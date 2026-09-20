@@ -1,25 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-
-/**
- * `eq`/`and` are replaced with the shared introspectable markers so the
- * in-memory fake executor interprets a real Drizzle `where` condition rather
- * than ignoring it. This is what makes these tests different from the rest of
- * the suite, which stubs `eq`/`and` as no-ops via `test-utils.ts`: here, a
- * query that dropped a column from its `and(...)` (e.g. matching on `userId`
- * alone) filters the fixture rows incorrectly and the test fails, instead of
- * the condition being invisible.
- *
- * The executor is `fake-db.ts`, shared with `db/seed.test.ts` and — through
- * `seedDb()` in `test-utils.ts` — with the route tests.
- */
-vi.mock("drizzle-orm", async () => {
-  const actual =
-    await vi.importActual<typeof import("drizzle-orm")>("drizzle-orm");
-  const { markerOperators } = await import("../fake-db.ts");
-  return { ...actual, ...markerOperators() };
-});
-
-import { createFakeDb, type Row } from "../fake-db.ts";
+import { describe, it, expect } from "vitest";
+import { seedDb, type Row } from "../test-utils.ts";
 import {
   resolveOrgMembership,
   resolveWorkspaceAccess,
@@ -27,12 +7,18 @@ import {
 } from "./authorization.ts";
 
 /**
- * The Drizzle stand-in these tests query: the shared fake executor seeded with
- * the two tables {@link resolveOrgMembership} and {@link resolveWorkspaceAccess}
- * read, under the Postgres names it keys rows by.
+ * The Drizzle stand-in these tests query: `seedDb()` from `test-utils.ts`, the
+ * one fake executor the suite shares, seeded with the two tables
+ * {@link resolveOrgMembership} and {@link resolveWorkspaceAccess} read, under
+ * the Postgres names it keys rows by.
+ *
+ * Unlike the chainable `mockDb` — whose `.where()` throws its argument away —
+ * this executor interprets the condition a query builds, so a query that
+ * dropped a column from its `and(...)` (e.g. matching on `userId` alone)
+ * filters the fixture rows incorrectly and the test fails.
  */
 const fakeDb = (tables: { organizationMember: Row[]; workspace: Row[] }) =>
-  createFakeDb({
+  seedDb({
     organization_member: tables.organizationMember,
     workspace: tables.workspace,
   }).handle as Database;

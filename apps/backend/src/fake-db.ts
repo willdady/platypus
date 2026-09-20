@@ -12,9 +12,11 @@ import { vi, type Mock } from "vitest";
  * Here the operators are replaced with introspectable markers
  * ({@link markerOperators}) and this module evaluates them against seeded rows,
  * so a route that forgot to scope a lookup reads another Workspace's fixture
- * and the test fails. Two private copies of this idea already existed — in
- * `middleware/authorization-decisions.test.ts` and `db/seed.test.ts` — and this
- * module is the promotion of the better of the two; both now import it.
+ * and the test fails.
+ *
+ * This module is the engine, not the entry point: tests reach it through
+ * `seedDb()`/`resetMockDb()` in `test-utils.ts`, which installs it as the `db`
+ * every module imports and mocks `drizzle-orm` with the markers it reads.
  *
  * It is a fake, not Postgres: no SQL is parsed, no constraint exists that a
  * test did not ask for, and an operator or SQL fragment it cannot interpret
@@ -223,10 +225,6 @@ const joinedResolver =
     }
     return flatResolver(row)(ref);
   };
-
-/** Whether a flat row satisfies a condition — the predicate, on its own. */
-export const matches = (row: Row, condition: Condition): boolean =>
-  satisfies(flatResolver(row), condition);
 
 /** A `(column, direction)` pair as `asc()`/`desc()` record it. */
 type OrderMarker = { op: "asc" | "desc"; column: ColumnRef };

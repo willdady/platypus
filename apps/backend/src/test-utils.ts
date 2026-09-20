@@ -6,15 +6,7 @@ import {
   type Store,
 } from "./fake-db.ts";
 
-export {
-  createFakeDb,
-  markerOperators,
-  orderOperators,
-  matches,
-  type FakeDb,
-  type Row,
-  type Store,
-} from "./fake-db.ts";
+export type { FakeDb, Row, Store } from "./fake-db.ts";
 import type {
   PluginConfigContext,
   PluginLogger,

@@ -1,19 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-/**
- * `eq` and `count` are replaced with the shared introspectable markers so the
- * in-memory fake executor can interpret a Drizzle condition without parsing
- * SQL. Everything else (`pgTable` and friends, used by the schema module) comes
- * from the real package.
- */
-vi.mock("drizzle-orm", async () => {
-  const actual =
-    await vi.importActual<typeof import("drizzle-orm")>("drizzle-orm");
-  const { markerOperators } = await import("../fake-db.ts");
-  return { ...actual, ...markerOperators() };
-});
-
-import { createFakeDb as createSharedFakeDb, type Store } from "../fake-db.ts";
+import { seedDb, type Store } from "../test-utils.ts";
 import {
   seedFirstBoot,
   NonRetryableSeedError,
@@ -23,10 +9,10 @@ import {
 import { logger } from "../logger.ts";
 
 /**
- * The shared in-memory fake executor (`fake-db.ts`), seeded with the four
- * tables the seed touches and told about the one constraint these tests turn
- * on: `user.email` is unique in the real schema, so a leftover User makes a
- * second sign-up fail the way Postgres would.
+ * The one fake executor the suite shares (`seedDb()` in `test-utils.ts`),
+ * seeded with the four tables the seed touches and told about the one
+ * constraint these tests turn on: `user.email` is unique in the real schema, so
+ * a leftover User makes a second sign-up fail the way Postgres would.
  *
  * The executor's `transaction` really rolls back — the callback gets a handle
  * bound to a staging copy merged back only on success — which is the assertion
@@ -38,7 +24,7 @@ import { logger } from "../logger.ts";
 const createFakeDb = (
   options: { onInsert?: (table: string) => void } = {},
 ): { handle: unknown; tables: Store } =>
-  createSharedFakeDb(
+  seedDb(
     { organization: [], user: [], organization_member: [], workspace: [] },
     {
       onInsert: options.onInsert,
