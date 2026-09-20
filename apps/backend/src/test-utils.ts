@@ -102,6 +102,7 @@ type BuilderMethodName =
   | "select"
   | "from"
   | "where"
+  | "for"
   | "limit"
   | "offset"
   | "orderBy"
@@ -151,6 +152,7 @@ function installBuilderMethods(target: MockDb): void {
     "select",
     "from",
     "where",
+    "for",
     "limit",
     "offset",
     "orderBy",
@@ -236,6 +238,8 @@ const { mockDb, mockAuth, dbHandle, fakeRef } = vi.hoisted(() => {
   const authMock = {
     api: {
       getSession: vi.fn(),
+      createUser: vi.fn(),
+      signInEmail: vi.fn(),
     },
     $Infer: {
       Session: {
@@ -352,6 +356,39 @@ export const mockSession = (
  */
 export const mockNoSession = () => {
   mockAuth.api.getSession.mockResolvedValue(null);
+};
+
+/**
+ * Helper to mock `auth.api.createUser` — the administrative create-user call
+ * the invitation-link registration route uses (see `invitation-link.ts`).
+ */
+export const mockCreateUser = (user: unknown) => {
+  mockAuth.api.createUser.mockResolvedValue({ user });
+};
+
+/** Helper to mock `auth.api.createUser` rejecting because the email already has an account. */
+export const mockCreateUserAlreadyExists = () => {
+  mockAuth.api.createUser.mockRejectedValue(
+    Object.assign(new Error("User already exists. Use another email."), {
+      status: "BAD_REQUEST",
+      body: {
+        code: "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL",
+        message: "User already exists. Use another email.",
+      },
+    }),
+  );
+};
+
+/**
+ * Helper to mock `auth.api.signInEmail({ asResponse: true })` — the shape the
+ * invitation-link registration route reads to relay the fresh session cookie.
+ */
+export const mockSignInEmail = (
+  cookies: string[] = ["better-auth.session_token=tok; Path=/"],
+) => {
+  mockAuth.api.signInEmail.mockResolvedValue({
+    headers: { getSetCookie: () => cookies },
+  });
 };
 
 /**

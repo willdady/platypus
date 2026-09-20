@@ -19,10 +19,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import type { Workspace } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 
 // Apply a Blueprint to an existing Workspace (ADR-0008). The macro is additive
 // and idempotent, so re-applying only attaches what is missing — we report the
@@ -40,7 +40,6 @@ export const ApplyBlueprintDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const [workspaceId, setWorkspaceId] = useState<string>("");
   const [applying, setApplying] = useState(false);
@@ -51,11 +50,9 @@ export const ApplyBlueprintDialog = ({
     total: number;
   } | null>(null);
 
-  const { data } = useSWR<{ results: Workspace[] }>(
-    backendUrl && user && open
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
-      : null,
-    fetcher,
+  const { data } = useScopedSWR<{ results: Workspace[] }>(
+    "workspaces",
+    open ? { orgId } : null,
   );
   const workspaces = [...(data?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),

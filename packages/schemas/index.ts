@@ -1807,6 +1807,10 @@ export const invitationSchema = z.object({
   // accept (ADR-0009). Stored in the invitation_blueprint junction; surfaced
   // here in `position` order on reads.
   blueprintIds: z.array(z.string()).optional(),
+  // Redemption token minted with the invitation (ADR-0019, #549). Nullable
+  // only at the column level for pre-existing rows a backfill migration
+  // hasn't reached yet; every invitation created through the API has one.
+  token: z.string().nullable().optional(),
   expiresAt: z.date(),
   createdAt: z.date(),
 });
@@ -1825,6 +1829,44 @@ export const invitationListItemSchema = invitationSchema.extend({
 });
 
 export type InvitationListItem = z.infer<typeof invitationListItemSchema>;
+
+// Response of the unauthenticated invitation-link resolution endpoint
+// (#549, ADR-0019): only what a bare "choose a password" form needs to
+// look legitimate rather than like a phishing page. Never the inviter,
+// the Blueprint set, or the Workspace name.
+export const invitationLinkResolutionSchema = z.object({
+  email: z.string().email(),
+  organizationName: z.string(),
+});
+
+export type InvitationLinkResolution = z.infer<
+  typeof invitationLinkResolutionSchema
+>;
+
+// Body of the unauthenticated invitation-link registration endpoint
+// (#549, ADR-0019). The email is deliberately absent: it comes only from
+// the token server-side, matching the frontend's non-editable email field.
+export const invitationRedemptionRegisterSchema = z.object({
+  name: z.string().min(1),
+  password: z.string().min(8),
+});
+
+export type InvitationRedemptionRegister = z.infer<
+  typeof invitationRedemptionRegisterSchema
+>;
+
+// Response of the invitation-link redemption and accept endpoints (#549,
+// ADR-0019): where the accept landed the new member, so the client can send
+// them straight to the Workspace it just provisioned.
+export const invitationAcceptResultSchema = z.object({
+  message: z.string(),
+  organizationId: z.string(),
+  workspaceId: z.string(),
+});
+
+export type InvitationAcceptResult = z.infer<
+  typeof invitationAcceptResultSchema
+>;
 
 export const providerUpdateSchema = providerBaseSchema.pick({
   name: true,

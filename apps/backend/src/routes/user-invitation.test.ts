@@ -71,7 +71,6 @@ describe("User Invitation Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ message: "Invitation accepted" });
       expect(mockDb.transaction).toHaveBeenCalled();
 
       // ADR-0008: accepting always provisions a workspace owned by the
@@ -84,6 +83,14 @@ describe("User Invitation Routes", () => {
         organizationId: "org-1",
         ownerId: "u1",
         name: "Contractor Sandbox",
+      });
+
+      // The response names where the member landed: the Organization and the
+      // Workspace this accept actually provisioned.
+      expect(await res.json()).toEqual({
+        message: "Invitation accepted",
+        organizationId: "org-1",
+        workspaceId: provisioned!.id,
       });
     });
 
@@ -476,13 +483,15 @@ describe("User Invitation Routes", () => {
         method: "POST",
       });
       expect(acceptRes.status).toBe(200);
-      expect(await acceptRes.json()).toEqual({
-        message: "Invitation accepted",
-      });
 
       const provisioned = mockDb.values.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
         .find((v) => v?.name);
+      expect(await acceptRes.json()).toEqual({
+        message: "Invitation accepted",
+        organizationId: "org-1",
+        workspaceId: provisioned!.id,
+      });
       expect(provisioned).toMatchObject({
         organizationId: "org-1",
         ownerId: "u1",

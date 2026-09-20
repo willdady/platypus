@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
 import {
   BotMessageSquare,
   Unplug,
@@ -30,8 +29,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { userRoutes, workspaceRoutes } from "@/lib/routes";
 
 interface CommandMenuProps {
@@ -42,45 +40,29 @@ interface CommandMenuProps {
 export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  const backendUrl = useBackendUrl();
-  const { user } = useAuth();
   const routes = workspaceRoutes(orgId, workspaceId);
+  const scope = { orgId, workspaceId };
 
   // Fetch agents for the workspace
-  const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
-      : null,
-    fetcher,
+  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
+    "agents",
+    scope,
   );
 
   const agents = agentsData?.results || [];
 
   // Fetch boards for the workspace
-  const { data: boardsData } = useSWR<{ results: KanbanBoard[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards`,
-        )
-      : null,
-    fetcher,
+  const { data: boardsData } = useScopedSWR<{ results: KanbanBoard[] }>(
+    "boards",
+    scope,
   );
 
   const boards = boardsData?.results || [];
 
   // Fetch triggers for the workspace
-  const { data: triggersData } = useSWR<{ results: Trigger[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/triggers`,
-        )
-      : null,
-    fetcher,
+  const { data: triggersData } = useScopedSWR<{ results: Trigger[] }>(
+    "triggers",
+    scope,
   );
 
   const triggers = triggersData?.results || [];

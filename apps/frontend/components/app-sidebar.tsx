@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import useSWR, { useSWRConfig } from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { writeEntity } from "@/lib/api-write";
+import { useSWRConfig } from "swr";
+import {
+  chatListEntity,
+  organizationEntity,
+  scopedUrl,
+  writeEntity,
+} from "@/lib/api-write";
 import { toast } from "sonner";
 import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   Sidebar,
   SidebarContent,
@@ -75,12 +80,12 @@ export function AppSidebar() {
     orgId: string;
     workspaceId: string;
   }>();
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const isMobile = useIsMobile();
 
   const routes = workspaceRoutes(orgId, workspaceId);
   const org = orgRoutes(orgId);
+  const scope = { orgId, workspaceId };
 
   const pathname = usePathname();
   const router = useRouter();
@@ -113,33 +118,19 @@ export function AppSidebar() {
 
   // Helper to revalidate the chat list (handles query params in SWR key)
   const revalidateChatList = () => {
-    const chatListUrl = joinUrl(
-      backendUrl,
-      `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-    );
+    const chatListUrl = scopedUrl(backendUrl, chatListEntity(), scope);
     return mutate(
       (key: unknown) => typeof key === "string" && key.startsWith(chatListUrl),
     );
   };
 
-  const { data } = useSWR<{ results: Workspace[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
-      : null,
-    fetcher,
-  );
+  const { data } = useScopedSWR<{ results: Workspace[] }>("workspaces", {
+    orgId,
+  });
 
-  const searchParam = debouncedSearch
-    ? `&search=${encodeURIComponent(debouncedSearch)}`
-    : "";
-  const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat?limit=100${searchParam}`,
-        )
-      : null,
-    fetcher,
+  const { data: chatData } = useScopedSWR<{ results: ChatListItem[] }>(
+    chatListEntity({ limit: 100, search: debouncedSearch }),
+    scope,
     {
       // Nothing else revalidates this list: not the per-chat spinner rendered
       // off it, not the chat row the backend creates when a run starts, not
@@ -164,9 +155,9 @@ export function AppSidebar() {
     },
   );
 
-  const { data: orgData } = useSWR<Organization>(
-    backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
-    fetcher,
+  const { data: orgData } = useScopedSWR<Organization>(
+    organizationEntity(orgId),
+    {},
   );
 
   const workspaces = (data?.results ?? []).sort((a, b) =>
@@ -215,20 +206,15 @@ export function AppSidebar() {
     setIsRenaming(true);
     setRenameValidationErrors({});
     try {
-      const outcome = await writeEntity(
-        backendUrl,
-        "chat",
-        { orgId, workspaceId },
-        {
-          id: renameChatId,
-          data: {
-            workspaceId,
-            title: renameTitle,
-            isPinned: currentChat.isPinned,
-            tags: renameTags,
-          },
+      const outcome = await writeEntity(backendUrl, "chat", scope, {
+        id: renameChatId,
+        data: {
+          workspaceId,
+          title: renameTitle,
+          isPinned: currentChat.isPinned,
+          tags: renameTags,
         },
-      );
+      });
 
       if (outcome.outcome === "success") {
         // Close the dialog
@@ -256,12 +242,9 @@ export function AppSidebar() {
 
     setIsDeleting(true);
     try {
-      const outcome = await writeEntity(
-        backendUrl,
-        "chat",
-        { orgId, workspaceId },
-        { id: deleteChatId },
-      );
+      const outcome = await writeEntity(backendUrl, "chat", scope, {
+        id: deleteChatId,
+      });
 
       if (outcome.outcome !== "success") {
         toast.error(outcome.message);
@@ -289,20 +272,15 @@ export function AppSidebar() {
 
     setIsTogglingPin(true);
     try {
-      const outcome = await writeEntity(
-        backendUrl,
-        "chat",
-        { orgId, workspaceId },
-        {
-          id: chatId,
-          data: {
-            workspaceId,
-            title: currentChat.title,
-            isPinned: !currentChat.isPinned,
-            tags: currentChat.tags ?? [],
-          },
+      const outcome = await writeEntity(backendUrl, "chat", scope, {
+        id: chatId,
+        data: {
+          workspaceId,
+          title: currentChat.title,
+          isPinned: !currentChat.isPinned,
+          tags: currentChat.tags ?? [],
         },
-      );
+      });
 
       if (outcome.outcome !== "success") {
         toast.error(outcome.message);

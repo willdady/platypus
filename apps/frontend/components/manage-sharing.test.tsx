@@ -20,6 +20,7 @@ beforeAll(() => {
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
+  useAuth: () => ({ user: { id: "u1" } }),
 }));
 
 // The attachments and workspaces lists this component renders. Set per test.

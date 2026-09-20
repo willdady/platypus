@@ -9,17 +9,8 @@ import {
   ItemContent,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,32 +28,37 @@ import {
   Bot,
   Building,
   EllipsisVertical,
-  ExternalLink,
-  Link2,
   Pencil,
   Plus,
   Share2,
   Trash2,
   TriangleAlert,
-  Unlink,
   UserRound,
 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import Link from "next/link";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth } from "@/components/auth-provider";
 import {
   canManageOrgSharedResource,
   canManageSharedResource,
 } from "@/lib/authorization";
-import { AttachSharedResourceDialog } from "@/components/attach-shared-resource-dialog";
 import {
   ManageAttachmentsDialog,
   SharedWithBadge,
 } from "@/components/manage-sharing";
-import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
-import { useDetachDialog } from "@/hooks/use-detach-dialog";
+import {
+  AttachSharedAction,
+  DeleteBlockedDialog,
+  DetachSharedDialog,
+  PromoteSharedDialog,
+} from "@/components/shared-resource-actions";
+import { writeEntity, type Scope } from "@/lib/api-write";
+import {
+  usePromoteShared,
+  useSharedDeleteGuard,
+  useSharedDetach,
+} from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
@@ -127,29 +123,15 @@ export const SkillsList = ({
   orgId: string;
   workspaceId?: string;
 }) => {
-  const { user, actor } = useAuth();
-  const backendUrl = useBackendUrl();
-  const orgSkillDetach = useDetachDialog<SkillWithScope>();
-  const [detaching, setDetaching] = useState(false);
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [skillToPromote, setSkillToPromote] = useState<SkillWithScope | null>(
-    null,
-  );
-  const [promoting, setPromoting] = useState(false);
-  const [promoteError, setPromoteError] = useState<string | null>(null);
+  const { actor } = useAuth();
   const [skillToManage, setSkillToManage] = useState<SkillWithScope | null>(
     null,
   );
-  const [deleteBlocked, setDeleteBlocked] = useState<{
-    skill: SkillWithScope;
-    count: number;
-  } | null>(null);
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
   // each call site.
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
-  const listUrl = scopedPath("skills", scope);
   const editBasePath = workspaceId
     ? workspaceRoutes(orgId, workspaceId).skills.root
     : orgRoutes(orgId).settings.skills;
@@ -159,19 +141,14 @@ export const SkillsList = ({
     error,
     isLoading,
     mutate,
-  } = useSWR<{
+  } = useScopedSWR<{
     results: SkillWithScope[];
-  }>(backendUrl && user ? joinUrl(backendUrl, listUrl) : null, fetcher);
+  }>("skills", scope);
 
   // Agent associations are a workspace concern; only fetched on that surface.
-  const { data: agentsData } = useSWR<{
+  const { data: agentsData } = useScopedSWR<{
     results: Agent[];
-  }>(
-    backendUrl && user && workspaceId
-      ? joinUrl(backendUrl, scopedPath("agents", scope))
-      : null,
-    fetcher,
-  );
+  }>("agents", workspaceId ? scope : null);
 
   const agents = agentsData?.results || [];
 
@@ -185,9 +162,17 @@ export const SkillsList = ({
   const canPromote = canAttach;
   const canManageOrg = canManageOrgSharedResource(actor).allowed;
 
-  const attachedOrgIds = skills
-    .filter((s) => s.scope === "organization")
-    .map((s) => s.id);
+  const orgSkillDetach = useSharedDetach<SkillWithScope>({
+    resourceType: "skill",
+    scope,
+    mutate,
+  });
+
+  const promote = usePromoteShared<SkillWithScope>({
+    entity: "skills",
+    scope,
+    mutate,
+  });
 
   const getAgentsForSkill = (skillId: string) =>
     agents.filter((agent) => agent.skillIds?.includes(skillId));
@@ -198,76 +183,18 @@ export const SkillsList = ({
     delete: (skill, url) => writeEntity(url, "skills", scope, { id: skill.id }),
   });
 
-  const handleDeleteClick = async (skill: SkillWithScope) => {
-    // On the Organization surface a Shared Skill can't be deleted while attached
-    // (ADR-0007) — check the live count first and explain the blocker up front
-    // instead of offering a Delete button that is guaranteed to fail.
-    if (!workspaceId && backendUrl) {
-      try {
-        const res = await fetch(
-          joinUrl(
-            backendUrl,
-            `${scopedPath("attachments", scope)}?resourceType=skill&resourceId=${skill.id}`,
-          ),
-          { credentials: "include" },
-        );
-        const info = await res.json().catch(() => ({ results: [] }));
-        const count = (info.results ?? []).length;
-        if (count > 0) {
-          setDeleteBlocked({ skill, count });
-          return;
-        }
-      } catch {
-        // If the check fails, fall through — the backend still guards with 409.
-      }
-    }
-    deleteFlow.request(skill);
-  };
+  // On the Organization surface a Shared Skill can't be deleted while attached
+  // (ADR-0007); the guard explains the blocker up front instead of offering a
+  // Delete button that is guaranteed to fail. Inside a Workspace there is
+  // nothing to check — the row is either private or a locked Shared card.
+  const deleteGuard = useSharedDeleteGuard<SkillWithScope>({
+    resourceType: "skill",
+    scope,
+    onAllowed: deleteFlow.request,
+  });
 
-  const detachOrgSkill = async (skillId: string) => {
-    if (!backendUrl || !workspaceId) return;
-    setDetaching(true);
-    orgSkillDetach.setError(null);
-    try {
-      const outcome = await writeEntity(
-        backendUrl,
-        "attachments/skill",
-        scope,
-        {
-          id: skillId,
-        },
-      );
-      if (outcome.outcome === "success") {
-        orgSkillDetach.close();
-        await mutate();
-      } else {
-        orgSkillDetach.setError(outcome.message);
-      }
-    } finally {
-      setDetaching(false);
-    }
-  };
-
-  const handlePromoteConfirm = async () => {
-    if (!skillToPromote || !backendUrl || !workspaceId) return;
-    setPromoting(true);
-    setPromoteError(null);
-    try {
-      const outcome = await writeEntity(
-        backendUrl,
-        `skills/${skillToPromote.id}/promote`,
-        scope,
-      );
-      if (outcome.outcome === "success") {
-        await mutate();
-        setSkillToPromote(null);
-      } else {
-        setPromoteError(outcome.message);
-      }
-    } finally {
-      setPromoting(false);
-    }
-  };
+  const handleDeleteClick = (skill: SkillWithScope) =>
+    workspaceId ? deleteFlow.request(skill) : deleteGuard.request(skill);
 
   if (isLoading) {
     return <ListState variant="loading">Loading...</ListState>;
@@ -381,10 +308,7 @@ export const SkillsList = ({
                           {canPromote && (
                             <DropdownMenuItem
                               className="cursor-pointer"
-                              onSelect={() => {
-                                setPromoteError(null);
-                                setSkillToPromote(skill);
-                              }}
+                              onSelect={() => promote.open(skill)}
                             >
                               <ArrowUpFromLine /> Promote to organization
                             </DropdownMenuItem>
@@ -421,10 +345,15 @@ export const SkillsList = ({
             <Plus /> Create skill
           </Link>
         </Button>
-        {canAttach && (
-          <Button variant="outline" onClick={() => setAttachOpen(true)}>
-            <Link2 className="size-4" /> Attach shared skill
-          </Button>
+        {canAttach && workspaceId && (
+          <AttachSharedAction
+            orgId={orgId}
+            workspaceId={workspaceId}
+            resourceType="skill"
+            label="Attach shared skill"
+            resources={skills}
+            onAttached={mutate}
+          />
         )}
       </div>
 
@@ -439,84 +368,23 @@ export const SkillsList = ({
         />
       )}
 
-      {canAttach && workspaceId && (
-        <AttachSharedResourceDialog
-          open={attachOpen}
-          onOpenChange={setAttachOpen}
-          orgId={orgId}
-          workspaceId={workspaceId}
-          resourceType="skill"
-          attachedIds={attachedOrgIds}
-          onAttached={() => {
-            setAttachOpen(false);
-            mutate();
-          }}
-        />
-      )}
-
-      <Dialog
-        open={!!orgSkillDetach.selected}
-        onOpenChange={(open) => {
-          if (!open) orgSkillDetach.close();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Organization Skill</DialogTitle>
-            <DialogDescription>
-              The skill <strong>{orgSkillDetach.selected?.name}</strong> is
-              managed at the organization level. It can only be edited from the
-              organization settings.
-            </DialogDescription>
-          </DialogHeader>
-          {orgSkillDetach.error && (
-            <p className="text-sm text-destructive">{orgSkillDetach.error}</p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={orgSkillDetach.close}>
-              Close
-            </Button>
-            {canAttach && orgSkillDetach.selected && (
-              <Button
-                variant="destructive"
-                disabled={detaching}
-                onClick={() => detachOrgSkill(orgSkillDetach.selected!.id)}
-              >
-                <Unlink className="size-4" />
-                Detach
-              </Button>
-            )}
-            {canAttach && orgSkillDetach.selected && (
-              <Button asChild>
-                <Link
-                  href={orgRoutes(orgId).settings.skillDetail(
-                    orgSkillDetach.selected.id,
-                  )}
-                >
-                  <ExternalLink className="size-4" />
-                  Org settings
-                </Link>
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog
-        open={!!skillToPromote}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSkillToPromote(null);
-            setPromoteError(null);
-          }
-        }}
-        title="Promote to organization"
-        description={`Promote "${skillToPromote?.name}" to an organization-shared skill? It will be managed by org admins and remain attached to this workspace.`}
-        confirmLabel="Promote"
-        onConfirm={handlePromoteConfirm}
-        loading={promoting}
-        error={promoteError}
+      <DetachSharedDialog
+        detach={orgSkillDetach}
+        title="Organization Skill"
+        description={(selected) => (
+          <>
+            The skill <strong>{selected.name}</strong> is managed at the
+            organization level. It can only be edited from the organization
+            settings.
+          </>
+        )}
+        canDetach={canAttach}
+        orgSettingsHref={(selected) =>
+          orgRoutes(orgId).settings.skillDetail(selected.id)
+        }
       />
+
+      <PromoteSharedDialog promote={promote} noun="skill" />
 
       <DeleteConfirmDialog
         open={deleteFlow.open}
@@ -528,24 +396,10 @@ export const SkillsList = ({
         error={deleteFlow.error}
       />
 
-      <ConfirmDialog
-        open={!!deleteBlocked}
-        onOpenChange={(open) => !open && setDeleteBlocked(null)}
-        title="Can't delete shared skill"
-        description={
-          deleteBlocked
-            ? `“${deleteBlocked.skill.name}” is shared with ${deleteBlocked.count} workspace${
-                deleteBlocked.count !== 1 ? "s" : ""
-              }. Detach it from every workspace before deleting.`
-            : ""
-        }
-        confirmLabel="Manage attachments"
-        cancelLabel="Close"
-        onConfirm={() => {
-          const skill = deleteBlocked?.skill ?? null;
-          setDeleteBlocked(null);
-          setSkillToManage(skill);
-        }}
+      <DeleteBlockedDialog
+        guard={deleteGuard}
+        noun="skill"
+        onManage={setSkillToManage}
       />
     </>
   );

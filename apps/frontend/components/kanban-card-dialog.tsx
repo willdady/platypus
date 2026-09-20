@@ -4,7 +4,7 @@ import { useState, type FocusEventHandler, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Markdown } from "@/components/markdown";
 import { format } from "date-fns";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import type {
   KanbanCard,
   KanbanCardComment,
@@ -61,7 +61,7 @@ import {
   Copy,
   Link2,
 } from "lucide-react";
-import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -748,31 +748,20 @@ export function KanbanCardDialog({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentBody, setEditingCommentBody] = useState("");
 
-  const commentsUrl =
-    backendUrl && user && card
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards/${boardId}/cards/${card.id}/comments`,
-        )
-      : null;
-
-  const { data: commentsData, mutate: mutateComments } = useSWR<{
+  // No card yet means no comment thread to name, so nothing is read.
+  const { data: commentsData, mutate: mutateComments } = useScopedSWR<{
     results: KanbanCardComment[];
-  }>(commentsUrl, fetcher);
+  }>(
+    `boards/${boardId}/cards/${card?.id ?? ""}/comments`,
+    card ? { orgId, workspaceId } : null,
+  );
 
   const comments = commentsData?.results ?? [];
 
   // Fetch workspace agents for assignee picker
-  const agentsUrl =
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
-      : null;
-  const { data: agentsData } = useSWR<{
+  const { data: agentsData } = useScopedSWR<{
     results: AgentOption[];
-  }>(agentsUrl, fetcher);
+  }>("agents", { orgId, workspaceId });
 
   const enterEditing = (field: "title" | "body") => {
     setFocusField(field);

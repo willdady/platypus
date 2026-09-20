@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,8 +12,6 @@ import type {
   KanbanCardHistoryChange,
   KanbanCardHistoryRef,
 } from "@platypus/schemas";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { useBackendUrl } from "@/components/auth-provider";
 
 /**
  * A card's history as the API returns it — timestamps arrive as JSON strings
@@ -124,18 +122,13 @@ export function KanbanCardHistory({
   boardId: string;
   cardId: string;
 }) {
-  const backendUrl = useBackendUrl();
   const [open, setOpen] = useState(false);
 
-  const url =
-    open && backendUrl
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards/${boardId}/cards/${cardId}/history`,
-        )
-      : null;
-
-  const { data } = useSWR<{ results: HistoryEntry[] }>(url, fetcher);
+  // A closed section names no scope, so nothing is read until it opens.
+  const { data } = useScopedSWR<{ results: HistoryEntry[] }>(
+    `boards/${boardId}/cards/${cardId}/history`,
+    open ? { orgId, workspaceId } : null,
+  );
   const entries = data?.results ?? [];
 
   return (

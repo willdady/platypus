@@ -52,6 +52,7 @@ interface AuthContextType {
   isAuthLoading: boolean;
   error: Error | null;
   authClient: ReturnType<typeof createAuthClient>;
+  refreshSession: () => Promise<void>;
   orgMembership: OrgMembership | null;
   /** The named actor for this request — see `lib/authorization.ts`. */
   actor: Actor;
@@ -81,7 +82,7 @@ export function AuthProvider({
     });
   }, [backendUrl]);
 
-  const { data, isPending, error } = authClient.useSession();
+  const { data, isPending, error, refetch } = authClient.useSession();
   const params = useParams();
 
   const orgId = params.orgId as string | undefined;
@@ -142,6 +143,7 @@ export function AuthProvider({
       isAuthLoading,
       error,
       authClient,
+      refreshSession: refetch,
       orgMembership: orgMembership ?? null,
       actor,
       ownsWorkspace,
@@ -155,6 +157,7 @@ export function AuthProvider({
       isAuthLoading,
       error,
       authClient,
+      refetch,
       orgMembership,
       actor,
       ownsWorkspace,
