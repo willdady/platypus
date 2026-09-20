@@ -33,7 +33,7 @@ export const LoadSkillTool = ({ toolPart }: LoadSkillToolProps) => {
     toolPart.errorText || (output && "error" in output ? output.error : null);
 
   return (
-    <div className="not-prose w-full min-w-0">
+    <div className="w-full min-w-0">
       <div className={toolRowClassName}>
         <span className={toolRowIconSlotClassName}>
           <SparklesIcon className="size-4" />

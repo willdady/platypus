@@ -12,10 +12,7 @@ import type { ComponentProps } from "react";
 export type SourcesProps = ComponentProps<"div">;
 
 export const Sources = ({ className, ...props }: SourcesProps) => (
-  <Collapsible
-    className={cn("not-prose text-primary text-xs", className)}
-    {...props}
-  />
+  <Collapsible className={cn("text-primary text-xs", className)} {...props} />
 );
 
 export type SourcesTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {

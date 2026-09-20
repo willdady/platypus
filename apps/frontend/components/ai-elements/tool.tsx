@@ -244,7 +244,7 @@ export const Tool = ({
   return (
     <ToolContext.Provider value={{ isOpen }}>
       <Collapsible
-        className={cn("not-prose w-full min-w-0", className)}
+        className={cn("w-full min-w-0", className)}
         open={isOpen}
         onOpenChange={setIsOpen}
         {...props}

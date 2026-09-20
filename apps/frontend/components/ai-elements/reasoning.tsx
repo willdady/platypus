@@ -102,7 +102,7 @@ export const Reasoning = memo(
         value={{ isStreaming, isOpen, setIsOpen, duration }}
       >
         <Collapsible
-          className={cn("not-prose", className)}
+          className={className}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}
