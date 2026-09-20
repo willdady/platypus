@@ -1,5 +1,5 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { BlockList, isIP } from "node:net";
 
 /**
  * Core's egress guard for **model-supplied** URLs (ADR-0014).
@@ -56,176 +56,55 @@ export const EGRESS_BLOCKED_MESSAGE =
 
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 
-const ipv4ToInt = (address: string): number | null => {
-  const octets = address.split(".");
-  if (octets.length !== 4) {
-    return null;
-  }
-  let value = 0;
-  for (const octet of octets) {
-    if (!/^\d{1,3}$/.test(octet)) {
-      return null;
-    }
-    const parsed = Number(octet);
-    if (parsed > 255) {
-      return null;
-    }
-    value = value * 256 + parsed;
-  }
-  return value >>> 0;
-};
-
-/**
- * Expand an IPv6 literal to its 16 bytes. `isIP` has already validated the
- * shape, so the group parsing below cannot see garbage. A zone id (`%eth0`) is
- * dropped — it scopes the address, it does not change which network it is on.
- */
-const ipv6ToBytes = (address: string): Uint8Array | null => {
-  const withoutZone = address.split("%")[0] ?? "";
-  if (isIP(withoutZone) !== 6) {
-    return null;
-  }
-  const elision = withoutZone.indexOf("::");
-  const headText = elision === -1 ? withoutZone : withoutZone.slice(0, elision);
-  const tailText = elision === -1 ? "" : withoutZone.slice(elision + 2);
-
-  const toGroups = (text: string): number[] => {
-    if (!text) {
-      return [];
-    }
-    const groups: number[] = [];
-    for (const piece of text.split(":")) {
-      // A trailing dotted-quad (`::ffff:169.254.169.254`) occupies two groups.
-      if (piece.includes(".")) {
-        const embedded = ipv4ToInt(piece);
-        if (embedded === null) {
-          return [];
-        }
-        groups.push((embedded >>> 16) & 0xffff, embedded & 0xffff);
-      } else {
-        groups.push(Number.parseInt(piece, 16));
-      }
-    }
-    return groups;
-  };
-
-  const head = toGroups(headText);
-  const tail = toGroups(tailText);
-  if (head.length + tail.length > 8) {
-    return null;
-  }
-  const groups = [
-    ...head,
-    ...new Array<number>(8 - head.length - tail.length).fill(0),
-    ...tail,
-  ];
-  const bytes = new Uint8Array(16);
-  groups.forEach((group, index) => {
-    bytes[index * 2] = (group >> 8) & 0xff;
-    bytes[index * 2 + 1] = group & 0xff;
-  });
-  return bytes;
-};
-
-/**
- * The IPv4 address embedded in an IPv4-mapped (`::ffff:a9fe:a9fe`) or
- * IPv4-compatible (`::169.254.169.254`) IPv6 address. Unwrapping matters because
- * `isIP` reports these as v6, so the v4 rules would otherwise never see them —
- * `http://[::ffff:a9fe:a9fe]/` reaches the metadata service.
- */
-const embeddedIpv4 = (bytes: Uint8Array): number | null => {
-  for (let index = 0; index < 10; index += 1) {
-    if (bytes[index] !== 0) {
-      return null;
-    }
-  }
-  const mapped = bytes[10] === 0xff && bytes[11] === 0xff;
-  const compatible = bytes[10] === 0 && bytes[11] === 0;
-  if (!mapped && !compatible) {
-    return null;
-  }
-  return (
-    ((bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15]) >>> 0
-  );
-};
-
-interface V4Rule {
+interface EgressRule {
   label: string;
-  base: number;
-  bits: number;
+  blockList: BlockList;
 }
 
-interface V6Rule {
-  label: string;
-  base: Uint8Array;
-  bits: number;
-}
-
-const v4Rule = (cidr: string, label: string): V4Rule => {
+const rule = (
+  cidr: string,
+  label: string,
+  family: "ipv4" | "ipv6",
+): EgressRule => {
   const [address, bits] = cidr.split("/");
-  const base = ipv4ToInt(address ?? "");
-  if (base === null || bits === undefined) {
-    throw new Error(`egress-guard: malformed IPv4 CIDR '${cidr}'`);
-  }
-  return { label, base, bits: Number(bits) };
+  const blockList = new BlockList();
+  blockList.addSubnet(address ?? "", Number(bits), family);
+  return { label, blockList };
 };
 
-const v6Rule = (cidr: string, label: string): V6Rule => {
-  const [address, bits] = cidr.split("/");
-  const base = ipv6ToBytes(address ?? "");
-  if (base === null || bits === undefined) {
-    throw new Error(`egress-guard: malformed IPv6 CIDR '${cidr}'`);
-  }
-  return { label, base, bits: Number(bits) };
-};
+const v4Rule = (cidr: string, label: string): EgressRule =>
+  rule(cidr, label, "ipv4");
 
-const matchesV4 = (value: number, rule: V4Rule): boolean => {
-  const mask = rule.bits === 0 ? 0 : (~0 << (32 - rule.bits)) >>> 0;
-  return (value & mask) >>> 0 === (rule.base & mask) >>> 0;
-};
-
-const matchesV6 = (bytes: Uint8Array, rule: V6Rule): boolean => {
-  const wholeBytes = Math.floor(rule.bits / 8);
-  for (let index = 0; index < wholeBytes; index += 1) {
-    if (bytes[index] !== rule.base[index]) {
-      return false;
-    }
-  }
-  const remainingBits = rule.bits % 8;
-  if (remainingBits === 0) {
-    return true;
-  }
-  const mask = (0xff << (8 - remainingBits)) & 0xff;
-  return (bytes[wholeBytes] & mask) === (rule.base[wholeBytes] & mask);
-};
+const v6Rule = (cidr: string, label: string): EgressRule =>
+  rule(cidr, label, "ipv6");
 
 // Blocked whatever `allowPrivateNetworks` says: nothing a page read legitimately
 // targets lives here, and each one is a known SSRF destination.
-const ALWAYS_BLOCKED_V4: readonly V4Rule[] = [
+//
+// The v4 rules also cover IPv4-mapped IPv6 literals (`::ffff:a9fe:a9fe`):
+// `BlockList.check` with `'ipv6'` consults the list's v4 subnets. The deprecated
+// IPv4-compatible form (`::169.254.169.254`) is not mapped, so `::/96` covers it
+// wholesale — no legitimate page read targets an address in that form.
+const ALWAYS_BLOCKED: readonly EgressRule[] = [
   // 0.0.0.0/8 sits with loopback rather than with "reserved": on Linux
   // `http://0.0.0.0:5432/` reaches a service listening on localhost.
   v4Rule("0.0.0.0/8", "this-host range, reaches localhost"),
   v4Rule("127.0.0.0/8", "loopback"),
   v4Rule("169.254.0.0/16", "link-local, hosts cloud metadata services"),
   v4Rule("100.64.0.0/10", "carrier-grade NAT, hosts Alibaba cloud metadata"),
-];
-
-const ALWAYS_BLOCKED_V6: readonly V6Rule[] = [
   v6Rule("::/128", "unspecified address"),
   v6Rule("::1/128", "loopback"),
   v6Rule("fe80::/10", "link-local"),
+  v6Rule("::/96", "deprecated IPv4-compatible address"),
 ];
 
 // Blocked only when the Operator sets EGRESS_ALLOW_PRIVATE_NETWORKS=false.
 // Allowed by default so intranet page reads — the reason the Web-search
 // Extension point exists — keep working.
-const PRIVATE_V4: readonly V4Rule[] = [
+const PRIVATE: readonly EgressRule[] = [
   v4Rule("10.0.0.0/8", "private network"),
   v4Rule("172.16.0.0/12", "private network"),
   v4Rule("192.168.0.0/16", "private network"),
-];
-
-const PRIVATE_V6: readonly V6Rule[] = [
   v6Rule("fc00::/7", "unique local address"),
 ];
 
@@ -238,41 +117,22 @@ const blockReasonFor = (
   address: string,
   allowPrivateNetworks: boolean,
 ): string | null => {
-  const v4Rules = allowPrivateNetworks
-    ? ALWAYS_BLOCKED_V4
-    : [...ALWAYS_BLOCKED_V4, ...PRIVATE_V4];
-  const v6Rules = allowPrivateNetworks
-    ? ALWAYS_BLOCKED_V6
-    : [...ALWAYS_BLOCKED_V6, ...PRIVATE_V6];
-
-  const family = isIP(address.split("%")[0] ?? "");
-
-  if (family === 4) {
-    const value = ipv4ToInt(address);
-    if (value === null) {
-      return "unparseable IPv4 address";
-    }
-    return v4Rules.find((rule) => matchesV4(value, rule))?.label ?? null;
+  // A zone id (`fe80::1%eth0`) scopes the address to an interface; it does not
+  // change which network the address is on. Drop it so it cannot hide an
+  // address from the rules.
+  const bare = address.split("%")[0] ?? "";
+  const family = isIP(bare);
+  if (family !== 4 && family !== 6) {
+    return "unrecognised address form";
   }
+  const type = family === 4 ? "ipv4" : "ipv6";
+  const rules = allowPrivateNetworks
+    ? ALWAYS_BLOCKED
+    : [...ALWAYS_BLOCKED, ...PRIVATE];
 
-  if (family === 6) {
-    const bytes = ipv6ToBytes(address);
-    if (bytes === null) {
-      return "unparseable IPv6 address";
-    }
-    const v6Match = v6Rules.find((rule) => matchesV6(bytes, rule));
-    if (v6Match) {
-      return v6Match.label;
-    }
-    // Fall through to the v4 rules for mapped/compatible forms.
-    const embedded = embeddedIpv4(bytes);
-    if (embedded !== null) {
-      return v4Rules.find((rule) => matchesV4(embedded, rule))?.label ?? null;
-    }
-    return null;
-  }
-
-  return "unrecognised address form";
+  return (
+    rules.find((entry) => entry.blockList.check(bare, type))?.label ?? null
+  );
 };
 
 const privateNetworksAllowedByEnv = (): boolean => {

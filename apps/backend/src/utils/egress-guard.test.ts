@@ -47,6 +47,18 @@ describe("checkEgress", () => {
       );
     });
 
+    it("blocks a link-local address carrying a zone id", async () => {
+      // A resolver can hand back a scoped address; the zone scopes which
+      // interface it sits on and must not hide it from the link-local rule.
+      const reason = expectBlocked(
+        await checkEgress("http://intranet.example.com/", {
+          allowPrivateNetworks: true,
+          resolve: resolvesTo("fe80::1%eth0"),
+        }),
+      );
+      expect(reason).toContain("link-local");
+    });
+
     it("blocks a hostname that resolves to the metadata service", async () => {
       const reason = expectBlocked(
         await checkEgress("http://metadata.google.internal/", {
