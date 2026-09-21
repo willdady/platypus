@@ -84,7 +84,7 @@ export const Chat = ({
   initialAgentId?: string;
 }) => {
   const { ownsWorkspace } = useAuth();
-  const canSendMessages = canSendChatMessages(ownsWorkspace).allowed;
+  const canSendMessages = canSendChatMessages(ownsWorkspace);
   const backendUrl = useBackendUrl();
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
 

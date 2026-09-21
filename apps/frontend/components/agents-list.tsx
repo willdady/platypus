@@ -141,7 +141,7 @@ export const AgentsList = ({
 
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007), asked of the auth module instead of re-derived here.
-  const canManageShared = canManageSharedResource(actor, workspaceId).allowed;
+  const canManageShared = canManageSharedResource(actor, workspaceId);
 
   const getToolSetNames = (toolSetIds: string[] | undefined) => {
     if (!toolSetIds?.length) return [];

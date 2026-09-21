@@ -227,7 +227,7 @@ const SandboxSettings = ({
   const { actor } = useAuth();
   const backendUrl = useBackendUrl();
   // Credential- and reach-bearing sandbox config is admin-managed (ADR-0006).
-  const canConfigure = canConfigureSandbox(actor).allowed;
+  const canConfigure = canConfigureSandbox(actor);
 
   const scope = { orgId, workspaceId };
 
