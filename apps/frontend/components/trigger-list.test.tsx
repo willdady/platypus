@@ -118,27 +118,43 @@ describe("TriggerList toggle enabled", () => {
 });
 
 describe("TriggerList cron schedule", () => {
-  it("shows the raw cron expression and the next run", () => {
+  it("describes the schedule in plain English with the next run", () => {
     renderTriggers([scheduledTrigger]);
 
-    const expression = screen.getByText("0 0 * * *");
-    expect(expression.tagName).toBe("CODE");
+    expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
     expect(
       screen.getByText("Next: formatted:2026-02-01T09:00:00.000Z"),
     ).toBeInTheDocument();
   });
 
-  it("shows the expression without a next run when the trigger is disabled", () => {
+  it("keeps the raw expression reachable as a tooltip", () => {
+    renderTriggers([scheduledTrigger]);
+
+    expect(screen.getByTitle("0 0 * * *")).toBeInTheDocument();
+  });
+
+  it("falls back to the raw expression when cron cannot be parsed", () => {
+    renderTriggers([
+      {
+        ...scheduledTrigger,
+        config: { cronExpression: "nonsense", timezone: "UTC" },
+      } as unknown as Trigger,
+    ]);
+
+    expect(screen.getByText("nonsense")).toBeInTheDocument();
+  });
+
+  it("describes the schedule without a next run when the trigger is disabled", () => {
     renderTriggers([{ ...scheduledTrigger, enabled: false } as Trigger]);
 
-    expect(screen.getByText("0 0 * * *")).toBeInTheDocument();
+    expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
     expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
   });
 
-  it("shows the expression without a next run when none is scheduled", () => {
+  it("describes the schedule without a next run when none is scheduled", () => {
     renderTriggers([{ ...scheduledTrigger, nextRunAt: null } as Trigger]);
 
-    expect(screen.getByText("0 0 * * *")).toBeInTheDocument();
+    expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
     expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
   });
 });
