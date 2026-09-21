@@ -37,7 +37,7 @@ import {
 } from "@platypus/schemas";
 import Link from "next/link";
 import { useBackendUrl } from "@/components/auth-provider";
-import { describeSchedule } from "@/lib/cron-utils";
+import { formatDateTime } from "@/lib/format-date";
 import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { writeEntity, type Scope } from "@/lib/api-write";
@@ -169,12 +169,18 @@ export const TriggerList = ({
                       <>
                         <span className="flex items-center gap-1">
                           <Timer className="h-3 w-3" />
-                          {describeSchedule(
-                            (trigger.config as CronTriggerConfig)
-                              .cronExpression,
-                            (trigger.config as CronTriggerConfig).timezone,
-                          )}
+                          <code>
+                            {
+                              (trigger.config as CronTriggerConfig)
+                                .cronExpression
+                            }
+                          </code>
                         </span>
+                        {trigger.enabled && trigger.nextRunAt && (
+                          <span className="flex items-center gap-1">
+                            Next: {formatDateTime(trigger.nextRunAt)}
+                          </span>
+                        )}
                       </>
                     ) : (
                       <span className="flex items-center gap-1 flex-wrap">

@@ -20,6 +20,12 @@ import {
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
+// The list renders the stored `nextRunAt` through this formatter; stubbing it
+// keeps the assertion independent of the viewer's locale and time zone.
+vi.mock("@/lib/format-date", () => ({
+  formatDateTime: (value: Date | string | number) =>
+    `formatted:${new Date(value).toISOString()}`,
+}));
 
 import { TriggerList } from "./trigger-list";
 
@@ -32,6 +38,12 @@ const cronTrigger: Trigger = {
   enabled: true,
   agentId: "agent1",
   config: { cronExpression: "0 0 * * *", timezone: "UTC" },
+} as unknown as Trigger;
+
+const nextRunAt = new Date("2026-02-01T09:00:00.000Z");
+const scheduledTrigger: Trigger = {
+  ...cronTrigger,
+  nextRunAt,
 } as unknown as Trigger;
 
 function renderTriggers(triggers: Trigger[], menuItem?: string) {
@@ -102,6 +114,32 @@ describe("TriggerList toggle enabled", () => {
       expect(toastError).toHaveBeenCalledWith("Trigger is running"),
     );
     expect(mutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("TriggerList cron schedule", () => {
+  it("shows the raw cron expression and the next run", () => {
+    renderTriggers([scheduledTrigger]);
+
+    const expression = screen.getByText("0 0 * * *");
+    expect(expression.tagName).toBe("CODE");
+    expect(
+      screen.getByText("Next: formatted:2026-02-01T09:00:00.000Z"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the expression without a next run when the trigger is disabled", () => {
+    renderTriggers([{ ...scheduledTrigger, enabled: false } as Trigger]);
+
+    expect(screen.getByText("0 0 * * *")).toBeInTheDocument();
+    expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
+  });
+
+  it("shows the expression without a next run when none is scheduled", () => {
+    renderTriggers([{ ...scheduledTrigger, nextRunAt: null } as Trigger]);
+
+    expect(screen.getByText("0 0 * * *")).toBeInTheDocument();
+    expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
   });
 });
 
