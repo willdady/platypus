@@ -335,9 +335,6 @@ importers:
       croner:
         specifier: ^10.0.1
         version: 10.0.1
-      date-fns:
-        specifier: ^4.4.0
-        version: 4.4.0
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.7)

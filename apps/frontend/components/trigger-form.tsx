@@ -54,7 +54,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { retractFieldError } from "@/lib/form-errors";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { Cron } from "croner";
-import { format } from "date-fns";
+import { formatDateTime } from "@/lib/format-date";
 import { toast } from "sonner";
 import { workspaceRoutes } from "@/lib/routes";
 
@@ -588,7 +588,7 @@ const TriggerForm = ({
       const next = cron.nextRun();
       return {
         isCronValid: true,
-        nextRunPreview: next ? format(next, "PPp") : null,
+        nextRunPreview: next ? formatDateTime(next) : null,
       };
     } catch {
       return { isCronValid: false, nextRunPreview: null };

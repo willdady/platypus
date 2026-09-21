@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { format } from "date-fns";
+import { formatDateTime } from "@/lib/format-date";
 import {
   Ban,
   Copy,
@@ -152,7 +152,7 @@ export const TriggerRunRow = ({
             >
               {run.triggerName}
             </Link>
-            <p className="text-sm">{format(new Date(run.startedAt), "PPp")}</p>
+            <p className="text-sm">{formatDateTime(run.startedAt)}</p>
             <p className="text-sm text-muted-foreground">
               {formatRelativeTime(run.startedAt)}
             </p>

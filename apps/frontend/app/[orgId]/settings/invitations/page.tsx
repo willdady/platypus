@@ -13,7 +13,7 @@ import { Trash2, Mail, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { format } from "date-fns";
+import { formatDate } from "@/lib/format-date";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -184,7 +184,7 @@ const OrgInvitationsPage = () => {
                       </TableCell>
                       <TableCell>{getStatusBadge(invite.status)}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {format(new Date(invite.expiresAt), "MMM d, yyyy")}
+                        {formatDate(invite.expiresAt)}
                       </TableCell>
                       <TableCell className="text-right">
                         {invite.status === "pending" && invite.token && (

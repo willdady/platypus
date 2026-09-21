@@ -3,7 +3,7 @@
 import { useState, type FocusEventHandler, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Markdown } from "@/components/markdown";
-import { format } from "date-fns";
+import { formatDate, formatDateAtTime } from "@/lib/format-date";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import type {
   KanbanCard,
@@ -655,9 +655,7 @@ function CardMetadataSection({
               )}
             >
               <CalendarIcon className="size-3.5" />
-              {selectedDueDate
-                ? format(new Date(selectedDueDate), "MMM d, yyyy")
-                : "Set due date"}
+              {selectedDueDate ? formatDate(selectedDueDate) : "Set due date"}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
@@ -685,7 +683,7 @@ function CardMetadataSection({
           Created
         </p>
         <p className="text-xs text-muted-foreground">
-          {format(new Date(createdAt), "MMM d, yyyy 'at' h:mm a")}
+          {formatDateAtTime(createdAt)}
           {createdByName && <> by {createdByName}</>}
         </p>
       </div>
@@ -694,7 +692,7 @@ function CardMetadataSection({
           Updated
         </p>
         <p className="text-xs text-muted-foreground">
-          {format(new Date(updatedAt), "MMM d, yyyy 'at' h:mm a")}
+          {formatDateAtTime(updatedAt)}
           {lastEditedByName && <> by {lastEditedByName}</>}
         </p>
       </div>

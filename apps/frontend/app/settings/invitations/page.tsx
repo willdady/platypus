@@ -8,7 +8,7 @@ import { Mail, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { format } from "date-fns";
+import { formatDate } from "@/lib/format-date";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState } from "react";
 
@@ -82,9 +82,7 @@ const UserInvitationsPage = () => {
                 <h3 className="font-semibold">{invite.organizationName}</h3>
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p>Invited by: {invite.invitedByName}</p>
-                  <p>
-                    Expires: {format(new Date(invite.expiresAt), "MMM d, yyyy")}
-                  </p>
+                  <p>Expires: {formatDate(invite.expiresAt)}</p>
                 </div>
               </div>
               <div className="flex gap-2">
