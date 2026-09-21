@@ -23,7 +23,6 @@ import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import { listScopedByIds } from "./scoped-resource.ts";
-import { calculateCardPosition } from "../utils/kanban-positioning.ts";
 import {
   filterKnownLabelIds,
   pruneCardLabelIds,
@@ -796,6 +795,45 @@ export const rebalancedPositions = (
   }));
 
 /**
+ * The slot a card takes when it sits behind `afterCardId` (`null` = the head),
+ * plus whether the gap it lands in has been halved so thin that the column
+ * must be renumbered first.
+ *
+ * `otherCards` is the column in ascending position order, without the card
+ * being placed.
+ */
+export const calculateCardPosition = (
+  otherCards: { id: string; position: number }[],
+  afterCardId: string | null,
+): { position: number; needsRebalance: boolean; afterIndex: number } => {
+  if (afterCardId === null) {
+    const position = otherCards.length === 0 ? 1.0 : otherCards[0].position / 2;
+    return { position, needsRebalance: false, afterIndex: -1 };
+  }
+
+  const afterIndex = otherCards.findIndex((card) => card.id === afterCardId);
+  if (afterIndex === -1) {
+    throw new ValidationError("afterCardId not found in column");
+  }
+
+  const anchor = otherCards[afterIndex];
+  const next = otherCards[afterIndex + 1];
+  if (!next) {
+    return {
+      position: anchor.position + 1.0,
+      needsRebalance: false,
+      afterIndex,
+    };
+  }
+
+  return {
+    position: (anchor.position + next.position) / 2,
+    needsRebalance: next.position - anchor.position < 0.001,
+    afterIndex,
+  };
+};
+
+/**
  * Where a card lands in a column, rebalancing the column first if the gap it
  * would take has collapsed. `afterCardId` is the card to sit behind: `null`
  * puts it at the head, `undefined` at the end.
@@ -826,12 +864,7 @@ export const placeCardInColumn = async (
     (card) => card.id !== input.excludeCardId,
   );
 
-  let result: ReturnType<typeof calculateCardPosition>;
-  try {
-    result = calculateCardPosition(otherCards, input.afterCardId);
-  } catch {
-    throw new ValidationError("afterCardId not found in column");
-  }
+  const result = calculateCardPosition(otherCards, input.afterCardId);
 
   if (!result.needsRebalance) return result.position;
 

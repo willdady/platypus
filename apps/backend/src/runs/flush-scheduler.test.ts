@@ -12,7 +12,7 @@ describe("FlushScheduler", () => {
 
   it("bump schedules a flush after intervalMs", async () => {
     const fn = vi.fn();
-    const sched = new FlushScheduler(1000, fn);
+    const sched = new FlushScheduler(fn, 1000);
 
     sched.bump();
     expect(fn).not.toHaveBeenCalled();
@@ -23,7 +23,7 @@ describe("FlushScheduler", () => {
 
   it("repeated bumps within the interval coalesce to one call", async () => {
     const fn = vi.fn();
-    const sched = new FlushScheduler(1000, fn);
+    const sched = new FlushScheduler(fn, 1000);
 
     sched.bump();
     await vi.advanceTimersByTimeAsync(200);
@@ -37,7 +37,7 @@ describe("FlushScheduler", () => {
 
   it("a new bump after a flush schedules another one", async () => {
     const fn = vi.fn();
-    const sched = new FlushScheduler(1000, fn);
+    const sched = new FlushScheduler(fn, 1000);
 
     sched.bump();
     await vi.advanceTimersByTimeAsync(1000);
@@ -49,7 +49,7 @@ describe("FlushScheduler", () => {
 
   it("flush() runs immediately and clears the pending timer", async () => {
     const fn = vi.fn();
-    const sched = new FlushScheduler(1000, fn);
+    const sched = new FlushScheduler(fn, 1000);
 
     sched.bump();
     await sched.flush();
@@ -62,7 +62,7 @@ describe("FlushScheduler", () => {
 
   it("dispose cancels pending flushes", async () => {
     const fn = vi.fn();
-    const sched = new FlushScheduler(1000, fn);
+    const sched = new FlushScheduler(fn, 1000);
 
     sched.bump();
     await sched.dispose();
@@ -79,7 +79,7 @@ describe("FlushScheduler", () => {
           resolveFlush = resolve;
         }),
     );
-    const sched = new FlushScheduler(100, fn);
+    const sched = new FlushScheduler(fn, 100);
 
     sched.bump();
     await vi.advanceTimersByTimeAsync(100);
@@ -102,7 +102,7 @@ describe("FlushScheduler", () => {
 
   it("bump after dispose is a no-op", async () => {
     const fn = vi.fn();
-    const sched = new FlushScheduler(1000, fn);
+    const sched = new FlushScheduler(fn, 1000);
 
     await sched.dispose();
     sched.bump();
@@ -113,7 +113,7 @@ describe("FlushScheduler", () => {
 
   it("flush after dispose is a no-op", async () => {
     const fn = vi.fn();
-    const sched = new FlushScheduler(1000, fn);
+    const sched = new FlushScheduler(fn, 1000);
 
     await sched.dispose();
     await sched.flush();
@@ -123,7 +123,7 @@ describe("FlushScheduler", () => {
 
   it("swallows errors thrown by the flush function", async () => {
     const fn = vi.fn().mockRejectedValue(new Error("boom"));
-    const sched = new FlushScheduler(100, fn);
+    const sched = new FlushScheduler(fn, 100);
 
     sched.bump();
     await vi.advanceTimersByTimeAsync(100);

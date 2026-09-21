@@ -5,6 +5,10 @@ import { logger } from "../logger.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { raceAbort } from "../utils/abort-race.ts";
+// Cuts a backend-supplied string to a core-owned bound, marking the cut so the
+// model can tell a truncated snippet from a naturally short one. Shared with
+// the Zod issue formatter: one definition of what a capped string looks like.
+import { truncate } from "../zod-issues.ts";
 import { withAttributedRegistrar } from "../tools/closers.ts";
 import {
   READ_URL_TOOL_NAME,
@@ -97,11 +101,6 @@ export const getWebBackends = (): ReadonlyArray<WebBackendRegistration> =>
 
 /** Test-only reset — see {@link createContributionRegistry}. */
 export const clearWebBackends = (): void => WEB_BACKENDS.clear();
-
-// Cut a backend-supplied string to a core-owned bound, marking the cut so the
-// model can tell a truncated snippet from a naturally short one.
-const truncate = (value: string, max: number): string =>
-  value.length > max ? `${value.slice(0, max)}…` : value;
 
 // Everything an executor resolves is read through this, so the wrapper treats a
 // backend's payload as `unknown` and narrows field by field. The SDK types say

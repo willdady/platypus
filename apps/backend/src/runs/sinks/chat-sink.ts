@@ -21,9 +21,6 @@ export type ChatSinkParams = {
   flushIntervalMs?: number;
 };
 
-/** Default cadence for periodic ChatSink flushes during a running run. */
-export const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
-
 /**
  * Persists a chat row at run lifecycle boundaries.
  *
@@ -107,13 +104,12 @@ export class ChatSink implements RunSink {
     this.plan = ctx.plan;
 
     // Lazily create the FlushScheduler now that we have a plan to write.
-    const intervalMs = this.params.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
-    this.flusher = new FlushScheduler(intervalMs, async () => {
+    this.flusher = new FlushScheduler(async () => {
       await this.writeRow({
         status: "running",
         messages: this.latestMessages,
       });
-    });
+    }, this.params.flushIntervalMs);
     return Promise.resolve();
   }
 

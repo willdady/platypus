@@ -56,18 +56,25 @@ async function withConcurrencyLimit<T>(
 /**
  * Attempts to acquire an advisory lock and runs the given function if successful.
  * This ensures only one backend instance runs the scheduled work at a time.
+ *
+ * `lockId` is load bearing across deploys — see `SCHEDULER_LOCK_ID`. Each
+ * background job passes its own, so jobs contend only with their own peers.
  */
-async function runWithLock(fn: () => Promise<void>): Promise<void> {
+export async function runWithLock(
+  lockId: number,
+  fn: () => Promise<void>,
+): Promise<void> {
   // Try to acquire advisory lock (non-blocking)
   const lockResult = await db.execute(
-    sql`SELECT pg_try_advisory_lock(${SCHEDULER_LOCK_ID}) as acquired`,
+    sql`SELECT pg_try_advisory_lock(${lockId}) as acquired`,
   );
 
   const acquired = lockResult.rows[0]?.acquired;
 
   if (!acquired) {
     logger.debug(
-      "Another backend instance is running the scheduler, skipping this tick",
+      { lockId },
+      "Another backend instance holds this job's lock, skipping this tick",
     );
     return;
   }
@@ -76,7 +83,7 @@ async function runWithLock(fn: () => Promise<void>): Promise<void> {
     await fn();
   } finally {
     // Always release lock, even if processing fails
-    await db.execute(sql`SELECT pg_advisory_unlock(${SCHEDULER_LOCK_ID})`);
+    await db.execute(sql`SELECT pg_advisory_unlock(${lockId})`);
   }
 }
 
@@ -92,7 +99,11 @@ async function runWithLock(fn: () => Promise<void>): Promise<void> {
  * to the same schedule, so the advisory lock contention is predictable
  * and only one instance wins each cycle.
  */
-function scheduleAligned(intervalMs: number, fn: () => Promise<void>): void {
+export function scheduleAligned(
+  name: string,
+  intervalMs: number,
+  fn: () => Promise<void>,
+): void {
   function scheduleNext() {
     const now = Date.now();
     const nextTick = Math.ceil(now / intervalMs) * intervalMs;
@@ -103,7 +114,7 @@ function scheduleAligned(intervalMs: number, fn: () => Promise<void>): void {
         try {
           await fn();
         } catch (error) {
-          logger.error({ error }, "Scheduled job failed");
+          logger.error({ error, job: name }, "Scheduled job failed");
         }
         scheduleNext();
       })();
@@ -461,8 +472,8 @@ export function startScheduler(): void {
   // multiple booting instances can't all sweep concurrently — the first to
   // grab the lock does it. Each sweep is wrapped independently so one failing
   // doesn't skip the others.
-  scheduleAligned(SCHEDULER_INTERVAL_MS, async () => {
-    await runWithLock(async () => {
+  scheduleAligned("trigger-scheduler", SCHEDULER_INTERVAL_MS, async () => {
+    await runWithLock(SCHEDULER_LOCK_ID, async () => {
       try {
         await recoverStuckTriggers();
       } catch (error) {

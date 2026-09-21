@@ -9,7 +9,6 @@ import {
 import { openProvider } from "./provider.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
-import { dedupeArray, toKebabCase } from "../utils.ts";
 import { UNTITLED_CHAT_TITLE, type Provider } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import { logger } from "../logger.ts";
@@ -26,6 +25,19 @@ export type GenerateChatMetadataParams = {
    */
   providerId: string;
 };
+
+/**
+ * A model-supplied tag, normalised to kebab-case. Splits camelCase, folds
+ * whitespace and underscores to hyphens, and drops anything else — models
+ * return "Machine Learning", "machineLearning" and "machine_learning" for the
+ * same tag, and tags only dedupe if they agree on a spelling.
+ */
+export const toKebabCase = (str: string): string =>
+  str
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-zA-Z0-9-]/g, "")
+    .toLowerCase();
 
 /** Whether the messages contain at least one user message carrying text. */
 const hasUserText = (messages: PlatypusUIMessage[]): boolean =>
@@ -175,7 +187,7 @@ export const generateChatMetadata = async (
   }
 
   // Enforce kebab-case tags and dedupe.
-  const newTags = dedupeArray(output.tags.map(toKebabCase));
+  const newTags = [...new Set(output.tags.map(toKebabCase))];
 
   // Conditional write: only apply while the row is still "Untitled". This is
   // the atomic concurrency backstop — the first writer wins, later writers

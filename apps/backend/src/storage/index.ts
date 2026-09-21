@@ -6,44 +6,23 @@ import { logger } from "../logger.ts";
 let storageInstance: StorageBackend | null = null;
 
 /**
- * Get the storage backend type from environment variable.
- * Defaults to "disk" if not set.
- */
-function getStorageBackendType(): "disk" | "s3" {
-  const backend = process.env.STORAGE_BACKEND || "disk";
-  if (backend !== "disk" && backend !== "s3") {
-    logger.warn(
-      `Invalid STORAGE_BACKEND value '${backend}', defaulting to 'disk'`,
-    );
-    return "disk";
-  }
-  return backend;
-}
-
-/**
- * Create a new storage backend instance based on environment configuration.
- */
-function createStorageBackend(): StorageBackend {
-  const type = getStorageBackendType();
-
-  if (type === "s3") {
-    logger.info("Using S3 storage backend");
-    return new S3Storage();
-  }
-
-  logger.info("Using disk storage backend");
-  return new DiskStorage();
-}
-
-/**
- * Get the singleton storage backend instance.
- * Creates the instance on first call based on STORAGE_BACKEND env var.
+ * The singleton storage backend, created on first call from `STORAGE_BACKEND`.
+ * Anything other than `s3` is disk.
+ *
+ * An unrecognised value still says so: `self-hosting/production.mdx` tells
+ * multi-replica operators to set this var, and a typo that silently serves
+ * disk on one replica makes files written there invisible to the others.
  */
 export function getStorage(): StorageBackend {
-  if (!storageInstance) {
-    storageInstance = createStorageBackend();
+  const configured = process.env.STORAGE_BACKEND;
+  if (configured && configured !== "disk" && configured !== "s3") {
+    logger.warn(
+      { STORAGE_BACKEND: configured },
+      "Unrecognised STORAGE_BACKEND, falling back to disk",
+    );
   }
-  return storageInstance;
+  return (storageInstance ??=
+    configured === "s3" ? new S3Storage() : new DiskStorage());
 }
 
 /**

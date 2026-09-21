@@ -18,7 +18,7 @@ vi.mock("./provider.ts", () => ({
   }),
 }));
 
-import { generateChatMetadata } from "./chat-metadata.ts";
+import { generateChatMetadata, toKebabCase } from "./chat-metadata.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
 const userMessage: PlatypusUIMessage = {
@@ -61,6 +61,19 @@ const sharedProvider = {
   workspaceId: null,
   organizationId: "org-1",
 };
+
+describe("toKebabCase", () => {
+  it.each([
+    ["Machine Learning", "machine-learning"],
+    ["machineLearning", "machine-learning"],
+    ["machine_learning", "machine-learning"],
+    ["C++/Rust!", "crust"],
+    ["already-kebab", "already-kebab"],
+    ["HTTP", "http"],
+  ])("normalizes %j to %j", (input, expected) => {
+    expect(toKebabCase(input)).toBe(expected);
+  });
+});
 
 describe("generateChatMetadata", () => {
   beforeEach(() => {

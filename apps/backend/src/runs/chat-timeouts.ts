@@ -25,16 +25,13 @@ export const DEFAULT_CHAT_PER_RUN_TIMEOUT_MS = 30 * 60 * 1000;
 
 /** The configured wall-clock ceiling for a whole Chat turn. */
 export const chatPerRunTimeoutMs = (): number =>
-  parseInt(
-    process.env.CHAT_PER_RUN_TIMEOUT_MS ??
-      String(DEFAULT_CHAT_PER_RUN_TIMEOUT_MS),
-  );
+  Number(process.env.CHAT_PER_RUN_TIMEOUT_MS) ||
+  DEFAULT_CHAT_PER_RUN_TIMEOUT_MS;
 
 /** The per-step and per-run bounds handed to the run registry for a Chat turn. */
 export const chatTimeouts = () => ({
-  perStepTimeoutMs: parseInt(
-    process.env.CHAT_PER_STEP_TIMEOUT_MS ??
-      String(DEFAULT_CHAT_PER_STEP_TIMEOUT_MS),
-  ),
+  perStepTimeoutMs:
+    Number(process.env.CHAT_PER_STEP_TIMEOUT_MS) ||
+    DEFAULT_CHAT_PER_STEP_TIMEOUT_MS,
   perRunTimeoutMs: chatPerRunTimeoutMs(),
 });

@@ -3,7 +3,6 @@ import type { z } from "zod";
 import type { agentBaseSchema } from "@platypus/schemas";
 import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
-import { dedupeArray } from "../utils.ts";
 import type { ScopeContext } from "../scope.ts";
 import {
   validateSubAgentAssignment,
@@ -94,10 +93,10 @@ type IdArrayFields = Pick<
 /** Dedupes the id arrays a write may carry; fields with none pass through unchanged. */
 const dedupeIdArrays = <T extends IdArrayFields>(fields: T): T => ({
   ...fields,
-  ...(fields.toolSetIds && { toolSetIds: dedupeArray(fields.toolSetIds) }),
-  ...(fields.skillIds && { skillIds: dedupeArray(fields.skillIds) }),
+  ...(fields.toolSetIds && { toolSetIds: [...new Set(fields.toolSetIds)] }),
+  ...(fields.skillIds && { skillIds: [...new Set(fields.skillIds)] }),
   ...(fields.subAgentIds && {
-    subAgentIds: dedupeArray(fields.subAgentIds),
+    subAgentIds: [...new Set(fields.subAgentIds)],
   }),
 });
 
