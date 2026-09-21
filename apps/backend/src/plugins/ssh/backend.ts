@@ -246,7 +246,7 @@ function parseHostKeyPin(pin: string): Buffer {
  * tools are built on top of this by {@link createPosixSandbox} — nothing here
  * parses find(1), counts lines, or decides what `truncated` means.
  */
-export class SshSandboxTransport implements SandboxTransport {
+class SshSandboxTransport implements SandboxTransport {
   private config: SshSandboxConfig;
   private credentials: SshSandboxCredentials;
   // Single reused connection and its in-flight promise (mirrors the Docker

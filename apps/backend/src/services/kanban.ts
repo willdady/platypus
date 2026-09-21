@@ -23,7 +23,6 @@ import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import { listScopedByIds } from "./scoped-resource.ts";
-import { calculateCardPosition } from "../utils/kanban-positioning.ts";
 import {
   filterKnownLabelIds,
   pruneCardLabelIds,
@@ -46,7 +45,7 @@ import {
  */
 
 /** Who is performing the mutation — one of a Workspace member or an Agent. */
-export type KanbanActor = { userId: string } | { agentId: string };
+type KanbanActor = { userId: string } | { agentId: string };
 
 /**
  * Where a lookup may reach: a {@link ScopeContext} — so the HTTP surface hands
@@ -67,7 +66,7 @@ export type KanbanContext = KanbanScope & { actor: KanbanActor };
 export type CardRef = { id: string; columnId: string; boardId: string };
 
 /** A column's identity and the board it belongs to. */
-export type ColumnRef = { id: string; boardId: string };
+type ColumnRef = { id: string; boardId: string };
 
 /** A comment row, as the guards return it. */
 export type CommentRow = typeof kanbanCardCommentTable.$inferSelect;
@@ -224,7 +223,7 @@ const dispatchCardWrite = (
  * `lastEditedBy*` columns, so an entry and the Card can never disagree about
  * who wrote it.
  */
-export type CardHistoryRow = typeof kanbanCardHistoryTable.$inferSelect;
+type CardHistoryRow = typeof kanbanCardHistoryTable.$inferSelect;
 
 /** A history entry with its actor's display name resolved. */
 export type CardHistoryEntry = CardHistoryRow & { actorName: string | null };
@@ -796,6 +795,45 @@ export const rebalancedPositions = (
   }));
 
 /**
+ * The slot a card takes when it sits behind `afterCardId` (`null` = the head),
+ * plus whether the gap it lands in has been halved so thin that the column
+ * must be renumbered first.
+ *
+ * `otherCards` is the column in ascending position order, without the card
+ * being placed.
+ */
+export const calculateCardPosition = (
+  otherCards: { id: string; position: number }[],
+  afterCardId: string | null,
+): { position: number; needsRebalance: boolean; afterIndex: number } => {
+  if (afterCardId === null) {
+    const position = otherCards.length === 0 ? 1.0 : otherCards[0].position / 2;
+    return { position, needsRebalance: false, afterIndex: -1 };
+  }
+
+  const afterIndex = otherCards.findIndex((card) => card.id === afterCardId);
+  if (afterIndex === -1) {
+    throw new ValidationError("afterCardId not found in column");
+  }
+
+  const anchor = otherCards[afterIndex];
+  const next = otherCards[afterIndex + 1];
+  if (!next) {
+    return {
+      position: anchor.position + 1.0,
+      needsRebalance: false,
+      afterIndex,
+    };
+  }
+
+  return {
+    position: (anchor.position + next.position) / 2,
+    needsRebalance: next.position - anchor.position < 0.001,
+    afterIndex,
+  };
+};
+
+/**
  * Where a card lands in a column, rebalancing the column first if the gap it
  * would take has collapsed. `afterCardId` is the card to sit behind: `null`
  * puts it at the head, `undefined` at the end.
@@ -826,12 +864,7 @@ export const placeCardInColumn = async (
     (card) => card.id !== input.excludeCardId,
   );
 
-  let result: ReturnType<typeof calculateCardPosition>;
-  try {
-    result = calculateCardPosition(otherCards, input.afterCardId);
-  } catch {
-    throw new ValidationError("afterCardId not found in column");
-  }
+  const result = calculateCardPosition(otherCards, input.afterCardId);
 
   if (!result.needsRebalance) return result.position;
 

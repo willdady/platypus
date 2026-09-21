@@ -76,86 +76,70 @@ describe("resolveActor", () => {
 
 describe("canManageSharedResource — attach/detach/Promote (ADR-0007)", () => {
   it.each(ACTORS)("%s outside a Workspace is refused", (actor) => {
-    expect(canManageSharedResource(actor, undefined)).toEqual({
-      allowed: false,
-      reason: "no-workspace-context",
-    });
+    expect(canManageSharedResource(actor, undefined)).toBe(false);
   });
 
   it("Operator inside a Workspace is allowed", () => {
-    expect(canManageSharedResource("operator", "ws-1")).toEqual({
-      allowed: true,
-    });
+    expect(canManageSharedResource("operator", "ws-1")).toBe(true);
   });
 
   it("Org Admin inside a Workspace is allowed", () => {
-    expect(canManageSharedResource("org-admin", "ws-1")).toEqual({
-      allowed: true,
-    });
+    expect(canManageSharedResource("org-admin", "ws-1")).toBe(true);
   });
 
   it("Workspace Owner inside their own Workspace is refused", () => {
-    expect(canManageSharedResource("workspace-owner", "ws-1")).toEqual({
-      allowed: false,
-      reason: "not-org-admin",
-    });
+    expect(canManageSharedResource("workspace-owner", "ws-1")).toBe(false);
   });
 
   it("a plain Org member inside a Workspace is refused", () => {
-    expect(canManageSharedResource("org-member", "ws-1")).toEqual({
-      allowed: false,
-      reason: "not-org-admin",
-    });
+    expect(canManageSharedResource("org-member", "ws-1")).toBe(false);
   });
 });
 
 describe("canConfigureWorkspaceResource — credential delegation (ADR-0006)", () => {
   for (const type of ["provider", "mcp"] as const) {
     it(`Operator always may configure a ${type}`, () => {
-      expect(canConfigureWorkspaceResource("operator", type, false)).toEqual({
-        allowed: true,
-      });
+      expect(canConfigureWorkspaceResource("operator", type, false)).toBe(true);
     });
 
     it(`Org Admin always may configure a ${type}`, () => {
-      expect(canConfigureWorkspaceResource("org-admin", type, false)).toEqual({
-        allowed: true,
-      });
+      expect(canConfigureWorkspaceResource("org-admin", type, false)).toBe(
+        true,
+      );
     });
 
     it(`Workspace Owner may configure a delegated ${type}`, () => {
-      expect(
-        canConfigureWorkspaceResource("workspace-owner", type, true),
-      ).toEqual({ allowed: true });
+      expect(canConfigureWorkspaceResource("workspace-owner", type, true)).toBe(
+        true,
+      );
     });
 
     it(`Workspace Owner may not configure a non-delegated ${type}`, () => {
       expect(
         canConfigureWorkspaceResource("workspace-owner", type, false),
-      ).toEqual({ allowed: false, reason: "not-delegated" });
+      ).toBe(false);
     });
 
     it(`a plain Org member may never configure a ${type}`, () => {
-      expect(canConfigureWorkspaceResource("org-member", type, true)).toEqual({
-        allowed: false,
-        reason: "not-owner",
-      });
+      expect(canConfigureWorkspaceResource("org-member", type, true)).toBe(
+        false,
+      );
     });
   }
 
   it("a Sandbox is never delegatable, even to its Workspace Owner", () => {
     expect(
       canConfigureWorkspaceResource("workspace-owner", "sandbox", true),
-    ).toEqual({ allowed: false, reason: "not-delegatable" });
+    ).toBe(false);
   });
 
   it("Operator and Org Admin still configure a Sandbox", () => {
-    expect(canConfigureWorkspaceResource("operator", "sandbox", false)).toEqual(
-      { allowed: true },
+    expect(canConfigureWorkspaceResource("operator", "sandbox", false)).toBe(
+      true,
     );
-    expect(
-      canConfigureWorkspaceResource("org-admin", "sandbox", false),
-    ).toEqual({ allowed: true });
+    expect(canConfigureWorkspaceResource("org-admin", "sandbox", false)).toBe(
+      true,
+    );
   });
 });
 
@@ -167,38 +151,29 @@ describe.each([
   ["canManageWorkspaceDelegation", canManageWorkspaceDelegation],
 ] as const)("%s — Org-Admin-tier, no Workspace requirement", (_name, fn) => {
   it("the Operator is allowed", () => {
-    expect(fn("operator")).toEqual({ allowed: true });
+    expect(fn("operator")).toBe(true);
   });
 
   it("the Org Admin is allowed", () => {
-    expect(fn("org-admin")).toEqual({ allowed: true });
+    expect(fn("org-admin")).toBe(true);
   });
 
   it("the Workspace Owner is refused", () => {
-    expect(fn("workspace-owner")).toEqual({
-      allowed: false,
-      reason: "not-org-admin",
-    });
+    expect(fn("workspace-owner")).toBe(false);
   });
 
   it("a plain Org member is refused", () => {
-    expect(fn("org-member")).toEqual({
-      allowed: false,
-      reason: "not-org-admin",
-    });
+    expect(fn("org-member")).toBe(false);
   });
 });
 
 describe("canSendChatMessages", () => {
   it("the literal Workspace owner is allowed", () => {
-    expect(canSendChatMessages(true)).toEqual({ allowed: true });
+    expect(canSendChatMessages(true)).toBe(true);
   });
 
   it("a non-owner is refused, regardless of admin tier", () => {
-    expect(canSendChatMessages(false)).toEqual({
-      allowed: false,
-      reason: "not-owner",
-    });
+    expect(canSendChatMessages(false)).toBe(false);
   });
 });
 

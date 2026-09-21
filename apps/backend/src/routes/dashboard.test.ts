@@ -7,11 +7,10 @@ import {
 } from "../test-utils.ts";
 import app from "../server.ts";
 import { logger } from "../logger.ts";
+import { mockNanoid } from "../test-setup.ts";
 import type { WidgetType } from "@platypus/schemas";
 
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn(() => "test-id-123"),
-}));
+mockNanoid.mockReturnValue("test-id-123");
 
 describe("Dashboard Routes", () => {
   beforeEach(() => {

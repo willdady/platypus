@@ -26,7 +26,7 @@ export default function OrgPage({
 }) {
   const { orgId } = use(params);
   const { actor, isAuthLoading } = useAuth();
-  const canCreate = canCreateWorkspace(actor).allowed;
+  const canCreate = canCreateWorkspace(actor);
   const routes = orgRoutes(orgId);
 
   const { data: workspacesData } = useScopedSWR<{

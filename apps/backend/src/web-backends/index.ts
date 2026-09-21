@@ -5,6 +5,10 @@ import { logger } from "../logger.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { raceAbort } from "../utils/abort-race.ts";
+// Cuts a backend-supplied string to a core-owned bound, marking the cut so the
+// model can tell a truncated snippet from a naturally short one. Shared with
+// the Zod issue formatter: one definition of what a capped string looks like.
+import { truncate } from "../zod-issues.ts";
 import { withAttributedRegistrar } from "../tools/closers.ts";
 import {
   READ_URL_TOOL_NAME,
@@ -58,7 +62,7 @@ export const MAX_CONTENT_TYPE_CHARS = 200;
 // plugin-named) rather than silently clamped here, because `timeoutMs` is static
 // on the contribution and therefore knowable at load. 120s covers a cold
 // headless-browser render with headroom.
-export const DEFAULT_WEB_TIMEOUT_MS = 30_000;
+const DEFAULT_WEB_TIMEOUT_MS = 30_000;
 export const MAX_WEB_TIMEOUT_MS = 120_000;
 
 const WEB_SEARCH_DESCRIPTION =
@@ -97,11 +101,6 @@ export const getWebBackends = (): ReadonlyArray<WebBackendRegistration> =>
 
 /** Test-only reset — see {@link createContributionRegistry}. */
 export const clearWebBackends = (): void => WEB_BACKENDS.clear();
-
-// Cut a backend-supplied string to a core-owned bound, marking the cut so the
-// model can tell a truncated snippet from a naturally short one.
-const truncate = (value: string, max: number): string =>
-  value.length > max ? `${value.slice(0, max)}…` : value;
 
 // Everything an executor resolves is read through this, so the wrapper treats a
 // backend's payload as `unknown` and narrows field by field. The SDK types say

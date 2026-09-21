@@ -34,9 +34,6 @@ export type TriggerSinkParams = {
   flushIntervalMs?: number;
 };
 
-/** Default cadence for periodic TriggerSink stat and event flushes. */
-export const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
-
 /**
  * `steps == null` means no step was ever observed, and writing "0 steps, 0
  * tokens" for a run that never started reads as a real measurement — hence the
@@ -139,8 +136,10 @@ export class TriggerSink implements RunSink {
       createdAt: new Date(),
     });
 
-    const intervalMs = this.params.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
-    this.flusher = new FlushScheduler(intervalMs, () => this.flush());
+    this.flusher = new FlushScheduler(
+      () => this.flush(),
+      this.params.flushIntervalMs,
+    );
     this.events?.subscribe(() => this.flusher?.bump());
   }
 

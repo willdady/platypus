@@ -22,7 +22,7 @@
  */
 
 /** How often a silent stream puts bytes on the wire. */
-export const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
 
 /**
  * One SSE comment frame. A line opening with `:` carries no event, so a

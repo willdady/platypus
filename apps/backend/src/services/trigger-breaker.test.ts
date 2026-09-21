@@ -3,26 +3,14 @@ import { mockDb, resetMockDb } from "../test-utils.ts";
 import { lte, notInArray } from "drizzle-orm";
 import { triggerRun as triggerRunTable } from "../db/schema.ts";
 
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn(() => "suppressed-1"),
-}));
+import { mockLogger, mockNanoid } from "../test-setup.ts";
 
-const { mockLogger } = vi.hoisted(() => ({
-  mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
-
-vi.mock("../logger.ts", () => ({ logger: mockLogger }));
+mockNanoid.mockReturnValue("suppressed-1");
 
 import {
-  DEFAULT_TRIGGER_BREAKER_MAX_RUNS,
-  DEFAULT_TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP,
-  DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS,
   retainTriggerRuns,
   shouldSuppressTriggerRun,
   suppressTriggerRun,
-  TRIGGER_BREAKER_MAX_RUNS_ENV,
-  TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP_ENV,
-  TRIGGER_BREAKER_WINDOW_SECONDS_ENV,
   triggerBreakerConfig,
   validateTriggerBreakerConfig,
 } from "./trigger-breaker.ts";
@@ -41,18 +29,18 @@ describe("trigger-breaker", () => {
   describe("triggerBreakerConfig", () => {
     it("uses the proposed defaults when nothing is set", () => {
       expect(triggerBreakerConfig({})).toEqual({
-        maxRuns: DEFAULT_TRIGGER_BREAKER_MAX_RUNS,
-        windowSeconds: DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS,
-        suppressedRunsToKeep: DEFAULT_TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP,
+        maxRuns: 20,
+        windowSeconds: 3600,
+        suppressedRunsToKeep: 20,
       });
     });
 
     it("reads every setting from the environment", () => {
       expect(
         triggerBreakerConfig({
-          [TRIGGER_BREAKER_MAX_RUNS_ENV]: "5",
-          [TRIGGER_BREAKER_WINDOW_SECONDS_ENV]: "60",
-          [TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP_ENV]: "3",
+          TRIGGER_BREAKER_MAX_RUNS: "5",
+          TRIGGER_BREAKER_WINDOW_SECONDS: "60",
+          TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP: "3",
         }),
       ).toEqual({ maxRuns: 5, windowSeconds: 60, suppressedRunsToKeep: 3 });
     });
@@ -65,13 +53,12 @@ describe("trigger-breaker", () => {
       (raw) => {
         if (raw.trim() === "") {
           expect(
-            triggerBreakerConfig({ [TRIGGER_BREAKER_MAX_RUNS_ENV]: raw })
-              .maxRuns,
-          ).toBe(DEFAULT_TRIGGER_BREAKER_MAX_RUNS);
+            triggerBreakerConfig({ TRIGGER_BREAKER_MAX_RUNS: raw }).maxRuns,
+          ).toBe(20);
           return;
         }
         expect(() =>
-          triggerBreakerConfig({ [TRIGGER_BREAKER_MAX_RUNS_ENV]: raw }),
+          triggerBreakerConfig({ TRIGGER_BREAKER_MAX_RUNS: raw }),
         ).toThrow(/TRIGGER_BREAKER_MAX_RUNS must be a positive integer/);
       },
     );
@@ -79,15 +66,15 @@ describe("trigger-breaker", () => {
 
   describe("validateTriggerBreakerConfig", () => {
     it("fails startup on a malformed setting rather than defaulting it", () => {
-      vi.stubEnv(TRIGGER_BREAKER_MAX_RUNS_ENV, "banana");
+      vi.stubEnv("TRIGGER_BREAKER_MAX_RUNS", "banana");
 
       expect(() => validateTriggerBreakerConfig()).toThrow(
-        TRIGGER_BREAKER_MAX_RUNS_ENV,
+        "TRIGGER_BREAKER_MAX_RUNS",
       );
     });
 
     it("reports the effective settings at boot", () => {
-      vi.stubEnv(TRIGGER_BREAKER_MAX_RUNS_ENV, "5");
+      vi.stubEnv("TRIGGER_BREAKER_MAX_RUNS", "5");
 
       expect(validateTriggerBreakerConfig()).toMatchObject({ maxRuns: 5 });
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -97,7 +84,7 @@ describe("trigger-breaker", () => {
     });
 
     it("says out loud that a longer window retains more runs", () => {
-      vi.stubEnv(TRIGGER_BREAKER_WINDOW_SECONDS_ENV, "7200");
+      vi.stubEnv("TRIGGER_BREAKER_WINDOW_SECONDS", "7200");
 
       validateTriggerBreakerConfig();
 
@@ -116,7 +103,7 @@ describe("trigger-breaker", () => {
 
   describe("shouldSuppressTriggerRun", () => {
     it("suppresses once the window holds the ceiling, not one run later", async () => {
-      vi.stubEnv(TRIGGER_BREAKER_MAX_RUNS_ENV, "20");
+      vi.stubEnv("TRIGGER_BREAKER_MAX_RUNS", "20");
       mockDb.where.mockResolvedValueOnce([{ runs: 20 }]);
 
       await expect(
@@ -125,7 +112,7 @@ describe("trigger-breaker", () => {
     });
 
     it("allows the firing while the window is below the ceiling", async () => {
-      vi.stubEnv(TRIGGER_BREAKER_MAX_RUNS_ENV, "20");
+      vi.stubEnv("TRIGGER_BREAKER_MAX_RUNS", "20");
       mockDb.where.mockResolvedValueOnce([{ runs: 19 }]);
 
       await expect(
@@ -223,7 +210,7 @@ describe("trigger-breaker", () => {
       // an id list with the Trigger's throughput.
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
-      vi.stubEnv(TRIGGER_BREAKER_WINDOW_SECONDS_ENV, "3600");
+      vi.stubEnv("TRIGGER_BREAKER_WINDOW_SECONDS", "3600");
       stubRetention({ newest: [{ id: "newest" }], suppressed: [] });
 
       await retainTriggerRuns("trigger-1", 1);
@@ -260,7 +247,7 @@ describe("trigger-breaker", () => {
       // a module constant could not cover a value set at deploy time.
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
-      vi.stubEnv(TRIGGER_BREAKER_WINDOW_SECONDS_ENV, "60");
+      vi.stubEnv("TRIGGER_BREAKER_WINDOW_SECONDS", "60");
       stubRetention({ newest: [{ id: "newest" }], suppressed: [] });
 
       await retainTriggerRuns("trigger-1", 1);
@@ -272,7 +259,7 @@ describe("trigger-breaker", () => {
     });
 
     it("budgets suppressed rows separately from maxRunsToKeep", async () => {
-      vi.stubEnv(TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP_ENV, "1");
+      vi.stubEnv("TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP", "1");
       stubRetention({
         newest: [{ id: "newest" }],
         suppressed: [{ id: "suppressed-newest" }],
@@ -297,7 +284,7 @@ describe("trigger-breaker", () => {
     });
 
     it("still budgets suppressed rows when maxRunsToKeep is zero", async () => {
-      vi.stubEnv(TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP_ENV, "1");
+      vi.stubEnv("TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP", "1");
       mockDb.limit.mockResolvedValueOnce([{ id: "suppressed-newest" }]);
       mockDb.returning.mockResolvedValueOnce([]);
 

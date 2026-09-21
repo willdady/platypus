@@ -279,16 +279,7 @@ vi.mock("ssh2", () => {
   return { Client: FakeClient };
 });
 
-vi.mock("../../logger.ts", () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-
-// Import AFTER vi.mock so the adapter binds to the mocked ssh2 + logger.
+// Import AFTER vi.mock so the adapter binds to the mocked ssh2.
 import {
   createSshSandboxBackend,
   sshSandboxConfigSchema,

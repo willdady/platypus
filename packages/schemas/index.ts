@@ -222,8 +222,6 @@ export const chatUpdateSchema = chatSchema.pick({
   tags: true,
 });
 
-export type ChatUpdateData = z.infer<typeof chatUpdateSchema>;
-
 export type ChatSubmitData = z.infer<typeof chatSubmitSchema>;
 
 export const chatListItemSchema = chatSchema.pick({
@@ -245,8 +243,6 @@ export const chatListSchema = z.object({
   results: z.array(chatListItemSchema),
   totalCount: z.number(),
 });
-
-export type ChatList = z.infer<typeof chatListSchema>;
 
 // Agent
 
@@ -743,7 +739,6 @@ export const attachmentCreateSchema = attachmentBaseSchema.pick({
   resourceType: true,
   resourceId: true,
 });
-export type AttachmentCreateData = z.infer<typeof attachmentCreateSchema>;
 
 // Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
 // creates the Attachments for a chosen set of Shared resources in one step
@@ -802,7 +797,6 @@ export const blueprintCreateSchema = blueprintBaseSchema.pick({
   memoryEmbeddingProviderId: true,
   context: true,
 });
-export type BlueprintCreateData = z.infer<typeof blueprintCreateSchema>;
 
 export const blueprintUpdateSchema = blueprintBaseSchema.pick({
   name: true,
@@ -813,19 +807,15 @@ export const blueprintUpdateSchema = blueprintBaseSchema.pick({
   memoryEmbeddingProviderId: true,
   context: true,
 });
-export type BlueprintUpdateData = z.infer<typeof blueprintUpdateSchema>;
 
 // Apply a Blueprint to an existing Workspace (admin only, ad-hoc re-apply).
 export const blueprintApplySchema = z.object({
   workspaceId: z.string(),
 });
-export type BlueprintApplyData = z.infer<typeof blueprintApplySchema>;
 
 // Provider
 
 export const providerApiModeSchema = z.enum(["chat", "responses"]);
-
-export type ProviderApiMode = z.infer<typeof providerApiModeSchema>;
 
 // Per-model configuration attached to a provider. Replaces the old free-form
 // `modelIds: string[]`; each enabled model now carries its own metadata.
@@ -1786,8 +1776,6 @@ export const invitationStatusSchema = z.enum([
   "expired",
 ]);
 
-export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
-
 export const invitationSchema = z.object({
   id: z.string(),
   email: z.string().email(),
@@ -1901,8 +1889,6 @@ export const organizationMemberSchema = z.object({
   updatedAt: z.date(),
 });
 
-export type OrganizationMember = z.infer<typeof organizationMemberSchema>;
-
 export const organizationMemberUpdateSchema = organizationMemberSchema.pick({
   role: true,
 });
@@ -1918,10 +1904,6 @@ export const organizationMemberWithUserSchema = organizationMemberSchema.extend(
   },
 );
 
-export type OrganizationMemberWithUser = z.infer<
-  typeof organizationMemberWithUserSchema
->;
-
 // Combined Org Member for List
 
 export const orgMemberListItemSchema = organizationMemberWithUserSchema.extend({
@@ -1933,8 +1915,6 @@ export type OrgMemberListItem = z.infer<typeof orgMemberListItemSchema>;
 export const orgMemberListSchema = z.object({
   results: z.array(orgMemberListItemSchema),
 });
-
-export type OrgMemberList = z.infer<typeof orgMemberListSchema>;
 
 // Context
 
@@ -1969,8 +1949,6 @@ export const memoryDailySummarySchema = z.object({
   createdAt: z.date(),
   updatedAt: z.date(),
 });
-
-export type MemoryDailySummary = z.infer<typeof memoryDailySummarySchema>;
 
 // Webhook Event (defined here so trigger schemas can reference it). Each
 // event's payload is declared beside the name in `webhookEventDataSchemas` at
@@ -2009,8 +1987,6 @@ export const eventTriggerFiltersSchema = z.object({
   columnId: z.string().optional(),
   changedFields: z.array(z.string()).optional(),
 });
-
-export type EventTriggerFilters = z.infer<typeof eventTriggerFiltersSchema>;
 
 export const eventTriggerConfigSchema = z.object({
   events: z.array(webhookEventSchema).min(1),
@@ -2202,13 +2178,9 @@ export const triggerRunSchema = z.object({
   createdAt: z.date(),
 });
 
-export type TriggerRun = z.infer<typeof triggerRunSchema>;
-
 export const triggerRunListSchema = z.object({
   results: z.array(triggerRunSchema),
 });
-
-export type TriggerRunList = z.infer<typeof triggerRunListSchema>;
 
 /**
  * A run as the workspace-wide Trigger runs list returns it: the run plus the
@@ -2356,18 +2328,6 @@ export const notificationSchema = z.object({
 });
 
 export type Notification = z.infer<typeof notificationSchema>;
-
-export const notificationCreateSchema = notificationSchema.pick({
-  title: true,
-  body: true,
-});
-
-export const notificationUpdateSchema = notificationSchema
-  .pick({
-    title: true,
-    body: true,
-  })
-  .partial();
 
 export const notificationListItemSchema = notificationSchema.extend({
   agentName: z.string(),
@@ -2664,10 +2624,6 @@ export const kanbanCardHistoryEntrySchema = z.object({
   actorName: z.string().nullable().optional(),
   createdAt: z.date(),
 });
-
-export type KanbanCardHistoryEntry = z.infer<
-  typeof kanbanCardHistoryEntrySchema
->;
 
 // Kanban Board State (nested response)
 

@@ -28,15 +28,6 @@ import {
   type WebToolError,
 } from "./index.ts";
 
-vi.mock("../logger.ts", () => ({
-  logger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
 const mockLogger = vi.mocked(logger);
 
 // What core hands its own `buildTurnTools`. `providerId` is core's alone: it
@@ -333,9 +324,13 @@ describe("web_search — core-owned caps", () => {
       }),
     });
 
+    // The shared `truncate` spends the last character on the `…` marker, so a
+    // cut string is exactly the cap long — marker included.
     const [only] = (await search(web_search, "q")).results;
-    expect(only.title).toBe(`${"t".repeat(MAX_TITLE_CHARS)}…`);
-    expect(only.snippet).toBe(`${"s".repeat(MAX_SNIPPET_CHARS)}…`);
+    expect(only.title).toBe(`${"t".repeat(MAX_TITLE_CHARS - 1)}…`);
+    expect(only.snippet).toBe(`${"s".repeat(MAX_SNIPPET_CHARS - 1)}…`);
+    expect(only.title).toHaveLength(MAX_TITLE_CHARS);
+    expect(only.snippet).toHaveLength(MAX_SNIPPET_CHARS);
   });
 
   it("truncates the answer box — free upstream text is not passed through unbounded", async () => {
@@ -348,7 +343,8 @@ describe("web_search — core-owned caps", () => {
     });
 
     const result = await search(web_search, "q");
-    expect(result.answer).toBe(`${"a".repeat(MAX_ANSWER_CHARS)}…`);
+    expect(result.answer).toBe(`${"a".repeat(MAX_ANSWER_CHARS - 1)}…`);
+    expect(result.answer).toHaveLength(MAX_ANSWER_CHARS);
   });
 
   it("omits answer entirely when the backend supplies none", async () => {

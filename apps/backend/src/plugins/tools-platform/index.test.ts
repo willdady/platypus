@@ -7,25 +7,6 @@ import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 // Postgres. Factories return AI SDK tool maps without touching the db until a
 // tool's `execute` runs, so these stubs are enough.
 vi.mock("../../index.ts", () => ({ db: {} }));
-// `child` is part of the mock because the plugin loader derives each plugin's
-// own logger from this one.
-vi.mock("../../logger.ts", () => {
-  const child = {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  };
-  return {
-    logger: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      child: vi.fn(() => child),
-    },
-  };
-});
 vi.mock("../../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
 vi.mock("../../services/sub-agent-validation.ts", () => ({
   validateSubAgentAssignment: vi.fn(),

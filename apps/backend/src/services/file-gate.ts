@@ -44,7 +44,7 @@ const isFilePart = (part: unknown): part is FilePart =>
  * (switching model may help); the other two are properties of the file itself
  * (switching model won't), so each gets its own message.
  */
-export type FileRejectionReason =
+type FileRejectionReason =
   "unsupported" | Exclude<ExtractionResult["status"], "ok">;
 
 export type FileRejection = { file: string; reason: FileRejectionReason };

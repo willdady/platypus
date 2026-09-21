@@ -50,7 +50,7 @@ export type ToolErrorLike = {
  * - `unserializable` — a parsed value that cannot be rendered as text
  * - `absent` — no input on the part at all (a provider-executed result)
  */
-export type ToolInputKind =
+type ToolInputKind =
   "unparseable" | "empty" | "parsed" | "unserializable" | "absent";
 
 export type ToolInputRecord = {

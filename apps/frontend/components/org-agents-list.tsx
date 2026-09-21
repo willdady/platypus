@@ -40,7 +40,7 @@ import { useSharedDeleteGuard } from "@/hooks/use-shared-resource-actions";
 // here on the Organization surface — in Workspaces it is locked.
 export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   const { actor } = useAuth();
-  const canManage = canManageOrgSharedResource(actor).allowed;
+  const canManage = canManageOrgSharedResource(actor);
   const [agentToManage, setAgentToManage] = useState<Agent | null>(null);
 
   // Resolved once per render and reused for the list's read and every write

@@ -77,8 +77,8 @@ const WorkspaceForm = ({
   workspaceId,
 }: WorkspaceFormProps) => {
   const { user, actor } = useAuth();
-  const canListMembers = canListOrgMembers(actor).allowed;
-  const canManageDelegation = canManageWorkspaceDelegation(actor).allowed;
+  const canListMembers = canListOrgMembers(actor);
+  const canManageDelegation = canManageWorkspaceDelegation(actor);
   const backendUrl = useBackendUrl();
   const router = useRouter();
 

@@ -36,15 +36,8 @@ export type TriggerBreakerConfig = {
   suppressedRunsToKeep: number;
 };
 
-export const DEFAULT_TRIGGER_BREAKER_MAX_RUNS = 20;
-export const DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS = 3600;
-export const DEFAULT_TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP = 20;
-
-export const TRIGGER_BREAKER_MAX_RUNS_ENV = "TRIGGER_BREAKER_MAX_RUNS";
-export const TRIGGER_BREAKER_WINDOW_SECONDS_ENV =
-  "TRIGGER_BREAKER_WINDOW_SECONDS";
-export const TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP_ENV =
-  "TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP";
+/** Also the threshold `validateTriggerBreakerConfig` warns above. */
+const DEFAULT_WINDOW_SECONDS = 3600;
 
 /**
  * Reads one positive-integer setting. An explicitly-set value that is not one
@@ -74,19 +67,15 @@ const readPositiveInt = (
 export const triggerBreakerConfig = (
   env: NodeJS.ProcessEnv = process.env,
 ): TriggerBreakerConfig => ({
-  maxRuns: readPositiveInt(
-    TRIGGER_BREAKER_MAX_RUNS_ENV,
-    DEFAULT_TRIGGER_BREAKER_MAX_RUNS,
-    env,
-  ),
+  maxRuns: readPositiveInt("TRIGGER_BREAKER_MAX_RUNS", 20, env),
   windowSeconds: readPositiveInt(
-    TRIGGER_BREAKER_WINDOW_SECONDS_ENV,
-    DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS,
+    "TRIGGER_BREAKER_WINDOW_SECONDS",
+    DEFAULT_WINDOW_SECONDS,
     env,
   ),
   suppressedRunsToKeep: readPositiveInt(
-    TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP_ENV,
-    DEFAULT_TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP,
+    "TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP",
+    20,
     env,
   ),
 });
@@ -105,11 +94,11 @@ export const triggerBreakerConfig = (
 export const validateTriggerBreakerConfig = (): TriggerBreakerConfig => {
   const config = triggerBreakerConfig();
   logger.info(config, "Trigger run-rate breaker configured");
-  if (config.windowSeconds > DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS) {
+  if (config.windowSeconds > DEFAULT_WINDOW_SECONDS) {
     logger.warn(
       {
         windowSeconds: config.windowSeconds,
-        defaultWindowSeconds: DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS,
+        defaultWindowSeconds: DEFAULT_WINDOW_SECONDS,
       },
       "Trigger breaker window is longer than the default; trigger runs are retained for the whole window",
     );

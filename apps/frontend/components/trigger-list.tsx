@@ -37,13 +37,27 @@ import {
 } from "@platypus/schemas";
 import Link from "next/link";
 import { useBackendUrl } from "@/components/auth-provider";
-import { describeSchedule } from "@/lib/cron-utils";
+import { formatDateTime } from "@/lib/format-date";
+import cronstrue from "cronstrue";
 import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
+
+/**
+ * Plain-English rendering of a cron expression, e.g. "At 09:00 AM, only on
+ * Monday (UTC)". cronstrue throws on a malformed expression, so fall back to
+ * showing it raw rather than blanking the row.
+ */
+const describeSchedule = (cronExpression: string, timezone: string): string => {
+  try {
+    return `${cronstrue.toString(cronExpression, { verbose: false })} (${timezone})`;
+  } catch {
+    return cronExpression;
+  }
+};
 
 export const TriggerList = ({
   orgId,
@@ -167,7 +181,12 @@ export const TriggerList = ({
                   <div className="flex flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
                     {trigger.type === "cron" ? (
                       <>
-                        <span className="flex items-center gap-1">
+                        <span
+                          className="flex items-center gap-1"
+                          title={
+                            (trigger.config as CronTriggerConfig).cronExpression
+                          }
+                        >
                           <Timer className="h-3 w-3" />
                           {describeSchedule(
                             (trigger.config as CronTriggerConfig)
@@ -175,6 +194,11 @@ export const TriggerList = ({
                             (trigger.config as CronTriggerConfig).timezone,
                           )}
                         </span>
+                        {trigger.enabled && trigger.nextRunAt && (
+                          <span className="flex items-center gap-1">
+                            Next: {formatDateTime(trigger.nextRunAt)}
+                          </span>
+                        )}
                       </>
                     ) : (
                       <span className="flex items-center gap-1 flex-wrap">

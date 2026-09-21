@@ -10,10 +10,6 @@ import { z } from "zod";
 import { serializeLoggedError } from "../log-serializers.ts";
 import { formatStreamError } from "./stream-error.ts";
 
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-}));
-
 /**
  * The real error the SDK raises when a tool call's arguments fail their input
  * schema: an `InvalidToolInputError` wrapping a `TypeValidationError` wrapping

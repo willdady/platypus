@@ -97,7 +97,7 @@ export const ResourceList = ({
 
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
-  const canAttach = canManageSharedResource(actor, workspaceId).allowed;
+  const canAttach = canManageSharedResource(actor, workspaceId);
 
   // Workspace-scoped config is admin-only unless the workspace delegates it
   // (ADR-0006), resolved once by the auth module off the Workspace's own
@@ -108,7 +108,7 @@ export const ResourceList = ({
         actor,
         config.resourceType,
         workspaceDelegation?.[config.delegationFlag] === true,
-      ).allowed
+      )
     : true;
 
   if (isLoading) {

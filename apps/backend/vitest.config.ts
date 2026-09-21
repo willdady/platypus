@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    setupFiles: ["./src/test-setup.ts"],
     include: ["**/*.test.ts"],
     exclude: ["node_modules", "drizzle"],
     coverage: {

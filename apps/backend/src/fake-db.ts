@@ -238,7 +238,7 @@ export const orderOperators = () => ({
 });
 
 /** A unique index, as the fake enforces it on insert. */
-export type UniqueConstraint = {
+type UniqueConstraint = {
   /** The constraint name, as it reads in the Postgres error message. */
   name: string;
   /** The columns whose combined value must be unique. */

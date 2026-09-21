@@ -158,9 +158,9 @@ export const SkillsList = ({
 
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
-  const canAttach = canManageSharedResource(actor, workspaceId).allowed;
+  const canAttach = canManageSharedResource(actor, workspaceId);
   const canPromote = canAttach;
-  const canManageOrg = canManageOrgSharedResource(actor).allowed;
+  const canManageOrg = canManageOrgSharedResource(actor);
 
   const orgSkillDetach = useSharedDetach<SkillWithScope>({
     resourceType: "skill",

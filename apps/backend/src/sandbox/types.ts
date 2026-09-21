@@ -96,8 +96,12 @@ export type FsListInput = z.infer<typeof fsListInputSchema>;
 // one would be implementing two different interfaces. Asserted both ways, so a
 // drift in either the schema or the SDK is a type error here rather than a
 // mismatch nobody notices until an adapter is written against the wrong one.
+//
+// The alias is deliberately never referenced: its constraints are checked when
+// it is declared, which is the whole assertion. The `_` prefix is the repo's
+// "intentionally unused" escape hatch, so the unused-vars lint leaves it be.
 type MutuallyAssignable<A extends B, B extends C, C = A> = true;
-export type SandboxInputTypesMatchSdk = [
+type _SandboxInputTypesMatchSdk = [
   MutuallyAssignable<ShellExecInput, SdkShellExecInput>,
   MutuallyAssignable<SdkShellExecInput, ShellExecInput>,
   MutuallyAssignable<FsReadInput, SdkFsReadInput>,

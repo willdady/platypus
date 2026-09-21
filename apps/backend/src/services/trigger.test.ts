@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mockNanoid } from "../test-setup.ts";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 
 vi.mock("../utils/cron.ts", () => ({
@@ -8,9 +9,7 @@ vi.mock("../utils/cron.ts", () => ({
   }),
 }));
 
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn(() => "trig-new"),
-}));
+mockNanoid.mockReturnValue("trig-new");
 
 import {
   createTrigger,

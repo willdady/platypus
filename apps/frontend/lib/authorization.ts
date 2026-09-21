@@ -2,8 +2,9 @@
  * Frontend counterpart to the backend's authorization module
  * (`apps/backend/src/middleware/authorization.ts`): the actor is a named
  * value — never a role boolean a caller reconstructs into policy — and each
- * function answers whether that actor may perform one action, returning a
- * typed denial reason rather than throwing (ADR-0010).
+ * function answers whether that actor may perform one action. Checks return a
+ * plain boolean; only `canAccessOrganization` returns a typed denial reason,
+ * because the UI renders which refusal it was (ADR-0010).
  */
 
 export type OrgRole = "admin" | "member";
@@ -36,10 +37,6 @@ const isOrgAdminOrAbove = (actor: Actor): boolean =>
 
 // ---- Shared resources: attach / detach / Promote (ADR-0007) ----
 
-export type SharedResourceDenial = "no-workspace-context" | "not-org-admin";
-
-export type SharedResourceAccess = Access<SharedResourceDenial>;
-
 /**
  * Attach, detach, and Promote a Shared resource are the same rule (ADR-0007)
  * — an Org Admin action, available only inside a Workspace — collapsed to
@@ -48,12 +45,9 @@ export type SharedResourceAccess = Access<SharedResourceDenial>;
 export function canManageSharedResource(
   actor: Actor,
   workspaceId: string | undefined,
-): SharedResourceAccess {
-  if (!workspaceId) return { allowed: false, reason: "no-workspace-context" };
-  if (!isOrgAdminOrAbove(actor)) {
-    return { allowed: false, reason: "not-org-admin" };
-  }
-  return { allowed: true };
+): boolean {
+  if (!workspaceId) return false;
+  return isOrgAdminOrAbove(actor);
 }
 
 // ---- Credential/reach-bearing config delegation (ADR-0006) ----
@@ -68,14 +62,6 @@ export interface WorkspaceDelegationFlags {
   mcpSelfManagement: boolean;
 }
 
-export type ConfigAccessDenial =
-  "not-owner" | "not-delegatable" | "not-delegated";
-
-export type Access<Reason> =
-  { allowed: true } | { allowed: false; reason: Reason };
-
-export type WorkspaceConfigAccess = Access<ConfigAccessDenial>;
-
 /**
  * ADR-0006: may this actor configure a credential- and reach-bearing
  * Workspace resource? Sandboxes are never delegatable; Providers and MCPs
@@ -87,21 +73,19 @@ export function canConfigureWorkspaceResource(
   actor: Actor,
   type: CredentialResourceType,
   delegated: boolean,
-): WorkspaceConfigAccess {
-  if (isOrgAdminOrAbove(actor)) return { allowed: true };
-  if (actor !== "workspace-owner") {
-    return { allowed: false, reason: "not-owner" };
-  }
-  if (type === "sandbox") return { allowed: false, reason: "not-delegatable" };
-  if (!delegated) return { allowed: false, reason: "not-delegated" };
-  return { allowed: true };
+): boolean {
+  if (isOrgAdminOrAbove(actor)) return true;
+  if (actor !== "workspace-owner") return false;
+  if (type === "sandbox") return false;
+  return delegated;
 }
 
 // ---- Route-level access ----
 
 export type OrgAccessDenial = "not-a-member" | "insufficient-role";
 
-export type OrgAccess = Access<OrgAccessDenial>;
+export type OrgAccess =
+  { allowed: true } | { allowed: false; reason: OrgAccessDenial };
 
 /** Authority tiers, ordered so a higher role satisfies a lower requirement. */
 const ORG_ROLE_RANK: Record<OrgRole, number> = { member: 1, admin: 2 };
@@ -141,15 +125,8 @@ export function isOperator(actor: Actor): boolean {
 
 // ---- Org-Admin-tier actions with no Workspace requirement ----
 
-export type OrgAdminOnlyDenial = "not-org-admin";
-
-export type OrgAdminOnlyAccess = Access<OrgAdminOnlyDenial>;
-
 /** Shared body for every Org-Admin-tier, no-Workspace-requirement capability below. */
-const orgAdminOnly = (actor: Actor): OrgAdminOnlyAccess =>
-  isOrgAdminOrAbove(actor)
-    ? { allowed: true }
-    : { allowed: false, reason: "not-org-admin" };
+const orgAdminOnly = (actor: Actor): boolean => isOrgAdminOrAbove(actor);
 
 /**
  * May this actor manage a Shared resource on the Organization settings
@@ -186,10 +163,6 @@ export const canManageWorkspaceDelegation = orgAdminOnly;
 
 // ---- Chat: literal Workspace ownership (not the `Actor` tier) ----
 
-export type ChatWriteDenial = "not-owner";
-
-export type ChatWriteAccess = Access<ChatWriteDenial>;
-
 /**
  * May this caller send chat messages in this Workspace? Mirrors the
  * backend's `requireWorkspaceOwner`: literal ownership only — an Org Admin
@@ -198,7 +171,6 @@ export type ChatWriteAccess = Access<ChatWriteDenial>;
  * tier ranking would otherwise fold an Org-Admin-who-owns-it into
  * `"org-admin"` and hide the case this asks about.
  */
-export function canSendChatMessages(ownsWorkspace: boolean): ChatWriteAccess {
-  if (!ownsWorkspace) return { allowed: false, reason: "not-owner" };
-  return { allowed: true };
+export function canSendChatMessages(ownsWorkspace: boolean): boolean {
+  return ownsWorkspace;
 }

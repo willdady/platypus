@@ -20,6 +20,12 @@ import {
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
+// The list renders the stored `nextRunAt` through this formatter; stubbing it
+// keeps the assertion independent of the viewer's locale and time zone.
+vi.mock("@/lib/format-date", () => ({
+  formatDateTime: (value: Date | string | number) =>
+    `formatted:${new Date(value).toISOString()}`,
+}));
 
 import { TriggerList } from "./trigger-list";
 
@@ -32,6 +38,12 @@ const cronTrigger: Trigger = {
   enabled: true,
   agentId: "agent1",
   config: { cronExpression: "0 0 * * *", timezone: "UTC" },
+} as unknown as Trigger;
+
+const nextRunAt = new Date("2026-02-01T09:00:00.000Z");
+const scheduledTrigger: Trigger = {
+  ...cronTrigger,
+  nextRunAt,
 } as unknown as Trigger;
 
 function renderTriggers(triggers: Trigger[], menuItem?: string) {
@@ -102,6 +114,48 @@ describe("TriggerList toggle enabled", () => {
       expect(toastError).toHaveBeenCalledWith("Trigger is running"),
     );
     expect(mutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("TriggerList cron schedule", () => {
+  it("describes the schedule in plain English with the next run", () => {
+    renderTriggers([scheduledTrigger]);
+
+    expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
+    expect(
+      screen.getByText("Next: formatted:2026-02-01T09:00:00.000Z"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the raw expression reachable as a tooltip", () => {
+    renderTriggers([scheduledTrigger]);
+
+    expect(screen.getByTitle("0 0 * * *")).toBeInTheDocument();
+  });
+
+  it("falls back to the raw expression when cron cannot be parsed", () => {
+    renderTriggers([
+      {
+        ...scheduledTrigger,
+        config: { cronExpression: "nonsense", timezone: "UTC" },
+      } as unknown as Trigger,
+    ]);
+
+    expect(screen.getByText("nonsense")).toBeInTheDocument();
+  });
+
+  it("describes the schedule without a next run when the trigger is disabled", () => {
+    renderTriggers([{ ...scheduledTrigger, enabled: false } as Trigger]);
+
+    expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
+    expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
+  });
+
+  it("describes the schedule without a next run when none is scheduled", () => {
+    renderTriggers([{ ...scheduledTrigger, nextRunAt: null } as Trigger]);
+
+    expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
+    expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
   });
 });
 

@@ -1,3 +1,6 @@
+/** How often a Run's partial state is persisted when nobody overrides it. */
+export const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
+
 /**
  * Coalesces calls to a flush function on a fixed interval.
  *
@@ -16,7 +19,10 @@ export class FlushScheduler {
   private readonly intervalMs: number;
   private readonly flushFn: () => Promise<void> | void;
 
-  constructor(intervalMs: number, flushFn: () => Promise<void> | void) {
+  constructor(
+    flushFn: () => Promise<void> | void,
+    intervalMs: number = DEFAULT_FLUSH_INTERVAL_MS,
+  ) {
     this.intervalMs = intervalMs;
     this.flushFn = flushFn;
   }
