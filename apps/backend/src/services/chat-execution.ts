@@ -107,15 +107,6 @@ type ChatContext = {
   guardrails: string | null;
 };
 
-/**
- * The slim request shape `prepareChatTurn` actually consumes: agent/provider
- * selection plus generation overrides. Re-exported so this module's existing
- * callers keep resolving it from here. Lives in `runs/types.ts` — not here —
- * so `runs/` never imports a type from `services/` (see `RunInput`, which
- * also carries this shape).
- */
-export type { ChatTurnRequest };
-
 export type ChatTurn = {
   stream: RunPlan & { messages: PlatypusUIMessage[] };
   resolved: ResolvedGeneration;
@@ -274,7 +265,7 @@ export type ChatTurnQueries = {
  * workspaceId" as the definition of Shared, which lets a row carrying both
  * columns resolve in a Workspace that neither owns nor attached it.
  */
-export const drizzleChatTurnQueries: ChatTurnQueries = {
+const drizzleChatTurnQueries: ChatTurnQueries = {
   async getWorkspace(id) {
     const rows = await db
       .select()

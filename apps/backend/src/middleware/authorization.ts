@@ -85,35 +85,6 @@ const isSuperAdmin = (user: AuthUser | undefined): boolean => {
 };
 
 /**
- * Type guard to check if an organization membership is from a super admin.
- * Useful for discriminating between regular and super admin memberships in route handlers.
- *
- * @param membership - The organization membership to check
- * @returns True if the membership is a super admin membership
- *
- * @example
- * ```typescript
- * const orgMembership = c.get("orgMembership");
- * if (isSuperAdminMembership(orgMembership)) {
- *   // TypeScript knows orgMembership.isSuperAdmin is true
- *   console.log("Super admin access");
- * } else {
- *   // TypeScript knows this is a regular OrganizationMembership
- *   console.log("Regular member:", orgMembership.userId);
- * }
- * ```
- */
-const isSuperAdminMembership = (
-  membership: OrganizationMembership | SuperAdminOrgMembership | undefined,
-): membership is SuperAdminOrgMembership => {
-  return (
-    membership != null &&
-    "isSuperAdmin" in membership &&
-    membership.isSuperAdmin === true
-  );
-};
-
-/**
  * Middleware that validates user access to an organization.
  *
  * **Access Control:**
@@ -166,7 +137,7 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
   });
 
 /** Why {@link resolveOrgMembership} refused a caller. */
-export type OrgAccessDenial =
+type OrgAccessDenial =
   /** No `orgId` in the request for a non-super-admin caller to be checked against. */
   | "org-id-required"
   /** Not a member of the organization. */
@@ -305,7 +276,7 @@ export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
 });
 
 /** Why {@link resolveWorkspaceAccess} refused a caller. */
-export type WorkspaceAccessDenial =
+type WorkspaceAccessDenial =
   /** No workspace exists with this id. */
   | "not-found"
   /** The workspace exists, but in a different Organization than the caller
@@ -474,7 +445,7 @@ export type DelegationFlag = "providerSelfManagement" | "mcpSelfManagement";
  * Carried rather than thrown so read paths can redact on the same rule the
  * write paths reject on.
  */
-export type ConfigAccessDenial =
+type ConfigAccessDenial =
   /** Not an admin, and not even the Workspace Owner. */
   | "not-owner"
   /** Owner, but the resource is admin-only and never delegatable. */
@@ -509,7 +480,7 @@ const CONFIG_ACCESS_DENIED: Record<ConfigAccessDenial, string> = {
  *
  * @param delegationFlag - Omit for admin-only resources that are never delegatable.
  */
-export const workspaceConfigAccess = async (
+const workspaceConfigAccess = async (
   c: Context<Env>,
   delegationFlag?: DelegationFlag,
 ): Promise<WorkspaceConfigAccess> => {
@@ -659,4 +630,4 @@ export const requireWorkspaceOwner = createMiddleware<Env>(async (c, next) => {
   await next();
 });
 
-export { isSuperAdmin, isSuperAdminMembership };
+export { isSuperAdmin };

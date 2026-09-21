@@ -46,7 +46,7 @@ import {
  */
 
 /** Who is performing the mutation — one of a Workspace member or an Agent. */
-export type KanbanActor = { userId: string } | { agentId: string };
+type KanbanActor = { userId: string } | { agentId: string };
 
 /**
  * Where a lookup may reach: a {@link ScopeContext} — so the HTTP surface hands
@@ -67,7 +67,7 @@ export type KanbanContext = KanbanScope & { actor: KanbanActor };
 export type CardRef = { id: string; columnId: string; boardId: string };
 
 /** A column's identity and the board it belongs to. */
-export type ColumnRef = { id: string; boardId: string };
+type ColumnRef = { id: string; boardId: string };
 
 /** A comment row, as the guards return it. */
 export type CommentRow = typeof kanbanCardCommentTable.$inferSelect;
@@ -224,7 +224,7 @@ const dispatchCardWrite = (
  * `lastEditedBy*` columns, so an entry and the Card can never disagree about
  * who wrote it.
  */
-export type CardHistoryRow = typeof kanbanCardHistoryTable.$inferSelect;
+type CardHistoryRow = typeof kanbanCardHistoryTable.$inferSelect;
 
 /** A history entry with its actor's display name resolved. */
 export type CardHistoryEntry = CardHistoryRow & { actorName: string | null };

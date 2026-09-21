@@ -111,7 +111,7 @@ export type WithCoreRegistrar<T> = Omit<T, "registerCloser"> & {
  * The closer passes through unwrapped, so the same function registered twice is
  * still one function when the session dedupes it.
  */
-export const attributeCloser = (
+const attributeCloser = (
   register: CoreCloserRegistrar,
   attribution: Record<string, unknown>,
 ): CloserRegistrar => {

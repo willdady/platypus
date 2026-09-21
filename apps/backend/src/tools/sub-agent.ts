@@ -26,24 +26,6 @@ export type LoadedSubAgentTools = {
 };
 
 /**
- * The tool name a delegation was recorded under BEFORE the single `delegate`
- * dispatcher — "delegateTo<PascalCaseName>", e.g. "Research Agent" →
- * "delegateToResearchAgent".
- *
- * No longer the name of any tool declared to a model, and no longer called from
- * production code. It is kept as the executable record of a shape that is now
- * permanent: every Chat that predates the dispatcher holds `tool-delegateToX`
- * parts for ever, and the frontend's own inverse (`extractSubAgentName`, which
- * cannot import from the backend) is written against this rule. Nothing new is
- * written in this shape, and nothing is backfilled.
- */
-export const subAgentToolName = (subAgent: { name: string }): string =>
-  `delegateTo${subAgent.name
-    .replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase())
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .replace(/^./, (c) => c.toUpperCase())}`;
-
-/**
  * Activity log entry for a sub-agent's execution.
  */
 type SubAgentActivityEntry = {

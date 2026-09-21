@@ -35,7 +35,7 @@ export type TriggerSinkParams = {
 };
 
 /** Default cadence for periodic TriggerSink stat and event flushes. */
-export const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
+const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
 
 /**
  * `steps == null` means no step was ever observed, and writing "0 steps, 0

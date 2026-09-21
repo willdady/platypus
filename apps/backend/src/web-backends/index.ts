@@ -58,7 +58,7 @@ export const MAX_CONTENT_TYPE_CHARS = 200;
 // plugin-named) rather than silently clamped here, because `timeoutMs` is static
 // on the contribution and therefore knowable at load. 120s covers a cold
 // headless-browser render with headroom.
-export const DEFAULT_WEB_TIMEOUT_MS = 30_000;
+const DEFAULT_WEB_TIMEOUT_MS = 30_000;
 export const MAX_WEB_TIMEOUT_MS = 120_000;
 
 const WEB_SEARCH_DESCRIPTION =

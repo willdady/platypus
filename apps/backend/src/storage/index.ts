@@ -53,6 +53,4 @@ export function resetStorage(): void {
   storageInstance = null;
 }
 
-export { DiskStorage } from "./disk.ts";
-export { S3Storage } from "./s3.ts";
-export type { StorageBackend, FileExtractionContext } from "./types.ts";
+export type { StorageBackend } from "./types.ts";

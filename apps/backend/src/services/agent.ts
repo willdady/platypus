@@ -50,7 +50,7 @@ import { deleteAvatar } from "./avatar.ts";
  * `{ error }`.
  */
 
-export type AgentRow = typeof agentTable.$inferSelect;
+type AgentRow = typeof agentTable.$inferSelect;
 
 /** The fields a create carries — every field but the id and its scope. */
 export type AgentCreateFields = Omit<

@@ -46,8 +46,6 @@ export const dockerPluginConfigSchema = z
   })
   .strict();
 
-export type DockerPluginConfig = z.infer<typeof dockerPluginConfigSchema>;
-
 // Read the Operator network allowlist out of @platypus/docker's boot-resolved
 // plugin config. Defensive-parses so a caller can pass the raw registry value;
 // an absent/invalid block yields `[]` (default-deny). Feeds the admin
@@ -336,7 +334,7 @@ async function runExec(
  * tools are built on top of this by {@link createPosixSandbox} — nothing here
  * parses find(1), counts lines, or decides what `truncated` means.
  */
-export class DockerSandboxTransport implements SandboxTransport {
+class DockerSandboxTransport implements SandboxTransport {
   private docker: Docker;
   private inflight: Map<string, Promise<Container>>;
   private networks: string[];

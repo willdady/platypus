@@ -8,7 +8,7 @@ import { organization, organizationMember, workspace, user } from "./schema.ts";
 export type SeedDatabase = typeof db;
 
 /** Environment variables the seed reads. */
-export type SeedEnv = {
+type SeedEnv = {
   ADMIN_EMAIL?: string;
   ADMIN_PASSWORD?: string;
 };

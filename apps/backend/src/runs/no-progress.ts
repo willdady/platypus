@@ -68,7 +68,7 @@ const signatureFor = (
     .update(stableStringify(output))
     .digest("hex");
 
-export type NoProgressTrip = { toolName: string; count: number };
+type NoProgressTrip = { toolName: string; count: number };
 
 /**
  * The slice of an AI SDK `StepResult` the detector reads. Typed structurally

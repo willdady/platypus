@@ -26,7 +26,7 @@ import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
  */
 
 /** The most events one run records. A runaway guard, not a performance bound. */
-export const RUN_EVENT_CEILING = 10_000;
+const RUN_EVENT_CEILING = 10_000;
 
 /**
  * Where a drive's events go: the recorder of the root run, and the event they

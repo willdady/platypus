@@ -9,7 +9,6 @@ import {
   createDelegateTools,
   createSubAgentDelegate,
   type LoadedSubAgentTools,
-  subAgentToolName,
   SUB_AGENT_STEP_LIMIT_NOTE,
   SUB_AGENT_TRUNCATION_NOTE,
 } from "./sub-agent.ts";
@@ -248,34 +247,6 @@ const modelText = (
       output,
     }) as { value: string }
   ).value;
-
-// The names delegations were STORED under before the single dispatcher. No
-// tool is declared under them any more, and none ever will be again — but every
-// Chat written before this change holds parts named this way, permanently, and
-// the frontend recovers the Sub-Agent's display name by inverting exactly this.
-describe("subAgentToolName — the pre-dispatcher stored shape", () => {
-  it("generates PascalCase delegateTo prefix", () => {
-    expect(subAgentToolName({ name: "Research Agent" })).toBe(
-      "delegateToResearchAgent",
-    );
-  });
-
-  it("handles single-word names", () => {
-    expect(subAgentToolName({ name: "Helper" })).toBe("delegateToHelper");
-  });
-
-  it("strips non-alphanumeric characters", () => {
-    expect(subAgentToolName({ name: "My (Special) Agent!" })).toMatch(
-      /^delegateTo[A-Za-z0-9]+$/,
-    );
-  });
-
-  it("handles hyphenated names", () => {
-    expect(subAgentToolName({ name: "code-review" })).toBe(
-      "delegateToCodeReview",
-    );
-  });
-});
 
 describe("createSubAgentDelegate", () => {
   beforeEach(() => {

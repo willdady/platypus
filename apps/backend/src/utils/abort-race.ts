@@ -22,7 +22,7 @@
  * individual tool call — and the shape of that retention is the platform's
  * business, not something a busy turn should depend on being generous.
  */
-export const rejectOnAbort = (
+const rejectOnAbort = (
   signal: AbortSignal,
 ): { promise: Promise<never>; release: () => void } => {
   let release = () => {};

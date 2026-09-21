@@ -22,7 +22,7 @@ export type ChatSinkParams = {
 };
 
 /** Default cadence for periodic ChatSink flushes during a running run. */
-export const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
+const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
 
 /**
  * Persists a chat row at run lifecycle boundaries.

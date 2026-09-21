@@ -24,7 +24,7 @@ import type { ScopeContext } from "../scope.ts";
  * and so does a sub-Agent fixture in a test — both callers of
  * `resolveGenerationPlan` only ever have this much in hand.
  */
-export type GenerationAgentSource = {
+type GenerationAgentSource = {
   providerId: string;
   modelId: string;
   maxSteps?: number | null;

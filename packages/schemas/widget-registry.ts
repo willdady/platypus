@@ -36,19 +36,13 @@ export const metricWidgetDataSchema = z.object({
   change: z.string().optional(),
 });
 
-export type MetricWidgetData = z.infer<typeof metricWidgetDataSchema>;
-
 export const textWidgetDataSchema = z.object({
   content: z.string(),
 });
 
-export type TextWidgetData = z.infer<typeof textWidgetDataSchema>;
-
 export const imageWidgetDataSchema = z.object({
   url: z.string(),
 });
-
-export type ImageWidgetData = z.infer<typeof imageWidgetDataSchema>;
 
 export const embedWidgetDataSchema = z
   .object({
@@ -298,13 +292,6 @@ function unionMembers<T extends z.ZodType>(
     ),
   );
 }
-
-export const widgetDataSchema = z.discriminatedUnion(
-  "type",
-  unionMembers((type, dataSchema) =>
-    z.object({ type: z.literal(type), data: dataSchema }),
-  ),
-);
 
 const widgetBaseSchema = z.object({
   id: z.string(),

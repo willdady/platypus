@@ -83,7 +83,7 @@ export type SlashCommandQueries = {
   ): Promise<{ name: string; body: string } | null>;
 };
 
-export const drizzleSlashCommandQueries: SlashCommandQueries = {
+const drizzleSlashCommandQueries: SlashCommandQueries = {
   async getAgentSkillIds(agentId, orgId, workspaceId) {
     const found = await resolveScoped(db, "agent", agentId, {
       orgId,
@@ -124,7 +124,7 @@ const generateToolCallId = createIdGenerator({ prefix: "call", size: 24 });
  * answer — what a model-initiated call looks like. A standalone assistant
  * message would render as two.
  */
-export const loadSkillSeedMessage = (skill: {
+const loadSkillSeedMessage = (skill: {
   name: string;
   body: string;
 }): PlatypusUIMessage => ({
