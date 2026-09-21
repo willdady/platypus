@@ -3,10 +3,6 @@ import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
 import { z } from "zod";
 
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
-
 import { startRun } from "./run-lifecycle.ts";
 import { driveOnce } from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";

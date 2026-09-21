@@ -20,8 +20,8 @@
  * same value — an instance configured with a shorter one computes an earlier
  * cutoff and could fail a turn a peer is still running.
  */
-export const DEFAULT_CHAT_PER_STEP_TIMEOUT_MS = 2 * 60 * 1000;
-export const DEFAULT_CHAT_PER_RUN_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_CHAT_PER_STEP_TIMEOUT_MS = 2 * 60 * 1000;
+const DEFAULT_CHAT_PER_RUN_TIMEOUT_MS = 30 * 60 * 1000;
 
 /** The configured wall-clock ceiling for a whole Chat turn. */
 export const chatPerRunTimeoutMs = (): number =>

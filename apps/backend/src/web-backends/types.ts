@@ -6,13 +6,9 @@ import type { WithCoreRegistrar } from "../tools/closers.ts";
 // The SDK is the single home of the executor-facing contract; core re-exports the
 // types its internal callers need so nothing below imports the SDK directly.
 export type {
-  ReadUrlResult,
   WebBackendContext,
   WebBackendContribution,
   WebBackendExecutors,
-  WebExecutorOptions,
-  WebSearchResult,
-  WebSearchResults,
 } from "@platypuschat/plugin-sdk";
 
 // Two of the output bounds live here rather than beside their siblings in
@@ -76,7 +72,6 @@ export const MAX_READ_URL_SLICE_CHARS = 100_000;
 export const webSearchInputSchema = z.object({
   query: z.string().min(1).describe("The search query"),
 });
-export type WebSearchInput = z.infer<typeof webSearchInputSchema>;
 
 // Mirrors `fetchUrl`'s pagination inputs byte-for-byte — `max_length` default
 // 5000 and max 1_000_000, `start_index` default 0 — so a model cannot phrase a
@@ -105,7 +100,6 @@ export const readUrlInputSchema = z.object({
     .default(0)
     .describe("Start character index for pagination"),
 });
-export type ReadUrlInput = z.infer<typeof readUrlInputSchema>;
 
 // Model-facing returns. snake_case here, camelCase in the SDK types: this side
 // must match `fetchUrl` exactly (see readUrlInputSchema above).

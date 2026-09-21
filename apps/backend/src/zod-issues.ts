@@ -9,7 +9,7 @@
 /** How much of a single validation issue is worth repeating back. */
 export const MAX_ISSUE_LENGTH = 160;
 /** Beyond a handful of issues the list stops being diagnostic. */
-export const MAX_ISSUES = 5;
+const MAX_ISSUES = 5;
 /** A union nested past this is a pathological schema, not a diagnosable one. */
 const MAX_UNION_DEPTH = 12;
 /** How far down a `cause` chain a Zod failure is worth looking for. */

@@ -283,6 +283,14 @@ describe("serializeLoggedError", () => {
       expect(JSON.stringify(serialized)).toContain("a plain string cause");
     });
 
+    it("serializes an error-like object that carries no stack", () => {
+      const serialized = serializeLoggedError({
+        message: "no stack here",
+      }) as Record<string, unknown>;
+
+      expect(serialized.message).toBe("no stack here");
+    });
+
     it("keeps the message when the issue tree summarises to nothing", () => {
       // Suppressing the message because issues are *present* would lose the
       // only readable line when the tree yields no reportable leaf.

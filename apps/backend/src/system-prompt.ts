@@ -5,9 +5,6 @@ import { MEMORY_TOOLSET_ID, SANDBOX_TOOLSET_ID } from "./tools/index.ts";
 import type { MemorySummary } from "./services/memory-retrieval.ts";
 import { renderSecurityGuardrails } from "./security-prompt.ts";
 
-// Re-exported for callers that reach the renderer through this module.
-export { renderSecurityGuardrails };
-
 type AgentRecord = typeof agentTable.$inferSelect;
 
 /**

@@ -45,7 +45,7 @@ export type Database = typeof db;
  * (ADR-0007 no-cascade rule). `name` is so the UI can render a fix-this
  * checklist. The guard decides the concrete shape; this module just carries it.
  */
-export type PromoteBlocker = { type: string; id: string; name: string };
+type PromoteBlocker = { type: string; id: string; name: string };
 
 /**
  * A route-supplied rule that runs on the pre-check row before the transaction.

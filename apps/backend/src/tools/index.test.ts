@@ -7,10 +7,6 @@ vi.mock("../index.ts", () => ({
   db: {},
 }));
 
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
-
 vi.mock("../services/event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
 }));

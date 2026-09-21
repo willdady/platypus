@@ -5,9 +5,8 @@ import {
   canAccessOrganization,
   canAccessWorkspace,
   isOperator,
-  type OrgRole,
 } from "@/lib/authorization";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import {
   Empty,
@@ -24,7 +23,8 @@ import { orgRoutes } from "@/lib/routes";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredOrgRole?: OrgRole;
+  /** Require the caller to be an Org Admin, not merely a member. */
+  requireOrgAdmin?: boolean;
   requireOrgAccess?: boolean;
   requireWorkspaceAccess?: boolean;
   requireSuperAdmin?: boolean;
@@ -33,18 +33,25 @@ interface ProtectedRouteProps {
 interface AccessDeniedProps {
   title: string;
   description: React.ReactNode;
-  buttonHref?: string;
-  buttonText?: string;
-  buttonIcon?: React.ElementType;
+  /** `organization` swaps the home button for one back to the Organization. */
+  variant?: "home" | "organization";
 }
 
 function AccessDenied({
   title,
   description,
-  buttonHref = "/",
-  buttonText = "Return Home",
-  buttonIcon: Icon = Home,
+  variant = "home",
 }: AccessDeniedProps) {
+  const params = useParams();
+  const { href, text, Icon } =
+    variant === "organization"
+      ? {
+          href: orgRoutes(params.orgId as string).root,
+          text: "Back to Organization",
+          Icon: Building,
+        }
+      : { href: "/", text: "Return Home", Icon: Home };
+
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <Empty className="max-w-md border-2 border-dashed">
@@ -57,9 +64,9 @@ function AccessDenied({
         </EmptyHeader>
         <EmptyContent>
           <Button asChild>
-            <Link href={buttonHref}>
+            <Link href={href}>
               <Icon className="size-4" />
-              {buttonText}
+              {text}
             </Link>
           </Button>
         </EmptyContent>
@@ -70,14 +77,13 @@ function AccessDenied({
 
 export function ProtectedRoute({
   children,
-  requiredOrgRole = "member",
+  requireOrgAdmin = false,
   requireOrgAccess = false,
   requireWorkspaceAccess = false,
   requireSuperAdmin = false,
 }: ProtectedRouteProps) {
   const { user, isAuthLoading, orgMembership, actor } = useAuth();
   const router = useRouter();
-  const params = useParams();
 
   useEffect(() => {
     if (!isAuthLoading && !user) {
@@ -103,6 +109,7 @@ export function ProtectedRoute({
   }
 
   if (requireOrgAccess) {
+    const requiredOrgRole = requireOrgAdmin ? "admin" : "member";
     const orgAccess = canAccessOrganization(
       actor,
       orgMembership?.role ?? null,
@@ -138,9 +145,7 @@ export function ProtectedRoute({
       <AccessDenied
         title="Workspace Access Required"
         description="You do not have permission to access this workspace. You can only access workspaces you own."
-        buttonHref={orgRoutes(params.orgId as string).root}
-        buttonText="Back to Organization"
-        buttonIcon={Building}
+        variant="organization"
       />
     );
   }

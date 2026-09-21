@@ -31,7 +31,7 @@ export interface ContributionIdentity {
 }
 
 /** What a point's `prepare` is told about the contribution it is preparing. */
-export interface ContributionContext {
+interface ContributionContext {
   /** The contributing plugin's manifest name, for error attribution. */
   pluginName: string;
   /** The trimmed, namespaced id this contribution registers under. */

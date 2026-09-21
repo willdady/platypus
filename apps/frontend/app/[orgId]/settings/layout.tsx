@@ -58,7 +58,7 @@ export default async function OrgSettingsLayout({
   const organization = await fetchOrganization(orgId);
 
   return (
-    <ProtectedRoute requireOrgAccess={true} requiredOrgRole="admin">
+    <ProtectedRoute requireOrgAccess requireOrgAdmin>
       <SettingsShell
         menu={
           <OrgSettingsMenu

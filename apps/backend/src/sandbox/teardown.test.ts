@@ -2,10 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
 import { loadedPluginsFixture, mockDb, resetMockDb } from "../test-utils.ts";
 
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
-
 import { destroySandboxRow, destroyWorkspaceSandboxes } from "./teardown.ts";
 import { clearSandboxBackends, registerSandboxBackend } from "./index.ts";
 import type { SandboxBackend } from "./types.ts";

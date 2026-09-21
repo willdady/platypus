@@ -85,7 +85,7 @@ import TriggerRunsPage from "./page";
 import {
   RUN_CUT_SHORT_NOTICE,
   RUN_STEP_LIMIT_NOTICE,
-} from "@/components/run-cut-short-notice";
+} from "@/components/turn-notice";
 import { RUN_SUPPRESSED_NOTICE } from "@/components/trigger-run-row";
 import { installResizeObserverStub, selectOption } from "@/lib/test-utils";
 

@@ -74,7 +74,7 @@ import { withAgentCausation, withChildCausation } from "../event-causation.ts";
  * single task `prompt`, a Chat turn has already-converted `modelMessages`. A
  * union rather than two optionals, so a caller cannot pass both or neither.
  */
-export type DriveConversation =
+type DriveConversation =
   | { prompt: string; modelMessages?: never }
   | { prompt?: never; modelMessages: ModelMessage[] };
 

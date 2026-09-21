@@ -4,10 +4,6 @@ import type { Tool } from "ai";
 // Mock the db used by transitive imports (the sandbox tool set, etc.)
 vi.mock("../index.ts", () => ({ db: {} }));
 
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
-
 vi.mock("../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
 vi.mock("../services/sub-agent-validation.ts", () => ({
   validateSubAgentAssignment: vi.fn(),

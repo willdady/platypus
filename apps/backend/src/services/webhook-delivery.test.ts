@@ -30,14 +30,6 @@ vi.mock("../index.ts", () => ({
   },
 }));
 
-vi.mock("../logger.ts", () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
 vi.mock("./trigger-execution.ts", () => ({
   executeTrigger: vi.fn(),
   updateTriggerAfterRun: vi.fn(),

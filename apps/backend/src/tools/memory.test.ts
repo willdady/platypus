@@ -10,10 +10,6 @@ vi.mock("../services/embedding.ts", () => ({
   generateEmbedding: vi.fn(),
 }));
 
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
-
 import { createMemoryTools } from "./memory.ts";
 import { generateEmbedding } from "../services/embedding.ts";
 import { logger } from "../logger.ts";

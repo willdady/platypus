@@ -1,10 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 import type { ModelConfig } from "@platypus/schemas";
-
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-}));
 
 import {
   orphanedAliasRepoints,

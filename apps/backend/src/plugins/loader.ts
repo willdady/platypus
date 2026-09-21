@@ -83,7 +83,7 @@ interface LoaderExtensionPoint {
 // Deploy-time config/credentials the Operator supplies for one plugin. Both
 // halves are optional and opaque until validated against the manifest's
 // plugin-level schemas at boot.
-export interface RawPluginConfig {
+interface RawPluginConfig {
   config?: unknown;
   credentials?: unknown;
 }

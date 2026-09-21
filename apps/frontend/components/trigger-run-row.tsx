@@ -28,10 +28,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  RunCutShortNotice,
-  RunStepLimitNotice,
-} from "@/components/run-cut-short-notice";
-import { TurnNotice } from "@/components/turn-notice";
+  RUN_CUT_SHORT_NOTICE,
+  RUN_STEP_LIMIT_NOTICE,
+  TurnNotice,
+} from "@/components/turn-notice";
 import { cachedTokenBreakdown } from "@/lib/cached-tokens";
 import { formatTokens } from "@/lib/context-window";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -248,8 +248,12 @@ export const TriggerRunRow = ({
                 )}
               </div>
             )}
-            {stats?.truncatedByTokenLimit && <RunCutShortNotice />}
-            {stats?.stoppedAtStepLimit && <RunStepLimitNotice />}
+            {stats?.truncatedByTokenLimit && (
+              <TurnNotice className="mt-1">{RUN_CUT_SHORT_NOTICE}</TurnNotice>
+            )}
+            {stats?.stoppedAtStepLimit && (
+              <TurnNotice className="mt-1">{RUN_STEP_LIMIT_NOTICE}</TurnNotice>
+            )}
             {run.status === "suppressed" && (
               <TurnNotice className="mt-1">{RUN_SUPPRESSED_NOTICE}</TurnNotice>
             )}

@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-
-const { mockLogger } = vi.hoisted(() => ({
-  mockLogger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
-}));
-
-vi.mock("../logger.ts", () => ({ logger: mockLogger }));
-
+import { mockLogger } from "../test-setup.ts";
 import type { WebhookEventData } from "@platypus/schemas";
 import {
   debounceTriggerExecution,
