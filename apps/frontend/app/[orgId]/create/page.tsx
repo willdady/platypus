@@ -11,7 +11,7 @@ const WorkspaceCreatePage = async ({
   const { orgId } = await params;
 
   return (
-    <ProtectedRoute requireOrgAccess={true} requiredOrgRole="admin">
+    <ProtectedRoute requireOrgAccess requireOrgAdmin>
       <ResourcePage
         backFallbackHref={orgRoutes(orgId).root}
         title="Create Workspace"

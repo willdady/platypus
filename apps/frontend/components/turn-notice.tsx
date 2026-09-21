@@ -2,6 +2,17 @@ import { TriangleAlertIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
+ * The Trigger-run wording for the two ceilings. The row is shared but the
+ * wording is not: a Trigger run says "Run" where a Chat reply names its own
+ * subject. Exported so tests assert the wording without restating the prose.
+ */
+export const RUN_CUT_SHORT_NOTICE =
+  "Run cut short at the model's output limit.";
+
+/** The same for a run whose tool-calling loop hit its step ceiling. */
+export const RUN_STEP_LIMIT_NOTICE = "Run cut short at the step limit.";
+
+/**
  * The muted warning row for a per-turn notice about how an answer was produced
  * or how it ended — under a Chat reply, under a delegated Sub-Agent response,
  * and in Trigger run history.

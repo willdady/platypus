@@ -10,7 +10,7 @@ import type {
   KanbanResolvedAssignee,
 } from "@platypus/schemas";
 import { KANBAN_CARD_PRIORITIES } from "@platypus/schemas";
-import { KanbanLabelBadge } from "@/components/kanban-label-badge";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { cn } from "@/lib/utils";
@@ -100,11 +100,13 @@ const KanbanCardComponentInner = function KanbanCardComponent({
       {cardLabels.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {cardLabels.map((label) => (
-            <KanbanLabelBadge
+            <Badge
               key={label.id}
-              name={label.name}
-              color={label.color}
-            />
+              className="border-0"
+              style={{ backgroundColor: label.color }}
+            >
+              {label.name}
+            </Badge>
           ))}
         </div>
       )}
