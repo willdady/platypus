@@ -41,8 +41,6 @@ const { harness } = vi.hoisted(() => ({
     sendMessage: vi.fn(),
     chatMutate: vi.fn(),
     agentsMutate: vi.fn(),
-    /** Stands in for the info dialog's open state - see the `use-chat-ui` mock. */
-    agentInfoDialogOpen: false,
     chatMessageRenders: 0,
     lastChatMessageProps: null as null | {
       onMessageDelete: (messageId: string) => void;
@@ -122,14 +120,28 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   PromptInputFooter: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  PromptInputTools: () => null,
+  PromptInputTools: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   PromptInputAttachments: () => null,
   PromptInputAttachment: () => null,
   PromptInputActionMenu: () => null,
   PromptInputActionMenuTrigger: () => null,
   PromptInputActionMenuContent: () => null,
   PromptInputActionAddAttachments: () => null,
-  PromptInputButton: () => null,
+  PromptInputButton: ({
+    children,
+    onClick,
+    variant,
+  }: {
+    children?: React.ReactNode;
+    onClick?: () => void;
+    variant?: string;
+  }) => (
+    <button type="button" data-variant={variant} onClick={onClick}>
+      {children}
+    </button>
+  ),
   PromptInputSpeechButton: () => null,
   PromptInputTextarea: ({
     placeholder,
@@ -236,28 +248,34 @@ vi.mock("./no-providers-empty-state", () => ({
   NoProvidersEmptyState: () => null,
 }));
 vi.mock("./model-selector-dialog", () => ({ ModelSelectorDialog: () => null }));
-vi.mock("./agent-info-dialog", () => ({ AgentInfoDialog: () => null }));
+vi.mock("./agent-info-dialog", () => ({
+  AgentInfoDialog: ({ onClose }: { onClose: () => void }) => (
+    <button type="button" onClick={onClose}>
+      Close info
+    </button>
+  ),
+}));
 
-// The info dialog opens from a composer button this file stubs to null, so the
-// open state is driven from the harness instead of through a click. Everything
-// else about the hook is left real, because the error-dialog tests below are
-// assertions about its actual behaviour.
-vi.mock("@/hooks/use-chat-ui", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/hooks/use-chat-ui")>();
-  return {
-    useChatUI: (...args: Parameters<typeof actual.useChatUI>) => ({
-      ...actual.useChatUI(...args),
-      isAgentInfoDialogOpen: harness.agentInfoDialogOpen,
-    }),
-  };
-});
 vi.mock("./chat-settings-dialog", () => ({
   ChatSettingsDialog: () => null,
   CHAT_MAX_STEPS_ERROR: "bad max steps",
 }));
 vi.mock("./chat-error-dialog", () => ({
-  ChatErrorDialog: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div role="dialog">Chat Error</div> : null,
+  ChatErrorDialog: ({
+    isOpen,
+    onOpenChange,
+  }: {
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    isOpen ? (
+      <div role="dialog">
+        Chat Error
+        <button type="button" onClick={() => onOpenChange(false)}>
+          Dismiss error
+        </button>
+      </div>
+    ) : null,
 }));
 
 import { Chat } from "./chat";
@@ -298,6 +316,58 @@ const pollFor = (row: { status: string } | null) => {
 const renderChat = () =>
   render(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
 
+/** Two Providers differing only in whether they can search. */
+const searchProvider = {
+  id: "ps",
+  name: "Searchable",
+  searchSource: "tavily",
+  modelIds: [{ id: "ms", passthroughFileTypes: [] }],
+};
+const plainProvider = {
+  id: "pp",
+  name: "Plain",
+  searchSource: "none",
+  modelIds: [{ id: "mp", passthroughFileTypes: [] }],
+};
+const agentOn = (id: string, providerId: string, modelId: string) => ({
+  id,
+  name: id,
+  providerId,
+  modelId,
+});
+
+const searchAgents = [
+  agentOn("as", "ps", "ms"),
+  agentOn("as2", "ps", "ms"),
+  agentOn("ap", "pp", "mp"),
+];
+
+/**
+ * Renders the Chat pointed at one of `searchAgents` via `?agentId=`, so the
+ * resolved model — and with it the search toggle — can be switched between
+ * renders by changing that prop.
+ */
+const renderWithAgent = (agentId: string) => {
+  harness.data.set("/providers", {
+    results: [searchProvider, plainProvider],
+  });
+  harness.data.set("/agents", { results: searchAgents });
+  return render(
+    <Chat
+      orgId="org1"
+      workspaceId="ws1"
+      chatId={CHAT_ID}
+      initialAgentId={agentId}
+    />,
+  );
+};
+
+/** The search toggle's Globe control, present only when the model can search. */
+const searchToggle = () =>
+  document.querySelector("svg.lucide-globe")?.closest("button") ?? null;
+const searchIsOn = () =>
+  searchToggle()?.getAttribute("data-variant") === "default";
+
 /**
  * Renders, then walks the local turn through a status sequence the way the chat
  * hook would. The sequence matters: whether a turn ever reached `streaming` is
@@ -327,13 +397,13 @@ beforeEach(() => {
   ]);
   harness.responses = new Map();
   harness.turn = { status: "ready", error: undefined, messages: [] };
+  localStorage.clear();
   harness.setMessages.mockReset();
   harness.sendMessage.mockReset();
   harness.chatMutate.mockReset();
   harness.chatMutate.mockResolvedValue(undefined);
   harness.agentsMutate.mockReset();
   harness.agentsMutate.mockResolvedValue(undefined);
-  harness.agentInfoDialogOpen = false;
   harness.chatMessageRenders = 0;
   harness.lastChatMessageProps = null;
 });
@@ -542,6 +612,173 @@ describe("routing a chat error", () => {
     const { container, queryByRole } = renderChat();
 
     expect(container.textContent).not.toMatch(RECOVERING);
+    expect(queryByRole("dialog")).toBeNull();
+  });
+
+  // Keyed on the error so the modal can be dismissed while the error persists;
+  // a later, different error still reopens it.
+  it("reopens for a second, different failure after being dismissed", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "failed", messages: [] });
+    const view = renderThrough(...DROPPED);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss error" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    harness.turn.error = new Error("a second failure");
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+/**
+ * The search toggle's invariant (issue #624): search may not be on when the
+ * resolved selection cannot search. The control only ever forces the toggle
+ * off, and only when the resolved model's `canSearch` actually changes — not
+ * on every Agent/Provider/model identity change, and not while resolution is
+ * briefly unknown.
+ */
+describe("the search toggle", () => {
+  it("starts off", () => {
+    renderWithAgent("as");
+
+    expect(searchToggle()).toBeInTheDocument();
+    expect(searchIsOn()).toBe(false);
+  });
+
+  it("stays on switching between two selections that can both search", () => {
+    const view = renderWithAgent("as");
+
+    fireEvent.click(searchToggle()!);
+    expect(searchIsOn()).toBe(true);
+
+    view.rerender(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as2"
+      />,
+    );
+
+    expect(searchIsOn()).toBe(true);
+  });
+
+  it("forces off when switching to a selection that cannot search", () => {
+    const view = renderWithAgent("as");
+
+    fireEvent.click(searchToggle()!);
+    expect(searchIsOn()).toBe(true);
+
+    // The non-searching selection has no Globe at all.
+    view.rerender(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="ap"
+      />,
+    );
+    expect(searchToggle()).toBeNull();
+
+    // Back on a searching selection, the toggle was forced off, not restored.
+    view.rerender(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as"
+      />,
+    );
+    expect(searchIsOn()).toBe(false);
+  });
+
+  it("does not turn back on switching from a non-searching to a searching selection", () => {
+    const view = renderWithAgent("ap");
+
+    expect(searchToggle()).toBeNull();
+
+    view.rerender(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as"
+      />,
+    );
+
+    expect(searchIsOn()).toBe(false);
+  });
+
+  it("does nothing while the selection is unresolved, preserving the setting", () => {
+    const view = renderWithAgent("as");
+
+    fireEvent.click(searchToggle()!);
+    expect(searchIsOn()).toBe(true);
+
+    // A brief loading/revalidation gap: nothing resolves, so no Globe.
+    harness.data.set("/providers", { results: [] });
+    harness.responses = new Map();
+    view.rerender(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as"
+      />,
+    );
+    expect(searchToggle()).toBeNull();
+
+    // Providers return; the User's setting must survive the gap.
+    harness.data.set("/providers", {
+      results: [searchProvider, plainProvider],
+    });
+    harness.responses = new Map();
+    view.rerender(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as"
+      />,
+    );
+
+    expect(searchIsOn()).toBe(true);
+  });
+});
+
+/**
+ * Whether the turn's stream ever established, judged per turn. The refused case
+ * is already covered above; this pins the reset, so a second turn is not judged
+ * on the first turn's stream.
+ */
+describe("turn establishment", () => {
+  it("judges a second turn on its own stream, not an earlier turn's", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
+    const { getByRole } = renderThrough(
+      "submitted",
+      "streaming",
+      "ready",
+      "submitted",
+      "error",
+    );
+
+    expect(getByRole("dialog")).toBeInTheDocument();
+  });
+
+  // Once established, it stays established while the broken turn sits there:
+  // repeated `error` renders must not re-open the modal or drop the answer.
+  it("keeps the answer while a broken turn sits there", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
+    const { container, queryByRole } = renderThrough(
+      "submitted",
+      "streaming",
+      "error",
+      "error",
+    );
+
+    expect(container.textContent).toMatch(/Connection interrupted/);
     expect(queryByRole("dialog")).toBeNull();
   });
 });
@@ -766,21 +1003,23 @@ describe("transcript stability", () => {
 // configuration is shown, so opening it is the moment worth spending a request
 // on (issue #920).
 describe("the Agent behind the info dialog", () => {
-  const openInfoDialog = (view: ReturnType<typeof renderChat>) => {
-    harness.agentInfoDialogOpen = true;
-    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
-  };
+  const openInfoDialog = () =>
+    fireEvent.click(
+      document.querySelector("svg.lucide-info")!.closest("button")!,
+    );
+  const closeInfoDialog = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Close info" }));
 
   it("does not re-read the Agents while the dialog is closed", () => {
-    renderChat();
+    renderWithAgent("as");
 
     expect(harness.agentsMutate).not.toHaveBeenCalled();
   });
 
   it("re-reads the Agents when the dialog opens", () => {
-    const view = renderChat();
+    renderWithAgent("as");
 
-    openInfoDialog(view);
+    openInfoDialog();
 
     expect(harness.agentsMutate).toHaveBeenCalledTimes(1);
   });
@@ -789,22 +1028,35 @@ describe("the Agent behind the info dialog", () => {
   // every streamed chunk, and a request per chunk for a dialog that is already
   // showing the answer would be worse than the staleness it fixes.
   it("re-reads once, however many times it re-renders while open", () => {
-    const view = renderChat();
-    openInfoDialog(view);
+    const view = renderWithAgent("as");
+    openInfoDialog();
 
-    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
-    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+    view.rerender(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as"
+      />,
+    );
+    view.rerender(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as"
+      />,
+    );
 
     expect(harness.agentsMutate).toHaveBeenCalledTimes(1);
   });
 
   it("re-reads again the next time the dialog is opened", () => {
-    const view = renderChat();
-    openInfoDialog(view);
+    renderWithAgent("as");
+    openInfoDialog();
 
-    harness.agentInfoDialogOpen = false;
-    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
-    openInfoDialog(view);
+    closeInfoDialog();
+    openInfoDialog();
 
     expect(harness.agentsMutate).toHaveBeenCalledTimes(2);
   });
@@ -814,9 +1066,9 @@ describe("the Agent behind the info dialog", () => {
   // leave unhandled.
   it("swallows a failed re-read", async () => {
     harness.agentsMutate.mockRejectedValue(new Error("offline"));
-    const view = renderChat();
+    renderWithAgent("as");
 
-    expect(() => openInfoDialog(view)).not.toThrow();
+    expect(() => openInfoDialog()).not.toThrow();
     await Promise.resolve();
   });
 });

@@ -268,7 +268,6 @@ export type PromptInputProps = Omit<
   "onSubmit" | "onError"
 > & {
   accept?: string; // e.g., "image/*", ".pdf", or a comma-separated list of either
-  multiple?: boolean;
   /**
    * Parts the input opens holding, for a surface editing a message that already
    * carries attachments (issue #710). Read once, on mount: after that the list
@@ -279,13 +278,7 @@ export type PromptInputProps = Omit<
   initialAttachments?: FileUIPart[];
   // When true, accepts drops anywhere on document. Default false (opt-in).
   globalDrop?: boolean;
-  // Minimal constraints
-  maxFiles?: number;
-  maxFileSize?: number; // bytes
-  onError?: (err: {
-    code: "max_files" | "max_file_size" | "accept" | "conversion";
-    message: string;
-  }) => void;
+  onError?: (err: { code: "accept" | "conversion"; message: string }) => void;
   onSubmit: (
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>,
@@ -295,11 +288,8 @@ export type PromptInputProps = Omit<
 export const PromptInput = ({
   className,
   accept,
-  multiple,
   initialAttachments,
   globalDrop,
-  maxFiles,
-  maxFileSize,
   onError,
   onSubmit,
   children,
@@ -344,32 +334,10 @@ export const PromptInput = ({
         });
         return;
       }
-      const withinSize = (f: File) =>
-        maxFileSize ? f.size <= maxFileSize : true;
-      const sized = accepted.filter(withinSize);
-      if (accepted.length > 0 && sized.length === 0) {
-        onError?.({
-          code: "max_file_size",
-          message: "All files exceed the maximum size.",
-        });
-        return;
-      }
 
       setItems((prev) => {
-        const capacity =
-          typeof maxFiles === "number"
-            ? Math.max(0, maxFiles - prev.length)
-            : undefined;
-        const capped =
-          typeof capacity === "number" ? sized.slice(0, capacity) : sized;
-        if (typeof capacity === "number" && sized.length > capacity) {
-          onError?.({
-            code: "max_files",
-            message: "Too many files. Some were not added.",
-          });
-        }
         const next: (FileUIPart & { id: string })[] = [];
-        for (const file of capped) {
+        for (const file of accepted) {
           next.push({
             id: nanoid(),
             type: "file",
@@ -381,7 +349,7 @@ export const PromptInput = ({
         return prev.concat(next);
       });
     },
-    [matchesAccept, maxFiles, maxFileSize, onError],
+    [matchesAccept, onError],
   );
 
   const remove = useCallback((id: string) => {
@@ -573,7 +541,7 @@ export const PromptInput = ({
         accept={accept}
         aria-label="Upload files"
         className="hidden"
-        multiple={multiple}
+        multiple
         onChange={handleChange}
         ref={inputRef}
         title="Upload files"

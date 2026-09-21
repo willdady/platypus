@@ -1,11 +1,53 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Provider, Agent, Chat } from "@platypus/schemas";
-import { setWithExpiry, getWithExpiry } from "@/lib/local-storage";
 import { decodeSelectionReference } from "@/lib/selection-reference";
 import {
   resolveRestoredSelection,
   type StoredSelection,
 } from "@/lib/restore-selection";
+
+/** How long a stored selection is remembered — 24 hours. */
+const STORAGE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Reads a selection this browser remembered for a workspace, or `null` when
+ * there is none (or it has aged out). Storage may be absent (SSR), blocked, or
+ * hold something that is not the shape written below; all of those read as "no
+ * stored selection" rather than throwing.
+ */
+const readStoredSelection = (key: string): StoredSelection | null => {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item) return null;
+    const stored = JSON.parse(item) as {
+      value: StoredSelection;
+      expiresAt: number;
+    };
+    if (Date.now() > stored.expiresAt) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return stored.value;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Persists a selection so the next new Chat in this workspace opens against
+ * it. A write that fails (storage full, or blocked) leaves the previous value
+ * in place; the selection just won't be remembered.
+ */
+const writeStoredSelection = (key: string, value: StoredSelection): void => {
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({ value, expiresAt: Date.now() + STORAGE_TTL_MS }),
+    );
+  } catch {
+    // Deliberately swallowed: nothing to recover, and nothing to tell the user.
+  }
+};
 
 export interface ModelSelection {
   agentId: string;
@@ -66,7 +108,7 @@ export const useModelSelection = ({
   // Read during the first render rather than from an effect: the ladder is
   // consulted before the first paint, and an effect cannot be.
   const [storedSelection, setStoredSelection] = useState(() =>
-    getWithExpiry<StoredSelection>(STORAGE_KEY),
+    readStoredSelection(STORAGE_KEY),
   );
 
   // What the reader has actually picked in this Chat. `null` means they have
@@ -82,7 +124,7 @@ export const useModelSelection = ({
   const [prevKey, setPrevKey] = useState(STORAGE_KEY);
   if (prevKey !== STORAGE_KEY) {
     setPrevKey(STORAGE_KEY);
-    setStoredSelection(getWithExpiry<StoredSelection>(STORAGE_KEY));
+    setStoredSelection(readStoredSelection(STORAGE_KEY));
     setChosen(null);
   }
 
@@ -164,9 +206,13 @@ export const useModelSelection = ({
   const { agentId, providerId, modelId } = selection;
   useEffect(() => {
     if (agentId) {
-      setWithExpiry(STORAGE_KEY, { type: "agent", id: agentId });
+      writeStoredSelection(STORAGE_KEY, { type: "agent", id: agentId });
     } else if (providerId && modelId) {
-      setWithExpiry(STORAGE_KEY, { type: "provider", providerId, modelId });
+      writeStoredSelection(STORAGE_KEY, {
+        type: "provider",
+        providerId,
+        modelId,
+      });
     }
   }, [agentId, providerId, modelId, STORAGE_KEY]);
 

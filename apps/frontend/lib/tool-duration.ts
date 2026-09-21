@@ -15,23 +15,6 @@ export function formatToolDuration(ms: number): string {
   return `${Math.floor(totalSeconds / 60)}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-/** Reads a numeric property off a value that may be anything at all. */
-const numberAt = (source: unknown, key: string): number | undefined => {
-  if (typeof source !== "object" || source === null) return undefined;
-  const value = (source as Record<string, unknown>)[key];
-  return typeof value === "number" ? value : undefined;
-};
-
-/**
- * Pulls the run pipeline's recorded duration out of a tool invocation's
- * `toolMetadata`. The field is a free-form JSON object a provider may also
- * write to, so the value is checked rather than cast: anything that isn't a
- * number reads as "no duration", which renders as nothing at all.
- */
-export function toolDurationMs(metadata: unknown): number | undefined {
-  return numberAt(metadata, "durationMs");
-}
-
 /**
  * How long a tool call took, from whichever of the two carriers has it.
  *
@@ -42,21 +25,27 @@ export function toolDurationMs(metadata: unknown): number | undefined {
  * the map has it, and after a reload the part does — the same number either way,
  * which is why there is no visible change when one takes over from the other.
  *
- * Messages written before both carriers existed have neither and render no time,
- * which is the documented behaviour for older Chats.
+ * Both carriers are free-form JSON a provider may also write to, so the value
+ * is checked rather than trusted: anything that isn't a number reads as "no
+ * duration", which renders as nothing at all. Messages written before both
+ * carriers existed have neither, which is the documented behaviour for older
+ * Chats.
  */
 export function toolCallDurationMs(
   toolMetadata: unknown,
   messageMetadata: unknown,
   toolCallId: string,
 ): number | undefined {
-  const fromPart = toolDurationMs(toolMetadata);
-  if (fromPart !== undefined) return fromPart;
-  if (typeof messageMetadata !== "object" || messageMetadata === null) {
-    return undefined;
-  }
-  return numberAt(
-    (messageMetadata as Record<string, unknown>).toolDurations,
-    toolCallId,
-  );
+  const partDuration = (toolMetadata as { durationMs?: unknown } | null)
+    ?.durationMs;
+  const mapDuration = (
+    messageMetadata as { toolDurations?: Record<string, unknown> } | null
+  )?.toolDurations?.[toolCallId];
+
+  // A part value that isn't a number is treated as absent, not as an answer:
+  // the map still gets its say, exactly as the two-carrier read always did.
+  const duration =
+    (typeof partDuration === "number" ? partDuration : undefined) ??
+    mapDuration;
+  return typeof duration === "number" ? duration : undefined;
 }

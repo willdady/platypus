@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  formatToolDuration,
-  toolCallDurationMs,
-  toolDurationMs,
-} from "./tool-duration";
+import { formatToolDuration, toolCallDurationMs } from "./tool-duration";
 
 describe("formatToolDuration", () => {
   it("renders sub-second durations in milliseconds", () => {
@@ -37,20 +33,24 @@ describe("formatToolDuration", () => {
   });
 });
 
-describe("toolDurationMs", () => {
-  it("reads a numeric durationMs out of tool metadata", () => {
-    expect(toolDurationMs({ durationMs: 1234 })).toBe(1234);
-  });
-
-  it("ignores metadata that carries no usable duration", () => {
-    expect(toolDurationMs(undefined)).toBeUndefined();
-    expect(toolDurationMs({})).toBeUndefined();
-    expect(toolDurationMs({ durationMs: "1234" })).toBeUndefined();
-    expect(toolDurationMs({ durationMs: null })).toBeUndefined();
-  });
-});
-
 describe("toolCallDurationMs", () => {
+  it("reads a numeric durationMs out of the part's tool metadata", () => {
+    expect(toolCallDurationMs({ durationMs: 1234 }, undefined, "call-1")).toBe(
+      1234,
+    );
+  });
+
+  it("ignores part metadata that carries no usable duration", () => {
+    expect(toolCallDurationMs(undefined, undefined, "call-1")).toBeUndefined();
+    expect(toolCallDurationMs({}, undefined, "call-1")).toBeUndefined();
+    expect(
+      toolCallDurationMs({ durationMs: "1234" }, undefined, "call-1"),
+    ).toBeUndefined();
+    expect(
+      toolCallDurationMs({ durationMs: null }, undefined, "call-1"),
+    ).toBeUndefined();
+  });
+
   it("prefers the part's own recorded duration", () => {
     expect(
       toolCallDurationMs(
@@ -67,6 +67,18 @@ describe("toolCallDurationMs", () => {
     expect(
       toolCallDurationMs(
         undefined,
+        { toolDurations: { "call-1": 842 } },
+        "call-1",
+      ),
+    ).toBe(842);
+  });
+
+  // A non-numeric part value is "no duration", not an answer that hides the
+  // map's real one — the fall-through the old two-carrier read performed.
+  it("falls back to the map when the part's value is not a number", () => {
+    expect(
+      toolCallDurationMs(
+        { durationMs: "500" },
         { toolDurations: { "call-1": 842 } },
         "call-1",
       ),

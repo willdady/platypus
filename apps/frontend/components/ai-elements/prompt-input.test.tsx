@@ -118,15 +118,9 @@ describe("PromptInput attachments", () => {
     expect(screen.queryByText("photo.png")).not.toBeInTheDocument();
   });
 
-  it("enforces maxFiles and maxFileSize", () => {
-    const onError = vi.fn();
+  it("adds every file offered, with no size or count cap", () => {
     render(
-      <PromptInput
-        maxFiles={1}
-        maxFileSize={10}
-        onError={onError}
-        onSubmit={vi.fn()}
-      >
+      <PromptInput onSubmit={vi.fn()}>
         <PromptInputAttachments className="w-full">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
@@ -137,25 +131,12 @@ describe("PromptInput attachments", () => {
     );
 
     const input = getFileInput();
-    const tooBig = new File(["x".repeat(20)], "big.txt", {
-      type: "text/plain",
-    });
-    fireFileChange(input, [tooBig]);
-    expect(onError).toHaveBeenCalledWith({
-      code: "max_file_size",
-      message: "All files exceed the maximum size.",
-    });
+    const a = new File(["a"], "a.txt", { type: "text/plain" });
+    const b = new File(["x".repeat(1024)], "b.txt", { type: "text/plain" });
+    fireFileChange(input, [a, b]);
 
-    const small1 = new File(["a"], "a.txt", { type: "text/plain" });
-    const small2 = new File(["b"], "b.txt", { type: "text/plain" });
-    fireFileChange(input, [small1, small2]);
-
-    expect(onError).toHaveBeenCalledWith({
-      code: "max_files",
-      message: "Too many files. Some were not added.",
-    });
     expect(screen.getByText("a.txt")).toBeInTheDocument();
-    expect(screen.queryByText("b.txt")).not.toBeInTheDocument();
+    expect(screen.getByText("b.txt")).toBeInTheDocument();
   });
 
   it("adds files dropped anywhere on the document when globalDrop is set", () => {
@@ -190,7 +171,7 @@ describe("PromptInput attachments", () => {
  */
 describe("PromptInput drop routing with two inputs", () => {
   const named = (label: string, globalDrop: boolean) => (
-    <PromptInput globalDrop={globalDrop} multiple onSubmit={vi.fn()}>
+    <PromptInput globalDrop={globalDrop} onSubmit={vi.fn()}>
       <PromptInputAttachments className="w-full">
         {(attachment) => (
           <PromptInputAttachment
@@ -336,11 +317,7 @@ describe("PromptInput initialAttachments", () => {
     }) as unknown as typeof global.fetch;
     const onSubmit = vi.fn();
     render(
-      <PromptInput
-        initialAttachments={[seededPdf]}
-        multiple
-        onSubmit={onSubmit}
-      >
+      <PromptInput initialAttachments={[seededPdf]} onSubmit={onSubmit}>
         <PromptInputAttachments className="w-full">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
@@ -498,7 +475,7 @@ describe("PromptInput blob-URL lifecycle", () => {
     onError?: (err: { code: string; message: string }) => void,
   ) =>
     render(
-      <PromptInput multiple onError={onError} onSubmit={onSubmit}>
+      <PromptInput onError={onError} onSubmit={onSubmit}>
         <PromptInputAttachments className="w-full">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>

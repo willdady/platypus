@@ -14,7 +14,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { AnimatePresence } from "motion/react";
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import {
   Chat as ChatType,
   Provider,
@@ -36,10 +36,9 @@ import {
   snapshotMessages,
 } from "@/lib/chat-recovery";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { useTurnEstablished } from "@/hooks/use-turn-established";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import { useChatSettings } from "@/hooks/use-chat-settings";
-import { useSearchToggle } from "@/hooks/use-search-toggle";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
 import { clearedToolCallIds } from "@/lib/tool-result-clearing";
@@ -48,7 +47,6 @@ import { ContextMeter, ContextMeterEntrance } from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { ATTACHMENTS_ONLY_TEXT } from "@/lib/message-parts";
 import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
-import { useChatUI } from "@/hooks/use-chat-ui";
 import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canSendChatMessages } from "@/lib/authorization";
@@ -185,7 +183,20 @@ export const Chat = ({
 
   // Whether this turn's stream had started arriving before it broke — what tells
   // a dropped connection from a request the server refused (issue #648).
-  const turnEstablished = useTurnEstablished(status);
+  //
+  // The one thing that tells the two apart: a turn that got bytes passed through
+  // `streaming` on its way to `error`, and one that was refused went from
+  // `submitted` straight to `error`. Without it, a rejected attachment and a
+  // backgrounded tab look identical from the client — both are just an error on
+  // the chat hook. Reset at each submit, so the answer is about the turn in hand
+  // rather than an earlier one. Kept in state adjusted during render rather than
+  // a ref written in an effect: the classification is read on the very render the
+  // error appears, and a ref would still be holding the previous render's value.
+  const [turnEstablished, setTurnEstablished] = useState(false);
+  useResetOnChange(status, () => {
+    if (status === "submitted") setTurnEstablished(false);
+    else if (status === "streaming") setTurnEstablished(true);
+  });
 
   // Fetch existing chat data, and re-read it while there is reason to believe a
   // run is live so a client that lost its stream sees the partial answer keep
@@ -251,7 +262,23 @@ export const Chat = ({
     chatData ?? undefined,
     selection.agentId,
   );
-  const chatUI = useChatUI(error, errorTreatment);
+
+  // The Chat's own UI state, none of which any other surface shares.
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [isAgentInfoDialogOpen, setIsAgentInfoDialogOpen] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+
+  // Show the error dialog when a new error arrives from useChat. Keyed on the
+  // error so the user can still dismiss the dialog while the error persists,
+  // and only a `failure` opens it: a dropped connection to a run that is still
+  // going gets an inline line instead, because the turn has not failed and the
+  // answer keeps filling in on its own (issue #648).
+  useResetOnChange(error, () => {
+    if (error && errorTreatment === "failure") {
+      setShowErrorDialog(true);
+    }
+  });
 
   // Extract values from hooks for easier access
   const { agentId, modelId, providerId } = selection;
@@ -289,7 +316,22 @@ export const Chat = ({
     onModelChange: handleModelChange,
     maxOutputTokens: resolvedModel?.maxOutputTokens,
   };
-  const [search, setSearch] = useSearchToggle(resolvedModel);
+  const [search, setSearch] = useState(false);
+
+  // The Chat search toggle's one invariant (#624): search may not be on when
+  // the resolved selection cannot search. Keyed on `canSearch` itself — not on
+  // the Agent/Provider/model identity — so switching between two selections
+  // that can both search leaves the toggle exactly as the User set it. The
+  // invariant only ever forces the toggle off, never on, and does nothing while
+  // resolution is unknown (`resolvedModel === null`), so a brief
+  // loading/revalidation gap can't silently discard a chosen setting.
+  useResetOnChange(
+    resolvedModel === null ? null : resolvedModel.canSearch,
+    () => {
+      if (resolvedModel && !resolvedModel.canSearch) setSearch(false);
+    },
+  );
+
   const {
     instructions,
     temperature,
@@ -300,16 +342,6 @@ export const Chat = ({
     frequencyPenalty,
     maxSteps,
   } = settings;
-  const {
-    isSettingsDialogOpen,
-    setIsSettingsDialogOpen,
-    isAgentInfoDialogOpen,
-    setIsAgentInfoDialogOpen,
-    showErrorDialog,
-    setShowErrorDialog,
-    copiedMessageId,
-    setCopiedMessageId,
-  } = chatUI;
 
   // An Agent holding the agent-management tools can rewrite its own row
   // mid-chat, and nothing else invalidates this read: the turn writes on the

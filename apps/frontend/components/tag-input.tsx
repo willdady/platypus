@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 interface TagInputProps {
   value: string[];
   onChange: (tags: string[]) => void;
-  maxTags?: number;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -18,10 +17,12 @@ interface TagInputProps {
 
 const KEBAB_CASE_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/** The most tags a Chat may carry; the backend enforces the same ceiling. */
+const MAX_TAGS = 5;
+
 export function TagInput({
   value = [],
   onChange,
-  maxTags = 5,
   placeholder = "Add tag...",
   disabled = false,
   className,
@@ -33,7 +34,7 @@ export function TagInput({
     const trimmedTag = tag.trim().toLowerCase();
     if (!trimmedTag) return;
 
-    if (value.length >= maxTags) return;
+    if (value.length >= MAX_TAGS) return;
 
     if (value.includes(trimmedTag)) {
       setFlashingTag(trimmedTag);
@@ -96,9 +97,9 @@ export function TagInput({
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={
-          value.length < maxTags ? placeholder : `Max ${maxTags} tags reached`
+          value.length < MAX_TAGS ? placeholder : `Max ${MAX_TAGS} tags reached`
         }
-        disabled={disabled || value.length >= maxTags}
+        disabled={disabled || value.length >= MAX_TAGS}
         className="h-9"
       />
       <p className="text-[10px] text-muted-foreground">

@@ -121,7 +121,6 @@ export const Composer = ({
       onSubmit={onSubmit}
       initialAttachments={initialAttachments}
       globalDrop={globalDrop}
-      multiple
     >
       <PromptInputAttachments className="w-full">
         {(attachment) => <PromptInputAttachment data={attachment} />}
