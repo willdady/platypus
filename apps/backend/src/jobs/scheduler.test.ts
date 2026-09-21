@@ -10,21 +10,16 @@ import type { SQL } from "drizzle-orm";
  * drizzle real and renders the query instead.
  */
 
-const { mockDb, mockLogger } = vi.hoisted(() => ({
+const { mockDb } = vi.hoisted(() => ({
   mockDb: {
     update: vi.fn(),
     select: vi.fn(),
   },
-  mockLogger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
 }));
 
 vi.mock("../index.ts", () => ({ db: mockDb }));
-vi.mock("../logger.ts", () => ({ logger: mockLogger }));
+
+import { mockLogger } from "../test-setup.ts";
 
 import {
   recoverStuckChats,

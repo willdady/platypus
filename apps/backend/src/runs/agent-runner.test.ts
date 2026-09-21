@@ -96,15 +96,6 @@ vi.mock("ai", async () => {
   };
 });
 
-vi.mock("../logger.ts", () => ({
-  logger: {
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-
 import { convertToModelMessages } from "ai";
 import { AgentRunner } from "./agent-runner.ts";
 import { ConflictError, mapError } from "../errors.ts";

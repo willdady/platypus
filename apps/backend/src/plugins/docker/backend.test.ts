@@ -272,16 +272,6 @@ vi.mock("dockerode", () => {
   return { default: Docker };
 });
 
-// Mock logger so we can assert warning behaviour in destroy().
-vi.mock("../../logger.ts", () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-
 // Import AFTER vi.mock so the adapter binds to our mocked dockerode.
 import {
   createDockerSandboxBackend,

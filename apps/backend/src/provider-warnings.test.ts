@@ -2,10 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { generateText, stepCountIs, ToolLoopAgent, type Warning } from "ai";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
 
-vi.mock("./logger.ts", () => ({
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-}));
-
 import { logger } from "./logger.ts";
 import { installProviderWarningLogger } from "./provider-warnings.ts";
 

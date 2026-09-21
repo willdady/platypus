@@ -6,11 +6,10 @@ import {
   resetMockDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
+import { mockNanoid } from "../test-setup.ts";
 
-// Mock nanoid to return predictable IDs
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn(() => "test-id-123"),
-}));
+// Predictable IDs
+mockNanoid.mockReturnValue("test-id-123");
 
 describe("Kanban Routes", () => {
   beforeEach(() => {

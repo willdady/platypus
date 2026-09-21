@@ -36,11 +36,7 @@ vi.mock("./trigger-breaker.ts", () => ({
   suppressTriggerRun: mockSuppressTriggerRun,
 }));
 
-const { mockLogger } = vi.hoisted(() => ({
-  mockLogger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
-}));
-
-vi.mock("../logger.ts", () => ({ logger: mockLogger }));
+import { mockLogger } from "../test-setup.ts";
 
 import { dispatchEvent } from "./event-dispatch.ts";
 import { withCausation, withOriginatingTrigger } from "../event-causation.ts";

@@ -28,15 +28,6 @@ import {
   type WebToolError,
 } from "./index.ts";
 
-vi.mock("../logger.ts", () => ({
-  logger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
 const mockLogger = vi.mocked(logger);
 
 // What core hands its own `buildTurnTools`. `providerId` is core's alone: it

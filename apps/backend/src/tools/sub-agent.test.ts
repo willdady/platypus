@@ -36,10 +36,6 @@ vi.mock("ai", async () => {
   };
 });
 
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
-
 import { logger } from "../logger.ts";
 
 // --- Model harness -----------------------------------------------------------

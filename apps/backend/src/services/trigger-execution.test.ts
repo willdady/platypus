@@ -46,15 +46,9 @@ vi.mock("./trigger-breaker.ts", () => ({
   retainTriggerRuns: mockRetainTriggerRuns,
 }));
 
-const { mockLogger } = vi.hoisted(() => ({
-  mockLogger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
-}));
+import { mockLogger, mockNanoid } from "../test-setup.ts";
 
-vi.mock("../logger.ts", () => ({ logger: mockLogger }));
-
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn(() => "test-id"),
-}));
+mockNanoid.mockReturnValue("test-id");
 
 import { executeTrigger, updateTriggerAfterRun } from "./trigger-execution.ts";
 import {

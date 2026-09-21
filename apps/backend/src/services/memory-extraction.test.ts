@@ -11,10 +11,6 @@ const { mockGenerateText, mockOpenProvider, mockGenerateEmbedding } =
 vi.mock("ai", () => ({ generateText: mockGenerateText }));
 vi.mock("./provider.ts", () => ({ openProvider: mockOpenProvider }));
 vi.mock("./embedding.ts", () => ({ generateEmbedding: mockGenerateEmbedding }));
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-}));
-vi.mock("nanoid", () => ({ nanoid: () => "generated-id" }));
 
 import { processMemoryExtractionBatch } from "./memory-extraction.ts";
 

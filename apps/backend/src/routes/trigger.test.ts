@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { mockNanoid } from "../test-setup.ts";
 import {
   mockDb,
   mockNoSession,
@@ -14,9 +15,7 @@ vi.mock("../utils/cron.ts", () => ({
   validateCronExpression: mockValidateCronExpression,
 }));
 
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn(() => "trig-new"),
-}));
+mockNanoid.mockReturnValue("trig-new");
 
 import app from "../server.ts";
 

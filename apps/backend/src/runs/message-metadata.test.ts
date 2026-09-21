@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   isToolUIPart,
   readUIMessageStream,
@@ -8,10 +8,6 @@ import {
 } from "ai";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
 import { z } from "zod";
-
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-}));
 
 import { createMessageMetadata } from "./message-metadata.ts";
 import type { PlatypusUIMessage } from "../types.ts";

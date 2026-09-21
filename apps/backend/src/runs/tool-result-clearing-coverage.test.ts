@@ -12,23 +12,6 @@ import type { SandboxBackend, SandboxContext } from "../sandbox/types.ts";
 // loading the real plugins here needs no live Postgres. Factories return AI
 // SDK tool maps without touching the db until a tool's `execute` runs.
 vi.mock("../index.ts", () => ({ db: {} }));
-vi.mock("../logger.ts", () => {
-  const child = {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  };
-  return {
-    logger: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      child: vi.fn(() => child),
-    },
-  };
-});
 vi.mock("../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
 vi.mock("../services/sub-agent-validation.ts", () => ({
   validateSubAgentAssignment: vi.fn(),

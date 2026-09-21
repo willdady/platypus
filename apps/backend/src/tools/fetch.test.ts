@@ -20,10 +20,6 @@ vi.mock("../utils/egress-guard.ts", async (importOriginal) => {
   };
 });
 
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
-
 const mockCheckEgress = vi.mocked(checkEgress);
 
 beforeEach(() => {

@@ -3,15 +3,9 @@ import { mockDb, resetMockDb } from "../test-utils.ts";
 import { lte, notInArray } from "drizzle-orm";
 import { triggerRun as triggerRunTable } from "../db/schema.ts";
 
-vi.mock("nanoid", () => ({
-  nanoid: vi.fn(() => "suppressed-1"),
-}));
+import { mockLogger, mockNanoid } from "../test-setup.ts";
 
-const { mockLogger } = vi.hoisted(() => ({
-  mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
-
-vi.mock("../logger.ts", () => ({ logger: mockLogger }));
+mockNanoid.mockReturnValue("suppressed-1");
 
 import {
   DEFAULT_TRIGGER_BREAKER_MAX_RUNS,
