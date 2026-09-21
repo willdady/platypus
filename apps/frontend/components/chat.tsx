@@ -47,7 +47,6 @@ import { useStableSet } from "@/hooks/use-stable-set";
 import { ContextMeter, ContextMeterEntrance } from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { ATTACHMENTS_ONLY_TEXT } from "@/lib/message-parts";
-import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
 import { useChatUI } from "@/hooks/use-chat-ui";
 import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -408,22 +407,6 @@ export const Chat = ({
       snapshotIsAtLeastAsComplete(snapshot, held) ? snapshot : held,
     );
   }, [chatData, setMessages]);
-
-  // Poll for a backend-generated title while the chat is still "Untitled".
-  // Titling is now owned entirely by the backend run lifecycle; the client only
-  // discovers the result (see hooks/use-chat-title-poll.ts).
-  const hasUserMessage = useMemo(
-    () => messages.some((m) => m.role === "user"),
-    [messages],
-  );
-  useChatTitlePoll({
-    chatId,
-    orgId,
-    workspaceId,
-    title: chatData?.title,
-    hasUserMessage,
-    backendUrl,
-  });
 
   const handleCopyMessage = useCallback(
     async (content: string, messageId: string) => {
