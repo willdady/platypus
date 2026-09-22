@@ -8,7 +8,6 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
  * @type {import('next').NextConfig}
  */
 const nextConfig = {
-  reactStrictMode: true,
   // The site ships a single small static logo; skip the image-optimization
   // runtime (not wired up on Cloudflare Workers) and serve it as-is.
   images: {

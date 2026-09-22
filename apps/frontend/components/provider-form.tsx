@@ -453,11 +453,6 @@ type ProviderFormData = Omit<
   embeddingDimensions: string;
 };
 
-// Deliberately empty: this form's fields can be validation-rejected on a
-// provider type that then hides the very input needed to retract them (see
-// the Save button below).
-const RETRACTABLE_FIELDS: readonly string[] = [];
-
 const ProviderForm = ({
   classNames,
   orgId,
@@ -503,7 +498,6 @@ const ProviderForm = ({
     setFormData,
     validationErrors,
     isSubmitting,
-    canSubmit,
     clearErrors,
     submit,
   } = useEntityForm<ProviderFormData, { id: string; aliasRepoints?: unknown }>({
@@ -529,7 +523,6 @@ const ProviderForm = ({
     entity: "providers",
     scope,
     id: providerId,
-    retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => ({
       workspaceId: workspaceId || undefined,
       organizationId: !workspaceId ? orgId : undefined,
@@ -1253,17 +1246,13 @@ const ProviderForm = ({
           submitText={providerId ? "Update" : "Save"}
           onSubmit={handleSubmit}
           submitDisabled={
-            isSubmitting ||
-            !!headersError ||
-            !!extraBodyError ||
-            // RETRACTABLE_FIELDS is deliberately empty: several fields here
-            // (apiMode, organization, project) render only for certain
-            // provider types, so a `validationErrors` key can outlive the
-            // input that would retract it. Server-returned errors must
-            // never gate Save for that reason — re-submitting simply
-            // re-validates. The JSON errors above are different: they are
-            // computed here as the user types and always clear themselves.
-            !canSubmit
+            isSubmitting || !!headersError || !!extraBodyError
+            // No `canSubmit` gate: several fields here (apiMode, organization,
+            // project) render only for certain provider types, so a
+            // server-returned error can outlive the input that would retract
+            // it. Re-submitting simply re-validates. The JSON errors above are
+            // different: they are computed here as the user types and always
+            // clear themselves.
           }
           deleteVisible={!!providerId}
           deleteDisabled={isSubmitting}

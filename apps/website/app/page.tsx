@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { SiteNav } from "./components/site-nav";
 import { HeroImage } from "./components/hero-image";
-import { Placeholder } from "./components/placeholder";
 import { DOCS_URL, GITHUB_URL } from "./components/sections";
 import { GitHubIcon } from "./components/icons";
 
@@ -89,8 +88,8 @@ const Section: FC<{
   </section>
 );
 
-// A dedicated, two-column feature section: copy + bullet points on one side, an
-// (placeholder) screenshot on the other. `reverse` flips which side the image
+// A dedicated, two-column feature section: copy + bullet points on one side, a
+// screenshot on the other. `reverse` flips which side the image
 // sits on so consecutive sections alternate.
 const FeatureSection: FC<{
   id: string;
@@ -100,8 +99,7 @@ const FeatureSection: FC<{
   body: string;
   points: string[];
   imageLabel: string;
-  // When provided, the real screenshot renders instead of the placeholder.
-  image?: { src: string; width: number; height: number };
+  image: { src: string; width: number; height: number };
   reverse?: boolean;
 }> = ({
   id,
@@ -135,17 +133,13 @@ const FeatureSection: FC<{
         </ul>
       </div>
       <div className={`lg:col-span-3 ${reverse ? "lg:order-1" : ""}`}>
-        {image ? (
-          <Image
-            src={image.src}
-            alt={imageLabel}
-            width={image.width}
-            height={image.height}
-            className="h-auto w-full rounded-xl border border-border shadow-2xl shadow-black/40"
-          />
-        ) : (
-          <Placeholder label={imageLabel} />
-        )}
+        <Image
+          src={image.src}
+          alt={imageLabel}
+          width={image.width}
+          height={image.height}
+          className="h-auto w-full rounded-xl border border-border shadow-2xl shadow-black/40"
+        />
       </div>
     </div>
   </Section>

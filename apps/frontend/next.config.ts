@@ -5,9 +5,6 @@ const allowedDevOrigins = process.env.ALLOWED_DEV_ORIGINS
   : [];
 
 const nextConfig: NextConfig = {
-  async redirects() {
-    return [];
-  },
   basePath: process.env.BASE_PATH || undefined,
   output: "standalone",
   // @swc/helpers 0.5.23 added a "module-sync" export condition that resolves

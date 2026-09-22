@@ -22,6 +22,8 @@ type Message = string | (() => string);
 const resolveMessage = (message: Message | undefined): string | undefined =>
   typeof message === "function" ? message() : message;
 
+const NO_RETRACTABLE_FIELDS: readonly string[] = [];
+
 export interface UseEntityFormOptions<TForm extends object, TResult> {
   /** The values the form starts with, before any record is loaded. */
   initialData: TForm;
@@ -35,7 +37,7 @@ export interface UseEntityFormOptions<TForm extends object, TResult> {
    * Field ids whose server error an edit can retract — and therefore the only
    * ones that may gate Save. See `canSubmitForm`.
    */
-  retractableFields: readonly string[];
+  retractableFields?: readonly string[];
   /**
    * Transforms a string field's value before it lands in `formData` — for a
    * field that normalises as it is typed (e.g. a lowercased skill name).
@@ -119,7 +121,7 @@ export function useEntityForm<TForm extends object, TResult = unknown>({
   entity,
   scope,
   id,
-  retractableFields,
+  retractableFields = NO_RETRACTABLE_FIELDS,
   transformField,
   buildPayload,
   conflictField,
