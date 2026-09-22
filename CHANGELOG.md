@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.0](https://github.com/willdady/platypus/compare/v3.8.1...v3.9.0) (2026-09-22)
+
+
+### Features
+
+* let an Operator require an invitation to sign up ([611edd1](https://github.com/willdady/platypus/commit/611edd1f7a6c90a400724cef2072deca6b946ef3)), closes [#550](https://github.com/willdady/platypus/issues/550)
+
 ## [3.8.1](https://github.com/willdady/platypus/compare/v3.8.0...v3.8.1) (2026-09-20)
 
 
