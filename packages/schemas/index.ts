@@ -1856,17 +1856,15 @@ export type InvitationAcceptResult = z.infer<
   typeof invitationAcceptResultSchema
 >;
 
-// Response of the unauthenticated registration-availability endpoint (#550,
-// ADR-0019): whether the public sign-up form is open, or an Invitation link is
-// the only way to an account. The one thing the frontend reads to decide
-// whether to offer Sign up.
-export const registrationAvailabilitySchema = z.object({
+// Response of the unauthenticated sign-up availability endpoint (#550,
+// ADR-0019): whether public sign-up is open, or an Invitation link is the only
+// way to an account. The one thing the frontend reads to decide whether to
+// offer Sign up.
+export const signUpAvailabilitySchema = z.object({
   open: z.boolean(),
 });
 
-export type RegistrationAvailability = z.infer<
-  typeof registrationAvailabilitySchema
->;
+export type SignUpAvailability = z.infer<typeof signUpAvailabilitySchema>;
 
 export const providerUpdateSchema = providerBaseSchema.pick({
   name: true,

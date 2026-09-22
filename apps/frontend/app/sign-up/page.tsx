@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
-import { useRegistrationOpen } from "@/hooks/use-registration-open";
+import { useSignUpOpen } from "@/hooks/use-sign-up-open";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
@@ -13,7 +13,7 @@ import Link from "next/link";
 export default function SignUpPage() {
   const { authClient } = useAuth();
   const router = useRouter();
-  const registrationOpen = useRegistrationOpen();
+  const signUpOpen = useSignUpOpen();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,44 +45,26 @@ export default function SignUpPage() {
     }
   };
 
-  const signInLink = (
-    <p className="text-center text-sm text-muted-foreground">
-      Already have an account?{" "}
-      <Link href="/sign-in" className="text-primary hover:underline">
-        Sign in
-      </Link>
-    </p>
-  );
-
-  // The Operator requires an invitation (#550, ADR-0019): say so rather than
-  // offer a form the backend would refuse. The route stays — a 404 would read
-  // as a broken deployment, not a closed door.
-  if (registrationOpen === false) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="w-full max-w-md space-y-8 p-8">
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="w-full max-w-md space-y-8 p-8">
+        {/* The Operator requires an invitation (#550, ADR-0019): say so rather
+            than offer a form the backend would refuse. The route stays — a 404
+            would read as a broken deployment, not a closed door. */}
+        {signUpOpen === false && (
           <div className="text-center">
-            <h1 className="text-2xl font-bold">
-              Registration is by invitation
-            </h1>
+            <h1 className="text-2xl font-bold">Sign-up is by invitation</h1>
             <p className="text-muted-foreground mt-2">
               This deployment does not accept open sign-ups. Ask an
               administrator of the Organization you are joining for an
               invitation link, and open that link to create your account.
             </p>
           </div>
-          {signInLink}
-        </div>
-      </div>
-    );
-  }
+        )}
 
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-md space-y-8 p-8">
         {/* The form waits for the backend to confirm sign-up is open: a form
             that appears and then vanishes is the dead end this avoids. */}
-        {registrationOpen && (
+        {signUpOpen && (
           <>
             <div className="text-center">
               <h1 className="text-2xl font-bold">Create an account</h1>
@@ -143,7 +125,12 @@ export default function SignUpPage() {
           </>
         )}
 
-        {signInLink}
+        <p className="text-center text-sm text-muted-foreground">
+          Already have an account?{" "}
+          <Link href="/sign-in" className="text-primary hover:underline">
+            Sign in
+          </Link>
+        </p>
       </div>
     </div>
   );

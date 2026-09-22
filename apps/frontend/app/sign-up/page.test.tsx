@@ -1,22 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { SWRConfig } from "swr";
 import SignUpPage from "./page";
 
 const mockSignUpEmail = vi.fn();
-
-/**
- * A distinct backend URL per test gives each its own SWR cache entry for the
- * registration read — `useSWR` caches by key at module scope, so a shared key
- * would let one test observe another's answer.
- */
-let mockBackendUrl = "http://backend-0.test";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => mockBackendUrl,
+  useBackendUrl: () => "http://backend.test",
   useAuth: () => ({
     authClient: {
       signUp: {
@@ -26,8 +20,8 @@ vi.mock("@/components/auth-provider", () => ({
   }),
 }));
 
-/** What the backend's registration endpoint answers. */
-const stubRegistration = (open: boolean) => {
+/** What the backend's sign-up availability endpoint answers. */
+const stubSignUpAvailability = (open: boolean) => {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
@@ -38,24 +32,34 @@ const stubRegistration = (open: boolean) => {
   );
 };
 
-/** Renders the page on a deployment with open registration, form shown. */
+/**
+ * Renders the page with an SWR cache of its own, so no test sees another's
+ * answer to the availability read.
+ */
+const renderPage = () =>
+  render(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <SignUpPage />
+    </SWRConfig>,
+  );
+
+/** Renders the page on a deployment with open sign-up, form shown. */
 const renderOpen = async () => {
-  stubRegistration(true);
-  const utils = render(<SignUpPage />);
+  stubSignUpAvailability(true);
+  const utils = renderPage();
   await screen.findByLabelText("Password");
   return utils;
 };
 
-describe("SignUpPage when registration requires an invitation", () => {
-  it("explains that registration is by invitation and offers no form", async () => {
-    stubRegistration(false);
-    mockBackendUrl = "http://backend-closed.test";
+describe("SignUpPage when an invitation is required", () => {
+  it("says sign-up is by invitation and offers no form", async () => {
+    stubSignUpAvailability(false);
 
-    render(<SignUpPage />);
+    renderPage();
 
     expect(
       await screen.findByRole("heading", {
-        name: "Registration is by invitation",
+        name: "Sign-up is by invitation",
       }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
@@ -70,12 +74,9 @@ describe("SignUpPage when registration requires an invitation", () => {
 });
 
 describe("SignUpPage password reveal toggle", () => {
-  let backendCounter = 0;
-
   beforeEach(() => {
     vi.clearAllMocks();
     mockSignUpEmail.mockResolvedValue({});
-    mockBackendUrl = `http://backend-${++backendCounter}.test`;
   });
 
   it("renders password masked as type='password' by default", async () => {

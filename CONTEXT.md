@@ -233,6 +233,10 @@ _Avoid_: invite request, membership request, allowlist entry.
 The single-use URL that redeems an Invitation, bearing a token minted with it. Held by whoever the Invitation's sender passes it to — the link, not the address on the Invitation, is what binds a redemption to it.
 _Avoid_: magic link, signup link, activation link.
 
+**Sign-up**:
+Creating an account through the public form, reached from the sign-in page's **Sign up** link — as opposed to redeeming an Invitation link. Open by default; the Operator closes it deployment-wide with `REQUIRE_INVITATION_TO_SIGN_UP`, after which an Invitation link is the only way an account comes into existence.
+_Avoid_: registration, self-registration.
+
 **Gateway** (Messaging gateway):
 A decoupled, stateful app — deployed alongside the frontend and backend — that bridges external chat Surfaces to Platypus, relaying messages both ways. Holds the long-lived per-Surface connections and hosts Gateway adapters; the backend itself stays messaging-agnostic. Platypus, not the Gateway, is the identity authority.
 _Avoid_: bot, bridge, connector.

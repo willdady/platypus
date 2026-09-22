@@ -72,7 +72,8 @@ describe("better-auth cookie configuration", () => {
  * the library itself, run on an in-memory database with those same options.
  * The second half is the confirmation the ADR asks for rather than assumes:
  * `disableSignUp` closes the public sign-up endpoint and nothing else, so an
- * upgrade of the library that moved the fence would fail here.
+ * upgrade of the library that moved the fence would fail here. How the
+ * variable's spellings parse is `sign-up.test.ts`'s, at the HTTP seam.
  */
 describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
   beforeEach(() => {
@@ -96,21 +97,10 @@ describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
     expect(await disableSignUp()).toBe(false);
   });
 
-  it.each(["true", "1", " TRUE "])(
-    "closes public sign-up when set to %j",
-    async (value) => {
-      process.env.REQUIRE_INVITATION_TO_SIGN_UP = value;
-      expect(await disableSignUp()).toBe(true);
-    },
-  );
-
-  it.each(["false", "0", ""])(
-    "leaves public sign-up open when set to %j",
-    async (value) => {
-      process.env.REQUIRE_INVITATION_TO_SIGN_UP = value;
-      expect(await disableSignUp()).toBe(false);
-    },
-  );
+  it("closes public sign-up when set to true", async () => {
+    process.env.REQUIRE_INVITATION_TO_SIGN_UP = "true";
+    expect(await disableSignUp()).toBe(true);
+  });
 
   /**
    * The composed options, run for real: the same `emailAndPassword` block and

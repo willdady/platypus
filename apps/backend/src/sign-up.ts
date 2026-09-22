@@ -4,9 +4,9 @@
  *
  * Read in two places that must never disagree — `auth.ts`, where it drives
  * better-auth's own `disableSignUp` option and so closes the public sign-up
- * endpoint, and `GET /registration`, the one answer the frontend reads to
- * decide whether to offer Sign up. It governs registration only: Organization
- * membership and Workspace access are untouched by it.
+ * endpoint, and `GET /sign-up`, the one answer the frontend reads to decide
+ * whether to offer Sign up. It governs sign-up only: Organization membership
+ * and Workspace access are untouched by it.
  *
  * Default off, so an upgrading deployment's admission posture is unchanged
  * until the Operator opts in. Parsed like the codebase's other boolean

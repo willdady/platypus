@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { db } from "./index.ts";
 import { auth } from "./auth.ts";
-import { requireInvitationToSignUp } from "./registration.ts";
+import { requireInvitationToSignUp } from "./sign-up.ts";
 import { chat } from "./routes/chat.ts";
 import { files } from "./routes/files.ts";
 import { organization } from "./routes/organization.ts";
@@ -144,11 +144,11 @@ app.use("*", async (c, next) => {
 });
 
 app.get("/health", (c) => c.json({ status: "ok" }));
-// Unauthenticated (#550, ADR-0019): the one authority the frontend reads to
-// decide whether to offer Sign up, so a second frontend-side variable that
-// could disagree with the backend never exists. It discloses nothing an
-// anonymous caller could not learn by attempting to register once.
-app.get("/registration", (c) => c.json({ open: !requireInvitationToSignUp() }));
+// Whether public sign-up is open. Unauthenticated (#550, ADR-0019): the one
+// authority the frontend reads to decide whether to offer Sign up, so a second
+// frontend-side variable that could disagree with the backend never exists. It
+// discloses nothing an anonymous caller could not learn by trying to sign up.
+app.get("/sign-up", (c) => c.json({ open: !requireInvitationToSignUp() }));
 
 app.route("/files", files);
 app.route("/organizations", organization);

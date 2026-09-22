@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { authPlugins } from "./auth-plugins.ts";
-import { requireInvitationToSignUp } from "./registration.ts";
+import { requireInvitationToSignUp } from "./sign-up.ts";
 import { db } from "./index.ts";
 import { backendBaseUrl } from "./base-urls.ts";
 import * as authSchema from "./db/auth-schema.ts";

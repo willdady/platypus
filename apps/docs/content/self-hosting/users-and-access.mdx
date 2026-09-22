@@ -57,13 +57,13 @@ What changes:
 
 - The public sign-up endpoint is closed. The sign-in page no longer shows
   **Sign up**, and the sign-up page, if someone opens it directly, says that
-  registration is by invitation and offers no form.
+  sign-up is by invitation and offers no form.
 - Nothing else. Sign-in, **Change password**, the password reset on
   **Settings → Users**, and first-boot seeding of the admin all work as before.
 
 What the invitee experiences is the **Not signed in** path below: they open the
 link, choose their own name and password, and land in their new Workspace.
-Registration is still self-service — nobody sets a password for them, and no
+Sign-up is still self-service — nobody sets a password for them, and no
 password passes through an administrator's hands. Only the entrance changed.
 
 <Callout type="warning">
@@ -75,9 +75,8 @@ password passes through an administrator's hands. Only the entrance changed.
   one. Expiry bounds the window either way.
 </Callout>
 
-Platypus applies **no rate limiting** of its own to sign-in or to invitation
-links. Put one in front of it at the reverse proxy — see
-[Running in production](/self-hosting/production#put-a-rate-limiter-in-front).
+Rate limiting for sign-in and invitation links belongs at the reverse proxy —
+see [Put a rate limiter in front](/self-hosting/production#put-a-rate-limiter-in-front).
 
 ## Inviting someone in
 
@@ -188,7 +187,7 @@ elsewhere as "the in-app user management".
 ## Where to next
 
 - **[Running in production](/self-hosting/production)** — TLS, the reverse
-  proxy, and the rate limiter Platypus does not have.
+  proxy, and rate limiting.
 - **[Administering](/administering)** — what an Org Admin does once people are in.
 - **[Providers & authentication](/self-hosting/providers-and-auth)** — the role
   ladder in more depth, and what each tier may configure.
