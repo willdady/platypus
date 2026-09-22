@@ -3,7 +3,7 @@
 import { useState, type FocusEventHandler, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Markdown } from "@/components/markdown";
-import { formatDate, formatDateAtTime } from "@/lib/format-date";
+import { formatDate, formatDateTime } from "@/lib/format-date";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import type {
   KanbanCard,
@@ -683,7 +683,7 @@ function CardMetadataSection({
           Created
         </p>
         <p className="text-xs text-muted-foreground">
-          {formatDateAtTime(createdAt)}
+          {formatDateTime(createdAt)}
           {createdByName && <> by {createdByName}</>}
         </p>
       </div>
@@ -692,7 +692,7 @@ function CardMetadataSection({
           Updated
         </p>
         <p className="text-xs text-muted-foreground">
-          {formatDateAtTime(updatedAt)}
+          {formatDateTime(updatedAt)}
           {lastEditedByName && <> by {lastEditedByName}</>}
         </p>
       </div>

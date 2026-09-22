@@ -51,7 +51,6 @@ export function PullToRefresh({
   const settledRef = useRef(false);
   // Ref mirrors so callbacks never read stale state
   const pullDistanceRef = useRef(0);
-  const isPullingRef = useRef(false);
 
   const handleTouchStart = useCallback((e: TouchEvent) => {
     startYRef.current = e.touches[0].clientY;
@@ -62,7 +61,6 @@ export function PullToRefresh({
     firstMoveRef.current = true;
     disqualifiedRef.current = false;
     settledRef.current = false;
-    isPullingRef.current = false;
     pullDistanceRef.current = 0;
   }, []);
 
@@ -110,7 +108,6 @@ export function PullToRefresh({
       const resistance = Math.min(deltaY * 0.45, MAX_PULL_DISTANCE);
       pullDistanceRef.current = resistance;
 
-      isPullingRef.current = true;
       setIsPulling(true);
       setPullDistance(resistance);
     },
@@ -121,7 +118,6 @@ export function PullToRefresh({
     if (isRefreshingRef.current) return;
 
     const currentPullDistance = pullDistanceRef.current;
-    isPullingRef.current = false;
 
     if (currentPullDistance >= REFRESH_THRESHOLD) {
       isRefreshingRef.current = true;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDate, formatDateTime, formatDateAtTime } from "./format-date";
+import { formatDate, formatDateTime } from "./format-date";
 
 // These render in the viewer's locale, so the assertions pin the shape of each
 // formatter rather than one locale's spelling of it.
@@ -19,13 +19,6 @@ describe("format-date", () => {
     const rendered = formatDateTime(value);
 
     expect(rendered).toContain("2026");
-    expect(rendered).toMatch(/\d{1,2}:05/);
-  });
-
-  it("reads a day and a time as a sentence", () => {
-    const rendered = formatDateAtTime(value);
-
-    expect(rendered.startsWith(`${formatDate(value)} at `)).toBe(true);
     expect(rendered).toMatch(/\d{1,2}:05/);
   });
 
