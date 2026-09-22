@@ -1,6 +1,6 @@
 ---
 title: Users & access
-description: How people get accounts, what sign-up does and doesn't give them, how invitations actually work, and the platform user-management screen.
+description: How people get accounts, how to require an invitation to get one, how invitations actually work, and the platform user-management screen.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -15,22 +15,24 @@ today.
 Sessions are cookies, signed with `BETTER_AUTH_SECRET` and valid for **7 days**.
 Rotating that secret signs everybody out.
 
-## Anyone who can reach the frontend can create an account
+## Who can create an account
+
+That is the Operator's call, made with one backend variable:
+`REQUIRE_INVITATION_TO_SIGN_UP`. It is **off by default**, so upgrading changes
+nothing until you set it.
+
+### Open sign-up (the default)
 
 Self-serve sign-up is **open**. The sign-in page links to **Sign up**, the form
 takes a name, an email and a password, and the account exists immediately —
 **email verification is off**, so no address is ever confirmed.
 
-Nothing Platypus exposes turns this off. There is no environment variable and no
-toggle in the app; the underlying auth library has a switch for it, but Platypus
-doesn't surface it, so closing sign-up means patching and rebuilding the backend.
-
 <Callout type="warning">
-  Put Platypus on the public internet and strangers will be able to register
-  accounts. Treat network reachability as the access control, because in this
-  release it is the only one: keep the frontend behind a VPN, an SSO-aware
-  reverse proxy, or an IP allowlist if the set of people who may hold an account
-  is not "anyone who can route to it".
+  Put Platypus on the public internet with sign-up open and strangers will be
+  able to register accounts. Either require an invitation (next section) or
+  treat network reachability as the access control: keep the frontend behind a
+  VPN, an SSO-aware reverse proxy, or an IP allowlist if the set of people who
+  may hold an account is not "anyone who can route to it".
 </Callout>
 
 The mitigating half, worth knowing before you panic:
@@ -43,7 +45,39 @@ the ability to reach anything in your deployment.
 
 Registered accounts still accumulate rows in your database, and a registered
 address is enough to accept an invitation later, so the exposure is worth closing
-at the network layer rather than shrugging at.
+rather than shrugging at.
+
+### Invitation-only sign-up
+
+Set `REQUIRE_INVITATION_TO_SIGN_UP=true` on the backend and restart it. From then
+on an account comes into existence in exactly one way: somebody redeems an
+[invitation link](#inviting-someone-in).
+
+What changes:
+
+- The public sign-up endpoint is closed. The sign-in page no longer shows
+  **Sign up**, and the sign-up page, if someone opens it directly, says that
+  registration is by invitation and offers no form.
+- Nothing else. Sign-in, **Change password**, the password reset on
+  **Settings → Users**, and first-boot seeding of the admin all work as before.
+
+What the invitee experiences is the **Not signed in** path below: they open the
+link, choose their own name and password, and land in their new Workspace.
+Registration is still self-service — nobody sets a password for them, and no
+password passes through an administrator's hands. Only the entrance changed.
+
+<Callout type="warning">
+  **The link is the credential.** Whoever holds an invitation link can redeem it
+  and become the account it names, so send it over a channel you would trust
+  with a password. If a link reaches the wrong person there is no revoke
+  button: delete the invitation — the trash icon at the end of its row in
+  **Organization settings → Invitations**, then **Delete** — and send a fresh
+  one. Expiry bounds the window either way.
+</Callout>
+
+Platypus applies **no rate limiting** of its own to sign-in or to invitation
+links. Put one in front of it at the reverse proxy — see
+[Running in production](/self-hosting/production#put-a-rate-limiter-in-front).
 
 ## Inviting someone in
 
@@ -153,8 +187,8 @@ elsewhere as "the in-app user management".
 
 ## Where to next
 
-- **[Running in production](/self-hosting/production)** — the reverse proxy that
-  is currently your access control.
+- **[Running in production](/self-hosting/production)** — TLS, the reverse
+  proxy, and the rate limiter Platypus does not have.
 - **[Administering](/administering)** — what an Org Admin does once people are in.
 - **[Providers & authentication](/self-hosting/providers-and-auth)** — the role
   ladder in more depth, and what each tier may configure.

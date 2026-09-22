@@ -1,6 +1,6 @@
 ---
 title: Running in production
-description: TLS, a reverse proxy, the domain constraint that makes sign-in work, and backing the database up before you upgrade.
+description: TLS, a reverse proxy, the rate limiter Platypus does not have, the domain constraint that makes sign-in work, and backing the database up before you upgrade.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -10,9 +10,9 @@ import { Callout, Steps } from "nextra/components";
 The quick start gets you a stack on `localhost`. This page is what has to be true
 before other people use it.
 
-Four things, in order of how badly each bites: put it behind TLS, choose hostnames
-that let sign-in work, back the database up before every upgrade, and decide where
-uploaded files live.
+Five things, in order of how badly each bites: put it behind TLS, put a rate
+limiter in front, choose hostnames that let sign-in work, back the database up
+before every upgrade, and decide where uploaded files live.
 
 ## Put it behind a reverse proxy with TLS
 
@@ -32,11 +32,38 @@ you pick hostnames.
   types the bare hostname gets the insecure version and nothing warns them.
 </Callout>
 
-Nothing about the reverse proxy restricts _who_ may reach the app. Because
-[self-serve sign-up is open and cannot be disabled](/self-hosting/users-and-access),
-the proxy is also where you put an IP allowlist, a VPN requirement, or SSO-aware
-auth if the set of people who may hold an account is narrower than "anyone who can
-route to it".
+Nothing about the reverse proxy restricts _who_ may reach the app. Whether a
+stranger who reaches it can create an account is a separate switch,
+[`REQUIRE_INVITATION_TO_SIGN_UP`](/self-hosting/users-and-access#who-can-create-an-account),
+off by default. If you leave sign-up open, the proxy is also where you put an IP
+allowlist, a VPN requirement, or SSO-aware auth if the set of people who may hold
+an account is narrower than "anyone who can route to it".
+
+## Put a rate limiter in front
+
+Platypus has **no in-app rate limiting**. Nothing in the backend slows down a
+client that submits a thousand sign-in attempts, a thousand invitation-link
+guesses, or a thousand password changes. That is the reverse proxy's job, and on
+a deployment anyone hostile can reach it is not optional.
+
+Limit the credential-bearing paths, per client address:
+
+- `/auth/sign-in/email` — sign-in.
+- `/auth/sign-up/email` — sign-up, while it is open.
+- `/auth/change-password` and `/auth/admin/set-user-password` — password changes.
+- `/invitation-links/` — resolving and redeeming invitation links.
+
+Ten requests a minute per address, with a small burst, is a reasonable starting
+point: a person signing in never approaches it, and a script does in its first
+second. nginx's `limit_req`, Caddy's rate-limit handler, Traefik's `RateLimit`
+middleware and every cloud load balancer can express it.
+
+<Callout type="warning">
+  Do not put that limit on all of `/auth/`. The app reads the session from
+  `/auth/get-session` on every page load and again whenever a tab regains
+  focus, so a ten-a-minute ceiling there signs people out mid-session for no
+  reason they can see. Limit the paths above, not the prefix.
+</Callout>
 
 ## Choose hostnames that let the cookie work
 
@@ -145,10 +172,15 @@ R2 or Spaces — before you run more than one backend. The variables are in
 - `ALLOWED_ORIGINS`, `BACKEND_URL` and `FRONTEND_URL` matching those hostnames.
 - `BETTER_AUTH_SECRET` a real random value, not the placeholder.
 - `ADMIN_PASSWORD` changed from whatever seeded the first admin.
+- `REQUIRE_INVITATION_TO_SIGN_UP=true`, unless you mean for anyone who can
+  reach the frontend to be able to register.
+- A rate limit at the proxy on sign-in, password changes and invitation links
+  — Platypus has none of its own.
 - `pg_dump` on a schedule, and once more immediately before any upgrade.
 - Image tags pinned in a `compose.override.yaml`, not `:latest`.
 - `STORAGE_BACKEND=s3` if more than one backend replica.
-- Network access restricted to the people who should be able to register.
+- Network access restricted to the people who should be able to register, if
+  sign-up stays open.
 - `EGRESS_ALLOW_PRIVATE_NETWORKS=false` if Agents have no business reading
   internal hosts.
 

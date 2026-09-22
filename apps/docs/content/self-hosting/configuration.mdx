@@ -96,6 +96,10 @@ at `/auth/*` on the backend. The essentials:
   without starting the HTTP server if either is unset against an empty database.
   See [what first boot creates](/self-hosting/docker-compose#what-first-boot-creates)
   for the seeding rule and the recovery path.
+- **`REQUIRE_INVITATION_TO_SIGN_UP`** — `true` closes public sign-up, so an
+  account can only be created by redeeming an invitation link. Off by default.
+  The two modes and what the invitee sees are in
+  [Users & access](/self-hosting/users-and-access#who-can-create-an-account).
 
 The deeper model — Providers, the role ladder, and the default admin — lives in
 [Providers & authentication](/self-hosting/providers-and-auth).

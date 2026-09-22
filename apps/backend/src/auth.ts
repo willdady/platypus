@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { authPlugins } from "./auth-plugins.ts";
+import { requireInvitationToSignUp } from "./registration.ts";
 import { db } from "./index.ts";
 import { backendBaseUrl } from "./base-urls.ts";
 import * as authSchema from "./db/auth-schema.ts";
@@ -26,6 +27,11 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Set to true for production
+    // Closing public sign-up is the library's own switch, not a guard in
+    // front of a live endpoint (ADR-0019). Sign-in, password changes and the
+    // admin plugin's create-user API do not consult it, so an Invitation link
+    // still redeems into an account and the first-boot seed still runs.
+    disableSignUp: requireInvitationToSignUp(),
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days

@@ -14,19 +14,21 @@ type SeedEnv = {
 };
 
 /**
- * Creates the admin User and returns its id. In production this is
- * better-auth's `signUpEmail`, which owns its own database access and so writes
- * outside any transaction the seed opens — the reason `seedFirstBoot`
- * compensates for the User explicitly instead of relying on rollback.
+ * Creates the admin User and returns its id. In production this is the
+ * better-auth admin plugin's `createUser` — the administrative API, not public
+ * sign-up, so seeding works whether or not the Operator has closed
+ * registration (#550). It owns its own database access and so writes outside
+ * any transaction the seed opens — the reason `seedFirstBoot` compensates for
+ * the User explicitly instead of relying on rollback.
  */
-export type AdminSignUp = (input: {
+export type AdminCreateUser = (input: {
   email: string;
   password: string;
   name: string;
 }) => Promise<{ id: string }>;
 
 export type SeedDeps = {
-  signUpAdmin: AdminSignUp;
+  createUser: AdminCreateUser;
   /** Defaults to `process.env`. */
   env?: SeedEnv;
 };
@@ -53,9 +55,9 @@ export class NonRetryableSeedError extends Error {
 }
 
 /**
- * better-auth rejects invalid input (a password below its minimum length, an
- * email already taken) with a 4xx `APIError`. Those are deterministic; 5xx and
- * plain transport errors are not.
+ * better-auth rejects invalid input (a malformed email, an email already
+ * taken) with a 4xx `APIError`. Those are deterministic; 5xx and plain
+ * transport errors are not.
  */
 const isDeterministicRejection = (error: unknown): boolean => {
   const status = (error as { statusCode?: unknown } | null)?.statusCode;
@@ -64,6 +66,14 @@ const isDeterministicRejection = (error: unknown): boolean => {
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+/**
+ * better-auth's default minimum, which its sign-up and password-change
+ * endpoints enforce. The administrative create-user API the seed goes through
+ * hashes whatever it is given, so the seed checks this itself — a short
+ * ADMIN_PASSWORD fails loudly here rather than being accepted.
+ */
+const MIN_ADMIN_PASSWORD_LENGTH = 8;
 
 /**
  * Bootstraps an empty database with the Default Organization, the admin User
@@ -109,10 +119,15 @@ export const seedFirstBoot = async (
   }
   const email = env.ADMIN_EMAIL!;
   const password = env.ADMIN_PASSWORD!;
+  if (password.length < MIN_ADMIN_PASSWORD_LENGTH) {
+    throw new NonRetryableSeedError(
+      `ADMIN_PASSWORD must be at least ${MIN_ADMIN_PASSWORD_LENGTH} characters. Set a longer one and restart.`,
+    );
+  }
 
   logger.info("No organizations found. Seeding initial data...");
 
-  const adminId = await createAdminUser(database, deps.signUpAdmin, {
+  const adminId = await createAdminUser(database, deps.createUser, {
     email,
     password,
   });
@@ -184,7 +199,7 @@ export const seedFirstBoot = async (
  */
 const createAdminUser = async (
   database: SeedDatabase,
-  signUpAdmin: AdminSignUp,
+  createUser: AdminCreateUser,
   credentials: { email: string; password: string },
 ): Promise<string> => {
   const [existing] = await database
@@ -200,7 +215,7 @@ const createAdminUser = async (
   }
 
   try {
-    const created = await signUpAdmin({
+    const created = await createUser({
       email: credentials.email,
       password: credentials.password,
       name: "Admin User",

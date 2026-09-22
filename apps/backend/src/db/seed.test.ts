@@ -4,7 +4,7 @@ import {
   seedFirstBoot,
   NonRetryableSeedError,
   type SeedDatabase,
-  type AdminSignUp,
+  type AdminCreateUser,
 } from "./seed.ts";
 import { logger } from "../logger.ts";
 
@@ -35,14 +35,15 @@ const createFakeDb = (
 const asSeedDb = (fake: { handle: unknown }) => fake.handle as SeedDatabase;
 
 /**
- * Stands in for better-auth's `signUpEmail`: it writes the User row through its
- * own database access, outside any transaction the seed opens — which is the
- * whole reason the seed has to compensate rather than rely on rollback.
+ * Stands in for the better-auth admin plugin's `createUser`: it writes the User
+ * row through its own database access, outside any transaction the seed opens
+ * — which is the whole reason the seed has to compensate rather than rely on
+ * rollback.
  */
-const createSignUp = (
+const createUserApi = (
   tables: Store,
   behaviour: { fail?: Error } = {},
-): AdminSignUp => {
+): AdminCreateUser => {
   let n = 0;
   return vi.fn(({ email, name }) => {
     if (behaviour.fail) return Promise.reject(behaviour.fail);
@@ -65,7 +66,7 @@ const createSignUp = (
 
 const VALID_ENV = {
   ADMIN_EMAIL: "admin@example.com",
-  ADMIN_PASSWORD: "s3cret!",
+  ADMIN_PASSWORD: "s3cret!!",
 };
 
 describe("seedFirstBoot", () => {
@@ -75,10 +76,10 @@ describe("seedFirstBoot", () => {
 
   it("seeds an organization, admin user, membership and workspace on an empty database", async () => {
     const fake = createFakeDb();
-    const signUpAdmin = createSignUp(fake.tables);
+    const createUser = createUserApi(fake.tables);
 
     const result = await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin,
+      createUser,
       env: VALID_ENV,
     });
 
@@ -108,30 +109,50 @@ describe("seedFirstBoot", () => {
 
   it("writes nothing and names the missing variable when ADMIN_EMAIL is unset", async () => {
     const fake = createFakeDb();
-    const signUpAdmin = createSignUp(fake.tables);
+    const createUser = createUserApi(fake.tables);
 
     await expect(
       seedFirstBoot(asSeedDb(fake), {
-        signUpAdmin,
-        env: { ADMIN_PASSWORD: "s3cret!" },
+        createUser,
+        env: { ADMIN_PASSWORD: "s3cret!!" },
       }),
     ).rejects.toThrow(/ADMIN_EMAIL/);
 
     expect(fake.tables.organization).toHaveLength(0);
     expect(fake.tables.user).toHaveLength(0);
-    expect(signUpAdmin).not.toHaveBeenCalled();
+    expect(createUser).not.toHaveBeenCalled();
   });
 
   it("names ADMIN_PASSWORD when it is the unset one, and does not retry", async () => {
     const fake = createFakeDb();
 
     const error = await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin: createSignUp(fake.tables),
+      createUser: createUserApi(fake.tables),
       env: { ADMIN_EMAIL: "admin@example.com" },
     }).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(NonRetryableSeedError);
     expect((error as Error).message).toMatch(/ADMIN_PASSWORD/);
+    expect(fake.tables.organization).toHaveLength(0);
+  });
+
+  // The administrative create-user API the seed goes through hashes whatever
+  // it is given; public sign-up would have refused a short password, so the
+  // seed keeps that refusal itself.
+  it("refuses an ADMIN_PASSWORD shorter than 8 characters before writing anything", async () => {
+    const fake = createFakeDb();
+    const createUser = createUserApi(fake.tables);
+
+    const error = await seedFirstBoot(asSeedDb(fake), {
+      createUser,
+      env: { ADMIN_EMAIL: "admin@example.com", ADMIN_PASSWORD: "short" },
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NonRetryableSeedError);
+    expect((error as Error).message).toMatch(/ADMIN_PASSWORD/);
+    expect((error as Error).message).toMatch(/8 characters/);
+    expect(createUser).not.toHaveBeenCalled();
+    expect(fake.tables.user).toHaveLength(0);
     expect(fake.tables.organization).toHaveLength(0);
   });
 
@@ -144,7 +165,7 @@ describe("seedFirstBoot", () => {
 
     await expect(
       seedFirstBoot(asSeedDb(fake), {
-        signUpAdmin: createSignUp(fake.tables),
+        createUser: createUserApi(fake.tables),
         env: VALID_ENV,
       }),
     ).rejects.toThrow(/connection terminated/);
@@ -166,16 +187,16 @@ describe("seedFirstBoot", () => {
         }
       },
     });
-    const signUpAdmin = createSignUp(fake.tables);
+    const createUser = createUserApi(fake.tables);
 
     await expect(
-      seedFirstBoot(asSeedDb(fake), { signUpAdmin, env: VALID_ENV }),
+      seedFirstBoot(asSeedDb(fake), { createUser, env: VALID_ENV }),
     ).rejects.toThrow(/connection terminated/);
 
     failing = false;
 
     const result = await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin,
+      createUser,
       env: VALID_ENV,
     });
 
@@ -198,17 +219,17 @@ describe("seedFirstBoot", () => {
       role: "user",
       emailVerified: false,
     });
-    const signUpAdmin = createSignUp(fake.tables);
+    const createUser = createUserApi(fake.tables);
 
     const error = await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin,
+      createUser,
       env: VALID_ENV,
     }).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(NonRetryableSeedError);
     expect((error as Error).message).toMatch(VALID_ENV.ADMIN_EMAIL);
     expect((error as Error).message).toMatch(/Delete that user/);
-    expect(signUpAdmin).not.toHaveBeenCalled();
+    expect(createUser).not.toHaveBeenCalled();
     expect(fake.tables.user[0]).toMatchObject({ role: "user" });
     expect(fake.tables.organization).toHaveLength(0);
     expect(fake.tables.organization_member).toHaveLength(0);
@@ -216,14 +237,14 @@ describe("seedFirstBoot", () => {
 
   it("is a quiet no-op against an already-seeded database", async () => {
     const fake = createFakeDb();
-    const signUpAdmin = createSignUp(fake.tables);
-    await seedFirstBoot(asSeedDb(fake), { signUpAdmin, env: VALID_ENV });
+    const createUser = createUserApi(fake.tables);
+    await seedFirstBoot(asSeedDb(fake), { createUser, env: VALID_ENV });
 
     const warn = vi.spyOn(logger, "warn");
     const error = vi.spyOn(logger, "error");
 
     const result = await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin,
+      createUser,
       env: VALID_ENV,
     });
 
@@ -238,13 +259,13 @@ describe("seedFirstBoot", () => {
   it("requires no admin config to skip an already-seeded database", async () => {
     const fake = createFakeDb();
     await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin: createSignUp(fake.tables),
+      createUser: createUserApi(fake.tables),
       env: VALID_ENV,
     });
 
     await expect(
       seedFirstBoot(asSeedDb(fake), {
-        signUpAdmin: createSignUp(fake.tables),
+        createUser: createUserApi(fake.tables),
         env: {},
       }),
     ).resolves.toEqual({ seeded: false });
@@ -252,17 +273,17 @@ describe("seedFirstBoot", () => {
 
   it("reports a deterministic better-auth rejection as non-retryable", async () => {
     const fake = createFakeDb();
-    const rejection = Object.assign(new Error("Password too short"), {
+    const rejection = Object.assign(new Error("Invalid email"), {
       statusCode: 400,
     });
 
     const error = await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin: createSignUp(fake.tables, { fail: rejection }),
+      createUser: createUserApi(fake.tables, { fail: rejection }),
       env: VALID_ENV,
     }).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(NonRetryableSeedError);
-    expect((error as Error).message).toMatch(/Password too short/);
+    expect((error as Error).message).toMatch(/Invalid email/);
     expect(fake.tables.organization).toHaveLength(0);
     expect(fake.tables.user).toHaveLength(0);
   });
@@ -271,7 +292,7 @@ describe("seedFirstBoot", () => {
     const fake = createFakeDb();
 
     const error = await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin: createSignUp(fake.tables, {
+      createUser: createUserApi(fake.tables, {
         fail: new Error("socket hang up"),
       }),
       env: VALID_ENV,
@@ -291,7 +312,7 @@ describe("seedFirstBoot", () => {
     const error = vi.spyOn(logger, "error");
 
     const result = await seedFirstBoot(asSeedDb(fake), {
-      signUpAdmin: createSignUp(fake.tables),
+      createUser: createUserApi(fake.tables),
       env: VALID_ENV,
     });
 

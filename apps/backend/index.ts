@@ -7,7 +7,7 @@ import { logger } from "./src/logger.ts";
 import {
   NonRetryableSeedError,
   seedFirstBoot,
-  type AdminSignUp,
+  type AdminCreateUser,
 } from "./src/db/seed.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduler } from "./src/jobs/scheduler.ts";
@@ -18,13 +18,17 @@ import { validateTriggerBreakerConfig } from "./src/services/trigger-breaker.ts"
 
 const PORT = process.env.PORT || "4001";
 
-/** The production admin-User creator handed to the seed: better-auth sign-up. */
-const signUpAdmin: AdminSignUp = async (input) => {
-  const result = await auth.api.signUpEmail({ body: input });
-  if (!result.user) {
-    throw new Error("Sign up returned no user");
-  }
-  return { id: result.user.id };
+/**
+ * The production admin-User creator handed to the seed: the better-auth admin
+ * plugin's create-user API, called in-process with no headers, which the
+ * plugin treats as a trusted internal call needing no session. It hashes the
+ * password and links a credential account exactly as public sign-up would,
+ * without going through the public sign-up endpoint — so seeding works whether
+ * or not `REQUIRE_INVITATION_TO_SIGN_UP` has closed it (#550, ADR-0019).
+ */
+const createAdminUser: AdminCreateUser = async (input) => {
+  const { user } = await auth.api.createUser({ body: input });
+  return { id: user.id };
 };
 
 const main = async () => {
@@ -48,7 +52,7 @@ const main = async () => {
       // Enable pgvector extension for embedding storage (needed before drizzle-kit push in dev)
       await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
 
-      await seedFirstBoot(db, { signUpAdmin });
+      await seedFirstBoot(db, { createUser: createAdminUser });
     });
   } catch (error) {
     // The message goes in the log line, not just the serialised error: it is

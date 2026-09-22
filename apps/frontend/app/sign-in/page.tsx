@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
+import { useRegistrationOpen } from "@/hooks/use-registration-open";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
@@ -12,6 +13,7 @@ import Link from "next/link";
 export default function SignInPage() {
   const { authClient } = useAuth();
   const router = useRouter();
+  const registrationOpen = useRegistrationOpen();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -87,12 +89,18 @@ export default function SignInPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link href="/sign-up" className="text-primary hover:underline">
-            Sign up
-          </Link>
-        </p>
+        {/* Offered only once the backend has said sign-up is open (#550):
+            where the Operator requires an invitation there is no form to
+            link to, and a link that appears and then turns out dead is the
+            dead end this avoids. */}
+        {registrationOpen && (
+          <p className="text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{" "}
+            <Link href="/sign-up" className="text-primary hover:underline">
+              Sign up
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

@@ -4,11 +4,19 @@ import SignUpPage from "./page";
 
 const mockSignUpEmail = vi.fn();
 
+/**
+ * A distinct backend URL per test gives each its own SWR cache entry for the
+ * registration read — `useSWR` caches by key at module scope, so a shared key
+ * would let one test observe another's answer.
+ */
+let mockBackendUrl = "http://backend-0.test";
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock("@/components/auth-provider", () => ({
+  useBackendUrl: () => mockBackendUrl,
   useAuth: () => ({
     authClient: {
       signUp: {
@@ -18,14 +26,60 @@ vi.mock("@/components/auth-provider", () => ({
   }),
 }));
 
+/** What the backend's registration endpoint answers. */
+const stubRegistration = (open: boolean) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ open }),
+    }),
+  );
+};
+
+/** Renders the page on a deployment with open registration, form shown. */
+const renderOpen = async () => {
+  stubRegistration(true);
+  const utils = render(<SignUpPage />);
+  await screen.findByLabelText("Password");
+  return utils;
+};
+
+describe("SignUpPage when registration requires an invitation", () => {
+  it("explains that registration is by invitation and offers no form", async () => {
+    stubRegistration(false);
+    mockBackendUrl = "http://backend-closed.test";
+
+    render(<SignUpPage />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Registration is by invitation",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Sign up" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/sign-in",
+    );
+  });
+});
+
 describe("SignUpPage password reveal toggle", () => {
+  let backendCounter = 0;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockSignUpEmail.mockResolvedValue({});
+    mockBackendUrl = `http://backend-${++backendCounter}.test`;
   });
 
-  it("renders password masked as type='password' by default", () => {
-    render(<SignUpPage />);
+  it("renders password masked as type='password' by default", async () => {
+    await renderOpen();
 
     const passwordInput = screen.getByLabelText("Password");
     expect(passwordInput).toHaveAttribute("type", "password");
@@ -34,8 +88,8 @@ describe("SignUpPage password reveal toggle", () => {
     ).toBeInTheDocument();
   });
 
-  it("toggles password visibility between text and password on click", () => {
-    render(<SignUpPage />);
+  it("toggles password visibility between text and password on click", async () => {
+    await renderOpen();
 
     const passwordInput = screen.getByLabelText("Password");
     const toggleButton = screen.getByRole("button", { name: "Show password" });
@@ -55,8 +109,8 @@ describe("SignUpPage password reveal toggle", () => {
     ).toBeInTheDocument();
   });
 
-  it("preserves typed password value across multiple toggle clicks", () => {
-    render(<SignUpPage />);
+  it("preserves typed password value across multiple toggle clicks", async () => {
+    await renderOpen();
 
     const passwordInput = screen.getByLabelText("Password");
     fireEvent.change(passwordInput, {
@@ -79,7 +133,7 @@ describe("SignUpPage password reveal toggle", () => {
   });
 
   it("submits the credentials when the form is submitted", async () => {
-    const { container } = render(<SignUpPage />);
+    const { container } = await renderOpen();
 
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Ada Lovelace" },
@@ -101,8 +155,8 @@ describe("SignUpPage password reveal toggle", () => {
     });
   });
 
-  it("does not trigger form submission when clicking the reveal button", () => {
-    render(<SignUpPage />);
+  it("does not trigger form submission when clicking the reveal button", async () => {
+    await renderOpen();
 
     const toggleButton = screen.getByRole("button", { name: "Show password" });
 
