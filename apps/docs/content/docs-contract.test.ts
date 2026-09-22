@@ -1517,19 +1517,27 @@ describe("docker image tags", () => {
   it("pushes latest, the exact version, and a floating major for both images", () => {
     const violations: string[] = [];
 
+    // Both images run through one matrixed merge job, so the image name is a
+    // matrix value and each tag template appears once.
     for (const image of IMAGES) {
-      const expected = [
-        `willdady/platypus-${image}:latest`,
-        `willdady/platypus-${image}:\${{ steps.version.outputs.version }}`,
-        `\${{ steps.tags.outputs.${image}_major }}`,
-      ];
-      for (const tag of expected) {
-        if (!workflow.includes(tag)) {
-          violations.push(
-            `${RELEASE_WORKFLOW} no longer tags the ${image} image with \`${tag}\`.\n` +
-              `${COMPOSE_PAGE} tells Operators all three tags exist; either restore the tag or rewrite that page.`,
-          );
-        }
+      if (!workflow.includes(`image: [${IMAGES.join(", ")}]`)) {
+        violations.push(
+          `${RELEASE_WORKFLOW} no longer lists the ${image} image in its matrix.\n` +
+            `${COMPOSE_PAGE} tells Operators both images publish the same three tags.`,
+        );
+      }
+    }
+    const expected = [
+      "willdady/platypus-${{ matrix.image }}:latest",
+      "willdady/platypus-${{ matrix.image }}:${{ steps.version.outputs.version }}",
+      "${{ steps.tags.outputs.major }}",
+    ];
+    for (const tag of expected) {
+      if (!workflow.includes(tag)) {
+        violations.push(
+          `${RELEASE_WORKFLOW} no longer tags the images with \`${tag}\`.\n` +
+            `${COMPOSE_PAGE} tells Operators all three tags exist; either restore the tag or rewrite that page.`,
+        );
       }
     }
 
@@ -1546,7 +1554,7 @@ describe("docker image tags", () => {
   it("hardcodes no major in the release workflow", () => {
     const hardcoded = [
       ...workflow.matchAll(
-        /willdady\/platypus-(?:frontend|backend):(\d[\w.]*)/g,
+        /willdady\/platypus-(?:frontend|backend|\$\{\{ matrix\.image \}\}):(\d[\w.]*)/g,
       ),
     ];
 
