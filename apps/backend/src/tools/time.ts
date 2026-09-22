@@ -70,7 +70,8 @@ export const convertTimezone = tool({
     );
     // ICU renders the longOffset sign as U+2212; normalise to ASCII so the
     // output stays valid ISO
-    const offset = parts.timeZoneName.replace(/^GMT/, "").replace("−", "-") || "Z";
+    const offset =
+      parts.timeZoneName.replace(/^GMT/, "").replace("−", "-") || "Z";
     const isoDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}`;
 
     return {

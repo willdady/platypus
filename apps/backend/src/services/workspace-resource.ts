@@ -188,10 +188,8 @@ const allOf = (...conditions: (SQL | undefined)[]): SQL => and(...conditions)!;
  * The scope-half of every predicate here: this scope column equals this
  * value. The one place that equality is written for all seven tables.
  */
-const scopeWhere = (
-  scope: RegistryEntry["scope"],
-  scopeValue: string,
-): SQL => eq(scope.column, scopeValue);
+const scopeWhere = (scope: RegistryEntry["scope"], scopeValue: string): SQL =>
+  eq(scope.column, scopeValue);
 
 /**
  * The `WHERE` clause matching a single Workspace-child resource: this id, in
