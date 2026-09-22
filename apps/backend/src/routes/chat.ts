@@ -110,7 +110,7 @@ chat.get(
     const chatId = c.req.param("chatId");
     const { workspaceId } = workspaceScopeOf(c);
 
-    const chat = await requireOwned(db, "chat", chatId, workspaceId);
+    const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
 
     // The pinned Memories block and previous-turn stamp (ADR-0020) are internal
     // — absent from the Chat response schema, never surfaced in the product.
@@ -170,7 +170,9 @@ chat.post(
         lastTurnAt: chatTable.lastTurnAt,
       })
       .from(chatTable)
-      .where(ownedWhere("chat", data.id, scope.workspaceId))
+      .where(
+        ownedWhere("chat", { id: data.id, workspaceId: scope.workspaceId }),
+      )
       .limit(1);
     const now = new Date();
     const pin = resolveMemoryPin({
@@ -260,7 +262,7 @@ chat.post(
     // This is what makes a cross-workspace cancel return 404 rather than
     // silently no-op — runIds (which equal chat IDs) are otherwise the
     // only thing the registry sees.
-    await requireOwned(db, "chat", chatId, workspaceId);
+    await requireOwned(db, "chat", { id: chatId, workspaceId });
 
     // Idempotent: cancel returns false for unknown / already-finished
     // runs, but we still respond 200 so flaky clients can safely retry.
@@ -280,7 +282,10 @@ chat.delete(
     const { orgId, workspaceId } = workspaceScopeOf(c);
 
     // First fetch the chat to get its messages for file cleanup
-    const chatRecord = await requireOwned(db, "chat", chatId, workspaceId);
+    const chatRecord = await requireOwned(db, "chat", {
+      id: chatId,
+      workspaceId,
+    });
 
     // Delete associated files from storage (best-effort). Scoped to this Chat,
     // so a planted file part naming another tenant's key deletes nothing.
@@ -293,7 +298,9 @@ chat.delete(
     }
 
     // Delete the chat record
-    await db.delete(chatTable).where(ownedWhere("chat", chatId, workspaceId));
+    await db
+      .delete(chatTable)
+      .where(ownedWhere("chat", { id: chatId, workspaceId }));
 
     return c.json({ message: "Chat deleted successfully" }, 200);
   },
@@ -311,12 +318,17 @@ chat.put(
     const { workspaceId } = workspaceScopeOf(c);
     const { title, isPinned, tags } = c.req.valid("json");
 
-    const result = await updateOwned(db, "chat", chatId, workspaceId, {
-      title,
-      isPinned,
-      tags,
-      updatedAt: new Date(),
-    });
+    const result = await updateOwned(
+      db,
+      "chat",
+      { id: chatId, workspaceId },
+      {
+        title,
+        isPinned,
+        tags,
+        updatedAt: new Date(),
+      },
+    );
 
     if (!result) {
       throw new NotFoundError("Chat not found");

@@ -14,13 +14,9 @@ import {
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   deleteOwned,
-  deleteOwnedWidget,
   listOwned,
-  listOwnedWidgets,
   requireOwned,
-  requireOwnedWidget,
   updateOwned,
-  updateOwnedWidget,
 } from "./workspace-resource.ts";
 import { logger } from "../logger.ts";
 import { formatIssues } from "../zod-issues.ts";
@@ -49,13 +45,18 @@ export const parseStoredWidgets = (
   });
 
 export const listDashboards = (database: Database, workspaceId: string) =>
-  listOwned(database, "dashboard", workspaceId, asc(dashboardTable.createdAt));
+  listOwned(
+    database,
+    "dashboard",
+    { workspaceId },
+    asc(dashboardTable.createdAt),
+  );
 
 export const getDashboard = (
   database: Database,
   dashboardId: string,
   workspaceId: string,
-) => requireOwned(database, "dashboard", dashboardId, workspaceId);
+) => requireOwned(database, "dashboard", { id: dashboardId, workspaceId });
 
 const ensureDashboardNameAvailable = async (
   database: Database,
@@ -122,10 +123,15 @@ export const updateDashboard = async (
       data.name,
       dashboardId,
     );
-  return updateOwned(database, "dashboard", dashboardId, workspaceId, {
-    ...data,
-    updatedAt: new Date(),
-  });
+  return updateOwned(
+    database,
+    "dashboard",
+    { id: dashboardId, workspaceId },
+    {
+      ...data,
+      updatedAt: new Date(),
+    },
+  );
 };
 
 export const removeDashboard = async (
@@ -134,7 +140,7 @@ export const removeDashboard = async (
   workspaceId: string,
 ) => {
   await getDashboard(database, dashboardId, workspaceId);
-  await deleteOwned(database, "dashboard", dashboardId, workspaceId);
+  await deleteOwned(database, "dashboard", { id: dashboardId, workspaceId });
 };
 
 export const listWidgets = async (
@@ -160,7 +166,12 @@ export const listWidgetRows = async (
   workspaceId: string,
 ) => {
   await getDashboard(database, dashboardId, workspaceId);
-  return listOwnedWidgets(database, dashboardId, asc(widgetTable.createdAt));
+  return listOwned(
+    database,
+    "widget",
+    { dashboardId },
+    asc(widgetTable.createdAt),
+  );
 };
 
 export const createWidget = async (
@@ -208,7 +219,10 @@ export const updateWidget = async (
   data: { type: WidgetRow["type"]; data: unknown; title?: string },
 ) => {
   await getDashboard(database, dashboardId, workspaceId);
-  const existing = await requireOwnedWidget(database, widgetId, dashboardId);
+  const existing = await requireOwned(database, "widget", {
+    id: widgetId,
+    dashboardId,
+  });
   if (existing.type !== data.type) return { typeMismatch: true as const };
   // Matching `type` is only half the contract: `data` has to be the payload
   // that type declares. The REST route's body schema already pairs the two,
@@ -241,14 +255,19 @@ export const updateWidget = async (
         "A widget with that title already exists on this dashboard",
       );
   }
-  return updateOwnedWidget(database, widgetId, dashboardId, {
-    // The parse output, not the input: it is the payload as the named type's
-    // own schema resolved it, rather than as whichever union branch happened
-    // to match first.
-    data: pairing.data.data,
-    ...(data.title && { title: data.title }),
-    updatedAt: new Date(),
-  });
+  return updateOwned(
+    database,
+    "widget",
+    { id: widgetId, dashboardId },
+    {
+      // The parse output, not the input: it is the payload as the named type's
+      // own schema resolved it, rather than as whichever union branch happened
+      // to match first.
+      data: pairing.data.data,
+      ...(data.title && { title: data.title }),
+      updatedAt: new Date(),
+    },
+  );
 };
 
 export const getWidget = async (
@@ -258,7 +277,10 @@ export const getWidget = async (
   workspaceId: string,
 ) => {
   await getDashboard(database, dashboardId, workspaceId);
-  const row = await requireOwnedWidget(database, widgetId, dashboardId);
+  const row = await requireOwned(database, "widget", {
+    id: widgetId,
+    dashboardId,
+  });
   const parsed = parseStoredWidgets([row], dashboardId);
   if (!parsed.length) throw new NotFoundError("Widget not found");
   return parsed[0];
@@ -271,6 +293,6 @@ export const removeWidget = async (
   workspaceId: string,
 ) => {
   await getDashboard(database, dashboardId, workspaceId);
-  await requireOwnedWidget(database, widgetId, dashboardId);
-  await deleteOwnedWidget(database, widgetId, dashboardId);
+  await requireOwned(database, "widget", { id: widgetId, dashboardId });
+  await deleteOwned(database, "widget", { id: widgetId, dashboardId });
 };

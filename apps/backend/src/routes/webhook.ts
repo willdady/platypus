@@ -35,7 +35,7 @@ webhook.get(
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
 
-    const results = await listOwned(db, "webhook", workspaceId, null);
+    const results = await listOwned(db, "webhook", { workspaceId }, null);
 
     return c.json({ results });
   },
@@ -97,7 +97,10 @@ webhook.get(
     const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
-    const record = await requireOwned(db, "webhook", webhookId, workspaceId);
+    const record = await requireOwned(db, "webhook", {
+      id: webhookId,
+      workspaceId,
+    });
 
     return c.json(record);
   },
@@ -133,8 +136,7 @@ webhook.put(
     const result = await updateOwned(
       db,
       "webhook",
-      webhookId,
-      workspaceId,
+      { id: webhookId, workspaceId },
       updateData,
     );
 
@@ -156,7 +158,10 @@ webhook.delete(
     const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
-    const deleted = await deleteOwned(db, "webhook", webhookId, workspaceId);
+    const deleted = await deleteOwned(db, "webhook", {
+      id: webhookId,
+      workspaceId,
+    });
 
     if (!deleted) {
       throw new NotFoundError("Webhook not found");
@@ -176,10 +181,15 @@ webhook.post(
     const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
-    const result = await updateOwned(db, "webhook", webhookId, workspaceId, {
-      signingSecret: generateSigningSecret(),
-      updatedAt: new Date(),
-    });
+    const result = await updateOwned(
+      db,
+      "webhook",
+      { id: webhookId, workspaceId },
+      {
+        signingSecret: generateSigningSecret(),
+        updatedAt: new Date(),
+      },
+    );
 
     if (!result) {
       throw new NotFoundError("Webhook not found");

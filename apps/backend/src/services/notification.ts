@@ -21,7 +21,7 @@ const normalizeBody = (body: string) =>
 
 const agentOwnedWhere = (ctx: NotificationContext, id: string) =>
   and(
-    ownedWhere("notification", id, ctx.workspaceId),
+    ownedWhere("notification", { id, workspaceId: ctx.workspaceId }),
     ctx.agentId ? eq(notificationTable.agentId, ctx.agentId) : undefined,
   );
 
@@ -122,12 +122,10 @@ export const markRead = async (
   notificationId: string,
   userId: string,
 ) => {
-  const owned = await resolveOwned(
-    database,
-    "notification",
-    notificationId,
-    ctx.workspaceId,
-  );
+  const owned = await resolveOwned(database, "notification", {
+    id: notificationId,
+    workspaceId: ctx.workspaceId,
+  });
   if (!owned) return false;
   await database
     .insert(notificationReadTable)

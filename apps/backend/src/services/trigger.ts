@@ -168,12 +168,10 @@ export async function updateTrigger(
   triggerId: string,
   fields: TriggerUpdateFields,
 ): Promise<TriggerRow> {
-  const existing = await requireOwned(
-    db,
-    "trigger",
-    triggerId,
-    ctx.workspaceId,
-  );
+  const existing = await requireOwned(db, "trigger", {
+    id: triggerId,
+    workspaceId: ctx.workspaceId,
+  });
   const effectiveType = fields.type ?? (existing.type as TriggerType);
 
   const updateData: Partial<TriggerRow> = {
@@ -238,8 +236,7 @@ export async function updateTrigger(
   const row = await updateOwned(
     db,
     "trigger",
-    triggerId,
-    ctx.workspaceId,
+    { id: triggerId, workspaceId: ctx.workspaceId },
     updateData,
   );
   if (!row) {

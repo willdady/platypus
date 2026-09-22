@@ -12,10 +12,10 @@ import {
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import {
-  resolveOwnedSandbox,
-  requireOwnedSandbox,
-  updateOwnedSandbox,
-  deleteOwnedSandbox,
+  deleteOwned,
+  requireOwned,
+  resolveOwned,
+  updateOwned,
 } from "../services/workspace-resource.ts";
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
@@ -143,7 +143,7 @@ sandbox.get(
   requireWorkspaceAccess,
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const record = await requireOwnedSandbox(db, workspaceId);
+    const record = await requireOwned(db, "sandbox", { workspaceId });
     const isAdmin = c.get("orgMembership")?.role === "admin";
     return c.json(sanitizeSandboxResponse(record, isAdmin));
   },
@@ -187,7 +187,7 @@ sandbox.post(
       );
     }
 
-    const existing = await resolveOwnedSandbox(db, workspaceId);
+    const existing = await resolveOwned(db, "sandbox", { workspaceId });
     if (existing) {
       return c.json(
         { error: "Sandbox already configured for this workspace" },
@@ -240,7 +240,7 @@ sandbox.put(
     const force = c.req.query("force") === "true";
     const isAdmin = c.get("orgMembership")?.role === "admin";
 
-    const current = await requireOwnedSandbox(db, workspaceId);
+    const current = await requireOwned(db, "sandbox", { workspaceId });
 
     // Non-admin owner: restrict to name + userEnv, no backend/config changes.
     if (!isAdmin) {
@@ -253,11 +253,16 @@ sandbox.put(
           400,
         );
       }
-      const record = await updateOwnedSandbox(db, workspaceId, {
-        name: data.name,
-        ...(data.userEnv !== undefined ? { userEnv: data.userEnv } : {}),
-        updatedAt: new Date(),
-      });
+      const record = await updateOwned(
+        db,
+        "sandbox",
+        { workspaceId },
+        {
+          name: data.name,
+          ...(data.userEnv !== undefined ? { userEnv: data.userEnv } : {}),
+          updatedAt: new Date(),
+        },
+      );
       // Non-admin owner — redact adminEnv values in the response.
       return c.json(sanitizeSandboxResponse(record!, false));
     }
@@ -337,10 +342,15 @@ sandbox.put(
       );
     }
 
-    const record = await updateOwnedSandbox(db, workspaceId, {
-      ...data,
-      updatedAt: new Date(),
-    });
+    const record = await updateOwned(
+      db,
+      "sandbox",
+      { workspaceId },
+      {
+        ...data,
+        updatedAt: new Date(),
+      },
+    );
     // Reached only on the admin branch above.
     return c.json(sanitizeSandboxResponse(record!, true));
   },
@@ -360,7 +370,7 @@ sandbox.delete(
     const { workspaceId } = workspaceScopeOf(c);
     const force = c.req.query("force") === "true";
 
-    const existing = await requireOwnedSandbox(db, workspaceId);
+    const existing = await requireOwned(db, "sandbox", { workspaceId });
 
     if (!force) {
       try {
@@ -396,7 +406,7 @@ sandbox.delete(
       );
     }
 
-    await deleteOwnedSandbox(db, workspaceId);
+    await deleteOwned(db, "sandbox", { workspaceId });
     return c.json({ message: "Sandbox deleted" });
   },
 );

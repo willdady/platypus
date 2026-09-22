@@ -35,7 +35,7 @@ trigger.get(
     const results = await listOwned(
       db,
       "trigger",
-      workspaceId,
+      { workspaceId },
       desc(triggerTable.createdAt),
     );
     return c.json({ results });
@@ -52,7 +52,10 @@ trigger.get(
     const triggerId = c.req.param("triggerId");
     const { workspaceId } = workspaceScopeOf(c);
 
-    const record = await requireOwned(db, "trigger", triggerId, workspaceId);
+    const record = await requireOwned(db, "trigger", {
+      id: triggerId,
+      workspaceId,
+    });
 
     return c.json(record);
   },
@@ -133,7 +136,10 @@ trigger.delete(
     const triggerId = c.req.param("triggerId");
     const { workspaceId } = workspaceScopeOf(c);
 
-    const deleted = await deleteOwned(db, "trigger", triggerId, workspaceId);
+    const deleted = await deleteOwned(db, "trigger", {
+      id: triggerId,
+      workspaceId,
+    });
 
     if (!deleted) {
       throw new NotFoundError("Trigger not found");

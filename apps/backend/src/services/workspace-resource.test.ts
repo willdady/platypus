@@ -11,14 +11,6 @@ import {
   updateOwned,
   deleteOwned,
   ownedWhere,
-  resolveOwnedWidget,
-  requireOwnedWidget,
-  listOwnedWidgets,
-  updateOwnedWidget,
-  deleteOwnedWidget,
-  widgetOwnedWhere,
-  resolveOwnedSandbox,
-  requireOwnedSandbox,
 } from "./workspace-resource.ts";
 import { NotFoundError } from "../errors.ts";
 
@@ -36,24 +28,20 @@ describe("WorkspaceResource module", () => {
       const row = { id: "chat-1", workspaceId, title: "Hello" };
       mockDb.limit.mockResolvedValueOnce([row]);
 
-      const found = await resolveOwned(
-        asDb(mockDb),
-        "chat",
-        "chat-1",
+      const found = await resolveOwned(asDb(mockDb), "chat", {
+        id: "chat-1",
         workspaceId,
-      );
+      });
       expect(found).toEqual(row);
     });
 
     it("returns null when the row is missing", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
 
-      const found = await resolveOwned(
-        asDb(mockDb),
-        "chat",
-        "chat-1",
+      const found = await resolveOwned(asDb(mockDb), "chat", {
+        id: "chat-1",
         workspaceId,
-      );
+      });
       expect(found).toBeNull();
     });
   });
@@ -63,12 +51,10 @@ describe("WorkspaceResource module", () => {
       const row = { id: "dash-1", workspaceId, name: "Dashboard" };
       mockDb.limit.mockResolvedValueOnce([row]);
 
-      const found = await requireOwned(
-        asDb(mockDb),
-        "dashboard",
-        "dash-1",
+      const found = await requireOwned(asDb(mockDb), "dashboard", {
+        id: "dash-1",
         workspaceId,
-      );
+      });
       expect(found).toEqual(row);
     });
 
@@ -76,10 +62,13 @@ describe("WorkspaceResource module", () => {
       mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
-        requireOwned(asDb(mockDb), "dashboard", "dash-1", workspaceId),
+        requireOwned(asDb(mockDb), "dashboard", {
+          id: "dash-1",
+          workspaceId,
+        }),
       ).rejects.toThrow(NotFoundError);
       await expect(
-        requireOwned(asDb(mockDb), "trigger", "trig-1", workspaceId),
+        requireOwned(asDb(mockDb), "trigger", { id: "trig-1", workspaceId }),
       ).rejects.toThrow("Trigger not found");
     });
   });
@@ -92,7 +81,7 @@ describe("WorkspaceResource module", () => {
       const results = await listOwned(
         asDb(mockDb),
         "webhook",
-        workspaceId,
+        { workspaceId },
         null,
       );
       expect(results).toEqual(rows);
@@ -106,7 +95,7 @@ describe("WorkspaceResource module", () => {
       const results = await listOwned(
         asDb(mockDb),
         "trigger",
-        workspaceId,
+        { workspaceId },
         desc(triggerTable.createdAt),
       );
       expect(results).toEqual(rows);
@@ -122,8 +111,7 @@ describe("WorkspaceResource module", () => {
       const result = await updateOwned(
         asDb(mockDb),
         "chat",
-        "chat-1",
-        workspaceId,
+        { id: "chat-1", workspaceId },
         {
           title: "Renamed",
         },
@@ -137,8 +125,7 @@ describe("WorkspaceResource module", () => {
       const result = await updateOwned(
         asDb(mockDb),
         "chat",
-        "chat-1",
-        workspaceId,
+        { id: "chat-1", workspaceId },
         {
           title: "Renamed",
         },
@@ -151,79 +138,84 @@ describe("WorkspaceResource module", () => {
     it("returns true when a row was deleted", async () => {
       mockDb.returning.mockResolvedValueOnce([{ id: "wh-1" }]);
 
-      const deleted = await deleteOwned(
-        asDb(mockDb),
-        "webhook",
-        "wh-1",
+      const deleted = await deleteOwned(asDb(mockDb), "webhook", {
+        id: "wh-1",
         workspaceId,
-      );
+      });
       expect(deleted).toBe(true);
     });
 
     it("returns false when nothing matched", async () => {
       mockDb.returning.mockResolvedValueOnce([]);
 
-      const deleted = await deleteOwned(
-        asDb(mockDb),
-        "webhook",
-        "wh-1",
+      const deleted = await deleteOwned(asDb(mockDb), "webhook", {
+        id: "wh-1",
         workspaceId,
-      );
+      });
       expect(deleted).toBe(false);
     });
   });
 
   describe("ownedWhere", () => {
     it("is a concrete SQL condition, not undefined", () => {
-      expect(ownedWhere("chat", "chat-1", workspaceId)).toBeTruthy();
+      expect(ownedWhere("chat", { id: "chat-1", workspaceId })).toBeTruthy();
+    });
+
+    it("throws when an id-bearing type is given no id", () => {
+      // The type system requires `id` here; the cast simulates a caller bug
+      // reaching past it (e.g. an absent route param) at runtime.
+      const ref = { workspaceId } as never;
+      expect(() => ownedWhere("chat", ref)).toThrow("requires an id");
     });
   });
 
-  // --- Widget: nested under Dashboard ---
+  // --- Widget: nested under its Dashboard ---
 
   const dashboardId = "dash-1";
 
-  describe("resolveOwnedWidget / requireOwnedWidget", () => {
+  describe("widget resolve / require", () => {
     it("resolves a widget scoped to its dashboard", async () => {
       const row = { id: "widget-1", dashboardId };
       mockDb.limit.mockResolvedValueOnce([row]);
 
-      const found = await resolveOwnedWidget(
-        asDb(mockDb),
-        "widget-1",
+      const found = await resolveOwned(asDb(mockDb), "widget", {
+        id: "widget-1",
         dashboardId,
-      );
+      });
       expect(found).toEqual(row);
     });
 
-    it("requireOwnedWidget throws NotFoundError when missing", async () => {
+    it("requireOwned throws NotFoundError when missing", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
-        requireOwnedWidget(asDb(mockDb), "widget-1", dashboardId),
+        requireOwned(asDb(mockDb), "widget", { id: "widget-1", dashboardId }),
       ).rejects.toThrow("Widget not found");
     });
   });
 
-  describe("listOwnedWidgets", () => {
-    it("lists widgets on a dashboard", async () => {
+  describe("widget list / update / delete", () => {
+    it("lists the widgets on a dashboard", async () => {
       const rows = [{ id: "widget-1", dashboardId }];
       mockDb.where.mockResolvedValueOnce(rows);
 
-      const results = await listOwnedWidgets(asDb(mockDb), dashboardId, null);
+      const results = await listOwned(
+        asDb(mockDb),
+        "widget",
+        { dashboardId },
+        null,
+      );
       expect(results).toEqual(rows);
     });
-  });
 
-  describe("updateOwnedWidget / deleteOwnedWidget", () => {
     it("updates a widget scoped to its dashboard", async () => {
       const updated = { id: "widget-1", dashboardId, data: { value: 1 } };
       mockDb.returning.mockResolvedValueOnce([updated]);
 
-      const result = await updateOwnedWidget(
+      const result = await updateOwned(
         asDb(mockDb),
-        "widget-1",
-        dashboardId,
+        "widget",
+        { id: "widget-1", dashboardId },
         {
           data: { value: 1 },
         },
@@ -234,38 +226,63 @@ describe("WorkspaceResource module", () => {
     it("deletes a widget scoped to its dashboard", async () => {
       mockDb.returning.mockResolvedValueOnce([{ id: "widget-1" }]);
 
-      const deleted = await deleteOwnedWidget(
-        asDb(mockDb),
-        "widget-1",
+      const deleted = await deleteOwned(asDb(mockDb), "widget", {
+        id: "widget-1",
         dashboardId,
-      );
+      });
       expect(deleted).toBe(true);
     });
-  });
 
-  describe("widgetOwnedWhere", () => {
-    it("is a concrete SQL condition, not undefined", () => {
-      expect(widgetOwnedWhere("widget-1", dashboardId)).toBeTruthy();
+    it("scopes the predicate by dashboardId, not workspaceId", () => {
+      expect(
+        ownedWhere("widget", { id: "widget-1", dashboardId }),
+      ).toBeTruthy();
     });
   });
 
-  // --- Sandbox: workspace singleton ---
+  // --- Sandbox: one-per-Workspace singleton, addressed by scope alone ---
 
-  describe("resolveOwnedSandbox / requireOwnedSandbox", () => {
+  describe("sandbox resolve / require", () => {
     it("resolves the workspace's sandbox", async () => {
       const row = { id: "sbx-1", workspaceId, backend: "docker" };
       mockDb.limit.mockResolvedValueOnce([row]);
 
-      const found = await resolveOwnedSandbox(asDb(mockDb), workspaceId);
+      const found = await resolveOwned(asDb(mockDb), "sandbox", {
+        workspaceId,
+      });
       expect(found).toEqual(row);
     });
 
-    it("requireOwnedSandbox throws NotFoundError when none configured", async () => {
+    it("requireOwned throws NotFoundError when none configured", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
-        requireOwnedSandbox(asDb(mockDb), workspaceId),
+        requireOwned(asDb(mockDb), "sandbox", { workspaceId }),
       ).rejects.toThrow("Sandbox not configured");
+    });
+  });
+
+  describe("sandbox update / delete", () => {
+    it("updates the workspace's sandbox, scoped by workspaceId alone", async () => {
+      const updated = { id: "sbx-1", workspaceId, name: "Renamed" };
+      mockDb.returning.mockResolvedValueOnce([updated]);
+
+      const result = await updateOwned(
+        asDb(mockDb),
+        "sandbox",
+        { workspaceId },
+        { name: "Renamed" },
+      );
+      expect(result).toEqual(updated);
+    });
+
+    it("deletes the workspace's sandbox", async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: "sbx-1" }]);
+
+      const deleted = await deleteOwned(asDb(mockDb), "sandbox", {
+        workspaceId,
+      });
+      expect(deleted).toBe(true);
     });
   });
 });
