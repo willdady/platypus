@@ -37,8 +37,6 @@
     "ai": "^7.0.106",
     "better-auth": "^1.7.5",
     "croner": "^10.0.1",
-    "date-fns": "^4.4.0",
-    "date-fns-tz": "^3.2.0",
     "dockerode": "^5.0.1",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.8",

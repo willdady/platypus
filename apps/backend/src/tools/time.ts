@@ -1,6 +1,5 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { formatInTimeZone } from "date-fns-tz";
 
 const TIMEZONE = process.env.TIMEZONE || "UTC";
 
@@ -10,11 +9,11 @@ export const getCurrentTime = tool({
   inputSchema: z.object({}),
   execute: () => {
     const now = new Date();
-    const formatted = formatInTimeZone(
-      now,
-      TIMEZONE,
-      "EEEE, MMMM d, yyyy 'at' h:mm:ss a zzz",
-    );
+    const formatted = new Intl.DateTimeFormat("en-US", {
+      dateStyle: "full",
+      timeStyle: "long",
+      timeZone: TIMEZONE,
+    }).format(now);
 
     return {
       timezone: TIMEZONE,
@@ -53,12 +52,26 @@ export const convertTimezone = tool({
       throw new Error(`Invalid date format: ${dateTime}`);
     }
 
-    // Format as ISO datetime in the target timezone
-    const isoDateTime = formatInTimeZone(
-      date,
-      toTimezone,
-      "yyyy-MM-dd'T'HH:mm:ssXXX",
+    // sv-SE renders dates in near-ISO shape; assemble the parts manually to
+    // get a T separator and an explicit offset like -05:00 (Z for UTC)
+    const formatter = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: toTimezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZoneName: "longOffset",
+    });
+    const parts = Object.fromEntries(
+      formatter.formatToParts(date).map((p) => [p.type, p.value]),
     );
+    // ICU renders the longOffset sign as U+2212; normalise to ASCII so the
+    // output stays valid ISO
+    const offset = parts.timeZoneName.replace(/^GMT/, "").replace("−", "-") || "Z";
+    const isoDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}`;
 
     return {
       originalDateTime: dateTime,
