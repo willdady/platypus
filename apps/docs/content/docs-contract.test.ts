@@ -1519,13 +1519,11 @@ describe("docker image tags", () => {
 
     // Both images run through one matrixed merge job, so the image name is a
     // matrix value and each tag template appears once.
-    for (const image of IMAGES) {
-      if (!workflow.includes(`image: [${IMAGES.join(", ")}]`)) {
-        violations.push(
-          `${RELEASE_WORKFLOW} no longer lists the ${image} image in its matrix.\n` +
-            `${COMPOSE_PAGE} tells Operators both images publish the same three tags.`,
-        );
-      }
+    if (!workflow.includes(`image: [${IMAGES.join(", ")}]`)) {
+      violations.push(
+        `${RELEASE_WORKFLOW} no longer lists both images in its matrix.\n` +
+          `${COMPOSE_PAGE} tells Operators both images publish the same three tags.`,
+      );
     }
     const expected = [
       "willdady/platypus-${{ matrix.image }}:latest",
