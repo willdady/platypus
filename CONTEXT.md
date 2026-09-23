@@ -11,7 +11,7 @@ The top-level tenant. Owns Workspaces, organization-scoped Providers, and member
 A scoped environment inside an Organization that contains Chats, Agents, MCPs, Skills, and workspace-scoped Providers. Owned by exactly one User within the Organization; not shared between Users.
 
 **Chat**:
-A persisted conversation in a Workspace. Composed of a sequence of messages and the configuration used to produce the assistant's replies.
+A persisted conversation in a Workspace. Composed of its messages, which may hold **Alternatives**, and the configuration used to produce the assistant's replies.
 
 **Chat turn**:
 A single round of running the model: given the prior messages and a Workspace + Agent (or Provider + model) selection, produce the assistant's next streamed response. Distinct from one-shot Provider executions like metadata generation.
@@ -70,8 +70,16 @@ Where the next model call starts from: the last call's **Context occupancy** plu
 _Avoid_: estimated occupancy, projected usage, next-turn tokens.
 
 **Transcript**:
-The ordered messages of a **Chat**, held as its record and re-sent to the model in full on every **Chat turn** and on every step within one. Distinct from what a single model call receives, which may be narrower — see **Tool-result clearing** — and from the **System prompt**, which is composed per turn rather than accumulated.
+The **Active path** of a **Chat**, held as its record and re-sent to the model in full on every **Chat turn** and on every step within one. Distinct from what a single model call receives, which may be narrower — see **Tool-result clearing** — and from the **System prompt**, which is composed per turn rather than accumulated.
 _Avoid_: history, conversation, message log, context (which already carries three other meanings).
+
+**Active path**:
+The one line of messages through a **Chat**, from its first message to the one currently selected, choosing a single **Alternative** wherever a message has several. What a User reads, what a **Chat turn** continues, and what every background reader of a Chat — its title, its **Memories** — works from.
+_Avoid_: branch, thread, current conversation.
+
+**Alternative**:
+One of the messages that follow the same message in a **Chat**, or that all open it — a different message from the User at that point, made by editing, or a different response from the assistant, made by regenerating. Never destroyed by the edit or regenerate that supersedes it; the User moves between Alternatives, and the one they land on becomes part of the **Active path**.
+_Avoid_: version (reads as a release), branch, sibling, variant, revision, draft.
 
 **Tool-result clearing**:
 Replacing the content of an older tool result in what a model call receives, leaving the tool call itself and the stored **Transcript** untouched. Bounds a **Transcript** by retention rather than by summary, so a cleared result is plainly absent to the model instead of silently condensed; Platypus does not summarise a **Transcript** at all. Engages only where a **Context window** was declared, and only for tools whose results are safe to lose — a core tool core knows to be read-only, or an MCP tool carrying a **Read-only hint**. A tool that has said nothing about itself is treated as one that writes.
@@ -268,6 +276,7 @@ The record binding a Conversation locus to a Chat (which carries the Workspace +
 - An **Organization** has many **Workspaces**.
 - A **Workspace** has many **Chats**, **Agents**, **MCPs**, **Skills**, **Boards**, **Dashboards**, **Triggers**, **Webhooks**, and **Notifications**, and zero-or-one **Sandbox**.
 - A **Chat** is produced by a sequence of **Chat turns**.
+- A **Chat**'s messages form a tree: each message follows exactly one parent, or opens the Chat, and messages following the same parent — or all opening it — are **Alternatives**. Exactly one path through it is the **Active path**, and that path is the **Transcript**.
 - A **Chat turn** runs in two sequential phases: **Turn resolution** assembles what the turn needs, then the **Drive** runs the model loop. A slow turn is slow in one phase or the other, and they are attributed separately.
 - A **Chat turn** uses either an **Agent** or a direct **Provider** + model selection.
 - A **Chat turn** renders one **System prompt**, whose first fragment is the **Instructions** of the selected **Agent** — or of the **Chat** itself, where no Agent is selected.
