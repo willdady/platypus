@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.9.2](https://github.com/willdady/platypus/compare/v3.9.1...v3.9.2) (2026-09-23)
+
+
+### Bug Fixes
+
+* **frontend:** even the gap after the composer's search toggle ([#998](https://github.com/willdady/platypus/issues/998)) ([864a820](https://github.com/willdady/platypus/commit/864a8203605eeaa27ca46044e62531124522f2e3))
+* **frontend:** resolve a new chat's Agent on its first frame ([#997](https://github.com/willdady/platypus/issues/997)) ([cc9880d](https://github.com/willdady/platypus/commit/cc9880d72188a6d13168f79cf413a649bb9f9889))
+* **frontend:** show agent avatars in the command menu ([#1000](https://github.com/willdady/platypus/issues/1000)) ([5a84ad3](https://github.com/willdady/platypus/commit/5a84ad37bb54ff791b41f9fd4f18e388d945c5ab))
+
 ## [3.9.1](https://github.com/willdady/platypus/compare/v3.9.0...v3.9.1) (2026-09-23)
 
 
