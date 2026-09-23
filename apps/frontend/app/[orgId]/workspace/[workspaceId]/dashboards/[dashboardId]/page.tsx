@@ -332,12 +332,16 @@ const DashboardPage = ({
         writeEntity(url, widgetsEntity, scope, { id: widgetId }),
       ),
     );
-    const next = widgetIds.reduce(
-      (s, widgetId, idx) => recordDeletion(s, widgetId, outcomes[idx].outcome),
-      current,
-    );
-    setSession(next);
-    return next;
+    const record = (s: EditSession) =>
+      widgetIds.reduce(
+        (acc, widgetId, idx) =>
+          recordDeletion(acc, widgetId, outcomes[idx].outcome),
+        s,
+      );
+    // Applied to the latest session, not `current`, so anything staged while
+    // the DELETEs were in flight survives.
+    setSession((prev) => prev && record(prev));
+    return record(current);
   };
 
   // Cancel: undo pending additions and discard all other staged changes
@@ -450,7 +454,7 @@ const DashboardPage = ({
     return () => window.removeEventListener("keydown", handleEsc);
   }, []);
 
-  // Stage a widget deletion — only committed to the API when the user clicks Done
+  // Stage a widget deletion — only committed to the API when the user clicks Save
   const handleDeleteWidget = useCallback((widgetId: string) => {
     setSession((prev) => prev && stageDeletion(prev, widgetId));
     setEditingWidgetId((prev) => (prev === widgetId ? null : prev));
