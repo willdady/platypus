@@ -39,11 +39,19 @@ import type {
   KanbanCard,
   KanbanCardAssignee,
   KanbanCardPriority,
-  KanbanColumn,
   KanbanLabel,
 } from "@platypus/schemas";
 import { cn, joinUrl } from "@/lib/utils";
-import { writeEntity, writeAt, type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope } from "@/lib/api-write";
+import {
+  applyCardMove,
+  moveCard,
+  parseDropZoneId,
+  placeCard,
+  reorderColumns,
+  type BoardSync,
+  type ColumnWithCards,
+} from "@/lib/board-moves";
 import { useBackendUrl } from "@/components/auth-provider";
 import { KanbanColumnComponent } from "@/components/kanban-column";
 import { KanbanCardComponent } from "@/components/kanban-card";
@@ -70,10 +78,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { workspaceRoutes } from "@/lib/routes";
 
-type ColumnWithCards = KanbanColumn & { cards: KanbanCard[] };
-
-const DROP_ZONE_PREFIX = "column-drop-";
-
 const EMPTY_LABELS: KanbanLabel[] = [];
 
 const noop = () => {};
@@ -88,12 +92,6 @@ const POINTER_SENSOR_OPTIONS = {
 const TOUCH_SENSOR_OPTIONS = {
   activationConstraint: { delay: 250, tolerance: 5 },
 } as const;
-
-function parseDropZoneId(id: string): string | null {
-  return id.startsWith(DROP_ZONE_PREFIX)
-    ? id.slice(DROP_ZONE_PREFIX.length)
-    : null;
-}
 
 export function KanbanBoard({
   boardId,
@@ -156,6 +154,10 @@ export function KanbanBoard({
       }
     },
     [],
+  );
+  const sync: BoardSync = useMemo(
+    () => ({ setColumns: setLocalColumns, refetch: mutate }),
+    [setLocalColumns, mutate],
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<"column" | "card" | null>(null);
@@ -454,27 +456,24 @@ export function KanbanBoard({
       }
 
       if (active.data.current?.type === "column") {
-        const oldIndex = cols.findIndex((c) => c.id === active.id);
+        const current = columnsRef.current;
+        const oldIndex = current.findIndex((c) => c.id === active.id);
         // over.id may be a column id or a card id within that column
-        let newIndex = cols.findIndex((c) => c.id === over.id);
+        let newIndex = current.findIndex((c) => c.id === over.id);
         if (newIndex === -1) {
-          newIndex = cols.findIndex((c) =>
+          newIndex = current.findIndex((c) =>
             c.cards.some((card) => card.id === over.id),
           );
         }
         if (oldIndex !== newIndex && newIndex !== -1) {
-          const reordered = arrayMove(cols, oldIndex, newIndex);
-          setLocalColumns(reordered);
-          const outcome = await writeAt(joinUrl(baseUrl, "columns/reorder"), {
-            method: "PUT",
-            data: { columnIds: reordered.map((c) => c.id) },
-          });
-          if (outcome.outcome === "success") {
-            await mutate();
-          } else {
-            toast.error(outcome.message);
-            setLocalColumns(null);
-          }
+          const result = await reorderColumns(
+            baseUrl,
+            current,
+            oldIndex,
+            newIndex,
+            sync,
+          );
+          if (result.outcome === "failed") toast.error(result.message);
         } else {
           setLocalColumns(null);
         }
@@ -482,133 +481,52 @@ export function KanbanBoard({
       }
 
       // Card drag end.  Drag-over has already moved the card in the local
-      // copy, so `sourceColumn` here is where the card sits *now* — the drag's
-      // true origin lives in dragOriginColumnRef.  The target column is
-      // resolved from the drop target rather than from the array.
-      const sourceColumn = cols.find((col) =>
-        col.cards.some((c) => c.id === active.id),
-      );
-      if (!sourceColumn) {
+      // copy, so `fromColumnId` here is where the card sits *now* — the drag's
+      // true origin lives in dragOriginColumnRef.
+      const cardId = String(active.id);
+      const placement = placeCard(cols, {
+        activeId: cardId,
+        overId: String(over.id),
+        activeRect:
+          active.rect.current.translated ?? active.rect.current.initial,
+        overRect: over.rect,
+      });
+      if (!placement) {
         setLocalColumns(null);
         return;
       }
-
-      const overId = String(over.id);
-      const droppableColumnId = parseDropZoneId(overId);
-      const targetColumn =
-        (droppableColumnId
-          ? cols.find((col) => col.id === droppableColumnId)
-          : null) ??
-        cols.find((col) => col.id === over.id) ??
-        cols.find((col) => col.cards.some((c) => c.id === over.id)) ??
-        sourceColumn;
-
-      const isDropZone = droppableColumnId !== null;
-      const targetCards = targetColumn.cards.filter((c) => c.id !== active.id);
-
-      let afterCardId: string | null;
-      if (isDropZone || targetCards.length === 0) {
-        // Dropped on the column drop zone or onto an empty column
-        afterCardId =
-          targetCards.length > 0
-            ? targetCards[targetCards.length - 1].id
-            : null;
-      } else {
-        // Dropped over a specific card – decide whether to go before or
-        // after it by comparing the dragged card's current centre-Y with
-        // the over card's centre-Y.
-        const overIdx = targetCards.findIndex((c) => c.id === over.id);
-        if (overIdx === -1) {
-          // over card is the active card itself – fall back to array order
-          if (targetColumn.id === sourceColumn.id) {
-            const cardIndex = sourceColumn.cards.findIndex(
-              (c) => c.id === active.id,
-            );
-            afterCardId =
-              cardIndex > 0 ? sourceColumn.cards[cardIndex - 1].id : null;
-          } else {
-            afterCardId =
-              targetCards.length > 0
-                ? targetCards[targetCards.length - 1].id
-                : null;
-          }
-        } else {
-          const activeTranslated =
-            active.rect.current.translated ?? active.rect.current.initial;
-          const activeCenterY = activeTranslated
-            ? activeTranslated.top + activeTranslated.height / 2
-            : 0;
-          const overCenterY = over.rect.top + over.rect.height / 2;
-          if (activeCenterY > overCenterY) {
-            afterCardId = targetCards[overIdx].id;
-          } else {
-            afterCardId = overIdx > 0 ? targetCards[overIdx - 1].id : null;
-          }
-        }
-      }
+      const { fromColumnId, columnId, afterCardId } = placement;
 
       // Optimistic local update so the UI doesn't flash while the request
       // is in flight.
-      setLocalColumns((prev) => {
-        if (!prev) return prev;
-        const movedCard = sourceColumn.cards.find((c) => c.id === active.id);
-        if (!movedCard) return prev;
-        return prev.map((c) => {
-          if (c.id === sourceColumn.id && sourceColumn.id !== targetColumn.id) {
-            return {
-              ...c,
-              cards: c.cards.filter((card) => card.id !== active.id),
-            };
-          }
-          if (c.id === targetColumn.id) {
-            const cards = c.cards.filter((card) => card.id !== active.id);
-            if (afterCardId === null) {
-              cards.unshift(movedCard);
-            } else {
-              const afterIdx = cards.findIndex(
-                (card) => card.id === afterCardId,
-              );
-              cards.splice(afterIdx + 1, 0, movedCard);
-            }
-            return { ...c, cards };
-          }
-          return c;
-        });
-      });
-
-      const outcome = await writeAt(
-        joinUrl(baseUrl, `cards/${active.id}/move`),
-        {
-          method: "POST",
-          data: {
-            columnId: targetColumn.id,
+      setLocalColumns(
+        (prev) =>
+          prev &&
+          applyCardMove(prev, {
+            cardId,
+            fromColumnId,
+            toColumnId: columnId,
             afterCardId,
-            // The board polls, so the column this drag started from may already
-            // be out of date. Sending it makes the move conditional: an agent's
-            // move that landed mid-drag is reported rather than overwritten.
-            expectedColumnId: dragOriginColumnRef.current ?? sourceColumn.id,
-          },
-        },
+          }),
       );
-      if (outcome.outcome === "success") {
-        await mutate();
-      } else if (outcome.outcome === "conflict") {
-        // Not a failed write but a stale board, so the message says who moved
-        // it rather than surfacing wording aimed at an agent.
-        toast.error(
-          "This card was moved by someone else. Your change was not applied.",
-        );
-        // Dropping the optimistic copy falls back to the last poll — the very
-        // state that just lost the race — so this path re-fetches rather than
-        // leaving the card in the wrong column until the next interval.
-        setLocalColumns(null);
-        await mutate();
-      } else {
-        toast.error(outcome.message);
-        setLocalColumns(null);
+
+      const result = await moveCard(
+        baseUrl,
+        {
+          cardId,
+          columnId,
+          afterCardId,
+          expectedColumnId: dragOriginColumnRef.current ?? fromColumnId,
+        },
+        sync,
+      );
+      if (result.outcome === "conflict") {
+        toast.error(`${result.message} Your change was not applied.`);
+      } else if (result.outcome === "failed") {
+        toast.error(result.message);
       }
     },
-    [baseUrl, mutate, setLocalColumns],
+    [baseUrl, sync, setLocalColumns],
   );
 
   const handleAddColumn = useCallback(() => {
@@ -734,25 +652,21 @@ export function KanbanBoard({
 
   const handleMoveColumn = useCallback(
     async (columnId: string, direction: "left" | "right") => {
-      const currentColumns = data?.columns ?? [];
-      const index = currentColumns.findIndex((c) => c.id === columnId);
+      const current = columnsRef.current;
+      const index = current.findIndex((c) => c.id === columnId);
       if (index < 0) return;
       const newIndex = direction === "left" ? index - 1 : index + 1;
-      if (newIndex < 0 || newIndex >= currentColumns.length) return;
-      const reordered = arrayMove(currentColumns, index, newIndex);
-      setLocalColumns(reordered);
-      const outcome = await writeAt(joinUrl(baseUrl, "columns/reorder"), {
-        method: "PUT",
-        data: { columnIds: reordered.map((c) => c.id) },
-      });
-      if (outcome.outcome === "success") {
-        await mutate();
-      } else {
-        toast.error(outcome.message);
-        setLocalColumns(null);
-      }
+      if (newIndex < 0 || newIndex >= current.length) return;
+      const result = await reorderColumns(
+        baseUrl,
+        current,
+        index,
+        newIndex,
+        sync,
+      );
+      if (result.outcome === "failed") toast.error(result.message);
     },
-    [data?.columns, baseUrl, mutate, setLocalColumns],
+    [baseUrl, sync],
   );
 
   const handleCardSave = useCallback(
@@ -773,6 +687,8 @@ export function KanbanBoard({
       );
       if (!column) return;
       const { columnId: targetColumnId, ...updateData } = cardData;
+      // Fields first: moving first would, on a failed update, reseed the
+      // dialog from the new column and wipe the user's unsaved edits.
       const updateOutcome = await writeEntity(
         backendUrl,
         `${boardPath}/cards`,
@@ -783,25 +699,45 @@ export function KanbanBoard({
         toast.error(updateOutcome.message);
         return;
       }
-      if (targetColumnId && targetColumnId !== column.id) {
-        const moveOutcome = await writeAt(
-          joinUrl(baseUrl, `cards/${cardId}/move`),
-          {
-            method: "POST",
-            data: { columnId: targetColumnId, afterCardId: null },
-          },
-        );
-        if (moveOutcome.outcome !== "success") {
-          toast.error(moveOutcome.message);
-          return;
-        }
+      const closeDialog = () => {
+        setDialogOpen(false);
+        setSelectedCard(null);
+        updateCardIdParam(null);
+      };
+      if (!targetColumnId || targetColumnId === column.id) {
+        closeDialog();
+        await mutate();
+        return;
       }
-      setDialogOpen(false);
-      setSelectedCard(null);
-      updateCardIdParam(null);
-      await mutate();
+      const result = await moveCard(
+        baseUrl,
+        {
+          cardId,
+          columnId: targetColumnId,
+          afterCardId: null,
+          expectedColumnId: column.id,
+        },
+        sync,
+      );
+      if (result.outcome !== "moved") {
+        toast.error(
+          `Your changes were saved, but the card was not moved. ${result.message}`,
+        );
+      }
+      // A failed move stays open to retry. A conflict closes: the refetch
+      // would otherwise reseed the dialog from its stale open-time snapshot.
+      if (result.outcome !== "failed") closeDialog();
     },
-    [columns, backendUrl, baseUrl, boardPath, scope, mutate, updateCardIdParam],
+    [
+      columns,
+      backendUrl,
+      baseUrl,
+      boardPath,
+      scope,
+      mutate,
+      sync,
+      updateCardIdParam,
+    ],
   );
 
   const handleCardDelete = useCallback(

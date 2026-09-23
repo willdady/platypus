@@ -102,7 +102,12 @@ vi.mock("@dnd-kit/sortable", async (importOriginal) => {
 });
 
 import { KanbanBoard } from "./kanban-board";
-import { stubAcceptedSave, stubRejectedSave } from "@/lib/test-utils";
+import {
+  selectOption,
+  stubAcceptedSave,
+  stubRejectedSave,
+  stubSaveSequence,
+} from "@/lib/test-utils";
 
 // --- Fixtures ----------------------------------------------------------------
 
@@ -386,6 +391,37 @@ describe("KanbanBoard transport", () => {
       expect(toastError).not.toHaveBeenCalled();
     });
 
+    it("reorders on a column drag", async () => {
+      const fetchMock = stubAcceptedSave({ message: "Columns reordered" });
+
+      renderBoard();
+      const active = {
+        id: "col-1",
+        data: { current: { type: "column" } },
+        rect: { current: { translated: null, initial: null } },
+      };
+      act(() => {
+        dragHandlers.onDragStart?.({ active });
+      });
+      act(() => {
+        dragHandlers.onDragEnd?.({
+          active,
+          over: { id: "col-2", rect: { top: 0, height: 10 } },
+        });
+      });
+
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns/reorder",
+          expect.objectContaining({
+            method: "PUT",
+            body: JSON.stringify({ columnIds: ["col-2", "col-1"] }),
+          }),
+        ),
+      );
+      await waitFor(() => expect(columnOrder()).toEqual(["Done", "To Do"]));
+    });
+
     it("rolls the board back and reports the error on failure", async () => {
       stubRejectedSave("Only the workspace owner can perform this action", 403);
 
@@ -647,5 +683,97 @@ describe("KanbanBoard transport", () => {
         ).toBeInTheDocument();
       },
     );
+
+    describe("with a Column change", () => {
+      beforeEach(() => {
+        boardState = makeBoardState([
+          makeColumn({ id: "col-1", name: "To Do" }, [makeCard()]),
+          makeColumn({ id: "col-2", name: "Done" }),
+        ]);
+      });
+
+      async function saveInDoneColumn() {
+        fireEvent.click(screen.getByText("A card"));
+        await screen.findByRole("button", { name: "Save" });
+        await selectOption("To Do", "Done");
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      }
+
+      it("updates the card, then moves it guarded by its current column", async () => {
+        const fetchMock = stubAcceptedSave({ id: "card-1" });
+
+        renderBoard();
+        await saveInDoneColumn();
+
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+        const [[updateUrl, update], [moveUrl, move]] = fetchMock.mock.calls as [
+          string,
+          RequestInit,
+        ][];
+        expect(updateUrl).toBe(
+          "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1",
+        );
+        expect(update.method).toBe("PUT");
+        expect(moveUrl).toBe(
+          "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1/move",
+        );
+        expect(JSON.parse(move.body as string)).toEqual({
+          columnId: "col-2",
+          afterCardId: null,
+          expectedColumnId: "col-1",
+        });
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("button", { name: "Save" }),
+          ).not.toBeInTheDocument(),
+        );
+      });
+
+      it("says the changes saved but the card was not moved on a conflict, and closes", async () => {
+        stubSaveSequence(
+          { status: 200, body: { id: "card-1" } },
+          {
+            status: 409,
+            body: { error: "Card is no longer in the expected column" },
+          },
+        );
+
+        renderBoard();
+        await saveInDoneColumn();
+
+        await waitFor(() =>
+          expect(toastError).toHaveBeenCalledWith(
+            "Your changes were saved, but the card was not moved. This card was moved by someone else.",
+          ),
+        );
+        expect(mutateBoard).toHaveBeenCalled();
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("button", { name: "Save" }),
+          ).not.toBeInTheDocument(),
+        );
+      });
+
+      it("says the changes saved but the card was not moved on a failure, and stays open", async () => {
+        stubSaveSequence(
+          { status: 200, body: { id: "card-1" } },
+          { status: 404, body: { error: "Column not found" } },
+        );
+
+        renderBoard();
+        await saveInDoneColumn();
+
+        await waitFor(() =>
+          expect(toastError).toHaveBeenCalledWith(
+            expect.stringContaining("Column not found"),
+          ),
+        );
+        expect(toastError.mock.calls[0][0]).toContain("saved");
+        expect(mutateBoard).toHaveBeenCalled();
+        expect(
+          screen.getByRole("button", { name: "Save" }),
+        ).toBeInTheDocument();
+      });
+    });
   });
 });
