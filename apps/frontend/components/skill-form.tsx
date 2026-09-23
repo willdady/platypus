@@ -95,7 +95,6 @@ const SkillForm = ({
     entity: "skills",
     scope,
     id: skillId,
-    // Includes agentIds in workspace mode.
     fromRecord: (skill) => ({
       name: skill.name,
       description: skill.description,
@@ -103,6 +102,7 @@ const SkillForm = ({
       argumentHint: skill.argumentHint ?? "",
       disableModelInvocation: skill.disableModelInvocation,
     }),
+    // agentIds are present in workspace mode only.
     onSeed: (skill) => {
       if (skill.agentIds) setSelectedAgentIds(skill.agentIds);
     },

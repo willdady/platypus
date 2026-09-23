@@ -33,7 +33,10 @@ export interface UseEntityFormOptions<
 > {
   /** The values the form starts with, before any record is loaded. */
   initialData: TForm;
-  /** The backend collection noun, e.g. `"skills"`. */
+  /**
+   * The backend collection path under `scope`, e.g. `"skills"`, or
+   * `"users/me/contexts"` with the root scope.
+   */
   entity: string;
   /** The Organization/Workspace scope the write targets (ADR-0007). */
   scope: Scope;
@@ -50,7 +53,7 @@ export interface UseEntityFormOptions<
   fromRecord?: (record: TRecord) => TForm;
   /**
    * Seeds record-derived state the form keeps outside `formData`, on the same
-   * once-per-id rule as `fromRecord`.
+   * once-per-id rule as `fromRecord` (so only when `fromRecord` is given).
    */
   onSeed?: (record: TRecord) => void;
   /**
