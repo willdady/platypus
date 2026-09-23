@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import {
+  callOkTool,
+  callTool,
+  mockDb,
+  resetMockDb,
+  seedDb,
+} from "../test-utils.ts";
 
 vi.mock("../utils/cron.ts", () => ({
   validateCronExpression: vi.fn((expr: string) => {
@@ -83,6 +89,46 @@ describe("createTriggerTools", () => {
       expect(
         await tools.listTriggers.execute!({ enabledOnly: false }, ctx),
       ).toEqual({ triggers, count: 1 });
+    });
+  });
+
+  describe("Workspace scoping", () => {
+    const trigger = (id: string, ws: string, createdAt: string) => ({
+      id,
+      workspaceId: ws,
+      agentId: "a1",
+      name: id,
+      type: "cron",
+      enabled: true,
+      createdAt: new Date(createdAt),
+    });
+
+    beforeEach(() => {
+      seedDb({
+        trigger: [
+          trigger("mine-old", workspaceId, "2026-01-01"),
+          trigger("theirs", "ws-2", "2026-03-01"),
+          trigger("mine-new", workspaceId, "2026-02-01"),
+        ],
+      });
+    });
+
+    it("lists only this workspace's triggers, newest first", async () => {
+      expect(
+        await callOkTool(tools.listTriggers, { enabledOnly: false }),
+      ).toMatchObject({
+        triggers: [{ id: "mine-new" }, { id: "mine-old" }],
+        count: 2,
+      });
+    });
+
+    it("does not get another workspace's trigger", async () => {
+      expect(await callTool(tools.getTrigger, { triggerId: "theirs" })).toEqual(
+        {
+          error:
+            "Trigger not found in this workspace. Use listTriggers to find valid IDs.",
+        },
+      );
     });
   });
 
@@ -223,7 +269,9 @@ describe("createTriggerTools", () => {
       )) as TriggerResult;
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Agent not found");
+      expect(result.error).toBe(
+        "Agent not found in this workspace. Use listAgents to find valid agent IDs.",
+      );
     });
 
     it("accepts a Shared agent attached to this workspace", async () => {

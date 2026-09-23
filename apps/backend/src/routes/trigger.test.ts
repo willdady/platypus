@@ -297,7 +297,9 @@ describe("Trigger Routes", () => {
 
     it("rejects an agent change when the new agent is not in the workspace", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([]); // new agent not found
+      mockDb.limit
+        .mockResolvedValueOnce([cronTrigger]) // existing
+        .mockResolvedValueOnce([]); // new agent not found
 
       const res = await app.request(`${baseUrl}/trig-1`, {
         method: "PUT",
@@ -308,6 +310,21 @@ describe("Trigger Routes", () => {
       expect(await res.json()).toEqual({
         error: "Agent not found in this workspace",
       });
+    });
+
+    it("returns 404 for a missing trigger before checking the new agent", async () => {
+      stubAuthLookups();
+      mockDb.limit
+        .mockResolvedValueOnce([]) // existing not found
+        .mockResolvedValueOnce([]); // new agent not found
+
+      const res = await app.request(`${baseUrl}/trig-missing`, {
+        method: "PUT",
+        body: JSON.stringify({ agentId: "agent-other" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Trigger not found" });
     });
 
     it("round-trips a columnId/changedFields filter through a config update", async () => {

@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { desc } from "drizzle-orm";
 import {
   cronTriggerConfigSchema,
   eventTriggerConfigSchema,
@@ -12,11 +13,18 @@ import { trigger as triggerTable } from "../db/schema.ts";
 import type { ScopeContext } from "../scope.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { validateCronExpression } from "../utils/cron.ts";
-import { requireOwned, updateOwned } from "./workspace-resource.ts";
+import { resolveScoped } from "./scoped-resource.ts";
+import {
+  deleteOwned,
+  listOwned,
+  requireOwned,
+  updateOwned,
+} from "./workspace-resource.ts";
 
 /**
- * The Trigger write model: the one place `type`/`config` validation and
- * `nextRunAt` computation happen, behind an interface both surfaces call.
+ * The Trigger model: the one place `type`/`config` validation, the Agent
+ * visibility check, create defaults and `nextRunAt` computation happen, and
+ * the reads both surfaces share, behind an interface both surfaces call.
  * `routes/trigger.ts` (the UI's HTTP route) and `tools/trigger.ts` (the
  * Agent-facing Tool set) used to each hand-roll this — the Tool's copy
  * imported nothing from `@platypus/schemas`, so it drifted narrower on
@@ -25,9 +33,13 @@ import { requireOwned, updateOwned } from "./workspace-resource.ts";
  * `eventTriggerConfigSchema`) is what actually prevents that drift.
  *
  * Trigger is Workspace-only (the `trigger` table has no `organizationId`
- * column) — no scope union like `services/provider-write.ts`'s. There is no
- * `deleteTrigger`: delete has no domain-specific rule to consolidate, so both
- * callers keep their existing generic delete path.
+ * column) — no scope union like `services/provider-write.ts`'s. Its reads and
+ * delete are thin over `workspace-resource.ts`, so neither caller hand-rolls
+ * the Workspace containment predicate.
+ *
+ * A Trigger's Agent must be usable in the Workspace — Workspace-scoped, or a
+ * Shared one attached here (ADR-0007), the same set a run resolves when the
+ * Trigger fires — so create and update check it here, not at each caller.
  *
  * `config` update semantics are full-replace only: supplying `config` on an
  * update replaces it wholesale rather than merging. A caller that wants to
@@ -49,21 +61,33 @@ type TriggerBaseFields = {
   name: string;
   description?: string | null;
   instruction: string;
-  enabled: boolean;
-  maxRunsToKeep: number;
-  search: boolean;
-  includeMemories: boolean;
+  enabled?: boolean;
+  maxRunsToKeep?: number;
+  search?: boolean;
+  includeMemories?: boolean;
   config: CronTriggerConfig | EventTriggerConfig;
 };
 
 /**
- * The fields a create carries. Defaults (`enabled`, `maxRunsToKeep`, `search`,
- * `includeMemories`) are the caller's responsibility to resolve first — the HTTP
- * route gets them from `triggerCreateSchema`'s own Zod defaults, the Tool
- * applies its own (intentionally different) defaults — this module only
- * validates and writes.
+ * The fields a create carries. `enabled`, `maxRunsToKeep`, `search` and
+ * `includeMemories` are optional: an omitted one takes {@link CREATE_DEFAULTS}.
+ * The HTTP route always supplies them, already defaulted by
+ * `triggerCreateSchema`'s Zod defaults.
  */
 export type TriggerCreateFields = TriggerBaseFields;
+
+/**
+ * What a create stores for a field the caller omitted — matching the `trigger`
+ * table's column defaults and the Trigger form.
+ */
+const CREATE_DEFAULTS = {
+  enabled: true,
+  // `triggerCreateSchema` defaults this to 50, so an HTTP caller omitting it
+  // gets 50, not 10.
+  maxRunsToKeep: 10,
+  search: false,
+  includeMemories: false,
+};
 
 /** The fields an update carries — only the ones actually supplied. */
 export type TriggerUpdateFields = Partial<TriggerBaseFields>;
@@ -147,17 +171,30 @@ const parseEventConfig = (config: unknown): EventTriggerConfig => {
   return parsed.data;
 };
 
+/** Throws `ValidationError` unless the Agent is usable in this Workspace. */
+const requireUsableAgent = async (
+  ctx: ScopeContext,
+  agentId: string,
+): Promise<void> => {
+  if (!(await resolveScoped(db, "agent", agentId, ctx))) {
+    throw new ValidationError("Agent not found in this workspace");
+  }
+};
+
 /**
  * Creates a new Trigger in this Workspace. Branches on `type`: cron
  * expressions are parsed via `nextCronRunAt` to compute `nextRunAt`;
  * event configs are validated against the real schema. Throws
- * `ValidationError` on an invalid cron expression/timezone, an invalid or
- * empty `events` array, or invalid `filters`.
+ * `ValidationError` on an Agent not usable here, an invalid cron
+ * expression/timezone, an invalid or empty `events` array, or invalid
+ * `filters`.
  */
 export async function createTrigger(
   ctx: ScopeContext,
   fields: TriggerCreateFields,
 ): Promise<TriggerRow> {
+  await requireUsableAgent(ctx, fields.agentId);
+
   let nextRunAt: Date | null = null;
   let config: CronTriggerConfig | EventTriggerConfig;
   if (fields.type === "cron") {
@@ -182,10 +219,11 @@ export async function createTrigger(
       name: fields.name,
       description: fields.description ?? null,
       instruction: fields.instruction,
-      enabled: fields.enabled,
-      maxRunsToKeep: fields.maxRunsToKeep,
-      search: fields.search,
-      includeMemories: fields.includeMemories,
+      enabled: fields.enabled ?? CREATE_DEFAULTS.enabled,
+      maxRunsToKeep: fields.maxRunsToKeep ?? CREATE_DEFAULTS.maxRunsToKeep,
+      search: fields.search ?? CREATE_DEFAULTS.search,
+      includeMemories:
+        fields.includeMemories ?? CREATE_DEFAULTS.includeMemories,
       config,
       nextRunAt,
     })
@@ -195,10 +233,11 @@ export async function createTrigger(
 
 /**
  * Updates a Trigger in this Workspace. Throws `NotFoundError` when it does
- * not exist here. `config`, if supplied, replaces the stored value wholesale
- * and is (re)validated against the effective type; `nextRunAt` is recomputed
- * for a cron trigger whose `config`/`type` changed or which is being enabled,
- * and cleared for an event trigger.
+ * not exist here — checked before a supplied `agentId`, which throws
+ * `ValidationError` when not usable here. `config`, if supplied, replaces the
+ * stored value wholesale and is (re)validated against the effective type;
+ * `nextRunAt` is recomputed for a cron trigger whose `config`/`type` changed
+ * or which is being enabled, and cleared for an event trigger.
  */
 export async function updateTrigger(
   ctx: ScopeContext,
@@ -209,6 +248,9 @@ export async function updateTrigger(
     id: triggerId,
     workspaceId: ctx.workspaceId,
   });
+  if (fields.agentId !== undefined) {
+    await requireUsableAgent(ctx, fields.agentId);
+  }
   // Only the stored type is read here, not its config: an update that supplies
   // a new config must be able to repair a row whose stored one is malformed.
   // An unknown stored type falls through to the `ValidationError` below.
@@ -285,3 +327,34 @@ export async function updateTrigger(
   }
   return row;
 }
+
+/**
+ * This Workspace's Triggers, newest first — only the enabled ones when
+ * `enabledOnly` is set.
+ */
+export async function listTriggers(
+  ctx: ScopeContext,
+  { enabledOnly = false }: { enabledOnly?: boolean } = {},
+): Promise<TriggerRow[]> {
+  const rows = await listOwned(
+    db,
+    "trigger",
+    { workspaceId: ctx.workspaceId },
+    desc(triggerTable.createdAt),
+  );
+  return enabledOnly ? rows.filter((row) => row.enabled) : rows;
+}
+
+/** A Trigger in this Workspace. Throws `NotFoundError` when not here. */
+export const getTrigger = (
+  ctx: ScopeContext,
+  triggerId: string,
+): Promise<TriggerRow> =>
+  requireOwned(db, "trigger", { id: triggerId, workspaceId: ctx.workspaceId });
+
+/** Deletes a Trigger in this Workspace; `false` when none was here. */
+export const deleteTrigger = (
+  ctx: ScopeContext,
+  triggerId: string,
+): Promise<boolean> =>
+  deleteOwned(db, "trigger", { id: triggerId, workspaceId: ctx.workspaceId });

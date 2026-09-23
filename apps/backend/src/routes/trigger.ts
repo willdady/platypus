@@ -1,8 +1,5 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { desc } from "drizzle-orm";
-import { db } from "../index.ts";
-import { trigger as triggerTable } from "../db/schema.ts";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -11,13 +8,13 @@ import {
   requireWorkspaceOwner,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import { resolveScoped } from "../services/scoped-resource.ts";
 import {
-  requireOwned,
-  listOwned,
-  deleteOwned,
-} from "../services/workspace-resource.ts";
-import { createTrigger, updateTrigger } from "../services/trigger.ts";
+  createTrigger,
+  deleteTrigger,
+  getTrigger,
+  listTriggers,
+  updateTrigger,
+} from "../services/trigger.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
@@ -31,13 +28,7 @@ trigger.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const { workspaceId } = workspaceScopeOf(c);
-    const results = await listOwned(
-      db,
-      "trigger",
-      { workspaceId },
-      desc(triggerTable.createdAt),
-    );
+    const results = await listTriggers(workspaceScopeOf(c));
     return c.json({ results });
   },
 );
@@ -49,14 +40,10 @@ trigger.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const triggerId = c.req.param("triggerId");
-    const { workspaceId } = workspaceScopeOf(c);
-
-    const record = await requireOwned(db, "trigger", {
-      id: triggerId,
-      workspaceId,
-    });
-
+    const record = await getTrigger(
+      workspaceScopeOf(c),
+      c.req.param("triggerId"),
+    );
     return c.json(record);
   },
 );
@@ -72,21 +59,11 @@ trigger.post(
   async (c) => {
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
-    const { workspaceId } = scope;
-
-    // The Agent must be usable here: workspace-scoped, or a Shared one attached
-    // to this Workspace (ADR-0007) — the same set the run resolves when the
-    // trigger fires.
-    const agentRecord = await resolveScoped(db, "agent", data.agentId, scope);
-
-    if (!agentRecord) {
-      return c.json({ error: "Agent not found in this workspace" }, 400);
-    }
 
     const record = await createTrigger(scope, data);
 
     logger.info(
-      `Created trigger '${record.id}' in workspace '${workspaceId}'${record.nextRunAt ? ` - next run at ${record.nextRunAt.toISOString()}` : ""}`,
+      `Created trigger '${record.id}' in workspace '${scope.workspaceId}'${record.nextRunAt ? ` - next run at ${record.nextRunAt.toISOString()}` : ""}`,
     );
 
     return c.json(record, 201);
@@ -103,21 +80,9 @@ trigger.put(
   sValidator("json", triggerUpdateSchema),
   async (c) => {
     const triggerId = c.req.param("triggerId");
-    const scope = workspaceScopeOf(c);
     const data = c.req.valid("json");
 
-    // A new agentId must be usable here: workspace-scoped, or a Shared one
-    // attached to this Workspace (ADR-0007) — see the create route.
-    // `updateTrigger` itself 404s if the trigger doesn't exist.
-    if (data.agentId) {
-      const agentRecord = await resolveScoped(db, "agent", data.agentId, scope);
-
-      if (!agentRecord) {
-        return c.json({ error: "Agent not found in this workspace" }, 400);
-      }
-    }
-
-    const record = await updateTrigger(scope, triggerId, data);
+    const record = await updateTrigger(workspaceScopeOf(c), triggerId, data);
 
     logger.info(`Updated trigger '${triggerId}'`);
 
@@ -134,14 +99,8 @@ trigger.delete(
   requireWorkspaceOwner,
   async (c) => {
     const triggerId = c.req.param("triggerId");
-    const { workspaceId } = workspaceScopeOf(c);
 
-    const deleted = await deleteOwned(db, "trigger", {
-      id: triggerId,
-      workspaceId,
-    });
-
-    if (!deleted) {
+    if (!(await deleteTrigger(workspaceScopeOf(c), triggerId))) {
       throw new NotFoundError("Trigger not found");
     }
 

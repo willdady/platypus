@@ -1,6 +1,5 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
 import {
   cronTriggerConfigSchema,
   eventTriggerFiltersSchema,
@@ -9,10 +8,15 @@ import {
   type EventTriggerConfig,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
-import { trigger as triggerTable } from "../db/schema.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
-import { listScoped, resolveScoped } from "../services/scoped-resource.ts";
-import { createTrigger, updateTrigger } from "../services/trigger.ts";
+import { listScoped } from "../services/scoped-resource.ts";
+import {
+  createTrigger,
+  deleteTrigger as deleteTriggerService,
+  getTrigger as getTriggerService,
+  listTriggers as listTriggersService,
+  updateTrigger,
+} from "../services/trigger.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 
@@ -25,6 +29,17 @@ export function createTriggerTools(
   // Shared one attached to it (ADR-0007), which is exactly what the Chat turn
   // resolves when the trigger fires.
   const ctx: ScopeContext = { orgId, workspaceId };
+
+  /** Translates the Trigger module's typed errors into a Tool result. */
+  const toToolError = (error: unknown) => {
+    if (error instanceof ValidationError || error instanceof NotFoundError) {
+      const hint = error.message.startsWith("Agent not found")
+        ? ". Use listAgents to find valid agent IDs."
+        : "";
+      return { success: false, error: error.message + hint };
+    }
+    throw error;
+  };
 
   const listAgents = tool({
     description:
@@ -58,26 +73,18 @@ export function createTriggerTools(
         .describe("If true, only return enabled triggers"),
     }),
     execute: async ({ enabledOnly }) => {
-      const conditions = [eq(triggerTable.workspaceId, workspaceId)];
-      if (enabledOnly) {
-        conditions.push(eq(triggerTable.enabled, true));
-      }
-
-      const triggers = await db
-        .select({
-          id: triggerTable.id,
-          name: triggerTable.name,
-          description: triggerTable.description,
-          agentId: triggerTable.agentId,
-          type: triggerTable.type,
-          enabled: triggerTable.enabled,
-          nextRunAt: triggerTable.nextRunAt,
-          lastRunAt: triggerTable.lastRunAt,
-          createdAt: triggerTable.createdAt,
-        })
-        .from(triggerTable)
-        .where(and(...conditions))
-        .orderBy(desc(triggerTable.createdAt));
+      const rows = await listTriggersService(ctx, { enabledOnly });
+      const triggers = rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        agentId: row.agentId,
+        type: row.type,
+        enabled: row.enabled,
+        nextRunAt: row.nextRunAt,
+        lastRunAt: row.lastRunAt,
+        createdAt: row.createdAt,
+      }));
 
       return { triggers, count: triggers.length };
     },
@@ -89,25 +96,17 @@ export function createTriggerTools(
       triggerId: z.string().describe("The ID of the trigger to retrieve"),
     }),
     execute: async ({ triggerId }) => {
-      const result = await db
-        .select()
-        .from(triggerTable)
-        .where(
-          and(
-            eq(triggerTable.id, triggerId),
-            eq(triggerTable.workspaceId, workspaceId),
-          ),
-        )
-        .limit(1);
-
-      if (result.length === 0) {
-        return {
-          error:
-            "Trigger not found in this workspace. Use listTriggers to find valid IDs.",
-        };
+      try {
+        return { trigger: await getTriggerService(ctx, triggerId) };
+      } catch (error) {
+        if (error instanceof NotFoundError) {
+          return {
+            error:
+              "Trigger not found in this workspace. Use listTriggers to find valid IDs.",
+          };
+        }
+        throw error;
       }
-
-      return { trigger: result[0] };
     },
   });
 
@@ -138,7 +137,7 @@ export function createTriggerTools(
         .string()
         .optional()
         .describe(
-          "The ID of the agent to run (required when creating, use list-agents to find available IDs)",
+          "The ID of the agent to run (required when creating, use listAgents to find available IDs)",
         ),
       instruction: z
         .string()
@@ -219,26 +218,6 @@ export function createTriggerTools(
 
       // Update existing trigger
       if (triggerId) {
-        // A new agentId must be usable here: workspace-scoped, or a Shared
-        // one attached to this Workspace (ADR-0007) — see the create branch
-        // below. `updateTrigger` itself errors if the trigger doesn't exist.
-        if (fields.agentId) {
-          const agentRecord = await resolveScoped(
-            db,
-            "agent",
-            fields.agentId,
-            ctx,
-          );
-
-          if (!agentRecord) {
-            return {
-              success: false,
-              error:
-                "Agent not found in this workspace. Use list-agents to find valid agent IDs.",
-            };
-          }
-        }
-
         try {
           const record = await updateTrigger(ctx, triggerId, {
             agentId: fields.agentId,
@@ -266,13 +245,7 @@ export function createTriggerTools(
             ...(url && { url }),
           };
         } catch (error) {
-          if (
-            error instanceof ValidationError ||
-            error instanceof NotFoundError
-          ) {
-            return { success: false, error: error.message };
-          }
-          throw error;
+          return toToolError(error);
         }
       }
 
@@ -286,17 +259,6 @@ export function createTriggerTools(
         };
       }
 
-      // Verify the agent is usable in this workspace
-      const agentRecord = await resolveScoped(db, "agent", agentId, ctx);
-
-      if (!agentRecord) {
-        return {
-          success: false,
-          error:
-            "Agent not found in this workspace. Use list-agents to find valid agent IDs.",
-        };
-      }
-
       try {
         const record = await createTrigger(ctx, {
           agentId,
@@ -304,10 +266,10 @@ export function createTriggerTools(
           name,
           description: fields.description,
           instruction,
-          enabled: fields.enabled ?? true,
-          maxRunsToKeep: fields.maxRunsToKeep ?? 10,
-          search: fields.search ?? false,
-          includeMemories: fields.includeMemories ?? false,
+          enabled: fields.enabled,
+          maxRunsToKeep: fields.maxRunsToKeep,
+          search: fields.search,
+          includeMemories: fields.includeMemories,
           config,
         });
 
@@ -324,10 +286,7 @@ export function createTriggerTools(
           ...(url && { url }),
         };
       } catch (error) {
-        if (error instanceof ValidationError) {
-          return { success: false, error: error.message };
-        }
-        throw error;
+        return toToolError(error);
       }
     },
   });
@@ -338,22 +297,12 @@ export function createTriggerTools(
       triggerId: z
         .string()
         .describe(
-          "The ID of the trigger to delete (use list-triggers to find IDs)",
+          "The ID of the trigger to delete (use listTriggers to find IDs)",
         ),
       label: z.string().describe("The trigger name (for display purposes)"),
     }),
     execute: async ({ triggerId }) => {
-      const result = await db
-        .delete(triggerTable)
-        .where(
-          and(
-            eq(triggerTable.id, triggerId),
-            eq(triggerTable.workspaceId, workspaceId),
-          ),
-        )
-        .returning({ id: triggerTable.id });
-
-      if (result.length === 0) {
+      if (!(await deleteTriggerService(ctx, triggerId))) {
         return { error: "Trigger not found" };
       }
 
