@@ -1,6 +1,5 @@
 ---
 status: accepted
-implemented-by: "#549, #550"
 ---
 
 # Invitations are redeemable into accounts
