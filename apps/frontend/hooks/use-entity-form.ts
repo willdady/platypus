@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useSWRConfig } from "swr";
+import { useSWRConfig, type KeyedMutator } from "swr";
 import { writeEntity, type Scope, type WriteOutcome } from "@/lib/api-write";
 import {
   applyDeleteOutcome,
@@ -15,6 +15,8 @@ import {
   type FormErrors,
 } from "@/lib/form-errors";
 import { useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
 /** The success copy a write shows, or a thunk for a message that varies. */
 type Message = string | (() => string);
@@ -24,7 +26,11 @@ const resolveMessage = (message: Message | undefined): string | undefined =>
 
 const NO_RETRACTABLE_FIELDS: readonly string[] = [];
 
-export interface UseEntityFormOptions<TForm extends object, TResult> {
+export interface UseEntityFormOptions<
+  TForm extends object,
+  TResult,
+  TRecord = unknown,
+> {
   /** The values the form starts with, before any record is loaded. */
   initialData: TForm;
   /** The backend collection noun, e.g. `"skills"`. */
@@ -33,6 +39,25 @@ export interface UseEntityFormOptions<TForm extends object, TResult> {
   scope: Scope;
   /** Absent when creating. */
   id?: string;
+  /**
+   * Maps the loaded record onto the form's values. Given with an `id`, the
+   * hook reads `${entity}/${id}` under `scope` and seeds `formData` from it
+   * once per record id — never again for the same id, so a revalidation that
+   * changes the row (a scheduler bumping `nextRunAt`, an OAuth status flip)
+   * can't wipe an edit in progress. Read what must track the server from
+   * `record` instead.
+   */
+  fromRecord?: (record: TRecord) => TForm;
+  /**
+   * Seeds record-derived state the form keeps outside `formData`, on the same
+   * once-per-id rule as `fromRecord`.
+   */
+  onSeed?: (record: TRecord) => void;
+  /**
+   * The read's path from the root scope, when it isn't `${entity}/${id}`
+   * under `scope` — e.g. a user-scoped row written through a `write` override.
+   */
+  readEntity?: string;
   /**
    * Field ids whose server error an edit can retract — and therefore the only
    * ones that may gate Save. See `canSubmitForm`.
@@ -76,7 +101,24 @@ export interface UseEntityFormOptions<TForm extends object, TResult> {
   write?: (data: TForm) => Promise<WriteOutcome<TResult>>;
 }
 
-export interface UseEntityFormResult<TForm extends object, TResult> {
+/** The record read's state, shaped to spread into `DetailFormState`. */
+export interface EntityLoadState<TRecord> {
+  isLoading: boolean;
+  error?: unknown;
+  data?: TRecord;
+}
+
+export interface UseEntityFormResult<
+  TForm extends object,
+  TResult,
+  TRecord = unknown,
+> {
+  /** The loaded record; absent when creating or still loading. */
+  record: TRecord | undefined;
+  /** Revalidates the record. What arrives does not re-seed `formData`. */
+  mutateRecord: KeyedMutator<TRecord>;
+  /** Spread into `DetailFormState`. Never loading when creating. */
+  loadState: EntityLoadState<TRecord>;
   formData: TForm;
   setFormData: React.Dispatch<React.SetStateAction<TForm>>;
   validationErrors: FormErrors;
@@ -116,11 +158,18 @@ export interface UseEntityFormResult<TForm extends object, TResult> {
  * The form keeps only what genuinely differs — its fields, its payload shape,
  * and what success and failure mean for it.
  */
-export function useEntityForm<TForm extends object, TResult = unknown>({
+export function useEntityForm<
+  TForm extends object,
+  TResult = unknown,
+  TRecord = unknown,
+>({
   initialData,
   entity,
   scope,
   id,
+  fromRecord,
+  onSeed,
+  readEntity,
   retractableFields = NO_RETRACTABLE_FIELDS,
   transformField,
   buildPayload,
@@ -133,10 +182,35 @@ export function useEntityForm<TForm extends object, TResult = unknown>({
   onConflict,
   onError,
   write,
-}: UseEntityFormOptions<TForm, TResult>): UseEntityFormResult<TForm, TResult> {
+}: UseEntityFormOptions<TForm, TResult, TRecord>): UseEntityFormResult<
+  TForm,
+  TResult,
+  TRecord
+> {
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
   const [formData, setFormData] = useState<TForm>(initialData);
+
+  const reads = !!id && !!fromRecord;
+  const {
+    data: record,
+    error,
+    isLoading,
+    mutate: mutateRecord,
+  } = useScopedSWR<TRecord>(
+    readEntity ?? `${entity}/${id}`,
+    reads ? (readEntity ? {} : scope) : null,
+  );
+
+  // Keyed on the id, not the record: SWR hands back a new object whenever a
+  // revalidation changes the row, and keying on that would re-seed over the
+  // edit in progress. Gated on the record being loaded so a cold read seeds
+  // when it lands rather than into a blank form beforehand (#474).
+  useResetOnChange(record ? id : undefined, () => {
+    if (!record || !fromRecord) return;
+    setFormData(fromRecord(record));
+    onSeed?.(record);
+  });
   const [validationErrors, setValidationErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -250,6 +324,9 @@ export function useEntityForm<TForm extends object, TResult = unknown>({
   );
 
   return {
+    record,
+    mutateRecord,
+    loadState: { isLoading, error, data: record },
     formData,
     setFormData,
     validationErrors,

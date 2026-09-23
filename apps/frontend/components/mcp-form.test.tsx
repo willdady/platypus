@@ -104,6 +104,36 @@ describe("McpForm locked delete", () => {
   });
 });
 
+describe("McpForm record revalidation", () => {
+  afterEach(() => {
+    resetFormHarness();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps an unsaved edit when the OAuth status flips underneath it", () => {
+    const mcp = {
+      id: "m1",
+      name: "Docs",
+      url: "http://mcp.test",
+      authType: "OAuth",
+      oauthClientId: "client-id",
+      oauthAuthorized: false,
+    };
+    setData(mcp);
+    const { rerender } = render(<McpForm orgId="org1" mcpId="m1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Edited" },
+    });
+    // What `mutateMcp()` after Authorize delivers: the same row, now authorized.
+    setData({ ...mcp, oauthAuthorized: true });
+    rerender(<McpForm orgId="org1" mcpId="m1" />);
+
+    expect(screen.getByLabelText("Name")).toHaveValue("Edited");
+    expect(screen.getByText("Authorized")).toBeInTheDocument();
+  });
+});
+
 describe("McpForm detail read failures", () => {
   afterEach(() => {
     resetFormHarness();

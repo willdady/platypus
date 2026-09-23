@@ -7,6 +7,10 @@ import {
   configuredMutate,
   toastSuccess,
   resetFormHarness,
+  setData,
+  setDataFor,
+  setError,
+  setLoading,
   stubAcceptedSave,
   stubRejectedSave,
 } from "@/lib/form-test-harness";
@@ -80,6 +84,118 @@ describe("useEntityForm field adapters", () => {
 
     act(() => result.current.setNumberField("count", ""));
     expect(result.current.formData.count).toBeUndefined();
+  });
+});
+
+describe("useEntityForm record read", () => {
+  beforeEach(() => resetFormHarness());
+
+  type Row = { id: string; name: string; description: string };
+  const row: Row = { id: "s1", name: "Deploy", description: "Ships it" };
+  const fromRecord = (r: Row): Data => ({
+    name: r.name,
+    description: r.description,
+  });
+
+  const renderRead = (
+    options: Partial<Parameters<typeof useEntityForm<Data, unknown, Row>>[0]>,
+  ) =>
+    renderHook(
+      (props: { id?: string }) =>
+        useEntityForm<Data, unknown, Row>({
+          ...baseOptions,
+          id: "s1",
+          fromRecord,
+          ...options,
+          ...props,
+        }),
+      { initialProps: {} },
+    );
+
+  it("reads the record at the Organization scope", () => {
+    setDataFor("/organizations/org1/skills/s1", row);
+    const { result } = renderRead({});
+    expect(result.current.record).toBe(row);
+  });
+
+  it("reads the record at the Workspace scope", () => {
+    setDataFor("/organizations/org1/workspaces/ws1/skills/s1", row);
+    const { result } = renderRead({
+      scope: { orgId: "org1", workspaceId: "ws1" },
+    });
+    expect(result.current.record).toBe(row);
+  });
+
+  it("reads from the root when given a read path", () => {
+    setDataFor("http://test/users/me/contexts/s1", row);
+    const { result } = renderRead({ readEntity: "users/me/contexts/s1" });
+    expect(result.current.record).toBe(row);
+  });
+
+  it("seeds formData from the record", () => {
+    setData(row);
+    const { result } = renderRead({});
+    expect(result.current.formData).toEqual({
+      name: "Deploy",
+      description: "Ships it",
+    });
+  });
+
+  it("keeps an edit when the same record changes on the server", () => {
+    setData(row);
+    const onSeed = vi.fn();
+    const { result, rerender } = renderRead({ onSeed });
+
+    act(() => result.current.setField("name", "Edited"));
+    setData({ ...row, name: "server" });
+    rerender({});
+
+    expect(result.current.formData.name).toBe("Edited");
+    expect(result.current.record?.name).toBe("server");
+    expect(onSeed).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-seeds for a different record id", () => {
+    setData(row);
+    const { result, rerender } = renderRead({});
+
+    act(() => result.current.setField("name", "Edited"));
+    setData({ id: "s2", name: "Other", description: "" });
+    rerender({ id: "s2" });
+
+    expect(result.current.formData.name).toBe("Other");
+  });
+
+  it("passes the read's state through for DetailFormState", () => {
+    setLoading();
+    const { result, rerender } = renderRead({});
+    expect(result.current.loadState.isLoading).toBe(true);
+
+    const failure = Object.assign(new Error("gone"), { status: 404 });
+    resetFormHarness();
+    setError(failure);
+    rerender({});
+    expect(result.current.loadState).toMatchObject({
+      isLoading: false,
+      error: failure,
+      data: undefined,
+    });
+
+    resetFormHarness();
+    setData(row);
+    rerender({});
+    expect(result.current.loadState.data).toBe(row);
+  });
+
+  it("issues no read and is not loading without an id", () => {
+    setLoading();
+    const { result } = renderRead({ id: undefined });
+    expect(result.current.loadState).toEqual({
+      isLoading: false,
+      error: undefined,
+      data: undefined,
+    });
+    expect(result.current.formData).toEqual(baseOptions.initialData);
   });
 });
 

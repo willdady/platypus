@@ -19,16 +19,14 @@ import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useEffect } from "react";
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
+import { joinUrl } from "@/lib/utils";
+import { scopedPath, writeAt } from "@/lib/api-write";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { toast } from "sonner";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 import {
   Trash2,
   Plug,
@@ -46,6 +44,11 @@ import {
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 type HeaderRow = { key: string; value: string };
+
+type McpRecord = MCP & {
+  oauthAuthorized?: boolean;
+  headers?: Record<string, string>;
+};
 
 type McpFormData = Omit<
   MCP,
@@ -74,14 +77,12 @@ const McpForm = ({
   workspaceId?: string;
   mcpId?: string;
 }) => {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   // An MCP is scoped to either a Workspace or the Organization (ADR-0007).
   // The scope determines the backend collection and the settings/edit paths.
-  const collectionUrl = workspaceId
-    ? `/organizations/${orgId}/workspaces/${workspaceId}/mcps`
-    : `/organizations/${orgId}/mcps`;
+  const scope = workspaceId ? { orgId, workspaceId } : { orgId };
+  const collectionUrl = scopedPath("mcps", scope);
   const listPath = workspaceId
     ? workspaceRoutes(orgId, workspaceId).settings.mcp
     : orgRoutes(orgId).settings.mcp;
@@ -102,16 +103,6 @@ const McpForm = ({
 
   const router = useRouter();
 
-  const {
-    data: mcp,
-    error: mcpError,
-    isLoading,
-    mutate: mutateMcp,
-  } = useSWR<MCP & { oauthAuthorized?: boolean }>(
-    mcpId && user ? joinUrl(backendUrl, `${collectionUrl}/${mcpId}`) : null,
-    fetcher,
-  );
-
   /** Convert headerRows to a Record, filtering out empty keys */
   const buildHeadersObject = (): Record<string, string> | undefined => {
     const headers: Record<string, string> = {};
@@ -125,6 +116,9 @@ const McpForm = ({
   };
 
   const {
+    record: mcp,
+    mutateRecord: mutateMcp,
+    loadState,
     formData,
     setFormData,
     validationErrors,
@@ -134,7 +128,7 @@ const McpForm = ({
     handleChange: onFieldChange,
     toFieldChange: toFieldChangeBase,
     submit,
-  } = useEntityForm<McpFormData, { id: string }>({
+  } = useEntityForm<McpFormData, { id: string }, McpRecord>({
     initialData: {
       name: "",
       url: "",
@@ -146,8 +140,23 @@ const McpForm = ({
       headerRows: [],
     },
     entity: "mcps",
-    scope: workspaceId ? { orgId, workspaceId } : { orgId },
+    scope,
     id: mcpId,
+    // OAuth status is read from `mcp` itself, not seeded: Authorize/Revoke
+    // revalidate the record, and that must not wipe unsaved edits.
+    fromRecord: (mcp) => ({
+      name: mcp.name,
+      url: mcp.url || "",
+      authType: mcp.authType,
+      bearerToken: mcp.bearerToken || "",
+      oauthClientId: mcp.oauthClientId || "",
+      oauthClientSecret: "",
+      oauthRequestedScope: mcp.oauthRequestedScope || "",
+      headerRows: Object.entries(mcp.headers ?? {}).map(([key, value]) => ({
+        key,
+        value,
+      })),
+    }),
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => ({
       // Scope discriminator — the backend routes also enforce this from the
@@ -180,36 +189,13 @@ const McpForm = ({
     handleDelete,
   } = useEntityDelete({
     entity: "mcps",
-    scope: workspaceId ? { orgId, workspaceId } : { orgId },
+    scope,
     id: mcpId,
     onSuccess: () => router.push(listPath),
     onError: (message, outcome, { close }) => {
       toastGuidanceOrError(message, outcome);
       close();
     },
-  });
-
-  useResetOnChange(mcp, () => {
-    if (mcp) {
-      const existingHeaders = (mcp as { headers?: Record<string, string> })
-        .headers;
-      const headerRows: HeaderRow[] = existingHeaders
-        ? Object.entries(existingHeaders).map(([key, value]) => ({
-            key,
-            value,
-          }))
-        : [];
-      setFormData({
-        name: mcp.name,
-        url: mcp.url || "",
-        authType: mcp.authType,
-        bearerToken: mcp.bearerToken || "",
-        oauthClientId: mcp.oauthClientId || "",
-        oauthClientSecret: "",
-        oauthRequestedScope: mcp.oauthRequestedScope || "",
-        headerRows,
-      });
-    }
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -824,9 +810,7 @@ const McpForm = ({
 
   return (
     <DetailFormState
-      isLoading={isLoading}
-      error={mcpError}
-      data={mcp}
+      {...loadState}
       subject="MCP server"
       backHref={listPath}
       backLabel="Back to MCP servers"

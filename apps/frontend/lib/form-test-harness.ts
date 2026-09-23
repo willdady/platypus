@@ -104,6 +104,16 @@ export function setError(error: unknown, keySuffix?: string) {
   defaultResponse = { ...defaultResponse, error };
 }
 
+/**
+ * Makes the read for a key ending in `keySuffix` still in flight: no data,
+ * `isLoading`. With no suffix, every read with no more specific match is.
+ */
+export function setLoading(keySuffix?: string) {
+  const response = { ...buildResponse(undefined), isLoading: true };
+  if (keySuffix) responsesByKeySuffix.set(keySuffix, response);
+  else defaultResponse = response;
+}
+
 // Suffix matching, not substring: a form's registered key is the tail of the
 // request URL (`/providers`), and a substring match would also catch the
 // detail read beneath it (`/providers/p1`). The list harness matches on

@@ -79,7 +79,6 @@ import {
 } from "@/lib/context-window";
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 /**
@@ -494,13 +493,19 @@ const ProviderForm = ({
   const scope = formScope === "workspace" ? { orgId, workspaceId } : { orgId };
 
   const {
+    record: provider,
+    loadState,
     formData,
     setFormData,
     validationErrors,
     isSubmitting,
     clearErrors,
     submit,
-  } = useEntityForm<ProviderFormData, { id: string; aliasRepoints?: unknown }>({
+  } = useEntityForm<
+    ProviderFormData,
+    { id: string; aliasRepoints?: unknown },
+    ProviderWithScope
+  >({
     initialData: {
       providerType: "OpenAI",
       name: "",
@@ -523,6 +528,45 @@ const ProviderForm = ({
     entity: "providers",
     scope,
     id: providerId,
+    fromRecord: (provider) => ({
+      providerType: provider.providerType,
+      name: provider.name,
+      // The API is free to withhold the stored key: it is returned only to a
+      // caller who may manage this Provider (ADR-0006). Anyone else lands here
+      // read-only, so an empty field is the honest rendering — and keeps the
+      // input controlled either way.
+      apiKey: provider.apiKey ?? "",
+      region: provider.region || "",
+      baseUrl: provider.baseUrl || "",
+      headers: provider.headers || {},
+      extraBody: provider.extraBody || {},
+      organization: provider.organization || "",
+      project: provider.project || "",
+      apiMode: provider.apiMode ?? "responses",
+      // Held exactly as stored, including a row backfilled to "native"
+      // (ADR-0014) on a Provider with no native tool at all — Bedrock, or
+      // vLLM on the chat API. Rendering that as the built-in search option
+      // would be wrong, but so is rewriting it: `doSubmit` sends this field
+      // on every save, so coercing here would let a save that touched only
+      // the name silently retire a selection the Operator never edited, and
+      // one that starts working again the moment the Provider regains a
+      // native tool. See `nativeSelectedButUnavailable` for what renders.
+      searchSource: provider.searchSource ?? SEARCH_SOURCE_NATIVE,
+      securityGuardrails: provider.securityGuardrails ?? "",
+      modelIds: provider.modelIds ? getModelConfigs(provider) : [],
+      taskModelId: provider.taskModelId,
+      memoryExtractionModelId: provider.memoryExtractionModelId,
+      embeddingModelId: provider.embeddingModelId || "",
+      embeddingDimensions: provider.embeddingDimensions?.toString() || "",
+    }),
+    onSeed: (provider) => {
+      setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
+      setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
+      setSavedEmbeddingModelId(provider.embeddingModelId || null);
+      setSavedEmbeddingDimensions(
+        provider.embeddingDimensions?.toString() || null,
+      );
+    },
     buildPayload: (data) => ({
       workspaceId: workspaceId || undefined,
       organizationId: !workspaceId ? orgId : undefined,
@@ -572,22 +616,6 @@ const ProviderForm = ({
     },
   });
 
-  const fetchUrl =
-    providerId && user
-      ? formScope === "workspace"
-        ? joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
-          )
-        : joinUrl(backendUrl, `/organizations/${orgId}/providers/${providerId}`)
-      : null;
-
-  const {
-    data: provider,
-    error: providerError,
-    isLoading,
-  } = useSWR<ProviderWithScope>(fetchUrl, fetcher);
-
   // The Web-search backends this deployment has installed (ADR-0014). Org-scoped
   // rather than workspace-scoped because this form serves both Provider scopes and
   // `workspaceId` is optional here; the list itself is deployment-wide either way.
@@ -633,63 +661,6 @@ const ProviderForm = ({
   const nativeSelectedButUnavailable =
     formData.searchSource === SEARCH_SOURCE_NATIVE &&
     !providerHasNativeSearch(formData);
-
-  // Populate once per Provider, keyed on `providerId` rather than `provider`
-  // itself: `provider` gets a new object reference on every revalidation that
-  // actually changes the record (a save from another tab, a focus
-  // revalidation), and keying on it directly would re-run this on the Provider
-  // the reader is already editing, clobbering the edit in progress with
-  // whatever the server has right now. Gating the key on `provider` being
-  // loaded — rather than firing as soon as `providerId` changes — defers the
-  // reset until the switch actually has data to populate with, so a cold
-  // fetch (data not loaded yet) doesn't reset into a blank form early and
-  // then never fire again once the fetch resolves.
-  //
-  // `useResetOnChange` rather than an effect: it adjusts state during render,
-  // so a switch to a Provider already warm in SWR's cache repopulates on that
-  // same render instead of leaving the previous Provider's fields on screen
-  // for one extra frame (#474).
-  useResetOnChange(provider ? providerId : undefined, () => {
-    if (provider) {
-      setFormData({
-        providerType: provider.providerType,
-        name: provider.name,
-        // The API is free to withhold the stored key: it is returned only to a
-        // caller who may manage this Provider (ADR-0006). Anyone else lands here
-        // read-only, so an empty field is the honest rendering — and keeps the
-        // input controlled either way.
-        apiKey: provider.apiKey ?? "",
-        region: provider.region || "",
-        baseUrl: provider.baseUrl || "",
-        headers: provider.headers || {},
-        extraBody: provider.extraBody || {},
-        organization: provider.organization || "",
-        project: provider.project || "",
-        apiMode: provider.apiMode ?? "responses",
-        // Held exactly as stored, including a row backfilled to "native"
-        // (ADR-0014) on a Provider with no native tool at all — Bedrock, or
-        // vLLM on the chat API. Rendering that as the built-in search option
-        // would be wrong, but so is rewriting it: `doSubmit` sends this field
-        // on every save, so coercing here would let a save that touched only
-        // the name silently retire a selection the Operator never edited, and
-        // one that starts working again the moment the Provider regains a
-        // native tool. See `nativeSelectedButUnavailable` for what renders.
-        searchSource: provider.searchSource ?? SEARCH_SOURCE_NATIVE,
-        securityGuardrails: provider.securityGuardrails ?? "",
-        modelIds: provider.modelIds ? getModelConfigs(provider) : [],
-        taskModelId: provider.taskModelId,
-        memoryExtractionModelId: provider.memoryExtractionModelId,
-        embeddingModelId: provider.embeddingModelId || "",
-        embeddingDimensions: provider.embeddingDimensions?.toString() || "",
-      });
-      setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
-      setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
-      setSavedEmbeddingModelId(provider.embeddingModelId || null);
-      setSavedEmbeddingDimensions(
-        provider.embeddingDimensions?.toString() || null,
-      );
-    }
-  });
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -1285,9 +1256,7 @@ const ProviderForm = ({
 
   return (
     <DetailFormState
-      isLoading={isLoading}
-      error={providerError}
-      data={provider}
+      {...loadState}
       subject="provider"
       backHref={listHref}
       backLabel="Back to providers"
