@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import type { MCP, Provider } from "@platypus/schemas";
+import type { WorkspaceDelegationFlags } from "@/lib/authorization";
 import {
   authMock,
   authState,
@@ -62,7 +63,7 @@ const RESOURCES: {
   entity: string;
   settingsPath: string;
   /** The Workspace delegation flag letting its Owner self-manage the resource. */
-  delegationFlag: string;
+  delegationFlag: keyof WorkspaceDelegationFlags;
   item: ScopedResource;
   workspaceItem: ScopedResource;
   dialogTitle: string;
@@ -145,6 +146,7 @@ describe.each(RESOURCES)(
       authState.workspaceDelegation = { [delegationFlag]: true };
       renderRows([]);
 
+      expect(screen.queryByText(/configured/)).not.toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
         "href",
         `/org1/workspace/ws1/${settingsPath}/create`,
@@ -165,6 +167,7 @@ describe.each(RESOURCES)(
     });
 
     it("offers an Org Admin both create and attach when the workspace has none", () => {
+      authState.actor = "org-admin";
       renderRows([]);
 
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(

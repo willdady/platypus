@@ -125,11 +125,7 @@ export const ResourceList = ({
   if (!resources.length && workspaceId && !canAttach && !canManage) {
     const EmptyState = config.emptyState;
     return (
-      <EmptyState
-        orgId={orgId}
-        workspaceId={workspaceId}
-        canManage={canManage}
-      />
+      <EmptyState orgId={orgId} workspaceId={workspaceId} canManage={false} />
     );
   }
 
