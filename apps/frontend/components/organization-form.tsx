@@ -11,15 +11,12 @@ import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { DetailFormState } from "@/components/detail-form-state";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { type Organization } from "@platypus/schemas";
 import { ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH } from "@platypus/schemas";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { toast } from "sonner";
-import useSWR from "swr";
 import { orgRoutes } from "@/lib/routes";
 
 interface OrganizationFormProps {
@@ -35,29 +32,26 @@ const INITIAL_DATA = {
 };
 
 const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
   const router = useRouter();
 
-  const { data: organization } = useSWR<Organization>(
-    orgId && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
-    fetcher,
-  );
-
   const {
+    loadState,
     formData,
-    setFormData,
     validationErrors,
     isSubmitting,
     canSubmit,
     handleChange,
     toFieldChange,
     submit,
-  } = useEntityForm<typeof INITIAL_DATA, Organization>({
+  } = useEntityForm<typeof INITIAL_DATA, Organization, Organization>({
     initialData: INITIAL_DATA,
     entity: "organizations",
     scope: {},
     id: orgId,
+    fromRecord: (organization) => ({
+      name: organization.name,
+      identityContext: organization.identityContext ?? "",
+    }),
     retractableFields: RETRACTABLE_FIELDS,
     // identityContext is update-only (the create schema accepts name only).
     buildPayload: (data) =>
@@ -102,78 +96,76 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
     },
   });
 
-  useResetOnChange(organization, () => {
-    if (organization) {
-      setFormData({
-        name: organization.name,
-        identityContext: organization.identityContext ?? "",
-      });
-    }
-  });
-
   return (
-    <div className={classNames}>
-      <FieldSet className="mb-6">
-        <FieldGroup>
-          <FormTextField
-            label="Name"
-            name="name"
-            placeholder="Organization name"
-            value={formData.name}
-            onChange={toFieldChange("name")}
-            disabled={isSubmitting}
-            error={validationErrors.name}
-            autoFocus
-          />
+    <DetailFormState
+      {...loadState}
+      subject="organization"
+      backHref={orgId ? orgRoutes(orgId).root : "/"}
+      backLabel="Back to organization"
+    >
+      <div className={classNames}>
+        <FieldSet className="mb-6">
+          <FieldGroup>
+            <FormTextField
+              label="Name"
+              name="name"
+              placeholder="Organization name"
+              value={formData.name}
+              onChange={toFieldChange("name")}
+              disabled={isSubmitting}
+              error={validationErrors.name}
+              autoFocus
+            />
 
-          {orgId && (
-            <Field data-invalid={!!validationErrors.identityContext}>
-              <ExpandableTextarea
-                id="identityContext"
-                label="Organization identity / context"
-                placeholder="Optional identity or context for this organization, shared across all workspaces"
-                value={formData.identityContext}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                aria-invalid={!!validationErrors.identityContext}
-                className="!font-mono"
-                maxLength={ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH}
-              />
-              <FieldDescription>
-                Framing added early in the system prompt for every chat across
-                the organization — who you are, what you do. This is context,
-                not a security control (set provider security guardrails for
-                that).
-              </FieldDescription>
-              {validationErrors.identityContext && (
-                <FieldError>{validationErrors.identityContext}</FieldError>
-              )}
-            </Field>
-          )}
-        </FieldGroup>
-      </FieldSet>
+            {orgId && (
+              <Field data-invalid={!!validationErrors.identityContext}>
+                <ExpandableTextarea
+                  id="identityContext"
+                  label="Organization identity / context"
+                  placeholder="Optional identity or context for this organization, shared across all workspaces"
+                  value={formData.identityContext}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  aria-invalid={!!validationErrors.identityContext}
+                  className="!font-mono"
+                  maxLength={ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH}
+                />
+                <FieldDescription>
+                  Framing added early in the system prompt for every chat across
+                  the organization — who you are, what you do. This is context,
+                  not a security control (set provider security guardrails for
+                  that).
+                </FieldDescription>
+                {validationErrors.identityContext && (
+                  <FieldError>{validationErrors.identityContext}</FieldError>
+                )}
+              </Field>
+            )}
+          </FieldGroup>
+        </FieldSet>
 
-      <FormFooterButtons
-        submitText="Save"
-        onSubmit={() => void submit()}
-        submitDisabled={isSubmitting || !canSubmit}
-        submitClassName=""
-        deleteVisible={!!orgId}
-        deleteDisabled={isSubmitting}
-        deleteClassName=""
-        onDelete={openDeleteDialog}
-      />
+        <FormFooterButtons
+          submitText="Save"
+          onSubmit={() => void submit()}
+          submitDisabled={isSubmitting || !canSubmit}
+          submitClassName=""
+          deleteVisible={!!orgId}
+          deleteDisabled={isSubmitting}
+          deleteClassName=""
+          onDelete={openDeleteDialog}
+        />
 
-      <EntityDeleteDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        title="Delete Organization"
-        description="Are you sure you want to delete this organization? This action cannot be undone."
-        confirmPhrase="Delete organization"
-        onConfirm={handleDelete}
-        loading={isDeleting}
-      />
-    </div>
+        <EntityDeleteDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+          title="Delete Organization"
+          description="Are you sure you want to delete this organization? This action cannot be undone."
+          confirmPhrase="Delete organization"
+          onConfirm={handleDelete}
+          loading={isDeleting}
+        />
+      </div>
+    </DetailFormState>
   );
 };
 

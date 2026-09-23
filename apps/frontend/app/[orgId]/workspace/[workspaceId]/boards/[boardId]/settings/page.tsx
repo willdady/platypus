@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useRouter } from "next/navigation";
-import type { KanbanBoardState } from "@platypus/schemas";
+import type { KanbanBoard } from "@platypus/schemas";
 import { writeEntity } from "@/lib/api-write";
 import { applyDeleteOutcome } from "@/lib/apply-write-outcome";
 import { useBackendUrl } from "@/components/auth-provider";
@@ -27,10 +27,11 @@ const BoardSettingsPage = ({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const { data, error, mutate } = useScopedSWR<KanbanBoardState>(
-    `boards/${boardId}/state`,
-    { orgId, workspaceId },
-  );
+  // The same key the form reads through, so one request serves both.
+  const { data: board } = useScopedSWR<KanbanBoard>(`boards/${boardId}`, {
+    orgId,
+    workspaceId,
+  });
 
   const handleDeleteConfirm = async () => {
     setIsDeleting(true);
@@ -52,15 +53,6 @@ const BoardSettingsPage = ({
     });
   };
 
-  if (error) {
-    return (
-      <div className="text-destructive">Failed to load board settings.</div>
-    );
-  }
-  if (!data) {
-    return <div>Loading...</div>;
-  }
-
   return (
     <ResourcePage
       backFallbackHref={routes.boards.detail(boardId)}
@@ -70,15 +62,9 @@ const BoardSettingsPage = ({
       <KanbanBoardForm
         orgId={orgId}
         workspaceId={workspaceId}
-        board={{
-          id: data.board.id,
-          name: data.board.name,
-          description: data.board.description,
-          labels: data.board.labels,
-        }}
+        boardId={boardId}
         onDelete={() => setIsDeleteDialogOpen(true)}
         isDeleting={isDeleting}
-        onSuccess={() => mutate()}
       />
 
       <ConfirmDialog
@@ -88,8 +74,8 @@ const BoardSettingsPage = ({
         description={
           <>
             This action cannot be undone. This will permanently delete the board{" "}
-            <span className="font-semibold">{data.board.name}</span> and all of
-            its data.
+            <span className="font-semibold">{board?.name}</span> and all of its
+            data.
           </>
         }
         confirmLabel="Delete"

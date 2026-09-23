@@ -2,7 +2,8 @@
 
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useEntityForm } from "@/hooks/use-entity-form";
+import { DetailFormState } from "@/components/detail-form-state";
 import { Trash2 } from "lucide-react";
 import { ResourcePage } from "@/components/resource-page";
 import { Button } from "@/components/ui/button";
@@ -30,51 +31,41 @@ const DashboardSettingsPage = ({
   const backendUrl = useBackendUrl();
   const router = useRouter();
 
-  const { data: dashboard, mutate } = useScopedSWR<Dashboard>(
-    `dashboards/${dashboardId}`,
-    { orgId, workspaceId },
-  );
-
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Initialise fields once the dashboard loads (null = not yet touched by user)
-  const displayName = name !== "" ? name : (dashboard?.name ?? "");
-  const displayDescription =
-    description !== null ? description : (dashboard?.description ?? "");
+  const {
+    record: dashboard,
+    loadState,
+    formData,
+    handleChange,
+    isSubmitting: saving,
+    submit,
+  } = useEntityForm<{ name: string; description: string }, unknown, Dashboard>({
+    initialData: { name: "", description: "" },
+    entity: "dashboards",
+    scope: { orgId, workspaceId },
+    id: dashboardId,
+    fromRecord: (dashboard) => ({
+      name: dashboard.name,
+      description: dashboard.description ?? "",
+    }),
+    buildPayload: (data) => ({
+      name: data.name.trim(),
+      description: data.description.trim() || null,
+    }),
+    successMessage: "Dashboard updated",
+    onInvalid: (_fieldErrors, message) => setSaveError(message),
+    onConflict: setSaveError,
+    onError: setSaveError,
+  });
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!backendUrl || !displayName.trim()) return;
-    setSaving(true);
+    if (!formData.name.trim()) return;
     setSaveError(null);
-    const outcome = await writeEntity(
-      backendUrl,
-      "dashboards",
-      { orgId, workspaceId },
-      {
-        id: dashboardId,
-        data: {
-          name: displayName.trim(),
-          description: displayDescription.trim() || null,
-        },
-      },
-    );
-    if (outcome.outcome === "conflict") {
-      setSaveError(outcome.message);
-    } else if (outcome.outcome === "success") {
-      await mutate();
-      setName("");
-      setDescription(null);
-      toast.success("Dashboard updated");
-    } else {
-      setSaveError(outcome.message);
-    }
-    setSaving(false);
+    await submit();
   };
 
   const handleDelete = async () => {
@@ -95,54 +86,57 @@ const DashboardSettingsPage = ({
     }
   };
 
-  if (!dashboard) {
-    return null;
-  }
-
   return (
     <ResourcePage
       backFallbackHref={routes.dashboards.detail(dashboardId)}
       title="Dashboard Settings"
       variant="stacked"
     >
-      <form onSubmit={handleSave} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Name</Label>
-          <Input
-            id="name"
-            value={displayName}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="My Dashboard"
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            value={displayDescription}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional description"
-          />
-        </div>
-        {saveError && <p className="text-sm text-destructive">{saveError}</p>}
-        <div className="flex gap-2">
-          <Button
-            type="submit"
-            disabled={saving || deleting || !displayName.trim()}
-          >
-            Save
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setDeleteOpen(true)}
-            disabled={saving || deleting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        </div>
-      </form>
+      <DetailFormState
+        {...loadState}
+        subject="dashboard"
+        backHref={routes.root}
+        backLabel="Back to workspace"
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="My Dashboard"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={handleChange}
+              placeholder="Optional description"
+            />
+          </div>
+          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+          <div className="flex gap-2">
+            <Button
+              type="submit"
+              disabled={saving || deleting || !formData.name.trim()}
+            >
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(true)}
+              disabled={saving || deleting}
+            >
+              <Trash2 /> Delete
+            </Button>
+          </div>
+        </form>
+      </DetailFormState>
 
       <ConfirmDialog
         open={deleteOpen}
@@ -151,7 +145,7 @@ const DashboardSettingsPage = ({
         description={
           <>
             This action cannot be undone. This will permanently delete the
-            dashboard <span className="font-semibold">{dashboard.name}</span>{" "}
+            dashboard <span className="font-semibold">{dashboard?.name}</span>{" "}
             and all of its widgets.
           </>
         }

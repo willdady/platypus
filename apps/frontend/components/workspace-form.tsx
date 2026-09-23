@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import { DetailFormState } from "@/components/detail-form-state";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
@@ -82,13 +83,6 @@ const WorkspaceForm = ({
   const backendUrl = useBackendUrl();
   const router = useRouter();
 
-  const { data: workspace } = useSWR<Workspace>(
-    workspaceId && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`)
-      : null,
-    fetcher,
-  );
-
   // Fetch providers
   const { data: providersData } = useSWR<{ results: Provider[] }>(
     workspaceId && user
@@ -127,6 +121,7 @@ const WorkspaceForm = ({
       : members;
 
   const {
+    loadState,
     formData,
     setFormData,
     validationErrors,
@@ -136,7 +131,7 @@ const WorkspaceForm = ({
     handleChange,
     toFieldChange,
     submit,
-  } = useEntityForm<WorkspaceFormData, Workspace>({
+  } = useEntityForm<WorkspaceFormData, Workspace, Workspace>({
     initialData: {
       name: "",
       context: "",
@@ -154,6 +149,18 @@ const WorkspaceForm = ({
     entity: "workspaces",
     scope: { orgId },
     id: workspaceId,
+    fromRecord: (workspace) => ({
+      name: workspace.name,
+      context: workspace.context || "",
+      ownerId: workspace.ownerId,
+      taskModelProviderId: workspace.taskModelProviderId || null,
+      memoryExtractionProviderId: workspace.memoryExtractionProviderId || null,
+      memoryEmbeddingProviderId: workspace.memoryEmbeddingProviderId || null,
+      maxDailySummaries:
+        workspace.maxDailySummaries ?? DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
+      providerSelfManagement: workspace.providerSelfManagement ?? false,
+      mcpSelfManagement: workspace.mcpSelfManagement ?? false,
+    }),
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) =>
       workspaceId
@@ -219,334 +226,341 @@ const WorkspaceForm = ({
     }
   });
 
-  useResetOnChange(workspace, () => {
-    if (workspace) {
-      setFormData({
-        name: workspace.name,
-        context: workspace.context || "",
-        ownerId: workspace.ownerId,
-        taskModelProviderId: workspace.taskModelProviderId || null,
-        memoryExtractionProviderId:
-          workspace.memoryExtractionProviderId || null,
-        memoryEmbeddingProviderId: workspace.memoryEmbeddingProviderId || null,
-        maxDailySummaries:
-          workspace.maxDailySummaries ?? DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
-        providerSelfManagement: workspace.providerSelfManagement ?? false,
-        mcpSelfManagement: workspace.mcpSelfManagement ?? false,
-      });
-    }
-  });
-
   return (
-    <div className={classNames}>
-      <FieldSet className="mb-6">
-        <FieldGroup>
-          <FormTextField
-            label="Name"
-            name="name"
-            placeholder="Workspace name"
-            value={formData.name}
-            onChange={toFieldChange("name")}
-            disabled={isSubmitting}
-            error={validationErrors.name}
-            autoFocus
-          />
-
-          {/* ADR-0008: on creation an admin assigns the workspace owner. */}
-          {!workspaceId && (
-            <Field data-invalid={!!validationErrors.ownerId}>
-              <FieldLabel htmlFor="ownerId">Owner</FieldLabel>
-              <Select
-                value={formData.ownerId || undefined}
-                onValueChange={(value) => {
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "ownerId"),
-                  );
-                  setFormData((prevData) => ({ ...prevData, ownerId: value }));
-                }}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an owner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ownerOptions.map((m) => (
-                    <SelectItem key={m.userId} value={m.userId}>
-                      {m.user.name || m.user.email}
-                      {m.userId === user?.id ? " (you)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                The member who will own this workspace. Defaults to you.
-              </FieldDescription>
-              {validationErrors.ownerId && (
-                <FieldError>{validationErrors.ownerId}</FieldError>
-              )}
-            </Field>
-          )}
-
-          <Field data-invalid={!!validationErrors.context}>
-            <ExpandableTextarea
-              id="context"
-              label="Context"
-              placeholder="Optional context for this workspace"
-              value={formData.context}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.context}
-              className="!font-mono"
-              maxLength={CONTEXT_MAX_LENGTH}
-            />
-            <FieldDescription>
-              Additional context about this workspace included in all chats in
-              this workspace
-            </FieldDescription>
-            {validationErrors.context && (
-              <FieldError>{validationErrors.context}</FieldError>
-            )}
-          </Field>
-
-          {workspaceId && (
-            <Field data-invalid={!!validationErrors.taskModelProviderId}>
-              <FieldLabel htmlFor="taskModelProviderId">
-                Task Model Provider
-              </FieldLabel>
-              <Select
-                value={formData.taskModelProviderId || "none"}
-                onValueChange={(value) => {
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "taskModelProviderId"),
-                  );
-                  setFormData((prevData) => ({
-                    ...prevData,
-                    taskModelProviderId: value === "none" ? null : value,
-                  }));
-                }}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (use chat provider)</SelectItem>
-                  {providers.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {provider.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Provider to use for generating chat titles and tags. If not set,
-                each chat will use its own provider for metadata generation.
-              </FieldDescription>
-              {validationErrors.taskModelProviderId && (
-                <FieldError>{validationErrors.taskModelProviderId}</FieldError>
-              )}
-            </Field>
-          )}
-
-          {workspaceId && (
-            <Field data-invalid={!!validationErrors.memoryExtractionProviderId}>
-              <FieldLabel htmlFor="memoryExtractionProviderId">
-                Memory Extraction Provider
-              </FieldLabel>
-              <Select
-                value={formData.memoryExtractionProviderId || "none"}
-                onValueChange={(value) => {
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "memoryExtractionProviderId"),
-                  );
-                  setFormData((prevData) => ({
-                    ...prevData,
-                    memoryExtractionProviderId: value === "none" ? null : value,
-                  }));
-                }}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Disabled</SelectItem>
-                  {providers
-                    .filter((p) => p.memoryExtractionModelId)
-                    .map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Provider to use for extracting memories from conversations.
-                Enable memory extraction on a provider to see it here.
-              </FieldDescription>
-              {validationErrors.memoryExtractionProviderId && (
-                <FieldError>
-                  {validationErrors.memoryExtractionProviderId}
-                </FieldError>
-              )}
-            </Field>
-          )}
-
-          {workspaceId && (
-            <Field data-invalid={!!validationErrors.memoryEmbeddingProviderId}>
-              <FieldLabel htmlFor="memoryEmbeddingProviderId">
-                Memory Embedding Provider
-              </FieldLabel>
-              <Select
-                value={formData.memoryEmbeddingProviderId || "none"}
-                onValueChange={(value) => {
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "memoryEmbeddingProviderId"),
-                  );
-                  setFormData((prevData) => ({
-                    ...prevData,
-                    memoryEmbeddingProviderId: value === "none" ? null : value,
-                  }));
-                }}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Disabled</SelectItem>
-                  {providers
-                    .filter(
-                      (p) =>
-                        (p as { embeddingModelId?: string }).embeddingModelId,
-                    )
-                    .map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Provider to use for generating memory embeddings. Required for
-                semantic memory search. Set an embedding model ID on a provider
-                to see it here.
-              </FieldDescription>
-              {validationErrors.memoryEmbeddingProviderId && (
-                <FieldError>
-                  {validationErrors.memoryEmbeddingProviderId}
-                </FieldError>
-              )}
-            </Field>
-          )}
-
-          {workspaceId && (
+    <DetailFormState
+      {...loadState}
+      subject="workspace"
+      backHref={
+        workspaceId
+          ? workspaceRoutes(orgId, workspaceId).root
+          : orgRoutes(orgId).root
+      }
+      backLabel="Back to workspace"
+    >
+      <div className={classNames}>
+        <FieldSet className="mb-6">
+          <FieldGroup>
             <FormTextField
-              label="Memory Summary Retention"
-              name="maxDailySummaries"
-              type="number"
-              min={WORKSPACE_MAX_DAILY_SUMMARIES_MIN}
-              max={WORKSPACE_MAX_DAILY_SUMMARIES_MAX}
-              value={String(formData.maxDailySummaries)}
-              onChange={(value) => {
-                setValidationErrors((prev) =>
-                  retractFieldError(prev, "maxDailySummaries"),
-                );
-                setFormData((prevData) => ({
-                  ...prevData,
-                  maxDailySummaries:
-                    parseInt(value) || DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
-                }));
-              }}
+              label="Name"
+              name="name"
+              placeholder="Workspace name"
+              value={formData.name}
+              onChange={toFieldChange("name")}
               disabled={isSubmitting}
-              error={validationErrors.maxDailySummaries}
-              description="Maximum number of daily memory summaries to retain (7-365, default 90 days)."
+              error={validationErrors.name}
+              autoFocus
             />
-          )}
 
-          {/* Delegation flags (ADR-0006) — admin-only. When off, only org
+            {/* ADR-0008: on creation an admin assigns the workspace owner. */}
+            {!workspaceId && (
+              <Field data-invalid={!!validationErrors.ownerId}>
+                <FieldLabel htmlFor="ownerId">Owner</FieldLabel>
+                <Select
+                  value={formData.ownerId || undefined}
+                  onValueChange={(value) => {
+                    setValidationErrors((prev) =>
+                      retractFieldError(prev, "ownerId"),
+                    );
+                    setFormData((prevData) => ({
+                      ...prevData,
+                      ownerId: value,
+                    }));
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an owner" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ownerOptions.map((m) => (
+                      <SelectItem key={m.userId} value={m.userId}>
+                        {m.user.name || m.user.email}
+                        {m.userId === user?.id ? " (you)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  The member who will own this workspace. Defaults to you.
+                </FieldDescription>
+                {validationErrors.ownerId && (
+                  <FieldError>{validationErrors.ownerId}</FieldError>
+                )}
+              </Field>
+            )}
+
+            <Field data-invalid={!!validationErrors.context}>
+              <ExpandableTextarea
+                id="context"
+                label="Context"
+                placeholder="Optional context for this workspace"
+                value={formData.context}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                aria-invalid={!!validationErrors.context}
+                className="!font-mono"
+                maxLength={CONTEXT_MAX_LENGTH}
+              />
+              <FieldDescription>
+                Additional context about this workspace included in all chats in
+                this workspace
+              </FieldDescription>
+              {validationErrors.context && (
+                <FieldError>{validationErrors.context}</FieldError>
+              )}
+            </Field>
+
+            {workspaceId && (
+              <Field data-invalid={!!validationErrors.taskModelProviderId}>
+                <FieldLabel htmlFor="taskModelProviderId">
+                  Task Model Provider
+                </FieldLabel>
+                <Select
+                  value={formData.taskModelProviderId || "none"}
+                  onValueChange={(value) => {
+                    setValidationErrors((prev) =>
+                      retractFieldError(prev, "taskModelProviderId"),
+                    );
+                    setFormData((prevData) => ({
+                      ...prevData,
+                      taskModelProviderId: value === "none" ? null : value,
+                    }));
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      None (use chat provider)
+                    </SelectItem>
+                    {providers.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Provider to use for generating chat titles and tags. If not
+                  set, each chat will use its own provider for metadata
+                  generation.
+                </FieldDescription>
+                {validationErrors.taskModelProviderId && (
+                  <FieldError>
+                    {validationErrors.taskModelProviderId}
+                  </FieldError>
+                )}
+              </Field>
+            )}
+
+            {workspaceId && (
+              <Field
+                data-invalid={!!validationErrors.memoryExtractionProviderId}
+              >
+                <FieldLabel htmlFor="memoryExtractionProviderId">
+                  Memory Extraction Provider
+                </FieldLabel>
+                <Select
+                  value={formData.memoryExtractionProviderId || "none"}
+                  onValueChange={(value) => {
+                    setValidationErrors((prev) =>
+                      retractFieldError(prev, "memoryExtractionProviderId"),
+                    );
+                    setFormData((prevData) => ({
+                      ...prevData,
+                      memoryExtractionProviderId:
+                        value === "none" ? null : value,
+                    }));
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Disabled</SelectItem>
+                    {providers
+                      .filter((p) => p.memoryExtractionModelId)
+                      .map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id}>
+                          {provider.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Provider to use for extracting memories from conversations.
+                  Enable memory extraction on a provider to see it here.
+                </FieldDescription>
+                {validationErrors.memoryExtractionProviderId && (
+                  <FieldError>
+                    {validationErrors.memoryExtractionProviderId}
+                  </FieldError>
+                )}
+              </Field>
+            )}
+
+            {workspaceId && (
+              <Field
+                data-invalid={!!validationErrors.memoryEmbeddingProviderId}
+              >
+                <FieldLabel htmlFor="memoryEmbeddingProviderId">
+                  Memory Embedding Provider
+                </FieldLabel>
+                <Select
+                  value={formData.memoryEmbeddingProviderId || "none"}
+                  onValueChange={(value) => {
+                    setValidationErrors((prev) =>
+                      retractFieldError(prev, "memoryEmbeddingProviderId"),
+                    );
+                    setFormData((prevData) => ({
+                      ...prevData,
+                      memoryEmbeddingProviderId:
+                        value === "none" ? null : value,
+                    }));
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Disabled</SelectItem>
+                    {providers
+                      .filter(
+                        (p) =>
+                          (p as { embeddingModelId?: string }).embeddingModelId,
+                      )
+                      .map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id}>
+                          {provider.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Provider to use for generating memory embeddings. Required for
+                  semantic memory search. Set an embedding model ID on a
+                  provider to see it here.
+                </FieldDescription>
+                {validationErrors.memoryEmbeddingProviderId && (
+                  <FieldError>
+                    {validationErrors.memoryEmbeddingProviderId}
+                  </FieldError>
+                )}
+              </Field>
+            )}
+
+            {workspaceId && (
+              <FormTextField
+                label="Memory Summary Retention"
+                name="maxDailySummaries"
+                type="number"
+                min={WORKSPACE_MAX_DAILY_SUMMARIES_MIN}
+                max={WORKSPACE_MAX_DAILY_SUMMARIES_MAX}
+                value={String(formData.maxDailySummaries)}
+                onChange={(value) => {
+                  setValidationErrors((prev) =>
+                    retractFieldError(prev, "maxDailySummaries"),
+                  );
+                  setFormData((prevData) => ({
+                    ...prevData,
+                    maxDailySummaries:
+                      parseInt(value) || DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
+                  }));
+                }}
+                disabled={isSubmitting}
+                error={validationErrors.maxDailySummaries}
+                description="Maximum number of daily memory summaries to retain (7-365, default 90 days)."
+              />
+            )}
+
+            {/* Delegation flags (ADR-0006) — admin-only. When off, only org
               admins may configure the respective resource; when on, the
               workspace owner may self-manage it. */}
-          {workspaceId && canManageDelegation && (
-            <>
-              <Field
-                orientation="horizontal"
-                className="items-center justify-between"
-              >
-                <div>
-                  <FieldLabel htmlFor="providerSelfManagement">
-                    Owner-managed providers
-                  </FieldLabel>
-                  <FieldDescription>
-                    Let the workspace owner create and edit workspace-scoped
-                    providers. Off by default (org admins only).
-                  </FieldDescription>
-                </div>
-                <Switch
-                  id="providerSelfManagement"
-                  checked={formData.providerSelfManagement}
-                  disabled={isSubmitting}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      providerSelfManagement: checked,
-                    }))
-                  }
-                />
-              </Field>
+            {workspaceId && canManageDelegation && (
+              <>
+                <Field
+                  orientation="horizontal"
+                  className="items-center justify-between"
+                >
+                  <div>
+                    <FieldLabel htmlFor="providerSelfManagement">
+                      Owner-managed providers
+                    </FieldLabel>
+                    <FieldDescription>
+                      Let the workspace owner create and edit workspace-scoped
+                      providers. Off by default (org admins only).
+                    </FieldDescription>
+                  </div>
+                  <Switch
+                    id="providerSelfManagement"
+                    checked={formData.providerSelfManagement}
+                    disabled={isSubmitting}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        providerSelfManagement: checked,
+                      }))
+                    }
+                  />
+                </Field>
 
-              <Field
-                orientation="horizontal"
-                className="items-center justify-between"
-              >
-                <div>
-                  <FieldLabel htmlFor="mcpSelfManagement">
-                    Owner-managed MCP servers
-                  </FieldLabel>
-                  <FieldDescription>
-                    Let the workspace owner register and authorize their own MCP
-                    servers (e.g. personal-credential integrations). Off by
-                    default (org admins only).
-                  </FieldDescription>
-                </div>
-                <Switch
-                  id="mcpSelfManagement"
-                  checked={formData.mcpSelfManagement}
-                  disabled={isSubmitting}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      mcpSelfManagement: checked,
-                    }))
-                  }
-                />
-              </Field>
-            </>
-          )}
-        </FieldGroup>
-      </FieldSet>
+                <Field
+                  orientation="horizontal"
+                  className="items-center justify-between"
+                >
+                  <div>
+                    <FieldLabel htmlFor="mcpSelfManagement">
+                      Owner-managed MCP servers
+                    </FieldLabel>
+                    <FieldDescription>
+                      Let the workspace owner register and authorize their own
+                      MCP servers (e.g. personal-credential integrations). Off
+                      by default (org admins only).
+                    </FieldDescription>
+                  </div>
+                  <Switch
+                    id="mcpSelfManagement"
+                    checked={formData.mcpSelfManagement}
+                    disabled={isSubmitting}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        mcpSelfManagement: checked,
+                      }))
+                    }
+                  />
+                </Field>
+              </>
+            )}
+          </FieldGroup>
+        </FieldSet>
 
-      <FormFooterButtons
-        submitText="Save"
-        onSubmit={() => void submit()}
-        submitDisabled={isSubmitting || !canSubmit}
-        submitClassName=""
-        deleteVisible={!!workspaceId}
-        deleteDisabled={isSubmitting}
-        deleteClassName=""
-        onDelete={openDeleteDialog}
-      />
+        <FormFooterButtons
+          submitText="Save"
+          onSubmit={() => void submit()}
+          submitDisabled={isSubmitting || !canSubmit}
+          submitClassName=""
+          deleteVisible={!!workspaceId}
+          deleteDisabled={isSubmitting}
+          deleteClassName=""
+          onDelete={openDeleteDialog}
+        />
 
-      <EntityDeleteDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        title="Delete Workspace"
-        description="Are you sure you want to delete this workspace? This action cannot be undone."
-        confirmPhrase="Delete workspace"
-        onConfirm={handleDelete}
-        loading={isDeleting}
-      />
-    </div>
+        <EntityDeleteDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+          title="Delete Workspace"
+          description="Are you sure you want to delete this workspace? This action cannot be undone."
+          confirmPhrase="Delete workspace"
+          onConfirm={handleDelete}
+          loading={isDeleting}
+        />
+      </div>
+    </DetailFormState>
   );
 };
 
