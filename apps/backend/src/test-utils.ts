@@ -321,7 +321,7 @@ vi.mock("drizzle-orm", async () => {
     lte: vi.fn(markers.lte),
     asc: vi.fn(order.asc),
     count: vi.fn(markers.count),
-    max: vi.fn(),
+    max: vi.fn(markers.max),
     desc: vi.fn(order.desc),
     isNull: vi.fn(markers.isNull),
     sql: sqlMock,

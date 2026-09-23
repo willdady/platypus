@@ -1,17 +1,6 @@
 import { Hono, type Context } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
-import { and, asc, count, desc, eq, inArray, not } from "drizzle-orm";
 import { db } from "../index.ts";
-import {
-  kanbanBoard as kanbanBoardTable,
-  kanbanColumn as kanbanColumnTable,
-  kanbanCard as kanbanCardTable,
-  kanbanCardComment as kanbanCardCommentTable,
-  agent as agentTable,
-} from "../db/schema.ts";
-import { user } from "../db/auth-schema.ts";
-import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import {
   kanbanBoardCreateSchema,
@@ -36,18 +25,26 @@ import {
 import type { Variables } from "../server.ts";
 import { NotFoundError } from "../errors.ts";
 import {
+  createBoard,
   createCard,
+  createColumn,
   createComment,
+  deleteBoard,
   deleteCard,
+  deleteColumn,
+  getBoardState,
+  listBoards,
   listCardHistory,
   listComments,
   moveCard,
-  nextColumnPosition,
-  pruneCardLabelsForBoard,
   removeComment,
+  renameColumn,
+  reorderColumns,
   requireBoard,
   requireComment,
+  resolveBoardState,
   resolveCommentNames,
+  updateBoard,
   updateCard,
   updateCommentBody,
   type KanbanContext,
@@ -87,13 +84,7 @@ kanban.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const { workspaceId } = workspaceScopeOf(c);
-    const results = await db
-      .select()
-      .from(kanbanBoardTable)
-      .where(eq(kanbanBoardTable.workspaceId, workspaceId))
-      .orderBy(desc(kanbanBoardTable.createdAt));
-    return c.json({ results });
+    return c.json({ results: await listBoards(db, workspaceScopeOf(c)) });
   },
 );
 
@@ -106,52 +97,12 @@ kanban.post(
   requireWorkspaceOwner,
   sValidator("json", kanbanBoardCreateSchema),
   async (c) => {
-    const data = c.req.valid("json");
-    const { workspaceId } = workspaceScopeOf(c);
-    const id = nanoid();
-    const now = new Date();
-
-    const record = await db
-      .insert(kanbanBoardTable)
-      .values({
-        id,
-        ...data,
-        workspaceId,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    // Create default columns
-    const defaultColumns = [
-      {
-        id: nanoid(),
-        boardId: id,
-        name: "To Do",
-        position: 1.0,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: nanoid(),
-        boardId: id,
-        name: "In Progress",
-        position: 2.0,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: nanoid(),
-        boardId: id,
-        name: "Done",
-        position: 3.0,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
-    await db.insert(kanbanColumnTable).values(defaultColumns);
-
-    return c.json(record[0], 201);
+    const board = await createBoard(
+      db,
+      workspaceScopeOf(c),
+      c.req.valid("json"),
+    );
+    return c.json(board, 201);
   },
 );
 
@@ -175,34 +126,13 @@ kanban.put(
   requireWorkspaceOwner,
   sValidator("json", kanbanBoardUpdateSchema),
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const { workspaceId } = workspaceScopeOf(c);
-    const data = c.req.valid("json");
-
-    // Labels the update drops are gone from the board, so the cards using them
-    // lose them in the same transaction — otherwise a card is left holding an
-    // ID that resolves to nothing.
-    const record = await db.transaction(async (tx) => {
-      const updated = await tx
-        .update(kanbanBoardTable)
-        .set({ ...data, updatedAt: new Date() })
-        .where(
-          and(
-            eq(kanbanBoardTable.id, boardId),
-            eq(kanbanBoardTable.workspaceId, workspaceId),
-          ),
-        )
-        .returning();
-
-      if (updated.length > 0 && data.labels !== undefined) {
-        await pruneCardLabelsForBoard(tx, boardId, data.labels);
-      }
-      return updated;
-    });
-
-    if (record.length === 0) throw new NotFoundError("Board not found");
-
-    return c.json(record[0]);
+    const board = await updateBoard(
+      db,
+      scopeOf(c),
+      c.req.param("boardId"),
+      c.req.valid("json"),
+    );
+    return c.json(board);
   },
 );
 
@@ -214,21 +144,7 @@ kanban.delete(
   requireWorkspaceAccess,
   requireWorkspaceOwner,
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const { workspaceId } = workspaceScopeOf(c);
-
-    const result = await db
-      .delete(kanbanBoardTable)
-      .where(
-        and(
-          eq(kanbanBoardTable.id, boardId),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .returning();
-
-    if (result.length === 0) throw new NotFoundError("Board not found");
-
+    await deleteBoard(db, scopeOf(c), c.req.param("boardId"));
     return c.json({ message: "Board deleted" });
   },
 );
@@ -242,159 +158,8 @@ kanban.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const board = await requireBoard(db, scopeOf(c), boardId);
-
-    const columns = await db
-      .select()
-      .from(kanbanColumnTable)
-      .where(eq(kanbanColumnTable.boardId, boardId))
-      .orderBy(asc(kanbanColumnTable.position));
-
-    const columnIds = columns.map((col) => col.id);
-
-    let cards: (typeof kanbanCardTable.$inferSelect)[] = [];
-    if (columnIds.length > 0) {
-      cards = await db
-        .select()
-        .from(kanbanCardTable)
-        .where(inArray(kanbanCardTable.columnId, columnIds))
-        .orderBy(asc(kanbanCardTable.position));
-    }
-
-    // Fetch comment counts per card
-    const cardIds = cards.map((card) => card.id);
-    const commentCounts =
-      cardIds.length > 0
-        ? await db
-            .select({
-              cardId: kanbanCardCommentTable.cardId,
-              count: count(),
-            })
-            .from(kanbanCardCommentTable)
-            .where(inArray(kanbanCardCommentTable.cardId, cardIds))
-            .groupBy(kanbanCardCommentTable.cardId)
-        : [];
-    const commentCountMap = new Map(
-      commentCounts.map((cc) => [cc.cardId, cc.count]),
-    );
-
-    // Collect unique user IDs and agent IDs to fetch names
-    const userIds = new Set<string>();
-    const agentIds = new Set<string>();
-    for (const card of cards) {
-      if (card.createdByUserId) userIds.add(card.createdByUserId);
-      if (card.lastEditedByUserId) userIds.add(card.lastEditedByUserId);
-      if (card.createdByAgentId) agentIds.add(card.createdByAgentId);
-      if (card.lastEditedByAgentId) agentIds.add(card.lastEditedByAgentId);
-      // Collect assignee IDs
-      const assignees = (card.assignees ?? []) as {
-        type: "user" | "agent";
-        id: string;
-      }[];
-      for (const a of assignees) {
-        if (a.type === "user") userIds.add(a.id);
-        else if (a.type === "agent") agentIds.add(a.id);
-      }
-    }
-
-    // Fetch user names and images
-    const users =
-      userIds.size > 0
-        ? await db
-            .select({ id: user.id, name: user.name, image: user.image })
-            .from(user)
-            .where(inArray(user.id, Array.from(userIds)))
-        : [];
-
-    const userMap = new Map(users.map((u) => [u.id, u.name]));
-    const userImageMap = new Map(users.map((u) => [u.id, u.image ?? null]));
-
-    // Fetch agent names and avatar keys
-    const agents =
-      agentIds.size > 0
-        ? await db
-            .select({
-              id: agentTable.id,
-              name: agentTable.name,
-              avatarKey: agentTable.avatarKey,
-            })
-            .from(agentTable)
-            .where(inArray(agentTable.id, Array.from(agentIds)))
-        : [];
-
-    const agentMap = new Map(agents.map((a) => [a.id, a.name]));
-
-    const baseUrl = getOrigin(c);
-    const agentAvatarUrlMap = new Map(
-      agents.map((a) => [a.id, avatarKeyToUrl(a.avatarKey, baseUrl)]),
-    );
-
-    // Add user and agent names to cards, plus resolved assignees
-    const cardsWithNames = cards.map((card) => {
-      const assignees = (card.assignees ?? []) as {
-        type: "user" | "agent";
-        id: string;
-      }[];
-      const resolvedAssignees = assignees
-        .map((a) => {
-          if (a.type === "user") {
-            const name = userMap.get(a.id);
-            if (!name) return null;
-            return {
-              type: "user" as const,
-              id: a.id,
-              name,
-              image: userImageMap.get(a.id) ?? null,
-            };
-          } else {
-            const name = agentMap.get(a.id);
-            if (!name) return null;
-            return {
-              type: "agent" as const,
-              id: a.id,
-              name,
-              image: agentAvatarUrlMap.get(a.id) ?? null,
-            };
-          }
-        })
-        .filter(Boolean);
-
-      return {
-        ...card,
-        dueDate: card.dueDate ? card.dueDate.toISOString() : null,
-        createdByName: card.createdByUserId
-          ? (userMap.get(card.createdByUserId) ?? null)
-          : card.createdByAgentId
-            ? (agentMap.get(card.createdByAgentId) ?? null)
-            : null,
-        lastEditedByName: card.lastEditedByUserId
-          ? (userMap.get(card.lastEditedByUserId) ?? null)
-          : card.lastEditedByAgentId
-            ? (agentMap.get(card.lastEditedByAgentId) ?? null)
-            : null,
-        resolvedAssignees,
-        commentCount: commentCountMap.get(card.id) ?? 0,
-      };
-    });
-
-    // Nest cards into columns
-    const cardsByColumn = new Map<string, typeof cardsWithNames>();
-    for (const card of cardsWithNames) {
-      const existing = cardsByColumn.get(card.columnId) ?? [];
-      existing.push(card);
-      cardsByColumn.set(card.columnId, existing);
-    }
-
-    const columnsWithCards = columns.map((col) => ({
-      ...col,
-      cards: cardsByColumn.get(col.id) ?? [],
-    }));
-
-    return c.json({
-      board,
-      columns: columnsWithCards,
-    });
+    const state = await getBoardState(db, scopeOf(c), c.req.param("boardId"));
+    return c.json(await resolveBoardState(db, state, getOrigin(c)));
   },
 );
 
@@ -409,41 +174,12 @@ kanban.put(
   requireWorkspaceOwner,
   sValidator("json", kanbanColumnReorderSchema),
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const { columnIds } = c.req.valid("json");
-
-    await requireBoard(db, scopeOf(c), boardId);
-
-    // Validate all columnIds belong to this board
-    const boardColumns = await db
-      .select({ id: kanbanColumnTable.id })
-      .from(kanbanColumnTable)
-      .where(eq(kanbanColumnTable.boardId, boardId))
-      .orderBy(asc(kanbanColumnTable.position));
-
-    const boardColumnIds = new Set(boardColumns.map((col) => col.id));
-    const allBelong = columnIds.every((id: string) => boardColumnIds.has(id));
-    if (!allBelong) {
-      return c.json(
-        { message: "Some column IDs do not belong to this board" },
-        400,
-      );
-    }
-
-    await db.transaction(async (tx) => {
-      for (let i = 0; i < columnIds.length; i++) {
-        await tx
-          .update(kanbanColumnTable)
-          .set({ position: (i + 1) * 1.0, updatedAt: new Date() })
-          .where(
-            and(
-              eq(kanbanColumnTable.id, columnIds[i]),
-              eq(kanbanColumnTable.boardId, boardId),
-            ),
-          );
-      }
-    });
-
+    await reorderColumns(
+      db,
+      scopeOf(c),
+      c.req.param("boardId"),
+      c.req.valid("json").columnIds,
+    );
     return c.json({ message: "Columns reordered" });
   },
 );
@@ -457,47 +193,13 @@ kanban.post(
   requireWorkspaceOwner,
   sValidator("json", kanbanColumnCreateSchema),
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const data = c.req.valid("json");
-
-    await requireBoard(db, scopeOf(c), boardId);
-
-    // Check for duplicate column name within the board
-    const existingColumn = await db
-      .select({ id: kanbanColumnTable.id })
-      .from(kanbanColumnTable)
-      .where(
-        and(
-          eq(kanbanColumnTable.boardId, boardId),
-          eq(kanbanColumnTable.name, data.name),
-        ),
-      )
-      .limit(1);
-
-    if (existingColumn.length > 0) {
-      return c.json(
-        { error: "A column with this name already exists on the board" },
-        409,
-      );
-    }
-
-    const position = await nextColumnPosition(db, boardId);
-    const id = nanoid();
-    const now = new Date();
-
-    const record = await db
-      .insert(kanbanColumnTable)
-      .values({
-        id,
-        ...data,
-        boardId,
-        position,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    return c.json(record[0], 201);
+    const column = await createColumn(
+      db,
+      scopeOf(c),
+      c.req.param("boardId"),
+      c.req.valid("json"),
+    );
+    return c.json(column, 201);
   },
 );
 
@@ -510,48 +212,14 @@ kanban.put(
   requireWorkspaceOwner,
   sValidator("json", kanbanColumnUpdateSchema),
   async (c) => {
-    const columnId = c.req.param("columnId");
-    const boardId = c.req.param("boardId");
-    const data = c.req.valid("json");
-
-    // The column is addressed through its board, so the board must be in this
-    // Workspace — otherwise the `boardId` in the URL is taken on trust.
-    await requireBoard(db, scopeOf(c), boardId);
-
-    // Check for duplicate column name within the board (excluding this column)
-    const existingColumn = await db
-      .select({ id: kanbanColumnTable.id })
-      .from(kanbanColumnTable)
-      .where(
-        and(
-          eq(kanbanColumnTable.boardId, boardId),
-          eq(kanbanColumnTable.name, data.name),
-          not(eq(kanbanColumnTable.id, columnId)),
-        ),
-      )
-      .limit(1);
-
-    if (existingColumn.length > 0) {
-      return c.json(
-        { error: "A column with this name already exists on the board" },
-        409,
-      );
-    }
-
-    const record = await db
-      .update(kanbanColumnTable)
-      .set({ ...data, updatedAt: new Date() })
-      .where(
-        and(
-          eq(kanbanColumnTable.id, columnId),
-          eq(kanbanColumnTable.boardId, boardId),
-        ),
-      )
-      .returning();
-
-    if (record.length === 0) throw new NotFoundError("Column not found");
-
-    return c.json(record[0]);
+    const column = await renameColumn(
+      db,
+      scopeOf(c),
+      c.req.param("boardId"),
+      c.req.param("columnId"),
+      c.req.valid("json"),
+    );
+    return c.json(column);
   },
 );
 
@@ -563,23 +231,12 @@ kanban.delete(
   requireWorkspaceAccess,
   requireWorkspaceOwner,
   async (c) => {
-    const columnId = c.req.param("columnId");
-    const boardId = c.req.param("boardId");
-
-    await requireBoard(db, scopeOf(c), boardId);
-
-    const result = await db
-      .delete(kanbanColumnTable)
-      .where(
-        and(
-          eq(kanbanColumnTable.id, columnId),
-          eq(kanbanColumnTable.boardId, boardId),
-        ),
-      )
-      .returning();
-
-    if (result.length === 0) throw new NotFoundError("Column not found");
-
+    await deleteColumn(
+      db,
+      scopeOf(c),
+      c.req.param("boardId"),
+      c.req.param("columnId"),
+    );
     return c.json({ message: "Column deleted" });
   },
 );

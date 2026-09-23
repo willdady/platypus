@@ -25,6 +25,66 @@ describe("Kanban Routes", () => {
   const boardId = "board-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/boards`;
 
+  /**
+   * The Board and Column routes run over `seedDb()`, which interprets each
+   * query's `WHERE`, so these assert the status and body a request gets from
+   * fixture rows rather than which query came back nth. The rules behind them
+   * are the Kanban module's, tested in `services/kanban.boards.test.ts`; here
+   * each status and body pair is pinned once.
+   *
+   * The caller (`user-1`) owns `ws-1` and its `board-1`; `board-b` lives in
+   * `ws-2`, owned by someone else in the same Organization.
+   */
+  const boardWorld = (
+    over: { owner?: string; cards?: Record<string, unknown>[] } = {},
+  ): FakeDb =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
+      ],
+      workspace: [
+        {
+          id: workspaceId,
+          organizationId: orgId,
+          ownerId: over.owner ?? "user-1",
+        },
+        { id: "ws-2", organizationId: orgId, ownerId: "other-user" },
+      ],
+      kanban_board: [
+        {
+          id: boardId,
+          workspaceId,
+          name: "Mine",
+          description: null,
+          labels: [{ id: "label-1", name: "Bug", color: "#ef4444" }],
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+        {
+          id: "board-b",
+          workspaceId: "ws-2",
+          name: "Theirs",
+          description: null,
+          labels: [],
+          createdAt: new Date("2026-01-02T00:00:00.000Z"),
+          updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+        },
+      ],
+      kanban_column: [
+        { id: "col-1", boardId, name: "To Do", position: 1 },
+        { id: "col-2", boardId, name: "Done", position: 2 },
+        { id: "col-b", boardId: "board-b", name: "To Do", position: 1 },
+      ],
+      kanban_card: over.cards ?? [],
+      user: [{ id: "user-1", name: "Ada", image: null }],
+    });
+
+  const json = (method: string, body: unknown) => ({
+    method,
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+
   describe("GET /", () => {
     it("should return 401 if not authenticated", async () => {
       mockNoSession();
@@ -32,531 +92,354 @@ describe("Kanban Routes", () => {
       expect(res.status).toBe(401);
     });
 
-    it("should list all boards in workspace", async () => {
+    it("lists this Workspace's boards", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-
-      const mockBoards = [{ id: "board-1", name: "Board 1", workspaceId }];
-      mockDb.orderBy.mockResolvedValueOnce(mockBoards);
 
       const res = await app.request(baseUrl);
+
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockBoards });
+      const body = (await res.json()) as { results: { id: string }[] };
+      expect(body.results.map((board) => board.id)).toEqual([boardId]);
     });
   });
 
   describe("POST /", () => {
     it("should return 401 if not authenticated", async () => {
       mockNoSession();
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({ name: "New Board" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(baseUrl, json("POST", { name: "New" }));
       expect(res.status).toBe(401);
     });
 
     it("should return 403 if user is not workspace owner", async () => {
+      boardWorld({ owner: "other-user" });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "other-user", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({ name: "New Board" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(baseUrl, json("POST", { name: "New" }));
       expect(res.status).toBe(403);
     });
 
-    it("should create board with default columns", async () => {
+    it("creates the board with its default columns", async () => {
+      const fake = boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      const mockBoard = { id: "test-id-123", name: "New Board", workspaceId };
-      mockDb.returning.mockResolvedValueOnce([mockBoard]);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({ name: "New Board" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        baseUrl,
+        json("POST", { name: "New Board" }),
+      );
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockBoard);
+      expect(await res.json()).toMatchObject({
+        id: "test-id-123",
+        name: "New Board",
+        workspaceId,
+      });
+      expect(
+        fake.tables.kanban_column
+          .filter((col) => col.boardId === "test-id-123")
+          .map((col) => col.name),
+      ).toEqual(["To Do", "In Progress", "Done"]);
     });
 
     it("should return 400 if name is missing", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({}),
-        headers: { "Content-Type": "application/json" },
-      });
-
+      const res = await app.request(baseUrl, json("POST", {}));
       expect(res.status).toBe(400);
     });
   });
 
   describe("GET /:boardId", () => {
-    it("should return 404 if board not found", async () => {
+    it("returns 404 for another Workspace's board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // get board
 
-      const res = await app.request(`${baseUrl}/${boardId}`);
+      const res = await app.request(`${baseUrl}/board-b`);
+
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Board not found" });
     });
 
-    it("should return board if found", async () => {
+    it("returns the board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-
-      const mockBoard = { id: boardId, name: "Board 1", workspaceId };
-      mockDb.limit.mockResolvedValueOnce([mockBoard]);
 
       const res = await app.request(`${baseUrl}/${boardId}`);
+
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockBoard);
+      expect(await res.json()).toMatchObject({ id: boardId, name: "Mine" });
     });
   });
 
   describe("PUT /:boardId", () => {
-    it("should update board if user is workspace owner", async () => {
+    it("returns the updated board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      const mockBoard = { id: boardId, name: "Updated Board" };
-      mockDb.returning.mockResolvedValueOnce([mockBoard]);
-
-      const res = await app.request(`${baseUrl}/${boardId}`, {
-        method: "PUT",
-        body: JSON.stringify({ name: "Updated Board" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/${boardId}`,
+        json("PUT", { name: "Updated Board" }),
+      );
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockBoard);
+      expect(await res.json()).toMatchObject({
+        id: boardId,
+        name: "Updated Board",
+      });
     });
 
-    it("should return 404 if board not found", async () => {
+    it("returns 404 for another Workspace's board", async () => {
+      const fake = boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      mockDb.returning.mockResolvedValueOnce([]);
-
-      const res = await app.request(`${baseUrl}/${boardId}`, {
-        method: "PUT",
-        body: JSON.stringify({ name: "Updated Board" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/board-b`,
+        json("PUT", { name: "Hijacked" }),
+      );
 
       expect(res.status).toBe(404);
-    });
-
-    describe("label cleanup", () => {
-      /**
-       * Queues the `where` calls made before the board's cards are read:
-       * the two authorization lookups, the board update, and the subquery that
-       * resolves the board's columns. The next `where` is the card read.
-       */
-      const queueWheresBeforeCardRead = () => {
-        mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess
-        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess
-        mockDb.where.mockReturnValueOnce(mockDb); // board update
-        mockDb.where.mockReturnValueOnce(mockDb); // board columns subquery
-      };
-
-      const authorizeOwner = () => {
-        mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
-      };
-
-      it("should remove a deleted label from the cards using it", async () => {
-        authorizeOwner();
-        mockDb.returning.mockResolvedValueOnce([
-          { id: boardId, name: "Board 1" },
-        ]);
-        queueWheresBeforeCardRead();
-        mockDb.where.mockResolvedValueOnce([
-          { id: "card-1", labelIds: ["lbl-old", "lbl-new"] },
-          { id: "card-2", labelIds: ["lbl-new"] },
-        ]);
-
-        const res = await app.request(`${baseUrl}/${boardId}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            name: "Board 1",
-            labels: [{ id: "lbl-new", name: "New", color: "#ef4444" }],
-          }),
-          headers: { "Content-Type": "application/json" },
-        });
-
-        expect(res.status).toBe(200);
-        // Only the card holding the deleted label is rewritten.
-        const labelWrites = mockDb.set.mock.calls.filter(
-          (call) =>
-            typeof call[0] === "object" &&
-            call[0] !== null &&
-            "labelIds" in call[0],
-        );
-        expect(labelWrites).toHaveLength(1);
-        expect(labelWrites[0][0]).toMatchObject({ labelIds: ["lbl-new"] });
-      });
-
-      it("should empty every card's labels when all board labels are removed", async () => {
-        authorizeOwner();
-        mockDb.returning.mockResolvedValueOnce([
-          { id: boardId, name: "Board 1" },
-        ]);
-        queueWheresBeforeCardRead();
-        mockDb.where.mockResolvedValueOnce([
-          { id: "card-1", labelIds: ["lbl-a"] },
-          { id: "card-2", labelIds: ["lbl-a", "lbl-b"] },
-        ]);
-
-        const res = await app.request(`${baseUrl}/${boardId}`, {
-          method: "PUT",
-          body: JSON.stringify({ name: "Board 1", labels: [] }),
-          headers: { "Content-Type": "application/json" },
-        });
-
-        expect(res.status).toBe(200);
-        const labelWrites = mockDb.set.mock.calls.filter(
-          (call) =>
-            typeof call[0] === "object" &&
-            call[0] !== null &&
-            "labelIds" in call[0],
-        );
-        expect(labelWrites).toHaveLength(2);
-        expect(labelWrites[0][0]).toMatchObject({ labelIds: [] });
-        expect(labelWrites[1][0]).toMatchObject({ labelIds: [] });
-      });
-
-      it("should leave card labels alone when the update omits labels", async () => {
-        authorizeOwner();
-        mockDb.returning.mockResolvedValueOnce([
-          { id: boardId, name: "Renamed" },
-        ]);
-
-        const res = await app.request(`${baseUrl}/${boardId}`, {
-          method: "PUT",
-          body: JSON.stringify({ name: "Renamed", description: "New blurb" }),
-          headers: { "Content-Type": "application/json" },
-        });
-
-        expect(res.status).toBe(200);
-        // The board's own labels are left out of the update, and no card is
-        // rewritten.
-        expect(mockDb.set).toHaveBeenCalledTimes(1);
-        expect(mockDb.set.mock.calls[0][0]).not.toHaveProperty("labels");
-        expect(mockDb.set.mock.calls[0][0]).not.toHaveProperty("labelIds");
-      });
+      expect(await res.json()).toEqual({ error: "Board not found" });
+      expect(fake.tables.kanban_board[1].name).toBe("Theirs");
     });
   });
 
   describe("DELETE /:boardId", () => {
-    it("should delete board if user is workspace owner", async () => {
+    it("deletes the board", async () => {
+      const fake = boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-
-      mockDb.returning.mockResolvedValueOnce([{ id: boardId }]);
 
       const res = await app.request(`${baseUrl}/${boardId}`, {
         method: "DELETE",
       });
+
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Board deleted" });
+      expect(fake.tables.kanban_board.map((board) => board.id)).toEqual([
+        "board-b",
+      ]);
     });
 
-    it("should return 404 if board not found", async () => {
+    it("returns 404 for another Workspace's board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      mockDb.returning.mockResolvedValueOnce([]);
-
-      const res = await app.request(`${baseUrl}/${boardId}`, {
+      const res = await app.request(`${baseUrl}/board-b`, {
         method: "DELETE",
       });
+
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Board not found" });
     });
   });
 
   describe("GET /:boardId/state", () => {
-    it("should return 404 if board not found", async () => {
+    it("returns 404 for another Workspace's board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // get board
 
-      const res = await app.request(`${baseUrl}/${boardId}/state`);
+      const res = await app.request(`${baseUrl}/board-b/state`);
+
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Board not found" });
     });
 
-    it("should return board state with columns and cards", async () => {
+    // The whole body, because the frontend reads this shape
+    // (`kanbanBoardStateSchema`) and it must not drift.
+    it("returns the board with its columns and resolved cards", async () => {
+      boardWorld({
+        cards: [
+          {
+            id: "card-1",
+            columnId: "col-1",
+            title: "Card 1",
+            body: null,
+            labelIds: ["label-1"],
+            assignees: [{ type: "user", id: "user-1" }],
+            dueDate: new Date("2026-02-01T00:00:00.000Z"),
+            priority: "high",
+            position: 1,
+            createdByUserId: "user-1",
+            createdByAgentId: null,
+            lastEditedByUserId: null,
+            lastEditedByAgentId: null,
+            createdAt: new Date("2026-01-03T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+          },
+        ],
+      });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-
-      const mockBoard = {
-        id: boardId,
-        name: "Board 1",
-        workspaceId,
-        labels: [{ id: "label-1", name: "Bug", color: "#ef4444" }],
-      };
-      mockDb.limit.mockResolvedValueOnce([mockBoard]);
-
-      const mockColumns = [
-        { id: "col-1", boardId, name: "To Do", position: 1.0 },
-      ];
-      mockDb.orderBy.mockResolvedValueOnce(mockColumns); // columns query
-
-      const mockCards = [
-        {
-          id: "card-1",
-          columnId: "col-1",
-          title: "Card 1",
-          position: 1.0,
-          createdByUserId: null,
-          lastEditedByUserId: null,
-        },
-      ];
-      mockDb.orderBy.mockResolvedValueOnce(mockCards); // cards query
-      mockDb.groupBy.mockResolvedValueOnce([]); // comment counts query
 
       const res = await app.request(`${baseUrl}/${boardId}/state`);
+
       expect(res.status).toBe(200);
-      const body = (await res.json()) as {
-        board: unknown;
-        columns: { cards: { createdByName: string | null }[] }[];
-      };
-      expect(body.board).toEqual(mockBoard);
-      expect(Array.isArray(body.columns)).toBe(true);
-      expect(body.columns).toHaveLength(1);
-      expect(body.columns[0].cards).toHaveLength(1);
-      expect(body.columns[0].cards[0].createdByName).toBeNull();
+      expect(await res.json()).toEqual({
+        board: {
+          id: boardId,
+          workspaceId,
+          name: "Mine",
+          description: null,
+          labels: [{ id: "label-1", name: "Bug", color: "#ef4444" }],
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        columns: [
+          {
+            id: "col-1",
+            boardId,
+            name: "To Do",
+            position: 1,
+            cards: [
+              {
+                id: "card-1",
+                columnId: "col-1",
+                title: "Card 1",
+                body: null,
+                labelIds: ["label-1"],
+                assignees: [{ type: "user", id: "user-1" }],
+                dueDate: "2026-02-01T00:00:00.000Z",
+                priority: "high",
+                position: 1,
+                createdByUserId: "user-1",
+                createdByAgentId: null,
+                lastEditedByUserId: null,
+                lastEditedByAgentId: null,
+                createdAt: "2026-01-03T00:00:00.000Z",
+                updatedAt: "2026-01-03T00:00:00.000Z",
+                createdByName: "Ada",
+                lastEditedByName: null,
+                resolvedAssignees: [
+                  { type: "user", id: "user-1", name: "Ada", image: null },
+                ],
+                commentCount: 0,
+              },
+            ],
+          },
+          { id: "col-2", boardId, name: "Done", position: 2, cards: [] },
+        ],
+      });
     });
   });
 
   describe("POST /:boardId/columns", () => {
-    it("should return 404 if board not found", async () => {
+    it("returns 404 for another Workspace's board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // get board
 
-      const res = await app.request(`${baseUrl}/${boardId}/columns`, {
-        method: "POST",
-        body: JSON.stringify({ name: "New Column" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/board-b/columns`,
+        json("POST", { name: "New Column" }),
+      );
+
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Board not found" });
     });
 
-    it("should create column", async () => {
+    it("creates the column at the end of the board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      const mockBoard = { id: boardId, name: "Board 1", workspaceId };
-      mockDb.limit.mockResolvedValueOnce([mockBoard]);
-      mockDb.limit.mockResolvedValueOnce([]); // duplicate check
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns`,
+        json("POST", { name: "New Column" }),
+      );
 
-      mockDb.orderBy.mockResolvedValueOnce([{ maxPos: 1.0 }]);
-
-      const mockColumn = {
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({
         id: "test-id-123",
         boardId,
         name: "New Column",
-        position: 2.0,
-      };
-      mockDb.returning.mockResolvedValueOnce([mockColumn]);
-
-      const res = await app.request(`${baseUrl}/${boardId}/columns`, {
-        method: "POST",
-        body: JSON.stringify({ name: "New Column" }),
-        headers: { "Content-Type": "application/json" },
+        position: 3,
       });
-
-      expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockColumn);
     });
 
-    it("should return 409 if column name already exists on board", async () => {
+    it("returns 409 if the board already has a column by that name", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      const mockBoard = { id: boardId, name: "Board 1", workspaceId };
-      mockDb.limit.mockResolvedValueOnce([mockBoard]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "existing-col" }]); // duplicate check
-
-      const res = await app.request(`${baseUrl}/${boardId}/columns`, {
-        method: "POST",
-        body: JSON.stringify({ name: "Existing Column" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns`,
+        json("POST", { name: "Done" }),
+      );
 
       expect(res.status).toBe(409);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toBe(
-        "A column with this name already exists on the board",
-      );
+      expect(await res.json()).toEqual({
+        error: "A column with this name already exists on the board",
+      });
     });
   });
 
   describe("PUT /:boardId/columns/:columnId", () => {
-    it("should update column", async () => {
+    it("returns the renamed column", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { id: boardId, name: "Board 1", workspaceId },
-      ]); // requireBoard
-      mockDb.limit.mockResolvedValueOnce([]); // duplicate check
 
-      const mockColumn = { id: "col-1", boardId, name: "Updated Column" };
-      mockDb.returning.mockResolvedValueOnce([mockColumn]);
-
-      const res = await app.request(`${baseUrl}/${boardId}/columns/col-1`, {
-        method: "PUT",
-        body: JSON.stringify({ name: "Updated Column" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns/col-1`,
+        json("PUT", { name: "Updated Column" }),
+      );
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockColumn);
+      expect(await res.json()).toMatchObject({
+        id: "col-1",
+        boardId,
+        name: "Updated Column",
+      });
     });
 
-    it("should return 404 if column not found", async () => {
+    it("returns 404 if the column is not on the board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { id: boardId, name: "Board 1", workspaceId },
-      ]); // requireBoard
-      mockDb.limit.mockResolvedValueOnce([]); // duplicate check
 
-      mockDb.returning.mockResolvedValueOnce([]);
-
-      const res = await app.request(`${baseUrl}/${boardId}/columns/col-1`, {
-        method: "PUT",
-        body: JSON.stringify({ name: "Updated Column" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns/no-such-column`,
+        json("PUT", { name: "Updated Column" }),
+      );
 
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Column not found" });
     });
 
-    it("should return 409 if renaming to an existing column name", async () => {
+    it("returns 409 if renaming to an existing column name", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { id: boardId, name: "Board 1", workspaceId },
-      ]); // requireBoard
-      mockDb.limit.mockResolvedValueOnce([{ id: "other-col" }]); // duplicate check
 
-      const res = await app.request(`${baseUrl}/${boardId}/columns/col-1`, {
-        method: "PUT",
-        body: JSON.stringify({ name: "Existing Column" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns/col-1`,
+        json("PUT", { name: "Done" }),
+      );
 
       expect(res.status).toBe(409);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toBe(
-        "A column with this name already exists on the board",
-      );
+      expect(await res.json()).toEqual({
+        error: "A column with this name already exists on the board",
+      });
     });
   });
 
   describe("DELETE /:boardId/columns/:columnId", () => {
-    it("should delete column", async () => {
+    it("deletes the column", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { id: boardId, name: "Board 1", workspaceId },
-      ]); // requireBoard
-
-      mockDb.returning.mockResolvedValueOnce([{ id: "col-1" }]);
 
       const res = await app.request(`${baseUrl}/${boardId}/columns/col-1`, {
         method: "DELETE",
       });
+
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Column deleted" });
     });
 
-    it("should return 404 if column not found", async () => {
+    it("returns 404 if the column is not on the board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { id: boardId, name: "Board 1", workspaceId },
-      ]); // requireBoard
 
-      mockDb.returning.mockResolvedValueOnce([]);
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns/no-such-column`,
+        { method: "DELETE" },
+      );
 
-      const res = await app.request(`${baseUrl}/${boardId}/columns/col-1`, {
-        method: "DELETE",
-      });
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Column not found" });
     });
   });
 
@@ -631,65 +514,54 @@ describe("Kanban Routes", () => {
   });
 
   describe("PUT /:boardId/columns/reorder", () => {
-    it("should return 404 if board not found", async () => {
+    it("returns 404 for another Workspace's board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // get board
 
-      const res = await app.request(`${baseUrl}/${boardId}/columns/reorder`, {
-        method: "PUT",
-        body: JSON.stringify({ columnIds: ["col-1", "col-2"] }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/board-b/columns/reorder`,
+        json("PUT", { columnIds: ["col-b"] }),
+      );
+
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Board not found" });
     });
 
-    it("should reorder columns", async () => {
+    it("reorders the columns", async () => {
+      const fake = boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      const mockBoard = { id: boardId, name: "Board 1", workspaceId };
-      mockDb.limit.mockResolvedValueOnce([mockBoard]);
-
-      // board columns validation
-      mockDb.orderBy.mockResolvedValueOnce([{ id: "col-1" }, { id: "col-2" }]);
-
-      const res = await app.request(`${baseUrl}/${boardId}/columns/reorder`, {
-        method: "PUT",
-        body: JSON.stringify({ columnIds: ["col-1", "col-2"] }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns/reorder`,
+        json("PUT", { columnIds: ["col-2", "col-1"] }),
+      );
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Columns reordered" });
-      expect(mockDb.transaction).toHaveBeenCalled();
+      expect(
+        fake.tables.kanban_column
+          .filter((col) => col.boardId === boardId)
+          .map((col) => [col.id, col.position]),
+      ).toEqual([
+        ["col-1", 2],
+        ["col-2", 1],
+      ]);
     });
 
-    it("should return 400 if columnIds contain IDs not belonging to board", async () => {
+    // The frontend's write helper reads `error`, so the reason reaches the user.
+    it("returns 400 with an error when a column is not on the board", async () => {
+      boardWorld();
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
 
-      const mockBoard = { id: boardId, name: "Board 1", workspaceId };
-      mockDb.limit.mockResolvedValueOnce([mockBoard]); // board found
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns/reorder`,
+        json("PUT", { columnIds: ["col-1", "col-b"] }),
+      );
 
-      // board columns
-      mockDb.orderBy.mockResolvedValueOnce([{ id: "col-1" }, { id: "col-2" }]);
-
-      const res = await app.request(`${baseUrl}/${boardId}/columns/reorder`, {
-        method: "PUT",
-        body: JSON.stringify({ columnIds: ["col-1", "col-foreign"] }),
-        headers: { "Content-Type": "application/json" },
-      });
       expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Some column IDs do not belong to this board",
+      });
     });
   });
 

@@ -1,12 +1,6 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "../index.ts";
-import {
-  kanbanBoard as kanbanBoardTable,
-  kanbanColumn as kanbanColumnTable,
-  kanbanCard as kanbanCardTable,
-} from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   bulkUpdateCards,
@@ -14,11 +8,12 @@ import {
   createCard,
   createComment,
   deleteCards,
+  getBoardState,
+  getCard,
+  listBoards,
   listCardHistory,
   listComments,
   moveCard,
-  requireBoard,
-  requireCard,
   removeComment,
   requireComment,
   resolveCommentNames,
@@ -92,25 +87,24 @@ export function createKanbanTools(
 
   const listAgents = createListAgentsTool({ orgId, workspaceId });
 
-  const listBoards = tool({
+  const listBoardsTool = tool({
     description: "List all kanban boards in the current workspace.",
     inputSchema: z.object({}),
-    execute: async () => {
-      const boards = await db
-        .select({
-          id: kanbanBoardTable.id,
-          name: kanbanBoardTable.name,
-          description: kanbanBoardTable.description,
-          labels: kanbanBoardTable.labels,
-          createdAt: kanbanBoardTable.createdAt,
-        })
-        .from(kanbanBoardTable)
-        .where(eq(kanbanBoardTable.workspaceId, workspaceId));
-      return boards;
-    },
+    execute: async () =>
+      // Trimmed to what the model needs to pick a board; the Workspace and
+      // timestamps it already knows or does not use.
+      (await listBoards(db, ctx)).map(
+        ({ id, name, description, labels, createdAt }) => ({
+          id,
+          name,
+          description,
+          labels,
+          createdAt,
+        }),
+      ),
   });
 
-  const getBoardState = tool({
+  const getBoardStateTool = tool({
     description:
       "Get the state of a kanban board including columns with nested card summaries (id, title, position, labelIds) and labels. Use getCard to fetch full card details.",
     inputSchema: z.object({
@@ -119,69 +113,33 @@ export function createKanbanTools(
     }),
     execute: async ({ boardId }) =>
       asToolResult(async () => {
-        const board = await requireBoard(db, ctx, boardId);
-
-        const columns = await db
-          .select()
-          .from(kanbanColumnTable)
-          .where(eq(kanbanColumnTable.boardId, boardId))
-          .orderBy(asc(kanbanColumnTable.position));
-
-        const columnIds = columns.map((col) => col.id);
-
-        type CardSummary = {
-          id: string;
-          columnId: string;
-          title: string;
-          position: number;
-          labelIds: string[];
-          assignees: { type: "user" | "agent"; id: string }[];
-          dueDate: Date | null;
-          priority: string;
-        };
-
-        let cards: CardSummary[] = [];
-        if (columnIds.length > 0) {
-          cards = await db
-            .select({
-              id: kanbanCardTable.id,
-              columnId: kanbanCardTable.columnId,
-              title: kanbanCardTable.title,
-              position: kanbanCardTable.position,
-              labelIds: kanbanCardTable.labelIds,
-              assignees: kanbanCardTable.assignees,
-              dueDate: kanbanCardTable.dueDate,
-              priority: kanbanCardTable.priority,
-            })
-            .from(kanbanCardTable)
-            .where(inArray(kanbanCardTable.columnId, columnIds))
-            .orderBy(asc(kanbanCardTable.position));
-        }
-
-        const cardsByColumn = new Map<string, CardSummary[]>();
-        for (const card of cards) {
-          const existing = cardsByColumn.get(card.columnId) ?? [];
-          existing.push(card);
-          cardsByColumn.set(card.columnId, existing);
-        }
-
-        const columnsWithCards = columns.map((col) => ({
-          ...col,
-          cards: cardsByColumn.get(col.id) ?? [],
-        }));
-
+        const { board, columns } = await getBoardState(db, ctx, boardId);
         const url = boardUrl(boardId);
 
+        // Summaries rather than whole cards: a board read goes into the
+        // model's context, and `getCard` is there for the rest.
         return {
           board,
-          columns: columnsWithCards,
+          columns: columns.map(({ cards, ...column }) => ({
+            ...column,
+            cards: cards.map((card) => ({
+              id: card.id,
+              columnId: card.columnId,
+              title: card.title,
+              position: card.position,
+              labelIds: card.labelIds,
+              assignees: card.assignees,
+              dueDate: card.dueDate,
+              priority: card.priority,
+            })),
+          })),
           labels: board.labels,
           ...(url && { url }),
         };
       }),
   });
 
-  const getCard = tool({
+  const getCardTool = tool({
     description:
       "Get full details of a specific kanban card. Set includeHistory to also see how the card reached its current state — who changed which fields, and when — before acting on it.",
     inputSchema: z.object({
@@ -196,15 +154,7 @@ export function createKanbanTools(
     }),
     execute: async ({ cardId, includeHistory }) =>
       asToolResult(async () => {
-        const ref = await requireCard(db, ctx, cardId);
-
-        const cards = await db
-          .select()
-          .from(kanbanCardTable)
-          .where(eq(kanbanCardTable.id, cardId))
-          .limit(1);
-
-        const card = withCardUrl({ card: cards[0], boardId: ref.boardId });
+        const card = withCardUrl(await getCard(db, ctx, cardId));
         if (!includeHistory) return card;
 
         return {
@@ -539,9 +489,9 @@ export function createKanbanTools(
 
   return {
     listAgents,
-    listBoards,
-    getBoardState,
-    getCard,
+    listBoards: listBoardsTool,
+    getBoardState: getBoardStateTool,
+    getCard: getCardTool,
     upsertCard,
     moveCard: moveCardTool,
     copyCard: copyCardTool,

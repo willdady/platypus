@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
-import { callTool, mockDb, resetMockDb } from "../test-utils.ts";
+import {
+  callOkTool,
+  callTool,
+  mockDb,
+  resetMockDb,
+  seedDb,
+} from "../test-utils.ts";
 
 vi.mock("../services/event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
@@ -40,12 +46,101 @@ describe("createKanbanTools", () => {
     ]);
   });
 
-  describe("listBoards", () => {
-    it("returns boards in workspace", async () => {
-      const boards = [{ id: "b1", name: "Board 1" }];
-      mockDb.where.mockResolvedValue(boards);
+  /** Two Workspaces, each with a Board, over the fake that reads `WHERE`s. */
+  const seedBoards = () =>
+    seedDb({
+      kanban_board: [
+        {
+          id: "b1",
+          workspaceId,
+          name: "Older",
+          description: null,
+          labels: [{ id: "lbl-1", name: "Bug", color: "#ef4444" }],
+          createdAt: new Date("2026-01-01"),
+          updatedAt: new Date("2026-01-01"),
+        },
+        {
+          id: "b2",
+          workspaceId,
+          name: "Newer",
+          description: "Second",
+          labels: [],
+          createdAt: new Date("2026-02-01"),
+          updatedAt: new Date("2026-02-01"),
+        },
+        {
+          id: "b-other",
+          workspaceId: "ws-2",
+          name: "Theirs",
+          description: null,
+          labels: [],
+          createdAt: new Date("2026-03-01"),
+          updatedAt: new Date("2026-03-01"),
+        },
+      ],
+      kanban_column: [
+        { id: "col-2", boardId: "b1", name: "Done", position: 2 },
+        { id: "col-1", boardId: "b1", name: "To Do", position: 1 },
+        { id: "col-other", boardId: "b-other", name: "To Do", position: 1 },
+      ],
+      kanban_card: [
+        {
+          id: "card-2",
+          columnId: "col-1",
+          title: "Second",
+          body: "A long body the summary leaves out",
+          position: 2,
+          labelIds: [],
+          assignees: [],
+          dueDate: null,
+          priority: "none",
+          createdByUserId: "user-1",
+        },
+        {
+          id: "card-1",
+          columnId: "col-1",
+          title: "First",
+          body: null,
+          position: 1,
+          labelIds: ["lbl-1"],
+          assignees: [{ type: "agent", id: "agent-1" }],
+          dueDate: new Date("2026-04-01"),
+          priority: "high",
+          createdByUserId: "user-1",
+        },
+        {
+          id: "card-other",
+          columnId: "col-other",
+          title: "Theirs",
+          position: 1,
+          labelIds: [],
+          assignees: [],
+          dueDate: null,
+          priority: "none",
+        },
+      ],
+    });
 
-      expect(await tools.listBoards.execute!({}, ctx)).toEqual(boards);
+  describe("listBoards", () => {
+    it("lists this Workspace's boards, newest first, trimmed to a summary", async () => {
+      seedBoards();
+
+      expect(await callTool(tools.listBoards, {})).toEqual([
+        {
+          id: "b2",
+          name: "Newer",
+          description: "Second",
+          labels: [],
+          createdAt: new Date("2026-02-01"),
+        },
+        {
+          id: "b1",
+          name: "Older",
+          description: null,
+          labels: [{ id: "lbl-1", name: "Bug", color: "#ef4444" }],
+          createdAt: new Date("2026-01-01"),
+        },
+      ]);
     });
   });
 
@@ -59,6 +154,63 @@ describe("createKanbanTools", () => {
           ctx,
         ),
       ).toEqual({ error: "Board not found" });
+    });
+
+    it("does not reach another Workspace's board", async () => {
+      seedBoards();
+
+      expect(
+        await callTool(tools.getBoardState, {
+          boardId: "b-other",
+          label: "Theirs",
+        }),
+      ).toEqual({ error: "Board not found" });
+    });
+
+    it("returns ordered columns with card summaries, labels and a link", async () => {
+      seedBoards();
+
+      const state: unknown = await callOkTool(tools.getBoardState, {
+        boardId: "b1",
+        label: "Older",
+      });
+
+      expect(state).toEqual({
+        board: expect.objectContaining({ id: "b1", name: "Older" }) as unknown,
+        columns: [
+          {
+            id: "col-1",
+            boardId: "b1",
+            name: "To Do",
+            position: 1,
+            cards: [
+              {
+                id: "card-1",
+                columnId: "col-1",
+                title: "First",
+                position: 1,
+                labelIds: ["lbl-1"],
+                assignees: [{ type: "agent", id: "agent-1" }],
+                dueDate: new Date("2026-04-01"),
+                priority: "high",
+              },
+              {
+                id: "card-2",
+                columnId: "col-1",
+                title: "Second",
+                position: 2,
+                labelIds: [],
+                assignees: [],
+                dueDate: null,
+                priority: "none",
+              },
+            ],
+          },
+          { id: "col-2", boardId: "b1", name: "Done", position: 2, cards: [] },
+        ],
+        labels: [{ id: "lbl-1", name: "Bug", color: "#ef4444" }],
+        url: `${frontendUrl}/${orgId}/workspace/${workspaceId}/boards/b1`,
+      });
     });
   });
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb, seedDb } from "./test-utils.ts";
 import { db } from "./index.ts";
-import { and, eq, isNull, lt, ne } from "drizzle-orm";
+import { and, count, eq, isNull, lt, max, ne } from "drizzle-orm";
 import { workspace as workspaceTable } from "./db/schema.ts";
 
 /**
@@ -120,5 +120,80 @@ describe("the seeded fake beside the chainable mock", () => {
       .from(triggerRun)
       .where(lt(triggerRun.startedAt, new Date("2026-01-02")));
     expect(before).toEqual([{ id: "r1" }]);
+  });
+
+  it("reads `max()` as the highest value, and as null over no rows", async () => {
+    seedDb({
+      kanban_column: [
+        { id: "c1", boardId: "b1", position: 1 },
+        { id: "c2", boardId: "b1", position: 3 },
+        { id: "c3", boardId: "b2", position: 7 },
+      ],
+    });
+    const { kanbanColumn } = await import("./db/schema.ts");
+
+    const top = await db
+      .select({ top: max(kanbanColumn.position) })
+      .from(kanbanColumn)
+      .where(eq(kanbanColumn.boardId, "b1"));
+    expect(top).toEqual([{ top: 3 }]);
+
+    const none = await db
+      .select({ top: max(kanbanColumn.position) })
+      .from(kanbanColumn)
+      .where(eq(kanbanColumn.boardId, "no-such-board"));
+    expect(none).toEqual([{ top: null }]);
+  });
+
+  it("folds each `groupBy` bucket into one row, and omits empty buckets", async () => {
+    seedDb({
+      kanban_card_comment: [
+        { id: "m1", cardId: "card-1" },
+        { id: "m2", cardId: "card-1" },
+        { id: "m3", cardId: "card-2" },
+        { id: "m4", cardId: "card-3" },
+      ],
+    });
+    const { kanbanCardComment } = await import("./db/schema.ts");
+    const { inArray } = await import("drizzle-orm");
+
+    const counts = await db
+      .select({ cardId: kanbanCardComment.cardId, n: count() })
+      .from(kanbanCardComment)
+      .where(inArray(kanbanCardComment.cardId, ["card-1", "card-2", "card-9"]))
+      .groupBy(kanbanCardComment.cardId);
+    expect(counts).toEqual([
+      { cardId: "card-1", n: 2 },
+      { cardId: "card-2", n: 1 },
+    ]);
+  });
+
+  it("runs a select passed to `inArray` as a subquery", async () => {
+    seedDb({
+      kanban_column: [
+        { id: "c1", boardId: "b1" },
+        { id: "c2", boardId: "b2" },
+      ],
+      kanban_card: [
+        { id: "k1", columnId: "c1" },
+        { id: "k2", columnId: "c2" },
+      ],
+    });
+    const { kanbanCard, kanbanColumn } = await import("./db/schema.ts");
+    const { inArray } = await import("drizzle-orm");
+
+    const onBoard = await db
+      .select({ id: kanbanCard.id })
+      .from(kanbanCard)
+      .where(
+        inArray(
+          kanbanCard.columnId,
+          db
+            .select({ id: kanbanColumn.id })
+            .from(kanbanColumn)
+            .where(eq(kanbanColumn.boardId, "b1")),
+        ),
+      );
+    expect(onBoard).toEqual([{ id: "k1" }]);
   });
 });

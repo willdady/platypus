@@ -47,6 +47,9 @@ export type Condition = Marker | undefined | null;
 /** A marker standing in for `count()` in a `select({ n: count() })` projection. */
 export type CountMarker = { isCount: true };
 
+/** A marker standing in for `max(column)` in a `select({ top: max(…) })` projection. */
+export type MaxMarker = { isMax: true; column: ColumnRef };
+
 /** Resolves a {@link ColumnRef} against whichever row shape is in play. */
 type Resolve = (ref: ColumnRef) => unknown;
 
@@ -119,6 +122,7 @@ export const markerOperators = () => ({
   or: (...conditions: Condition[]) =>
     ({ op: "or", conditions: conditions.filter(Boolean) }) as Marker,
   count: (): CountMarker => ({ isCount: true }),
+  max: (column: unknown): MaxMarker => ({ isMax: true, column: refOf(column) }),
 });
 
 /**
@@ -147,6 +151,13 @@ const isCountMarker = (value: unknown): value is CountMarker =>
   typeof value === "object" &&
   (value as CountMarker).isCount === true;
 
+const isMaxMarker = (value: unknown): value is MaxMarker =>
+  !!value && typeof value === "object" && (value as MaxMarker).isMax === true;
+
+/** Whether a projection value folds many rows into one. */
+const isAggregate = (value: unknown): boolean =>
+  isCountMarker(value) || isMaxMarker(value);
+
 /**
  * Evaluates the handful of raw-SQL fragments the code under test composes into
  * a `WHERE`. Anything else throws: a fragment this fake silently treated as
@@ -167,6 +178,28 @@ const matchesSql = (
   throw new Error(
     `fake db cannot interpret this SQL fragment: \`${marker.strings.join("?")}\``,
   );
+};
+
+/**
+ * Marks a `select` builder so a condition can run it as a subquery. It stays
+ * off the builder's enumerable surface, which is what the code under test sees.
+ */
+const SUBQUERY = Symbol("fake-db:subquery");
+
+/**
+ * The list an `inArray`/`notInArray` tests against: a literal array, or a
+ * one-column `select` passed as a subquery (`inArray(col, db.select({ id })…)`),
+ * evaluated against the rows as they stand when the outer query runs.
+ */
+const listOf = (values: unknown): unknown[] => {
+  if (Array.isArray(values)) return values;
+  const run = (values as Record<symbol, unknown> | null)?.[SUBQUERY];
+  if (typeof run !== "function") {
+    throw new Error(
+      "fake db was handed an inArray list that is neither an array nor a select",
+    );
+  }
+  return (run as () => Row[])().map((row) => Object.values(row)[0]);
 };
 
 /**
@@ -212,9 +245,9 @@ const satisfies = (resolve: Resolve, condition: Condition): boolean => {
     case "isNull":
       return resolve(condition.column) == null;
     case "inArray":
-      return condition.values.includes(resolve(condition.column));
+      return listOf(condition.values).includes(resolve(condition.column));
     case "notInArray":
-      return !condition.values.includes(resolve(condition.column));
+      return !listOf(condition.values).includes(resolve(condition.column));
     case "sql":
       return matchesSql(condition, resolve);
   }
@@ -304,7 +337,7 @@ const uniqueViolation = (constraint: string) => {
  * empty rather than an error, so a query for a resource a test never created
  * simply finds nothing.
  *
- * Covers `select`/`from`/`innerJoin`/`where`/`orderBy`/`limit`,
+ * Covers `select`/`from`/`innerJoin`/`where`/`orderBy`/`groupBy`/`limit`,
  * `insert`/`values`/`returning`, `update`/`set`/`where`/`returning`,
  * `delete`/`where`/`returning`, `execute`, and a `transaction` that really
  * rolls back: the callback gets a handle bound to a staging copy merged back
@@ -329,25 +362,35 @@ export const createFakeDb = (
       return store[name];
     };
 
-    /** Applies a `select({...})` projection, or copies the row when there is none. */
+    /**
+     * Applies a `select({...})` projection, or copies the row when there is
+     * none. `group` is every row the aggregates fold over — the whole match, or
+     * one `groupBy` bucket — and `row` the one a plain column is read from.
+     */
     const project = (
       row: Row,
       resolve: Resolve,
       selection: Record<string, unknown> | undefined,
-      rowCount: number,
+      group: Resolve[],
     ): Row => {
       if (!selection) return { ...row };
       const out: Row = {};
       for (const [key, value] of Object.entries(selection)) {
         if (isCountMarker(value)) {
-          out[key] = rowCount;
+          out[key] = group.length;
+        } else if (isMaxMarker(value)) {
+          const values = group
+            .map((r) => r(value.column))
+            .filter((v) => v != null) as number[];
+          // Postgres' `max()` over no rows is `NULL`, not an empty result set.
+          out[key] = values.length ? Math.max(...values) : null;
         } else if (isColumn(value)) {
           out[key] = resolve(refOf(value));
         } else {
           // Silently projecting `undefined` would let a query select something
-          // this fake cannot compute (an aggregate, say) and still pass.
+          // this fake cannot compute and still pass.
           throw new Error(
-            `fake db cannot project the selection "${key}" — it is neither a column nor count()`,
+            `fake db cannot project the selection "${key}" — it is neither a column, count() nor max()`,
           );
         }
       }
@@ -363,7 +406,12 @@ export const createFakeDb = (
       returning(selection?: Record<string, unknown>) {
         return Promise.resolve().then(() =>
           touched.map((row) =>
-            project(row, flatResolver(row), selection, touched.length),
+            project(
+              row,
+              flatResolver(row),
+              selection,
+              touched.map(flatResolver),
+            ),
           ),
         );
       },
@@ -380,6 +428,7 @@ export const createFakeDb = (
       let condition: Condition;
       let take = Infinity;
       let order: OrderMarker[] = [];
+      let grouping: ColumnRef[] = [];
       const joins: { table: unknown; on: Condition }[] = [];
 
       const rows = (): Row[] => {
@@ -420,15 +469,40 @@ export const createFakeDb = (
           });
         }
 
+        // `groupBy` folds each bucket of matching rows into one, keyed by the
+        // grouped columns' values; a bucket exists only if a row fell into it.
+        if (grouping.length) {
+          const buckets = new Map<string, Row[]>();
+          for (const row of matched) {
+            const resolve = resolverFor(row);
+            const key = JSON.stringify(
+              grouping.map((column) => resolve(column)),
+            );
+            buckets.set(key, [...(buckets.get(key) ?? []), row]);
+          }
+          return [...buckets.values()]
+            .slice(0, take)
+            .map((bucket) =>
+              project(
+                bucket[0],
+                resolverFor(bucket[0]),
+                selection,
+                bucket.map(resolverFor),
+              ),
+            );
+        }
+
         // An aggregate selection is one row whatever the table holds — a
         // `count()` over no rows is `0`, not an empty result set.
-        if (selection && Object.values(selection).some(isCountMarker)) {
-          return [project({}, flatResolver({}), selection, matched.length)];
+        if (selection && Object.values(selection).some(isAggregate)) {
+          return [
+            project({}, flatResolver({}), selection, matched.map(resolverFor)),
+          ];
         }
 
         const page = matched.slice(0, take);
         return page.map((row) =>
-          project(row, resolverFor(row), selection, matched.length),
+          project(row, resolverFor(row), selection, [resolverFor(row)]),
         );
       };
 
@@ -449,6 +523,10 @@ export const createFakeDb = (
           order = markers.filter(Boolean);
           return builder;
         },
+        groupBy(...columns: unknown[]) {
+          grouping = columns.map(refOf);
+          return builder;
+        },
         limit(n: number) {
           take = n;
           return builder;
@@ -466,6 +544,7 @@ export const createFakeDb = (
             .then(onFulfilled, onRejected);
         },
       };
+      Object.defineProperty(builder, SUBQUERY, { value: rows });
       return builder;
     };
 

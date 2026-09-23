@@ -1,4 +1,14 @@
-import { and, asc, desc, eq, inArray, max, notInArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  max,
+  ne,
+  notInArray,
+} from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
   KanbanCardAssignee,
@@ -23,14 +33,16 @@ import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import { listScopedByIds } from "./scoped-resource.ts";
+import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import {
   filterKnownLabelIds,
   pruneCardLabelIds,
 } from "../utils/kanban-labels.ts";
 
 /**
- * The Kanban board's write model: every rule and mutation the board has, in one
- * place, behind an interface both surfaces call. The HTTP routes and the Agent
+ * The Kanban board's model: every rule, mutation and read the board has —
+ * Boards, Columns, Cards, Comments, Card history — in one place, behind an
+ * interface both surfaces call. The HTTP routes and the Agent
  * Tool set are adapters over it — they parse and authorize their own input,
  * call in here, and shape the result (an HTTP envelope, a tool result). The two
  * used to carry a copy each and had already drifted apart, so an Agent could
@@ -66,7 +78,10 @@ export type KanbanContext = KanbanScope & { actor: KanbanActor };
 export type CardRef = { id: string; columnId: string; boardId: string };
 
 /** A column's identity and the board it belongs to. */
-type ColumnRef = { id: string; boardId: string };
+export type ColumnRef = { id: string; boardId: string };
+
+/** A column row as stored. */
+export type ColumnRow = typeof kanbanColumnTable.$inferSelect;
 
 /** A comment row, as the guards return it. */
 export type CommentRow = typeof kanbanCardCommentTable.$inferSelect;
@@ -530,7 +545,7 @@ export const requireCard = async (
 };
 
 /** The column, with its board — or `NotFoundError` when it is out of scope. */
-const requireColumn = async (
+export const requireColumn = async (
   database: Database,
   scope: KanbanScope,
   columnId: string,
@@ -555,6 +570,29 @@ const requireColumn = async (
   if (!row) throw new NotFoundError("Column not found");
   return row;
 };
+
+/**
+ * The ids of every board in scope, as a subquery. A board or column write puts
+ * this — or {@link withinScope} itself — in its own `WHERE`, rather than
+ * relying on a guard that ran first: dropping the guard then narrows nothing
+ * away, the same rule `ownedWhere` states for Workspace-child resources.
+ */
+const boardIdsInScope = (executor: Executor, scope: KanbanScope) =>
+  executor
+    .select({ id: kanbanBoardTable.id })
+    .from(kanbanBoardTable)
+    .where(withinScope(scope));
+
+/** One column, matched only while its board is in scope. */
+const columnInScope = (
+  executor: Executor,
+  scope: KanbanScope,
+  columnId: string,
+) =>
+  and(
+    eq(kanbanColumnTable.id, columnId),
+    inArray(kanbanColumnTable.boardId, boardIdsInScope(executor, scope)),
+  );
 
 /**
  * The comment — or `NotFoundError` when its card is out of scope. Returns the
@@ -654,7 +692,7 @@ export const keepKnownLabelIds = async (
  * so deleting a label would otherwise leave cards holding an ID that resolves
  * to nothing. Only removes IDs — a card never gains a label here.
  */
-export const pruneCardLabelsForBoard = async (
+const pruneCardLabelsForBoard = async (
   executor: Executor,
   boardId: string,
   labels: { id: string }[],
@@ -769,7 +807,7 @@ const nextCardPosition = (
   );
 
 /** The position a column appended to the end of a board would take. */
-export const nextColumnPosition = (
+const nextColumnPosition = (
   executor: Executor,
   boardId: string,
 ): Promise<number> =>
@@ -1451,6 +1489,21 @@ const resolveBulkLabels = (
   return next;
 };
 
+// --- Card reads ---
+
+/** The whole card, with the board it is on — or `NotFoundError` out of scope. */
+export const getCard = async (
+  database: Database,
+  scope: KanbanScope,
+  cardId: string,
+): Promise<CardResult> => {
+  const card = await requireCard(database, scope, cardId);
+  return {
+    card: await currentCardRow(database, cardId),
+    boardId: card.boardId,
+  };
+};
+
 // --- Comments ---
 
 /** A comment with the display name of whoever wrote it, user or Agent. */
@@ -1626,4 +1679,466 @@ export const removeComment = async (
   await database
     .delete(kanbanCardCommentTable)
     .where(eq(kanbanCardCommentTable.id, comment.id));
+};
+
+// --- Boards ---
+
+/** The fields a board write accepts. */
+export type BoardInput = {
+  name: string;
+  description?: string | null;
+  labels?: { id: string; name: string; color: string }[];
+};
+
+/** The columns a new board starts with, in order. */
+const DEFAULT_COLUMNS = ["To Do", "In Progress", "Done"];
+
+/** The boards in scope, newest first. */
+export const listBoards = (
+  database: Database,
+  scope: KanbanScope,
+): Promise<BoardRow[]> =>
+  database
+    .select()
+    .from(kanbanBoardTable)
+    .where(withinScope(scope))
+    .orderBy(desc(kanbanBoardTable.createdAt));
+
+/**
+ * Creates a board in the scope's Workspace with its default columns. Both
+ * writes share a transaction, so a failure leaves no board without columns.
+ */
+export const createBoard = async (
+  database: Database,
+  scope: KanbanScope,
+  input: BoardInput,
+): Promise<BoardRow> => {
+  const id = nanoid();
+  const now = new Date();
+
+  return database.transaction(async (tx) => {
+    const rows = await tx
+      .insert(kanbanBoardTable)
+      .values({
+        id,
+        ...input,
+        workspaceId: scope.workspaceId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    await tx.insert(kanbanColumnTable).values(
+      DEFAULT_COLUMNS.map((name, index) => ({
+        id: nanoid(),
+        boardId: id,
+        name,
+        position: (index + 1) * 1.0,
+        createdAt: now,
+        updatedAt: now,
+      })),
+    );
+
+    return rows[0];
+  });
+};
+
+/**
+ * Updates a board. Labels the update drops are gone from the board, so the
+ * cards using them lose them in the same transaction — otherwise a card is
+ * left holding an ID that resolves to nothing. The prune is a board-level
+ * edit, not a card field write, so it leaves no Card history (ADR-0024).
+ */
+export const updateBoard = async (
+  database: Database,
+  scope: KanbanScope,
+  boardId: string,
+  input: Partial<BoardInput>,
+): Promise<BoardRow> => {
+  const record = await database.transaction(async (tx) => {
+    const rows = await tx
+      .update(kanbanBoardTable)
+      .set({ ...input, updatedAt: new Date() })
+      .where(and(eq(kanbanBoardTable.id, boardId), withinScope(scope)))
+      .returning();
+
+    const row = rows[0];
+    if (row && input.labels !== undefined) {
+      await pruneCardLabelsForBoard(tx, boardId, input.labels);
+    }
+    return row;
+  });
+
+  if (!record) throw new NotFoundError("Board not found");
+  return record;
+};
+
+/**
+ * Deletes a board; its columns and cards go with it by FK cascade.
+ *
+ * Open question: the cascaded cards are not announced — no `card.deleted`
+ * fires for them, so Webhooks and Event Triggers never hear they went. Whether
+ * a cascade should announce each card is undecided; until it is, this keeps
+ * the behaviour it has always had.
+ */
+export const deleteBoard = async (
+  database: Database,
+  scope: KanbanScope,
+  boardId: string,
+): Promise<void> => {
+  const rows = await database
+    .delete(kanbanBoardTable)
+    .where(and(eq(kanbanBoardTable.id, boardId), withinScope(scope)))
+    .returning({ id: kanbanBoardTable.id });
+
+  if (rows.length === 0) throw new NotFoundError("Board not found");
+};
+
+// --- Columns ---
+
+/**
+ * Column names are unique per board. A read-then-write check — there is no
+ * unique index to lean on — so it narrows the window rather than closing it.
+ */
+const requireUniqueColumnName = async (
+  database: Database,
+  boardId: string,
+  name: string,
+  excludeColumnId?: string,
+): Promise<void> => {
+  const clashes = await database
+    .select({ id: kanbanColumnTable.id })
+    .from(kanbanColumnTable)
+    .where(
+      and(
+        eq(kanbanColumnTable.boardId, boardId),
+        eq(kanbanColumnTable.name, name),
+        excludeColumnId ? ne(kanbanColumnTable.id, excludeColumnId) : undefined,
+      ),
+    )
+    .limit(1);
+
+  if (clashes.length > 0) {
+    throw new ConflictError(
+      "A column with this name already exists on the board",
+    );
+  }
+};
+
+/**
+ * A column addressed through its board: the board must be in scope, and the
+ * column on that board. The two misses stay distinct, so a caller naming a
+ * board it cannot see hears about the board rather than the column.
+ */
+const requireColumnOnBoard = async (
+  database: Database,
+  scope: KanbanScope,
+  boardId: string,
+  columnId: string,
+): Promise<KanbanScope> => {
+  await requireBoard(database, scope, boardId);
+  const onBoard = { ...scope, boardId };
+  await requireColumn(database, onBoard, columnId);
+  return onBoard;
+};
+
+/** Adds a column to the end of a board. */
+export const createColumn = async (
+  database: Database,
+  scope: KanbanScope,
+  boardId: string,
+  input: { name: string },
+): Promise<ColumnRow> => {
+  await requireBoard(database, scope, boardId);
+  await requireUniqueColumnName(database, boardId, input.name);
+
+  const position = await nextColumnPosition(database, boardId);
+  const now = new Date();
+
+  const rows = await database
+    .insert(kanbanColumnTable)
+    .values({
+      id: nanoid(),
+      name: input.name,
+      boardId,
+      position,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+
+  return rows[0];
+};
+
+/** Renames a column. Keeping its own name is not a clash. */
+export const renameColumn = async (
+  database: Database,
+  scope: KanbanScope,
+  boardId: string,
+  columnId: string,
+  input: { name: string },
+): Promise<ColumnRow> => {
+  const onBoard = await requireColumnOnBoard(
+    database,
+    scope,
+    boardId,
+    columnId,
+  );
+  await requireUniqueColumnName(database, boardId, input.name, columnId);
+
+  const rows = await database
+    .update(kanbanColumnTable)
+    .set({ name: input.name, updatedAt: new Date() })
+    .where(columnInScope(database, onBoard, columnId))
+    .returning();
+
+  const row = rows[0];
+  if (!row) throw new NotFoundError("Column not found");
+  return row;
+};
+
+/**
+ * Deletes a column; its cards go with it by FK cascade.
+ *
+ * Open question: as with {@link deleteBoard}, the cascaded cards fire no
+ * `card.deleted`. Undecided whether they should; the behaviour is unchanged.
+ */
+export const deleteColumn = async (
+  database: Database,
+  scope: KanbanScope,
+  boardId: string,
+  columnId: string,
+): Promise<void> => {
+  const onBoard = await requireColumnOnBoard(
+    database,
+    scope,
+    boardId,
+    columnId,
+  );
+
+  const rows = await database
+    .delete(kanbanColumnTable)
+    .where(columnInScope(database, onBoard, columnId))
+    .returning({ id: kanbanColumnTable.id });
+
+  if (rows.length === 0) throw new NotFoundError("Column not found");
+};
+
+/**
+ * Puts a board's columns in the order given, at positions 1..n. Every id must
+ * be on the board; one that is not refuses the whole reorder.
+ */
+export const reorderColumns = async (
+  database: Database,
+  scope: KanbanScope,
+  boardId: string,
+  columnIds: string[],
+): Promise<void> => {
+  await requireBoard(database, scope, boardId);
+  const onBoard = { ...scope, boardId };
+
+  const onThisBoard = new Set(
+    (
+      await database
+        .select({ id: kanbanColumnTable.id })
+        .from(kanbanColumnTable)
+        .where(eq(kanbanColumnTable.boardId, boardId))
+    ).map((column) => column.id),
+  );
+  if (!columnIds.every((id) => onThisBoard.has(id))) {
+    throw new ValidationError("Some column IDs do not belong to this board");
+  }
+
+  await database.transaction(async (tx) => {
+    for (const [index, columnId] of columnIds.entries()) {
+      await tx
+        .update(kanbanColumnTable)
+        .set({ position: (index + 1) * 1.0, updatedAt: new Date() })
+        .where(columnInScope(tx, onBoard, columnId));
+    }
+  });
+};
+
+// --- Board state ---
+
+/** A board with its columns in order, each holding its cards in order. */
+export type BoardState<Card = CardRow> = {
+  board: BoardRow;
+  columns: (ColumnRow & { cards: Card[] })[];
+};
+
+/**
+ * The whole board in one read: its columns by position, and each column's
+ * cards by position. Both surfaces start here — the HTTP route resolves it
+ * for display ({@link resolveBoardState}), the Tool trims it to summaries.
+ */
+export const getBoardState = async (
+  database: Database,
+  scope: KanbanScope,
+  boardId: string,
+): Promise<BoardState> => {
+  const board = await requireBoard(database, scope, boardId);
+
+  const columns = await database
+    .select()
+    .from(kanbanColumnTable)
+    .where(eq(kanbanColumnTable.boardId, board.id))
+    .orderBy(asc(kanbanColumnTable.position));
+
+  const columnIds = columns.map((column) => column.id);
+  const cards =
+    columnIds.length > 0
+      ? await database
+          .select()
+          .from(kanbanCardTable)
+          .where(inArray(kanbanCardTable.columnId, columnIds))
+          .orderBy(asc(kanbanCardTable.position))
+      : [];
+
+  const cardsByColumn = new Map<string, CardRow[]>();
+  for (const card of cards) {
+    cardsByColumn.set(card.columnId, [
+      ...(cardsByColumn.get(card.columnId) ?? []),
+      card,
+    ]);
+  }
+
+  return {
+    board,
+    columns: columns.map((column) => ({
+      ...column,
+      cards: cardsByColumn.get(column.id) ?? [],
+    })),
+  };
+};
+
+/** An assignee with the name and picture a person sees. */
+export type ResolvedAssignee = {
+  type: "user" | "agent";
+  id: string;
+  name: string;
+  image: string | null;
+};
+
+/** A card as the board displays it. */
+export type ResolvedCard = Omit<CardRow, "dueDate"> & {
+  dueDate: string | null;
+  createdByName: string | null;
+  lastEditedByName: string | null;
+  resolvedAssignees: ResolvedAssignee[];
+  commentCount: number;
+};
+
+/**
+ * Resolves a {@link getBoardState} read for display: who created and last
+ * edited each card, its assignees' names and pictures, and how many comments
+ * it has. `baseUrl` is where stored Agent avatars are served from. An assignee
+ * who no longer resolves — a deleted user or Agent — is left out.
+ */
+export const resolveBoardState = async (
+  database: Database,
+  state: BoardState,
+  baseUrl: string,
+): Promise<BoardState<ResolvedCard>> => {
+  const cards = state.columns.flatMap((column) => column.cards);
+  const cardIds = cards.map((card) => card.id);
+
+  const commentCounts =
+    cardIds.length > 0
+      ? await database
+          .select({ cardId: kanbanCardCommentTable.cardId, count: count() })
+          .from(kanbanCardCommentTable)
+          .where(inArray(kanbanCardCommentTable.cardId, cardIds))
+          .groupBy(kanbanCardCommentTable.cardId)
+      : [];
+  const commentCountOf = new Map(
+    commentCounts.map((row) => [row.cardId, row.count]),
+  );
+
+  const userIds = new Set<string>();
+  const agentIds = new Set<string>();
+  for (const card of cards) {
+    if (card.createdByUserId) userIds.add(card.createdByUserId);
+    if (card.lastEditedByUserId) userIds.add(card.lastEditedByUserId);
+    if (card.createdByAgentId) agentIds.add(card.createdByAgentId);
+    if (card.lastEditedByAgentId) agentIds.add(card.lastEditedByAgentId);
+    for (const assignee of card.assignees ?? []) {
+      (assignee.type === "user" ? userIds : agentIds).add(assignee.id);
+    }
+  }
+
+  const users =
+    userIds.size > 0
+      ? await database
+          .select({ id: user.id, name: user.name, image: user.image })
+          .from(user)
+          .where(inArray(user.id, Array.from(userIds)))
+      : [];
+  const agents =
+    agentIds.size > 0
+      ? await database
+          .select({
+            id: agentTable.id,
+            name: agentTable.name,
+            avatarKey: agentTable.avatarKey,
+          })
+          .from(agentTable)
+          .where(inArray(agentTable.id, Array.from(agentIds)))
+      : [];
+
+  const userById = new Map(users.map((u) => [u.id, u]));
+  const agentById = new Map(agents.map((a) => [a.id, a]));
+
+  const nameOf = (userId: string | null, agentId: string | null) =>
+    userId
+      ? (userById.get(userId)?.name ?? null)
+      : agentId
+        ? (agentById.get(agentId)?.name ?? null)
+        : null;
+
+  const resolveAssignee = (
+    assignee: KanbanCardAssignee,
+  ): ResolvedAssignee | null => {
+    // Built field by field rather than spread: a stored assignee comes back
+    // from `jsonb` with its keys reordered, and the response keeps its shape.
+    if (assignee.type === "user") {
+      const found = userById.get(assignee.id);
+      return found
+        ? {
+            type: "user",
+            id: assignee.id,
+            name: found.name,
+            image: found.image ?? null,
+          }
+        : null;
+    }
+    const found = agentById.get(assignee.id);
+    return found
+      ? {
+          type: "agent",
+          id: assignee.id,
+          name: found.name,
+          image: avatarKeyToUrl(found.avatarKey, baseUrl),
+        }
+      : null;
+  };
+
+  const resolveCard = (card: CardRow): ResolvedCard => ({
+    ...card,
+    dueDate: isoOrNull(card.dueDate),
+    createdByName: nameOf(card.createdByUserId, card.createdByAgentId),
+    lastEditedByName: nameOf(card.lastEditedByUserId, card.lastEditedByAgentId),
+    resolvedAssignees: (card.assignees ?? [])
+      .map(resolveAssignee)
+      .filter((assignee) => assignee !== null),
+    commentCount: commentCountOf.get(card.id) ?? 0,
+  });
+
+  return {
+    board: state.board,
+    columns: state.columns.map((column) => ({
+      ...column,
+      cards: column.cards.map(resolveCard),
+    })),
+  };
 };
