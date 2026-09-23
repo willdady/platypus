@@ -260,6 +260,13 @@ const processChat = async (
   logger.info(`Memory summary extraction completed for chat ${chat.id}`);
 };
 
+type ChatToProcess = {
+  chat: typeof chatTable.$inferSelect;
+  workspace: typeof workspaceTable.$inferSelect;
+  extractionProvider: typeof providerTable.$inferSelect;
+  embeddingProvider: typeof providerTable.$inferSelect | null;
+};
+
 /**
  * Finds chats that need memory extraction processing, and when they were read.
  *
@@ -270,12 +277,7 @@ const processChat = async (
  */
 const findChatsToProcess = async (): Promise<{
   readAt: Date;
-  chats: Array<{
-    chat: typeof chatTable.$inferSelect;
-    workspace: typeof workspaceTable.$inferSelect;
-    extractionProvider: typeof providerTable.$inferSelect;
-    embeddingProvider: typeof providerTable.$inferSelect | null;
-  }>;
+  chats: ChatToProcess[];
 }> => {
   // Find workspaces with memory extraction enabled
   const workspacesWithExtraction = await db
@@ -335,12 +337,7 @@ const findChatsToProcess = async (): Promise<{
   const workspaceMap = new Map(workspacesWithExtraction.map((w) => [w.id, w]));
 
   // Build result with all required data
-  const result: Array<{
-    chat: typeof chatTable.$inferSelect;
-    workspace: typeof workspaceTable.$inferSelect;
-    extractionProvider: typeof providerTable.$inferSelect;
-    embeddingProvider: typeof providerTable.$inferSelect | null;
-  }> = [];
+  const result: ChatToProcess[] = [];
 
   for (const chat of chatsToProcess) {
     const workspace = workspaceMap.get(chat.workspaceId);

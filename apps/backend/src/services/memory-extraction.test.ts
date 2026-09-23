@@ -319,6 +319,18 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect(await run()).toEqual(["old-fail"]);
   });
 
+  it("selects a failed Chat inside the backoff once it has a new turn", async () => {
+    seedChats(
+      chat("failed-then-turn", {
+        memoryExtractionStatus: "failed",
+        lastMemoryProcessedAt: minutes(-30),
+        lastTurnAt: minutes(-10),
+      }),
+    );
+
+    expect(await run()).toEqual(["failed-then-turn"]);
+  });
+
   it("records the read time, so a turn during the pass is picked up later", async () => {
     seedChats(chat("busy"));
     mockGenerateText.mockImplementationOnce(() => {
