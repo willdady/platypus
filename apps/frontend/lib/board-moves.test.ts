@@ -35,7 +35,7 @@ describe("placeCard", () => {
         activeRect: rect(0),
         overRect: rect(0),
       }),
-    ).toEqual({ fromColumnId: "col-1", columnId: "col-2", afterCardId: "d" });
+    ).toEqual({ fromColumnId: "col-1", toColumnId: "col-2", afterCardId: "d" });
   });
 
   it("drops at the head of an empty column", () => {
@@ -46,7 +46,11 @@ describe("placeCard", () => {
         activeRect: rect(0),
         overRect: rect(0),
       }),
-    ).toEqual({ fromColumnId: "col-1", columnId: "col-3", afterCardId: null });
+    ).toEqual({
+      fromColumnId: "col-1",
+      toColumnId: "col-3",
+      afterCardId: null,
+    });
   });
 
   it("goes after the over card when the active centre is below it", () => {
@@ -57,7 +61,7 @@ describe("placeCard", () => {
         activeRect: rect(20),
         overRect: rect(10),
       }),
-    ).toMatchObject({ columnId: "col-1", afterCardId: "b" });
+    ).toMatchObject({ toColumnId: "col-1", afterCardId: "b" });
   });
 
   it("goes before the over card when the active centre is above it", () => {
@@ -68,7 +72,7 @@ describe("placeCard", () => {
         activeRect: rect(0),
         overRect: rect(10),
       }),
-    ).toMatchObject({ columnId: "col-1", afterCardId: "b" });
+    ).toMatchObject({ toColumnId: "col-1", afterCardId: "b" });
     expect(
       placeCard(columns, {
         activeId: "d",
@@ -76,7 +80,7 @@ describe("placeCard", () => {
         activeRect: rect(0),
         overRect: rect(10),
       }),
-    ).toMatchObject({ columnId: "col-1", afterCardId: null });
+    ).toMatchObject({ toColumnId: "col-1", afterCardId: null });
   });
 
   it("falls back to array order when over itself in the same column", () => {
@@ -87,8 +91,11 @@ describe("placeCard", () => {
         activeRect: null,
         overRect: rect(0),
       });
-    expect(place("b")).toMatchObject({ columnId: "col-1", afterCardId: "a" });
-    expect(place("a")).toMatchObject({ columnId: "col-1", afterCardId: null });
+    expect(place("b")).toMatchObject({ toColumnId: "col-1", afterCardId: "a" });
+    expect(place("a")).toMatchObject({
+      toColumnId: "col-1",
+      afterCardId: null,
+    });
   });
 
   it("goes after the target's last card when over itself after crossing", () => {
@@ -101,7 +108,18 @@ describe("placeCard", () => {
         activeRect: null,
         overRect: rect(0),
       }),
-    ).toMatchObject({ columnId: "col-2", afterCardId: "d" });
+    ).toMatchObject({ toColumnId: "col-2", afterCardId: "d" });
+  });
+
+  it("goes after the target's last card when over another column's id", () => {
+    expect(
+      placeCard(columns, {
+        activeId: "a",
+        overId: "col-2",
+        activeRect: null,
+        overRect: rect(0),
+      }),
+    ).toEqual({ fromColumnId: "col-1", toColumnId: "col-2", afterCardId: "d" });
   });
 
   it("returns null when the active card is on no column", () => {

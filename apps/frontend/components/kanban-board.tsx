@@ -495,26 +495,19 @@ export function KanbanBoard({
         setLocalColumns(null);
         return;
       }
-      const { fromColumnId, columnId, afterCardId } = placement;
+      const { fromColumnId, toColumnId, afterCardId } = placement;
 
       // Optimistic local update so the UI doesn't flash while the request
       // is in flight.
       setLocalColumns(
-        (prev) =>
-          prev &&
-          applyCardMove(prev, {
-            cardId,
-            fromColumnId,
-            toColumnId: columnId,
-            afterCardId,
-          }),
+        (prev) => prev && applyCardMove(prev, { cardId, ...placement }),
       );
 
       const result = await moveCard(
         baseUrl,
         {
           cardId,
-          columnId,
+          columnId: toColumnId,
           afterCardId,
           expectedColumnId: dragOriginColumnRef.current ?? fromColumnId,
         },

@@ -33,7 +33,7 @@ export interface CardDrop {
 export interface CardPlacement {
   /** The column the card sits in within `columns`. */
   fromColumnId: string;
-  columnId: string;
+  toColumnId: string;
   /** The card to sit behind; null means the head of the column. */
   afterCardId: string | null;
 }
@@ -101,7 +101,7 @@ export function placeCard(
 
   return {
     fromColumnId: sourceColumn.id,
-    columnId: targetColumn.id,
+    toColumnId: targetColumn.id,
     afterCardId,
   };
 }
