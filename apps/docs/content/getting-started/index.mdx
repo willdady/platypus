@@ -6,9 +6,9 @@ import { Callout, Steps } from "nextra/components";
 
 # Getting Started
 
-Platypus is a self-hosted platform for always-on AI agents — agents that reason,
-use tools, and connect to your data through the Model Context Protocol. This
-guide takes you from nothing to your first streamed reply.
+Platypus is a self-hosted platform for AI agents that use tools, run on
+schedules and events, and connect to your data through the Model Context
+Protocol. This guide takes you from nothing to your first streamed reply.
 
 The fastest path is the Docker quick start below, then a five-step loop:
 **create a Workspace → configure a Provider → create an Agent → start a Chat →
@@ -17,9 +17,8 @@ send a message**.
 ## Before you start
 
 - **Docker Engine with the Compose v2 plugin.** Every command here is
-  `docker compose` (a space, not a hyphen). If `docker compose version` prints
-  nothing, you have the old standalone `docker-compose` binary and the overlay
-  files below won't merge the way this guide describes.
+  `docker compose` (a space, not a hyphen). If `docker compose version` fails,
+  install the Compose v2 plugin before going further.
 - **Ports `3000` and `4000` free on the host.** The frontend publishes `3000`
   and the backend `4000`. Postgres stays on the private network and publishes
   nothing.
@@ -43,8 +42,9 @@ Open `.env` and set, at minimum:
 
 - **`BETTER_AUTH_SECRET`** — a secure random string (32+ characters). The app
   signs session tokens with this; treat it like a password.
-- **`ADMIN_EMAIL`** / **`ADMIN_PASSWORD`** — the first admin account. **Required
-  on first boot**: the backend exits rather than starting without them (see
+- **`ADMIN_EMAIL`** / **`ADMIN_PASSWORD`** — the first admin account. The
+  password needs **8+ characters**. **Required on first boot**: the backend
+  exits rather than starting without them, or with a shorter password (see
   [First run](#first-run--the-default-admin) below).
 
 The shipped `.env.example` fills in everything else for `localhost`, so a
@@ -86,11 +86,11 @@ and configuration hardening — see
 The three failures that account for almost all of them, and what each looks
 like:
 
-| Symptom                                                   | Cause                                                                  | Fix                                                                                                                                        |
-| --------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `docker compose ps` shows `backend` as **exited**         | A required variable is unset, or first-boot seeding failed             | `docker compose logs backend` — the last line names the variable or the seeding problem. Fix `.env` and `docker compose up -d` again.       |
-| The backend sits in `starting` or goes **unhealthy**      | It cannot reach Postgres                                               | Check `docker compose logs database`, then that `DATABASE_URL` points at the `database` service rather than `localhost`.                    |
-| Port already allocated on `3000` or `4000`                | Something else on the host holds the port                              | Stop the other process, or remap the host side in a `compose.override.yaml` and update `BACKEND_URL` / `ALLOWED_ORIGINS` to match.          |
+| Symptom                                                                   | Cause                                                                                                                               | Fix                                                                                                                                                                                               |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker compose ps` shows `backend` as **exited**                         | A required variable is unset, first-boot seeding failed, or the backend gave up reaching Postgres after about 30 seconds of retries | `docker compose logs backend` — the last line names the variable, the seeding problem, or the database error. Fix it and `docker compose up -d` again.                                            |
+| `docker compose up` reports **dependency failed to start** for `database` | Postgres never became healthy, so the backend was not started                                                                       | `docker compose logs database`.                                                                                                                                                                   |
+| Port already allocated on `3000` or `4000`                                | Something else on the host holds the port                                                                                           | Stop the other process, or remap the host side in a `compose.override.yaml`. Remapping `3000` means updating `ALLOWED_ORIGINS` and `FRONTEND_URL`; remapping `4000` means updating `BACKEND_URL`. |
 
 You sign in successfully and are immediately signed out again? That is the URL
 variables disagreeing, not a password problem — see
@@ -102,22 +102,18 @@ is in
 
 ## First run & the default admin
 
-First boot against an empty database creates four things: a **Default
-Organization**, an **admin user** from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, that
-user's membership of the Organization, and a **Default Workspace** named
-_Default Workspace_ that the admin owns.
+First boot creates a **Default Organization**, a **Default Workspace**, and an
+admin account from `ADMIN_EMAIL` / `ADMIN_PASSWORD` that owns the Workspace.
+That account is the **Operator** — the platform super-admin. Sign in with it and
+you are already inside a usable Workspace; you don't have to create one.
 
-That admin account is the **Operator** — the platform super-admin who bypasses
-in-app authorization. Sign in with it, and you are already inside a usable
-Workspace; you don't have to create one. Add regular users for day-to-day work.
+Editing `ADMIN_EMAIL` / `ADMIN_PASSWORD` after first boot changes nothing —
+change the password from within the app. The full rule, and the recovery path
+for a first boot that failed, are in
+[what first boot creates](/self-hosting/docker-compose#what-first-boot-creates).
 
-<Callout type="info">
-  The seed runs when the database has **no Organizations**, and only then.
-  Editing `ADMIN_EMAIL` / `ADMIN_PASSWORD` afterwards changes nothing — change
-  the password from within the app. The full rule and the recovery path for a
-  first boot that failed are in
-  [what first boot creates](/self-hosting/docker-compose#what-first-boot-creates).
-</Callout>
+For day-to-day work, add regular users — see
+[Users & access](/self-hosting/users-and-access).
 
 ## Your first agent
 
@@ -141,8 +137,9 @@ yourself as the **Owner**, and click **Save**.
 ### Configure a Provider
 
 A Workspace can't run an agent until it can reach a model. The dashboard shows
-a **No providers configured** prompt — click **Add provider** (or go to
-**Settings → Providers → Add provider**).
+a **No providers configured** prompt — click **Add provider**, then **Add
+provider** again on the Providers page that opens (or go to **Settings →
+Providers → Add provider**).
 
 Fill in the form:
 
@@ -155,12 +152,16 @@ Fill in the form:
   machine](/self-hosting/providers-and-auth#reaching-a-model-server-on-the-host-machine)
   for what **Base URL** takes.
 - **Name** — a label for this connection.
-- **API Key** — your credential from that vendor.
+- **API Key** — your credential from that vendor. The field is required: for a
+  model server with no key, such as Ollama, enter any placeholder value.
+- **Region** _(Bedrock only)_ — the AWS region, e.g. `us-east-1`. Required for
+  Bedrock.
 - **Models** — a repeatable list, not a text box. Click **Add model** for each
-  one and type its id into the **Model ID** field (e.g. `gpt-4o`,
-  `claude-sonnet-4-6`). Leave **Alias** empty, **Context window** on **Not set**,
-  and **Advanced** collapsed for now — every one of them is optional, and you can
-  come back to them.
+  one and type its id into the **Model ID** field (e.g. `gpt-4o`). Leave
+  **Alias** empty, **Context window** on **Not set**, and **Advanced** collapsed
+  for now — every one of them is optional, and you can come back to them.
+- **Task Model ID** — one of the model ids you just added. Platypus uses it to
+  name your Chats; left empty, every Chat stays _Untitled_.
 
 Click **Save**.
 
@@ -195,7 +196,7 @@ streaming the model's response.
 
 </Steps>
 
-That's the full loop. 🎉
+That's the full loop.
 
 ## Where to next
 
