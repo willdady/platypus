@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.9.1](https://github.com/willdady/platypus/compare/v3.9.0...v3.9.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **backend:** delete a Chat, Workspace or Organization's stored files by key prefix ([#991](https://github.com/willdady/platypus/issues/991)) ([25e635e](https://github.com/willdady/platypus/commit/25e635e6fbea76058dc29fc8476f3980e89af134))
+* **backend:** fire a Trigger through one module so every exit advances its schedule and retention ([#976](https://github.com/willdady/platypus/issues/976)) ([beb0284](https://github.com/willdady/platypus/commit/beb0284127446436aac65d3f80317c436fbbb137))
+* **backend:** re-extract memories from a Chat after each new turn ([#992](https://github.com/willdady/platypus/issues/992)) ([ebebb27](https://github.com/willdady/platypus/commit/ebebb2799d7c4502cf48514b5fe93f197c2f7700))
+* **backend:** read only a Chat's own files into its turn ([1724e6c](https://github.com/willdady/platypus/commit/1724e6c09829342b18bebd30b4ff2b7bcc937542))
+* **backend:** scope Column updates and deletes to the admitted Workspace ([#967](https://github.com/willdady/platypus/issues/967)) ([1ec07f9](https://github.com/willdady/platypus/commit/1ec07f9781a726bcee35f20d06d96bc39661cffc))
+* **docs:** correct Getting Started troubleshooting and Provider setup ([#982](https://github.com/willdady/platypus/issues/982)) ([ab20ebc](https://github.com/willdady/platypus/commit/ab20ebcf7509fab3a5b10a6745ce230bd8ea040a))
+* **frontend:** let the entity-form lifecycle own the record read and seed ([#985](https://github.com/willdady/platypus/issues/985)) ([0295cae](https://github.com/willdady/platypus/commit/0295caedf35f9fd7e1079756cf47e0d64cea7ee6))
+* **frontend:** model the Dashboard edit session as a pure module with a retry-safe commit ([#983](https://github.com/willdady/platypus/issues/983)) ([3f0c3b9](https://github.com/willdady/platypus/commit/3f0c3b9779ae8e6352f8671d533170f30ccfb5a0))
+* **frontend:** move a Card through one module so the Card dialog keeps the stale-board guard ([#979](https://github.com/willdady/platypus/issues/979)) ([6f33c35](https://github.com/willdady/platypus/commit/6f33c351b504bc0db790ada65bca2e91d76a8915))
+* **frontend:** offer a delegated Workspace Owner the Provider create page ([#993](https://github.com/willdady/platypus/issues/993)) ([0ffe882](https://github.com/willdady/platypus/commit/0ffe8824616f79950d6d6a62979732ca760d18e4))
+* **frontend:** render the chat while the new-chat redirect lands ([#984](https://github.com/willdady/platypus/issues/984)) ([3645a84](https://github.com/willdady/platypus/commit/3645a84afc0df76b1cd0647d5171d9d3af7333a6))
+* **frontend:** start every Chat turn through one module so regenerate and edit get the pre-turn checks ([#978](https://github.com/willdady/platypus/issues/978)) ([e24632f](https://github.com/willdady/platypus/commit/e24632fc15aaa693896dfb00a9a2b3f422d933e5))
+
 ## [3.9.0](https://github.com/willdady/platypus/compare/v3.8.1...v3.9.0) (2026-09-22)
 
 
