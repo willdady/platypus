@@ -1,5 +1,17 @@
 import { generateText } from "ai";
-import { eq, and, or, isNull, sql, inArray, desc } from "drizzle-orm";
+import {
+  eq,
+  ne,
+  gt,
+  lt,
+  and,
+  or,
+  isNull,
+  isNotNull,
+  sql,
+  inArray,
+  desc,
+} from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
@@ -61,18 +73,20 @@ ${conversationText}
 };
 
 /**
- * Updates the chat's memory extraction status.
+ * Updates the chat's memory extraction status. `readAt` is when the job read
+ * the Chat's messages, not when the pass finished: a turn that starts mid-pass
+ * lands after it, so the Chat is due again on a later run.
  */
 const updateChatExtractionStatus = async (
   chatId: string,
-  status: "pending" | "processing" | "completed" | "failed",
-  processedAt?: Date,
+  status: "processing" | "completed" | "failed",
+  readAt: Date,
 ) => {
   await db
     .update(chatTable)
     .set({
       memoryExtractionStatus: status,
-      lastMemoryProcessedAt: processedAt || new Date(),
+      lastMemoryProcessedAt: readAt,
       updatedAt: new Date(),
     })
     .where(eq(chatTable.id, chatId));
@@ -93,13 +107,14 @@ const processChat = async (
   workspace: typeof workspaceTable.$inferSelect,
   extractionProvider: typeof providerTable.$inferSelect,
   embeddingProvider: typeof providerTable.$inferSelect | null,
+  readAt: Date,
 ): Promise<void> => {
   const messages = (chat.messages as PlatypusUIMessage[]) || [];
 
   // Only process chats with at least 2 messages (user + assistant)
   if (messages.length < 2) {
     logger.debug(`Chat ${chat.id} has insufficient messages, skipping`);
-    await updateChatExtractionStatus(chat.id, "completed");
+    await updateChatExtractionStatus(chat.id, "completed", readAt);
     return;
   }
 
@@ -159,7 +174,7 @@ const processChat = async (
       },
       `Memory summary extraction LLM call failed: ${message}`,
     );
-    await updateChatExtractionStatus(chat.id, "failed");
+    await updateChatExtractionStatus(chat.id, "failed", readAt);
     return;
   }
 
@@ -167,7 +182,7 @@ const processChat = async (
 
   if (!updatedSummary) {
     logger.warn(`Empty summary returned for chat ${chat.id}, skipping`);
-    await updateChatExtractionStatus(chat.id, "completed");
+    await updateChatExtractionStatus(chat.id, "completed", readAt);
     return;
   }
 
@@ -240,53 +255,59 @@ const processChat = async (
   }
 
   // Mark chat as processed
-  await updateChatExtractionStatus(chat.id, "completed");
+  await updateChatExtractionStatus(chat.id, "completed", readAt);
 
   logger.info(`Memory summary extraction completed for chat ${chat.id}`);
 };
 
 /**
- * Finds chats that need memory extraction processing.
+ * Finds chats that need memory extraction processing, and when they were read.
+ *
+ * A Chat is due when it is not mid-turn and it has never been read, a turn
+ * started after it was last read, or its last pass failed over an hour ago.
+ * The turn signal is `lastTurnAt`, never `updatedAt`, which this job and
+ * auto-titling bump themselves (see `db/schema.ts`).
  */
-const findChatsToProcess = async (): Promise<
-  Array<{
+const findChatsToProcess = async (): Promise<{
+  readAt: Date;
+  chats: Array<{
     chat: typeof chatTable.$inferSelect;
     workspace: typeof workspaceTable.$inferSelect;
     extractionProvider: typeof providerTable.$inferSelect;
     embeddingProvider: typeof providerTable.$inferSelect | null;
-  }>
-> => {
+  }>;
+}> => {
   // Find workspaces with memory extraction enabled
   const workspacesWithExtraction = await db
     .select()
     .from(workspaceTable)
-    .where(sql`${workspaceTable.memoryExtractionProviderId} IS NOT NULL`);
+    .where(isNotNull(workspaceTable.memoryExtractionProviderId));
 
   if (workspacesWithExtraction.length === 0) {
     logger.debug("No workspaces have memory extraction enabled, skipping");
-    return [];
+    return { readAt: new Date(), chats: [] };
   }
 
   const workspaceIds = workspacesWithExtraction.map((w) => w.id);
 
   // Find chats in those workspaces that need processing
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const readAt = new Date();
+  const oneHourAgo = new Date(readAt.getTime() - 60 * 60 * 1000);
 
   const chatsToProcess = await db
-    .select({
-      chat: chatTable,
-    })
+    .select()
     .from(chatTable)
     .where(
       and(
         inArray(chatTable.workspaceId, workspaceIds),
+        ne(chatTable.status, "running"),
         or(
-          eq(chatTable.memoryExtractionStatus, "pending"),
+          isNull(chatTable.lastMemoryProcessedAt),
+          gt(chatTable.lastTurnAt, chatTable.lastMemoryProcessedAt),
           and(
             eq(chatTable.memoryExtractionStatus, "failed"),
-            sql`${chatTable.lastMemoryProcessedAt} < ${oneHourAgo}`,
+            lt(chatTable.lastMemoryProcessedAt, oneHourAgo),
           ),
-          isNull(chatTable.memoryExtractionStatus),
         ),
       ),
     )
@@ -321,7 +342,7 @@ const findChatsToProcess = async (): Promise<
     embeddingProvider: typeof providerTable.$inferSelect | null;
   }> = [];
 
-  for (const { chat } of chatsToProcess) {
+  for (const chat of chatsToProcess) {
     const workspace = workspaceMap.get(chat.workspaceId);
     if (!workspace || !workspace.memoryExtractionProviderId) continue;
 
@@ -337,7 +358,7 @@ const findChatsToProcess = async (): Promise<
     result.push({ chat, workspace, extractionProvider, embeddingProvider });
   }
 
-  return result;
+  return { readAt, chats: result };
 };
 
 /**
@@ -348,7 +369,7 @@ export const processMemoryExtractionBatch = async (): Promise<void> => {
   logger.info("Starting memory extraction batch");
 
   try {
-    const chatsToProcess = await findChatsToProcess();
+    const { readAt, chats: chatsToProcess } = await findChatsToProcess();
 
     if (chatsToProcess.length === 0) {
       logger.info("No chats to process for memory extraction");
@@ -366,7 +387,7 @@ export const processMemoryExtractionBatch = async (): Promise<void> => {
     } of chatsToProcess) {
       try {
         // Mark as processing
-        await updateChatExtractionStatus(chat.id, "processing");
+        await updateChatExtractionStatus(chat.id, "processing", readAt);
 
         // Process the chat
         await processChat(
@@ -374,13 +395,14 @@ export const processMemoryExtractionBatch = async (): Promise<void> => {
           workspace,
           extractionProvider,
           embeddingProvider,
+          readAt,
         );
       } catch (error) {
         logger.error(
           { error, chatId: chat.id },
           "Error processing chat for memory extraction",
         );
-        await updateChatExtractionStatus(chat.id, "failed");
+        await updateChatExtractionStatus(chat.id, "failed", readAt);
       }
     }
 

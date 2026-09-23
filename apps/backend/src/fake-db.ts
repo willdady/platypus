@@ -36,7 +36,7 @@ export type Marker =
       column: ColumnRef;
       value: unknown;
     }
-  | { op: "isNull"; column: ColumnRef }
+  | { op: "isNull" | "isNotNull"; column: ColumnRef }
   | { op: "inArray" | "notInArray"; column: ColumnRef; values: unknown[] }
   | { op: "and" | "or"; conditions: Condition[] }
   | { op: "sql"; strings: readonly string[]; values: unknown[] };
@@ -113,6 +113,8 @@ export const markerOperators = () => ({
     ({ op: "lte", column: refOf(column), value }) as Marker,
   isNull: (column: unknown) =>
     ({ op: "isNull", column: refOf(column) }) as Marker,
+  isNotNull: (column: unknown) =>
+    ({ op: "isNotNull", column: refOf(column) }) as Marker,
   inArray: (column: unknown, values: unknown[]) =>
     ({ op: "inArray", column: refOf(column), values }) as Marker,
   notInArray: (column: unknown, values: unknown[]) =>
@@ -244,6 +246,8 @@ const satisfies = (resolve: Resolve, condition: Condition): boolean => {
       );
     case "isNull":
       return resolve(condition.column) == null;
+    case "isNotNull":
+      return resolve(condition.column) != null;
     case "inArray":
       return listOf(condition.values).includes(resolve(condition.column));
     case "notInArray":
