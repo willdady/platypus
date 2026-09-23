@@ -228,8 +228,9 @@ export function stuckTriggerCutoff(): Date {
  *
  * 1. `processDueTriggers` claims a due trigger by setting `nextRunAt = NULL`
  *    before firing it. If the process dies before the firing's bookkeeping
- *    writes the next schedule, the trigger row is permanently stuck — the scheduler query `nextRunAt <= NOW()` is false
- *    for NULL, so the trigger is invisible on every subsequent tick.
+ *    writes the next schedule, the trigger row is permanently stuck — the
+ *    scheduler query `nextRunAt <= NOW()` is false for NULL, so the trigger
+ *    is invisible on every subsequent tick.
  *
  * 2. `TriggerSink.onStart` writes a `trigger_run` row with status `running`.
  *    A crash leaves that row dangling, which clutters the UI and gives no

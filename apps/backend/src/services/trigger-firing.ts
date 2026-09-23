@@ -25,6 +25,7 @@ import {
   narrowTriggerConfig,
   nextCronRunAt,
   type TriggerRow,
+  type TypedTriggerConfig,
 } from "./trigger.ts";
 import type { RunInput } from "../runs/types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
@@ -250,6 +251,19 @@ const runTrigger = async (
   );
 };
 
+/** The row's narrowed config, or `null` — logged — when it is malformed. */
+const narrowOrNull = (row: TriggerRow): TypedTriggerConfig | null => {
+  try {
+    return narrowTriggerConfig(row);
+  } catch (error) {
+    logger.error(
+      { triggerId: row.id, error: errorMessage(error) },
+      "Trigger row is malformed; its schedule was not updated",
+    );
+    return null;
+  }
+};
+
 /**
  * What every firing that got as far as a run owes its Trigger, whatever the
  * run's outcome: `lastRunAt` at completion, the next schedule, and retention.
@@ -272,9 +286,12 @@ const recordFiring = async (triggerId: string): Promise<void> => {
     }
 
     const now = new Date();
-    const typed = narrowTriggerConfig(current);
+    const typed = narrowOrNull(current);
     const schedule: Partial<TriggerRow> = {};
-    if (typed.type === "cron" && typed.config.isOneOff) {
+    if (!typed) {
+      // A malformed row gets no schedule written, but still its `lastRunAt`
+      // and retention: a run happened, and its history must stay bounded.
+    } else if (typed.type === "cron" && typed.config.isOneOff) {
       // A one-off has had its one run, whether or not it succeeded — retrying
       // a failed one every tick would be an unbounded loop.
       schedule.enabled = false;
@@ -301,7 +318,7 @@ const recordFiring = async (triggerId: string): Promise<void> => {
     logger.info(
       {
         triggerId,
-        type: typed.type,
+        type: current.type,
         enabled: schedule.enabled ?? current.enabled,
         nextRunAt: schedule.nextRunAt?.toISOString(),
       },

@@ -319,6 +319,25 @@ describe("fireTrigger", () => {
       expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
+    it("still stamps completion and trims history when the current row is malformed", async () => {
+      const snapshot = makeTrigger({ maxRunsToKeep: 1 });
+      const fake = world({ ...snapshot, config: { garbage: true } }, [
+        oldRun("old-1", 1),
+      ]);
+      drive("succeeded");
+
+      await expect(fireTrigger(snapshot, { kind: "cron" })).resolves.toBe(
+        "ran",
+      );
+
+      expect(triggerRow(fake).lastRunAt).toEqual(COMPLETED);
+      expect(runIds(fake)).toEqual(["run-new"]);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ triggerId: "trigger-1" }),
+        "Trigger row is malformed; its schedule was not updated",
+      );
+    });
+
     it("leaves nextRunAt null and says so when the cron expression cannot be parsed", async () => {
       const snapshot = makeTrigger();
       const fake = world({
@@ -373,6 +392,34 @@ describe("fireTrigger", () => {
       ]);
       // Not a run, so not a `lastRunAt`.
       expect(triggerRow(fake).lastRunAt).toBeNull();
+    });
+
+    it("bounds suppressed rows by their own budget", async () => {
+      process.env.TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP = "2";
+      try {
+        const trigger = eventTrigger();
+        const fake = world(trigger, [
+          ...recentRuns("c1"),
+          oldRun("sup-1", 1, { status: "suppressed", entityId: "c1" }),
+          oldRun("sup-2", 2, { status: "suppressed", entityId: "c1" }),
+        ]);
+
+        await fireTrigger(trigger, {
+          kind: "event",
+          payload: cardEvent("card.updated", { id: "c1" }),
+          entityId: "c1",
+        });
+
+        // The new suppressed row and the newest old one survive.
+        expect(
+          fake.tables.trigger_run
+            .filter((r) => r.status === "suppressed")
+            .map((r) => r.id)
+            .sort(),
+        ).toEqual(["run-new", "sup-2"]);
+      } finally {
+        delete process.env.TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP;
+      }
     });
 
     it("counts per entity, so a busy Card does not hold back another", async () => {
