@@ -74,7 +74,7 @@ The **Active path** of a **Chat**, held as its record and re-sent to the model i
 _Avoid_: history, conversation, message log, context (which already carries three other meanings).
 
 **Active path**:
-The one line of messages through a **Chat**, from its first message to the one currently selected, choosing a single **Alternative** wherever a message has several. What a User reads, what a **Chat turn** continues, and what every background reader of a Chat — its title, its **Memories** — works from.
+The one line of messages through a **Chat**, from its first message to the one currently selected, choosing a single **Alternative** wherever a message has several and leaving out any message the User deleted. What a User reads, what a **Chat turn** continues, and what every background reader of a Chat — its title, its **Memories** — works from.
 _Avoid_: branch, thread, current conversation.
 
 **Alternative**:

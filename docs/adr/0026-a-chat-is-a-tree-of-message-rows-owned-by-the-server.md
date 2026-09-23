@@ -9,8 +9,9 @@ implemented-by: "#709"
 > on `chat.messages`. The client sends that whole array on every **Chat turn**,
 > and `ChatSink` writes it back over the column. Editing a user message truncates
 > the array at that point and resubmits it. Regenerating drops the last assistant
-> message. The per-message Delete action never reaches the server at all, so the
-> message comes back on reload.
+> message. Deleting a message only removes it from the view. It is stored only
+> when the next turn writes the shortened array, and until then a reload brings
+> it back.
 
 Editing or regenerating a message destroys everything after it, permanently.
 The decision is to keep that work as **Alternatives**. Every message becomes a
@@ -109,12 +110,19 @@ a message id.
 
 ## Consequences
 
-- **Per-message Delete is removed, not made durable.** It never persisted, and
-  once Alternatives exist, editing or regenerating is how a user steps past a
-  message. Any durable delete would also need a rule for the Alternatives under
-  the deleted message. Cascade destroys the very work this ADR protects, and
-  reparenting joins two unrelated lines of conversation. There is no rule to
-  choose until someone asks for the feature.
+- **Deleting a message takes it out of the Active path, not out of the
+  tree.** The row gets a deleted flag. The shared load of the Active path skips
+  it, so it is gone from the view and from what the model is sent, and the
+  change is stored the moment the user clicks. Users rely on Delete to prune a
+  long Chat when the context meter fills up. That is something an Alternative
+  cannot do, because an edit starts again from a point and cannot remove one
+  message from the middle. Removing a row was rejected because the tree would
+  need a rule for its children. Cascade destroys the work this ADR protects.
+  Reparenting joins two unrelated lines of conversation and can make an
+  assistant reply an Alternative of user messages. A flag leaves the tree's
+  shape alone, so neither question comes up. Accepted limitation: deleting a
+  message that has Alternatives also removes the arrows that reach them. They
+  stay in the tree but cannot be navigated to.
 - **`chat.messages` is dropped by the same migration that backfills it.** Each
   existing array becomes a chain in which each message's parent is the one
   before it, and `activeLeafId` is the last message. Keeping the column for a
