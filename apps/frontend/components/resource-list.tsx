@@ -58,7 +58,7 @@ export interface ResourceListConfig {
   /** The Workspace delegation flag granting self-management (ADR-0006). */
   readonly delegationFlag: keyof WorkspaceDelegationFlags;
   readonly labels: ResourceListLabels;
-  /** Rendered when a workspace has no resources and the caller cannot attach one. */
+  /** Rendered when a workspace has no resources and the caller can neither attach nor create one. */
   readonly emptyState: ComponentType<EmptyStateProps>;
 }
 
@@ -120,9 +120,9 @@ export const ResourceList = ({
   }
 
   const resources: ScopedResource[] = data?.results ?? [];
-  // When an admin can attach Shared resources, fall through to the main render
-  // (which offers the Attach button) even if the workspace has no resources yet.
-  if (!resources.length && workspaceId && !canAttach) {
+  // When the caller can attach or create, fall through to the main render
+  // (which offers those buttons) even if the workspace has no resources yet.
+  if (!resources.length && workspaceId && !canAttach && !canManage) {
     const EmptyState = config.emptyState;
     return (
       <EmptyState

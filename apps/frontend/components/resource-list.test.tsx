@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 import type { MCP, Provider } from "@platypus/schemas";
 import {
   authMock,
+  authState,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -60,6 +61,8 @@ const RESOURCES: {
   /** Collection entity as the API spells it — the read the list makes. */
   entity: string;
   settingsPath: string;
+  /** The Workspace delegation flag letting its Owner self-manage the resource. */
+  delegationFlag: string;
   item: ScopedResource;
   workspaceItem: ScopedResource;
   dialogTitle: string;
@@ -71,6 +74,7 @@ const RESOURCES: {
     resourceType: "provider",
     entity: "providers",
     settingsPath: "settings/providers",
+    delegationFlag: "providerSelfManagement",
     item: orgProvider,
     workspaceItem: workspaceProvider,
     dialogTitle: "Organization Provider",
@@ -82,6 +86,7 @@ const RESOURCES: {
     resourceType: "mcp",
     entity: "mcps",
     settingsPath: "settings/mcp",
+    delegationFlag: "mcpSelfManagement",
     item: orgMcp,
     workspaceItem: workspaceMcp,
     dialogTitle: "Organization MCP",
@@ -105,6 +110,7 @@ describe.each(RESOURCES)(
     resourceType,
     entity,
     settingsPath,
+    delegationFlag,
     item,
     workspaceItem,
     dialogTitle,
@@ -132,6 +138,42 @@ describe.each(RESOURCES)(
         "href",
         `/org1/workspace/ws1/${settingsPath}/create`,
       );
+    });
+
+    it("offers a delegated Workspace Owner the create page when the workspace has none", () => {
+      authState.actor = "workspace-owner";
+      authState.workspaceDelegation = { [delegationFlag]: true };
+      renderRows([]);
+
+      expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
+        "href",
+        `/org1/workspace/ws1/${settingsPath}/create`,
+      );
+    });
+
+    it("offers a non-delegated Workspace Owner no create CTA when the workspace has none", () => {
+      authState.actor = "workspace-owner";
+      authState.workspaceDelegation = { [delegationFlag]: false };
+      renderRows([]);
+
+      expect(
+        screen.getByText(/Ask an organization admin to add one/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /^Add/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("offers an Org Admin both create and attach when the workspace has none", () => {
+      renderRows([]);
+
+      expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
+        "href",
+        `/org1/workspace/ws1/${settingsPath}/create`,
+      );
+      expect(
+        screen.getByRole("button", { name: /^Attach shared/ }),
+      ).toBeInTheDocument();
     });
 
     it("renders a fetch failure rather than swallowing it", () => {
