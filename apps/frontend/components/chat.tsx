@@ -237,7 +237,9 @@ export const Chat = ({
     chatData: chatData ?? undefined,
     providers,
     agents: agentsIfLoaded,
-    isChatLoading,
+    // SWR reports a key's first mount as loading even when the cache already
+    // holds a value: a row, or the `null` the index route seeds for a new Chat.
+    isChatLoading: isChatLoading && chatData === undefined,
     workspaceId,
     initialAgentId,
   });

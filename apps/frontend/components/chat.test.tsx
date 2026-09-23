@@ -1168,3 +1168,33 @@ describe("the Agent behind the info dialog", () => {
     await Promise.resolve();
   });
 });
+
+/**
+ * A new Chat's row is cached as absent by the index route, but SWR still
+ * reports the key's first mount as loading. The selection must not wait on
+ * that, or every New chat click paints the default placeholder and a pending
+ * picker until the read settles (issue #966).
+ */
+describe("restoring the selection on a new Chat", () => {
+  it("resolves the stored Agent while a cached absent row reads as loading", () => {
+    harness.data.set("/agents", {
+      results: [{ ...agentOn("a1", "p1", "m1"), inputPlaceholder: "Ask a1" }],
+    });
+    harness.responses.set(CHAT_KEY, {
+      data: null,
+      isLoading: true,
+      mutate: harness.chatMutate,
+    });
+    localStorage.setItem(
+      "platypus:workspace:ws1:lastSelection",
+      JSON.stringify({
+        value: { type: "agent", id: "a1" },
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
+
+    renderChat();
+
+    expect(screen.getByPlaceholderText("Ask a1")).toBeInTheDocument();
+  });
+});
