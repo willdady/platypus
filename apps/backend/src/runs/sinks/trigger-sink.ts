@@ -103,9 +103,13 @@ const toTriggerRunStatus = (status: RunStatus): TriggerRunStatus => {
  * `suppressed` rows are written by the run-rate breaker instead of a run, and
  * never pass through this sink.
  *
- * Note: trigger-table maintenance (`lastRunAt`, `nextRunAt`, retention) is
- * still owned by `updateTriggerAfterRun`, called by event-dispatch and the
- * cron scheduler after `executeTrigger` returns.
+ * Note: trigger-table maintenance (`lastRunAt`, `nextRunAt`, retention) is not
+ * this sink's: `services/trigger-firing.ts` owns it, and applies it on every
+ * exit of a firing — including a run that threw before or after this sink saw
+ * it. The run is bounded by `TRIGGER_PER_RUN_TIMEOUT_MS`
+ * (`runs/trigger-timeouts.ts`), not the run registry's generic default; the
+ * stuck-run sweep in `jobs/scheduler.ts` reads the same value, which is why a
+ * row this sink leaves `running` is safe from it until that ceiling passes.
  */
 export class TriggerSink implements RunSink {
   private latestStats: RunStats = {};

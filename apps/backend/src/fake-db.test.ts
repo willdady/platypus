@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb, seedDb } from "./test-utils.ts";
 import { db } from "./index.ts";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, lt, ne } from "drizzle-orm";
 import { workspace as workspaceTable } from "./db/schema.ts";
 
 /**
@@ -96,5 +96,29 @@ describe("the seeded fake beside the chainable mock", () => {
         ),
       );
     expect(shared).toEqual([expect.objectContaining({ id: "a1" })]);
+  });
+
+  it("reads `ne` as inequality and `lt` as a strict less-than", async () => {
+    seedDb({
+      trigger_run: [
+        { id: "r1", status: "running", startedAt: new Date("2026-01-01") },
+        { id: "r2", status: "suppressed", startedAt: new Date("2026-01-02") },
+        { id: "r3", status: "failed", startedAt: new Date("2026-01-03") },
+      ],
+    });
+    const { triggerRun } = await import("./db/schema.ts");
+
+    const notSuppressed = await db
+      .select({ id: triggerRun.id })
+      .from(triggerRun)
+      .where(ne(triggerRun.status, "suppressed"));
+    expect(notSuppressed).toEqual([{ id: "r1" }, { id: "r3" }]);
+
+    // Strict: the row started exactly at the bound is not before it.
+    const before = await db
+      .select({ id: triggerRun.id })
+      .from(triggerRun)
+      .where(lt(triggerRun.startedAt, new Date("2026-01-02")));
+    expect(before).toEqual([{ id: "r1" }]);
   });
 });

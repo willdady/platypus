@@ -116,6 +116,24 @@ run sooner.
 | `TRIGGER_PER_STEP_TIMEOUT_MS` | Idle timeout between steps of a Trigger run; a step that makes no progress aborts it. | `600000` (10 minutes)  | No       |
 | `TRIGGER_PER_RUN_TIMEOUT_MS`  | Wall-clock timeout for an entire Trigger run.                                         | `3600000` (60 minutes) | No       |
 
+If the backend is killed mid-run, neither timeout gets the chance to end the
+run, so its record would otherwise stay _running_ for ever — and a scheduled
+Trigger it belonged to would never be picked up again. A background sweep marks
+those runs failed once they are older than `TRIGGER_PER_RUN_TIMEOUT_MS` plus a
+five-minute grace period, and puts a scheduled Trigger back on its cadence. It
+runs once a minute, so a run abandoned by a crash is cleared roughly 65 minutes
+later on the defaults.
+
+<Callout type="warning">
+  Running several backends against one database looks like it needs no
+  co-ordination, because each run belongs to the instance driving it. The
+  sweep is the exception: it decides which runs are old enough to have no
+  live owner, and it decides that from its own
+  `TRIGGER_PER_RUN_TIMEOUT_MS`. Give an instance a shorter value than its
+  peers and it will mark their live runs as failed while they are still
+  working. Set the same value on every instance.
+</Callout>
+
 ### The run-rate breaker
 
 No Event Trigger may run without bound against one record. When a Trigger has

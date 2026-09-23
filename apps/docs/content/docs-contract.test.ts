@@ -772,7 +772,7 @@ describe("webhook event payloads", () => {
  * worked example, and the example's scaffolding has to be the scaffolding the
  * service builds.
  */
-const TRIGGER_PREFIX_SOURCE = "apps/backend/src/services/trigger-execution.ts";
+const TRIGGER_PREFIX_SOURCE = "apps/backend/src/services/trigger-firing.ts";
 
 /**
  * The fixed text of the event prefix template, in order — the parts of the

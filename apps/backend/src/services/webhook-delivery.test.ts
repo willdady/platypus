@@ -30,9 +30,8 @@ vi.mock("../index.ts", () => ({
   },
 }));
 
-vi.mock("./trigger-execution.ts", () => ({
-  executeTrigger: vi.fn(),
-  updateTriggerAfterRun: vi.fn(),
+vi.mock("./trigger-firing.ts", () => ({
+  fireTrigger: vi.fn(),
 }));
 
 vi.mock("./event-trigger-debounce.ts", () => ({

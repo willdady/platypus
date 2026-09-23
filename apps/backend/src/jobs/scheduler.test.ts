@@ -25,6 +25,7 @@ import {
   recoverStuckChats,
   recoverStuckTriggers,
   stuckChatCutoff,
+  stuckTriggerCutoff,
 } from "./scheduler.ts";
 import {
   chat as chatTable,
@@ -82,6 +83,35 @@ describe("stuckChatCutoff", () => {
 
     // 60 min per-run timeout + 5 min buffer = 65 min.
     expect(stuckChatCutoff().toISOString()).toBe("2026-08-30T10:55:00.000Z");
+  });
+});
+
+describe("stuckTriggerCutoff", () => {
+  beforeEach(() => {
+    delete process.env.TRIGGER_PER_RUN_TIMEOUT_MS;
+  });
+
+  afterEach(() => {
+    delete process.env.TRIGGER_PER_RUN_TIMEOUT_MS;
+    vi.useRealTimers();
+  });
+
+  it("sits one stale buffer past the default Trigger per-run timeout", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
+
+    // 60 min per-run timeout + 5 min buffer = 65 min — not the registry's
+    // 10-minute fallback, which would fail live Trigger runs at 15.
+    expect(stuckTriggerCutoff().toISOString()).toBe("2026-08-30T10:55:00.000Z");
+  });
+
+  it("tracks TRIGGER_PER_RUN_TIMEOUT_MS", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
+    process.env.TRIGGER_PER_RUN_TIMEOUT_MS = String(2 * 60 * 60 * 1000);
+
+    // 120 min per-run timeout + 5 min buffer = 125 min.
+    expect(stuckTriggerCutoff().toISOString()).toBe("2026-08-30T09:55:00.000Z");
   });
 });
 
@@ -214,12 +244,34 @@ describe("recoverStuckTriggers", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.TRIGGER_PER_RUN_TIMEOUT_MS;
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
   });
 
   afterEach(() => {
+    delete process.env.TRIGGER_PER_RUN_TIMEOUT_MS;
     vi.useRealTimers();
+  });
+
+  it("fails only `running` rows started before the Trigger per-run timeout plus the buffer", async () => {
+    process.env.TRIGGER_PER_RUN_TIMEOUT_MS = String(90 * 60 * 1000);
+    const captured = captureUpdates([]);
+
+    await recoverStuckTriggers();
+
+    const runs = captured[0];
+    expect(runs.table).toBe(triggerRunTable);
+    expect(runs.set).toMatchObject({
+      status: "failed",
+      errorMessage: "Server restarted during execution",
+    });
+    const { sql: text, params } = render(runs.where);
+    expect(text).toBe(
+      `("trigger_run"."status" = $1 and "trigger_run"."started_at" < $2)`,
+    );
+    // 12:00 − (90 min + 5 min buffer).
+    expect(params).toEqual(["running", "2026-08-30T10:25:00.000Z"]);
   });
 
   it("closes the orphaned runs' still-open events as errors, with no duration", async () => {

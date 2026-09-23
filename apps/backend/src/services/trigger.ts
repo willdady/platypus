@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import {
   cronTriggerConfigSchema,
   eventTriggerConfigSchema,
+  triggerTypeSchema,
   type CronTriggerConfig,
   type EventTriggerConfig,
   type TriggerType,
@@ -68,6 +69,45 @@ export type TriggerCreateFields = TriggerBaseFields;
 export type TriggerUpdateFields = Partial<TriggerBaseFields>;
 
 /**
+ * A Trigger row's `type` and `config`, narrowed together. The table stores
+ * `type` as plain text and `config` as jsonb, so the pair is only a
+ * discriminated union once something has checked it.
+ */
+export type TypedTriggerConfig =
+  | { type: "cron"; config: CronTriggerConfig }
+  | { type: "event"; config: EventTriggerConfig };
+
+/**
+ * Narrows a stored row's `type` + `config` into {@link TypedTriggerConfig},
+ * validated against the real config schemas. A malformed row throws here — the
+ * one place it can — rather than surfacing as an `undefined` read wherever a
+ * caller cast the jsonb to the shape it hoped for.
+ */
+export const narrowTriggerConfig = (
+  row: Pick<TriggerRow, "id" | "type" | "config">,
+): TypedTriggerConfig => {
+  if (row.type === "cron") {
+    const parsed = cronTriggerConfigSchema.safeParse(row.config);
+    if (parsed.success) return { type: "cron", config: parsed.data };
+  } else if (row.type === "event") {
+    const parsed = eventTriggerConfigSchema.safeParse(row.config);
+    if (parsed.success) return { type: "event", config: parsed.data };
+  }
+  throw new Error(
+    `Trigger '${row.id}' has a malformed '${row.type}' type/config pair`,
+  );
+};
+
+/**
+ * The next `nextRunAt` a cron config names, from now — or `null` when the
+ * expression or timezone cannot be parsed. The one statement of the schedule
+ * rule: the write model, the post-run bookkeeping and the recovery sweep all
+ * call it.
+ */
+export const nextCronRunAt = (config: CronTriggerConfig): Date | null =>
+  validateCronExpression(config.cronExpression, config.timezone);
+
+/**
  * Validates a cron config and returns it normalized (Zod defaults applied —
  * e.g. `timezone` filled in as `"UTC"`) alongside its next run time. Returning
  * the parsed, not the raw, config is what guarantees a concrete `timezone`
@@ -82,10 +122,7 @@ const parseCronConfig = (
       "Cron triggers require a non-empty config.cronExpression and a valid config.timezone.",
     );
   }
-  const nextRunAt = validateCronExpression(
-    parsed.data.cronExpression,
-    parsed.data.timezone,
-  );
+  const nextRunAt = nextCronRunAt(parsed.data);
   if (!nextRunAt) {
     throw new ValidationError(
       "Invalid cron expression or timezone. Example: '0 9 * * *' for daily at 9 AM.",
@@ -112,7 +149,7 @@ const parseEventConfig = (config: unknown): EventTriggerConfig => {
 
 /**
  * Creates a new Trigger in this Workspace. Branches on `type`: cron
- * expressions are parsed via `validateCronExpression` to compute `nextRunAt`;
+ * expressions are parsed via `nextCronRunAt` to compute `nextRunAt`;
  * event configs are validated against the real schema. Throws
  * `ValidationError` on an invalid cron expression/timezone, an invalid or
  * empty `events` array, or invalid `filters`.
@@ -172,7 +209,11 @@ export async function updateTrigger(
     id: triggerId,
     workspaceId: ctx.workspaceId,
   });
-  const effectiveType = fields.type ?? (existing.type as TriggerType);
+  // Only the stored type is read here, not its config: an update that supplies
+  // a new config must be able to repair a row whose stored one is malformed.
+  // An unknown stored type falls through to the `ValidationError` below.
+  const effectiveType: TriggerType | undefined =
+    fields.type ?? triggerTypeSchema.safeParse(existing.type).data;
 
   const updateData: Partial<TriggerRow> = {
     updatedAt: new Date(),

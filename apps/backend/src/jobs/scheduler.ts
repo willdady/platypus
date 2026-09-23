@@ -6,15 +6,11 @@ import {
   triggerRun as triggerRunTable,
   triggerRunEvent as triggerRunEventTable,
 } from "../db/schema.ts";
-import {
-  executeTrigger,
-  updateTriggerAfterRun,
-} from "../services/trigger-execution.ts";
+import { fireTrigger } from "../services/trigger-firing.ts";
+import { narrowTriggerConfig, nextCronRunAt } from "../services/trigger.ts";
 import { logger } from "../logger.ts";
-import { DEFAULT_PER_RUN_TIMEOUT_MS } from "../runs/run-registry.ts";
 import { chatPerRunTimeoutMs } from "../runs/chat-timeouts.ts";
-import { validateCronExpression } from "../utils/cron.ts";
-import type { CronTriggerConfig } from "@platypus/schemas";
+import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
 
 // Advisory lock ID for the background scheduler. The numeric value is load
 // bearing across deploys: an old and a new instance must contend for the same
@@ -125,84 +121,28 @@ export function scheduleAligned(
 }
 
 /**
- * Processes a single trigger execution.
- * Handles errors independently so one failure doesn't block others.
+ * Fires one claimed cron Trigger. Firing owns the run and every bit of
+ * bookkeeping after it, and never rejects, so one Trigger's failure cannot
+ * block the others.
  */
 async function processSingleTrigger(
   job: typeof triggerTable.$inferSelect,
 ): Promise<void> {
-  const now = new Date();
-
-  try {
-    logger.info(
-      {
-        triggerId: job.id,
-        name: job.name,
-        agentId: job.agentId,
-      },
-      "Processing cron trigger",
-    );
-
-    // Execute the trigger
-    await executeTrigger(job);
-
-    // Update the trigger state after successful execution
-    await updateTriggerAfterRun(job.id, job);
-
-    logger.info(
-      {
-        triggerId: job.id,
-        name: job.name,
-      },
-      "Cron trigger processed successfully",
-    );
-  } catch (error) {
-    logger.error(
-      { error, triggerId: job.id, name: job.name },
-      "Failed to process cron trigger",
-    );
-
-    try {
-      const cronConfig = job.config as CronTriggerConfig;
-      if (cronConfig.isOneOff) {
-        // One-off triggers should be disabled on failure to prevent infinite retry
-        await db
-          .update(triggerTable)
-          .set({
-            lastRunAt: now,
-            enabled: false,
-            nextRunAt: null,
-            updatedAt: now,
-          })
-          .where(eq(triggerTable.id, job.id));
-      } else {
-        // Recompute nextRunAt so the trigger retries on the next cycle
-        const nextRunAt = validateCronExpression(
-          cronConfig.cronExpression,
-          cronConfig.timezone,
-        );
-        await db
-          .update(triggerTable)
-          .set({
-            lastRunAt: now,
-            nextRunAt,
-            updatedAt: now,
-          })
-          .where(eq(triggerTable.id, job.id));
-      }
-    } catch (updateError) {
-      logger.error(
-        { error: updateError, triggerId: job.id },
-        "Failed to update trigger after failure",
-      );
-    }
-  }
+  logger.info(
+    { triggerId: job.id, name: job.name, agentId: job.agentId },
+    "Processing cron trigger",
+  );
+  const outcome = await fireTrigger(job, { kind: "cron" });
+  logger.info(
+    { triggerId: job.id, name: job.name, outcome },
+    "Cron trigger processed",
+  );
 }
 
 /**
  * Processes all due cron triggers.
  * Queries for triggers where type = 'cron' AND enabled = true AND nextRunAt <= NOW(),
- * executes each one with controlled concurrency, and updates the trigger state.
+ * claims them, and fires each one with controlled concurrency.
  */
 async function processDueTriggers(): Promise<void> {
   const now = new Date();
@@ -246,10 +186,12 @@ async function processDueTriggers(): Promise<void> {
 /**
  * Buffer added on top of a run's own per-run timeout before we consider a
  * `running` row abandoned — shared by both sweeps below, each of which adds it
- * to the timeout its own kind of run is bounded by. Any live instance would
- * have aborted the run by `started + <its per-run timeout>`, so anything older
- * than that plus this buffer is definitely orphaned. Five extra minutes gives
- * the normal per-run timeout path a chance to write the failure first.
+ * to the timeout its own kind of run is bounded by: `TRIGGER_PER_RUN_TIMEOUT_MS`
+ * for a Trigger run, `CHAT_PER_RUN_TIMEOUT_MS` for a Chat turn. Any live
+ * instance would have aborted the run by `started + <its per-run timeout>`, so
+ * anything older than that plus this buffer is definitely orphaned. Five extra
+ * minutes gives the normal per-run timeout path a chance to write the failure
+ * first.
  */
 const RECOVERY_STALE_BUFFER_MS = 5 * 60 * 1000;
 
@@ -264,14 +206,29 @@ function staleCutoff(perRunTimeoutMs: number): Date {
 }
 
 /**
+ * The moment before which a `running` Trigger run is considered abandoned.
+ *
+ * Derived from `TRIGGER_PER_RUN_TIMEOUT_MS` — the ceiling a Trigger run
+ * actually runs under (`runs/trigger-timeouts.ts`) — and NOT from the run
+ * registry's generic 10-minute fallback, which Trigger runs never use: a
+ * cutoff taken from it failed live runs at 15 minutes that were allowed 60.
+ *
+ * Horizontal scaling: the env var is read per process. Instances sharing a
+ * database must be configured with the same value; one given a shorter value
+ * computes an earlier cutoff and could fail a peer's live run.
+ */
+export function stuckTriggerCutoff(): Date {
+  return staleCutoff(triggerPerRunTimeoutMs());
+}
+
+/**
  * Periodic recovery for state left behind by a server crash mid-execution.
  *
  * Two failure modes both manifest as "trigger never runs again":
  *
  * 1. `processDueTriggers` claims a due trigger by setting `nextRunAt = NULL`
- *    before invoking `executeTrigger`. If the process dies before
- *    `updateTriggerAfterRun` writes the next schedule, the trigger row is
- *    permanently stuck — the scheduler query `nextRunAt <= NOW()` is false
+ *    before firing it. If the process dies before the firing's bookkeeping
+ *    writes the next schedule, the trigger row is permanently stuck — the scheduler query `nextRunAt <= NOW()` is false
  *    for NULL, so the trigger is invisible on every subsequent tick.
  *
  * 2. `TriggerSink.onStart` writes a `trigger_run` row with status `running`.
@@ -283,18 +240,20 @@ function staleCutoff(perRunTimeoutMs: number): Date {
  *    rather than a bar drawn to "now".
  *
  * Critical horizontal-scaling note: a `running` row may still be a peer
- * instance's live work. We must NOT touch rows younger than
- * `DEFAULT_PER_RUN_TIMEOUT_MS + RECOVERY_STALE_BUFFER_MS`, because a live
- * instance would have aborted any run older than that via its own per-run
- * timeout. Recovery is gated on that age threshold; the advisory lock only
- * serializes concurrent recoveries, it does not prevent racing live runs.
+ * instance's live work — an Event Trigger run executes in the process that
+ * dispatched it, outside the scheduler lock. We must NOT touch rows younger
+ * than {@link stuckTriggerCutoff} (`TRIGGER_PER_RUN_TIMEOUT_MS` +
+ * `RECOVERY_STALE_BUFFER_MS`), because a live instance would have aborted any
+ * run older than that via its own per-run timeout. Recovery is gated on that
+ * age threshold; the advisory lock only serializes concurrent recoveries, it
+ * does not prevent racing live runs.
  *
  * Same reason for `nextRunAt`: we only recompute it for triggers whose latest
  * `running` row we just failed. If `nextRunAt IS NULL` but no run row crossed
  * the staleness threshold, a peer is currently executing — leave it alone.
  */
 export async function recoverStuckTriggers(): Promise<void> {
-  const cutoff = staleCutoff(DEFAULT_PER_RUN_TIMEOUT_MS);
+  const cutoff = stuckTriggerCutoff();
 
   // Mark abandoned running runs as failed. The age cutoff guarantees no
   // live peer is still working on them.
@@ -361,15 +320,21 @@ export async function recoverStuckTriggers(): Promise<void> {
     );
 
   for (const job of stuck) {
-    const cronConfig = job.config as CronTriggerConfig;
-    if (cronConfig.isOneOff) continue;
-    const nextRunAt = validateCronExpression(
-      cronConfig.cronExpression,
-      cronConfig.timezone,
-    );
+    let typed: ReturnType<typeof narrowTriggerConfig>;
+    try {
+      typed = narrowTriggerConfig(job);
+    } catch (error) {
+      logger.error(
+        { triggerId: job.id, error },
+        "Skipped a malformed trigger during recovery",
+      );
+      continue;
+    }
+    if (typed.type !== "cron" || typed.config.isOneOff) continue;
+    const nextRunAt = nextCronRunAt(typed.config);
     if (!nextRunAt) {
       logger.error(
-        { triggerId: job.id, cronExpression: cronConfig.cronExpression },
+        { triggerId: job.id, cronExpression: typed.config.cronExpression },
         "Failed to recompute nextRunAt during recovery (invalid cron expression?)",
       );
       continue;
@@ -393,15 +358,16 @@ export async function recoverStuckTriggers(): Promise<void> {
  * The moment before which a `running` Chat is considered abandoned.
  *
  * Derived from `CHAT_PER_RUN_TIMEOUT_MS` — the ceiling a Chat turn actually
- * runs under (`runs/chat-timeouts.ts`) — and NOT from the Trigger's
- * `DEFAULT_PER_RUN_TIMEOUT_MS`, which is three times shorter and would fail
- * live turns. A live instance aborts any turn older than its own per-run
- * timeout, so a row past this cutoff has no live owner on any instance.
+ * runs under (`runs/chat-timeouts.ts`) — the same way {@link stuckTriggerCutoff}
+ * derives the Trigger sweep's from `TRIGGER_PER_RUN_TIMEOUT_MS`. Each sweep
+ * reads its own kind of run's timeout; a live instance aborts any turn older
+ * than its own per-run timeout, so a row past this cutoff has no live owner
+ * on any instance.
  *
- * Horizontal scaling: this env var is read per process, unlike the Trigger
- * timeout which is a code constant. Instances sharing a database must be
- * configured with the same value; one given a shorter value computes an
- * earlier cutoff and could fail a peer's live turn.
+ * Horizontal scaling: this env var is read per process, as the Trigger one
+ * is. Instances sharing a database must be configured with the same value;
+ * one given a shorter value computes an earlier cutoff and could fail a
+ * peer's live turn.
  */
 export function stuckChatCutoff(): Date {
   return staleCutoff(chatPerRunTimeoutMs());

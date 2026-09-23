@@ -119,7 +119,11 @@ A few details worth knowing:
   (one-off Triggers disable themselves instead). Switching **Enabled** back on
   restarts the cadence from that moment: the first run lands on the next slot
   the schedule names, so a Trigger that was off over one of its slots does not
-  fire the moment you re-enable it to catch up.
+  fire the moment you re-enable it to catch up. A _failed_ run moves the
+  schedule on just as a successful one does, and a one-off Trigger disables
+  itself either way.
+- **Switching Enabled off during a run** lets that run finish, and the Trigger
+  stays off afterwards.
 - **Event runs** fire when a matching event occurs, with a short debounce so a
   burst of rapid events coalesces into one run.
 - **No-progress runs stop early.** Because no one is watching a Trigger run,

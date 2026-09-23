@@ -1,6 +1,6 @@
 import { webhookEventChangedFields } from "@platypus/schemas";
 import { logger } from "../logger.ts";
-import type { EventContext } from "./trigger-execution.ts";
+import type { EventContext } from "./trigger-firing.ts";
 import type { trigger as triggerTable } from "../db/schema.ts";
 
 type Trigger = typeof triggerTable.$inferSelect;

@@ -31,7 +31,11 @@ export type ColumnRef = { table: string; name: string };
 
 /** A comparison marker standing in for a Drizzle operator's `SQL` fragment. */
 export type Marker =
-  | { op: "eq" | "gt" | "lte"; column: ColumnRef; value: unknown }
+  | {
+      op: "eq" | "ne" | "gt" | "lt" | "lte";
+      column: ColumnRef;
+      value: unknown;
+    }
   | { op: "isNull"; column: ColumnRef }
   | { op: "inArray" | "notInArray"; column: ColumnRef; values: unknown[] }
   | { op: "and" | "or"; conditions: Condition[] }
@@ -96,8 +100,12 @@ const refOf = (column: unknown): ColumnRef => {
 export const markerOperators = () => ({
   eq: (column: unknown, value: unknown) =>
     ({ op: "eq", column: refOf(column), value }) as Marker,
+  ne: (column: unknown, value: unknown) =>
+    ({ op: "ne", column: refOf(column), value }) as Marker,
   gt: (column: unknown, value: unknown) =>
     ({ op: "gt", column: refOf(column), value }) as Marker,
+  lt: (column: unknown, value: unknown) =>
+    ({ op: "lt", column: refOf(column), value }) as Marker,
   lte: (column: unknown, value: unknown) =>
     ({ op: "lte", column: refOf(column), value }) as Marker,
   isNull: (column: unknown) =>
@@ -184,9 +192,16 @@ const satisfies = (resolve: Resolve, condition: Condition): boolean => {
       return condition.conditions.some((c) => satisfies(resolve, c));
     case "eq":
       return resolve(condition.column) === operandOf(condition.value, resolve);
+    case "ne":
+      return resolve(condition.column) !== operandOf(condition.value, resolve);
     case "gt":
       return (
         (resolve(condition.column) as number) >
+        (operandOf(condition.value, resolve) as number)
+      );
+    case "lt":
+      return (
+        (resolve(condition.column) as number) <
         (operandOf(condition.value, resolve) as number)
       );
     case "lte":

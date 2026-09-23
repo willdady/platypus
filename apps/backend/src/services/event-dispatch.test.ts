@@ -8,32 +8,19 @@ import {
 } from "../test-utils.ts";
 import { clearPendingTriggers } from "./event-trigger-debounce.ts";
 
-const { mockDeliverWebhook, mockExecuteTrigger, mockUpdateTriggerAfterRun } =
-  vi.hoisted(() => ({
-    mockDeliverWebhook: vi.fn(),
-    mockExecuteTrigger: vi.fn(),
-    mockUpdateTriggerAfterRun: vi.fn(),
-  }));
+const { mockDeliverWebhook, mockFireTrigger } = vi.hoisted(() => ({
+  mockDeliverWebhook: vi.fn(),
+  mockFireTrigger: vi.fn(),
+}));
 
 vi.mock("./webhook-delivery.ts", () => ({
   deliverWebhook: mockDeliverWebhook,
 }));
 
-vi.mock("./trigger-execution.ts", () => ({
-  executeTrigger: mockExecuteTrigger,
-  updateTriggerAfterRun: mockUpdateTriggerAfterRun,
-}));
-
-const { mockShouldSuppressTriggerRun, mockSuppressTriggerRun } = vi.hoisted(
-  () => ({
-    mockShouldSuppressTriggerRun: vi.fn(),
-    mockSuppressTriggerRun: vi.fn(),
-  }),
-);
-
-vi.mock("./trigger-breaker.ts", () => ({
-  shouldSuppressTriggerRun: mockShouldSuppressTriggerRun,
-  suppressTriggerRun: mockSuppressTriggerRun,
+// Dispatch decides which Trigger fires and when; what firing does — the
+// breaker, the run, its bookkeeping — is `trigger-firing.test.ts`'s subject.
+vi.mock("./trigger-firing.ts", () => ({
+  fireTrigger: mockFireTrigger,
 }));
 
 import { mockLogger } from "../test-setup.ts";
@@ -130,7 +117,7 @@ async function runsForPair(
   dispatchEvent("org-1", "ws-1", second);
   await flushMicrotasks();
 
-  return mockExecuteTrigger.mock.calls.length;
+  return mockFireTrigger.mock.calls.length;
 }
 
 describe("event-dispatch", () => {
@@ -138,10 +125,7 @@ describe("event-dispatch", () => {
     vi.useFakeTimers();
     resetMockDb();
     vi.clearAllMocks();
-    mockExecuteTrigger.mockResolvedValue("chat-1");
-    mockUpdateTriggerAfterRun.mockResolvedValue(undefined);
-    mockShouldSuppressTriggerRun.mockResolvedValue(false);
-    mockSuppressTriggerRun.mockResolvedValue(undefined);
+    mockFireTrigger.mockResolvedValue("ran");
   });
 
   afterEach(() => {
@@ -210,14 +194,11 @@ describe("event-dispatch", () => {
       dispatchEvent("org-1", "ws-1", created);
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).toHaveBeenCalledWith(trigger, {
+      expect(mockFireTrigger).toHaveBeenCalledWith(trigger, {
+        kind: "event",
         payload: created,
         entityId: "c1",
       });
-      expect(mockUpdateTriggerAfterRun).toHaveBeenCalledWith(
-        "trigger-1",
-        trigger,
-      );
     });
 
     it("should skip triggers not subscribed to the event", async () => {
@@ -229,7 +210,7 @@ describe("event-dispatch", () => {
       dispatchEvent("org-1", "ws-1", cardEvent("card.created", { id: "c1" }));
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should filter triggers by boardId when filter is set", async () => {
@@ -249,7 +230,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should execute trigger when boardId filter matches", async () => {
@@ -268,7 +249,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).toHaveBeenCalled();
+      expect(mockFireTrigger).toHaveBeenCalled();
     });
 
     it("should filter triggers by columnId when filter is set", async () => {
@@ -287,7 +268,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should filter triggers by changedFields when the filter set does not intersect", async () => {
@@ -306,7 +287,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should execute the trigger when the changedFields filter intersects the event", async () => {
@@ -328,7 +309,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).toHaveBeenCalled();
+      expect(mockFireTrigger).toHaveBeenCalled();
     });
 
     it("should ignore the changedFields filter for an event other than card.updated", async () => {
@@ -349,7 +330,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).toHaveBeenCalled();
+      expect(mockFireTrigger).toHaveBeenCalled();
     });
 
     it("should compose the changedFields filter with the boardId filter", async () => {
@@ -372,7 +353,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should fire card.moved for a column filter matching the destination column", async () => {
@@ -395,7 +376,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).toHaveBeenCalled();
+      expect(mockFireTrigger).toHaveBeenCalled();
     });
 
     it("should not fire card.moved for a column filter matching only the source column", async () => {
@@ -418,7 +399,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should skip a card.moved trigger when its own agent caused the event", async () => {
@@ -441,7 +422,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should reach the debounce path for card.moved, coalescing rapid duplicates", async () => {
@@ -477,7 +458,7 @@ describe("event-dispatch", () => {
 
       // Both calls key onto the same trigger+card debounce entry, so they
       // coalesce into a single execution — same as card.updated does.
-      expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+      expect(mockFireTrigger).toHaveBeenCalledTimes(1);
     });
 
     it("should not coalesce card.deleted events for two different cards", async () => {
@@ -548,37 +529,26 @@ describe("event-dispatch", () => {
       expect(runs).toBe(1);
     });
 
-    describe("the run-rate breaker", () => {
-      it("consults the breaker with the trigger and the event's entity", async () => {
-        const trigger = makeEventTrigger({ id: "trigger-1" });
-        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
-
-        dispatchEvent("org-1", "ws-1", cardEvent("card.updated", { id: "c1" }));
-        await flushMicrotasks();
-
-        expect(mockShouldSuppressTriggerRun).toHaveBeenCalledWith(
-          "trigger-1",
-          "c1",
-        );
-        expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
-      });
-
-      it("keys the count by the event-specific id rather than a shared bucket", async () => {
+    describe("what a firing is handed", () => {
+      it("names the event's single entity, which the run-rate breaker counts by", async () => {
         const trigger = makeEventTrigger({
           config: { events: ["card.deleted"] },
         });
         mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-        dispatchEvent("org-1", "ws-1", deletedEvent("c1"));
+        const deleted = deletedEvent("c1");
+        dispatchEvent("org-1", "ws-1", deleted);
         await flushMicrotasks();
 
-        expect(mockShouldSuppressTriggerRun).toHaveBeenCalledWith(
-          "trigger-1",
-          "c1",
-        );
+        // Keyed by the event-specific id (`cardId`), not a shared bucket.
+        expect(mockFireTrigger).toHaveBeenCalledWith(trigger, {
+          kind: "event",
+          payload: deleted,
+          entityId: "c1",
+        });
       });
 
-      it("exempts events that name no single entity", async () => {
+      it("names no entity for an event that names a set", async () => {
         // A bulk mark-all-read names a set, so counting its firings would trip
         // the breaker after N unrelated Notifications.
         const trigger = makeEventTrigger({
@@ -586,63 +556,49 @@ describe("event-dispatch", () => {
         });
         mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-        dispatchEvent(
-          "org-1",
-          "ws-1",
-          readEvent({
-            notificationIds: ["n-1", "n-2"],
-            userId: "user-1",
-            bulk: true,
-          }),
-        );
+        const bulk = readEvent({
+          notificationIds: ["n-1", "n-2"],
+          userId: "user-1",
+          bulk: true,
+        });
+        dispatchEvent("org-1", "ws-1", bulk);
         await flushMicrotasks();
 
-        expect(mockShouldSuppressTriggerRun).not.toHaveBeenCalled();
-        expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+        expect(mockFireTrigger).toHaveBeenCalledWith(trigger, {
+          kind: "event",
+          payload: bulk,
+          entityId: undefined,
+        });
       });
 
-      it("drops the firing when the breaker trips, recording a suppressed row instead", async () => {
-        const trigger = makeEventTrigger({ id: "trigger-1" });
-        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
-        mockShouldSuppressTriggerRun.mockResolvedValue(true);
-
-        const suppressedCard = cardEvent("card.updated", {
-          id: "c1",
-          title: "Board the quarterly acquisition",
-        });
-        dispatchEvent("org-1", "ws-1", suppressedCard);
-        await flushMicrotasks();
-
-        expect(mockExecuteTrigger).not.toHaveBeenCalled();
-        expect(mockUpdateTriggerAfterRun).not.toHaveBeenCalled();
-        expect(mockSuppressTriggerRun).toHaveBeenCalledWith({
-          triggerId: "trigger-1",
-          maxRunsToKeep: 10,
-          entityId: "c1",
-          eventType: "card.updated",
-          eventData: suppressedCard.data,
-        });
-        expect(decisionLines().map((line) => line.decision)).toEqual([
-          "fired",
-          "suppressed",
-        ]);
-      });
-
-      it("checks the breaker only once the run would start, after the debounce window", async () => {
+      it("fires only once the debounce window closes", async () => {
         const trigger = makeEventTrigger();
         mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
-        mockShouldSuppressTriggerRun.mockResolvedValue(true);
 
         dispatchEvent("org-1", "ws-1", cardEvent("card.created", { id: "c1" }));
         await vi.advanceTimersByTimeAsync(1_000);
 
-        // Still inside the debounce window: nothing has been decided yet, so
-        // a burst folded into this window can write at most one suppressed row.
-        expect(mockSuppressTriggerRun).not.toHaveBeenCalled();
+        // Still inside the window: nothing has been decided yet, so a burst
+        // folded into it reaches the breaker as one firing.
+        expect(mockFireTrigger).not.toHaveBeenCalled();
 
         await flushMicrotasks();
 
-        expect(mockSuppressTriggerRun).toHaveBeenCalledTimes(1);
+        expect(mockFireTrigger).toHaveBeenCalledTimes(1);
+      });
+
+      it("records a firing the breaker dropped as suppressed", async () => {
+        const trigger = makeEventTrigger({ id: "trigger-1" });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+        mockFireTrigger.mockResolvedValue("suppressed");
+
+        dispatchEvent("org-1", "ws-1", cardEvent("card.updated", { id: "c1" }));
+        await flushMicrotasks();
+
+        expect(decisionLines().map((line) => line.decision)).toEqual([
+          "fired",
+          "suppressed",
+        ]);
       });
     });
 
@@ -663,18 +619,25 @@ describe("event-dispatch", () => {
       await flushMicrotasks();
 
       expect(mockDeliverWebhook).toHaveBeenCalledTimes(2);
-      expect(mockExecuteTrigger).toHaveBeenCalledTimes(2);
+      expect(mockFireTrigger).toHaveBeenCalledTimes(2);
     });
 
-    it("should not throw when trigger execution fails", async () => {
-      const trigger = makeEventTrigger();
-      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+    it("skips a malformed trigger row without abandoning the others", async () => {
+      const malformed = makeEventTrigger({ id: "trigger-bad", config: {} });
+      const good = makeEventTrigger({ id: "trigger-good" });
+      mockDb.where
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([malformed, good]);
 
-      mockExecuteTrigger.mockRejectedValue(new Error("Execution failed"));
-
-      // Should not throw — errors are caught internally
       dispatchEvent("org-1", "ws-1", cardEvent("card.created", { id: "c1" }));
       await flushMicrotasks();
+
+      expect(mockFireTrigger).toHaveBeenCalledTimes(1);
+      expect(mockFireTrigger).toHaveBeenCalledWith(good, expect.anything());
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ triggerId: "trigger-bad" }),
+        "Skipped a malformed event trigger",
+      );
     });
 
     describe("dispatch decisions are logged", () => {
@@ -723,7 +686,7 @@ describe("event-dispatch", () => {
         );
         await flushMicrotasks();
 
-        expect(mockExecuteTrigger).not.toHaveBeenCalled();
+        expect(mockFireTrigger).not.toHaveBeenCalled();
         expect(decisionLines()).toEqual([
           {
             event: "card.updated",
@@ -750,7 +713,7 @@ describe("event-dispatch", () => {
         dispatchEvent("org-1", "ws-1", cardEvent("card.updated", { id: "c1" }));
         await flushMicrotasks();
 
-        expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+        expect(mockFireTrigger).toHaveBeenCalledTimes(1);
         expect(decisionLines().map((line) => line.decision)).toEqual([
           "fired",
           "debounced",
@@ -825,7 +788,7 @@ describe("event-dispatch", () => {
         );
         await flushMicrotasks();
 
-        expect(mockExecuteTrigger).not.toHaveBeenCalled();
+        expect(mockFireTrigger).not.toHaveBeenCalled();
         expect(decisionLines()).toEqual([]);
       });
 
@@ -859,7 +822,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should skip a trigger when a sub-agent of its own agent caused the event (depth 1)", async () => {
@@ -872,7 +835,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should skip a trigger when a sub-agent of its own agent caused the event (depth 2+)", async () => {
@@ -884,7 +847,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("should fire on a human event even when the trigger's agent previously touched the card", async () => {
@@ -900,7 +863,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).toHaveBeenCalled();
+      expect(mockFireTrigger).toHaveBeenCalled();
     });
 
     it("should fire when a different agent caused the event", async () => {
@@ -914,7 +877,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).toHaveBeenCalled();
+      expect(mockFireTrigger).toHaveBeenCalled();
     });
 
     it("should not apply the self-actor guard to triggers without an agentId", async () => {
@@ -926,7 +889,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).toHaveBeenCalled();
+      expect(mockFireTrigger).toHaveBeenCalled();
     });
 
     it("should dispatch to both webhooks and triggers for the same event", async () => {
@@ -940,7 +903,7 @@ describe("event-dispatch", () => {
       await flushMicrotasks();
 
       expect(mockDeliverWebhook).toHaveBeenCalledTimes(1);
-      expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+      expect(mockFireTrigger).toHaveBeenCalledTimes(1);
     });
 
     it("should not fire a trigger on its own agent's notification writes", async () => {
@@ -958,7 +921,7 @@ describe("event-dispatch", () => {
         } as const,
       ]) {
         mockDb.where.mockClear();
-        vi.mocked(mockExecuteTrigger).mockClear();
+        vi.mocked(mockFireTrigger).mockClear();
         mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
         withCausation(["agent-1"], () =>
@@ -966,7 +929,7 @@ describe("event-dispatch", () => {
         );
         await flushMicrotasks();
 
-        expect(mockExecuteTrigger).not.toHaveBeenCalled();
+        expect(mockFireTrigger).not.toHaveBeenCalled();
       }
     });
 
@@ -986,7 +949,7 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      expect(mockFireTrigger).not.toHaveBeenCalled();
     });
 
     it("suppresses only the trigger whose agent caused the event, running the rest", async () => {
@@ -1011,8 +974,9 @@ describe("event-dispatch", () => {
       // the triggers was suppressed.
       expect(mockDeliverWebhook).toHaveBeenCalledTimes(1);
       // The suppressed trigger's run never starts, but the unrelated one does.
-      expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
-      expect(mockExecuteTrigger).toHaveBeenCalledWith(unrelated, {
+      expect(mockFireTrigger).toHaveBeenCalledTimes(1);
+      expect(mockFireTrigger).toHaveBeenCalledWith(unrelated, {
+        kind: "event",
         payload: created,
         entityId: "c1",
       });

@@ -5,22 +5,15 @@ import {
   trigger as triggerTable,
 } from "../db/schema.ts";
 import { deliverWebhook } from "./webhook-delivery.ts";
-import { executeTrigger } from "./trigger-execution.ts";
-import { updateTriggerAfterRun } from "./trigger-execution.ts";
 import { debounceTriggerExecution } from "./event-trigger-debounce.ts";
-import {
-  shouldSuppressTriggerRun,
-  suppressTriggerRun,
-} from "./trigger-breaker.ts";
+import { fireTrigger } from "./trigger-firing.ts";
+import { narrowTriggerConfig } from "./trigger.ts";
 import { logger } from "../logger.ts";
 import {
   currentCausingAgents,
   currentOriginatingTrigger,
 } from "../event-causation.ts";
-import type {
-  EventTriggerConfig,
-  WebhookEventPayload,
-} from "@platypus/schemas";
+import type { WebhookEventPayload } from "@platypus/schemas";
 import { webhookEventEntity, webhookEventScope } from "@platypus/schemas";
 
 /**
@@ -130,7 +123,23 @@ export function dispatchEvent(
         );
 
       for (const trigger of eventTriggers) {
-        const triggerConfig = trigger.config as EventTriggerConfig;
+        // A malformed row is skipped on its own, rather than aborting dispatch
+        // for every Trigger after it.
+        let typed: ReturnType<typeof narrowTriggerConfig>;
+        try {
+          typed = narrowTriggerConfig(trigger);
+        } catch (error) {
+          logger.error(
+            {
+              triggerId: trigger.id,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            "Skipped a malformed event trigger",
+          );
+          continue;
+        }
+        if (typed.type !== "event") continue;
+        const triggerConfig = typed.config;
         if (!triggerConfig.events.includes(event)) continue;
 
         // Apply event filters. Evaluated before the self-actor guard so that a
@@ -191,38 +200,11 @@ export function dispatchEvent(
           debounceKey,
           trigger,
           { payload, entityId: breakerEntityId },
+          // Firing owns the breaker, the run and its bookkeeping, and never
+          // rejects. The breaker is checked there, once the window closes.
           async (t, ctx) => {
-            try {
-              // The breaker is checked when the run would start, not when the
-              // event arrives: the debounce has then folded any burst into one
-              // firing, so a burst cannot manufacture suppressed rows, and the
-              // count includes runs that started during the window.
-              if (
-                ctx.entityId &&
-                (await shouldSuppressTriggerRun(t.id, ctx.entityId))
-              ) {
-                await suppressTriggerRun({
-                  triggerId: t.id,
-                  maxRunsToKeep: t.maxRunsToKeep,
-                  entityId: ctx.entityId,
-                  eventType: ctx.payload.event,
-                  eventData: ctx.payload.data,
-                });
-                logDecision(t, "suppressed");
-                return;
-              }
-              await executeTrigger(t, ctx);
-              await updateTriggerAfterRun(t.id, t);
-            } catch (error) {
-              logger.error(
-                {
-                  triggerId: t.id,
-                  event,
-                  error: error instanceof Error ? error.message : String(error),
-                },
-                "Event trigger execution failed",
-              );
-            }
+            const outcome = await fireTrigger(t, { kind: "event", ...ctx });
+            if (outcome === "suppressed") logDecision(t, "suppressed");
           },
         );
 
