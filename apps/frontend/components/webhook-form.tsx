@@ -17,15 +17,13 @@ import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useCallback, useState } from "react";
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { joinUrl } from "@/lib/utils";
 import { retractExactKeys } from "@/lib/form-errors";
 import { writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 import { Eye, EyeOff, Copy, RefreshCw, Plus, X } from "lucide-react";
 import { workspaceRoutes } from "@/lib/routes";
 
@@ -87,7 +85,6 @@ const INITIAL_DATA = {
 };
 
 const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
 
@@ -97,22 +94,10 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
   const isEditMode = !!webhookId;
 
-  const fetchUrl =
-    webhookId && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/webhooks/${webhookId}`,
-        )
-      : null;
-
   const {
-    data: webhook,
-    error: webhookError,
-    isLoading,
-    mutate,
-  } = useSWR<Webhook>(fetchUrl, fetcher);
-
-  const {
+    record: webhook,
+    mutateRecord,
+    loadState,
     formData,
     setFormData,
     validationErrors,
@@ -122,11 +107,23 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     toFieldChange,
     clearErrors,
     submit,
-  } = useEntityForm<typeof INITIAL_DATA, unknown>({
+  } = useEntityForm<typeof INITIAL_DATA, unknown, Webhook>({
     initialData: INITIAL_DATA,
     entity: "webhooks",
     scope: { orgId, workspaceId },
     id: webhookId,
+    fromRecord: (webhook) => ({
+      name: webhook.name,
+      url: webhook.url,
+      enabled: webhook.enabled,
+      events: webhook.events ?? [...ALL_EVENTS],
+      headers: webhook.headers
+        ? Object.entries(webhook.headers).map(([key, value]) => ({
+            key,
+            value,
+          }))
+        : [],
+    }),
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => {
       const headersObj: Record<string, string> = {};
@@ -167,24 +164,6 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     },
   });
 
-  // Initialise the form from the loaded webhook, once per webhook id.
-  useResetOnChange(webhook?.id, () => {
-    if (webhook) {
-      setFormData({
-        name: webhook.name,
-        url: webhook.url,
-        enabled: webhook.enabled,
-        events: webhook.events ?? [...ALL_EVENTS],
-        headers: webhook.headers
-          ? Object.entries(webhook.headers).map(([key, value]) => ({
-              key,
-              value,
-            }))
-          : [],
-      });
-    }
-  });
-
   const { events, headers } = formData;
 
   const toggleEvent = (event: string) => {
@@ -212,7 +191,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
     if (outcome.outcome === "success") {
       toast.success("Signing secret regenerated");
-      await mutate();
+      await mutateRecord();
     } else {
       toast.error(outcome.message);
     }
@@ -500,9 +479,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
   return (
     <DetailFormState
-      isLoading={isLoading}
-      error={webhookError}
-      data={webhook}
+      {...loadState}
       subject="webhook"
       backHref={workspaceRoutes(orgId, workspaceId).settings.webhooks}
       backLabel="Back to webhooks"

@@ -54,11 +54,6 @@ export interface UseEntityFormOptions<
    */
   onSeed?: (record: TRecord) => void;
   /**
-   * The read's path from the root scope, when it isn't `${entity}/${id}`
-   * under `scope` — e.g. a user-scoped row written through a `write` override.
-   */
-  readEntity?: string;
-  /**
    * Field ids whose server error an edit can retract — and therefore the only
    * ones that may gate Save. See `canSubmitForm`.
    */
@@ -169,7 +164,6 @@ export function useEntityForm<
   id,
   fromRecord,
   onSeed,
-  readEntity,
   retractableFields = NO_RETRACTABLE_FIELDS,
   transformField,
   buildPayload,
@@ -197,10 +191,7 @@ export function useEntityForm<
     error,
     isLoading,
     mutate: mutateRecord,
-  } = useScopedSWR<TRecord>(
-    readEntity ?? `${entity}/${id}`,
-    reads ? (readEntity ? {} : scope) : null,
-  );
+  } = useScopedSWR<TRecord>(`${entity}/${id}`, reads ? scope : null);
 
   // Keyed on the id, not the record: SWR hands back a new object whenever a
   // revalidation changes the row, and keying on that would re-seed over the

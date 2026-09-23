@@ -162,3 +162,40 @@ describe("TriggerForm — Include Memories", () => {
     expect(savedBody(fetchMock).includeMemories).toBe(true);
   });
 });
+
+describe("TriggerForm — record revalidation", () => {
+  it("keeps an unsaved edit when the scheduler bumps nextRunAt", () => {
+    const trigger = {
+      id: "trigger-1",
+      workspaceId: "ws1",
+      agentId: "agent-1",
+      name: "Nightly",
+      description: "Old",
+      instruction: "Do it",
+      type: "cron",
+      config: { cronExpression: "0 9 * * *", timezone: "UTC", isOneOff: false },
+      enabled: true,
+      maxRunsToKeep: 10,
+      nextRunAt: "2026-09-23T09:00:00.000Z",
+    };
+    setDataFor("/triggers/trigger-1", trigger);
+    const { rerender } = render(
+      <TriggerForm orgId="org1" workspaceId="ws1" triggerId="trigger-1" />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "Edited" },
+    });
+    // A focus revalidation after the scheduler ran: same row, later schedule.
+    setDataFor("/triggers/trigger-1", {
+      ...trigger,
+      lastRunAt: "2026-09-23T09:00:00.000Z",
+      nextRunAt: "2026-09-24T09:00:00.000Z",
+    });
+    rerender(
+      <TriggerForm orgId="org1" workspaceId="ws1" triggerId="trigger-1" />,
+    );
+
+    expect(screen.getByLabelText("Description")).toHaveValue("Edited");
+  });
+});

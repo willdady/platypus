@@ -47,9 +47,8 @@ import {
   type Provider,
   type Skill,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { writeAt, errorMessage } from "@/lib/api-write";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { writeAt, errorMessage, scopedUrl } from "@/lib/api-write";
 import {
   toastGuidanceOrError,
   FIX_FORM_ERRORS_MESSAGE,
@@ -62,7 +61,7 @@ import {
 } from "@/lib/selection-reference";
 import { ModelCapabilityNotice } from "@/components/model-capability-notice";
 import { toast } from "sonner";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { ToolSetsUnavailableNotice } from "@/components/tool-sets-unavailable-notice";
 import { type ToolSetsFailureReason } from "@/lib/tool-sets-request";
@@ -132,62 +131,37 @@ const AgentForm = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
-  // Resource base paths differ by scope: the Organization surface lists/writes
-  // org-scoped references, the Workspace surface its own.
-  const agentsBase = orgScoped
-    ? `/organizations/${orgId}/agents`
-    : `/organizations/${orgId}/workspaces/${workspaceId}/agents`;
-  const providersBase = orgScoped
-    ? `/organizations/${orgId}/providers`
-    : `/organizations/${orgId}/workspaces/${workspaceId}/providers`;
-  const skillsBase = orgScoped
-    ? `/organizations/${orgId}/skills`
-    : `/organizations/${orgId}/workspaces/${workspaceId}/skills`;
+  // The Organization surface lists/writes org-scoped references, the
+  // Workspace surface its own.
+  const scope = orgScoped ? { orgId } : { orgId, workspaceId: workspaceId! };
   const doneHref = orgScoped
     ? orgRoutes(orgId).settings.agents
     : workspaceRoutes(orgId, workspaceId!).root;
 
   // Fetch providers
-  const { data: providersData, isLoading: providersLoading } = useSWR<{
+  const { data: providersData, isLoading: providersLoading } = useScopedSWR<{
     results: Provider[];
-  }>(backendUrl && user ? joinUrl(backendUrl, providersBase) : null, fetcher);
+  }>("providers", scope);
   const providers = useMemo(
     () => providersData?.results || [],
     [providersData],
   );
 
   // Fetch skills
-  const { data: skillsData } = useSWR<{ results: Skill[] }>(
-    backendUrl && user ? joinUrl(backendUrl, skillsBase) : null,
-    fetcher,
+  const { data: skillsData } = useScopedSWR<{ results: Skill[] }>(
+    "skills",
+    scope,
   );
   const skills = skillsData?.results || [];
 
   // Fetch agents for Sub-Agent selection
-  const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    backendUrl && user ? joinUrl(backendUrl, agentsBase) : null,
-    fetcher,
+  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
+    "agents",
+    scope,
   );
   const agents = propAgents || agentsData?.results || [];
-
-  // Fetch existing agent data if editing
-  const {
-    data: agent,
-    error: agentError,
-    isLoading: agentLoading,
-  } = useSWR<Agent & { scope?: "organization" | "workspace" }>(
-    agentId && user ? joinUrl(backendUrl, `${agentsBase}/${agentId}`) : null,
-    fetcher,
-  );
-
-  // A Shared Agent opened on the Workspace surface is read-only for everyone —
-  // it is edited only on the Organization surface (ADR-0007). In org mode the
-  // form is the canonical editor, so it is always editable.
-  const isOrgScoped = agent?.scope === "organization";
-  const readOnly = isOrgScoped && !orgScoped;
 
   const router = useRouter();
 
@@ -197,6 +171,8 @@ const AgentForm = ({
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const {
+    record: agent,
+    loadState,
     formData,
     setFormData,
     validationErrors,
@@ -209,7 +185,11 @@ const AgentForm = ({
     setFloatField,
     clearErrors,
     submit,
-  } = useEntityForm<AgentFormData, Agent>({
+  } = useEntityForm<
+    AgentFormData,
+    Agent,
+    Agent & { scope?: "organization" | "workspace" }
+  >({
     initialData: {
       name: "",
       description: "",
@@ -223,8 +203,32 @@ const AgentForm = ({
       subAgentIds: [],
     },
     entity: "agents",
-    scope: orgScoped ? { orgId } : { orgId, workspaceId },
+    scope,
     id: agentId,
+    fromRecord: (agent) => ({
+      name: agent.name,
+      description: agent.description,
+      inputPlaceholder: agent.inputPlaceholder || "",
+      instructions: agent.instructions || "",
+      providerId: agent.providerId,
+      modelId: agent.modelId,
+      maxSteps: agent.maxSteps || DEFAULT_AGENT_MAX_STEPS,
+      temperature: agent.temperature ?? undefined,
+      topP: agent.topP ?? undefined,
+      topK: agent.topK ?? undefined,
+      seed: agent.seed ?? undefined,
+      presencePenalty: agent.presencePenalty ?? undefined,
+      frequencyPenalty: agent.frequencyPenalty ?? undefined,
+      toolSetIds: agent.toolSetIds || [],
+      skillIds: agent.skillIds || [],
+      subAgentIds: agent.subAgentIds || [],
+    }),
+    onSeed: (agent) => {
+      if (agent.avatarUrl) {
+        setAvatarPreviewUrl(agent.avatarUrl);
+        setAvatarDeleted(false);
+      }
+    },
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => {
       // Saving migrates a concrete id to the alias its model now carries
@@ -285,7 +289,7 @@ const AgentForm = ({
       // toast and continue on (#595).
       if (avatarDeleted && agentId) {
         const avatarOutcome = await writeAt(
-          joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
+          scopedUrl(backendUrl, `agents/${savedAgentId}/avatar`, scope),
           { method: "DELETE" },
         );
         if (avatarOutcome.outcome !== "success") {
@@ -297,7 +301,7 @@ const AgentForm = ({
         const avatarFormData = new FormData();
         avatarFormData.append("file", avatarFile);
         const avatarResponse = await fetch(
-          joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
+          scopedUrl(backendUrl, `agents/${savedAgentId}/avatar`, scope),
           {
             method: "POST",
             body: avatarFormData,
@@ -322,7 +326,7 @@ const AgentForm = ({
     handleDelete,
   } = useEntityDelete<Agent>({
     entity: "agents",
-    scope: orgScoped ? { orgId } : { orgId, workspaceId },
+    scope,
     id: agentId,
     onSuccess: () => router.push(doneHref),
     onError: (message, outcome, { close }) => {
@@ -350,33 +354,11 @@ const AgentForm = ({
     },
   );
 
-  // Initialize form with existing agent data when editing
-  useResetOnChange(agent, () => {
-    if (agent) {
-      setFormData({
-        name: agent.name,
-        description: agent.description,
-        inputPlaceholder: agent.inputPlaceholder || "",
-        instructions: agent.instructions || "",
-        providerId: agent.providerId,
-        modelId: agent.modelId,
-        maxSteps: agent.maxSteps || DEFAULT_AGENT_MAX_STEPS,
-        temperature: agent.temperature ?? undefined,
-        topP: agent.topP ?? undefined,
-        topK: agent.topK ?? undefined,
-        seed: agent.seed ?? undefined,
-        presencePenalty: agent.presencePenalty ?? undefined,
-        frequencyPenalty: agent.frequencyPenalty ?? undefined,
-        toolSetIds: agent.toolSetIds || [],
-        skillIds: agent.skillIds || [],
-        subAgentIds: agent.subAgentIds || [],
-      });
-      if (agent.avatarUrl) {
-        setAvatarPreviewUrl(agent.avatarUrl);
-        setAvatarDeleted(false);
-      }
-    }
-  });
+  // A Shared Agent opened on the Workspace surface is read-only for everyone —
+  // it is edited only on the Organization surface (ADR-0007). In org mode the
+  // form is the canonical editor, so it is always editable.
+  const isOrgScoped = agent?.scope === "organization";
+  const readOnly = isOrgScoped && !orgScoped;
 
   const setAvatarFromFile = useCallback(
     (file: File) => {
@@ -928,9 +910,8 @@ const AgentForm = ({
 
   return (
     <DetailFormState
-      isLoading={providersLoading || agentLoading}
-      error={agentError}
-      data={agent}
+      {...loadState}
+      isLoading={providersLoading || loadState.isLoading}
       subject="agent"
       backHref={doneHref}
       backLabel={orgScoped ? "Back to agents" : "Back to workspace"}

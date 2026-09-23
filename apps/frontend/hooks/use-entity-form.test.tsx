@@ -126,9 +126,9 @@ describe("useEntityForm record read", () => {
     expect(result.current.record).toBe(row);
   });
 
-  it("reads from the root when given a read path", () => {
+  it("reads a user-scoped record from the root scope", () => {
     setDataFor("http://test/users/me/contexts/s1", row);
-    const { result } = renderRead({ readEntity: "users/me/contexts/s1" });
+    const { result } = renderRead({ entity: "users/me/contexts", scope: {} });
     expect(result.current.record).toBe(row);
   });
 

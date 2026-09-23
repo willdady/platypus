@@ -365,20 +365,6 @@ const TriggerForm = ({
   );
   const boards = boardsData?.results || [];
 
-  const {
-    data: trigger,
-    error: triggerError,
-    isLoading: triggerLoading,
-  } = useSWR<Trigger>(
-    triggerId && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${triggerId}`,
-        )
-      : null,
-    fetcher,
-  );
-
   const [triggerType, setTriggerType] = useState<"cron" | "event">("cron");
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [filterBoardId, setFilterBoardId] = useState<string>("");
@@ -417,6 +403,8 @@ const TriggerForm = ({
   const router = useRouter();
 
   const {
+    record: trigger,
+    loadState,
     formData,
     setFormData,
     validationErrors,
@@ -428,7 +416,7 @@ const TriggerForm = ({
     setNumberField,
     setField,
     submit,
-  } = useEntityForm<TriggerFormData, { id: string }>({
+  } = useEntityForm<TriggerFormData, { id: string }, Trigger>({
     initialData: {
       name: "",
       description: "",
@@ -445,6 +433,47 @@ const TriggerForm = ({
     entity: "triggers",
     scope: { orgId, workspaceId },
     id: triggerId,
+    fromRecord: (trigger) => ({
+      name: trigger.name,
+      description: trigger.description || "",
+      agentId: trigger.agentId,
+      instruction: trigger.instruction,
+      cronExpression:
+        trigger.type === "cron"
+          ? (trigger.config as CronTriggerConfig).cronExpression
+          : "0 9 * * *",
+      timezone:
+        trigger.type === "cron"
+          ? (trigger.config as CronTriggerConfig).timezone
+          : getBrowserTimezone(),
+      isOneOff:
+        trigger.type === "cron"
+          ? (trigger.config as CronTriggerConfig).isOneOff
+          : false,
+      enabled: trigger.enabled,
+      maxRunsToKeep: trigger.maxRunsToKeep,
+      search: trigger.search ?? false,
+      includeMemories: trigger.includeMemories ?? false,
+    }),
+    onSeed: (trigger) => {
+      setTriggerType(trigger.type);
+      if (trigger.type === "cron") {
+        const cronConfig = trigger.config as CronTriggerConfig;
+        const parsed = parseCronExpression(cronConfig.cronExpression);
+        if (parsed) {
+          setSimpleSchedule(parsed);
+          setScheduleMode("simple");
+        } else {
+          setScheduleMode("advanced");
+        }
+      } else {
+        const eventConfig = trigger.config as EventTriggerConfig;
+        setSelectedEvents(eventConfig.events);
+        setFilterBoardId(eventConfig.filters?.boardId || "");
+        setFilterColumnId(eventConfig.filters?.columnId || "");
+        setFilterChangedFields(eventConfig.filters?.changedFields || []);
+      }
+    },
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data): unknown => {
       const commonFields = {
@@ -509,51 +538,6 @@ const TriggerForm = ({
       toast.error(message);
       close();
     },
-  });
-
-  useResetOnChange(trigger, () => {
-    if (trigger) {
-      setTriggerType(trigger.type);
-      setFormData({
-        name: trigger.name,
-        description: trigger.description || "",
-        agentId: trigger.agentId,
-        instruction: trigger.instruction,
-        cronExpression:
-          trigger.type === "cron"
-            ? (trigger.config as CronTriggerConfig).cronExpression
-            : "0 9 * * *",
-        timezone:
-          trigger.type === "cron"
-            ? (trigger.config as CronTriggerConfig).timezone
-            : getBrowserTimezone(),
-        isOneOff:
-          trigger.type === "cron"
-            ? (trigger.config as CronTriggerConfig).isOneOff
-            : false,
-        enabled: trigger.enabled,
-        maxRunsToKeep: trigger.maxRunsToKeep,
-        search: trigger.search ?? false,
-        includeMemories: trigger.includeMemories ?? false,
-      });
-
-      if (trigger.type === "cron") {
-        const cronConfig = trigger.config as CronTriggerConfig;
-        const parsed = parseCronExpression(cronConfig.cronExpression);
-        if (parsed) {
-          setSimpleSchedule(parsed);
-          setScheduleMode("simple");
-        } else {
-          setScheduleMode("advanced");
-        }
-      } else {
-        const eventConfig = trigger.config as EventTriggerConfig;
-        setSelectedEvents(eventConfig.events);
-        setFilterBoardId(eventConfig.filters?.boardId || "");
-        setFilterColumnId(eventConfig.filters?.columnId || "");
-        setFilterChangedFields(eventConfig.filters?.changedFields || []);
-      }
-    }
   });
 
   // When creating (no existing trigger), default the agent to the first
@@ -1220,9 +1204,8 @@ const TriggerForm = ({
 
   return (
     <DetailFormState
-      isLoading={agentsLoading || (!!triggerId && triggerLoading)}
-      error={triggerError}
-      data={trigger}
+      {...loadState}
+      isLoading={agentsLoading || loadState.isLoading}
       subject="trigger"
       backHref={workspaceRoutes(orgId, workspaceId).root}
       backLabel="Back to workspace"

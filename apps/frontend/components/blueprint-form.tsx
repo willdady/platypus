@@ -18,7 +18,6 @@ import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { Bot, Plug, Sparkles, Unplug } from "lucide-react";
@@ -172,19 +171,7 @@ const BlueprintForm = ({
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
-  const collectionUrl = `/organizations/${orgId}/blueprints`;
   const returnPath = orgRoutes(orgId).settings.blueprints;
-
-  const {
-    data: blueprint,
-    error: blueprintError,
-    isLoading,
-  } = useSWR<Blueprint>(
-    blueprintId && user
-      ? joinUrl(backendUrl, `${collectionUrl}/${blueprintId}`)
-      : null,
-    fetcher,
-  );
 
   // Org-scoped providers — the eligible set for Tier 2 pointer-settings, which
   // may only reference Shared resources (ADR-0008).
@@ -203,6 +190,7 @@ const BlueprintForm = ({
   const router = useRouter();
 
   const {
+    loadState,
     formData,
     setFormData,
     validationErrors,
@@ -212,11 +200,25 @@ const BlueprintForm = ({
     handleChange,
     toFieldChange,
     submit,
-  } = useEntityForm<typeof INITIAL_DATA, unknown>({
+  } = useEntityForm<typeof INITIAL_DATA, unknown, Blueprint>({
     initialData: INITIAL_DATA,
     entity: "blueprints",
     scope: { orgId },
     id: blueprintId,
+    fromRecord: (blueprint) => ({
+      name: blueprint.name,
+      description: blueprint.description ?? "",
+      context: blueprint.context ?? "",
+      taskModelProviderId: blueprint.taskModelProviderId ?? null,
+      memoryExtractionProviderId: blueprint.memoryExtractionProviderId ?? null,
+      memoryEmbeddingProviderId: blueprint.memoryEmbeddingProviderId ?? null,
+    }),
+    onSeed: (blueprint) =>
+      setSelected(
+        new Set(
+          blueprint.items.map((i) => itemKey(i.resourceType, i.resourceId)),
+        ),
+      ),
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => {
       const items: BlueprintItem[] = [...selected].map((key) => {
@@ -254,25 +256,6 @@ const BlueprintForm = ({
     scope: { orgId },
     id: blueprintId,
     onSuccess: () => router.push(returnPath),
-  });
-
-  useResetOnChange(blueprint, () => {
-    if (blueprint) {
-      setFormData({
-        name: blueprint.name,
-        description: blueprint.description ?? "",
-        context: blueprint.context ?? "",
-        taskModelProviderId: blueprint.taskModelProviderId ?? null,
-        memoryExtractionProviderId:
-          blueprint.memoryExtractionProviderId ?? null,
-        memoryEmbeddingProviderId: blueprint.memoryEmbeddingProviderId ?? null,
-      });
-      setSelected(
-        new Set(
-          blueprint.items.map((i) => itemKey(i.resourceType, i.resourceId)),
-        ),
-      );
-    }
   });
 
   const toggleItem = (
@@ -508,9 +491,7 @@ const BlueprintForm = ({
 
   return (
     <DetailFormState
-      isLoading={isLoading}
-      error={blueprintError}
-      data={blueprint}
+      {...loadState}
       subject="blueprint"
       backHref={returnPath}
       backLabel="Back to blueprints"

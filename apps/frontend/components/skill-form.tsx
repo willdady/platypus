@@ -15,7 +15,6 @@ import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import {
@@ -26,10 +25,8 @@ import {
   type Skill,
   type Agent,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { toast } from "sonner";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
@@ -62,37 +59,16 @@ const SkillForm = ({
   workspaceId?: string;
   skillId?: string;
 }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
-
   // The scope determines the backend collection and where we return after save.
-  const collectionUrl = workspaceId
-    ? `/organizations/${orgId}/workspaces/${workspaceId}/skills`
-    : `/organizations/${orgId}/skills`;
   const returnPath = workspaceId
     ? workspaceRoutes(orgId, workspaceId).root
     : orgRoutes(orgId).settings.skills;
   const scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
-  // Fetch existing skill data if editing (includes agentIds in workspace mode)
-  const {
-    data: skill,
-    error: skillError,
-    isLoading: skillLoading,
-  } = useSWR<Skill & { agentIds?: string[] }>(
-    skillId && user ? joinUrl(backendUrl, `${collectionUrl}/${skillId}`) : null,
-    fetcher,
-  );
-
   // Agent associations are a workspace concern; only fetched on that surface.
-  const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    backendUrl && user && workspaceId
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
-      : null,
-    fetcher,
+  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
+    "agents",
+    workspaceId ? scope : null,
   );
   const agents = agentsData?.results || [];
 
@@ -101,6 +77,7 @@ const SkillForm = ({
   const router = useRouter();
 
   const {
+    loadState,
     formData,
     setFormData,
     validationErrors,
@@ -109,11 +86,26 @@ const SkillForm = ({
     handleChange,
     toFieldChange,
     submit,
-  } = useEntityForm<typeof INITIAL_DATA, unknown>({
+  } = useEntityForm<
+    typeof INITIAL_DATA,
+    unknown,
+    Skill & { agentIds?: string[] }
+  >({
     initialData: INITIAL_DATA,
     entity: "skills",
     scope,
     id: skillId,
+    // Includes agentIds in workspace mode.
+    fromRecord: (skill) => ({
+      name: skill.name,
+      description: skill.description,
+      body: skill.body,
+      argumentHint: skill.argumentHint ?? "",
+      disableModelInvocation: skill.disableModelInvocation,
+    }),
+    onSeed: (skill) => {
+      if (skill.agentIds) setSelectedAgentIds(skill.agentIds);
+    },
     retractableFields: RETRACTABLE_FIELDS,
     // A Skill name is normalised to lowercase as it is typed.
     transformField: (id, value) =>
@@ -156,26 +148,6 @@ const SkillForm = ({
         stopLoading();
       }
     },
-  });
-
-  // Initialize form with existing skill data when editing
-  useResetOnChange(skill, () => {
-    if (skill) {
-      setFormData({
-        name: skill.name,
-        description: skill.description,
-        body: skill.body,
-        argumentHint: skill.argumentHint ?? "",
-        disableModelInvocation: skill.disableModelInvocation,
-      });
-    }
-  });
-
-  // Initialize agent selections from the skill's agentIds
-  useResetOnChange(skill, () => {
-    if (skill?.agentIds) {
-      setSelectedAgentIds(skill.agentIds);
-    }
   });
 
   const form = (
@@ -331,9 +303,7 @@ const SkillForm = ({
 
   return (
     <DetailFormState
-      isLoading={skillLoading}
-      error={skillError}
-      data={skill}
+      {...loadState}
       subject="skill"
       backHref={returnPath}
       backLabel={workspaceId ? "Back to workspace" : "Back to skills"}

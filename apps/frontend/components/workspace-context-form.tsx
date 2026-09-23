@@ -1,6 +1,5 @@
 "use client";
 
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import {
@@ -24,7 +23,6 @@ import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { fetcher, joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import useSWR from "swr";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
@@ -49,40 +47,33 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   const { user } = useAuth();
 
   const contextsUrl = joinUrl(backendUrl, "/users/me/contexts");
-  const contextUrl = contextId
-    ? joinUrl(backendUrl, `/users/me/contexts/${contextId}`)
-    : null;
 
   const {
+    record: contextData,
+    loadState,
     formData,
-    setFormData,
     validationErrors,
     setValidationErrors,
     isSubmitting,
     setField,
     handleChange,
     submit,
-  } = useEntityForm<typeof INITIAL_DATA, Context>({
+  } = useEntityForm<typeof INITIAL_DATA, Context, Context>({
     initialData: INITIAL_DATA,
-    entity: "contexts",
+    // User-scoped, so the root scope: `/users/me/contexts`.
+    entity: "users/me/contexts",
     scope: {},
     id: contextId,
+    fromRecord: (context) => ({
+      content: context.content,
+      workspaceId: context.workspaceId || "",
+    }),
     retractableFields: RETRACTABLE_FIELDS,
-    write: (data) =>
-      contextId && contextUrl
-        ? writeAt<Context>(contextUrl, {
-            method: "PUT",
-            data: { content: data.content },
-            revalidateKeys: [contextsUrl, contextUrl],
-          })
-        : writeAt<Context>(contextsUrl, {
-            method: "POST",
-            data: {
-              content: data.content,
-              workspaceId: data.workspaceId,
-            },
-            revalidateKeys: [contextsUrl],
-          }),
+    // The Workspace is fixed once the context exists.
+    buildPayload: (data) =>
+      contextId
+        ? { content: data.content }
+        : { content: data.content, workspaceId: data.workspaceId },
     // A create's 409 is "you already have a context for this workspace", so
     // it belongs on the Workspace field; an update has no such field.
     conflictField: contextId ? null : "workspaceId",
@@ -99,24 +90,12 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete({
-    entity: "contexts",
+    entity: "users/me/contexts",
     scope: {},
     id: contextId,
-    write: () =>
-      writeAt(contextUrl as string, {
-        method: "DELETE",
-        revalidateKeys: [contextsUrl],
-      }),
     successMessage: "Context deleted",
     onSuccess: () => router.push(userRoutes.contexts),
   });
-
-  // Fetch existing context if editing
-  const {
-    data: contextData,
-    error: contextError,
-    isLoading: contextLoading,
-  } = useSWR<Context>(contextId && user ? contextUrl : null, fetcher);
 
   // Fetch organizations
   const {
@@ -174,16 +153,6 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
     mutateWorkspaces();
   };
 
-  // Set form data when editing
-  useResetOnChange(contextData, () => {
-    if (contextData) {
-      setFormData({
-        content: contextData.content,
-        workspaceId: contextData.workspaceId || "",
-      });
-    }
-  });
-
   // Filter out workspaces that already have contexts (unless we're editing that context)
   const existingWorkspaceIds = new Set(
     allContexts?.results
@@ -216,9 +185,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
 
   return (
     <DetailFormState
-      isLoading={!!contextId && contextLoading}
-      error={contextError}
-      data={contextData}
+      {...loadState}
       subject="workspace context"
       backHref={userRoutes.contexts}
       backLabel="Back to contexts"
