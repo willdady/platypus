@@ -4,6 +4,8 @@ import {
   mockSession,
   mockNoSession,
   resetMockDb,
+  seedDb,
+  type FakeDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
 import { mockNanoid } from "../test-setup.ts";
@@ -454,6 +456,9 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: boardId, name: "Board 1", workspaceId },
+      ]); // requireBoard
       mockDb.limit.mockResolvedValueOnce([]); // duplicate check
 
       const mockColumn = { id: "col-1", boardId, name: "Updated Column" };
@@ -475,6 +480,9 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: boardId, name: "Board 1", workspaceId },
+      ]); // requireBoard
       mockDb.limit.mockResolvedValueOnce([]); // duplicate check
 
       mockDb.returning.mockResolvedValueOnce([]);
@@ -494,6 +502,9 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: boardId, name: "Board 1", workspaceId },
+      ]); // requireBoard
       mockDb.limit.mockResolvedValueOnce([{ id: "other-col" }]); // duplicate check
 
       const res = await app.request(`${baseUrl}/${boardId}/columns/col-1`, {
@@ -517,6 +528,9 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: boardId, name: "Board 1", workspaceId },
+      ]); // requireBoard
 
       mockDb.returning.mockResolvedValueOnce([{ id: "col-1" }]);
 
@@ -533,6 +547,9 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: boardId, name: "Board 1", workspaceId },
+      ]); // requireBoard
 
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -540,6 +557,76 @@ describe("Kanban Routes", () => {
         method: "DELETE",
       });
       expect(res.status).toBe(404);
+    });
+  });
+
+  /**
+   * These state fixture rows rather than counting queries: `seedDb()`
+   * interprets the `WHERE` each query builds, so a Column write that trusts the
+   * `boardId` in the URL reaches the other Workspace's row and the test fails.
+   * The caller owns `ws-1`; `board-b` and its Column live in `ws-2`, which
+   * belongs to someone else in the same Organization.
+   */
+  describe("column writes are scoped to the Workspace", () => {
+    const world = (): FakeDb =>
+      seedDb({
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
+        ],
+        workspace: [
+          { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
+          { id: "ws-2", organizationId: orgId, ownerId: "other-user" },
+        ],
+        kanban_board: [
+          { id: boardId, workspaceId, name: "Mine", labels: [] },
+          { id: "board-b", workspaceId: "ws-2", name: "Theirs", labels: [] },
+        ],
+        kanban_column: [
+          { id: "col-1", boardId, name: "To Do", position: 1 },
+          { id: "col-b", boardId: "board-b", name: "To Do", position: 1 },
+        ],
+      });
+
+    it("does not rename a Column on another Workspace's Board", async () => {
+      const fake = world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/board-b/columns/col-b`, {
+        method: "PUT",
+        body: JSON.stringify({ name: "Hijacked" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      expect(fake.tables.kanban_column).toContainEqual(
+        expect.objectContaining({ id: "col-b", name: "To Do" }),
+      );
+    });
+
+    it("does not delete a Column on another Workspace's Board", async () => {
+      const fake = world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/board-b/columns/col-b`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(404);
+      expect(fake.tables.kanban_column).toContainEqual(
+        expect.objectContaining({ id: "col-b" }),
+      );
+    });
+
+    it("deletes a Column on a Board in this Workspace", async () => {
+      const fake = world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/${boardId}/columns/col-1`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(fake.tables.kanban_column.map((col) => col.id)).toEqual(["col-b"]);
     });
   });
 

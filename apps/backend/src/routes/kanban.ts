@@ -514,6 +514,10 @@ kanban.put(
     const boardId = c.req.param("boardId");
     const data = c.req.valid("json");
 
+    // The column is addressed through its board, so the board must be in this
+    // Workspace — otherwise the `boardId` in the URL is taken on trust.
+    await requireBoard(db, scopeOf(c), boardId);
+
     // Check for duplicate column name within the board (excluding this column)
     const existingColumn = await db
       .select({ id: kanbanColumnTable.id })
@@ -561,6 +565,8 @@ kanban.delete(
   async (c) => {
     const columnId = c.req.param("columnId");
     const boardId = c.req.param("boardId");
+
+    await requireBoard(db, scopeOf(c), boardId);
 
     const result = await db
       .delete(kanbanColumnTable)
