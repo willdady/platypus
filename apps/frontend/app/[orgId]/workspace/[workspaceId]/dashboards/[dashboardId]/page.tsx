@@ -12,14 +12,25 @@ import type { LayoutItem } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import { cn } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
+import {
+  cancelPlan,
+  commitPlan,
+  effectiveLayouts,
+  recordDeletion,
+  savedDeletions,
+  stageAddition,
+  stageDeletion,
+  stageMove,
+  startEditSession,
+  type EditSession,
+  type LayoutTab,
+} from "@/lib/dashboard-edit-session";
 import { useBackendUrl } from "@/components/auth-provider";
 import {
   widgetTypeRegistry,
   type Dashboard,
   type Widget,
   type WidgetType,
-  type WidgetTypeDefinition,
-  type RglLayoutItem,
 } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,8 +89,6 @@ const widgetTypeEntries = Object.entries(widgetTypeRegistry) as [
 const GRID_BREAKPOINTS = { lg: 736, sm: 0 };
 const GRID_COLS = { lg: 12, sm: 2 };
 const GRID_CONTAINER_PADDING: [number, number] = [0, 0];
-const DEFAULT_MIN_W = 1;
-const DEFAULT_MIN_H = 3;
 
 const WIDGET_TIMESTAMP_FORMAT: Intl.DateTimeFormatOptions = {
   year: "numeric",
@@ -91,27 +100,6 @@ const WIDGET_TIMESTAMP_FORMAT: Intl.DateTimeFormatOptions = {
 
 function formatWidgetTimestamp(value: Date | string | number): string {
   return new Date(value).toLocaleString("sv-SE", WIDGET_TIMESTAMP_FORMAT);
-}
-
-// Stamp the registry's per-type minimum onto each layout item at render time.
-// Values are not stored in the DB; they are injected so the grid enforces them
-// during resize. An absent type or axis falls back to the global minimum.
-function withMinSize(
-  items: RglLayoutItem[],
-  widgetTypeById: Map<string, WidgetType>,
-): RglLayoutItem[] {
-  return items.map((item) => {
-    const type = widgetTypeById.get(item.i);
-    const definition = type
-      ? (widgetTypeRegistry[type] as WidgetTypeDefinition)
-      : undefined;
-    const minSize = definition?.minSize;
-    return {
-      ...item,
-      minH: minSize?.h ?? DEFAULT_MIN_H,
-      minW: minSize?.w ?? DEFAULT_MIN_W,
-    };
-  });
 }
 
 type WidgetTileProps = {
@@ -271,22 +259,13 @@ const DashboardPage = ({
   // Mirrors the grid's lg breakpoint (see effectiveGridWidth / breakpoints below).
   const isMobileViewport = gridWidth > 0 && gridWidth < 768;
 
-  // Edit mode state
-  const [editMode, setEditMode] = useState(false);
-  const [layoutTab, setLayoutTab] = useState<"desktop" | "mobile">("desktop");
+  // Edit mode state. The session holds everything staged; null when not editing.
+  const [session, setSession] = useState<EditSession | null>(null);
+  const editMode = session !== null;
+  const [layoutTab, setLayoutTab] = useState<LayoutTab>("desktop");
   const [editingWidgetId, setEditingWidgetId] = useState<string | null>(null);
   const [expandedWidgetId, setExpandedWidgetId] = useState<string | null>(null);
   const [isInteracting, setIsInteracting] = useState(false);
-  const [pendingDeletions, setPendingDeletions] = useState<Set<string>>(
-    new Set(),
-  );
-  const [pendingAdditions, setPendingAdditions] = useState<Set<string>>(
-    new Set(),
-  );
-
-  // Staged layout (only committed on Done)
-  const [stagedDesktop, setStagedDesktop] = useState<RglLayoutItem[]>([]);
-  const [stagedMobile, setStagedMobile] = useState<RglLayoutItem[]>([]);
 
   // Add widget dialog
   const [addWidgetOpen, setAddWidgetOpen] = useState(false);
@@ -315,54 +294,85 @@ const DashboardPage = ({
     scope,
   );
 
+  const deletions = session?.deletions;
   const widgets = useMemo(
-    () =>
-      (widgetsData?.results ?? []).filter((w) => !pendingDeletions.has(w.id)),
-    [widgetsData, pendingDeletions],
+    () => (widgetsData?.results ?? []).filter((w) => !deletions?.has(w.id)),
+    [widgetsData, deletions],
   );
   const allDashboards = allDashboardsData?.results ?? [];
 
-  // Enter edit mode: snapshot layouts and clear any prior staged changes
+  // Per-type minimum sizes and mobile heights live in the registry.
+  const widgetTypeById = useMemo(
+    () => new Map(widgets.map((w) => [w.id, w.type])),
+    [widgets],
+  );
+
   const enterEditMode = () => {
-    setStagedDesktop(dashboard?.desktopLayout ?? []);
-    setStagedMobile(dashboard?.mobileLayout ?? []);
-    setPendingDeletions(new Set());
-    setPendingAdditions(new Set());
-    setEditMode(true);
+    if (!dashboard) return;
+    setSession(startEditSession(dashboard));
     if (widgets.length === 0) {
       setAddWidgetOpen(true);
     }
   };
 
-  // Cancel: undo pending additions and discard all other staged changes
-  const cancelEdit = async () => {
-    if (backendUrl && pendingAdditions.size > 0) {
-      const outcomes = await Promise.all(
-        [...pendingAdditions].map((widgetId) =>
-          writeEntity(backendUrl, widgetsEntity, scope, { id: widgetId }),
-        ),
-      );
-      if (outcomes.some((outcome) => outcome.outcome !== "success")) {
-        toast.error("Failed to cancel dashboard changes");
-        return;
-      }
-      await mutateWidgets();
-    }
-    setPendingDeletions(new Set());
-    setPendingAdditions(new Set());
-    setEditMode(false);
+  const exitEditMode = () => {
+    setSession(null);
     setEditingWidgetId(null);
   };
 
-  // Done: execute pending deletions then persist layouts
-  const saveEdit = async () => {
-    if (!backendUrl || !dashboard) return;
-    const deleteOutcomes = await Promise.all(
-      [...pendingDeletions].map((widgetId) =>
-        writeEntity(backendUrl, widgetsEntity, scope, { id: widgetId }),
+  // Runs a plan's widget DELETEs and records each outcome, so a retry only
+  // re-sends the ones that failed. Returns the session with outcomes recorded.
+  const deleteWidgets = async (
+    url: string,
+    current: EditSession,
+    widgetIds: string[],
+  ) => {
+    const outcomes = await Promise.all(
+      widgetIds.map((widgetId) =>
+        writeEntity(url, widgetsEntity, scope, { id: widgetId }),
       ),
     );
-    if (deleteOutcomes.some((outcome) => outcome.outcome !== "success")) {
+    const next = widgetIds.reduce(
+      (s, widgetId, idx) => recordDeletion(s, widgetId, outcomes[idx].outcome),
+      current,
+    );
+    setSession(next);
+    return next;
+  };
+
+  // Cancel: undo pending additions and discard all other staged changes
+  const cancelEdit = async () => {
+    if (!backendUrl || !session) return;
+    const next = await deleteWidgets(backendUrl, session, cancelPlan(session));
+    if (cancelPlan(next).length > 0) {
+      toast.error("Failed to cancel dashboard changes");
+      return;
+    }
+    if (next.deleted.size > 0) {
+      await Promise.all([mutateWidgets(), mutateDashboard()]);
+    }
+    // A failed Save may already have deleted some widgets; there is no undo.
+    const saved = savedDeletions(next).length;
+    if (saved > 0) {
+      toast.info(
+        saved === 1
+          ? "1 widget had already been deleted and can't be restored"
+          : `${saved} widgets had already been deleted and can't be restored`,
+      );
+    }
+    exitEditMode();
+  };
+
+  // Save: execute pending deletions then persist layouts
+  const saveEdit = async () => {
+    if (!backendUrl || !session) return;
+    const next = await deleteWidgets(
+      backendUrl,
+      session,
+      commitPlan(session).deletions,
+    );
+    const plan = commitPlan(next);
+    if (plan.deletions.length > 0) {
       toast.error("Failed to save dashboard changes");
       return;
     }
@@ -370,23 +380,14 @@ const DashboardPage = ({
       backendUrl,
       "dashboards",
       { orgId, workspaceId },
-      {
-        id: dashboardId,
-        data: {
-          desktopLayout: stagedDesktop,
-          mobileLayout: stagedMobile,
-        },
-      },
+      { id: dashboardId, data: plan.layout },
     );
     if (layoutOutcome.outcome !== "success") {
       toast.error("Failed to save dashboard changes");
       return;
     }
     await Promise.all([mutateWidgets(), mutateDashboard()]);
-    setPendingDeletions(new Set());
-    setPendingAdditions(new Set());
-    setEditMode(false);
-    setEditingWidgetId(null);
+    exitEditMode();
   };
 
   // Sync layout only on user drag/resize stop to avoid the grid overwriting
@@ -394,11 +395,7 @@ const DashboardPage = ({
   const syncLayout = useCallback(
     (layout: readonly LayoutItem[]) => {
       const items = layout.map(({ i, x, y, w, h }) => ({ i, x, y, w, h }));
-      if (layoutTab === "desktop") {
-        setStagedDesktop(items);
-      } else {
-        setStagedMobile(items);
-      }
+      setSession((prev) => prev && stageMove(prev, layoutTab, items));
     },
     [layoutTab],
   );
@@ -424,33 +421,21 @@ const DashboardPage = ({
     }
     const widget = outcome.data;
 
-    // Track as pending so Cancel can delete it from the API.
-    setPendingAdditions((prev) => new Set([...prev, widget.id]));
-
     // Fetch the updated widget list first so the child element exists in the
     // DOM before we add the layout item — if the layout item appears with no
     // matching child the grid discards it and assigns a default (tiny) size.
     await mutateWidgets();
 
-    const { w: dw, h: dh } = widgetTypeRegistry[newWidgetType].defaultSize;
-
-    const maxY = stagedDesktop.reduce(
-      (m, item) => Math.max(m, item.y + item.h),
-      0,
+    // Staged as an addition too, so Cancel can delete it from the API.
+    setSession(
+      (prev) =>
+        prev &&
+        stageAddition(
+          prev,
+          { id: widget.id, type: widget.type },
+          widgetTypeById,
+        ),
     );
-    setStagedDesktop((prev) => [
-      ...prev,
-      { i: widget.id, x: 0, y: maxY, w: dw, h: dh },
-    ]);
-
-    const maxYMobile = stagedMobile.reduce(
-      (m, item) => Math.max(m, item.y + item.h),
-      0,
-    );
-    setStagedMobile((prev) => [
-      ...prev,
-      { i: widget.id, x: 0, y: maxYMobile, w: 2, h: dh },
-    ]);
 
     setAddWidgetOpen(false);
     setNewWidgetTitle("");
@@ -467,9 +452,7 @@ const DashboardPage = ({
 
   // Stage a widget deletion — only committed to the API when the user clicks Done
   const handleDeleteWidget = useCallback((widgetId: string) => {
-    setPendingDeletions((prev) => new Set([...prev, widgetId]));
-    setStagedDesktop((prev) => prev.filter((item) => item.i !== widgetId));
-    setStagedMobile((prev) => prev.filter((item) => item.i !== widgetId));
+    setSession((prev) => prev && stageDeletion(prev, widgetId));
     setEditingWidgetId((prev) => (prev === widgetId ? null : prev));
   }, []);
 
@@ -499,44 +482,20 @@ const DashboardPage = ({
     [backendUrl, scope, widgetsEntity, mutateWidgets],
   );
 
-  // Per-type minimum sizes live in the registry (see `withMinSize`).
-  const widgetTypeById = useMemo(
-    () => new Map(widgets.map((w) => [w.id, w.type])),
-    [widgets],
-  );
-
   // Compute the effective layout for display
-  const serverDesktopLayout = useMemo(
-    () => dashboard?.desktopLayout ?? [],
-    [dashboard],
-  );
-  const serverMobileLayout = useMemo(
-    () => dashboard?.mobileLayout ?? [],
-    [dashboard],
-  );
-  const effectiveDesktopLayout = useMemo(
-    () =>
-      withMinSize(
-        editMode ? stagedDesktop : serverDesktopLayout,
-        widgetTypeById,
-      ),
-    [editMode, stagedDesktop, serverDesktopLayout, widgetTypeById],
-  );
-
-  // For mobile fallback: sort by desktop y if mobileLayout is empty
-  const rawMobileLayout = editMode ? stagedMobile : serverMobileLayout;
-  const effectiveMobileLayout = useMemo(
-    () =>
-      withMinSize(
-        rawMobileLayout.length > 0
-          ? rawMobileLayout
-          : [...effectiveDesktopLayout]
-              .sort((a, b) => a.y - b.y)
-              .map((item, idx) => ({ ...item, x: 0, y: idx * 5, w: 2, h: 5 })),
-        widgetTypeById,
-      ),
-    [rawMobileLayout, effectiveDesktopLayout, widgetTypeById],
-  );
+  const { desktop: effectiveDesktopLayout, mobile: effectiveMobileLayout } =
+    useMemo(
+      () =>
+        effectiveLayouts(
+          session,
+          {
+            desktopLayout: dashboard?.desktopLayout ?? [],
+            mobileLayout: dashboard?.mobileLayout ?? [],
+          },
+          widgetTypeById,
+        ),
+      [session, dashboard, widgetTypeById],
+    );
 
   const activeLayout = isMobileViewport
     ? effectiveMobileLayout
@@ -671,7 +630,7 @@ const DashboardPage = ({
             <>
               <Tabs
                 value={layoutTab}
-                onValueChange={(v) => setLayoutTab(v as "desktop" | "mobile")}
+                onValueChange={(v) => setLayoutTab(v as LayoutTab)}
               >
                 <TabsList>
                   <TabsTrigger value="desktop">Desktop</TabsTrigger>
