@@ -23,6 +23,16 @@ export interface StorageBackend {
    * @param key - Unique identifier for the file
    */
   delete(key: string): Promise<void>;
+
+  /**
+   * Delete every object whose key starts with `prefix`, used when the Chat,
+   * Workspace or Organization that owns them is deleted. A prefix with nothing
+   * under it is not an error.
+   * @param prefix - A key prefix ending in `/` (see `assertValidStoragePrefix`)
+   * @throws ValidationError if the prefix is empty, lacks its trailing `/`, or
+   *   has an unsafe segment — before the backend is touched
+   */
+  deletePrefix(prefix: string): Promise<void>;
 }
 
 /**

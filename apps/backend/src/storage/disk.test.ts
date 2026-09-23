@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { DiskStorage } from "./disk.ts";
+import { ValidationError } from "../errors.ts";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -99,6 +100,50 @@ describe("DiskStorage", () => {
       // Should not throw
       await expect(storage.delete("non-existent")).resolves.not.toThrow();
     });
+  });
+
+  describe("deletePrefix", () => {
+    const exists = (key: string) =>
+      fs.access(path.join(tempDir, key)).then(
+        () => true,
+        () => false,
+      );
+
+    it("removes every object and sidecar under the prefix and nothing beside it", async () => {
+      const inside = ["o/w/c1/m1/0-a.png", "o/w/c2/m1/0-b.png"];
+      const outside = ["o/w2/c1/m1/0-c.png", "o/w-other/c1/m1/0-d.png"];
+      for (const key of [...inside, ...outside]) {
+        await storage.put(key, Buffer.from(key), "image/png");
+      }
+
+      await storage.deletePrefix("o/w/");
+
+      for (const key of inside) {
+        expect(await exists(key)).toBe(false);
+        expect(await exists(`${key}.meta`)).toBe(false);
+      }
+      expect(await exists("o/w")).toBe(false);
+      for (const key of outside) {
+        expect(await exists(key)).toBe(true);
+        expect(await exists(`${key}.meta`)).toBe(true);
+      }
+    });
+
+    it("succeeds when the prefix directory does not exist", async () => {
+      await expect(storage.deletePrefix("o/missing/")).resolves.toBeUndefined();
+    });
+
+    it.each(["", "/", "o/w", "o/../x/"])(
+      "rejects %j without touching the filesystem",
+      async (prefix) => {
+        await storage.put("o/w/c/m/0-a.png", Buffer.from("x"), "image/png");
+
+        await expect(storage.deletePrefix(prefix)).rejects.toThrow(
+          ValidationError,
+        );
+        expect(await exists("o/w/c/m/0-a.png")).toBe(true);
+      },
+    );
   });
 
   describe("integration", () => {

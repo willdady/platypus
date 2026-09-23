@@ -4,7 +4,13 @@ import {
   mockNoSession,
   mockSession,
   resetMockDb,
+  seedDb,
+  useTempDiskStorage,
+  putStoredFiles,
+  isStored,
 } from "../test-utils.ts";
+import { mockLogger } from "../test-setup.ts";
+import { getStorage } from "../storage/index.ts";
 
 const { mockPrepareChatTurn, mockValidateTurnAttachments } = vi.hoisted(() => ({
   mockPrepareChatTurn: vi.fn(),
@@ -618,6 +624,88 @@ describe("Chat Routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         message: "Chat deleted successfully",
+      });
+    });
+
+    describe("stored files", () => {
+      useTempDiskStorage();
+
+      // Neither file is referenced by the Chat's messages: the first was on a
+      // message an edit dropped, which is exactly what reference-based cleanup
+      // left behind.
+      const orphan = "org-1/ws-1/chat-1/msg-dropped/0-aaaaaaaa.png";
+      const sibling = "org-1/ws-1/chat-10/msg-1/0-bbbbbbbb.png";
+
+      const seed = () =>
+        seedDb({
+          organization_member: [
+            {
+              id: "m1",
+              userId: "user-1",
+              organizationId: orgId,
+              role: "member",
+            },
+          ],
+          workspace: [
+            { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
+          ],
+          chat: [
+            { id: "chat-1", workspaceId, messages: [] },
+            { id: "chat-10", workspaceId, messages: [] },
+          ],
+        });
+
+      it("removes everything under the Chat's prefix and nothing under a sibling's", async () => {
+        mockSession();
+        const fake = seed();
+        await putStoredFiles([orphan, sibling]);
+
+        const res = await app.request(`${baseUrl}/chat-1`, {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(200);
+        expect(fake.tables.chat.map((row) => row.id)).toEqual(["chat-10"]);
+        expect(await isStored(orphan)).toBe(false);
+        expect(await isStored(sibling)).toBe(true);
+      });
+
+      it("leaves storage untouched when the row delete fails", async () => {
+        mockSession();
+        const fake = seed();
+        await putStoredFiles([orphan]);
+        vi.spyOn(
+          fake.handle as { delete: () => never },
+          "delete",
+        ).mockImplementation(() => {
+          throw new Error("db down");
+        });
+
+        const res = await app.request(`${baseUrl}/chat-1`, {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(500);
+        expect(await isStored(orphan)).toBe(true);
+      });
+
+      it("still succeeds, and logs, when storage fails after the row delete", async () => {
+        mockSession();
+        const fake = seed();
+        vi.spyOn(getStorage(), "deletePrefix").mockRejectedValue(
+          new Error("storage down"),
+        );
+
+        const res = await app.request(`${baseUrl}/chat-1`, {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(200);
+        expect(fake.tables.chat.map((row) => row.id)).toEqual(["chat-10"]);
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ prefix: "org-1/ws-1/chat-1/" }),
+          "Failed to delete files from storage",
+        );
       });
     });
   });

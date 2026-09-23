@@ -164,6 +164,11 @@ Point `STORAGE_BACKEND` at `s3` — AWS S3, or anything S3-compatible like MinIO
 R2 or Spaces — before you run more than one backend. The variables are in
 [Storage](/reference/backend-configuration#storage).
 
+The S3 credentials need `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on
+the bucket's objects, and `s3:ListBucket` on the bucket itself. Without
+`s3:ListBucket`, deleting a Chat, Workspace or Organization leaves its files
+behind in the bucket.
+
 ## A short checklist
 
 - TLS terminated at a proxy, with an HTTP → HTTPS redirect.

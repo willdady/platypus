@@ -1,5 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import {
+  mockDb,
+  mockSession,
+  resetMockDb,
+  seedDb,
+  useTempDiskStorage,
+  putStoredFiles,
+  isStored,
+} from "../test-utils.ts";
+import { mockLogger } from "../test-setup.ts";
+import { getStorage } from "../storage/index.ts";
 import app from "../server.ts";
 import { resolveScoped } from "../services/scoped-resource.ts";
 import {
@@ -377,10 +387,12 @@ describe("Workspace Routes", () => {
 
       // Mock delete — order: orgAccess where (chained) → workspaceAccess where
       // (chained) → destroyWorkspaceSandboxes select-where (resolves []) →
-      // workspace delete where (resolves) → provider delete where (resolves).
+      // Agent avatar select-where (resolves []) → workspace delete where
+      // (resolves) → provider delete where (resolves).
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
@@ -399,6 +411,97 @@ describe("Workspace Routes", () => {
       const providerDeleteIndex = deleteCalls.indexOf(providerTable);
       expect(workspaceDeleteIndex).toBeGreaterThanOrEqual(0);
       expect(providerDeleteIndex).toBeGreaterThan(workspaceDeleteIndex);
+    });
+
+    describe("stored files", () => {
+      useTempDiskStorage();
+
+      const inside = [
+        "org-1/ws-1/chat-1/msg-1/0-aaaaaaaa.png",
+        "org-1/ws-1/chat-2/msg-1/0-bbbbbbbb.png",
+      ];
+      const avatar = "agents/agent-1/avatar-a.webp";
+      const outside = [
+        "org-1/ws-10/chat-3/msg-1/0-cccccccc.png",
+        "agents/agent-2/avatar-b.webp",
+      ];
+
+      const seed = () =>
+        seedDb({
+          organization_member: [
+            {
+              id: "m1",
+              userId: "user-1",
+              organizationId: "org-1",
+              role: "member",
+            },
+          ],
+          workspace: [
+            { id: "ws-1", organizationId: "org-1", ownerId: "user-1" },
+            { id: "ws-10", organizationId: "org-1", ownerId: "user-1" },
+          ],
+          agent: [
+            { id: "agent-1", workspaceId: "ws-1", avatarKey: avatar },
+            { id: "agent-2", workspaceId: "ws-10", avatarKey: outside[1] },
+            { id: "agent-3", workspaceId: "ws-1", avatarKey: null },
+          ],
+        });
+
+      it("removes the Workspace's files and its Agents' avatars, and nothing else", async () => {
+        mockSession({ id: "user-1", role: "user" });
+        seed();
+        await putStoredFiles([...inside, avatar, ...outside]);
+
+        const res = await app.request("/organizations/org-1/workspaces/ws-1", {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(200);
+        for (const key of [...inside, avatar]) {
+          expect(await isStored(key)).toBe(false);
+        }
+        for (const key of outside) {
+          expect(await isStored(key)).toBe(true);
+        }
+      });
+
+      it("leaves storage untouched when the DB delete fails", async () => {
+        mockSession({ id: "user-1", role: "user" });
+        const fake = seed();
+        await putStoredFiles([...inside, avatar]);
+        vi.spyOn(
+          fake.handle as { transaction: () => Promise<never> },
+          "transaction",
+        ).mockRejectedValue(new Error("db down"));
+
+        const res = await app.request("/organizations/org-1/workspaces/ws-1", {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(500);
+        for (const key of [...inside, avatar]) {
+          expect(await isStored(key)).toBe(true);
+        }
+      });
+
+      it("still succeeds, and logs, when storage fails after the DB delete", async () => {
+        mockSession({ id: "user-1", role: "user" });
+        const fake = seed();
+        vi.spyOn(getStorage(), "deletePrefix").mockRejectedValue(
+          new Error("storage down"),
+        );
+
+        const res = await app.request("/organizations/org-1/workspaces/ws-1", {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(200);
+        expect(fake.tables.workspace.map((row) => row.id)).toEqual(["ws-10"]);
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          expect.objectContaining({ prefix: "org-1/ws-1/" }),
+          "Failed to delete files from storage",
+        );
+      });
     });
   });
 });

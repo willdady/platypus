@@ -43,8 +43,24 @@ vi.mock("@aws-sdk/client-s3", () => {
       this.input = input;
     }
   }
+  class MockListObjectsV2Command implements MockCommand {
+    _type = "ListObjectsV2Command";
+    input: Record<string, unknown>;
+    constructor(input: Record<string, unknown>) {
+      this.input = input;
+    }
+  }
+  class MockDeleteObjectsCommand implements MockCommand {
+    _type = "DeleteObjectsCommand";
+    input: Record<string, unknown>;
+    constructor(input: Record<string, unknown>) {
+      this.input = input;
+    }
+  }
   return {
     S3Client: MockS3Client,
+    ListObjectsV2Command: MockListObjectsV2Command,
+    DeleteObjectsCommand: MockDeleteObjectsCommand,
     PutObjectCommand: MockPutObjectCommand,
     GetObjectCommand: MockGetObjectCommand,
     DeleteObjectCommand: MockDeleteObjectCommand,
@@ -245,5 +261,68 @@ describe("S3Storage", () => {
         Key: "org/ws/chat/msg/0-abc.png",
       });
     });
+  });
+
+  describe("deletePrefix", () => {
+    const keys = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({ Key: `o/w/c/m/${from + i}` }));
+
+    it("pages through the listing and deletes each page in a batch of at most 1000", async () => {
+      sendMock
+        .mockResolvedValueOnce({
+          Contents: keys(0, 1000),
+          IsTruncated: true,
+          NextContinuationToken: "page-2",
+        })
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ Contents: keys(1000, 3), IsTruncated: false })
+        .mockResolvedValueOnce({});
+      const storage = new S3Storage();
+
+      await storage.deletePrefix("o/w/");
+
+      const cmds = sendMock.mock.calls.map((call) => call[0] as MockCommand);
+      expect(cmds.map((cmd) => cmd._type)).toEqual([
+        "ListObjectsV2Command",
+        "DeleteObjectsCommand",
+        "ListObjectsV2Command",
+        "DeleteObjectsCommand",
+      ]);
+      expect(cmds[0].input).toMatchObject({
+        Bucket: "test-bucket",
+        Prefix: "o/w/",
+        ContinuationToken: undefined,
+      });
+      expect(cmds[2].input).toMatchObject({
+        Prefix: "o/w/",
+        ContinuationToken: "page-2",
+      });
+      const batches = [cmds[1], cmds[3]].map(
+        (cmd) => (cmd.input.Delete as { Objects: unknown[] }).Objects,
+      );
+      expect(batches[0]).toEqual(keys(0, 1000));
+      expect(batches[1]).toEqual(keys(1000, 3));
+    });
+
+    it("sends no delete for an empty listing", async () => {
+      sendMock.mockResolvedValueOnce({ IsTruncated: false });
+      const storage = new S3Storage();
+
+      await storage.deletePrefix("o/w/");
+
+      expect(sendMock).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["", "/", "o/w", "o/../x/"])(
+      "rejects %j without calling S3",
+      async (prefix) => {
+        const storage = new S3Storage();
+
+        await expect(storage.deletePrefix(prefix)).rejects.toThrow(
+          "Invalid storage prefix",
+        );
+        expect(sendMock).not.toHaveBeenCalled();
+      },
+    );
   });
 });

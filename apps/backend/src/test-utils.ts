@@ -1,4 +1,8 @@
-import { vi, type Mock } from "vitest";
+import { afterEach, beforeEach, vi, type Mock } from "vitest";
+import { promises as fs } from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { getStorage, resetStorage } from "./storage/index.ts";
 import {
   createFakeDb,
   type FakeDb,
@@ -502,3 +506,32 @@ export const notificationEvent = (
     ...over,
   },
 });
+
+/**
+ * Points the storage singleton at a fresh temp directory for each test in the
+ * calling `describe`, so a route that deletes files deletes real ones — and
+ * never touches the default `./data/files`.
+ */
+export const useTempDiskStorage = () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "platypus-storage-test-"));
+    process.env.STORAGE_DISK_PATH = dir;
+    resetStorage();
+  });
+  afterEach(async () => {
+    delete process.env.STORAGE_DISK_PATH;
+    resetStorage();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+};
+
+/** Store a placeholder object at each key in the current storage backend. */
+export const putStoredFiles = (keys: string[]) =>
+  Promise.all(
+    keys.map((key) => getStorage().put(key, Buffer.from(key), "image/png")),
+  );
+
+/** Whether an object is stored at `key` in the current storage backend. */
+export const isStored = async (key: string) =>
+  (await getStorage().get(key)) !== null;

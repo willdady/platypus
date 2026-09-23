@@ -4,15 +4,9 @@ import type { FileExtractionContext } from "./types.ts";
 import { getStorage } from "./index.ts";
 import { logger } from "../logger.ts";
 import { ValidationError } from "../errors.ts";
-import {
-  assertValidStorageKey,
-  chatStorageKeyPrefix,
-  isKeyUnderChat,
-  type ChatKeyScope,
-} from "./keys.ts";
+import { assertValidStorageKey, chatStorageKeyPrefix } from "./keys.ts";
 import {
   canonicalStorageKeyFromUrl,
-  claimedStorageKeyFromUrl,
   decodeDataUrl,
   resolvableStorageKeyFromUrl,
   servedUrlForKey,
@@ -229,47 +223,6 @@ export function rewriteStorageUrls(
 }
 
 /**
- * Extract all storage keys from messages.
- * Useful for cleanup operations (e.g., when deleting a chat).
- *
- * Every form a stored row can carry is recognised — `file-reference.ts` lists
- * them — so cleanup never orphans a file.
- *
- * The keys are only what the client claimed: they name candidates, not
- * property. A caller that deletes must filter them with `isKeyUnderChat`, as
- * {@link deleteFiles} does.
- *
- * @param messages - Array of chat messages
- * @returns Array of storage keys found in the messages
- */
-export function extractStorageKeys(messages: PlatypusUIMessage[]): string[] {
-  const keys: string[] = [];
-
-  for (const message of messages) {
-    if (!message.parts || !Array.isArray(message.parts)) {
-      continue;
-    }
-
-    for (const part of message.parts) {
-      if (
-        part.type !== "file" ||
-        !("url" in part) ||
-        typeof part.url !== "string"
-      ) {
-        continue;
-      }
-
-      const key = claimedStorageKeyFromUrl(part.url);
-      if (key) {
-        keys.push(key);
-      }
-    }
-  }
-
-  return keys;
-}
-
-/**
  * Resolve every stored File-part reference back to inline `data:` bytes so that
  * `convertToModelMessages()` can access file content without making HTTP
  * requests (which would fail without session cookies).
@@ -353,42 +306,15 @@ export async function inlineFileUrls(
 }
 
 /**
- * Delete all files associated with a chat's messages.
- * Best-effort operation - errors are logged but don't fail the operation.
- *
- * Only keys under this Chat's own prefix are deleted. The keys come out of
- * message parts, and a client can put any URL on a part, so an unfiltered
- * delete lets a user plant `…/files/{another org}/…` in a Chat they own and
- * destroy another tenant's files by deleting it. Reading a Chat is enough to
- * learn such a key: `rewriteStorageUrls` hands every reader HTTP URLs with the
- * keys in them, so without this filter read access to a Chat implies the power
- * to delete its files.
- *
- * @param messages - Array of chat messages
- * @param scope - The Chat being deleted, whose files these must be
+ * Delete everything stored under a deleted Chat's, Workspace's or
+ * Organization's key prefix. Best-effort, and called only once the rows are
+ * gone: a failure is logged and leaves an unreachable object behind, which is
+ * harmless, where deleting first could leave rows pointing at missing files.
  */
-export async function deleteFiles(
-  messages: PlatypusUIMessage[],
-  scope: ChatKeyScope,
-): Promise<void> {
-  const keys = extractStorageKeys(messages).filter((key) =>
-    isKeyUnderChat(key, scope),
-  );
-  if (keys.length === 0) {
-    return;
+export async function deleteStoredPrefix(prefix: string): Promise<void> {
+  try {
+    await getStorage().deletePrefix(prefix);
+  } catch (error) {
+    logger.error({ error, prefix }, "Failed to delete files from storage");
   }
-
-  const storage = getStorage();
-
-  await Promise.all(
-    keys.map(async (key) => {
-      try {
-        await storage.delete(key);
-      } catch (error) {
-        logger.error({ error, key }, "Failed to delete file from storage");
-      }
-    }),
-  );
-
-  logger.info({ count: keys.length }, "Deleted files from storage");
 }

@@ -3,6 +3,7 @@ import * as path from "node:path";
 import type { StorageBackend } from "./types.ts";
 import { logger } from "../logger.ts";
 import { ValidationError } from "../errors.ts";
+import { assertValidStoragePrefix } from "./keys.ts";
 
 /**
  * Disk-based storage backend that stores files on the local filesystem.
@@ -123,5 +124,14 @@ export class DiskStorage implements StorageBackend {
     ]);
 
     logger.debug({ key }, "File deleted from disk");
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    assertValidStoragePrefix(prefix);
+    // Every sidecar sits beside its object, so it is inside the directory too.
+    // `force` makes a directory that was never created a no-op.
+    await fs.rm(this.getFilePath(prefix), { recursive: true, force: true });
+
+    logger.debug({ prefix }, "Prefix deleted from disk");
   }
 }

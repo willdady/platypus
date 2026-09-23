@@ -6,7 +6,11 @@ import {
   workspace as workspaceTable,
   organizationMember,
   provider as providerTable,
+  agent as agentTable,
 } from "../db/schema.ts";
+import { deleteStoredPrefix } from "../storage/utils.ts";
+import { workspaceStorageKeyPrefix } from "../storage/keys.ts";
+import { deleteAvatar } from "../services/avatar.ts";
 import {
   workspaceCreateSchema,
   workspaceUpdateSchema,
@@ -223,10 +227,16 @@ workspace.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const { workspaceId } = workspaceScopeOf(c);
+    const scope = workspaceScopeOf(c);
+    const { workspaceId } = scope;
     // Best-effort sandbox teardown before the DB cascade fires. Never throws;
     // failures are recorded in sandbox_teardown_failure (ADR-0001).
     await destroyWorkspaceSandboxes(workspaceId);
+    // Read before the cascade takes the Agent rows, and their keys, away.
+    const agents = await db
+      .select({ avatarKey: agentTable.avatarKey })
+      .from(agentTable)
+      .where(eq(agentTable.workspaceId, workspaceId));
     // `provider` carries no FK to `workspace` (issue #661) — a cascade FK
     // would race `agent.providerId`'s `restrict` constraint, since Postgres
     // checks RESTRICT immediately rather than deferring to end of statement.
@@ -239,6 +249,8 @@ workspace.delete(
         .delete(providerTable)
         .where(eq(providerTable.workspaceId, workspaceId));
     });
+    await deleteStoredPrefix(workspaceStorageKeyPrefix(scope));
+    await Promise.all(agents.map(({ avatarKey }) => deleteAvatar(avatarKey)));
     return c.json({ message: "Workspace deleted" });
   },
 );

@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { isValidStorageKey, assertValidStorageKey } from "./keys.ts";
+import {
+  isValidStorageKey,
+  assertValidStorageKey,
+  assertValidStoragePrefix,
+  chatStorageKeyPrefix,
+  workspaceStorageKeyPrefix,
+  organizationStorageKeyPrefix,
+} from "./keys.ts";
 import { ValidationError } from "../errors.ts";
 
 describe("storage keys", () => {
@@ -54,6 +61,34 @@ describe("storage keys", () => {
 
     it("throws ValidationError so the seam answers 400", () => {
       expect(() => assertValidStorageKey("../secret")).toThrow(ValidationError);
+    });
+  });
+
+  describe("scope prefixes", () => {
+    const scope = { orgId: "org-1", workspaceId: "ws-1", chatId: "chat-1" };
+
+    it("nests Chat under Workspace under Organization", () => {
+      expect(organizationStorageKeyPrefix(scope)).toBe("org-1/");
+      expect(workspaceStorageKeyPrefix(scope)).toBe("org-1/ws-1/");
+      expect(chatStorageKeyPrefix(scope)).toBe("org-1/ws-1/chat-1/");
+    });
+  });
+
+  describe("assertValidStoragePrefix", () => {
+    it.each(["o/", "o/w/", "org-1/ws-1/chat-1/"])("passes %s", (prefix) => {
+      expect(() => assertValidStoragePrefix(prefix)).not.toThrow();
+    });
+
+    // The trailing `/` is what stops `org1/` matching `org10/…` on S3.
+    it.each([
+      ["empty", ""],
+      ["root", "/"],
+      ["no trailing slash", "o/w"],
+      ["parent segment", "o/../x/"],
+      ["absolute", "/o/"],
+      ["empty segment", "o//"],
+    ])("throws for %s", (_label, prefix) => {
+      expect(() => assertValidStoragePrefix(prefix)).toThrow(ValidationError);
     });
   });
 });

@@ -5,12 +5,17 @@ import { db } from "../index.ts";
 import {
   organization as organizationTable,
   organizationMember,
+  workspace as workspaceTable,
+  agent as agentTable,
 } from "../db/schema.ts";
 import {
   organizationCreateSchema,
   organizationUpdateSchema,
 } from "@platypus/schemas";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, or } from "drizzle-orm";
+import { deleteStoredPrefix } from "../storage/utils.ts";
+import { organizationStorageKeyPrefix } from "../storage/keys.ts";
+import { deleteAvatar } from "../services/avatar.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   orgScopeOf,
@@ -113,7 +118,27 @@ organization.delete(
   requireOrgAccess(["admin"]),
   async (c) => {
     const { orgId } = orgScopeOf(c);
+    // Read before the cascade takes the Agent rows, and their keys, away: the
+    // Org Agents and every Workspace's Agents.
+    const workspaces = await db
+      .select({ id: workspaceTable.id })
+      .from(workspaceTable)
+      .where(eq(workspaceTable.organizationId, orgId));
+    const agents = await db
+      .select({ avatarKey: agentTable.avatarKey })
+      .from(agentTable)
+      .where(
+        or(
+          eq(agentTable.organizationId, orgId),
+          inArray(
+            agentTable.workspaceId,
+            workspaces.map(({ id }) => id),
+          ),
+        ),
+      );
     await db.delete(organizationTable).where(eq(organizationTable.id, orgId));
+    await deleteStoredPrefix(organizationStorageKeyPrefix({ orgId }));
+    await Promise.all(agents.map(({ avatarKey }) => deleteAvatar(avatarKey)));
     return c.json({ message: "Organization deleted" });
   },
 );

@@ -20,11 +20,9 @@ import { isValidStorageKey } from "./keys.ts";
  * readers with four ideas of which forms exist is what made a `.txt` go
  * `[file unavailable]` from turn 2 on wherever `STORAGE_PUBLIC_URL` was set.
  *
- * Two readings of the served forms are offered, and the difference is the
- * point: resolving bytes accepts only what this deployment itself served
- * ({@link resolvableStorageKeyFromUrl}), while cleanup accepts anything that
- * looks like one of its keys ({@link claimedStorageKeyFromUrl}) so a changed
- * origin can't orphan files.
+ * Resolving bytes accepts only what this deployment itself served
+ * ({@link resolvableStorageKeyFromUrl}). Cleanup reads no URL at all: deleting
+ * a Chat removes everything under its key prefix.
  */
 
 /** Scheme identifying the canonical stored form. */
@@ -123,33 +121,6 @@ export const resolvableStorageKeyFromUrl = (
 
   const key = canonicalStorageKeyFromUrl(url) ?? servedStorageKey(url, origin);
   return key === undefined ? undefined : { key, valid: isValidStorageKey(key) };
-};
-
-/**
- * Every key a message's URLs could name, for cleanup — deliberately looser than
- * {@link resolvableStorageKeyFromUrl}: the `/files/` match ignores the origin in
- * front of it, because a deployment whose origin has changed still has rows
- * carrying the old one and failing to recognise those would orphan their files
- * forever.
- *
- * The cost of that tolerance is that these keys are only what the client
- * claimed. They name candidates, not property — a caller that deletes must
- * filter them by the Chat they belong to.
- */
-export const claimedStorageKeyFromUrl = (url: string): string | undefined => {
-  if (isDataUrl(url)) {
-    return undefined;
-  }
-
-  const markerIndex = url.lastIndexOf(FILES_ROUTE_PREFIX);
-  const key =
-    canonicalStorageKeyFromUrl(url) ??
-    servedStorageKey(url, undefined) ??
-    (markerIndex === -1
-      ? undefined
-      : url.slice(markerIndex + FILES_ROUTE_PREFIX.length));
-
-  return key !== undefined && isValidStorageKey(key) ? key : undefined;
 };
 
 /**

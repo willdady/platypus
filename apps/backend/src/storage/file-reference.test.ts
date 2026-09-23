@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import {
   canonicalStorageKeyFromUrl,
-  claimedStorageKeyFromUrl,
   decodeDataUrl,
   isUnresolvedReference,
   resolvableStorageKeyFromUrl,
@@ -89,48 +88,6 @@ describe("file reference", () => {
       expect(
         resolvableStorageKeyFromUrl(`${origin}/files/../secret`, origin),
       ).toEqual({ key: "../secret", valid: false });
-    });
-  });
-
-  describe("claimedStorageKeyFromUrl", () => {
-    it("reads the canonical form", () => {
-      expect(claimedStorageKeyFromUrl(storageReferenceUrl(KEY))).toBe(KEY);
-    });
-
-    it("reads the public form", () => {
-      process.env.STORAGE_PUBLIC_URL = "https://cdn.example.com";
-      expect(claimedStorageKeyFromUrl(`https://cdn.example.com/${KEY}`)).toBe(
-        KEY,
-      );
-    });
-
-    /**
-     * Cleanup's `/files/` match stays loose about the origin in front of it:
-     * rows written before a deployment's origin changed must still be
-     * recognised, or their files are orphaned forever. The keys name
-     * candidates, not property — `deleteFiles` filters them by Chat.
-     */
-    it("reads a /files/ URL under an origin this deployment no longer has", () => {
-      expect(
-        claimedStorageKeyFromUrl(`https://old-host.example.com/files/${KEY}`),
-      ).toBe(KEY);
-    });
-
-    it("returns undefined for inline content and external URLs", () => {
-      expect(
-        claimedStorageKeyFromUrl("data:text/plain;base64,aGk="),
-      ).toBeUndefined();
-      expect(
-        claimedStorageKeyFromUrl("https://example.com/report.pdf"),
-      ).toBeUndefined();
-    });
-
-    it("returns undefined for a key Platypus could not have stored", () => {
-      expect(
-        claimedStorageKeyFromUrl(
-          "http://localhost:4000/files/../../etc/passwd",
-        ),
-      ).toBeUndefined();
     });
   });
 

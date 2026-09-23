@@ -228,6 +228,26 @@ is the production option.
 | `STORAGE_S3_ACCESS_KEY_ID`     | S3 access key ID.                                                                                             | _(unset)_      | When `STORAGE_BACKEND=s3` |
 | `STORAGE_S3_SECRET_ACCESS_KEY` | S3 secret access key.                                                                                         | _(unset)_      | When `STORAGE_BACKEND=s3` |
 
+Deleting a Chat, Workspace or Organization removes its files from storage,
+along with the avatars of any Agents it deletes. The S3 credentials need these
+permissions:
+
+| Permission        | Granted on                               |
+| ----------------- | ---------------------------------------- |
+| `s3:PutObject`    | Objects in the bucket (`<bucket-arn>/*`) |
+| `s3:GetObject`    | Objects in the bucket (`<bucket-arn>/*`) |
+| `s3:DeleteObject` | Objects in the bucket (`<bucket-arn>/*`) |
+| `s3:ListBucket`   | The bucket itself (`<bucket-arn>`)       |
+
+<Callout type="warning">
+  `s3:ListBucket` applies to the bucket, not to the objects in it, so a policy
+  that grants everything on `<bucket-arn>/*` alone leaves it out. Uploads and
+  reads still work, but deleting a Chat, Workspace or Organization leaves its
+  files in the bucket, and the backend logs
+  `Failed to delete files from storage`. Grant `s3:ListBucket` on the bucket
+  ARN as well.
+</Callout>
+
 The backend image sets `STORAGE_DISK_PATH` to `/data/files` and creates that
 directory, so mounting any volume over `/data` persists uploaded files — the
 Compose stack does it with the `./data` bind mount, and a Kubernetes deployment

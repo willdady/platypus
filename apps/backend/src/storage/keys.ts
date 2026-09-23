@@ -58,32 +58,48 @@ export function assertValidStorageKey(key: string): void {
   }
 }
 
-/** The Chat a File part's key belongs to — the key's first three segments. */
-export interface ChatKeyScope {
+/**
+ * Assert a prefix is safe to delete everything under. It must end in `/` —
+ * without it `org1` would match `org10/…` on S3 — and what precedes the `/`
+ * must be a valid key, so an empty or `/` prefix never reaches a backend.
+ */
+export function assertValidStoragePrefix(prefix: string): void {
+  if (!prefix.endsWith("/") || !isValidStorageKey(prefix.slice(0, -1))) {
+    throw new ValidationError("Invalid storage prefix");
+  }
+}
+
+/** The Organization a File part's key belongs to — the key's first segment. */
+export interface OrganizationKeyScope {
   orgId: string;
+}
+
+/** The Workspace a File part's key belongs to — the key's first two segments. */
+export interface WorkspaceKeyScope extends OrganizationKeyScope {
   workspaceId: string;
+}
+
+/** The Chat a File part's key belongs to — the key's first three segments. */
+export interface ChatKeyScope extends WorkspaceKeyScope {
   chatId: string;
 }
 
 /**
- * The prefix every File part key for one Chat shares. `generateStorageKey`
- * builds keys from this and {@link isKeyUnderChat} reads them back with it, so
- * the writer and the ownership check cannot drift apart.
+ * The prefixes every File part key under one Organization, Workspace or Chat
+ * shares. `generateStorageKey` builds keys from these and deleting the scope removes everything under its prefix,
+ * so the writer and its readers cannot drift apart. Always built from
+ * server-side ids, never from message content.
  */
-export function chatStorageKeyPrefix(scope: ChatKeyScope): string {
-  return `${scope.orgId}/${scope.workspaceId}/${scope.chatId}/`;
+export function organizationStorageKeyPrefix(
+  scope: OrganizationKeyScope,
+): string {
+  return `${scope.orgId}/`;
 }
 
-/**
- * Whether a key names an object stored for this Chat.
- *
- * Validity is not ownership. `isValidStorageKey` answers "could Platypus have
- * stored this?", which every well-formed key satisfies — including one naming
- * another tenant's file. A client can put any URL on a file part (`extractFiles`
- * stores a non-`data:` URL verbatim), so a key read back out of a message part
- * says only what the client claimed, not what this Chat owns. Anything
- * destructive must ask this question instead.
- */
-export function isKeyUnderChat(key: string, scope: ChatKeyScope): boolean {
-  return isValidStorageKey(key) && key.startsWith(chatStorageKeyPrefix(scope));
+export function workspaceStorageKeyPrefix(scope: WorkspaceKeyScope): string {
+  return `${organizationStorageKeyPrefix(scope)}${scope.workspaceId}/`;
+}
+
+export function chatStorageKeyPrefix(scope: ChatKeyScope): string {
+  return `${workspaceStorageKeyPrefix(scope)}${scope.chatId}/`;
 }

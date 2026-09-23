@@ -3,8 +3,11 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import type { StorageBackend } from "./types.ts";
+import { assertValidStoragePrefix } from "./keys.ts";
 import { logger } from "../logger.ts";
 
 /**
@@ -108,5 +111,49 @@ export class S3Storage implements StorageBackend {
     );
 
     logger.debug({ key }, "File deleted from S3");
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    assertValidStoragePrefix(prefix);
+
+    let continuationToken: string | undefined;
+    let count = 0;
+    do {
+      // A page holds at most 1000 keys, which is also `DeleteObjects`' limit,
+      // so each page is exactly one batch.
+      const page = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          MaxKeys: 1000,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      const objects = (page.Contents ?? []).flatMap(({ Key }) =>
+        Key ? [{ Key }] : [],
+      );
+
+      if (objects.length > 0) {
+        const result = await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: { Objects: objects, Quiet: true },
+          }),
+        );
+        for (const error of result.Errors ?? []) {
+          logger.error(
+            { key: error.Key, code: error.Code, message: error.Message },
+            "Failed to delete object from S3",
+          );
+        }
+        count += objects.length;
+      }
+
+      continuationToken = page.IsTruncated
+        ? page.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+
+    logger.debug({ prefix, count }, "Prefix deleted from S3");
   }
 }

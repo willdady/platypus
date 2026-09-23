@@ -20,7 +20,8 @@ import {
 } from "../services/workspace-resource.ts";
 import type { Variables } from "../server.ts";
 import { type PlatypusUIMessage } from "../types.ts";
-import { rewriteStorageUrls, deleteFiles } from "../storage/utils.ts";
+import { rewriteStorageUrls, deleteStoredPrefix } from "../storage/utils.ts";
+import { chatStorageKeyPrefix } from "../storage/keys.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { ChatSink } from "../runs/sinks/chat-sink.ts";
@@ -281,26 +282,17 @@ chat.delete(
     const chatId = c.req.param("chatId");
     const { orgId, workspaceId } = workspaceScopeOf(c);
 
-    // First fetch the chat to get its messages for file cleanup
-    const chatRecord = await requireOwned(db, "chat", {
-      id: chatId,
-      workspaceId,
-    });
+    await requireOwned(db, "chat", { id: chatId, workspaceId });
 
-    // Delete associated files from storage (best-effort). Scoped to this Chat,
-    // so a planted file part naming another tenant's key deletes nothing.
-    if (chatRecord.messages) {
-      await deleteFiles(chatRecord.messages as PlatypusUIMessage[], {
-        orgId,
-        workspaceId,
-        chatId,
-      });
-    }
-
-    // Delete the chat record
     await db
       .delete(chatTable)
       .where(ownedWhere("chat", { id: chatId, workspaceId }));
+
+    // By prefix, not by the keys the messages reference: files on messages an
+    // edit or regenerate dropped are referenced by nothing, yet still stored.
+    await deleteStoredPrefix(
+      chatStorageKeyPrefix({ orgId, workspaceId, chatId }),
+    );
 
     return c.json({ message: "Chat deleted successfully" }, 200);
   },
