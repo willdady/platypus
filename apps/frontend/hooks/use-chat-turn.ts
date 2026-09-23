@@ -9,7 +9,7 @@ import { turnRequest } from "@/lib/chat-turn";
 import { ATTACHMENTS_ONLY_TEXT } from "@/lib/message-parts";
 import { joinUrl } from "@/lib/utils";
 
-type Body = { body: Record<string, unknown> };
+type TurnOptions = { body: Record<string, unknown> };
 
 /** An attachment-only message is a real turn: the question was the file. */
 const outgoing = (message: PromptInputMessage): PromptInputMessage => ({
@@ -25,8 +25,8 @@ export interface UseChatTurnInput<T extends UIMessage> {
   runHeldElsewhere: boolean;
   /** The chat hook's own calls. */
   chat: {
-    sendMessage: (message: PromptInputMessage, options: Body) => unknown;
-    regenerate: (options: Body) => unknown;
+    sendMessage: (message: PromptInputMessage, options: TurnOptions) => unknown;
+    regenerate: (options: TurnOptions) => unknown;
     stop: () => unknown;
     setMessages: (update: (held: T[]) => T[]) => void;
   };
@@ -67,7 +67,7 @@ export const useChatTurn = <T extends UIMessage>({
   );
 
   const start = useCallback(
-    (dispatch: (options: Body) => void): boolean => {
+    (dispatch: (options: TurnOptions) => void): boolean => {
       if (runHeldElsewhere) return false;
       if (!request.ok) {
         toast.error(request.reason);

@@ -51,8 +51,14 @@ export const turnRequest = ({
     body: {
       providerId,
       modelId,
-      ...settings,
       instructions: settings.instructions || undefined,
+      temperature: settings.temperature,
+      topP: settings.topP,
+      topK: settings.topK,
+      seed: settings.seed,
+      presencePenalty: settings.presencePenalty,
+      frequencyPenalty: settings.frequencyPenalty,
+      maxSteps: settings.maxSteps,
       search,
     },
   };
