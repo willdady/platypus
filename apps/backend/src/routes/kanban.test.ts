@@ -273,7 +273,32 @@ describe("Kanban Routes", () => {
       const res = await app.request(`${baseUrl}/${boardId}/state`);
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
+      const body = (await res.json()) as {
+        columns: { cards: Record<string, unknown>[] }[];
+      };
+      // `toEqual` ignores key order, so the order is pinned on its own.
+      expect(Object.keys(body.columns[0].cards[0])).toEqual([
+        "id",
+        "columnId",
+        "title",
+        "body",
+        "labelIds",
+        "assignees",
+        "dueDate",
+        "priority",
+        "position",
+        "createdByUserId",
+        "createdByAgentId",
+        "lastEditedByUserId",
+        "lastEditedByAgentId",
+        "createdAt",
+        "updatedAt",
+        "createdByName",
+        "lastEditedByName",
+        "resolvedAssignees",
+        "commentCount",
+      ]);
+      expect(body).toEqual({
         board: {
           id: boardId,
           workspaceId,

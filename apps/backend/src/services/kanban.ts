@@ -1827,10 +1827,11 @@ const requireUniqueColumnName = async (
 
 /**
  * A column addressed through its board: the board must be in scope, and the
- * column on that board. The two misses stay distinct, so a caller naming a
+ * column on that board. Returns the scope narrowed to that board, for the
+ * write's own `WHERE`. The two misses stay distinct, so a caller naming a
  * board it cannot see hears about the board rather than the column.
  */
-const requireColumnOnBoard = async (
+const narrowToColumnOnBoard = async (
   database: Database,
   scope: KanbanScope,
   boardId: string,
@@ -1878,7 +1879,7 @@ export const renameColumn = async (
   columnId: string,
   input: { name: string },
 ): Promise<ColumnRow> => {
-  const onBoard = await requireColumnOnBoard(
+  const onBoard = await narrowToColumnOnBoard(
     database,
     scope,
     boardId,
@@ -1909,7 +1910,7 @@ export const deleteColumn = async (
   boardId: string,
   columnId: string,
 ): Promise<void> => {
-  const onBoard = await requireColumnOnBoard(
+  const onBoard = await narrowToColumnOnBoard(
     database,
     scope,
     boardId,
@@ -1997,10 +1998,9 @@ export const getBoardState = async (
 
   const cardsByColumn = new Map<string, CardRow[]>();
   for (const card of cards) {
-    cardsByColumn.set(card.columnId, [
-      ...(cardsByColumn.get(card.columnId) ?? []),
-      card,
-    ]);
+    const inColumn = cardsByColumn.get(card.columnId) ?? [];
+    inColumn.push(card);
+    cardsByColumn.set(card.columnId, inColumn);
   }
 
   return {
@@ -2103,7 +2103,7 @@ export const resolveBoardState = async (
     // from `jsonb` with its keys reordered, and the response keeps its shape.
     if (assignee.type === "user") {
       const found = userById.get(assignee.id);
-      return found
+      return found?.name
         ? {
             type: "user",
             id: assignee.id,
@@ -2113,7 +2113,7 @@ export const resolveBoardState = async (
         : null;
     }
     const found = agentById.get(assignee.id);
-    return found
+    return found?.name
       ? {
           type: "agent",
           id: assignee.id,
