@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Chat } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
@@ -50,16 +50,30 @@ export const useChatSettings = (
   useResetOnChange(chatData?.id, initializeFromChat);
   useResetOnChange(agentId, initializeFromChat);
 
-  const settings: ChatSettings = {
-    instructions,
-    temperature,
-    topP,
-    topK,
-    seed,
-    presencePenalty,
-    frequencyPenalty,
-    maxSteps,
-  };
+  // One identity per actual value, so the turn built from it — and the
+  // callbacks `ChatMessage` is memoised on — survive a streamed token (#869).
+  const settings = useMemo<ChatSettings>(
+    () => ({
+      instructions,
+      temperature,
+      topP,
+      topK,
+      seed,
+      presencePenalty,
+      frequencyPenalty,
+      maxSteps,
+    }),
+    [
+      instructions,
+      temperature,
+      topP,
+      topK,
+      seed,
+      presencePenalty,
+      frequencyPenalty,
+      maxSteps,
+    ],
+  );
 
   const setters = {
     setInstructions,

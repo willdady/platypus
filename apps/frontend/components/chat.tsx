@@ -22,11 +22,9 @@ import {
   ToolSet,
   Skill,
   nextTurnOccupancy,
-  isValidChatMaxSteps,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import { joinUrl, optionalFetcher } from "@/lib/utils";
-import { writeAt, scopedPath } from "@/lib/api-write";
 import {
   chatPollIntervalMs,
   classifyChatError,
@@ -45,16 +43,13 @@ import { clearedToolCallIds } from "@/lib/tool-result-clearing";
 import { useStableSet } from "@/hooks/use-stable-set";
 import { ContextMeter, ContextMeterEntrance } from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
-import { ATTACHMENTS_ONLY_TEXT } from "@/lib/message-parts";
+import { useChatTurn } from "@/hooks/use-chat-turn";
 import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canSendChatMessages } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "./no-providers-empty-state";
 import { AgentInfoDialog } from "./agent-info-dialog";
-import {
-  ChatSettingsDialog,
-  CHAT_MAX_STEPS_ERROR,
-} from "./chat-settings-dialog";
+import { ChatSettingsDialog } from "./chat-settings-dialog";
 import { ChatErrorDialog } from "./chat-error-dialog";
 import {
   Tooltip,
@@ -144,26 +139,15 @@ export const Chat = ({
     stop,
   } = useChat<PlatypusUIMessage>({
     id: chatId,
-    // Transport: `body` is a function so it's re-evaluated on every request.
-    // This ensures dynamic values like agentId and model config are always current.
-    // We use `getRequestBodyRef` (a ref) to avoid stale closures since this
-    // transport instance is created once and captured by useChat. The `body`
-    // callback reads the ref at request time (not during render), which the
-    // static analysis can't prove from the construction site.
-    // eslint-disable-next-line react-hooks/refs
+    // The per-turn body rides each call (`useChatTurn` builds it) and wins the
+    // SDK's shallow merge over this one, so the transport carries only what
+    // never changes for the Chat (issue #971).
     transport: new DefaultChatTransport({
       api: joinUrl(
         backendUrl || "",
         `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
       ),
-      body: () => {
-        const currentBody = getRequestBodyRef.current?.() || {};
-        return {
-          orgId,
-          workspaceId,
-          ...currentBody,
-        };
-      },
+      body: { orgId, workspaceId },
       credentials: "include",
       // The AI SDK calls this before each fetch. We must include `id` and
       // `messages` in the body because the backend expects them in the
@@ -331,17 +315,6 @@ export const Chat = ({
     },
   );
 
-  const {
-    instructions,
-    temperature,
-    topP,
-    topK,
-    seed,
-    presencePenalty,
-    frequencyPenalty,
-    maxSteps,
-  } = settings;
-
   // An Agent holding the agent-management tools can rewrite its own row
   // mid-chat, and nothing else invalidates this read: the turn writes on the
   // server and the list here keeps whatever it loaded with. So re-read it when
@@ -354,58 +327,35 @@ export const Chat = ({
     void mutateAgents().catch(() => {});
   }, [isAgentInfoDialogOpen, mutateAgents]);
 
-  // Use ref to store getRequestBody so the transport callback can access current values
-  const getRequestBodyRef = useRef<(() => Record<string, unknown>) | undefined>(
-    undefined,
-  );
+  // Treat a server-side run-in-progress as if we were locally streaming,
+  // so a tab that reconnects mid-run (or an unrelated tab opened on the
+  // same chat) can't kick off a second concurrent run. The submit button
+  // becomes a stop button and Enter is blocked by PromptInputTextarea.
+  // `isRunHeldElsewhere` covers a dropped stream too, whose status is `error`
+  // rather than `ready` — the reading the old predicate missed (issue #648).
+  const runHeldElsewhere = isRunHeldElsewhere(runBelief);
+  const effectiveStatus = composerTurnStatus(runBelief, errorTreatment);
 
-  // Create getRequestBody function that depends on extracted values
-  const getRequestBody = useCallback(() => {
-    const baseBody = agentId
-      ? { agentId, search }
-      : {
-          providerId,
-          modelId,
-          instructions: instructions || undefined,
-          temperature,
-          topP,
-          topK,
-          seed,
-          presencePenalty,
-          frequencyPenalty,
-          maxSteps,
-          search,
-        };
-
-    return baseBody;
-  }, [
-    agentId,
-    providerId,
-    modelId,
-    instructions,
-    temperature,
-    topP,
-    topK,
-    seed,
-    presencePenalty,
-    frequencyPenalty,
-    maxSteps,
+  // Every entry point starts its turn here — the composer, Regenerate and a
+  // resent edit — so all three get the same pre-turn checks and refresh.
+  const turn = useChatTurn({
+    selection,
+    settings,
     search,
-  ]);
+    runHeldElsewhere,
+    chat: { sendMessage, regenerate, stop, setMessages },
+    refreshChat,
+    backendUrl,
+    scope,
+    chatId,
+  });
 
-  // Update ref whenever getRequestBody changes. Written in an effect (not
-  // during render) so the transport body callback reads the latest value.
-  useEffect(() => {
-    getRequestBodyRef.current = getRequestBody;
-  }, [getRequestBody]);
-
-  // Message editing hook (needs getRequestBody to be defined)
   const {
     editing,
     handleMessageEditStart,
     handleMessageEditCancel,
     handleMessageEditSubmit,
-  } = useMessageEditing(messages, setMessages, sendMessage, getRequestBody);
+  } = useMessageEditing(messages, turn.resendEdited);
 
   // Hydrate chat from persisted data on load (or when chatData changes).
   // We use a ref for status so that this effect only fires when chatData
@@ -453,11 +403,6 @@ export const Chat = ({
     },
     [setCopiedMessageId],
   );
-
-  const handleRegenerate = useCallback(() => {
-    const body = getRequestBody();
-    regenerate({ body });
-  }, [getRequestBody, regenerate]);
 
   // An updater, not a slice of the current list: closing over `messages` gave
   // this callback a new identity on every message update, which defeated the
@@ -527,81 +472,16 @@ export const Chat = ({
     );
   }
 
-  // Treat a server-side run-in-progress as if we were locally streaming,
-  // so a tab that reconnects mid-run (or an unrelated tab opened on the
-  // same chat) can't kick off a second concurrent run. The submit button
-  // becomes a stop button and Enter is blocked by PromptInputTextarea.
-  // `isRunHeldElsewhere` covers a dropped stream too, whose status is `error`
-  // rather than `ready` — the reading the old predicate missed (issue #648).
-  const runHeldElsewhere = isRunHeldElsewhere(runBelief);
-  const effectiveStatus = composerTurnStatus(runBelief, errorTreatment);
-
   // A dropped connection to a run that is still going: an inline line, and the
   // answer keeps arriving from the poll. The modal is for a turn that failed.
   const isRecoveringRun = errorTreatment === "recovering";
 
-  const handleSubmit = async (message: PromptInputMessage) => {
-    // Stop the stream if currently streaming or submitted
+  const handleSubmit = (message: PromptInputMessage) => {
     if (effectiveStatus === "streaming" || effectiveStatus === "submitted") {
-      // The server-side run is decoupled from the request lifecycle, so
-      // aborting the local fetch (what `stop()` does) no longer cancels
-      // the run. Send an explicit cancel POST so the server stops billing
-      // tokens and persists the partial result with status="cancelled".
-      // Fire-and-forget (not awaited) so `stop()` below isn't held up by
-      // the round trip, but a failure still surfaces — the user can retry
-      // by pressing stop again, and the server treats repeated cancels as
-      // idempotent no-ops, but silently swallowing a real failure (e.g. a
-      // network error) would leave them thinking the run was cancelled
-      // when it wasn't.
-      void writeAt(
-        joinUrl(
-          backendUrl || "",
-          `${scopedPath("chat", scope)}/${chatId}/cancel`,
-        ),
-        { method: "POST" },
-      ).then((outcome) => {
-        if (outcome.outcome !== "success") {
-          toast.error(outcome.message);
-        }
-      });
-      return stop();
+      return turn.cancel();
     }
-
-    const hasText = Boolean(message.text);
-    const hasAttachments = Boolean(message.files?.length);
-    if (!(hasText || hasAttachments)) {
-      return;
-    }
-
-    if (!agentId && (!modelId || !providerId)) {
-      toast.error("Please select a model or agent to start the chat");
-      return;
-    }
-
-    // The dialog already marks an out-of-range ceiling invalid, but nothing
-    // stopped it riding the turn — the user saw the inline error, sent anyway,
-    // and got a 400 back as a failed run instead of a correctable mistake
-    // (#539). Only Direct turns carry the value; an Agent turn ignores it.
-    if (!agentId && !isValidChatMaxSteps(maxSteps)) {
-      toast.error(CHAT_MAX_STEPS_ERROR);
-      return;
-    }
-
-    const body = getRequestBody();
-
-    sendMessage(
-      {
-        text: message.text || ATTACHMENTS_ONLY_TEXT,
-        files: message.files,
-      },
-      { body },
-    );
-
-    // Tell the chat read a run has started rather than leaving it to infer one.
-    // The run's start hook writes `status: "running"`, and until this read
-    // learns that, nothing here can tell a live run from last turn's finished
-    // one (issue #648).
-    refreshChat();
+    if (!message.text && !message.files?.length) return;
+    turn.send(message);
   };
 
   return (
@@ -646,7 +526,7 @@ export const Chat = ({
                   agents={agents}
                   onEditStart={handleMessageEditStart}
                   onMessageDelete={handleMessageDelete}
-                  onRegenerate={handleRegenerate}
+                  onRegenerate={turn.regenerate}
                   onCopyMessage={handleCopyMessage}
                   copiedMessageId={copiedMessageId}
                   staleToolCallIds={staleToolCallIds}
@@ -729,21 +609,21 @@ export const Chat = ({
                           <TooltipContent>Settings</TooltipContent>
                         </Tooltip>
                         <ChatSettingsDialog
-                          instructions={instructions}
+                          instructions={settings.instructions}
                           onInstructionsChange={setters.setInstructions}
-                          temperature={temperature}
+                          temperature={settings.temperature}
                           onTemperatureChange={setters.setTemperature}
-                          seed={seed}
+                          seed={settings.seed}
                           onSeedChange={setters.setSeed}
-                          topP={topP}
+                          topP={settings.topP}
                           onTopPChange={setters.setTopP}
-                          topK={topK}
+                          topK={settings.topK}
                           onTopKChange={setters.setTopK}
-                          presencePenalty={presencePenalty}
+                          presencePenalty={settings.presencePenalty}
                           onPresencePenaltyChange={setters.setPresencePenalty}
-                          frequencyPenalty={frequencyPenalty}
+                          frequencyPenalty={settings.frequencyPenalty}
                           onFrequencyPenaltyChange={setters.setFrequencyPenalty}
-                          maxSteps={maxSteps}
+                          maxSteps={settings.maxSteps}
                           onMaxStepsChange={setters.setMaxSteps}
                           onClose={() => setIsSettingsDialogOpen(false)}
                         />

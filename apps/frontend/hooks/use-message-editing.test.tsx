@@ -29,14 +29,10 @@ const transcript: UIMessage[] = [
   { id: "u2", role: "user", parts: [{ type: "text", text: "And this?" }] },
 ];
 
-const harness = (messages: UIMessage[] = transcript) => {
-  const setMessages = vi.fn();
-  const sendMessage = vi.fn();
-  const getRequestBody = vi.fn().mockReturnValue({ providerId: "p1" });
-  const view = renderHook(() =>
-    useMessageEditing(messages, setMessages, sendMessage, getRequestBody),
-  );
-  return { ...view, setMessages, sendMessage, getRequestBody };
+const harness = (messages: UIMessage[] = transcript, started = true) => {
+  const resend = vi.fn().mockReturnValue(started);
+  const view = renderHook(() => useMessageEditing(messages, resend));
+  return { ...view, resend };
 };
 
 describe("useMessageEditing opening an edit", () => {
@@ -76,20 +72,19 @@ describe("useMessageEditing opening an edit", () => {
   });
 
   it("closes on cancel without touching the transcript", () => {
-    const { result, setMessages, sendMessage } = harness();
+    const { result, resend } = harness();
 
     act(() => result.current.handleMessageEditStart("u1"));
     act(() => result.current.handleMessageEditCancel());
 
     expect(result.current.editing).toBeNull();
-    expect(setMessages).not.toHaveBeenCalled();
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(resend).not.toHaveBeenCalled();
   });
 });
 
 describe("useMessageEditing submitting an edit", () => {
   it("resubmits the attachments the edit surface hands back", () => {
-    const { result, sendMessage } = harness();
+    const { result, resend } = harness();
 
     act(() => result.current.handleMessageEditStart("u1"));
     act(() =>
@@ -99,36 +94,47 @@ describe("useMessageEditing submitting an edit", () => {
       }),
     );
 
-    expect(sendMessage).toHaveBeenCalledWith(
-      {
-        text: "What does this actually say?",
-        files: [reportPdf, screenshotPng],
-      },
-      { body: { providerId: "p1" } },
-    );
+    expect(resend).toHaveBeenCalledWith(0, {
+      text: "What does this actually say?",
+      files: [reportPdf, screenshotPng],
+    });
   });
 
-  it("truncates the transcript at the edited message and closes", () => {
-    const { result, setMessages } = harness();
+  it("resends from the edited message and closes once it started", () => {
+    const { result, resend } = harness();
 
     act(() => result.current.handleMessageEditStart("u1"));
     act(() =>
       result.current.handleMessageEditSubmit({ text: "Rewritten", files: [] }),
     );
 
-    expect(setMessages).toHaveBeenCalledWith([]);
+    expect(resend).toHaveBeenCalledWith(0, { text: "Rewritten", files: [] });
     expect(result.current.editing).toBeNull();
   });
 
-  it("truncates at a message part-way down the transcript", () => {
-    const { result, setMessages } = harness();
+  it("resends from a message part-way down the transcript", () => {
+    const { result, resend } = harness();
 
     act(() => result.current.handleMessageEditStart("u2"));
     act(() =>
       result.current.handleMessageEditSubmit({ text: "Rewritten", files: [] }),
     );
 
-    expect(setMessages).toHaveBeenCalledWith([transcript[0], transcript[1]]);
+    expect(resend.mock.calls[0][0]).toBe(2);
+  });
+
+  // A resend refused by the pre-turn checks (an out-of-range Max steps, say)
+  // leaves the edit there to retry once the setting is fixed (issue #971).
+  it("stays open when the resend is refused", () => {
+    const { result, resend } = harness(transcript, false);
+
+    act(() => result.current.handleMessageEditStart("u1"));
+    act(() =>
+      result.current.handleMessageEditSubmit({ text: "Rewritten", files: [] }),
+    );
+
+    expect(resend).toHaveBeenCalled();
+    expect(result.current.editing?.messageId).toBe("u1");
   });
 
   it("sends attachments the user added while editing", () => {
@@ -138,7 +144,7 @@ describe("useMessageEditing submitting an edit", () => {
       mediaType: "text/plain",
       filename: "extra.txt",
     };
-    const { result, sendMessage } = harness();
+    const { result, resend } = harness();
 
     act(() => result.current.handleMessageEditStart("u1"));
     act(() =>
@@ -148,47 +154,42 @@ describe("useMessageEditing submitting an edit", () => {
       }),
     );
 
-    expect(sendMessage.mock.calls[0][0].files).toEqual([reportPdf, added]);
+    expect(resend.mock.calls[0][1].files).toEqual([reportPdf, added]);
   });
 
   // An attachment-only edit is a real edit: the question was the file.
-  it("stands in a text for an edit left with attachments and no words", () => {
-    const { result, sendMessage } = harness();
+  it("resends an edit left with attachments and no words", () => {
+    const { result, resend } = harness();
 
     act(() => result.current.handleMessageEditStart("u1"));
     act(() =>
       result.current.handleMessageEditSubmit({ text: "", files: [reportPdf] }),
     );
 
-    expect(sendMessage.mock.calls[0][0]).toEqual({
-      text: "Sent with attachments",
-      files: [reportPdf],
-    });
+    expect(resend).toHaveBeenCalledWith(0, { text: "", files: [reportPdf] });
   });
 
   // Truncating the transcript and sending nothing is how a stray Enter would
   // wipe a conversation with no way back.
   it("refuses an edit with neither text nor attachments", () => {
-    const { result, setMessages, sendMessage } = harness();
+    const { result, resend } = harness();
 
     act(() => result.current.handleMessageEditStart("u1"));
     act(() => result.current.handleMessageEditSubmit({ text: "", files: [] }));
 
-    expect(setMessages).not.toHaveBeenCalled();
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(resend).not.toHaveBeenCalled();
     expect(result.current.editing).not.toBeNull();
   });
 
   it("ignores a submit for a message that has since gone", () => {
-    const { result, setMessages, sendMessage } = harness();
+    const { result, resend } = harness();
 
     act(() => result.current.handleMessageEditStart("gone"));
     act(() =>
       result.current.handleMessageEditSubmit({ text: "Rewritten", files: [] }),
     );
 
-    expect(setMessages).not.toHaveBeenCalled();
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(resend).not.toHaveBeenCalled();
   });
 });
 
@@ -230,7 +231,7 @@ describe("useMessageEditing on a message that invokes a Skill", () => {
   });
 
   it("resubmits with the command still leading the text", () => {
-    const { result, setMessages, sendMessage } = harness(withCommand);
+    const { result, resend } = harness(withCommand);
 
     act(() => result.current.handleMessageEditStart("u1"));
     act(() =>
@@ -242,10 +243,9 @@ describe("useMessageEditing on a message that invokes a Skill", () => {
 
     // The seeded pair goes with the message it belonged to; the resubmitted
     // turn is seeded afresh from the command in its text.
-    expect(setMessages).toHaveBeenCalledWith([]);
-    expect(sendMessage).toHaveBeenCalledWith(
-      { text: "/blog-post about platypuses", files: [] },
-      { body: { providerId: "p1" } },
-    );
+    expect(resend).toHaveBeenCalledWith(0, {
+      text: "/blog-post about platypuses",
+      files: [],
+    });
   });
 });

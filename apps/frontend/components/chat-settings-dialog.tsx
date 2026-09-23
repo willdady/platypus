@@ -22,13 +22,7 @@ import {
   CHAT_MAX_STEPS_MIN,
   isValidChatMaxSteps,
 } from "@platypus/schemas";
-
-/**
- * Shown inline under the field and raised as a toast if a bad value somehow
- * reaches send. One string so the two paths cannot describe the bound
- * differently.
- */
-export const CHAT_MAX_STEPS_ERROR = `Max steps must be a whole number between ${CHAT_MAX_STEPS_MIN} and ${CHAT_MAX_STEPS_MAX}.`;
+import { CHAT_MAX_STEPS_ERROR } from "@/lib/chat-turn";
 
 interface ChatSettingsDialogProps {
   instructions: string;

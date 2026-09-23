@@ -39,11 +39,15 @@ const { harness } = vi.hoisted(() => ({
     },
     setMessages: vi.fn(),
     sendMessage: vi.fn(),
+    regenerate: vi.fn(),
+    stop: vi.fn(),
+    toastError: vi.fn(),
     chatMutate: vi.fn(),
     agentsMutate: vi.fn(),
     chatMessageRenders: 0,
     lastChatMessageProps: null as null | {
       onMessageDelete: (messageId: string) => void;
+      onRegenerate: () => void;
       staleToolCallIds?: ReadonlySet<string>;
     },
   },
@@ -86,8 +90,8 @@ vi.mock("@ai-sdk/react", () => ({
     sendMessage: harness.sendMessage,
     status: harness.turn.status,
     error: harness.turn.error,
-    regenerate: vi.fn(),
-    stop: vi.fn(),
+    regenerate: harness.regenerate,
+    stop: harness.stop,
   }),
 }));
 
@@ -95,7 +99,9 @@ vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
   useAuth: () => ({ user: { id: "u1" }, ownsWorkspace: true }),
 }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { error: harness.toastError, info: vi.fn() },
+}));
 
 // The presentational tree, stubbed to the props under test. `PromptInputTextarea`
 // and `PromptInputSubmit` keep theirs, because the composer guard is one of the
@@ -111,8 +117,23 @@ vi.mock("@/components/ai-elements/conversation", () => ({
 }));
 
 vi.mock("@/components/ai-elements/prompt-input", () => ({
-  PromptInput: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
+  // A form handing back a fixed message, so a composer send can be driven
+  // without the real input's state.
+  PromptInput: ({
+    children,
+    onSubmit,
+  }: {
+    children?: React.ReactNode;
+    onSubmit: (message: { text: string; files: FileUIPart[] }) => void;
+  }) => (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit({ text: "Hello", files: [] });
+      }}
+    >
+      {children}
+    </form>
   ),
   PromptInputBody: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -169,25 +190,33 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   ),
 }));
 
-// Stubbed to the edit seam: an Edit button per message, and whatever edit
-// surface the Chat hands down for the one being edited. The transcript itself
-// is `chat-message`'s own test's business.
+// Stubbed to the edit seam: an Edit button per message, a Regenerate on the
+// last, and whatever edit surface the Chat hands down for the one being
+// edited. The transcript itself is `chat-message`'s own test's business.
 vi.mock("./chat-message", () => ({
   ChatMessage: ({
     message,
+    isLastMessage,
     editor,
     onEditStart,
     onMessageDelete,
+    onRegenerate,
     staleToolCallIds,
   }: {
     message: PlatypusUIMessage;
+    isLastMessage: boolean;
     editor?: React.ReactNode;
     onEditStart: (messageId: string) => void;
     onMessageDelete: (messageId: string) => void;
+    onRegenerate: () => void;
     staleToolCallIds?: ReadonlySet<string>;
   }) => {
     harness.chatMessageRenders += 1;
-    harness.lastChatMessageProps = { onMessageDelete, staleToolCallIds };
+    harness.lastChatMessageProps = {
+      onMessageDelete,
+      onRegenerate,
+      staleToolCallIds,
+    };
     return (
       <div>
         {editor ?? (
@@ -198,6 +227,11 @@ vi.mock("./chat-message", () => ({
             <button type="button" onClick={() => onMessageDelete(message.id)}>
               Delete {message.id}
             </button>
+            {isLastMessage && (
+              <button type="button" onClick={onRegenerate}>
+                Regenerate
+              </button>
+            )}
           </>
         )}
       </div>
@@ -258,7 +292,6 @@ vi.mock("./agent-info-dialog", () => ({
 
 vi.mock("./chat-settings-dialog", () => ({
   ChatSettingsDialog: () => null,
-  CHAT_MAX_STEPS_ERROR: "bad max steps",
 }));
 vi.mock("./chat-error-dialog", () => ({
   ChatErrorDialog: ({
@@ -281,6 +314,7 @@ vi.mock("./chat-error-dialog", () => ({
 import { Chat } from "./chat";
 import { optionalFetcher } from "@/lib/utils";
 import { CHAT_POLL_INTERVAL_MS } from "@/lib/chat-recovery";
+import { CHAT_MAX_STEPS_ERROR } from "@/lib/chat-turn";
 
 const CHAT_ID = "chat-1";
 const CHAT_KEY = `http://test/organizations/org1/workspaces/ws1/chat/${CHAT_ID}`;
@@ -400,6 +434,9 @@ beforeEach(() => {
   localStorage.clear();
   harness.setMessages.mockReset();
   harness.sendMessage.mockReset();
+  harness.regenerate.mockReset();
+  harness.stop.mockReset();
+  harness.toastError.mockReset();
   harness.chatMutate.mockReset();
   harness.chatMutate.mockResolvedValue(undefined);
   harness.agentsMutate.mockReset();
@@ -875,7 +912,10 @@ describe("editing a message", () => {
     openEditOn("u2");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(harness.setMessages).toHaveBeenCalledWith(
+    const update = harness.setMessages.mock.calls.at(-1)?.[0] as (
+      held: PlatypusUIMessage[],
+    ) => PlatypusUIMessage[];
+    expect(update(harness.turn.messages)).toEqual(
       harness.turn.messages.slice(0, 2),
     );
   });
@@ -900,6 +940,61 @@ describe("editing a message", () => {
 });
 
 /**
+ * Every entry point starts its turn through `useChatTurn` (issue #971); the
+ * rules themselves are pinned there. What this file can see is that the Chat
+ * actually routes Regenerate and the composer through it.
+ */
+describe("starting a turn", () => {
+  const directRow = (maxSteps: number) => ({
+    id: CHAT_ID,
+    status: "succeeded",
+    providerId: "p1",
+    modelId: "m1",
+    maxSteps,
+    messages: [],
+  });
+
+  it("refuses a Regenerate with an out-of-range Max steps", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, directRow(51));
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+
+    expect(harness.toastError).toHaveBeenCalledWith(CHAT_MAX_STEPS_ERROR);
+    expect(harness.regenerate).not.toHaveBeenCalled();
+    expect(harness.chatMutate).not.toHaveBeenCalled();
+  });
+
+  it("regenerates with the turn's body and refreshes the row", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+
+    expect(harness.regenerate).toHaveBeenCalledWith({
+      body: expect.objectContaining({ providerId: "p1", maxSteps: 10 }),
+    });
+    expect(harness.chatMutate).toHaveBeenCalledTimes(1);
+  });
+
+  // The #648 refresh: the row has to learn the new turn's status at submit.
+  it("refreshes the row after a composer send", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
+    renderChat();
+
+    fireEvent.click(screen.getByTestId("submit"));
+
+    expect(harness.sendMessage).toHaveBeenCalledWith(
+      { text: "Hello", files: [] },
+      { body: expect.objectContaining({ providerId: "p1" }) },
+    );
+    expect(harness.chatMutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
  * Issue #869: the transcript re-rendered on every streamed token and every
  * composer keystroke. `ChatMessage` is memoised, so what defeated it was the
  * props changing identity — the cleared-tool-call Set and the delete callback
@@ -907,7 +1002,7 @@ describe("editing a message", () => {
  * the whole tree.
  */
 describe("transcript stability", () => {
-  it("keeps the stale tool-call set and the delete callback stable across renders", () => {
+  it("keeps the stale tool-call set and the callbacks stable across renders", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
     const view = renderChat();
     const first = harness.lastChatMessageProps!;
@@ -917,6 +1012,7 @@ describe("transcript stability", () => {
     expect(harness.lastChatMessageProps!.onMessageDelete).toBe(
       first.onMessageDelete,
     );
+    expect(harness.lastChatMessageProps!.onRegenerate).toBe(first.onRegenerate);
     expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(
       first.staleToolCallIds,
     );

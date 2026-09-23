@@ -1,11 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { FileUIPart, UIMessage } from "ai";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import {
-  ATTACHMENTS_ONLY_TEXT,
-  messageAttachments,
-  messageText,
-} from "@/lib/message-parts";
+import { messageAttachments, messageText } from "@/lib/message-parts";
 
 /**
  * The message an edit surface should open with. `null` when nothing is being
@@ -19,23 +15,21 @@ export type MessageBeingEdited = {
 };
 
 /**
- * Editing a message: which one, what the surface opens holding, and what
- * resubmitting does to the transcript.
+ * Editing a message: which one, and what the surface opens holding.
  *
  * Editing stays destructive — the edited message and everything below it goes,
  * and the edit is sent as a fresh turn. What changed in issue #710 is that the
  * message survives the round trip whole: it opens from its parts and resubmits
  * with the attachments the surface hands back, rather than being flattened to
  * its text on the way in and rebuilt from a bare string on the way out.
+ *
+ * Starting that turn is `resend`'s business (issue #971): it truncates at
+ * `truncateAt`, sends, and answers whether it did. A refused resend leaves the
+ * surface open, so the user can fix what refused it and try again.
  */
 export const useMessageEditing = <T extends UIMessage = UIMessage>(
   messages: T[],
-  setMessages: (messages: T[]) => void,
-  sendMessage: (
-    message: PromptInputMessage,
-    options?: { body?: Record<string, unknown> },
-  ) => void,
-  getRequestBody: () => Record<string, unknown>,
+  resend: (truncateAt: number, message: PromptInputMessage) => boolean,
 ) => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
@@ -64,23 +58,14 @@ export const useMessageEditing = <T extends UIMessage = UIMessage>(
       const messageIndex = messages.findIndex((m) => m.id === editingMessageId);
       if (messageIndex === -1) return;
 
-      const files = edited.files;
       // An edit emptied of both its words and its files would truncate the
       // transcript and send nothing in its place — the one edit with no way
       // back. Left open instead, so the user can see what they are about to do.
-      if (!edited.text && files.length === 0) return;
+      if (!edited.text && edited.files.length === 0) return;
 
-      // Remove the edited message and everything after it
-      setMessages(messages.slice(0, messageIndex));
-
-      sendMessage(
-        { text: edited.text || ATTACHMENTS_ONLY_TEXT, files },
-        { body: getRequestBody() },
-      );
-
-      setEditingMessageId(null);
+      if (resend(messageIndex, edited)) setEditingMessageId(null);
     },
-    [editingMessageId, getRequestBody, messages, sendMessage, setMessages],
+    [editingMessageId, messages, resend],
   );
 
   return {
