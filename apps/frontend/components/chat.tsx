@@ -563,7 +563,7 @@ export const Chat = ({
                       <Tooltip delayDuration={1000}>
                         <TooltipTrigger asChild>
                           <PromptInputButton
-                            className="cursor-pointer mr-2"
+                            className="cursor-pointer"
                             onClick={() => setSearch(!search)}
                             variant={search ? "default" : "ghost"}
                           >
