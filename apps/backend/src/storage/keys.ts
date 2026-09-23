@@ -86,9 +86,9 @@ export interface ChatKeyScope extends WorkspaceKeyScope {
 
 /**
  * The prefixes every File part key under one Organization, Workspace or Chat
- * shares. `generateStorageKey` builds keys from these and deleting the scope removes everything under its prefix,
- * so the writer and its readers cannot drift apart. Always built from
- * server-side ids, never from message content.
+ * shares. `generateStorageKey` builds keys from these and deleting the scope
+ * removes everything under its prefix, so the writer and the deleters cannot
+ * drift apart. Always built from server-side ids, never from message content.
  */
 export function organizationStorageKeyPrefix(
   scope: OrganizationKeyScope,
