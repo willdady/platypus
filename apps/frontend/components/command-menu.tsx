@@ -28,6 +28,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { AgentAvatar } from "@/components/agent-avatar";
 import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { userRoutes, workspaceRoutes } from "@/lib/routes";
@@ -253,7 +254,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
                   );
                 }}
               >
-                <Bot />
+                <AgentAvatar agent={agent} className="size-4" />
                 <span>{agent.name}</span>
               </CommandItem>
             ))}
