@@ -27,7 +27,7 @@ A Webhook subscribes to one or more events. The available events are:
 | `card.created`           | A card is added to a [Board](/building-with-platypus/boards). |
 | `card.updated`           | A card's fields, column, or position change.                  |
 | `card.moved`             | A card's column changes — fires alongside `card.updated`.     |
-| `card.deleted`           | A card is removed.                                            |
+| `card.deleted`           | A card is deleted; not sent when its column or board is.      |
 | `notification.created`   | An Agent posts a notification.                                |
 | `notification.updated`   | A notification is edited.                                     |
 | `notification.read`      | A notification is marked read.                                |

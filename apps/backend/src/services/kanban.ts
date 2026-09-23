@@ -1776,10 +1776,9 @@ export const updateBoard = async (
 /**
  * Deletes a board; its columns and cards go with it by FK cascade.
  *
- * Open question: the cascaded cards are not announced — no `card.deleted`
- * fires for them, so Webhooks and Event Triggers never hear they went. Whether
- * a cascade should announce each card is undecided; until it is, this keeps
- * the behaviour it has always had.
+ * Silent by decision: the cascaded cards are not announced, so no
+ * `card.deleted` fires for them and Webhooks and Event Triggers do not hear
+ * they went. `card.deleted` means a card deleted on its own.
  */
 export const deleteBoard = async (
   database: Database,
@@ -1901,8 +1900,8 @@ export const renameColumn = async (
 /**
  * Deletes a column; its cards go with it by FK cascade.
  *
- * Open question: as with {@link deleteBoard}, the cascaded cards fire no
- * `card.deleted`. Undecided whether they should; the behaviour is unchanged.
+ * Silent by decision, as with {@link deleteBoard}: the cascaded cards fire no
+ * `card.deleted`.
  */
 export const deleteColumn = async (
   database: Database,

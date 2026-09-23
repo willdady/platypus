@@ -166,7 +166,7 @@ An outbound subscription that delivers Workspace **Webhook events** to an extern
 _Avoid_: callback, integration, outgoing hook.
 
 **Webhook event**:
-One of the enumerated Workspace occurrences a **Webhook** subscribes to and an **Event Trigger** fires on — `card.*` and `notification.*`, one shared stream with two consumers. Payload shape varies per event: some carry the full record, others only the IDs of what changed, and a few carry both shapes (`notification.read` has a singular and a bulk form).
+One of the enumerated Workspace occurrences a **Webhook** subscribes to and an **Event Trigger** fires on — `card.*` and `notification.*`, one shared stream with two consumers. Payload shape varies per event: some carry the full record, others only the IDs of what changed, and a few carry both shapes (`notification.read` has a singular and a bulk form). `card.deleted` announces a **Card** deleted on its own: deleting a **Column** or **Board** removes its Cards silently, with no `card.deleted` for each.
 _Avoid_: domain event, platform event; "notification" (reserved for the Notification itself).
 
 **Notification**:
