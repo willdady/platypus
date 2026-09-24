@@ -1,7 +1,7 @@
 import { validateUIMessages } from "ai";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../index.ts";
-import { chatMessage } from "../db/schema.ts";
+import { chat, chatMessage } from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
@@ -173,6 +173,48 @@ export const resolveTurn = async ({
 
   const { messages } = await loadActivePath(chatId, parentId);
   return { messages: [...messages, message], message, parentId };
+};
+
+/**
+ * Moves the Active path onto `messageId`, an Alternative the reader chose, and
+ * returns the new path. It lands on the newest message under that one: a
+ * message is always newer than the one it follows, so the newest message
+ * under it is a leaf. Deleted messages are never landed on, but the walk goes
+ * through them, as the Active path does.
+ */
+export const switchActivePath = async (
+  chatId: string,
+  messageId: string,
+): Promise<{ messages: PlatypusUIMessage[]; tree: ChatTreeNode[] }> => {
+  const nodes = await db
+    .select({
+      id: chatMessage.id,
+      parentId: chatMessage.parentId,
+      deletedAt: chatMessage.deletedAt,
+      createdAt: chatMessage.createdAt,
+    })
+    .from(chatMessage)
+    .where(eq(chatMessage.chatId, chatId));
+
+  const target = nodes.find((node) => node.id === messageId);
+  if (!target || target.deletedAt) {
+    throw new NotFoundError(`Message '${messageId}' not found`);
+  }
+
+  const childrenOf = Map.groupBy(nodes, (node) => node.parentId);
+  let leaf = target;
+  for (const under = [target]; under.length;) {
+    for (const node of childrenOf.get(under.pop()!.id) ?? []) {
+      under.push(node);
+      if (!node.deletedAt && node.createdAt >= leaf.createdAt) leaf = node;
+    }
+  }
+
+  await db
+    .update(chat)
+    .set({ activeLeafId: leaf.id })
+    .where(eq(chat.id, chatId));
+  return loadActivePath(chatId, leaf.id);
 };
 
 /**

@@ -48,6 +48,7 @@ function renderMessage(
       onEditStart={vi.fn()}
       onMessageDelete={vi.fn()}
       onRegenerate={vi.fn()}
+      onSwitchAlternative={vi.fn()}
       onCopyMessage={vi.fn()}
       copiedMessageId={null}
       {...overrides}
@@ -999,6 +1000,89 @@ describe("ChatMessage action bar during a turn", () => {
       screen.getByRole("button", { name: "Regenerate" }),
     ).toBeInTheDocument();
   });
+});
+
+// The arrows between Alternatives (ADR-0026), labelled by what they sit under.
+describe("ChatMessage Alternatives", () => {
+  const second = {
+    index: 1,
+    count: 3,
+    previousId: "u1-a",
+    nextId: "u1-c",
+  };
+  const first = {
+    index: 0,
+    count: 2,
+    previousId: null,
+    nextId: "m1-b",
+  };
+
+  it("labels a user message's position and moves between its Alternatives", () => {
+    const onSwitchAlternative = vi.fn();
+    renderMessage(userMessage(), { alternatives: second, onSwitchAlternative });
+
+    expect(
+      screen.getByRole("group", { name: "Message 2 of 3" }),
+    ).toHaveTextContent("2/3");
+    fireEvent.click(screen.getByRole("button", { name: "Next message" }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous message" }));
+
+    expect(onSwitchAlternative.mock.calls).toEqual([
+      ["u1", "u1-c"],
+      ["u1", "u1-a"],
+    ]);
+  });
+
+  it("labels a reply's position, with no way past the first", () => {
+    renderMessage(assistantMessage(), { alternatives: first });
+
+    expect(
+      screen.getByRole("group", { name: "Response 1 of 2" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Previous response" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next response" })).toBeEnabled();
+  });
+
+  it("never calls them versions or branches", () => {
+    const { container } = renderMessage(assistantMessage(), {
+      alternatives: first,
+    });
+
+    expect(container.innerHTML).not.toMatch(/version|branch/i);
+  });
+
+  it("shows no arrows to a reader", () => {
+    renderMessage(userMessage(), {
+      alternatives: second,
+      canSendMessages: false,
+    });
+
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.queryByRole("button", { name: /message$/ })).toBeNull();
+  });
+
+  it("shows no arrows on a message with no Alternatives", () => {
+    renderMessage(userMessage());
+
+    expect(screen.queryByRole("group")).toBeNull();
+  });
+
+  it.each(["submitted", "streaming"] as const)(
+    "holds the arrows and Regenerate on earlier replies while the chat is %s",
+    (status) => {
+      renderMessage(assistantMessage(), {
+        alternatives: { ...first, index: 1, previousId: "m1-a" },
+        status,
+        isLastMessage: false,
+      });
+
+      for (const action of ["Previous response", "Regenerate"]) {
+        expect(screen.getByRole("button", { name: action })).toBeDisabled();
+      }
+    },
+  );
 });
 
 describe("ChatMessage while editing", () => {

@@ -371,16 +371,18 @@ above.
 
 Hover a message for its actions:
 
-| Action         | On                       | Does                                              |
-| -------------- | ------------------------ | ------------------------------------------------- |
-| **Edit**       | Your own messages        | Reopens the message for rewriting — see below     |
-| **Copy**       | Any message              | Copies the message text to the clipboard          |
-| **Delete**     | Any message              | Removes it from the Chat for good                 |
-| **Regenerate** | The last assistant reply | Runs the turn again, same message, fresh response |
+| Action         | On                                  | Does                                              |
+| -------------- | ----------------------------------- | ------------------------------------------------- |
+| **Edit**       | Your own messages                   | Reopens the message for rewriting — see below     |
+| **Copy**       | Any message                         | Copies the message text to the clipboard          |
+| **Delete**     | Any message                         | Removes it from the Chat for good                 |
+| **Regenerate** | Any assistant reply                 | Runs the turn again, same message, fresh response |
+| **‹ 2/3 ›**    | Any message that has Alternatives   | Moves between its Alternatives — see below        |
 
-The actions are hidden while the last reply is still streaming. **Edit**,
-**Delete** and **Regenerate** are absent entirely if you cannot send messages in
-this Chat — see [Sharing a Chat](#sharing-a-chat). **Copy** stays.
+The actions are hidden on a reply that is still streaming, and **Regenerate**
+and the arrows on the rest of the Chat wait until it finishes. **Edit**,
+**Delete**, **Regenerate** and the arrows are absent entirely if you cannot send
+messages in this Chat — see [Sharing a Chat](#sharing-a-chat). **Copy** stays.
 
 ### Rewriting a message
 
@@ -400,14 +402,6 @@ the new selection. Read the picker in the box before saving, and change it there
 if that isn't what you want — it changes the Chat's selection too.
 
 <Callout type="warning">
-  **Edit discards everything after the message you edited.** Saving the edit
-  drops that message and every message below it, then sends the rewritten
-  message as a fresh turn. That is usually what you want — you're correcting a
-  wrong turn and re-running from there — but there is no undo, so an edit near
-  the top of a long conversation throws away the rest of it.
-</Callout>
-
-<Callout type="warning">
   **A file you remove while editing is gone from the resubmitted message.** The
   attachments in the box are what the new turn is sent with, so removing one and
   saving asks the model the same question without it. If you only wanted to
@@ -421,6 +415,36 @@ if that isn't what you want — it changes the Chat's selection too.
   they are, so you can take one message out of the middle of a long Chat without
   losing what came after it. Delete the message a reply answers and that reply
   loses its **Regenerate** — there is nothing left for it to answer.
+</Callout>
+
+### Going back to what an edit replaced
+
+Saving an edit throws nothing away. The rewritten message is sent as a fresh
+turn and takes the original's place on screen, but the original and everything
+that followed it stay in the Chat as an Alternative. **Regenerate** works the
+same way: the new reply takes the old one's place, and the old one stays.
+
+A message with Alternatives shows arrows among its actions, with its place
+between them — **‹ 2/3 ›**. Hover the count and it reads **Message 2 of 3** under
+your own message, **Response 2 of 3** under a reply. **Previous message** and
+**Next message** — **Previous response** and **Next response** under a reply —
+show the one before or after, oldest first, together with the conversation that
+carried on from it.
+
+Whichever you land on is the Chat from then on: it is what a reload shows, what
+the model is sent, and what your next message follows.
+
+<Callout type="warning">
+  **You can't switch while a reply is being written, even in another tab.** The
+  arrows put the conversation back where it was and say so. Wait for the reply
+  to finish, then switch.
+</Callout>
+
+<Callout type="warning">
+  **Deleting a message that has Alternatives takes its arrows with it.** The
+  Alternatives beside it stay in the Chat, but nothing on screen leads back to
+  them any more. Switch to the one you want to keep before you delete anything
+  that has arrows.
 </Callout>
 
 ## Organising a long history
@@ -537,8 +561,9 @@ raise it.
 Chats belong to the Workspace Owner. Anyone else who can reach the Chat sees it
 read-only: the input is replaced with a note saying only the Workspace Owner can
 send messages, and the per-message **Edit**, **Delete** and **Regenerate**
-actions are not offered. They can read the whole conversation, including tool
-calls, and copy from it; they cannot change it or continue it.
+actions and the arrows between Alternatives are not offered. They can read the
+whole conversation, including tool calls, and copy from it; they cannot change
+it or continue it.
 
 <Callout type="info">
   This includes an Org Admin and an Operator. Reaching a Workspace's Chats and

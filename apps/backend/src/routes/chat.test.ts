@@ -1258,5 +1258,149 @@ describe("Chat Routes", () => {
         expect(rowOf(fake, "u1")?.deletedAt).toBeNull();
       });
     });
+
+    describe("PUT /:chatId/active-leaf", () => {
+      const switchTo = (messageId: string) =>
+        app.request(`${baseUrl}/chat-1/active-leaf`, {
+          method: "PUT",
+          body: JSON.stringify({ messageId }),
+          headers: { "Content-Type": "application/json" },
+        });
+
+      /**
+       * u1 → a1 → u2 → a2 → u3 → a3, with u2 edited (u2b → a2b, the Active
+       * path) and a2 regenerated (a2c) in between.
+       */
+      const seedAlternatives = () =>
+        seedTenant({
+          chat: [
+            { id: "chat-1", workspaceId, title: "Chat", activeLeafId: "a2b" },
+          ],
+          chat_message: [
+            stored("u1", null, "user", 1),
+            stored("a1", "u1", "assistant", 2),
+            stored("u2", "a1", "user", 3),
+            stored("a2", "u2", "assistant", 4),
+            stored("u2b", "a1", "user", 5),
+            stored("a2b", "u2b", "assistant", 6),
+            stored("a2c", "u2", "assistant", 7),
+            stored("u3", "a2", "user", 8),
+            stored("a3", "u3", "assistant", 9),
+          ],
+        });
+
+      type Path = { messages: { id: string }[]; tree: unknown[] };
+      const ids = (body: unknown) => (body as Path).messages.map((m) => m.id);
+
+      it("lands on the newest message under the one chosen, however deep", async () => {
+        mockSession();
+        const fake = seedAlternatives();
+
+        const res = await switchTo("u2");
+
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as Path;
+        expect(ids(body)).toEqual(["u1", "a1", "u2", "a2", "u3", "a3"]);
+        expect(body.tree).toHaveLength(9);
+        expect(fake.tables.chat[0].activeLeafId).toBe("a3");
+      });
+
+      it("lands on the message itself when nothing follows it", async () => {
+        mockSession();
+        seedAlternatives();
+
+        expect(ids(await (await switchTo("a2c")).json())).toEqual([
+          "u1",
+          "a1",
+          "u2",
+          "a2c",
+        ]);
+      });
+
+      it("survives a reload", async () => {
+        mockSession();
+        seedAlternatives();
+        await switchTo("u2");
+
+        const reloaded: unknown = await (
+          await app.request(`${baseUrl}/chat-1`)
+        ).json();
+
+        expect(ids(reloaded)).toEqual(["u1", "a1", "u2", "a2", "u3", "a3"]);
+      });
+
+      it("skips a deleted message when choosing where to land", async () => {
+        mockSession();
+        const fake = seedAlternatives();
+        rowOf(fake, "a3")!.deletedAt = new Date();
+
+        const res = await switchTo("u2");
+
+        expect(ids(await res.json())).toEqual(["u1", "a1", "u2", "a2", "u3"]);
+        expect(fake.tables.chat[0].activeLeafId).toBe("u3");
+      });
+
+      it("reaches a message under a deleted one", async () => {
+        mockSession();
+        const fake = seedAlternatives();
+        rowOf(fake, "u3")!.deletedAt = new Date();
+
+        const res = await switchTo("u2");
+
+        expect(ids(await res.json())).toEqual(["u1", "a1", "u2", "a2", "a3"]);
+      });
+
+      it.each([
+        ["a message the Chat does not hold", "nope", () => {}],
+        [
+          "a deleted message",
+          "u2",
+          (fake: ReturnType<typeof seedDb>) => {
+            rowOf(fake, "u2")!.deletedAt = new Date();
+          },
+        ],
+      ])("404s %s and leaves the path", async (_, messageId, shape) => {
+        mockSession();
+        const fake = seedAlternatives();
+        shape(fake);
+
+        const res = await switchTo(messageId);
+
+        expect(res.status).toBe(404);
+        expect(await res.json()).toHaveProperty("error");
+        expect(fake.tables.chat[0].activeLeafId).toBe("a2b");
+      });
+
+      it("409s while a run is in flight", async () => {
+        mockSession();
+        const fake = seedAlternatives();
+        runRegistry.register("chat-1");
+        try {
+          const res = await switchTo("u2");
+          expect(res.status).toBe(409);
+          expect(await res.json()).toHaveProperty("error");
+          expect(fake.tables.chat[0].activeLeafId).toBe("a2b");
+        } finally {
+          runRegistry.unregister("chat-1");
+        }
+      });
+
+      it("is refused to anyone but the Workspace Owner", async () => {
+        mockSession();
+        const fake = seedTenant(
+          {
+            chat: [{ id: "chat-1", workspaceId, activeLeafId: "u1b" }],
+            chat_message: [
+              stored("u1", null, "user", 1),
+              stored("u1b", null, "user", 2),
+            ],
+          },
+          "user-2",
+        );
+
+        expect((await switchTo("u1")).status).toBe(403);
+        expect(fake.tables.chat[0].activeLeafId).toBe("u1b");
+      });
+    });
   });
 });

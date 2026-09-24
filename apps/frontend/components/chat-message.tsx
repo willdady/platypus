@@ -40,12 +40,15 @@ import { Agent, isPresentableUrl } from "@platypus/schemas";
 import { isImageAttachment, messageText } from "@/lib/message-parts";
 import {
   BotIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   PencilIcon,
   CopyIcon,
   TrashIcon,
   RefreshCwIcon,
 } from "lucide-react";
 import { toolCallDurationMs } from "@/lib/tool-duration";
+import type { AlternativePosition } from "@/lib/chat-alternatives";
 import { ResponseMetricsPopover } from "./response-metrics-popover";
 import { TurnNotice } from "./turn-notice";
 import { LoadSkillTool } from "./load-skill-tool";
@@ -163,10 +166,14 @@ interface ChatMessageProps {
   /** Callback when user deletes a message */
   onMessageDelete: (messageId: string) => void;
   /**
-   * Regenerates this reply. Passed only to the reply that can be regenerated:
-   * the last one, while the message it answers is still in the Chat.
+   * Regenerates this reply. Passed only to a reply that can be regenerated:
+   * one whose message is still in the Chat, right above it.
    */
   onRegenerate?: (messageId: string) => void;
+  /** Where this message sits among its Alternatives, when it has any. */
+  alternatives?: AlternativePosition;
+  /** Shows the Alternative `toId` in place of the message `fromId`. */
+  onSwitchAlternative: (fromId: string, toId: string) => void;
   /** Callback when user copies message content */
   onCopyMessage: (content: string, messageId: string) => void;
   /** ID of the message that was recently copied, or null */
@@ -190,6 +197,8 @@ export const ChatMessage = memo(function ChatMessage({
   onEditStart,
   onMessageDelete,
   onRegenerate,
+  alternatives,
+  onSwitchAlternative,
   onCopyMessage,
   copiedMessageId,
   staleToolCallIds,
@@ -425,10 +434,14 @@ export const ChatMessage = memo(function ChatMessage({
     },
   ];
 
+  const isTurnInFlight = status === "submitted" || status === "streaming";
   const isAwaitedReply =
-    message.role === "assistant" &&
-    isLastMessage &&
-    (status === "submitted" || status === "streaming");
+    message.role === "assistant" && isLastMessage && isTurnInFlight;
+  // Named for what it sits under, never "version" or "branch" (ADR-0026).
+  const alternativeNoun = message.role === "user" ? "Message" : "Response";
+  const alternativeLabel =
+    alternatives &&
+    `${alternativeNoun} ${alternatives.index + 1} of ${alternatives.count}`;
 
   return (
     <Fragment key={message.id}>
@@ -493,10 +506,48 @@ export const ChatMessage = memo(function ChatMessage({
         <MessageActions
           className={message.role === "user" ? "justify-end" : "pl-8"}
         >
+          {canSendMessages && alternatives && (
+            <div
+              role="group"
+              aria-label={alternativeLabel}
+              className="flex items-center"
+            >
+              <MessageAction
+                className="cursor-pointer text-muted-foreground"
+                disabled={isTurnInFlight || !alternatives.previousId}
+                onClick={() =>
+                  onSwitchAlternative(message.id, alternatives.previousId!)
+                }
+                variant="ghost"
+                size="icon"
+                tooltip={`Previous ${alternativeNoun.toLowerCase()}`}
+              >
+                <ChevronLeftIcon className="size-4" />
+              </MessageAction>
+              <span
+                title={alternativeLabel}
+                className="text-xs tabular-nums text-muted-foreground"
+              >
+                {alternatives.index + 1}/{alternatives.count}
+              </span>
+              <MessageAction
+                className="cursor-pointer text-muted-foreground"
+                disabled={isTurnInFlight || !alternatives.nextId}
+                onClick={() =>
+                  onSwitchAlternative(message.id, alternatives.nextId!)
+                }
+                variant="ghost"
+                size="icon"
+                tooltip={`Next ${alternativeNoun.toLowerCase()}`}
+              >
+                <ChevronRightIcon className="size-4" />
+              </MessageAction>
+            </div>
+          )}
           {message.role === "assistant" && (
-            // Leftmost, before Copy, and deliberately not adjacent to
-            // Delete — a frequently-poked new control beside an
-            // undoable action invites mis-clicks (issue #354).
+            // Before Copy, and deliberately not adjacent to Delete — a
+            // frequently-poked new control beside an undoable action invites
+            // mis-clicks (issue #354).
             <ResponseMetricsPopover metadata={message.metadata} />
           )}
           {/* Edit, Delete and Regenerate all change the transcript, so all
@@ -538,6 +589,9 @@ export const ChatMessage = memo(function ChatMessage({
           {canSendMessages && message.role === "assistant" && onRegenerate && (
             <MessageAction
               className="cursor-pointer text-muted-foreground"
+              // A second turn cannot start while one is running, and starting
+              // it would first cut this tab's reply off the screen.
+              disabled={isTurnInFlight}
               onClick={() => onRegenerate(message.id)}
               variant="ghost"
               size="icon"

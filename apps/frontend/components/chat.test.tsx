@@ -3,7 +3,12 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ChatStatus, FileUIPart, PrepareSendMessagesRequest } from "ai";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 import { reportPdf } from "@/lib/chat-test-fixtures";
-import { stubAcceptedSave, stubRejectedSave } from "@/lib/test-utils";
+import {
+  jsonResponse,
+  stubAcceptedSave,
+  stubRejectedSave,
+} from "@/lib/test-utils";
+import type { AlternativePosition } from "@/lib/chat-alternatives";
 
 type PrepareRequest = PrepareSendMessagesRequest<PlatypusUIMessage>;
 
@@ -51,6 +56,7 @@ const { harness } = vi.hoisted(() => ({
     lastChatMessageProps: null as null | {
       onMessageDelete: (messageId: string) => void;
       onRegenerate?: (messageId: string) => void;
+      onSwitchAlternative: (fromId: string, toId: string) => void;
       staleToolCallIds?: ReadonlySet<string>;
     },
     /** What the Chat configured the chat hook with. */
@@ -202,9 +208,9 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
 }));
 
 // Stubbed to the edit seam: an Edit button per message, a Regenerate wherever
-// the Chat hands one down, and whatever edit surface the Chat hands down for
-// the one being edited. The transcript itself is `chat-message`'s own test's
-// business.
+// the Chat hands one down, arrows wherever it hands down Alternatives, and
+// whatever edit surface the Chat hands down for the one being edited. The
+// transcript itself is `chat-message`'s own test's business.
 vi.mock("./chat-message", () => ({
   ChatMessage: ({
     message,
@@ -212,6 +218,8 @@ vi.mock("./chat-message", () => ({
     onEditStart,
     onMessageDelete,
     onRegenerate,
+    alternatives,
+    onSwitchAlternative,
     staleToolCallIds,
   }: {
     message: PlatypusUIMessage;
@@ -219,12 +227,15 @@ vi.mock("./chat-message", () => ({
     onEditStart: (messageId: string) => void;
     onMessageDelete: (messageId: string) => void;
     onRegenerate?: (messageId: string) => void;
+    alternatives?: AlternativePosition;
+    onSwitchAlternative: (fromId: string, toId: string) => void;
     staleToolCallIds?: ReadonlySet<string>;
   }) => {
     harness.chatMessageRenders += 1;
     harness.lastChatMessageProps = {
       onMessageDelete,
       onRegenerate,
+      onSwitchAlternative,
       staleToolCallIds,
     };
     return (
@@ -239,7 +250,32 @@ vi.mock("./chat-message", () => ({
             </button>
             {onRegenerate && (
               <button type="button" onClick={() => onRegenerate(message.id)}>
-                Regenerate
+                Regenerate {message.id}
+              </button>
+            )}
+            {alternatives && (
+              <span>
+                {message.id} {alternatives.index + 1}/{alternatives.count}
+              </span>
+            )}
+            {alternatives?.previousId && (
+              <button
+                type="button"
+                onClick={() =>
+                  onSwitchAlternative(message.id, alternatives.previousId!)
+                }
+              >
+                Previous {message.id}
+              </button>
+            )}
+            {alternatives?.nextId && (
+              <button
+                type="button"
+                onClick={() =>
+                  onSwitchAlternative(message.id, alternatives.nextId!)
+                }
+              >
+                Next {message.id}
               </button>
             )}
           </>
@@ -1101,7 +1137,7 @@ describe("starting a turn", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
     renderChat();
 
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate a1" }));
 
     expect(harness.toastError).toHaveBeenCalledWith(CHAT_MAX_STEPS_ERROR);
     expect(harness.regenerate).not.toHaveBeenCalled();
@@ -1113,7 +1149,7 @@ describe("starting a turn", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
     renderChat();
 
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate a1" }));
 
     expect(harness.regenerate).toHaveBeenCalledWith({
       body: expect.objectContaining({ providerId: "p1", maxSteps: 10 }),
@@ -1140,7 +1176,25 @@ describe("starting a turn", () => {
     ];
     renderChat();
 
-    expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Regenerate a2" })).toBeNull();
+  });
+
+  it("offers Regenerate on every reply, not only the last", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
+    harness.turn.messages = [
+      message("u1", "q"),
+      message("a1", "a"),
+      message("u2", "q2"),
+      message("a2", "a2"),
+    ];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate a1" }));
+
+    expect(screen.getByRole("button", { name: "Regenerate a2" })).toBeTruthy();
+    expect(harness.regenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ messageId: "a1" }),
+    );
   });
 
   it("offers Regenerate on a reply the tree does not list yet", () => {
@@ -1155,7 +1209,7 @@ describe("starting a turn", () => {
     renderChat();
 
     expect(
-      screen.getByRole("button", { name: "Regenerate" }),
+      screen.getByRole("button", { name: "Regenerate a1" }),
     ).toBeInTheDocument();
   });
 
@@ -1171,6 +1225,198 @@ describe("starting a turn", () => {
       { body: expect.objectContaining({ providerId: "p1" }) },
     );
     expect(harness.chatMutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Moving between Alternatives (#712): a local swap straight away, then the
+// server's path. Nothing fetched in between may drag the view back.
+describe("switching between Alternatives", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SWITCH_URL = `${CHAT_KEY}/active-leaf`;
+
+  /** u1 → a1 → u2 → a2 → u3 → a3, with u2 edited twice: u2b → a2b, and u2c. */
+  const tree = [
+    { id: "u1", parentId: null },
+    { id: "a1", parentId: "u1" },
+    { id: "u2", parentId: "a1" },
+    { id: "a2", parentId: "u2" },
+    { id: "u3", parentId: "a2" },
+    { id: "a3", parentId: "u3" },
+    { id: "u2b", parentId: "a1" },
+    { id: "a2b", parentId: "u2b" },
+    { id: "u2c", parentId: "a1" },
+  ];
+  const path = (...ids: string[]) => ids.map((id) => message(id, id));
+  const original = path("u1", "a1", "u2", "a2", "u3", "a3");
+  const edited = path("u1", "a1", "u2b", "a2b");
+  const row = (messages: PlatypusUIMessage[]) => ({
+    id: CHAT_ID,
+    status: "succeeded",
+    providerId: "p1",
+    modelId: "m1",
+    messages,
+    tree,
+  });
+
+  /** What is on screen: the chat hook's messages, updated as the Chat sets them. */
+  const onScreen = () => harness.turn.messages.map((m) => m.id);
+
+  const rerenderChat = (view: ReturnType<typeof renderChat>) =>
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+  /** A poll landing: the Chat read hands back a fresh row. */
+  const pollLands = (
+    view: ReturnType<typeof renderChat>,
+    messages: PlatypusUIMessage[],
+  ) => {
+    const response = harness.responses.get(CHAT_KEY) as object;
+    harness.responses.set(CHAT_KEY, { ...response, data: row(messages) });
+    rerenderChat(view);
+  };
+
+  /** A PUT that answers only when the test says so. */
+  const deferredFetch = () => {
+    let answer!: (body: unknown, status?: number) => void;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = (body, status = 200) => resolve(jsonResponse(status, body));
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return {
+      fetchMock,
+      answer: (body: unknown, status?: number) => answer(body, status),
+    };
+  };
+
+  const showing = (held: PlatypusUIMessage[]) => {
+    harness.data.set(`/chat/${CHAT_ID}`, row(held));
+    harness.turn.messages = held;
+    harness.setMessages.mockImplementation((update) => {
+      harness.turn.messages =
+        typeof update === "function" ? update(harness.turn.messages) : update;
+    });
+    return renderChat();
+  };
+
+  it("hands each message its position among its Alternatives", () => {
+    showing(edited);
+
+    expect(screen.getByText("u2b 2/3")).toBeInTheDocument();
+    expect(screen.queryByText(/^a2b /)).toBeNull();
+  });
+
+  it.each([
+    ["a longer path", edited, "Previous u2b", "u2", original],
+    ["a shorter path", original, "Next u2", "u2b", edited],
+  ])(
+    "switches to %s and is not dragged back by a poll while the switch is pending",
+    async (_, from, button, target, to) => {
+      const { fetchMock, answer } = deferredFetch();
+      const view = showing(from);
+
+      fireEvent.click(screen.getByRole("button", { name: button }));
+
+      // Straight away, without waiting on the server.
+      expect(onScreen()).toEqual(["u1", "a1", target]);
+      expect(fetchMock).toHaveBeenCalledWith(
+        SWITCH_URL,
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ messageId: target }),
+        }),
+      );
+
+      pollLands(view, from);
+      expect(onScreen()).toEqual(["u1", "a1", target]);
+
+      answer({ messages: to, tree });
+      await waitFor(() => expect(onScreen()).toEqual(to.map((m) => m.id)));
+      // Written into the read, so the next poll and the screen agree.
+      const [update, options] = harness.chatMutate.mock.calls.at(-1)!;
+      expect(options).toEqual({ revalidate: false });
+      expect(update(row(from))).toEqual(row(to));
+
+      // Released: a later poll lands as any other would.
+      pollLands(view, edited);
+      expect(onScreen()).toEqual(edited.map((m) => m.id));
+    },
+  );
+
+  it("leaves a turn started while the switch was pending alone", async () => {
+    const { answer } = deferredFetch();
+    const view = showing(edited);
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous u2b" }));
+    harness.turn.status = "streaming";
+    rerenderChat(view);
+    answer({ messages: original, tree });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onScreen()).toEqual(["u1", "a1", "u2"]);
+    expect(harness.chatMutate).not.toHaveBeenCalled();
+  });
+
+  it("reverts and says so when the switch is refused", async () => {
+    stubRejectedSave("A reply is still being written in this Chat", 409);
+    showing(edited);
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous u2b" }));
+
+    await waitFor(() =>
+      expect(harness.toastError).toHaveBeenCalledWith(
+        "A reply is still being written in this Chat",
+      ),
+    );
+    expect(harness.turn.messages).toBe(edited);
+    expect(harness.chatMutate).not.toHaveBeenCalled();
+  });
+
+  it("aborts an earlier switch for a later one, and ends on the later", async () => {
+    const answers: ((body: unknown) => void)[] = [];
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answers.push((body) => resolve(jsonResponse(200, body)));
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const view = showing(original);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next u2" }));
+    rerenderChat(view);
+    fireEvent.click(screen.getByRole("button", { name: "Next u2b" }));
+
+    const signals = fetchMock.mock.calls.map(
+      (call) => (call as unknown as [string, RequestInit])[1].signal!,
+    );
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, false]);
+    expect(onScreen()).toEqual(["u1", "a1", "u2c"]);
+
+    const last = path("u1", "a1", "u2c");
+    answers[1]({ messages: last, tree });
+    await waitFor(() => expect(onScreen()).toEqual(["u1", "a1", "u2c"]));
+    // The aborted one answering late changes nothing.
+    answers[0]({ messages: edited, tree });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onScreen()).toEqual(["u1", "a1", "u2c"]);
+    expect(harness.toastError).not.toHaveBeenCalled();
+  });
+
+  it("reverts a run of switches to where the first one started", async () => {
+    const { answer } = deferredFetch();
+    const view = showing(original);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next u2" }));
+    rerenderChat(view);
+    fireEvent.click(screen.getByRole("button", { name: "Next u2b" }));
+    answer({ error: "Request failed" }, 500);
+
+    await waitFor(() => expect(harness.toastError).toHaveBeenCalled());
+    expect(harness.turn.messages).toBe(original);
   });
 });
 
@@ -1193,6 +1439,9 @@ describe("transcript stability", () => {
       first.onMessageDelete,
     );
     expect(harness.lastChatMessageProps!.onRegenerate).toBe(first.onRegenerate);
+    expect(harness.lastChatMessageProps!.onSwitchAlternative).toBe(
+      first.onSwitchAlternative,
+    );
     expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(
       first.staleToolCallIds,
     );

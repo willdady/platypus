@@ -17,14 +17,13 @@ export type MessageBeingEdited = {
 /**
  * Editing a message: which one, and what the surface opens holding.
  *
- * Storage is no longer destructive: the edited message and everything below
- * it stay in the Chat as an Alternative (ADR-0026). The screen still is, until
- * there is a way to reach Alternatives (#712) — the edited message and
- * everything below it leave the transcript, and the edit is sent as a fresh
- * turn. What changed in issue #710 is that the message survives the round trip
- * whole: it opens from its parts and resubmits with the attachments the surface
- * hands back, rather than being flattened to its text on the way in and rebuilt
- * from a bare string on the way out.
+ * Nothing is lost: the edited message and everything below it stay in the Chat
+ * as an Alternative (ADR-0026), which the arrows reach again (#712). They leave
+ * the screen, and the edit is sent as a fresh turn. What changed in issue #710
+ * is that the message survives the round trip whole: it opens from its parts
+ * and resubmits with the attachments the surface hands back, rather than being
+ * flattened to its text on the way in and rebuilt from a bare string on the way
+ * out.
  *
  * Starting that turn is `resend`'s business (issue #971): it truncates at
  * `truncateAt`, sends, and answers whether it did. A refused resend leaves the

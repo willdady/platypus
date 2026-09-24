@@ -34,6 +34,7 @@ import {
   snapshotMessages,
 } from "@/lib/chat-recovery";
 import { scopedPath, writeAt } from "@/lib/api-write";
+import { alternativePositions } from "@/lib/chat-alternatives";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
@@ -405,6 +406,16 @@ export const Chat = ({
     statusRef.current = status;
   }, [status]);
 
+  // The switch between Alternatives in flight, and the path to go back to if
+  // it fails: the one on screen before the first of a run of clicks.
+  const switchRef = useRef<{
+    controller: AbortController;
+    before: PlatypusUIMessage[];
+  } | null>(null);
+  // Messages this tab has switched away from, so switching back to one shows
+  // it at once.
+  const seenRef = useRef(new Map<string, PlatypusUIMessage>());
+
   // Hydration never rewinds: mid-run, a fetched snapshot lands only where it is
   // at least as far along as what is on screen (issue #648). The chat row is
   // written on a flush interval, so a snapshot fetched mid-run lags the stream
@@ -413,12 +424,17 @@ export const Chat = ({
   // the live message list through the updater rather than a dependency, so the
   // effect still runs only when `chatData` changes and not on every streamed
   // chunk.
+  //
+  // A switch between Alternatives holds it off too, from the click until the
+  // server has answered: any row read in between still names the old path,
+  // and landing it would drag the view back.
   useEffect(() => {
     const snapshot = snapshotMessages(chatData);
     if (
       !snapshot ||
       statusRef.current === "streaming" ||
-      statusRef.current === "submitted"
+      statusRef.current === "submitted" ||
+      switchRef.current
     ) {
       return;
     }
@@ -471,21 +487,93 @@ export const Chat = ({
     [backendUrl, chatId, refreshChat, scope],
   );
 
+  // Shows the Alternative `toId` in place of `fromId` straight away, then asks
+  // the server for the path under it. Not debounced: a second click aborts
+  // the first request and sends its own. The local swap has only what this
+  // tab has already shown, or an empty message in its place, and nothing
+  // below it; the server's answer fills the rest in.
+  const handleSwitchAlternative = useCallback(
+    async (fromId: string, toId: string) => {
+      let before: PlatypusUIMessage[] = [];
+      setMessages((held) => {
+        before = held;
+        for (const message of held) seenRef.current.set(message.id, message);
+        const at = held.findIndex((message) => message.id === fromId);
+        const target = seenRef.current.get(toId) ?? {
+          id: toId,
+          role: held[at].role,
+          parts: [],
+        };
+        return [...held.slice(0, at), target];
+      });
+
+      const pending = switchRef.current;
+      pending?.controller.abort();
+      const controller = new AbortController();
+      switchRef.current = { controller, before: pending?.before ?? before };
+
+      const outcome = await writeAt<Pick<ChatType, "messages" | "tree">>(
+        joinUrl(
+          backendUrl || "",
+          `${scopedPath("chat", scope)}/${chatId}/active-leaf`,
+        ),
+        { method: "PUT", data: { messageId: toId }, signal: controller.signal },
+      );
+      // Superseded by a later click, which settles the run.
+      if (controller.signal.aborted) return;
+      const revertTo = switchRef.current.before;
+      switchRef.current = null;
+      // A turn started meanwhile, from the swapped-in message, owns the screen
+      // now, and its run moves the path itself.
+      if (
+        statusRef.current === "submitted" ||
+        statusRef.current === "streaming"
+      ) {
+        return;
+      }
+
+      if (outcome.outcome === "success") {
+        const { messages, tree } = outcome.data;
+        setMessages(messages);
+        void mutateChat(
+          (current) => current && { ...current, messages, tree },
+          { revalidate: false },
+        );
+      } else {
+        setMessages(revertTo);
+        toast.error(outcome.message);
+      }
+    },
+    [backendUrl, chatId, mutateChat, scope, setMessages],
+  );
+
+  // Keyed on the ids alone, so a streamed token (new messages, same ids)
+  // keeps each position's identity and the `ChatMessage` memo with it (#869).
+  const pathKey = messages.map((message) => message.id).join("\n");
+  const tree = chatData?.tree;
+  const positions = useMemo(
+    () => alternativePositions(tree, pathKey.split("\n")),
+    [tree, pathKey],
+  );
+
   // Regenerate runs again from the reply's own message, so it is offered only
   // where that message is the one above the reply on screen. Once it has been
   // deleted there is nothing to answer, and the server refuses (409). A reply
   // the tree does not list yet is the one this tab just streamed, from the
   // message above it.
-  const lastMessage = messages.at(-1);
-  const replyParentId = chatData?.tree?.find(
-    (node) => node.id === lastMessage?.id,
-  )?.parentId;
-  const regenerableId =
-    lastMessage?.role === "assistant" &&
-    messages.at(-2)?.role === "user" &&
-    (replyParentId === undefined || replyParentId === messages.at(-2)?.id)
-      ? lastMessage.id
-      : null;
+  const parentOf = useMemo(
+    () => new Map(tree?.map((node) => [node.id, node.parentId])),
+    [tree],
+  );
+  const isRegenerable = (index: number) => {
+    const above = messages[index - 1];
+    const parentId = parentOf.get(messages[index].id);
+    return (
+      messages[index].role === "assistant" &&
+      above?.role === "user" &&
+      (parentId === undefined || parentId === above.id)
+    );
+  };
 
   // Context occupancy (ADR-0018): the capacity comes from the Org Admin's
   // declaration on the resolved model (`resolvedModel.contextWindow`), the
@@ -630,8 +718,10 @@ export const Chat = ({
                   onEditStart={handleMessageEditStart}
                   onMessageDelete={handleMessageDelete}
                   onRegenerate={
-                    message.id === regenerableId ? turn.regenerate : undefined
+                    isRegenerable(messageIndex) ? turn.regenerate : undefined
                   }
+                  alternatives={positions.get(message.id)}
+                  onSwitchAlternative={handleSwitchAlternative}
                   onCopyMessage={handleCopyMessage}
                   copiedMessageId={copiedMessageId}
                   staleToolCallIds={staleToolCallIds}

@@ -250,6 +250,14 @@ export const chatSubmitSchema = z
     },
   );
 
+/**
+ * A switch between Alternatives: the message to show, which the Active path
+ * then follows down to the newest message under it (ADR-0026).
+ */
+export const chatActiveLeafSchema = z.object({
+  messageId: z.string().min(1),
+});
+
 export const chatUpdateSchema = chatSchema.pick({
   workspaceId: true,
   title: true,

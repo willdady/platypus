@@ -1,17 +1,8 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#709"
+status: accepted
 ---
 
 # A Chat is a tree of message rows, and the server owns it
-
-> **Not in the code yet.** Today a Chat's messages are one linear `jsonb` array
-> on `chat.messages`. The client sends that whole array on every **Chat turn**,
-> and `ChatSink` writes it back over the column. Editing a user message truncates
-> the array at that point and resubmits it. Regenerating drops the last assistant
-> message. Deleting a message only removes it from the view. It is stored only
-> when the next turn writes the shortened array, and until then a reload brings
-> it back.
 
 Editing or regenerating a message destroys everything after it, permanently.
 The decision is to keep that work as **Alternatives**. Every message becomes a

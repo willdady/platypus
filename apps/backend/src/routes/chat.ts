@@ -4,7 +4,11 @@ import { z } from "zod";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
-import { chatSubmitSchema, chatUpdateSchema } from "@platypus/schemas";
+import {
+  chatActiveLeafSchema,
+  chatSubmitSchema,
+  chatUpdateSchema,
+} from "@platypus/schemas";
 import { and, count, desc, eq, or, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -39,7 +43,20 @@ import {
   deleteMessage,
   loadActivePath,
   resolveTurn,
+  switchActivePath,
 } from "../services/chat-messages.ts";
+import type { PlatypusUIMessage } from "../types.ts";
+
+/**
+ * Stored messages as a reader gets them: storage references rewritten to
+ * served URLs, and web tool parts normalized — a view over stored data: the
+ * Transcript's appearance must not depend on which week it was sent (issue
+ * #525), and this is the read-path counterpart to the live stream's
+ * normalization in `runs/drive.ts` — no migration, no change to the stored
+ * part.
+ */
+const servedMessages = (messages: PlatypusUIMessage[], origin: string) =>
+  normalizeWebToolParts(rewriteStorageUrls(messages, origin));
 
 // --- Routes ---
 
@@ -133,14 +150,7 @@ chat.get(
 
     return c.json({
       ...chatResponse,
-      // Storage references rewritten to served URLs, and web tool parts
-      // normalized — a view over stored data: the Transcript's appearance must
-      // not depend on which week it was sent (issue #525), and this is the
-      // read-path counterpart to the live stream's normalization in
-      // `runs/drive.ts` — no migration, no change to the stored part.
-      messages: normalizeWebToolParts(
-        rewriteStorageUrls(messages, getOrigin(c)),
-      ),
+      messages: servedMessages(messages, getOrigin(c)),
       tree,
     });
   },
@@ -336,6 +346,32 @@ chat.delete(
     await deleteMessage(chatId, messageId);
 
     return c.json({ message: "Message deleted" }, 200);
+  },
+);
+
+chat.put(
+  "/:chatId/active-leaf",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceOwner,
+  sValidator("json", chatActiveLeafSchema),
+  async (c) => {
+    const chatId = c.req.param("chatId");
+    const { workspaceId } = workspaceScopeOf(c);
+    const { messageId } = c.req.valid("json");
+
+    await requireOwned(db, "chat", { id: chatId, workspaceId });
+
+    // A run moves the leaf onto its own reply as it goes, and a switch landing
+    // mid-run would race it (ADR-0026).
+    if (runRegistry.has(chatId)) {
+      throw new ConflictError("A reply is still being written in this Chat");
+    }
+
+    const { messages, tree } = await switchActivePath(chatId, messageId);
+
+    return c.json({ messages: servedMessages(messages, getOrigin(c)), tree });
   },
 );
 
