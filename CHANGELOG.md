@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.9.4](https://github.com/willdady/platypus/compare/v3.9.3...v3.9.4) (2026-09-24)
+
+
+### Bug Fixes
+
+* **backend:** resolve a Workspace's memory Providers through its Attachments ([3ee45f7](https://github.com/willdady/platypus/commit/3ee45f7abf0f3802ffa75eccb65d0b94afb81e03))
+* correct the Administering docs against the sharing and ownership code ([#1009](https://github.com/willdady/platypus/issues/1009)) ([ee2ffa8](https://github.com/willdady/platypus/commit/ee2ffa8e7c3753671636a3fd99e3c05b294d5822))
+* **frontend:** keep the org picker up when switching organizations ([#1006](https://github.com/willdady/platypus/issues/1006)) ([f80c85e](https://github.com/willdady/platypus/commit/f80c85e142547919e2802a5c1919779e878d2327))
+
 ## [3.9.3](https://github.com/willdady/platypus/compare/v3.9.2...v3.9.3) (2026-09-24)
 
 
