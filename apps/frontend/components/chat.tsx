@@ -62,6 +62,7 @@ import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { toast } from "sonner";
 import { ChatComposer } from "./chat-composer";
 import { ChatSkeleton } from "./chat-skeleton";
+import { ListError } from "./list-state";
 import type { ModelSelection } from "./composer";
 import { skillsForAgent } from "@/lib/slash-commands";
 
@@ -82,7 +83,11 @@ export const Chat = ({
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
 
   // Fetch providers
-  const { data: providersData, isLoading } = useScopedSWR<{
+  const {
+    data: providersData,
+    error: providersError,
+    isLoading,
+  } = useScopedSWR<{
     results: Provider[];
   }>("providers", scope);
 
@@ -478,6 +483,17 @@ export const Chat = ({
   const isTranscriptPending =
     (isChatLoading && chatData === undefined) ||
     (hydratedChatId !== chatId && snapshotMessages(chatData) !== undefined);
+
+  // A failed cold read would otherwise hold the skeleton up for good.
+  if (providersError && !providersData) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="w-full xl:w-4/5 max-w-4xl">
+          <ListError error={providersError} subject="providers" />
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading || !providersData) {
     return (

@@ -1235,6 +1235,20 @@ describe("loading", () => {
     expect(composer()).not.toBeInTheDocument();
   });
 
+  it("shows the failure, not an endless skeleton, when providers fail to load", () => {
+    harness.responses.set(PROVIDERS_KEY, {
+      data: undefined,
+      error: new Error("500"),
+      isLoading: false,
+      mutate: vi.fn(),
+    });
+
+    renderChat();
+
+    expect(loadingSkeleton()).not.toBeInTheDocument();
+    expect(screen.getByText(/Failed to load providers/)).toBeInTheDocument();
+  });
+
   it("shows the transcript skeleton for an existing Chat while providers load", () => {
     providersInFlight();
     rowInFlight();

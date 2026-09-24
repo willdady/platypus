@@ -64,6 +64,21 @@ const describeSchedule = (cronExpression: string, timezone: string): string => {
   }
 };
 
+/** The trigger cards as they load; the workspace home draws them too. */
+export const TriggerCardsSkeleton = ({ cards }: { cards?: number }) => (
+  <CardGridSkeleton
+    cards={cards}
+    titleBadges={["w-12"]}
+    extra={
+      <>
+        {/* The agent it runs, then its schedule or events. */}
+        <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
+        <SkeletonLine lineClassName="mt-1.5 h-4" className="h-3 w-48" />
+      </>
+    }
+  />
+);
+
 export const TriggerList = ({
   orgId,
   workspaceId,
@@ -135,16 +150,7 @@ export const TriggerList = ({
   if (isLoading) {
     return (
       <LoadingRegion label="Loading triggers">
-        <CardGridSkeleton
-          titleBadges={["w-12"]}
-          extra={
-            <>
-              {/* The agent it runs, then its schedule or events. */}
-              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
-              <SkeletonLine lineClassName="mt-1.5 h-4" className="h-3 w-48" />
-            </>
-          }
-        />
+        <TriggerCardsSkeleton />
       </LoadingRegion>
     );
   }

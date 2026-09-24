@@ -1,8 +1,8 @@
 "use client";
 
-import { AgentsList } from "@/components/agents-list";
+import { AgentCardsSkeleton, AgentsList } from "@/components/agents-list";
 import { SkillsList } from "@/components/skills-list";
-import { TriggerList } from "@/components/trigger-list";
+import { TriggerCardsSkeleton, TriggerList } from "@/components/trigger-list";
 import { BoardsList } from "@/components/boards-list";
 import { DashboardsList } from "@/components/dashboards-list";
 import {
@@ -11,7 +11,6 @@ import {
 } from "@/components/collapsible-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Item, ItemContent } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 import {
   Bot,
@@ -26,6 +25,11 @@ import {
   History,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ButtonRowSkeleton,
+  CardGridSkeleton,
+  SkeletonLine,
+} from "@/components/list-skeletons";
 import Link from "next/link";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -51,16 +55,6 @@ const SECTION_KEYS = {
   triggers: "section:triggers:open",
 } as const;
 
-/**
- * A placeholder for one line of text: a box the line's own height (`h`)
- * holding a shorter bar, which is how a loaded line of text reads.
- */
-const TextLine = ({ h, className }: { h: string; className: string }) => (
-  <div className={cn("flex items-center", h)}>
-    <Skeleton className={className} />
-  </div>
-);
-
 /** A section heading: the h2 over its one-line description. */
 const SectionHeaderSkeleton = ({
   titleWidth,
@@ -70,15 +64,8 @@ const SectionHeaderSkeleton = ({
   descriptionWidth: string;
 }) => (
   <div className="flex flex-col">
-    <TextLine h="h-7" className={cn("h-6", titleWidth)} />
-    <TextLine h="h-5" className={cn("h-4 max-w-full", descriptionWidth)} />
-  </div>
-);
-
-/** The card grid every section's list renders into. */
-const CardGridSkeleton = ({ children }: { children: React.ReactNode }) => (
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
-    {children}
+    <SkeletonLine lineClassName="h-7" className={cn("h-6", titleWidth)} />
+    <SkeletonLine className={cn("h-4 max-w-full", descriptionWidth)} />
   </div>
 );
 
@@ -113,70 +100,6 @@ const CollapsibleSectionSkeleton = ({
   );
 };
 
-/** An Agent card: avatar, name, a three-line description and the stats. */
-const AgentCardSkeleton = () => (
-  <Item variant="outline" className="h-full items-stretch">
-    <Skeleton className="size-12 shrink-0 rounded-lg" />
-    <ItemContent>
-      <TextLine h="h-5" className="h-4 w-32" />
-      <div>
-        <TextLine h="h-4" className="h-3 w-full" />
-        <TextLine h="h-4" className="h-3 w-full" />
-        <TextLine h="h-4" className="h-3 w-2/3" />
-      </div>
-      <div className="flex h-4 items-center gap-3">
-        <Skeleton className="h-3 w-16" />
-        <Skeleton className="h-3 w-12" />
-        <Skeleton className="h-3 w-20" />
-      </div>
-    </ItemContent>
-    {/* New chat + menu: beside the content on xl, in a footer below it. */}
-    <div className="hidden xl:flex items-center gap-2">
-      <Skeleton className="h-8 w-24 rounded-md" />
-      <Skeleton className="size-9 rounded-md" />
-    </div>
-    <div className="flex basis-full items-center justify-between gap-2 pl-16 xl:hidden">
-      <Skeleton className="h-8 w-24 rounded-md" />
-      <Skeleton className="size-9 rounded-md" />
-    </div>
-  </Item>
-);
-
-/** A Skill, Dashboard or Board card: name, two-line description, menu. */
-const EntityCardSkeleton = () => (
-  <Item variant="outline" className="h-full">
-    <ItemContent>
-      <TextLine h="h-5" className="h-4 w-36" />
-      <div>
-        <TextLine h="h-4" className="h-3 w-full" />
-        <TextLine h="h-4" className="h-3 w-1/2" />
-      </div>
-    </ItemContent>
-    <Skeleton className="size-9 rounded-md" />
-  </Item>
-);
-
-/** A Trigger card: name and type badge, description, Agent and schedule. */
-const TriggerCardSkeleton = () => (
-  <Item variant="outline" className="h-full">
-    <ItemContent>
-      <div className="flex items-center gap-2">
-        <TextLine h="h-5" className="h-4 w-32" />
-        <Skeleton className="h-[22px] w-12 rounded-full" />
-      </div>
-      <TextLine h="h-4" className="h-3 w-3/4" />
-      <TextLine h="h-4 mt-1" className="h-3 w-24" />
-      <TextLine h="h-4 mt-1.5" className="h-3 w-40" />
-    </ItemContent>
-    <Skeleton className="size-9 rounded-md" />
-  </Item>
-);
-
-/** An outline button in a section's action row. */
-const ButtonSkeleton = ({ width }: { width: string }) => (
-  <Skeleton className={cn("h-9 rounded-md", width)} />
-);
-
 /**
  * The workspace home while its reads are in flight, drawn on the loaded
  * page's frame — header, stat cards, then the five sections in order, each
@@ -190,7 +113,7 @@ const WorkspaceSkeleton = () => (
   >
     {/* Header: org name, then icon + workspace name, settings link */}
     <div className="flex flex-col">
-      <TextLine h="h-5 mb-1" className="h-3.5 w-24" />
+      <SkeletonLine lineClassName="h-5 mb-1" className="w-24" />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Skeleton className="size-8 rounded" />
@@ -219,13 +142,8 @@ const WorkspaceSkeleton = () => (
     <div className="space-y-4">
       <SectionHeaderSkeleton titleWidth="w-28" descriptionWidth="w-80" />
       <div>
-        <CardGridSkeleton>
-          <AgentCardSkeleton />
-          <AgentCardSkeleton />
-        </CardGridSkeleton>
-        <div className="mt-4 flex gap-2">
-          <ButtonSkeleton width="w-32" />
-        </div>
+        <AgentCardsSkeleton cards={2} />
+        <ButtonRowSkeleton className="mt-4" widths={["w-32"]} />
       </div>
     </div>
 
@@ -236,13 +154,8 @@ const WorkspaceSkeleton = () => (
       titleWidth="w-24"
       descriptionWidth="w-96"
     >
-      <CardGridSkeleton>
-        <EntityCardSkeleton />
-        <EntityCardSkeleton />
-      </CardGridSkeleton>
-      <div className="flex gap-2">
-        <ButtonSkeleton width="w-32" />
-      </div>
+      <CardGridSkeleton cards={2} descriptionLines={2} />
+      <ButtonRowSkeleton widths={["w-32"]} />
     </CollapsibleSectionSkeleton>
 
     <Separator />
@@ -252,11 +165,8 @@ const WorkspaceSkeleton = () => (
       titleWidth="w-36"
       descriptionWidth="w-96"
     >
-      <CardGridSkeleton>
-        <EntityCardSkeleton />
-        <EntityCardSkeleton />
-      </CardGridSkeleton>
-      <ButtonSkeleton width="w-44" />
+      <CardGridSkeleton cards={2} descriptionLines={2} />
+      <ButtonRowSkeleton widths={["w-44"]} />
     </CollapsibleSectionSkeleton>
 
     <Separator />
@@ -266,11 +176,8 @@ const WorkspaceSkeleton = () => (
       titleWidth="w-24"
       descriptionWidth="w-80"
     >
-      <CardGridSkeleton>
-        <EntityCardSkeleton />
-        <EntityCardSkeleton />
-      </CardGridSkeleton>
-      <ButtonSkeleton width="w-36" />
+      <CardGridSkeleton cards={2} descriptionLines={2} />
+      <ButtonRowSkeleton widths={["w-36"]} />
     </CollapsibleSectionSkeleton>
 
     <Separator />
@@ -280,14 +187,8 @@ const WorkspaceSkeleton = () => (
       titleWidth="w-28"
       descriptionWidth="w-80"
     >
-      <CardGridSkeleton>
-        <TriggerCardSkeleton />
-        <TriggerCardSkeleton />
-      </CardGridSkeleton>
-      <div className="flex flex-wrap gap-2">
-        <ButtonSkeleton width="w-36" />
-        <ButtonSkeleton width="w-32" />
-      </div>
+      <TriggerCardsSkeleton cards={2} />
+      <ButtonRowSkeleton className="flex-wrap" widths={["w-36", "w-32"]} />
     </CollapsibleSectionSkeleton>
   </div>
 );
