@@ -16,27 +16,27 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "next": "16.3.1",
+    "next": "16.3.6",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
-    "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "1.20.1",
+    "@opennextjs/cloudflare": "1.20.6",
     "@platypus/schemas": "workspace:*",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^24.13.5",
+    "@types/node": "^24.13.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "eslint": "^10.10.0",
-    "eslint-config-next": "16.3.1",
+    "eslint": "^10.11.0",
+    "eslint-config-next": "16.3.6",
     "github-slugger": "^2.0.0",
     "pagefind": "^1.5.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "^7.3.6",
     "vitest": "^4.1.11",
-    "wrangler": "^4.134.0"
+    "wrangler": "^4.137.0"
   }
 }
