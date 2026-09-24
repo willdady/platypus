@@ -39,6 +39,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ListError } from "@/components/list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type SandboxBackend = { backend: string; name: string };
@@ -589,13 +590,7 @@ const SandboxSettings = ({
   }
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-destructive">
-          Failed to load sandbox. {error.info?.message || error.message}
-        </p>
-      </div>
-    );
+    return <ListError error={error} subject="sandbox" />;
   }
 
   const hasSandbox = !!data;

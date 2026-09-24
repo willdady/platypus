@@ -34,7 +34,7 @@ describe("ContextsList", () => {
 
   it("shows the failure and its reason when the read fails", () => {
     mockScopedSWR({
-      "/contexts": { error: { message: "x", info: { message: "Boom" } } },
+      "/contexts": { error: { message: "x", info: { error: "Boom" } } },
     });
     renderList(<ContextsList />);
 

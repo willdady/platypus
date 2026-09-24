@@ -184,7 +184,7 @@ describe.each(RESOURCES)(
         [`/${entity}`]: {
           error: {
             message: "An error occurred while fetching the data.",
-            info: { message: "Server exploded" },
+            info: { error: "Server exploded" },
           },
         },
       });

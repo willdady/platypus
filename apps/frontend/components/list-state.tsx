@@ -30,16 +30,19 @@ export function ListState({
   );
 }
 
-/** The shape SWR puts on `error`, whether the failure carries an `info` or not. */
+/**
+ * The shape SWR puts on `error`, whether the failure carries an `info` or not.
+ * `info` is the response body, whose failure reason is under `error`.
+ */
 interface ReadError {
   readonly message?: string;
-  readonly info?: { readonly message?: string };
+  readonly info?: { readonly error?: unknown };
 }
 
 /**
  * The fetch-failure state shared by every list: "Failed to load <subject>." plus
- * the reader's reason. Owns the SWR `error.info?.message || error.message`
- * fallback that was copy-pasted into every list.
+ * the reader's reason — the body's `error` when it is a string (a validation
+ * failure's is an object, which can't render), else the error's own message.
  */
 export function ListError({
   error,
@@ -50,9 +53,10 @@ export function ListError({
   subject: string;
 }) {
   const { message, info } = (error ?? {}) as ReadError;
+  const reason = typeof info?.error === "string" ? info.error : message;
   return (
     <ListState variant="error">
-      Failed to load {subject}. {info?.message || message}
+      Failed to load {subject}. {reason}
     </ListState>
   );
 }

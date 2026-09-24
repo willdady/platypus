@@ -21,12 +21,12 @@ describe("ListState", () => {
 });
 
 describe("ListError", () => {
-  it("names the subject and prefers the reader's info message", () => {
+  it("names the subject and prefers the response body's error", () => {
     render(
       <ListError
         error={{
           message: "An error occurred while fetching the data.",
-          info: { message: "Server exploded" },
+          info: { error: "Server exploded" },
         }}
         subject="providers"
       />,
@@ -34,6 +34,20 @@ describe("ListError", () => {
 
     expect(
       screen.getByText("Failed to load providers. Server exploded"),
+    ).toBeInTheDocument();
+  });
+
+  // A validation failure's body carries an object under `error`.
+  it("falls back to the error's own message when the body's error isn't text", () => {
+    render(
+      <ListError
+        error={{ message: "Bad query", info: { error: { issues: [] } } }}
+        subject="agents"
+      />,
+    );
+
+    expect(
+      screen.getByText("Failed to load agents. Bad query"),
     ).toBeInTheDocument();
   });
 
