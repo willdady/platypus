@@ -12,6 +12,7 @@ import { pointerSettingModelId } from "./model-capability.ts";
 import { UNTITLED_CHAT_TITLE, type Provider } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import { logger } from "../logger.ts";
+import { loadActivePath } from "./chat-messages.ts";
 
 export type GenerateChatMetadataParams = {
   chatId: string;
@@ -85,7 +86,7 @@ export const generateChatMetadata = async (
   // a pointless model call in the common already-titled case.
   if (chat.title !== UNTITLED_CHAT_TITLE) return null;
 
-  const messages = (chat.messages as PlatypusUIMessage[]) || [];
+  const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
   if (!hasUserText(messages)) return null;
 
   // Fetch workspace to check for a task-model provider override.

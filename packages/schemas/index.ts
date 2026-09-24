@@ -131,7 +131,13 @@ export const chatSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   title: z.string().min(3).max(30),
+  // The Active path, as `GET /:chatId` returns it (ADR-0026).
   messages: z.any().optional(),
+  // Every live message's place in the Chat's tree, oldest first. Returned
+  // beside `messages` so a client can tell which messages have Alternatives.
+  tree: z
+    .array(z.object({ id: z.string(), parentId: z.string().nullable() }))
+    .optional(),
   status: chatStatusSchema,
   isPinned: z.boolean(),
   tags: z
@@ -183,11 +189,10 @@ export const isValidChatMaxSteps = (
   value: number | null | undefined,
 ): boolean => chatSchema.shape.maxSteps.safeParse(value).success;
 
-export const chatSubmitSchema = chatSchema
+const chatTurnSchema = chatSchema
   .pick({
     id: true,
     workspaceId: true,
-    messages: true,
     instructions: true,
     temperature: true,
     topP: true,
@@ -202,7 +207,37 @@ export const chatSubmitSchema = chatSchema
     providerId: z.string().optional(),
     modelId: z.string().optional(),
     search: z.boolean().optional(),
-  })
+    // The server owns the Transcript (ADR-0026) and rebuilds the history from
+    // its own rows. A client still sending its own is refused rather than
+    // half-honoured.
+    messages: z.never().optional(),
+  });
+
+/**
+ * A Chat turn: a new user message and the id it follows, or the id of a reply
+ * to regenerate.
+ *
+ * The message is a trust boundary — a user message of text and files, with no
+ * metadata, which only the server writes. The backend also runs it through the
+ * AI SDK's `validateUIMessages`, which knows each part's shape.
+ */
+export const chatSubmitSchema = z
+  .union([
+    chatTurnSchema.extend({
+      message: z.strictObject({
+        id: z.string().min(1),
+        role: z.literal("user"),
+        parts: z.array(z.looseObject({ type: z.enum(["text", "file"]) })),
+      }),
+      // Always stated, null for a Chat's first message: the server never
+      // guesses what a message follows.
+      parentId: z.string().nullable(),
+    }),
+    chatTurnSchema.extend({
+      trigger: z.literal("regenerate-message"),
+      messageId: z.string().min(1),
+    }),
+  ])
   .refine(
     (data) => {
       const hasAgent = Boolean(data.agentId);

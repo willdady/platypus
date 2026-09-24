@@ -162,8 +162,11 @@ interface ChatMessageProps {
   onEditStart: (messageId: string) => void;
   /** Callback when user deletes a message */
   onMessageDelete: (messageId: string) => void;
-  /** Callback when user regenerates the last assistant message */
-  onRegenerate: () => void;
+  /**
+   * Regenerates this reply. Passed only to the reply that can be regenerated:
+   * the last one, while the message it answers is still in the Chat.
+   */
+  onRegenerate?: (messageId: string) => void;
   /** Callback when user copies message content */
   onCopyMessage: (content: string, messageId: string) => void;
   /** ID of the message that was recently copied, or null */
@@ -532,10 +535,10 @@ export const ChatMessage = memo(function ChatMessage({
               <TrashIcon className="size-4" />
             </MessageAction>
           )}
-          {canSendMessages && message.role === "assistant" && isLastMessage && (
+          {canSendMessages && message.role === "assistant" && onRegenerate && (
             <MessageAction
               className="cursor-pointer text-muted-foreground"
-              onClick={onRegenerate}
+              onClick={() => onRegenerate(message.id)}
               variant="ghost"
               size="icon"
               label="Regenerate"

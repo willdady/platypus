@@ -455,13 +455,81 @@ describe("Agent Schema", () => {
 });
 
 describe("Chat Submit Schema", () => {
+  const userMessage = {
+    id: "u1",
+    role: "user",
+    parts: [
+      { type: "text", text: "What is this?" },
+      { type: "file", mediaType: "image/png", url: "data:image/png;base64,AA" },
+    ],
+  };
   const baseSubmit = {
     id: "chat-1",
     workspaceId: "ws-1",
-    messages: [],
+    message: userMessage,
+    parentId: null,
     providerId: "p1",
     modelId: "gpt-4",
   };
+  const { message: _, parentId: __, ...baseTurn } = baseSubmit;
+
+  it("should accept a new message and the id it follows", () => {
+    const result = chatSubmitSchema.safeParse({
+      ...baseSubmit,
+      parentId: "a1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("should accept a regenerate naming its reply", () => {
+    const result = chatSubmitSchema.safeParse({
+      ...baseTurn,
+      trigger: "regenerate-message",
+      messageId: "a1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  // The server owns the Transcript (ADR-0026): a client that still sends its
+  // whole history is refused, not quietly half-honoured.
+  it.each([
+    ["on its own", baseTurn],
+    ["beside a new message", baseSubmit],
+  ])("should reject a body carrying messages %s", (_, body) => {
+    const result = chatSubmitSchema.safeParse({ ...body, messages: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it("should require parentId to be stated, null for a Chat's first message", () => {
+    const { parentId: _, ...withoutParent } = baseSubmit;
+    expect(chatSubmitSchema.safeParse(withoutParent).success).toBe(false);
+  });
+
+  // The incoming message is a trust boundary: an assistant message, a tool
+  // part or metadata would plant content in the model's context that the
+  // user never wrote.
+  it.each([
+    ["an assistant message", { ...userMessage, role: "assistant" }],
+    [
+      "a tool part",
+      {
+        ...userMessage,
+        parts: [
+          {
+            type: "tool-loadSkill",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: {},
+            output: {},
+          },
+        ],
+      },
+    ],
+    ["metadata", { ...userMessage, metadata: { agentId: "a" } }],
+  ])("should reject %s", (_, message) => {
+    const result = chatSubmitSchema.safeParse({ ...baseSubmit, message });
+    expect(result.success).toBe(false);
+  });
 
   it("should accept a maxSteps override on the turn", () => {
     const result = chatSubmitSchema.safeParse({ ...baseSubmit, maxSteps: 25 });
@@ -516,7 +584,12 @@ describe("isValidChatMaxSteps", () => {
     const base = {
       id: "chat-1",
       workspaceId: "ws-1",
-      messages: [],
+      message: {
+        id: "u1",
+        role: "user",
+        parts: [{ type: "text", text: "hi" }],
+      },
+      parentId: null,
       providerId: "p1",
       modelId: "gpt-4",
     };

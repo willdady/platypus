@@ -39,18 +39,13 @@ export const SLASH_COMMAND_PATTERN = new RegExp(`^/(${SKILL_NAME_SOURCE})`);
  * prose part is the one the user typed. A trailing assistant message means the
  * turn is a continuation rather than a fresh submission, so there is no new
  * command to read.
- *
- * `parts` is defended even though the type says it is always there: the Chat
- * payload declares `messages` as `z.any()`, so what arrives here is whatever
- * the client sent, asserted into shape rather than validated into it. A message
- * carrying no parts must read as "no command", not throw the turn away.
  */
 export const slashCommandOf = (
   messages: PlatypusUIMessage[],
 ): string | null => {
   const latest = messages.at(-1);
   if (latest?.role !== "user") return null;
-  const firstText = (latest.parts ?? []).find((part) => part.type === "text");
+  const firstText = latest.parts.find((part) => part.type === "text");
   if (!firstText) return null;
   return SLASH_COMMAND_PATTERN.exec(firstText.text)?.[1] ?? null;
 };

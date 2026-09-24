@@ -22,9 +22,9 @@ import type { PlatypusUIMessage } from "@platypus/backend/src/types";
  * - **What to say about the drop.** {@link classifyChatError}. A dropped
  *   connection to a healthy run is not a failed turn and must not be reported
  *   as one.
- * - **Whether a snapshot may land.** {@link snapshotIsAtLeastAsComplete}. The
- *   row lags the stream by up to one flush interval, so an unguarded snapshot
- *   rewinds visible text.
+ * - **Whether a snapshot may land.** {@link snapshotMayLand}. The row lags the
+ *   stream by up to one flush interval, so an unguarded snapshot rewinds
+ *   visible text.
  */
 
 /** How often a Chat with a live run re-reads its row. */
@@ -180,32 +180,46 @@ export const transcriptExtent = (
  *
  * The chat row is written on a flush interval, so a snapshot fetched mid-run is
  * behind the stream by up to one flush. Applying it unconditionally is what
- * makes text disappear and reappear. Monotonicity is the guard: a snapshot
- * lands only where it is at least as far along as what is already held, which
- * makes it safe to hydrate on any signal — a poll, a focus, a restored page —
- * without checking first whether a stream is live.
+ * makes text disappear and reappear. So the rule turns on the run:
  *
- * An equal snapshot does land. That is deliberate: the row is the canonical form
- * of the transcript — attachment URLs rewritten, normalized tool parts — and
- * refusing an equal one would keep the page on its own version of the same
- * content until a reload.
+ * - **Over.** The row is final: it lands, always. That includes one equal to
+ *   what is held, deliberately — the row is the canonical form of the
+ *   transcript (attachment URLs rewritten, normalized tool parts), and
+ *   refusing it would keep the page on its own version until a reload.
+ * - **In progress, same leaf.** Only the leaf grows during a run, so it lands
+ *   if that message is at least as far along as the one held. Messages above
+ *   it may differ — a delete made in another tab still arrives.
+ * - **In progress, leaf held further up.** The row is behind a flush: a
+ *   connection dropped before the reply's first write. Refused, so the partial
+ *   reply stays on screen.
+ * - **In progress, leaf not held at all.** Another tab's run, on a path this
+ *   one is not showing. It lands.
+ *
+ * Which makes it safe to hydrate on any signal — a poll, a focus, a restored
+ * page — without checking first whether a stream is live.
  */
-export const snapshotIsAtLeastAsComplete = (
-  snapshot: readonly PlatypusUIMessage[] | undefined,
-  held: readonly PlatypusUIMessage[] | undefined,
+export const snapshotMayLand = (
+  snapshot: readonly PlatypusUIMessage[],
+  held: readonly PlatypusUIMessage[],
+  runStatus: RunStatus | undefined,
 ): boolean => {
-  const next = transcriptExtent(snapshot);
-  const current = transcriptExtent(held);
-  if (next.messages !== current.messages) {
-    return next.messages > current.messages;
+  if (isRunOver(runStatus)) return true;
+  const leaf = snapshot.at(-1);
+  const heldLeaf = held.at(-1);
+  if (leaf && heldLeaf && leaf.id === heldLeaf.id) {
+    const next = transcriptExtent([leaf]);
+    const current = transcriptExtent([heldLeaf]);
+    return next.parts >= current.parts && next.textLength >= current.textLength;
   }
-  return next.parts >= current.parts && next.textLength >= current.textLength;
+  return !held.some((message) => message.id === leaf?.id);
 };
 
-/** The messages on a fetched Chat row, or `undefined` where it carries none. */
+/**
+ * The messages on a fetched Chat row, or `undefined` where there is no row. An
+ * emptied Chat is a real snapshot — its empty list is what other tabs must
+ * land when every message is deleted.
+ */
 export const snapshotMessages = (
   chat: Chat | null | undefined,
-): PlatypusUIMessage[] | undefined => {
-  const messages = chat?.messages as PlatypusUIMessage[] | undefined;
-  return messages && messages.length > 0 ? messages : undefined;
-};
+): PlatypusUIMessage[] | undefined =>
+  chat?.messages as PlatypusUIMessage[] | undefined;

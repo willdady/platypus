@@ -30,9 +30,10 @@ import {
   classifyChatError,
   composerTurnStatus,
   isRunHeldElsewhere,
-  snapshotIsAtLeastAsComplete,
+  snapshotMayLand,
   snapshotMessages,
 } from "@/lib/chat-recovery";
+import { scopedPath, writeAt } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
@@ -155,18 +156,27 @@ export const Chat = ({
       ),
       body: { orgId, workspaceId },
       credentials: "include",
-      // The AI SDK calls this before each fetch. We must include `id` and
-      // `messages` in the body because the backend expects them in the
-      // JSON payload (not derived from the URL or headers).
-      prepareSendMessagesRequest: (options) => {
-        return {
-          body: {
-            ...options.body,
-            id: options.id,
-            messages: options.messages,
-          },
-        };
-      },
+      // The AI SDK calls this before each fetch. The server owns the
+      // Transcript (ADR-0026), so a turn carries only what is new: the message
+      // and the id it follows, or the reply to regenerate. Never the history.
+      prepareSendMessagesRequest: ({
+        id,
+        messages,
+        body,
+        trigger,
+        messageId,
+      }) => ({
+        body: {
+          ...body,
+          id,
+          ...(trigger === "regenerate-message"
+            ? { trigger, messageId }
+            : {
+                message: messages.at(-1),
+                parentId: messages.at(-2)?.id ?? null,
+              }),
+        },
+      }),
     }),
   });
 
@@ -377,13 +387,14 @@ export const Chat = ({
     statusRef.current = status;
   }, [status]);
 
-  // Hydration is monotonic: a fetched snapshot lands only where it is at least
-  // as far along as what is on screen (issue #648). The chat row is written on a
-  // flush interval, so a snapshot fetched mid-run lags the stream by up to one
-  // flush — applying it unconditionally is what would make the answer visibly
-  // shorten and then grow back. The comparison is made against the live message
-  // list through the updater rather than a dependency, so the effect still runs
-  // only when `chatData` changes and not on every streamed chunk.
+  // Hydration never rewinds: mid-run, a fetched snapshot lands only where it is
+  // at least as far along as what is on screen (issue #648). The chat row is
+  // written on a flush interval, so a snapshot fetched mid-run lags the stream
+  // by up to one flush — applying it unconditionally is what would make the
+  // answer visibly shorten and then grow back. The comparison is made against
+  // the live message list through the updater rather than a dependency, so the
+  // effect still runs only when `chatData` changes and not on every streamed
+  // chunk.
   useEffect(() => {
     const snapshot = snapshotMessages(chatData);
     if (
@@ -394,7 +405,7 @@ export const Chat = ({
       return;
     }
     setMessages((held) =>
-      snapshotIsAtLeastAsComplete(snapshot, held) ? snapshot : held,
+      snapshotMayLand(snapshot, held, chatData?.status) ? snapshot : held,
     );
   }, [chatData, setMessages]);
 
@@ -421,15 +432,42 @@ export const Chat = ({
     [setCopiedMessageId],
   );
 
-  // An updater, not a slice of the current list: closing over `messages` gave
-  // this callback a new identity on every message update, which defeated the
-  // `ChatMessage` memo and re-rendered the whole transcript per token (#869).
+  // Stored the moment it is clicked (ADR-0026), then the row is read back:
+  // the transcript on screen is the server's, not a local cut of it. Nothing
+  // here closes over `messages`, which would give this callback a new identity
+  // on every message update, defeat the `ChatMessage` memo and re-render the
+  // whole transcript per token (#869).
   const handleMessageDelete = useCallback(
     (messageId: string) => {
-      setMessages((held) => held.filter((m) => m.id !== messageId));
+      void writeAt(
+        joinUrl(
+          backendUrl || "",
+          `${scopedPath("chat", scope)}/${chatId}/messages/${messageId}`,
+        ),
+        { method: "DELETE" },
+      ).then((outcome) => {
+        if (outcome.outcome === "success") refreshChat();
+        else toast.error(outcome.message);
+      });
     },
-    [setMessages],
+    [backendUrl, chatId, refreshChat, scope],
   );
+
+  // Regenerate runs again from the reply's own message, so it is offered only
+  // where that message is the one above the reply on screen. Once it has been
+  // deleted there is nothing to answer, and the server refuses (409). A reply
+  // the tree does not list yet is the one this tab just streamed, from the
+  // message above it.
+  const lastMessage = messages.at(-1);
+  const replyParentId = chatData?.tree?.find(
+    (node) => node.id === lastMessage?.id,
+  )?.parentId;
+  const regenerableId =
+    lastMessage?.role === "assistant" &&
+    messages.at(-2)?.role === "user" &&
+    (replyParentId === undefined || replyParentId === messages.at(-2)?.id)
+      ? lastMessage.id
+      : null;
 
   // Context occupancy (ADR-0018): the capacity comes from the Org Admin's
   // declaration on the resolved model (`resolvedModel.contextWindow`), the
@@ -482,7 +520,7 @@ export const Chat = ({
   // then dropped it to the bottom once the messages arrived.
   const isTranscriptPending =
     (isChatLoading && chatData === undefined) ||
-    (hydratedChatId !== chatId && snapshotMessages(chatData) !== undefined);
+    (hydratedChatId !== chatId && !!snapshotMessages(chatData)?.length);
 
   // A failed cold read would otherwise hold the skeleton up for good.
   if (providersError && !providersData) {
@@ -573,7 +611,9 @@ export const Chat = ({
                   agents={agents}
                   onEditStart={handleMessageEditStart}
                   onMessageDelete={handleMessageDelete}
-                  onRegenerate={turn.regenerate}
+                  onRegenerate={
+                    message.id === regenerableId ? turn.regenerate : undefined
+                  }
                   onCopyMessage={handleCopyMessage}
                   copiedMessageId={copiedMessageId}
                   staleToolCallIds={staleToolCallIds}

@@ -2,10 +2,15 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 import { logger } from "../logger.ts";
 
-const { mockGenerateText, mockLanguageModel } = vi.hoisted(() => ({
-  mockGenerateText: vi.fn(),
-  mockLanguageModel: vi.fn(),
-}));
+const { mockGenerateText, mockLanguageModel, mockLoadActivePath } = vi.hoisted(
+  () => ({
+    mockGenerateText: vi.fn(),
+    mockLanguageModel: vi.fn(),
+    mockLoadActivePath: vi.fn(),
+  }),
+);
+
+vi.mock("./chat-messages.ts", () => ({ loadActivePath: mockLoadActivePath }));
 
 vi.mock("ai", () => ({
   generateText: mockGenerateText,
@@ -27,14 +32,22 @@ const userMessage: PlatypusUIMessage = {
   parts: [{ type: "text", text: "How do I center a div?" }],
 };
 
-/** Stubs the four reads generateChatMetadata makes before the model call. */
+/**
+ * Stubs the reads generateChatMetadata makes before the model call. A Chat's
+ * `messages` are its Active path, read from the Chat's leaf.
+ */
 const stubReads = (opts: {
-  chat: Record<string, unknown> | undefined;
+  chat:
+    (Record<string, unknown> & { messages?: PlatypusUIMessage[] }) | undefined;
   workspace?: Record<string, unknown> | undefined;
   provider?: Record<string, unknown> | undefined;
   existingTags?: string[];
 }) => {
-  mockDb.limit.mockResolvedValueOnce(opts.chat ? [opts.chat] : []); // chat
+  const { messages = [], ...chat } = opts.chat ?? {};
+  mockDb.limit.mockResolvedValueOnce(
+    opts.chat ? [{ ...chat, activeLeafId: "leaf-1" }] : [],
+  ); // chat
+  mockLoadActivePath.mockResolvedValue({ messages, tree: [] });
   if (opts.workspace !== undefined) {
     mockDb.limit.mockResolvedValueOnce(opts.workspace ? [opts.workspace] : []); // workspace
   }
@@ -104,6 +117,8 @@ describe("generateChatMetadata", () => {
     const result = await generateChatMetadata(params);
 
     expect(result).toEqual(updated);
+    // The Active path, not the Chat's Alternatives.
+    expect(mockLoadActivePath).toHaveBeenCalledWith("chat-1", "leaf-1");
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
     expect(setArg.title).toBe("Centering a div");
     // kebab-cased + deduped

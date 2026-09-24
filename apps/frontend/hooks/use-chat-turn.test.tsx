@@ -82,7 +82,7 @@ const edit = { text: "Rewritten", files: [] };
 type Turn = ReturnType<typeof harness>["turn"];
 const starts: [string, (turn: Turn) => boolean][] = [
   ["send", (turn) => turn.send(edit)],
-  ["regenerate", (turn) => turn.regenerate()],
+  ["regenerate", (turn) => turn.regenerate("a1")],
   ["resendEdited", (turn) => turn.resendEdited(1, edit)],
 ];
 
@@ -154,12 +154,14 @@ describe("useChatTurn starting a turn", () => {
     ]);
   });
 
-  it("regenerates with the turn's body, then refreshes the row", () => {
+  // Named explicitly: the SDK's default names no message, and the server
+  // needs the reply's id to know what to run from.
+  it("regenerates the named reply with the turn's body, then refreshes the row", () => {
     const h = harness();
 
-    expect(h.turn.regenerate()).toBe(true);
+    expect(h.turn.regenerate("a1")).toBe(true);
 
-    expect(h.regenerate).toHaveBeenCalledWith({ body });
+    expect(h.regenerate).toHaveBeenCalledWith({ body, messageId: "a1" });
     expect(h.calls).toEqual(["regenerate", "refreshChat"]);
   });
 
@@ -182,10 +184,11 @@ describe("useChatTurn starting a turn", () => {
       maxSteps: 51,
     });
 
-    h.turn.regenerate();
+    h.turn.regenerate("a1");
 
     expect(h.regenerate).toHaveBeenCalledWith({
       body: { agentId: "a1", search: false },
+      messageId: "a1",
     });
   });
 });

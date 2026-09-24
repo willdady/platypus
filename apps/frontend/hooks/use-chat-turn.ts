@@ -26,7 +26,7 @@ export interface UseChatTurnInput<T extends UIMessage> {
   /** The chat hook's own calls. */
   chat: {
     sendMessage: (message: PromptInputMessage, options: TurnOptions) => unknown;
-    regenerate: (options: TurnOptions) => unknown;
+    regenerate: (options: TurnOptions & { messageId: string }) => unknown;
     stop: () => unknown;
     setMessages: (update: (held: T[]) => T[]) => void;
   };
@@ -90,12 +90,23 @@ export const useChatTurn = <T extends UIMessage>({
     [sendMessage, start],
   );
 
+  /**
+   * Regenerates the reply `messageId`, named explicitly: the SDK's default
+   * names no message, and the server needs one to know what to run from.
+   */
   const regenerate = useCallback(
-    () => start((options) => regenerateTurn(options)),
+    (messageId: string) =>
+      start((options) => regenerateTurn({ ...options, messageId })),
     [regenerateTurn, start],
   );
 
-  /** Drops the message at `truncateAt` and everything after it, then sends. */
+  /**
+   * Drops the message at `truncateAt` and everything after it from the screen,
+   * then sends the edit as a new message under the edited one's parent. The
+   * stored rows stay (ADR-0026). Never `sendMessage({ messageId })`: it
+   * replaces the message in place under the same id, which is a row the server
+   * already holds.
+   */
   const resendEdited = useCallback(
     (truncateAt: number, message: PromptInputMessage) =>
       start((options) => {

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../index.ts";
-import { chat as chatTable } from "../../db/schema.ts";
+import { chat as chatTable, chatMessage } from "../../db/schema.ts";
 import { logger } from "../../logger.ts";
 import { generateChatMetadata } from "../../services/chat-metadata.ts";
 import { extractFiles } from "../../storage/utils.ts";
@@ -17,19 +17,28 @@ import type {
 export type ChatSinkParams = {
   orgId: string;
   workspaceId: string;
+  /** The user message this turn submits; absent on a regenerate. */
+  message?: PlatypusUIMessage;
+  /**
+   * The row this turn hangs from: the submitted message's parent, or the
+   * regenerated reply's parent.
+   */
+  parentId: string | null;
   /** Override the FlushScheduler interval. Defaults to 5 seconds. */
   flushIntervalMs?: number;
 };
 
 /**
- * Persists a chat row at run lifecycle boundaries.
+ * Persists a Chat turn at run lifecycle boundaries, writing only the rows the
+ * turn itself produced (ADR-0026) — never a row from history.
  *
- * - `onStart`: upsert the row with `status: "running"` so disconnected
- *   clients can read the in-progress state.
- * - `onProgress`: drive a FlushScheduler that periodically writes the
- *   latest messages while keeping `status: "running"`.
+ * - `onStart`: flip the Chat row to `status: "running"` (creating it for a new
+ *   Chat) and insert the submitted user message, so a disconnected client can
+ *   read the in-progress state.
+ * - `onProgress`: drive a FlushScheduler that periodically upserts the reply
+ *   while keeping `status: "running"`.
  * - `onFinish`: write the terminal status (`succeeded`, `failed`,
- *   `cancelled`) and the final messages.
+ *   `cancelled`) and the final reply.
  *
  * The sink intentionally only persists what `prepareChatTurn` resolved
  * (agent vs direct provider/model nulling already done) — it does not
@@ -53,50 +62,58 @@ export class ChatSink implements RunSink {
   }): Promise<void> {
     this.runId = ctx.runId;
     this.latestMessages = ctx.messages;
-    const { workspaceId } = this.params;
-    // Upsert with the input messages so a reconnecting client can see
-    // the user's question immediately, before the model produces its
-    // first step. Existing rows (follow-up turns) get their messages
-    // overwritten with the fuller history the client just sent, and the
-    // pinned Memories block (ADR-0020) is written so a re-take on this turn
-    // survives for the next.
-    try {
-      const updated = await db
+    const { workspaceId, parentId } = this.params;
+    const [message] = this.params.message
+      ? await this.extract([this.params.message])
+      : [];
+
+    // Not caught: a turn whose message cannot be stored must not run. The
+    // runner fails the run and the request with it. The pinned Memories block
+    // (ADR-0020) is written so a re-take on this turn survives for the next.
+    await db.transaction(async (tx) => {
+      const values = {
+        status: "running",
+        memorySnapshot: ctx.memorySnapshot ?? null,
+        lastTurnAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const updated = await tx
         .update(chatTable)
-        .set({
-          status: "running",
-          messages: ctx.messages,
-          memorySnapshot: ctx.memorySnapshot ?? null,
-          lastTurnAt: new Date(),
-          updatedAt: new Date(),
-        })
+        .set(values)
         .where(
           and(
             eq(chatTable.id, ctx.runId),
             eq(chatTable.workspaceId, workspaceId),
           ),
         )
-        .returning();
+        .returning({ id: chatTable.id });
 
       if (updated.length === 0) {
-        await db.insert(chatTable).values({
+        // Fails on a Chat id another Workspace holds, before any message is
+        // written into that Chat.
+        await tx.insert(chatTable).values({
           id: ctx.runId,
           workspaceId,
           title: "Untitled",
-          status: "running",
-          messages: ctx.messages,
-          memorySnapshot: ctx.memorySnapshot ?? null,
-          lastTurnAt: new Date(),
           createdAt: new Date(),
-          updatedAt: new Date(),
+          ...values,
         });
       }
-    } catch (error) {
-      logger.error(
-        { error, chatId: ctx.runId, workspaceId },
-        "Error upserting chat row in onStart",
-      );
-    }
+
+      if (message) {
+        await tx.insert(chatMessage).values({
+          chatId: ctx.runId,
+          id: message.id,
+          parentId,
+          role: "user",
+          parts: message.parts,
+        });
+        await tx
+          .update(chatTable)
+          .set({ activeLeafId: message.id })
+          .where(eq(chatTable.id, ctx.runId));
+      }
+    });
   }
 
   // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
@@ -192,10 +209,21 @@ export class ChatSink implements RunSink {
     });
   }
 
+  /** Stores inline file bytes and swaps them for storage references. */
+  private extract(messages: PlatypusUIMessage[]): Promise<PlatypusUIMessage[]> {
+    const { orgId, workspaceId } = this.params;
+    return extractFiles(messages, { orgId, workspaceId, chatId: this.runId });
+  }
+
   /**
-   * Writes the chat row with the resolved plan, the supplied status, and
-   * the supplied messages (after running them through `extractFiles`).
-   * Falls back to insert when update affects zero rows.
+   * Writes the Chat row with the resolved plan and the supplied status, and
+   * upserts the turn's reply (after running it through `extractFiles`).
+   *
+   * The reply is the trailing message when it is an assistant's. The history
+   * the server loaded always ends in a user message — the one submitted, or the
+   * regenerated reply's parent — so a trailing assistant message is this
+   * turn's own: the streamed reply, or the seeded `loadSkill` message the SDK
+   * continues under the same id. Before the first step that is all there is.
    */
   private async writeRow(args: {
     status: RunStatus;
@@ -204,22 +232,18 @@ export class ChatSink implements RunSink {
     if (!this.plan) return;
 
     const { resolved } = this.plan;
-    const { orgId, workspaceId } = this.params;
+    const { workspaceId } = this.params;
+    const last = args.messages.at(-1);
 
-    let processedMessages: PlatypusUIMessage[];
+    let reply: PlatypusUIMessage | undefined;
     try {
-      processedMessages = await extractFiles(args.messages, {
-        orgId,
-        workspaceId,
-        chatId: this.runId,
-      });
+      [reply] = last?.role === "assistant" ? await this.extract([last]) : [];
     } catch (error) {
       logger.error({ error, chatId: this.runId }, "Error extracting files");
       return;
     }
 
     const dbValues = {
-      messages: processedMessages,
       status: args.status,
       agentId: resolved.agentId ?? null,
       providerId: resolved.agentId ? null : resolved.providerId,
@@ -232,30 +256,53 @@ export class ChatSink implements RunSink {
       presencePenalty: resolved.presencePenalty ?? null,
       frequencyPenalty: resolved.frequencyPenalty ?? null,
       maxSteps: resolved.maxSteps ?? null,
+      // Every write points the leaf at the reply, so the first one moves it
+      // there. Nothing else moves it mid-run: a delete, like a switch between
+      // Alternatives, is refused while the run is in flight.
+      ...(reply ? { activeLeafId: reply.id } : {}),
       updatedAt: new Date(),
     };
 
     try {
-      const updateResult = await db
-        .update(chatTable)
-        .set(dbValues)
-        .where(
-          and(
-            eq(chatTable.id, this.runId),
-            eq(chatTable.workspaceId, workspaceId),
-          ),
-        )
-        .returning();
+      await db.transaction(async (tx) => {
+        if (reply) {
+          // Only the content: a reply deleted since the last write stays
+          // deleted.
+          const content = {
+            parts: reply.parts,
+            metadata: reply.metadata ?? null,
+          };
+          const updated = await tx
+            .update(chatMessage)
+            .set(content)
+            .where(
+              and(
+                eq(chatMessage.chatId, this.runId),
+                eq(chatMessage.id, reply.id),
+              ),
+            )
+            .returning({ id: chatMessage.id });
+          if (updated.length === 0) {
+            await tx.insert(chatMessage).values({
+              chatId: this.runId,
+              id: reply.id,
+              parentId: this.params.message?.id ?? this.params.parentId,
+              role: "assistant",
+              ...content,
+            });
+          }
+        }
 
-      if (updateResult.length === 0) {
-        await db.insert(chatTable).values({
-          id: this.runId,
-          workspaceId,
-          title: "Untitled",
-          createdAt: new Date(),
-          ...dbValues,
-        });
-      }
+        await tx
+          .update(chatTable)
+          .set(dbValues)
+          .where(
+            and(
+              eq(chatTable.id, this.runId),
+              eq(chatTable.workspaceId, workspaceId),
+            ),
+          );
+      });
     } catch (error) {
       logger.error(
         { error, chatId: this.runId, workspaceId },

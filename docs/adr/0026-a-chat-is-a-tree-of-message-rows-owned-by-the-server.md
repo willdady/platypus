@@ -138,6 +138,16 @@ a message id.
   the poll. The hydration guard stops comparing message counts. It accepts a
   snapshot when the leaf differs or the same leaf has grown, which holds in both
   directions the count-first comparison got wrong.
+
+  > **Note (#711):** the guard that shipped replaces "the leaf differs or the
+  > same leaf has grown" with a rule gated on the run. Once the run is over the
+  > row is final, so a snapshot always lands. Mid-run, a snapshot whose leaf is
+  > the held leaf lands if that message is at least as far along; one whose leaf
+  > is an ancestor on the held path is refused; one whose leaf is not on the held
+  > path lands. "The leaf differs" alone accepted the ancestor case, which is a
+  > connection dropped before the reply's first flush, and would have wiped the
+  > partial reply off the screen.
+
 - **Every background reader works from the Active path**, through one shared
   load: title generation, memory extraction, and the opening Context occupancy.
   Alternatives off the path are invisible to them. An Alternative that was on

@@ -375,7 +375,7 @@ Hover a message for its actions:
 | -------------- | ------------------------ | ------------------------------------------------- |
 | **Edit**       | Your own messages        | Reopens the message for rewriting — see below     |
 | **Copy**       | Any message              | Copies the message text to the clipboard          |
-| **Delete**     | Any message              | Removes it from the view                          |
+| **Delete**     | Any message              | Removes it from the Chat for good                 |
 | **Regenerate** | The last assistant reply | Runs the turn again, same message, fresh response |
 
 The actions are hidden while the last reply is still streaming. **Edit**,
@@ -415,13 +415,11 @@ if that isn't what you want — it changes the Chat's selection too.
 </Callout>
 
 <Callout type="warning">
-  **Delete removes the message from the view, and the next thing you send makes
-  that permanent.** Nothing is written when you click it, so anything that
-  re-reads the Chat brings the message back — reloading, and also switching away
-  from the tab and returning. Send a message afterwards and the shortened
-  conversation is what gets stored — the deletion you thought was cosmetic is
-  now the history. If you are pruning a long Chat, send in the same sitting
-  rather than leaving it and coming back.
+  **Delete takes effect the moment you click it, and there is no undo.** The
+  message is gone from the Chat — after a reload, in another tab, and from
+  everything the model is sent from then on. The messages around it stay where
+  they are, so you can take one message out of the middle of a long Chat without
+  losing what came after it.
 </Callout>
 
 ## Organising a long history

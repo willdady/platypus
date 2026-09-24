@@ -108,16 +108,6 @@ describe("slashCommandOf", () => {
     expect(slashCommandOf([userMessage("/-nope")])).toBe(null);
     expect(slashCommandOf([userMessage("/blog-post-")])).toBe("blog-post");
   });
-
-  // The Chat payload declares `messages` as `z.any()`, so a client can send a
-  // message shaped like nothing this type describes. Reading "no command" off it
-  // is right; throwing would fail a turn the route would otherwise have run.
-  it("reads no command off a message carrying no parts", () => {
-    const shapeless = [
-      { id: "u1", role: "user" },
-    ] as unknown as PlatypusUIMessage[];
-    expect(slashCommandOf(shapeless)).toBe(null);
-  });
 });
 
 describe("seedUserInvokedSkill", () => {

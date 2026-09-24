@@ -55,6 +55,7 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.18",
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^10.0.1",
     "@platypus-examples/tool-set": "workspace:*",
     "@types/dockerode": "^4.0.1",

@@ -11,8 +11,15 @@ const { mockGenerateText, mockOpenProvider, mockGenerateEmbedding } =
 vi.mock("ai", () => ({ generateText: mockGenerateText }));
 vi.mock("./provider.ts", () => ({ openProvider: mockOpenProvider }));
 vi.mock("./embedding.ts", () => ({ generateEmbedding: mockGenerateEmbedding }));
+// The real path read wherever rows are seeded; the chainable-mock tests below
+// stub it, since the mock cannot answer its queries by position.
+vi.mock("./chat-messages.ts", async (importActual) => {
+  const actual = await importActual<typeof import("./chat-messages.ts")>();
+  return { ...actual, loadActivePath: vi.fn(actual.loadActivePath) };
+});
 
 import { processMemoryExtractionBatch } from "./memory-extraction.ts";
+import { loadActivePath } from "./chat-messages.ts";
 
 const makeWorkspace = (overrides: Record<string, unknown> = {}) => ({
   id: "ws-1",
@@ -24,18 +31,54 @@ const makeWorkspace = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+type Message = { role: string; parts: { type: string; text: string }[] };
+
+const exchange: Message[] = [
+  { role: "user", parts: [{ type: "text", text: "hi" }] },
+  { role: "assistant", parts: [{ type: "text", text: "hello" }] },
+];
+
 const makeChat = (overrides: Record<string, unknown> = {}) => ({
   id: "chat-1",
   workspaceId: "ws-1",
   memoryExtractionStatus: "pending",
   lastMemoryProcessedAt: null,
   updatedAt: new Date(),
-  messages: [
-    { role: "user", parts: [{ type: "text", text: "hi" }] },
-    { role: "assistant", parts: [{ type: "text", text: "hello" }] },
-  ],
+  messages: exchange,
   ...overrides,
 });
+
+/** One `chat_message` row of a chain, `chatId:index` → `chatId:index-1`. */
+const messageRow = (chatId: string, message: Message, index: number) => ({
+  chatId,
+  id: `${chatId}:${index}`,
+  parentId: index > 0 ? `${chatId}:${index - 1}` : null,
+  role: message.role,
+  parts: message.parts,
+  metadata: null,
+  deletedAt: null,
+  createdAt: new Date(index),
+});
+
+/**
+ * Seeds rows as `seedDb` does, storing each Chat's `messages` the way the
+ * server does: as a chain of `chat_message` rows whose last is the leaf.
+ */
+const seedWithMessages = (store: Record<string, Record<string, unknown>[]>) =>
+  seedDb({
+    ...store,
+    chat: (store.chat ?? []).map(({ messages, ...chat }) => ({
+      ...chat,
+      activeLeafId: (messages as Message[]).length
+        ? `${chat.id as string}:${(messages as Message[]).length - 1}`
+        : null,
+    })),
+    chat_message: (store.chat ?? []).flatMap((chat) =>
+      (chat.messages as Message[]).map((message, index) =>
+        messageRow(chat.id as string, message, index),
+      ),
+    ),
+  });
 
 const makeProvider = (overrides: Record<string, unknown> = {}) => ({
   id: "p-extract",
@@ -70,6 +113,14 @@ describe("processMemoryExtractionBatch", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
+    vi.mocked(loadActivePath).mockResolvedValue({
+      messages: exchange as never,
+      tree: [],
+    });
+  });
+
+  afterEach(() => {
+    vi.mocked(loadActivePath).mockReset();
   });
 
   it("returns early when no workspaces have memory extraction enabled", async () => {
@@ -92,7 +143,8 @@ describe("processMemoryExtractionBatch", () => {
   it("marks a chat completed when it has fewer than 2 messages", async () => {
     const provider = makeProvider();
     setupWhere([makeWorkspace()], [provider]);
-    mockDb.limit.mockResolvedValueOnce([makeChat({ messages: [] })]);
+    mockDb.limit.mockResolvedValueOnce([makeChat()]);
+    vi.mocked(loadActivePath).mockResolvedValueOnce({ messages: [], tree: [] });
 
     await processMemoryExtractionBatch();
 
@@ -203,7 +255,7 @@ describe("processMemoryExtractionBatch chat selection", () => {
   let fake: FakeDb;
 
   const seedChats = (...chats: Record<string, unknown>[]) => {
-    fake = seedDb({
+    fake = seedWithMessages({
       workspace: [makeWorkspace()],
       provider: [makeProvider()],
       chat: chats.map((c) =>
@@ -225,7 +277,7 @@ describe("processMemoryExtractionBatch chat selection", () => {
   };
 
   /** Two messages whose text names the Chat, so a prompt says whose it is. */
-  const messagesFor = (id: string) => [
+  const messagesFor = (id: string): Message[] => [
     { role: "user", parts: [{ type: "text", text: `chat:${id}` }] },
     { role: "assistant", parts: [{ type: "text", text: "ok" }] },
   ];
@@ -350,6 +402,34 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect(await run()).toEqual(["busy"]);
   });
 
+  it("reads the Active path only, leaving Alternatives and deleted messages out", async () => {
+    seedChats(chat("tree"));
+    fake.tables.chat_message.push(
+      // An edit of the first message the User has moved away from.
+      {
+        ...messageRow("tree", exchange[0], 9),
+        parentId: null,
+        parts: [{ type: "text", text: "the edited-away question" }],
+      },
+    );
+    fake.tables.chat_message[0].parts = [
+      { type: "text", text: "chat:tree" },
+      { type: "text", text: " kept" },
+    ];
+    fake.tables.chat_message.push({
+      ...messageRow("tree", exchange[0], 2),
+      parentId: "tree:1",
+      parts: [{ type: "text", text: "the deleted question" }],
+      deletedAt: new Date(),
+    });
+
+    expect(await run()).toEqual(["tree"]);
+    const { prompt } = mockGenerateText.mock.calls[0][0] as { prompt: string };
+    expect(prompt).toContain("chat:tree kept");
+    expect(prompt).not.toContain("edited-away");
+    expect(prompt).not.toContain("deleted question");
+  });
+
   it("re-reads a Chat that was too short when first scanned after its next turn", async () => {
     seedChats(chat("short", { messages: messagesFor("short").slice(0, 1) }));
 
@@ -357,9 +437,12 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect(chatRow("short").memoryExtractionStatus).toBe("completed");
 
     vi.setSystemTime(minutes(5));
+    fake.tables.chat_message.push(
+      messageRow("short", messagesFor("short")[1], 1),
+    );
     Object.assign(chatRow("short"), {
       lastTurnAt: new Date(),
-      messages: messagesFor("short"),
+      activeLeafId: "short:1",
     });
     vi.setSystemTime(minutes(10));
 
@@ -393,7 +476,7 @@ describe("processMemoryExtractionBatch provider visibility", () => {
   });
 
   it("extracts with a Shared Provider attached to the Workspace", async () => {
-    seedDb({
+    seedWithMessages({
       workspace: [makeWorkspace()],
       provider: [shared()],
       attachment: [attached("p-extract")],
@@ -406,7 +489,7 @@ describe("processMemoryExtractionBatch provider visibility", () => {
   });
 
   it("skips a Workspace whose Shared extraction Provider is detached", async () => {
-    const fake = seedDb({
+    const fake = seedWithMessages({
       workspace: [makeWorkspace()],
       provider: [shared()],
       chat: [makeChat()],
@@ -420,7 +503,7 @@ describe("processMemoryExtractionBatch provider visibility", () => {
   });
 
   it("extracts without embeddings when the Shared embedding Provider is detached", async () => {
-    seedDb({
+    seedWithMessages({
       workspace: [makeWorkspace({ memoryEmbeddingProviderId: "p-embed" })],
       provider: [
         makeProvider(),

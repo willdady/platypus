@@ -4,6 +4,8 @@ import {
   unique,
   uniqueIndex,
   customType,
+  foreignKey,
+  primaryKey,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -167,7 +169,9 @@ export const chat = pgTable(
         onDelete: "cascade",
       }),
     title: t.text("title").notNull(),
-    messages: t.jsonb("messages"),
+    // The last message of the Chat's Active path (ADR-0026): the path is read
+    // by walking `parentId` up from here. Null for a Chat with no messages.
+    activeLeafId: t.text("active_leaf_id"),
     // Run lifecycle status. Existing rows backfill to "succeeded" — every
     // chat row pre-status was the result of a completed run.
     status: t.text("status").notNull().default("succeeded"),
@@ -224,6 +228,46 @@ export const chat = pgTable(
       t.lastMemoryProcessedAt,
       t.updatedAt,
     ),
+    // NO ACTION rather than a cascade or set-null: a message row is never
+    // hard-deleted on its own, only with its Chat, so the leaf cannot dangle.
+    foreignKey({
+      columns: [t.id, t.activeLeafId],
+      foreignColumns: [chatMessage.chatId, chatMessage.id],
+    }),
+  ],
+);
+
+/**
+ * One message of a Chat (ADR-0026). The messages form a tree through
+ * `parentId`; the Chat's `activeLeafId` picks the Active path through it.
+ *
+ * Rows are never hard-deleted on their own: Delete sets `deletedAt`, which
+ * takes the row off the Active path and leaves the tree's shape alone. Only the
+ * Chat's own delete removes them, by cascade.
+ */
+export const chatMessage = pgTable(
+  "chat_message",
+  (t) => ({
+    chatId: t
+      .text("chat_id")
+      .notNull()
+      .references((): AnyPgColumn => chat.id, { onDelete: "cascade" }),
+    // Client-generated for a user message, so unique only within its Chat.
+    id: t.text("id").notNull(),
+    // Null for a message that opens the Chat.
+    parentId: t.text("parent_id"),
+    role: t.text("role").$type<"user" | "assistant">().notNull(),
+    parts: t.jsonb("parts").notNull(),
+    metadata: t.jsonb("metadata"),
+    deletedAt: t.timestamp("deleted_at"),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    primaryKey({ columns: [t.chatId, t.id] }),
+    foreignKey({
+      columns: [t.chatId, t.parentId],
+      foreignColumns: [t.chatId, t.id],
+    }),
   ],
 );
 

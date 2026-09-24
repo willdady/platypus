@@ -498,6 +498,27 @@
       "when": 1789787683082,
       "tag": "0070_backfill_invitation_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1790244726659,
+      "tag": "0071_chat_message_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1790244732319,
+      "tag": "0072_backfill_chat_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1790244804439,
+      "tag": "0073_drop_chat_messages_column",
+      "breakpoints": true
     }
   ]
 }

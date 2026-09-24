@@ -3,7 +3,7 @@ import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
-import { NotFoundError } from "../errors.ts";
+import { ConflictError, NotFoundError } from "../errors.ts";
 import { chatSubmitSchema, chatUpdateSchema } from "@platypus/schemas";
 import { and, count, desc, eq, or, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -19,11 +19,11 @@ import {
   ownedWhere,
 } from "../services/workspace-resource.ts";
 import type { Variables } from "../server.ts";
-import { type PlatypusUIMessage } from "../types.ts";
 import { rewriteStorageUrls, deleteStoredPrefix } from "../storage/utils.ts";
 import { chatStorageKeyPrefix } from "../storage/keys.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
+import { runRegistry } from "../runs/run-registry.ts";
 import { ChatSink } from "../runs/sinks/chat-sink.ts";
 import { normalizeWebToolParts } from "../runs/web-tool-normalize.ts";
 import type { RunInput } from "../runs/types.ts";
@@ -35,6 +35,11 @@ import {
 } from "../services/memory-retrieval.ts";
 import { chatTimeouts } from "../runs/chat-timeouts.ts";
 import { seedUserInvokedSkill } from "../services/slash-command.ts";
+import {
+  deleteMessage,
+  loadActivePath,
+  resolveTurn,
+} from "../services/chat-messages.ts";
 
 // --- Routes ---
 
@@ -113,34 +118,31 @@ chat.get(
 
     const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
 
-    // The pinned Memories block and previous-turn stamp (ADR-0020) are internal
-    // — absent from the Chat response schema, never surfaced in the product.
-    // Strip them before serialising; the row read by the run sink still carries
-    // them.
+    // The pinned Memories block and previous-turn stamp (ADR-0020), and the
+    // active leaf (ADR-0026), are internal — absent from the Chat response
+    // schema, never surfaced in the product. Strip them before serialising;
+    // the row read by the run sink still carries them.
     const {
       memorySnapshot: _memorySnapshot,
       lastTurnAt: _lastTurnAt,
+      activeLeafId,
       ...chatResponse
     } = chat;
 
-    // Rewrite storage:// URLs to HTTP URLs
-    const origin = getOrigin(c);
-    if (chatResponse.messages) {
-      chatResponse.messages = rewriteStorageUrls(
-        chatResponse.messages as PlatypusUIMessage[],
-        origin,
-      );
-      // A view over stored data, same as the URL rewrite above: the
-      // Transcript's appearance must not depend on which week it was sent
-      // (issue #525), and this is the read-path counterpart to the live
-      // stream's normalization in `runs/drive.ts` — no migration, no change
-      // to the stored part.
-      chatResponse.messages = normalizeWebToolParts(
-        chatResponse.messages as PlatypusUIMessage[],
-      );
-    }
+    const { messages, tree } = await loadActivePath(chatId, activeLeafId);
 
-    return c.json(chatResponse);
+    return c.json({
+      ...chatResponse,
+      // Storage references rewritten to served URLs, and web tool parts
+      // normalized — a view over stored data: the Transcript's appearance must
+      // not depend on which week it was sent (issue #525), and this is the
+      // read-path counterpart to the live stream's normalization in
+      // `runs/drive.ts` — no migration, no change to the stored part.
+      messages: normalizeWebToolParts(
+        rewriteStorageUrls(messages, getOrigin(c)),
+      ),
+      tree,
+    });
   },
 );
 
@@ -175,6 +177,16 @@ chat.post(
         ownedWhere("chat", { id: data.id, workspaceId: scope.workspaceId }),
       )
       .limit(1);
+
+    // What the turn continues, from the server's own rows (ADR-0026). Refuses a
+    // turn that cannot run — an unknown parent, a duplicate id, a reply that
+    // cannot regenerate — before anything is retrieved or written.
+    const turn = await resolveTurn({
+      chatId: data.id,
+      owned: existingChat.length > 0,
+      request: data,
+    });
+
     const now = new Date();
     const pin = resolveMemoryPin({
       existingSnapshot: existingChat[0]?.memorySnapshot,
@@ -204,11 +216,13 @@ chat.post(
     // content with correct provenance and never as words the user said.
     //
     // Seeded onto the messages that go into `RunInput` — the array that reaches
-    // `originalMessages` and is what the sink persists. Seeding into the
-    // converted model messages instead would reach the model and persist
-    // nothing, quietly turning "persist the pair" into "re-seed every turn".
+    // `originalMessages`, whose trailing assistant message the reply continues
+    // and the sink persists. Seeding into the converted model messages instead
+    // would reach the model and persist nothing, quietly turning "persist the
+    // pair" into "re-seed every turn". A regenerate ends at the same user
+    // message, so it is seeded again exactly as its submit was.
     const messages = await seedUserInvokedSkill({
-      messages: (data.messages as PlatypusUIMessage[] | undefined) ?? [],
+      messages: turn.messages,
       orgId: scope.orgId,
       workspaceId: scope.workspaceId,
       agentId: data.agentId,
@@ -227,6 +241,8 @@ chat.post(
     const sink = new ChatSink({
       orgId: scope.orgId,
       workspaceId: scope.workspaceId,
+      message: turn.message,
+      parentId: turn.parentId,
     });
 
     // A rejected attachment (issue #328), an unresolved Agent/Provider/model,
@@ -288,13 +304,38 @@ chat.delete(
       .delete(chatTable)
       .where(ownedWhere("chat", { id: chatId, workspaceId }));
 
-    // By prefix, not by the keys the messages reference: files on messages an
-    // edit or regenerate dropped are referenced by nothing, yet still stored.
+    // By prefix, not by the keys the messages reference: files on messages off
+    // the Active path — Alternatives, deleted messages — are stored too.
     await deleteStoredPrefix(
       chatStorageKeyPrefix({ orgId, workspaceId, chatId }),
     );
 
     return c.json({ message: "Chat deleted successfully" }, 200);
+  },
+);
+
+chat.delete(
+  "/:chatId/messages/:messageId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceOwner,
+  async (c) => {
+    const { chatId, messageId } = c.req.param();
+    const { workspaceId } = workspaceScopeOf(c);
+
+    await requireOwned(db, "chat", { id: chatId, workspaceId });
+
+    // A run's reply hangs from the path it started on, and it writes the leaf
+    // as it goes — a delete landing mid-run would race it (ADR-0026). A Chat
+    // run's id is its Chat's id.
+    if (runRegistry.has(chatId)) {
+      throw new ConflictError("A reply is still being written in this Chat");
+    }
+
+    await deleteMessage(chatId, messageId);
+
+    return c.json({ message: "Message deleted" }, 200);
   },
 );
 
@@ -326,12 +367,13 @@ chat.put(
       throw new NotFoundError("Chat not found");
     }
 
-    // The pinned Memories block (ADR-0020) is internal — absent from the Chat
-    // response schema, never surfaced in the product. Strip the internal
-    // columns (`memorySnapshot`, `lastTurnAt`) before serialising.
+    // The pinned Memories block (ADR-0020) and the active leaf (ADR-0026) are
+    // internal — absent from the Chat response schema, never surfaced in the
+    // product. Strip the internal columns before serialising.
     const {
       memorySnapshot: _memorySnapshot,
       lastTurnAt: _lastTurnAt,
+      activeLeafId: _activeLeafId,
       ...chatResponse
     } = result;
 

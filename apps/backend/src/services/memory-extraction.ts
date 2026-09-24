@@ -27,6 +27,7 @@ import { openProvider } from "./provider.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
 import { generateEmbedding } from "./embedding.ts";
 import { resolveScoped } from "./scoped-resource.ts";
+import { loadActivePath } from "./chat-messages.ts";
 
 /**
  * Formats conversation messages for the summary prompt.
@@ -104,13 +105,15 @@ const getTodayDateString = (): string => {
  * Processes a single chat for memory extraction into daily summaries.
  */
 const processChat = async (
-  chat: typeof chatTable.$inferSelect,
+  chat: ChatToProcess["chat"],
   workspace: typeof workspaceTable.$inferSelect,
   extractionProvider: typeof providerTable.$inferSelect,
   embeddingProvider: typeof providerTable.$inferSelect | null,
   readAt: Date,
 ): Promise<void> => {
-  const messages = (chat.messages as PlatypusUIMessage[]) || [];
+  // The Active path only: an Alternative the User has moved away from is not
+  // something they said.
+  const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
 
   // Only process chats with at least 2 messages (user + assistant)
   if (messages.length < 2) {
@@ -262,7 +265,10 @@ const processChat = async (
 };
 
 type ChatToProcess = {
-  chat: typeof chatTable.$inferSelect;
+  chat: Pick<
+    typeof chatTable.$inferSelect,
+    "id" | "workspaceId" | "activeLeafId"
+  >;
   workspace: typeof workspaceTable.$inferSelect;
   extractionProvider: typeof providerTable.$inferSelect;
   embeddingProvider: typeof providerTable.$inferSelect | null;
@@ -338,8 +344,13 @@ const findChatsToProcess = async (): Promise<{
   const readAt = new Date();
   const oneHourAgo = new Date(readAt.getTime() - 60 * 60 * 1000);
 
+  // Not the messages: those are read per Chat as it is processed.
   const chatsToProcess = await db
-    .select()
+    .select({
+      id: chatTable.id,
+      workspaceId: chatTable.workspaceId,
+      activeLeafId: chatTable.activeLeafId,
+    })
     .from(chatTable)
     .where(
       and(

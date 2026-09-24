@@ -8,6 +8,8 @@ import {
   useTempDiskStorage,
   putStoredFiles,
   isStored,
+  type Row,
+  type Store,
 } from "../test-utils.ts";
 import { mockLogger } from "../test-setup.ts";
 import { getStorage } from "../storage/index.ts";
@@ -25,6 +27,7 @@ vi.mock("../services/chat-execution.ts", () => ({
 
 import { createUIMessageStreamResponse, streamText } from "ai";
 import app from "../server.ts";
+import { runRegistry } from "../runs/run-registry.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { FileValidationError } from "../services/file-gate.ts";
 import {
@@ -86,6 +89,35 @@ vi.mock("../services/memory-retrieval.ts", () => ({
   resolveMemoryPin: vi.fn().mockReturnValue({ reuse: false }),
 }));
 
+/** A row of `chat_message`, in `chat-1`. */
+const stored = (
+  id: string,
+  parentId: string | null,
+  role: "user" | "assistant",
+  seconds: number,
+  extra: Row = {},
+): Row => ({
+  chatId: "chat-1",
+  id,
+  parentId,
+  role,
+  parts: [{ type: "text", text: id }],
+  metadata: null,
+  deletedAt: null,
+  createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, seconds)),
+  ...extra,
+});
+
+/** user-1 as the owner of ws-1, plus whatever the test adds. */
+const seedTenant = (rows: Store = {}, owner = "user-1") =>
+  seedDb({
+    organization_member: [
+      { id: "m1", userId: "user-1", organizationId: "org-1", role: "admin" },
+    ],
+    workspace: [{ id: "ws-1", organizationId: "org-1", ownerId: owner }],
+    ...rows,
+  });
+
 describe("Chat Routes", () => {
   beforeEach(() => {
     resetMockDb();
@@ -99,6 +131,11 @@ describe("Chat Routes", () => {
   const orgId = "org-1";
   const workspaceId = "ws-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/chat`;
+  const hello = {
+    id: "u1",
+    role: "user",
+    parts: [{ type: "text", text: "hello" }],
+  };
 
   describe("GET /", () => {
     it("should list chats", async () => {
@@ -214,19 +251,62 @@ describe("Chat Routes", () => {
   });
 
   describe("GET /:chatId", () => {
-    it("should return chat", async () => {
+    it("returns the Active path and the tree, and nothing internal", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-
-      const mockChat = { id: "chat-1", title: "Chat 1" };
-      mockDb.limit.mockResolvedValueOnce([mockChat]);
+      seedTenant({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId,
+            title: "Chat 1",
+            activeLeafId: "a1",
+            memorySnapshot: "pinned",
+            lastTurnAt: new Date(),
+          },
+        ],
+        chat_message: [
+          stored("u1", null, "user", 1, {
+            parts: [
+              {
+                type: "file",
+                mediaType: "image/png",
+                url: "storage://org-1/ws-1/chat-1/u1/0-aaaaaaaa.png",
+              },
+            ],
+          }),
+          stored("a1", "u1", "assistant", 2),
+          stored("a1b", "u1", "assistant", 3),
+          stored("a1c", "u1", "assistant", 4, { deletedAt: new Date() }),
+        ],
+      });
 
       const res = await app.request(`${baseUrl}/chat-1`);
+
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockChat);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ id: "chat-1", title: "Chat 1" });
+      expect(body.messages).toEqual([
+        {
+          id: "u1",
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "image/png",
+              url: "http://localhost/files/org-1/ws-1/chat-1/u1/0-aaaaaaaa.png",
+            },
+          ],
+        },
+        { id: "a1", role: "assistant", parts: [{ type: "text", text: "a1" }] },
+      ]);
+      expect(body.tree).toEqual([
+        { id: "u1", parentId: null },
+        { id: "a1", parentId: "u1" },
+        { id: "a1b", parentId: "u1" },
+      ]);
+      expect(body).not.toHaveProperty("activeLeafId");
+      expect(body).not.toHaveProperty("memorySnapshot");
+      expect(body).not.toHaveProperty("lastTurnAt");
     });
   });
 
@@ -270,6 +350,7 @@ describe("Chat Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
+      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
 
       // ChatSink.onStart upserts the chat row with status=running before
       // prepareChatTurn runs. Returning a non-empty array skips the insert
@@ -302,7 +383,8 @@ describe("Chat Routes", () => {
           workspaceId,
           providerId: "p1",
           modelId: "m1",
-          messages: [{ role: "user", content: "hello" }],
+          message: hello,
+          parentId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -318,6 +400,7 @@ describe("Chat Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
+      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-2" }]); // ChatSink.onStart
 
       mockPrepareChatTurn.mockRejectedValueOnce(
@@ -330,7 +413,8 @@ describe("Chat Routes", () => {
           id: "chat-2",
           workspaceId,
           agentId: "agent-1",
-          messages: [{ role: "user", content: "hello" }],
+          message: hello,
+          parentId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -348,6 +432,7 @@ describe("Chat Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
+      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-3" }]); // ChatSink.onStart
 
       mockPrepareChatTurn.mockRejectedValueOnce(
@@ -361,7 +446,8 @@ describe("Chat Routes", () => {
           workspaceId,
           providerId: "p1",
           modelId: "bogus",
-          messages: [{ role: "user", content: "hello" }],
+          message: hello,
+          parentId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -379,6 +465,7 @@ describe("Chat Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
+      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
 
       const fileError = new FileValidationError([
         { file: "scan.pdf", reason: "unextractable" },
@@ -392,7 +479,8 @@ describe("Chat Routes", () => {
           workspaceId,
           providerId: "p1",
           modelId: "m1",
-          messages: [{ role: "user", content: "hello" }],
+          message: hello,
+          parentId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -415,6 +503,7 @@ describe("Chat Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (no row → new chat)
+      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-a" }]); // ChatSink.onStart
 
       vi.mocked(resolveMemoryPin).mockReturnValueOnce({ reuse: false });
@@ -433,7 +522,8 @@ describe("Chat Routes", () => {
           workspaceId,
           providerId: "p1",
           modelId: "m1",
-          messages: [],
+          message: hello,
+          parentId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -467,6 +557,8 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { memorySnapshot: "pinned-block", lastTurnAt: new Date() },
       ]);
+      mockDb.limit.mockResolvedValueOnce([]); // the message id is not taken
+      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-b" }]); // ChatSink.onStart
 
       vi.mocked(resolveMemoryPin).mockReturnValueOnce({
@@ -483,7 +575,8 @@ describe("Chat Routes", () => {
           workspaceId,
           providerId: "p1",
           modelId: "m1",
-          messages: [],
+          message: hello,
+          parentId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -506,6 +599,7 @@ describe("Chat Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
+      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.limit.mockResolvedValueOnce([
         { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
       ]); // the turn's Agent, for its assigned Skills
@@ -530,13 +624,12 @@ describe("Chat Routes", () => {
           id: "chat-cmd",
           workspaceId,
           agentId: "agent-1",
-          messages: [
-            {
-              id: "u1",
-              role: "user",
-              parts: [{ type: "text", text: "/blog-post about otters" }],
-            },
-          ],
+          message: {
+            id: "u1",
+            role: "user",
+            parts: [{ type: "text", text: "/blog-post about otters" }],
+          },
+          parentId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -573,6 +666,7 @@ describe("Chat Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
       mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.limit.mockResolvedValueOnce([
         { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
       ]);
@@ -588,13 +682,12 @@ describe("Chat Routes", () => {
           id: "chat-typo",
           workspaceId,
           agentId: "agent-1",
-          messages: [
-            {
-              id: "u1",
-              role: "user",
-              parts: [{ type: "text", text: "/usr/bin/env is broken" }],
-            },
-          ],
+          message: {
+            id: "u1",
+            role: "user",
+            parts: [{ type: "text", text: "/usr/bin/env is broken" }],
+          },
+          parentId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -630,11 +723,14 @@ describe("Chat Routes", () => {
     describe("stored files", () => {
       useTempDiskStorage();
 
-      // Neither file is referenced by the Chat's messages: the first was on a
-      // message an edit dropped, which is exactly what reference-based cleanup
-      // left behind.
-      const orphan = "org-1/ws-1/chat-1/msg-dropped/0-aaaaaaaa.png";
+      // Neither file is on the Chat's Active path: the first is on an
+      // Alternative an edit left behind, the second on a deleted message.
+      const orphan = "org-1/ws-1/chat-1/u1-edited/0-aaaaaaaa.png";
+      const deleted = "org-1/ws-1/chat-1/u2/0-cccccccc.png";
       const sibling = "org-1/ws-1/chat-10/msg-1/0-bbbbbbbb.png";
+      const withFile = (key: string) => [
+        { type: "file", mediaType: "image/png", url: `storage://${key}` },
+      ];
 
       const seed = () =>
         seedDb({
@@ -650,15 +746,33 @@ describe("Chat Routes", () => {
             { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
           ],
           chat: [
-            { id: "chat-1", workspaceId, messages: [] },
-            { id: "chat-10", workspaceId, messages: [] },
+            { id: "chat-1", workspaceId, activeLeafId: "u1" },
+            { id: "chat-10", workspaceId, activeLeafId: null },
+          ],
+          chat_message: [
+            { chatId: "chat-1", id: "u1", parentId: null, role: "user" },
+            {
+              chatId: "chat-1",
+              id: "u1-edited",
+              parentId: null,
+              role: "user",
+              parts: withFile(orphan),
+            },
+            {
+              chatId: "chat-1",
+              id: "u2",
+              parentId: "u1",
+              role: "user",
+              parts: withFile(deleted),
+              deletedAt: new Date(),
+            },
           ],
         });
 
       it("removes everything under the Chat's prefix and nothing under a sibling's", async () => {
         mockSession();
         const fake = seed();
-        await putStoredFiles([orphan, sibling]);
+        await putStoredFiles([orphan, deleted, sibling]);
 
         const res = await app.request(`${baseUrl}/chat-1`, {
           method: "DELETE",
@@ -667,6 +781,7 @@ describe("Chat Routes", () => {
         expect(res.status).toBe(200);
         expect(fake.tables.chat.map((row) => row.id)).toEqual(["chat-10"]);
         expect(await isStored(orphan)).toBe(false);
+        expect(await isStored(deleted)).toBe(false);
         expect(await isStored(sibling)).toBe(true);
       });
 
@@ -789,6 +904,356 @@ describe("Chat Routes", () => {
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockChat);
+    });
+  });
+
+  describe("the server-owned Transcript (ADR-0026)", () => {
+    const validTurn = {
+      stream: { model: {}, tools: {}, system: "", messages: [], maxSteps: 1 },
+      resolved: { providerId: "p1", modelId: "m1" },
+      dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    /** A fresh stream per request: the `ai` mock's one instance locks. */
+    const startsTurn = () => {
+      vi.mocked(streamText).mockReturnValueOnce({
+        toUIMessageStream: () =>
+          new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+      } as unknown as ReturnType<typeof streamText>);
+      vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
+        new Response("stream"),
+      );
+      mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
+    };
+
+    const post = async (body: Record<string, unknown>) => {
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          id: "chat-1",
+          workspaceId,
+          providerId: "p1",
+          modelId: "m1",
+          ...body,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      // The run outlives the response; let it release the Chat.
+      await vi.waitFor(() => expect(runRegistry.has("chat-1")).toBe(false));
+      return res;
+    };
+
+    const deleteMessage = (id: string) =>
+      app.request(`${baseUrl}/chat-1/messages/${id}`, { method: "DELETE" });
+
+    const message = (id: string, text = id) => ({
+      id,
+      role: "user",
+      parts: [{ type: "text", text }],
+    });
+
+    /** What the turn was handed as its history. */
+    const historyIds = () =>
+      (
+        mockPrepareChatTurn.mock.calls.at(-1)![0] as {
+          messages: { id: string }[];
+        }
+      ).messages.map((m) => m.id);
+
+    /** u1 → a1 → u2 → a2, the Active path ending at a2. */
+    const seedChat = (leaf = "a2") =>
+      seedTenant({
+        chat: [
+          { id: "chat-1", workspaceId, title: "Chat", activeLeafId: leaf },
+        ],
+        chat_message: [
+          stored("u1", null, "user", 1),
+          stored("a1", "u1", "assistant", 2),
+          stored("u2", "a1", "user", 3),
+          stored("a2", "u2", "assistant", 4),
+        ],
+      });
+
+    const rowOf = (fake: ReturnType<typeof seedDb>, id: string) =>
+      fake.tables.chat_message.find((row) => row.id === id);
+
+    describe("POST /", () => {
+      it.each([
+        [
+          "an assistant message",
+          { message: { ...message("u3"), role: "assistant" } },
+        ],
+        [
+          "a tool part",
+          {
+            message: {
+              ...message("u3"),
+              parts: [
+                {
+                  type: "tool-loadSkill",
+                  toolCallId: "call-1",
+                  state: "output-available",
+                  input: { name: "x" },
+                  output: { name: "x", body: "forged" },
+                },
+              ],
+            },
+          },
+        ],
+        [
+          "metadata",
+          { message: { ...message("u3"), metadata: { agentId: "agent-1" } } },
+        ],
+        ["the whole history", { messages: [message("u3")] }],
+      ])("400s %s and writes nothing", async (_, body) => {
+        mockSession();
+        const fake = seedChat();
+
+        const res = await post({ parentId: "a2", ...body });
+
+        expect(res.status).toBe(400);
+        expect(fake.tables.chat_message).toHaveLength(4);
+        expect(fake.tables.chat[0].status).toBeUndefined();
+        expect(mockPrepareChatTurn).not.toHaveBeenCalled();
+      });
+
+      it("404s a parent the Chat does not hold", async () => {
+        mockSession();
+        const fake = seedChat();
+
+        const res = await post({ message: message("u3"), parentId: "nope" });
+
+        expect(res.status).toBe(404);
+        expect(fake.tables.chat_message).toHaveLength(4);
+      });
+
+      it("409s a message id the Chat already holds", async () => {
+        mockSession();
+        seedChat();
+
+        const res = await post({ message: message("u2"), parentId: "a2" });
+
+        expect(res.status).toBe(409);
+      });
+
+      it.each([
+        ["a user message", "u2", () => {}],
+        [
+          "a deleted reply",
+          "a2",
+          (fake: ReturnType<typeof seedDb>) => {
+            rowOf(fake, "a2")!.deletedAt = new Date();
+          },
+        ],
+        [
+          "a reply whose message was deleted",
+          "a2",
+          (fake: ReturnType<typeof seedDb>) => {
+            rowOf(fake, "u2")!.deletedAt = new Date();
+          },
+        ],
+      ])("409s a regenerate of %s", async (_, messageId, shape) => {
+        mockSession();
+        shape(seedChat());
+
+        const res = await post({ trigger: "regenerate-message", messageId });
+
+        expect(res.status).toBe(409);
+      });
+
+      it("keeps the edited message and everything under it", async () => {
+        mockSession();
+        const fake = seedChat();
+        startsTurn();
+
+        // An edit of u2: a new message under u2's parent.
+        const res = await post({ message: message("u2-edit"), parentId: "a1" });
+
+        expect(res.status).toBe(200);
+        expect(historyIds()).toEqual(["u1", "a1", "u2-edit"]);
+        expect(fake.tables.chat_message.map((row) => row.id)).toEqual([
+          "u1",
+          "a1",
+          "u2",
+          "a2",
+          "u2-edit",
+        ]);
+        expect(rowOf(fake, "u2-edit")?.parentId).toBe("a1");
+        expect(fake.tables.chat[0].activeLeafId).toBe("u2-edit");
+      });
+
+      it("keeps the regenerated reply and runs from its parent", async () => {
+        mockSession();
+        const fake = seedChat();
+        startsTurn();
+
+        const res = await post({
+          trigger: "regenerate-message",
+          messageId: "a2",
+        });
+
+        expect(res.status).toBe(200);
+        expect(historyIds()).toEqual(["u1", "a1", "u2"]);
+        expect(rowOf(fake, "a2")).toMatchObject({ deletedAt: null });
+      });
+
+      // Two tabs on one Chat. Tab 1 went on to u2 → a2; tab 2 still shows
+      // u1 → a1 and sends from there.
+      it("stores a stale tab's message as a sibling on the path it held", async () => {
+        mockSession();
+        const fake = seedChat();
+        startsTurn();
+
+        const res = await post({ message: message("u2-tab2"), parentId: "a1" });
+
+        expect(res.status).toBe(200);
+        expect(historyIds()).toEqual(["u1", "a1", "u2-tab2"]);
+        expect(rowOf(fake, "u2")).toBeDefined();
+        expect(rowOf(fake, "a2")).toBeDefined();
+        expect(rowOf(fake, "u2-tab2")?.parentId).toBe("a1");
+      });
+
+      it("stores it there even when that path's last message was deleted in the other tab", async () => {
+        mockSession();
+        const fake = seedChat();
+        expect((await deleteMessage("a2")).status).toBe(200); // tab 1
+        startsTurn();
+
+        const res = await post({ message: message("u3"), parentId: "a2" }); // tab 2
+
+        expect(res.status).toBe(200);
+        expect(historyIds()).toEqual(["u1", "a1", "u2", "u3"]);
+        expect(rowOf(fake, "u3")?.parentId).toBe("a2");
+        expect(fake.tables.chat_message).toHaveLength(5);
+      });
+
+      it("seeds the Skill again when regenerating a reply to a /skill message", async () => {
+        mockSession();
+        seedTenant({
+          chat: [
+            { id: "chat-1", workspaceId, title: "Chat", activeLeafId: "a1" },
+          ],
+          chat_message: [
+            stored("u1", null, "user", 1, {
+              parts: [{ type: "text", text: "/blog-post about otters" }],
+            }),
+            stored("a1", "u1", "assistant", 2),
+          ],
+          agent: [
+            {
+              id: "agent-1",
+              workspaceId,
+              organizationId: null,
+              skillIds: ["skill-1"],
+            },
+          ],
+          skill: [
+            {
+              id: "skill-1",
+              workspaceId,
+              organizationId: null,
+              name: "blog-post",
+              body: "Write a blog post.",
+            },
+          ],
+        });
+        startsTurn();
+
+        const res = await post({
+          providerId: undefined,
+          modelId: undefined,
+          agentId: "agent-1",
+          trigger: "regenerate-message",
+          messageId: "a1",
+        });
+
+        expect(res.status).toBe(200);
+        const history = (
+          mockPrepareChatTurn.mock.calls[0][0] as {
+            messages: { id: string; role: string; parts: unknown[] }[];
+          }
+        ).messages;
+        expect(history.map((m) => m.role)).toEqual(["user", "assistant"]);
+        // A new seeded message, not the old reply: the reply it continues
+        // gets a new id and a1 stays as it was.
+        expect(history[1].id).not.toBe("a1");
+        expect(history[1].parts[0]).toMatchObject({
+          type: "tool-loadSkill",
+          output: { name: "blog-post", body: "Write a blog post." },
+        });
+      });
+    });
+
+    describe("DELETE /:chatId/messages/:messageId", () => {
+      it("takes the message out of the Chat for good, with no further send", async () => {
+        mockSession();
+        seedChat();
+
+        const res = await deleteMessage("u2");
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ message: "Message deleted" });
+        const reloaded = (await (
+          await app.request(`${baseUrl}/chat-1`)
+        ).json()) as { messages: { id: string }[] };
+        expect(reloaded.messages.map((m) => m.id)).toEqual(["u1", "a1", "a2"]);
+      });
+
+      it("leaves it out of what the next turn sends the model", async () => {
+        mockSession();
+        seedChat();
+        await deleteMessage("u2");
+        startsTurn();
+
+        await post({ message: message("u3"), parentId: "a2" });
+
+        expect(historyIds()).toEqual(["u1", "a1", "a2", "u3"]);
+      });
+
+      it("is idempotent", async () => {
+        mockSession();
+        seedChat();
+
+        expect((await deleteMessage("u2")).status).toBe(200);
+        expect((await deleteMessage("u2")).status).toBe(200);
+      });
+
+      it("404s a message the Chat does not hold", async () => {
+        mockSession();
+        seedChat();
+
+        expect((await deleteMessage("nope")).status).toBe(404);
+      });
+
+      it("409s while a run is in flight", async () => {
+        mockSession();
+        const fake = seedChat();
+        runRegistry.register("chat-1");
+        try {
+          expect((await deleteMessage("u2")).status).toBe(409);
+          expect(rowOf(fake, "u2")?.deletedAt).toBeNull();
+        } finally {
+          runRegistry.unregister("chat-1");
+        }
+      });
+
+      it("is refused to anyone but the Workspace Owner", async () => {
+        mockSession();
+        const fake = seedTenant(
+          {
+            chat: [{ id: "chat-1", workspaceId, activeLeafId: "u1" }],
+            chat_message: [stored("u1", null, "user", 1)],
+          },
+          "user-2",
+        );
+
+        expect((await deleteMessage("u1")).status).toBe(403);
+        expect(rowOf(fake, "u1")?.deletedAt).toBeNull();
+      });
     });
   });
 });

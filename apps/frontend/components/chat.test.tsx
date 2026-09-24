@@ -1,8 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import type { ChatStatus, FileUIPart } from "ai";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import type { ChatStatus, FileUIPart, PrepareSendMessagesRequest } from "ai";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 import { reportPdf } from "@/lib/chat-test-fixtures";
+import { stubAcceptedSave, stubRejectedSave } from "@/lib/test-utils";
+
+type PrepareRequest = PrepareSendMessagesRequest<PlatypusUIMessage>;
 
 /**
  * The wiring between `Chat` and `lib/chat-recovery` (issue #648).
@@ -47,9 +50,12 @@ const { harness } = vi.hoisted(() => ({
     chatMessageRenders: 0,
     lastChatMessageProps: null as null | {
       onMessageDelete: (messageId: string) => void;
-      onRegenerate: () => void;
+      onRegenerate?: (messageId: string) => void;
       staleToolCallIds?: ReadonlySet<string>;
     },
+    /** What the Chat configured the chat hook with. */
+    chatOptions: undefined as
+      undefined | { transport: { prepareSendMessagesRequest: PrepareRequest } },
   },
 }));
 
@@ -84,16 +90,21 @@ vi.mock("swr", () => ({
 }));
 
 vi.mock("@ai-sdk/react", () => ({
-  useChat: () => ({
-    messages: harness.turn.messages,
-    setMessages: harness.setMessages,
-    sendMessage: harness.sendMessage,
-    status: harness.turn.status,
-    error: harness.turn.error,
-    regenerate: harness.regenerate,
-    stop: harness.stop,
-  }),
+  useChat: (options: typeof harness.chatOptions) => {
+    harness.chatOptions = options;
+    return useChatState();
+  },
 }));
+
+const useChatState = () => ({
+  messages: harness.turn.messages,
+  setMessages: harness.setMessages,
+  sendMessage: harness.sendMessage,
+  status: harness.turn.status,
+  error: harness.turn.error,
+  regenerate: harness.regenerate,
+  stop: harness.stop,
+});
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
@@ -190,13 +201,13 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   ),
 }));
 
-// Stubbed to the edit seam: an Edit button per message, a Regenerate on the
-// last, and whatever edit surface the Chat hands down for the one being
-// edited. The transcript itself is `chat-message`'s own test's business.
+// Stubbed to the edit seam: an Edit button per message, a Regenerate wherever
+// the Chat hands one down, and whatever edit surface the Chat hands down for
+// the one being edited. The transcript itself is `chat-message`'s own test's
+// business.
 vi.mock("./chat-message", () => ({
   ChatMessage: ({
     message,
-    isLastMessage,
     editor,
     onEditStart,
     onMessageDelete,
@@ -204,11 +215,10 @@ vi.mock("./chat-message", () => ({
     staleToolCallIds,
   }: {
     message: PlatypusUIMessage;
-    isLastMessage: boolean;
     editor?: React.ReactNode;
     onEditStart: (messageId: string) => void;
     onMessageDelete: (messageId: string) => void;
-    onRegenerate: () => void;
+    onRegenerate?: (messageId: string) => void;
     staleToolCallIds?: ReadonlySet<string>;
   }) => {
     harness.chatMessageRenders += 1;
@@ -227,8 +237,8 @@ vi.mock("./chat-message", () => ({
             <button type="button" onClick={() => onMessageDelete(message.id)}>
               Delete {message.id}
             </button>
-            {isLastMessage && (
-              <button type="button" onClick={onRegenerate}>
+            {onRegenerate && (
+              <button type="button" onClick={() => onRegenerate(message.id)}>
                 Regenerate
               </button>
             )}
@@ -590,6 +600,14 @@ describe("applying a fetched snapshot", () => {
     );
   });
 
+  // Deleting every message reaches other tabs, and a reload too.
+  it("applies an emptied Chat", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
+    renderChat();
+
+    expect(applied([message("u1", "q")])).toEqual([]);
+  });
+
   // A live stream is left alone entirely — the guard that predates this change.
   it("does not touch the transcript while this tab is streaming", () => {
     harness.turn.status = "streaming";
@@ -600,6 +618,95 @@ describe("applying a fetched snapshot", () => {
     renderChat();
 
     expect(harness.setMessages).not.toHaveBeenCalled();
+  });
+});
+
+// The server owns the Transcript (ADR-0026): a turn sends what is new, never
+// the history, and a delete is stored the moment it is clicked.
+describe("the server-owned Transcript", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const prepare = (options: Partial<Parameters<PrepareRequest>[0]>) => {
+    renderChat();
+    return harness.chatOptions!.transport.prepareSendMessagesRequest({
+      id: CHAT_ID,
+      messages: [],
+      body: { providerId: "p1" },
+      requestMetadata: undefined,
+      headers: undefined,
+      credentials: undefined,
+      api: "",
+      trigger: "submit-message",
+      messageId: undefined,
+      ...options,
+    }) as { body: Record<string, unknown> };
+  };
+
+  it("sends a new message with the id it follows, and no history", () => {
+    const next = message("u2", "follow up");
+
+    const { body } = prepare({
+      messages: [message("u1", "q"), message("a1", "a"), next],
+    });
+
+    expect(body).toEqual({
+      providerId: "p1",
+      id: CHAT_ID,
+      message: next,
+      parentId: "a1",
+    });
+  });
+
+  it("sends a Chat's first message as following nothing", () => {
+    const { body } = prepare({ messages: [message("u1", "q")] });
+
+    expect(body.parentId).toBeNull();
+  });
+
+  it("sends a regenerate as the reply to regenerate, and no message", () => {
+    const { body } = prepare({
+      messages: [message("u1", "q")],
+      trigger: "regenerate-message",
+      messageId: "a1",
+    });
+
+    expect(body).toEqual({
+      providerId: "p1",
+      id: CHAT_ID,
+      trigger: "regenerate-message",
+      messageId: "a1",
+    });
+  });
+
+  it("deletes on the server, then reads the row back", async () => {
+    const fetchMock = stubAcceptedSave({ message: "Message deleted" });
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete u1" }));
+
+    await waitFor(() => expect(harness.chatMutate).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/workspaces/ws1/chat/chat-1/messages/u1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+    // Nothing is cut locally: what the server now holds is what lands.
+    expect(harness.setMessages).not.toHaveBeenCalled();
+  });
+
+  it("says so when the delete is refused, and leaves the transcript", async () => {
+    stubRejectedSave("A reply is still being written in this Chat", 409);
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete u1" }));
+
+    await waitFor(() =>
+      expect(harness.toastError).toHaveBeenCalledWith(
+        "A reply is still being written in this Chat",
+      ),
+    );
+    expect(harness.chatMutate).not.toHaveBeenCalled();
   });
 });
 
@@ -975,8 +1082,46 @@ describe("starting a turn", () => {
 
     expect(harness.regenerate).toHaveBeenCalledWith({
       body: expect.objectContaining({ providerId: "p1", maxSteps: 10 }),
+      messageId: "a1",
     });
     expect(harness.chatMutate).toHaveBeenCalledTimes(1);
+  });
+
+  // The reply's message was deleted: there is nothing to answer, and the
+  // server refuses the regenerate (409).
+  it("offers no Regenerate once the reply's message has left the Chat", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, {
+      ...directRow(10),
+      tree: [
+        { id: "u1", parentId: null },
+        { id: "a1", parentId: "u1" },
+        { id: "a2", parentId: "u2" },
+      ],
+    });
+    harness.turn.messages = [
+      message("u1", "q"),
+      message("a1", "a"),
+      message("a2", "an answer to a deleted question"),
+    ];
+    renderChat();
+
+    expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
+  });
+
+  it("offers Regenerate on a reply the tree does not list yet", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, {
+      ...directRow(10),
+      tree: [{ id: "u1", parentId: null }],
+    });
+    harness.turn.messages = [
+      message("u1", "q"),
+      message("a1", "just streamed"),
+    ];
+    renderChat();
+
+    expect(
+      screen.getByRole("button", { name: "Regenerate" }),
+    ).toBeInTheDocument();
   });
 
   // The #648 refresh: the row has to learn the new turn's status at submit.
@@ -1016,19 +1161,6 @@ describe("transcript stability", () => {
     expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(
       first.staleToolCallIds,
     );
-  });
-
-  it("deletes through an updater, so the callback need not close over the list", () => {
-    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
-    renderChat();
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete u1" }));
-
-    const update = harness.setMessages.mock.calls.at(-1)?.[0] as (
-      held: PlatypusUIMessage[],
-    ) => PlatypusUIMessage[];
-    expect(typeof update).toBe("function");
-    expect(update(harness.turn.messages).map((m) => m.id)).toEqual(["a1"]);
   });
 
   it("does not re-render the transcript while the composer is typed into", () => {
@@ -1282,8 +1414,9 @@ describe("loading", () => {
     expect(composer()).toBeInTheDocument();
   });
 
-  // Deleting is local: the row keeps its messages, so reading "row has
-  // messages, screen has none" as loading would never let go.
+  // Until the row is read back after a delete, it still holds the messages the
+  // screen has dropped; reading "row has messages, screen has none" as loading
+  // would never let go.
   it("does not come back when every message is deleted", () => {
     const messages = [message("u1", "q")];
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages });
@@ -1292,6 +1425,15 @@ describe("loading", () => {
 
     harness.turn.messages = [];
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(loadingSkeleton()).not.toBeInTheDocument();
+    expect(composer()).toBeInTheDocument();
+  });
+
+  it("renders an emptied Chat's composer, not an endless skeleton", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
+
+    renderChat();
 
     expect(loadingSkeleton()).not.toBeInTheDocument();
     expect(composer()).toBeInTheDocument();

@@ -8,7 +8,7 @@ import {
   classifyChatError,
   composerTurnStatus,
   isRunHeldElsewhere,
-  snapshotIsAtLeastAsComplete,
+  snapshotMayLand,
   snapshotMessages,
   transcriptExtent,
 } from "./chat-recovery";
@@ -260,62 +260,90 @@ describe("transcriptExtent", () => {
   });
 });
 
-describe("snapshotIsAtLeastAsComplete", () => {
-  // The lagging-snapshot case directly: the row is flushed on an interval, so
-  // mid-run it holds less text than the stream has already shown. Applying it
-  // would make the answer visibly shorten.
-  it("refuses a snapshot that is behind the text on screen", () => {
-    const held = [user("q"), assistant("the first two thirds of an answer")];
-    const snapshot = [user("q"), assistant("the first third")];
+describe("snapshotMayLand", () => {
+  const a1 = (text: string) => ({ ...assistant(text), id: "a-1" });
+  const a2 = (text: string) => ({ ...assistant(text), id: "a-2" });
 
-    expect(snapshotIsAtLeastAsComplete(snapshot, held)).toBe(false);
-  });
+  describe("once the run is over", () => {
+    // The row is final and the canonical form of the transcript — rewritten
+    // attachment URLs, normalized tool parts — so an otherwise-identical
+    // snapshot lands rather than leaving the page on its own version.
+    it("applies a snapshot equal to what is held", () => {
+      const held = [user("q"), assistant("an answer", 1)];
 
-  it("refuses a snapshot missing a part the client already has", () => {
-    const held = [user("q"), assistant("same text", 2)];
-    const snapshot = [user("q"), assistant("same text", 1)];
+      expect(snapshotMayLand([...held], held, "succeeded")).toBe(true);
+    });
 
-    expect(snapshotIsAtLeastAsComplete(snapshot, held)).toBe(false);
-  });
+    it.each(["succeeded", "failed", "cancelled"] as const)(
+      "applies a shorter snapshot when the run %s",
+      (status) => {
+        const held = [user("q"), a1("an answer"), user("gone")];
 
-  it("applies a snapshot that has moved on", () => {
-    const held = [user("q"), assistant("the first third")];
-    const snapshot = [user("q"), assistant("the first third and the rest")];
-
-    expect(snapshotIsAtLeastAsComplete(snapshot, held)).toBe(true);
-  });
-
-  it("applies a snapshot carrying a whole extra message", () => {
-    const held = [user("q")];
-    const snapshot = [user("q"), assistant("an answer")];
-
-    expect(snapshotIsAtLeastAsComplete(snapshot, held)).toBe(true);
-  });
-
-  // Initial hydration is the same comparison: nothing held, so anything wins.
-  it("applies the first snapshot onto an empty transcript", () => {
-    expect(snapshotIsAtLeastAsComplete([user("q"), assistant("a")], [])).toBe(
-      true,
+        expect(
+          snapshotMayLand([user("q"), a1("an answer")], held, status),
+        ).toBe(true);
+      },
     );
+
+    // Deleting every message reaches other tabs too.
+    it("applies an emptied Chat", () => {
+      expect(snapshotMayLand([], [user("q"), a1("a")], "succeeded")).toBe(true);
+    });
   });
 
-  // The row is the canonical form of the transcript — rewritten attachment
-  // URLs, normalized tool parts — so an otherwise-identical snapshot has to be
-  // allowed through rather than leaving the page on its own version until a
-  // reload.
-  it("applies a snapshot equal to what is held", () => {
-    const held = [user("q"), assistant("an answer", 1)];
+  describe("while the run is in progress", () => {
+    // The row is flushed on an interval, so mid-run it holds less text than the
+    // stream has already shown. Applying it would make the answer shorten.
+    it("refuses a snapshot whose leaf is behind the text on screen", () => {
+      const held = [user("q"), a1("the first two thirds of an answer")];
+      const snapshot = [user("q"), a1("the first third")];
 
-    expect(snapshotIsAtLeastAsComplete([...held], held)).toBe(true);
-  });
+      expect(snapshotMayLand(snapshot, held, "running")).toBe(false);
+    });
 
-  // A shorter transcript is a different conversation (an edit dropped the tail),
-  // not a later state of this one, and the client's own view is the newer.
-  it("refuses a snapshot with fewer messages", () => {
-    const held = [user("q"), assistant("an answer"), user("follow up")];
-    const snapshot = [user("q"), assistant("an answer")];
+    it("refuses a snapshot whose leaf is missing a part already held", () => {
+      const held = [user("q"), assistant("same text", 2)];
+      const snapshot = [user("q"), assistant("same text", 1)];
 
-    expect(snapshotIsAtLeastAsComplete(snapshot, held)).toBe(false);
+      expect(snapshotMayLand(snapshot, held, "running")).toBe(false);
+    });
+
+    it("applies a snapshot whose leaf has moved on", () => {
+      const held = [user("q"), a1("the first third")];
+      const snapshot = [user("q"), a1("the first third and the rest")];
+
+      expect(snapshotMayLand(snapshot, held, "running")).toBe(true);
+    });
+
+    // Only the leaf grows during a run, so a message deleted further up in
+    // another tab still reaches this one.
+    it("applies a mid-path delete under the same leaf", () => {
+      const held = [user("q"), a1("an answer"), user("more"), a2("partial")];
+      const snapshot = [user("q"), user("more"), a2("partial")];
+
+      expect(snapshotMayLand(snapshot, held, "running")).toBe(true);
+    });
+
+    // A connection dropped before the reply's first flush: the row still ends
+    // at the question, and the partial reply on screen must stay.
+    it("refuses a snapshot ending at a message held further up", () => {
+      const held = [user("q"), a1("a partial reply")];
+
+      expect(snapshotMayLand([user("q")], held, "running")).toBe(false);
+    });
+
+    // Another tab's run, on a path this tab is not showing.
+    it("applies a longer snapshot for a different path", () => {
+      const held = [user("q"), a1("an answer")];
+      const snapshot = [user("q"), a2("another answer"), user("next")];
+
+      expect(snapshotMayLand(snapshot, held, "running")).toBe(true);
+    });
+
+    // A tab that arrived mid-run holds nothing, so anything lands.
+    it("applies the first snapshot onto an empty transcript", () => {
+      expect(snapshotMayLand([user("q"), a1("a")], [], "running")).toBe(true);
+    });
   });
 });
 
@@ -325,11 +353,15 @@ describe("snapshotMessages", () => {
     expect(snapshotMessages({ messages } as never)).toBe(messages);
   });
 
+  // Deleting every message leaves a row with none, which other tabs must see.
+  it("reads an emptied Chat as an empty snapshot", () => {
+    expect(snapshotMessages({ messages: [] } as never)).toEqual([]);
+  });
+
   // A brand-new Chat's row does not exist yet, and the read resolves to null
   // rather than throwing.
   it("reads an absent row as no snapshot", () => {
     expect(snapshotMessages(null)).toBeUndefined();
     expect(snapshotMessages(undefined)).toBeUndefined();
-    expect(snapshotMessages({ messages: [] } as never)).toBeUndefined();
   });
 });
