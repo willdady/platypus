@@ -85,6 +85,8 @@ vi.mock("@/components/widgets", async () => {
 
 let dashboardData: Dashboard | undefined;
 let widgetsData: { results: Widget[] } | undefined;
+let dashboardError: unknown;
+let widgetsError: unknown;
 
 vi.mock("swr", () => ({
   __esModule: true,
@@ -96,7 +98,7 @@ vi.mock("swr", () => ({
     if (!key) return { data: undefined, mutate: vi.fn() };
     swrCalls.push({ key, options });
     if (key.endsWith("/widgets")) {
-      return { data: widgetsData, mutate: mutateWidgets };
+      return { data: widgetsData, error: widgetsError, mutate: mutateWidgets };
     }
     if (key.endsWith(`/workspaces/${WS_ID}/dashboards`)) {
       return {
@@ -104,7 +106,11 @@ vi.mock("swr", () => ({
         mutate: vi.fn(),
       };
     }
-    return { data: dashboardData, mutate: mutateDashboard };
+    return {
+      data: dashboardData,
+      error: dashboardError,
+      mutate: mutateDashboard,
+    };
   },
 }));
 
@@ -131,7 +137,7 @@ const textWidget = (id: string, title: string): Widget => ({
   updatedAt: new Date("2026-01-01T00:00:00Z"),
 });
 
-async function renderDashboard() {
+async function renderDashboardPage() {
   await act(async () => {
     render(
       <Suspense>
@@ -145,6 +151,10 @@ async function renderDashboard() {
       </Suspense>,
     );
   });
+}
+
+async function renderDashboard() {
+  await renderDashboardPage();
   await screen.findByText("Test Dashboard");
 }
 
@@ -152,6 +162,8 @@ describe("Dashboard render stability", () => {
   beforeEach(() => {
     dashboardData = baseDashboard();
     widgetsData = { results: [textWidget("w-1", "First")] };
+    dashboardError = undefined;
+    widgetsError = undefined;
     swrCalls.length = 0;
     widgetRender.mockClear();
     installResizeObserverStub();
@@ -227,5 +239,61 @@ describe("Dashboard render stability", () => {
     });
 
     expect(widgetRender).not.toHaveBeenCalled();
+  });
+});
+
+describe("Dashboard loading and failure states", () => {
+  beforeEach(() => {
+    dashboardData = baseDashboard();
+    widgetsData = { results: [] };
+    dashboardError = undefined;
+    widgetsError = undefined;
+    installResizeObserverStub();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("replaces the placeholder with a notice when the dashboard read fails", async () => {
+    dashboardData = undefined;
+    dashboardError = Object.assign(new Error("Not found"), { status: 404 });
+    await renderDashboardPage();
+
+    expect(screen.getByText("Not found")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Loading dashboard")).toBeNull();
+  });
+
+  it("keeps the placeholder while the dashboard is loading", async () => {
+    dashboardData = undefined;
+    await renderDashboardPage();
+
+    expect(screen.getByLabelText("Loading dashboard")).toBeInTheDocument();
+  });
+
+  it("does not claim there are no widgets before the widgets have loaded", async () => {
+    widgetsData = undefined;
+    await renderDashboard();
+
+    expect(screen.queryByText(/No widgets yet/)).toBeNull();
+    expect(
+      document.querySelectorAll('[data-slot="skeleton"]').length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("reports a failed widgets read instead of an empty dashboard", async () => {
+    widgetsData = undefined;
+    widgetsError = new Error("boom");
+    await renderDashboard();
+
+    expect(screen.getByText(/Failed to load widgets/)).toBeInTheDocument();
+    expect(screen.queryByText(/No widgets yet/)).toBeNull();
+  });
+
+  it("shows the empty state once the widgets have loaded empty", async () => {
+    await renderDashboard();
+
+    expect(screen.getByText(/No widgets yet/)).toBeInTheDocument();
   });
 });

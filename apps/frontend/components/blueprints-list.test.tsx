@@ -102,4 +102,14 @@ describe("BlueprintsList list states", () => {
 
     expect(screen.getByText(/Failed to load blueprints/)).toBeInTheDocument();
   });
+
+  it("holds the grid with a skeleton, not the empty state, while loading", () => {
+    mockScopedSWR({ "/blueprints": { isLoading: true } });
+    renderList(<BlueprintsList orgId="org1" />);
+
+    expect(
+      screen.getByRole("status", { name: "Loading blueprints" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText(/No blueprints yet/i)).not.toBeInTheDocument();
+  });
 });

@@ -18,6 +18,13 @@ import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+} from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
@@ -65,6 +72,36 @@ const RETRACTABLE_FIELDS = [
   "oauthClientSecret",
   "oauthRequestedScope",
 ] as const;
+
+const McpFormSkeleton = ({
+  className,
+  editing,
+}: {
+  className?: string;
+  editing: boolean;
+}) => (
+  <div className={className}>
+    <FormSkeletonSet>
+      <FormSkeletonGroup>
+        <FieldSkeleton />
+        <FieldSkeleton description={1} />
+        <div className="grid grid-cols-3 gap-4">
+          <FieldSkeleton className="col-span-1" />
+        </div>
+        {/* Custom Headers: label, description, Add header */}
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-3.5 w-28" />
+            <Skeleton className="h-3.5 w-2/3" />
+          </div>
+          <Skeleton className="h-8 w-28" />
+        </div>
+      </FormSkeletonGroup>
+      <Skeleton className="h-9 w-40" />
+    </FormSkeletonSet>
+    <FooterSkeleton buttons={editing ? 2 : 1} />
+  </div>
+);
 
 const McpForm = ({
   classNames,
@@ -812,6 +849,7 @@ const McpForm = ({
     <DetailFormState
       {...loadState}
       subject="MCP server"
+      skeleton={<McpFormSkeleton className={classNames} editing={!!mcpId} />}
       backHref={listPath}
       backLabel="Back to MCP servers"
     >

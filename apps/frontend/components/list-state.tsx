@@ -3,18 +3,18 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-type ListStateVariant = "loading" | "empty" | "error";
+type ListStateVariant = "empty" | "error";
 
 const TONE: Record<ListStateVariant, string> = {
-  loading: "text-muted-foreground",
   empty: "text-muted-foreground",
   error: "text-destructive",
 };
 
 /**
- * The loading / empty / error state every list shows (#877). Each list supplies
- * only the copy that differs; tone and the centered frame live here, so the
- * states stop drifting apart across lists.
+ * The empty / error state every list shows (#877). Each list supplies only the
+ * copy that differs; tone and the centered frame live here, so the states stop
+ * drifting apart across lists. Loading is a skeleton of the list's own rows
+ * instead (`list-skeletons`).
  */
 export function ListState({
   variant,

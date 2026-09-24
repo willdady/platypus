@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListError } from "@/components/list-state";
+import { CardGridSkeleton, LoadingRegion } from "@/components/list-skeletons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,7 +86,11 @@ export const EntityCardList = ({
   });
 
   if (isLoading) {
-    return <ListState variant="loading">Loading...</ListState>;
+    return (
+      <LoadingRegion label={`Loading ${config.entity}`}>
+        <CardGridSkeleton />
+      </LoadingRegion>
+    );
   }
 
   if (error) {

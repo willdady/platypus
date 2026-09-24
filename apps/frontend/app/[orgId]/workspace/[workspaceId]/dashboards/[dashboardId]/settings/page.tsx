@@ -4,6 +4,8 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { DetailFormState } from "@/components/detail-form-state";
+import { FooterSkeleton } from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Trash2 } from "lucide-react";
 import { ResourcePage } from "@/components/resource-page";
 import { Button } from "@/components/ui/button";
@@ -95,6 +97,19 @@ const DashboardSettingsPage = ({
       <DetailFormState
         {...loadState}
         subject="dashboard"
+        skeleton={
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-16" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+            <FooterSkeleton buttons={2} />
+          </div>
+        }
         backHref={routes.root}
         backLabel="Back to workspace"
       >

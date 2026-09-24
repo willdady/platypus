@@ -227,4 +227,14 @@ describe("SkillsList list states", () => {
 
     expect(screen.getByText(/Failed to load skills/)).toBeInTheDocument();
   });
+
+  it("holds the grid with a skeleton, not the empty state, while loading", () => {
+    mockScopedSWR({ "/skills": { isLoading: true } });
+    renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+    expect(
+      screen.getByRole("status", { name: "Loading skills" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText(/No skills yet/i)).not.toBeInTheDocument();
+  });
 });

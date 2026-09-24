@@ -25,6 +25,8 @@ const state = vi.hoisted(() => ({
   contextData: undefined as unknown,
   orgsError: undefined as Error | undefined,
   workspacesError: undefined as Error | undefined,
+  // The per-organization workspace fan-out still in flight.
+  workspacesPending: false,
 }));
 
 vi.mock("next/navigation", () => navigationMock);
@@ -44,7 +46,10 @@ vi.mock("swr", () => ({
   default: (key: unknown) => {
     if (Array.isArray(key)) {
       return {
-        data: state.workspacesError ? undefined : workspaces,
+        data:
+          state.workspacesError || state.workspacesPending
+            ? undefined
+            : workspaces,
         error: state.workspacesError,
         isLoading: false,
         mutate: vi.fn(),
@@ -227,11 +232,21 @@ describe("WorkspaceContextForm workspace read", () => {
     state.contextData = undefined;
     state.orgsError = undefined;
     state.workspacesError = undefined;
+    state.workspacesPending = false;
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("holds the Workspace picker disabled, and says why, while workspaces load", () => {
+    state.workspacesPending = true;
+
+    render(<WorkspaceContextForm />);
+
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(screen.getByText("Loading workspaces…")).toBeInTheDocument();
   });
 
   it("surfaces a failed workspaces read in the UI, not the console", () => {

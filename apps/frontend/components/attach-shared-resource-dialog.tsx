@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
+import { Skeleton } from "./ui/skeleton";
 import { useState } from "react";
 
 type ResourceType = "mcp" | "provider" | "skill" | "agent";
@@ -58,10 +59,9 @@ const AttachSharedResourceDialog = ({
   const collection = COLLECTION[resourceType];
   const label = LABEL[resourceType];
 
-  const { data } = useScopedSWR<{ results: { id: string; name: string }[] }>(
-    collection,
-    open ? { orgId } : null,
-  );
+  const { data, isLoading } = useScopedSWR<{
+    results: { id: string; name: string }[];
+  }>(collection, open ? { orgId } : null);
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +103,24 @@ const AttachSharedResourceDialog = ({
           </DialogDescription>
         </DialogHeader>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {available.length === 0 ? (
+        {isLoading ? (
+          // Rows shaped like the loaded ones, in place of the false "none
+          // available" while the list is still loading.
+          <ul aria-label={`Loading shared ${label}s`}>
+            {[0, 1, 2].map((i) => (
+              <li key={i} className="mb-2">
+                <Item variant="outline">
+                  <ItemContent>
+                    <Skeleton className="h-5 w-40" />
+                  </ItemContent>
+                  <ItemActions>
+                    <Skeleton className="h-8 w-[70px]" />
+                  </ItemActions>
+                </Item>
+              </li>
+            ))}
+          </ul>
+        ) : available.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">
             No shared {label}s available to attach.
           </p>

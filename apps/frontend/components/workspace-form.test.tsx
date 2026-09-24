@@ -59,3 +59,22 @@ describe("WorkspaceForm record read", () => {
     expect(screen.getByDisplayValue("Be brief")).toBeInTheDocument();
   });
 });
+
+describe("WorkspaceForm secondary reads", () => {
+  beforeEach(() => resetFormHarness());
+
+  it("holds the form back until the providers land, so the selects aren't blank", () => {
+    setDataFor(WORKSPACE_KEY, {
+      id: "ws1",
+      organizationId: "org1",
+      ownerId: "u1",
+      name: "Research",
+      context: "",
+    });
+    setLoading(`${WORKSPACE_KEY}/providers`);
+    renderForm();
+
+    expect(screen.getByLabelText("Loading workspace")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  });
+});

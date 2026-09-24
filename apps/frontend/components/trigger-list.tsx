@@ -10,7 +10,12 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListError } from "@/components/list-state";
+import {
+  CardGridSkeleton,
+  LoadingRegion,
+  SkeletonLine,
+} from "@/components/list-skeletons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -128,7 +133,20 @@ export const TriggerList = ({
   };
 
   if (isLoading) {
-    return <ListState variant="loading">Loading...</ListState>;
+    return (
+      <LoadingRegion label="Loading triggers">
+        <CardGridSkeleton
+          titleBadges={["w-12"]}
+          extra={
+            <>
+              {/* The agent it runs, then its schedule or events. */}
+              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
+              <SkeletonLine lineClassName="mt-1.5 h-4" className="h-3 w-48" />
+            </>
+          }
+        />
+      </LoadingRegion>
+    );
   }
 
   if (error) {

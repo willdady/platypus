@@ -12,6 +12,13 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
+import {
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+  TextareaSkeleton,
+} from "@/components/form-skeleton";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { type Organization } from "@platypus/schemas";
@@ -100,6 +107,17 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
     <DetailFormState
       {...loadState}
       subject="organization"
+      skeleton={
+        <div className={classNames}>
+          <FormSkeletonSet>
+            <FormSkeletonGroup>
+              <FieldSkeleton />
+              {orgId && <TextareaSkeleton counter description={3} />}
+            </FormSkeletonGroup>
+          </FormSkeletonSet>
+          <FooterSkeleton buttons={orgId ? 2 : 1} />
+        </div>
+      }
       backHref={orgId ? orgRoutes(orgId).root : "/"}
       backLabel="Back to organization"
     >

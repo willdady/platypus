@@ -47,6 +47,14 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  CollapsibleSkeleton,
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+} from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
@@ -451,6 +459,59 @@ type ProviderFormData = Omit<
   extraBody?: Record<string, unknown>;
   embeddingDimensions: string;
 };
+
+/** A ModelRow's box: three small labelled inputs, Advanced, and Remove. */
+const ModelRowSkeleton = () => (
+  <div className="flex items-start gap-2 rounded-md border p-3">
+    <div className="flex flex-1 flex-col gap-3">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="flex flex-col gap-1">
+          <div className="flex h-5 items-center">
+            <Skeleton className="h-3 w-20" />
+          </div>
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ))}
+      <div className="flex h-9 items-center">
+        <Skeleton className="h-3 w-20" />
+      </div>
+    </div>
+    <Skeleton className="size-9 shrink-0" />
+  </div>
+);
+
+const ProviderFormSkeleton = ({
+  className,
+  editing,
+}: {
+  className?: string;
+  editing: boolean;
+}) => (
+  <div className={className}>
+    <FormSkeletonSet>
+      <FormSkeletonGroup>
+        <FieldSkeleton />
+        <FieldSkeleton />
+        <FieldSkeleton />
+        <FieldSkeleton description={1} />
+        {/* Models: its label, one row, Add model and the description. */}
+        <div className="flex w-full flex-col gap-3">
+          <div className="flex h-5 items-center">
+            <Skeleton className="h-3.5 w-16" />
+          </div>
+          <ModelRowSkeleton />
+          <Skeleton className="mt-2 h-8 w-28" />
+          <Skeleton className="h-3.5 w-2/3" />
+        </div>
+        <FieldSkeleton description={1} />
+        <FieldSkeleton description={1} />
+        <FieldSkeleton description={1} />
+      </FormSkeletonGroup>
+      <CollapsibleSkeleton />
+    </FormSkeletonSet>
+    <FooterSkeleton buttons={editing ? 2 : 1} />
+  </div>
+);
 
 const ProviderForm = ({
   classNames,
@@ -1258,6 +1319,9 @@ const ProviderForm = ({
     <DetailFormState
       {...loadState}
       subject="provider"
+      skeleton={
+        <ProviderFormSkeleton className={classNames} editing={!!providerId} />
+      }
       backHref={listHref}
       backLabel="Back to providers"
     >

@@ -66,3 +66,29 @@ describe("DetailFormState", () => {
     expect(screen.getByText("the form")).toBeInTheDocument();
   });
 });
+
+describe("DetailFormState loading placeholder", () => {
+  it("names the placeholder after the subject by default", () => {
+    render(<DetailFormState {...baseProps} isLoading />);
+
+    expect(screen.getByLabelText("Loading provider")).toHaveAttribute(
+      "role",
+      "status",
+    );
+  });
+
+  it("shows the form's own skeleton under the label it's given", () => {
+    render(
+      <DetailFormState
+        {...baseProps}
+        isLoading
+        loadingLabel="Loading form"
+        skeleton={<p>the skeleton</p>}
+      />,
+    );
+
+    expect(screen.getByLabelText("Loading form")).toBeInTheDocument();
+    expect(screen.getByText("the skeleton")).toBeInTheDocument();
+    expect(screen.queryByText("the form")).toBeNull();
+  });
+});

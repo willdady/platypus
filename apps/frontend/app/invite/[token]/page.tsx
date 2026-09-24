@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Label } from "@/components/ui/label";
 import { InviteShell } from "../invite-shell";
+import { LoadingRegion, SkeletonLine } from "@/components/list-skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
   InvitationAcceptResult,
   InvitationLinkResolution,
@@ -136,9 +138,31 @@ export default function InviteTokenPage() {
   };
 
   if (isLoading || isAuthPending) {
+    // Shaped like the registration form, the state a fresh link most often
+    // lands on: heading and invite line, then email, name, password, submit.
     return (
-      <InviteShell className="text-center">
-        <p className="text-muted-foreground">Loading invitation...</p>
+      <InviteShell>
+        <LoadingRegion label="Loading invitation" className="space-y-8">
+          <div className="flex flex-col items-center">
+            <SkeletonLine lineClassName="h-8" className="h-6 w-44" />
+            <SkeletonLine
+              lineClassName="mt-2 h-6"
+              className="h-4 w-64 max-w-full"
+            />
+          </div>
+          <div className="space-y-4">
+            {["w-10", "w-12", "w-16"].map((width) => (
+              <div key={width} className="space-y-2">
+                <SkeletonLine lineClassName="h-3.5" className={width} />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ))}
+            <Skeleton className="h-9 w-full" />
+          </div>
+          <div className="flex h-9 items-center justify-center">
+            <Skeleton className="h-3.5 w-52" />
+          </div>
+        </LoadingRegion>
       </InviteShell>
     );
   }

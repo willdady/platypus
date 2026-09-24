@@ -69,16 +69,28 @@ describe("ContextsList", () => {
     ).toBeInTheDocument();
   });
 
-  // The page around it already reads these; a failure here would double up on
-  // whatever it says, so this list stays quiet.
-  it.each([
-    ["the read fails", { error: new Error("500") }],
-    ["the read is still in flight", { isLoading: true }],
-  ])("renders nothing while %s", (_, read) => {
-    mockScopedSWR({ contexts: read });
-    const { container } = renderList(<ContextsList />);
+  it("holds the row space with skeletons while the read is in flight", () => {
+    mockScopedSWR({ contexts: { isLoading: true } });
+    renderList(<ContextsList />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(
+      screen.getByLabelText("Loading workspace contexts"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No workspace contexts."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says the read failed rather than rendering nothing", () => {
+    mockScopedSWR({ contexts: { error: new Error("500") } });
+    renderList(<ContextsList />);
+
+    expect(
+      screen.getByText("Failed to load workspace contexts. 500"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No workspace contexts."),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -138,6 +150,18 @@ describe("WebhooksList", () => {
       screen.queryByText("No webhooks configured for this workspace."),
     ).not.toBeInTheDocument();
   });
+
+  it("holds the rows with a skeleton, not the empty state, while loading", () => {
+    mockScopedSWR({ webhooks: { isLoading: true } });
+    render();
+
+    expect(
+      screen.getByRole("status", { name: "Loading webhooks" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.queryByText("No webhooks configured for this workspace."),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("WorkspaceList", () => {
@@ -181,12 +205,12 @@ describe("WorkspaceList", () => {
     ).toBeGreaterThan(0);
   });
 
-  // The sidebar that hosts it has nowhere to put a failure, so it stays quiet.
-  it("renders nothing when the read fails", () => {
+  // The org home page waits on this read, so a silent failure left it blank.
+  it("says the read failed rather than rendering nothing", () => {
     mockScopedSWR({ workspaces: { error: new Error("500") } });
-    const { container } = renderList(<WorkspaceList orgId="org1" />);
+    renderList(<WorkspaceList orgId="org1" />);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText(/Failed to load workspaces/)).toBeInTheDocument();
   });
 });
 
@@ -218,6 +242,16 @@ describe("PluginsList", () => {
 
     expect(screen.getByText("No plugins installed")).toBeInTheDocument();
     expect(screen.getByText("PLATYPUS_PLUGINS")).toBeInTheDocument();
+  });
+
+  // No key yet (the session still resolving) reports `isLoading: false` with
+  // no data — which is not an empty catalog.
+  it("holds a placeholder, not the empty state, until the catalog arrives", () => {
+    mockScopedSWR({ plugins: { data: undefined } });
+    renderList(<PluginsList orgId="org1" />);
+
+    expect(screen.getByLabelText("Loading plugins")).toBeInTheDocument();
+    expect(screen.queryByText("No plugins installed")).not.toBeInTheDocument();
   });
 
   it("distinguishes a failed catalog read from an empty one", () => {

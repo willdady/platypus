@@ -12,6 +12,12 @@ import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import {
+  ButtonRowSkeleton,
+  CardGridSkeleton,
+  LoadingRegion,
+  SkeletonLine,
+} from "@/components/list-skeletons";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -49,7 +55,17 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
   });
 
   if (isLoading) {
-    return <ListState variant="loading">Loading...</ListState>;
+    return (
+      <LoadingRegion label="Loading blueprints">
+        <CardGridSkeleton
+          extra={
+            // The "N shared resources" count.
+            <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-28" />
+          }
+        />
+        <ButtonRowSkeleton className="mt-4" widths={["w-40"]} />
+      </LoadingRegion>
+    );
   }
 
   if (error) {

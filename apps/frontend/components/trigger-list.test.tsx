@@ -174,4 +174,13 @@ describe("TriggerList list states", () => {
 
     expect(screen.getByText(/Failed to load triggers/)).toBeInTheDocument();
   });
+
+  it("holds the grid with a skeleton while the read is in flight", () => {
+    mockScopedSWR({ "/triggers": { isLoading: true } });
+    renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
+
+    expect(
+      screen.getByRole("status", { name: "Loading triggers" }),
+    ).toHaveAttribute("aria-busy", "true");
+  });
 });

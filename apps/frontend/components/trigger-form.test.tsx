@@ -6,6 +6,7 @@ import {
   toastMock,
   swrMock,
   setDataFor,
+  setLoading,
   resetFormHarness,
   stubAcceptedSave,
   savedBody,
@@ -197,5 +198,16 @@ describe("TriggerForm — record revalidation", () => {
     );
 
     expect(screen.getByLabelText("Description")).toHaveValue("Edited");
+  });
+});
+
+describe("TriggerForm loading gate", () => {
+  it("holds the form back until the boards land, so a saved filter isn't blank", () => {
+    setLoading("/boards");
+
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByLabelText("Loading trigger")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 });

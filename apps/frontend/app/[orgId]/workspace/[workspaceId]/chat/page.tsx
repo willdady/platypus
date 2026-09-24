@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSWRConfig } from "swr";
 import { nanoid } from "nanoid";
 import { Chat } from "@/components/chat";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 import { scopedUrl } from "@/lib/api-write";
 import { workspaceRoutes } from "@/lib/routes";
 
@@ -16,17 +16,19 @@ const ChatPage = () => {
     workspaceId: string;
   }>();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
 
   // A freshly minted id has no Chat row, so cache it as absent before `Chat`
   // first reads it. Otherwise the row read is in flight on the first frames of
   // both this render and the detail page's, and the composer shows its default
-  // placeholder and a pending picker until it 404s (issue #966).
+  // placeholder and a pending picker until it 404s (issue #966). Not gated on
+  // the signed-in user the way the read is: on a cold load the session is still
+  // resolving here, and an unseeded row would show the transcript skeleton of an
+  // existing Chat until the read came back empty.
   const [chatId] = useState(() => {
     const id = nanoid();
-    if (backendUrl && user) {
+    if (backendUrl) {
       void mutate(
         scopedUrl(backendUrl, `chat/${id}`, { orgId, workspaceId }),
         null,

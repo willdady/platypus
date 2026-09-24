@@ -15,15 +15,26 @@ import { scopedUrl, type Scope } from "@/lib/api-write";
  * `config.fetcher` swaps the reader for one read — `optionalFetcher` for a row
  * that may not exist yet (issue #648). Absent one, every read keeps `fetcher`'s
  * contract, where any non-OK response is an error.
+ *
+ * While the session is still resolving there is no key yet, and SWR alone
+ * would report `isLoading: false` with no data — which every caller reads as
+ * "loaded, empty" (a blank editable form, a false empty state). A read the
+ * caller wants (non-null `scope`) is therefore reported as loading until the
+ * session settles. A signed-out user, or a caller-withheld `scope`, is not.
  */
 export function useScopedSWR<T>(
   entity: string,
   scope: Scope | null,
   config?: SWRConfiguration<T>,
 ): SWRResponse<T> {
-  const { user } = useAuth();
+  const { user, isPending } = useAuth();
   const backendUrl = useBackendUrl();
   const key =
     backendUrl && user && scope ? scopedUrl(backendUrl, entity, scope) : null;
-  return useSWR<T>(key, config?.fetcher ?? fetcher, config);
+  const response = useSWR<T>(key, config?.fetcher ?? fetcher, config);
+  // Spreading reads every SWR getter, subscribing this caller to all of its
+  // state — fine only here, where no key means nothing is loading anyway.
+  return scope && !user && isPending
+    ? { ...response, isLoading: true }
+    : response;
 }

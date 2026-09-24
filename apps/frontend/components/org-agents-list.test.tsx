@@ -106,4 +106,14 @@ describe("OrgAgentsList list states", () => {
       screen.getByText(/Failed to load shared agents/),
     ).toBeInTheDocument();
   });
+
+  it("holds the grid with a skeleton, not the empty state, while loading", () => {
+    mockScopedSWR({ "/agents": { isLoading: true } });
+    renderList(<OrgAgentsList orgId="org1" />);
+
+    expect(
+      screen.getByRole("status", { name: "Loading shared agents" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText(/No shared agents yet/i)).not.toBeInTheDocument();
+  });
 });

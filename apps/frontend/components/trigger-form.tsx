@@ -22,6 +22,17 @@ import {
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  CollapsibleSkeleton,
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+  SwitchRowSkeleton,
+  TextareaSkeleton,
+} from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useState, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
@@ -49,10 +60,7 @@ import {
   TRIGGER_MAX_RUNS_TO_KEEP_MAX,
   TRIGGER_MAX_RUNS_TO_KEEP_MIN,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { retractFieldError } from "@/lib/form-errors";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { Cron } from "croner";
 import { formatDateTime } from "@/lib/format-date";
 import { toast } from "sonner";
@@ -327,6 +335,38 @@ type TriggerFormData = {
   includeMemories: boolean;
 };
 
+/** The cron layout, which a new trigger opens on and most saved ones use. */
+const TriggerFormSkeleton = ({ editing }: { editing: boolean }) => (
+  <div>
+    <FormSkeletonSet>
+      <FormSkeletonGroup>
+        <FieldSkeleton />
+        <FieldSkeleton />
+        <FieldSkeleton />
+        <FieldSkeleton />
+        <TextareaSkeleton counter description={1} />
+        {/* Schedule Mode's button pair */}
+        <div className="flex w-full flex-col gap-3">
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="h-9 w-44" />
+        </div>
+        <FieldSkeleton />
+        <div className="flex gap-4">
+          <FieldSkeleton className="flex-1" />
+          <FieldSkeleton className="flex-1" />
+        </div>
+        <FieldSkeleton />
+        <SwitchRowSkeleton />
+        <FieldSkeleton className="w-1/2" description={1} />
+        <SwitchRowSkeleton />
+        <SwitchRowSkeleton />
+        <CollapsibleSkeleton />
+      </FormSkeletonGroup>
+    </FormSkeletonSet>
+    <FooterSkeleton buttons={editing ? 2 : 1} />
+  </div>
+);
+
 const TriggerForm = ({
   orgId,
   workspaceId,
@@ -336,33 +376,16 @@ const TriggerForm = ({
   workspaceId: string;
   triggerId?: string;
 }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
+  const scope = { orgId, workspaceId };
 
-  const { data: agentsData, isLoading: agentsLoading } = useSWR<{
+  const { data: agentsData, isLoading: agentsLoading } = useScopedSWR<{
     results: Agent[];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
-      : null,
-    fetcher,
-  );
+  }>("agents", scope);
   const agents = useMemo(() => agentsData?.results || [], [agentsData]);
 
-  const { data: boardsData } = useSWR<{
+  const { data: boardsData, isLoading: boardsLoading } = useScopedSWR<{
     results: KanbanBoard[];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards`,
-        )
-      : null,
-    fetcher,
-  );
+  }>("boards", scope);
   const boards = boardsData?.results || [];
 
   const [triggerType, setTriggerType] = useState<"cron" | "event">("cron");
@@ -371,15 +394,11 @@ const TriggerForm = ({
   const [filterColumnId, setFilterColumnId] = useState<string>("");
   const [filterChangedFields, setFilterChangedFields] = useState<string[]>([]);
 
-  const { data: boardStateData } = useSWR<KanbanBoardState>(
-    backendUrl && user && filterBoardId
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards/${filterBoardId}/state`,
-        )
-      : null,
-    fetcher,
-  );
+  const { data: boardStateData, isLoading: boardStateLoading } =
+    useScopedSWR<KanbanBoardState>(
+      `boards/${filterBoardId}/state`,
+      filterBoardId ? scope : null,
+    );
   const columns = boardStateData?.columns || [];
 
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -1205,8 +1224,18 @@ const TriggerForm = ({
   return (
     <DetailFormState
       {...loadState}
-      isLoading={agentsLoading || loadState.isLoading}
+      // A saved board/column filter needs its lists to show a name rather
+      // than a blank Select. Only a *seeded* column waits on the board's
+      // columns: picking another board clears the column, so a later board
+      // change never swaps the whole form back for the skeleton.
+      isLoading={
+        agentsLoading ||
+        boardsLoading ||
+        (!!filterColumnId && boardStateLoading) ||
+        loadState.isLoading
+      }
       subject="trigger"
+      skeleton={<TriggerFormSkeleton editing={!!triggerId} />}
       backHref={workspaceRoutes(orgId, workspaceId).root}
       backLabel="Back to workspace"
     >

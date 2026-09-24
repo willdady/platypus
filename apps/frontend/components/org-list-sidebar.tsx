@@ -27,12 +27,14 @@ interface OrgListSidebarProps {
 export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   const backendUrl = useBackendUrl();
 
-  const { data } = useScopedSWR<{ results: Organization[] }>(
+  const { data, error } = useScopedSWR<{ results: Organization[] }>(
     "organizations",
     {},
   );
 
-  const isReady = !!data;
+  // A failed read settles the list too; gating on data alone left a failed
+  // one pulsing forever.
+  const isReady = !!data || !!error;
 
   const organizations = (data?.results || []).sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -51,49 +53,64 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
-            {!isReady
-              ? Array.from({ length: 3 }).map((_, i) => (
-                  <SidebarMenuItem key={i}>
-                    <div className="flex h-8 items-center gap-2 rounded-md px-2">
-                      <Skeleton className="size-4 shrink-0" />
-                      <Skeleton className="h-4 flex-1" />
-                    </div>
-                  </SidebarMenuItem>
-                ))
-              : organizations.map((org) => (
-                  <SidebarMenuItem key={org.id}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={currentOrgId === org.id}
-                      className="cursor-pointer"
-                    >
-                      <Link href={orgRoutes(org.id).root}>
-                        <Building className="size-4" />
-                        <span>{org.name}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+            {!isReady ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <SidebarMenuItem key={i}>
+                  <div className="flex h-8 items-center gap-2 rounded-md px-2">
+                    <Skeleton className="size-4 shrink-0" />
+                    <Skeleton className="h-4 flex-1" />
+                  </div>
+                </SidebarMenuItem>
+              ))
+            ) : error && !data ? (
+              <SidebarMenuItem>
+                <p className="px-2 py-1.5 text-sm text-destructive">
+                  Couldn&apos;t load organizations.
+                </p>
+              </SidebarMenuItem>
+            ) : (
+              organizations.map((org) => (
+                <SidebarMenuItem key={org.id}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={currentOrgId === org.id}
+                    className="cursor-pointer"
+                  >
+                    <Link href={orgRoutes(org.id).root}>
+                      <Building className="size-4" />
+                      <span>{org.name}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))
+            )}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
 
-      {isReady && (
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
+      {/* Drawn as a placeholder while loading, so it doesn't pop in below
+        the list once the list arrives. */}
+      <SidebarGroup>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              {isReady ? (
                 <SidebarMenuButton asChild>
                   <Link href="/create">
                     <Plus className="size-4" />
                     <span>Add organization</span>
                   </Link>
                 </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      )}
+              ) : (
+                <div className="flex h-8 items-center gap-2 rounded-md px-2">
+                  <Skeleton className="size-4 shrink-0" />
+                  <Skeleton className="h-4 w-28" />
+                </div>
+              )}
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
     </SidebarContent>
   );
 }

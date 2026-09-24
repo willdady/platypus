@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher } from "@/lib/utils";
 import { workspaceRoutes } from "@/lib/routes";
@@ -206,22 +206,16 @@ const TriggerRunsPage = ({
           </Select>
         </div>
 
-        {isLoading && runs.length === 0 ? (
-          <div className="border rounded-lg divide-y">
+        {/* No data and no error is loading — including the frames before the
+          session resolves, when `getKey` has no key yet and SWR reports
+          `isLoading: false`. Reading `isLoading` alone flashed "No runs yet". */}
+        {!data && !error ? (
+          <div
+            className="border rounded-lg divide-y"
+            aria-label="Loading trigger runs"
+          >
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="p-4">
-                <div className="flex items-center gap-4 justify-between">
-                  <div className="flex items-center gap-4">
-                    <Skeleton className="h-5 w-16 rounded-full" />
-                    <div className="flex flex-col gap-1.5">
-                      <Skeleton className="h-4 w-40" />
-                      <Skeleton className="h-3 w-24" />
-                      <Skeleton className="h-3 w-32" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-8 w-8 rounded-md shrink-0" />
-                </div>
-              </div>
+              <TriggerRunRowSkeleton key={i} />
             ))}
           </div>
         ) : error && runs.length === 0 ? (

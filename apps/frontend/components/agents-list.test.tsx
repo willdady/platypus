@@ -204,14 +204,19 @@ describe("AgentsList list states", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the loading state while the read is in flight", () => {
+  it("holds the card grid with a skeleton while the read is in flight", () => {
     mockScopedSWR({
       "/agents": { isLoading: true },
       "/providers": [provider],
     });
     renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
 
-    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading agents" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.queryByText("No agents yet. Create one to get started."),
+    ).not.toBeInTheDocument();
   });
 
   it("surfaces a failed read rather than rendering an empty list", () => {

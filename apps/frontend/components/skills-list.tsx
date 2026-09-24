@@ -12,6 +12,12 @@ import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import {
+  ButtonRowSkeleton,
+  CardGridSkeleton,
+  LoadingRegion,
+  SkeletonLine,
+} from "@/components/list-skeletons";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -197,7 +203,24 @@ export const SkillsList = ({
     workspaceId ? deleteFlow.request(skill) : deleteGuard.request(skill);
 
   if (isLoading) {
-    return <ListState variant="loading">Loading...</ListState>;
+    // A workspace card carries its agent count; an organization card, for an
+    // Org Admin, its "Shared with" badge — both one `text-xs` line.
+    const hasExtraLine = Boolean(workspaceId) || canManageOrg;
+    return (
+      <LoadingRegion label="Loading skills">
+        <CardGridSkeleton
+          extra={
+            hasExtraLine && (
+              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
+            )
+          }
+        />
+        <ButtonRowSkeleton
+          className="mt-4"
+          widths={["w-32", ...(canAttach && workspaceId ? ["w-44"] : [])]}
+        />
+      </LoadingRegion>
+    );
   }
 
   if (error) {

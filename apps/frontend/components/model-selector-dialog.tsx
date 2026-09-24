@@ -140,7 +140,14 @@ export const ModelSelectorDialog = ({
           </span>
         </>
       ) : (
-        <Skeleton className="h-4 w-24" aria-label="Loading selection" />
+        // `bg-foreground/10`, not the Skeleton's `bg-accent`: that is the
+        // outline button's own hover fill, so the bar vanished on hover. The
+        // width is roughly a model or Agent label's, so the trigger doesn't
+        // jump sideways when the selection resolves.
+        <Skeleton
+          className="h-4 w-28 bg-foreground/10"
+          aria-label="Loading selection"
+        />
       )}
     </Button>
   );

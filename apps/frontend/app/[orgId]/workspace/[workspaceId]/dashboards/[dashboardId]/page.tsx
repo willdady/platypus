@@ -69,6 +69,8 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DetailFormState } from "@/components/detail-form-state";
+import { ListError } from "@/components/list-state";
 import {
   Tooltip,
   TooltipContent,
@@ -212,6 +214,21 @@ const WidgetTile = memo(function WidgetTile({
   );
 });
 
+// The widget grid's loading placeholder: shown until the widgets have loaded
+// and the grid container has been measured, so neither "No widgets yet" nor
+// an empty frame flashes first.
+const GridSkeleton = () => (
+  <div className="p-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <Skeleton className="h-32 rounded-lg" />
+      <Skeleton className="h-32 rounded-lg" />
+      <Skeleton className="h-32 rounded-lg" />
+      <Skeleton className="md:col-span-2 h-48 rounded-lg" />
+      <Skeleton className="h-48 rounded-lg" />
+    </div>
+  </div>
+);
+
 // ─── Main page ──────────────────────────────────────────────────────────────
 
 const DashboardPage = ({
@@ -272,15 +289,19 @@ const DashboardPage = ({
   const [newWidgetType, setNewWidgetType] = useState<WidgetType>("metric");
   const [newWidgetTitle, setNewWidgetTitle] = useState("");
 
-  const { data: dashboard, mutate: mutateDashboard } = useScopedSWR<Dashboard>(
-    `dashboards/${dashboardId}`,
-    scope,
-    {
-      refreshInterval: editMode ? 0 : 5000,
-    },
-  );
+  const {
+    data: dashboard,
+    error: dashboardError,
+    mutate: mutateDashboard,
+  } = useScopedSWR<Dashboard>(`dashboards/${dashboardId}`, scope, {
+    refreshInterval: editMode ? 0 : 5000,
+  });
 
-  const { data: widgetsData, mutate: mutateWidgets } = useScopedSWR<{
+  const {
+    data: widgetsData,
+    error: widgetsError,
+    mutate: mutateWidgets,
+  } = useScopedSWR<{
     results: Widget[];
   }>(widgetsEntity, scope, {
     refreshInterval: editMode ? 0 : 5000,
@@ -564,20 +585,36 @@ const DashboardPage = ({
     : Math.max(0, gridWidth - 32);
 
   if (!dashboard) {
+    // A failed read (deleted id, 403, 500) never produces a dashboard, so it
+    // must end the placeholder rather than leave it pulsing forever.
+    if (dashboardError) {
+      return (
+        <div className="p-4">
+          <DetailFormState
+            isLoading={false}
+            error={dashboardError}
+            data={dashboard}
+            subject="dashboard"
+            backHref={routes.root}
+            backLabel="Back to workspace"
+          >
+            {null}
+          </DetailFormState>
+        </div>
+      );
+    }
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full" aria-label="Loading dashboard">
         <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
           <Skeleton className="h-7 w-40" />
-          <Skeleton className="h-8 w-16 rounded-md" />
-        </div>
-        <div className="flex-1 overflow-auto p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Skeleton className="h-32 rounded-lg" />
-            <Skeleton className="h-32 rounded-lg" />
-            <Skeleton className="h-32 rounded-lg" />
-            <Skeleton className="md:col-span-2 h-48 rounded-lg" />
-            <Skeleton className="h-48 rounded-lg" />
+          <div className="flex items-center gap-2">
+            {/* Edit (desktop only) + settings link */}
+            <Skeleton className="hidden md:block h-8 w-[72px] rounded-md" />
+            <Skeleton className="size-9 rounded-md" />
           </div>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <GridSkeleton />
         </div>
       </div>
     );
@@ -683,7 +720,13 @@ const DashboardPage = ({
           isInteracting && "select-none",
         )}
       >
-        {widgets.length === 0 && !editMode ? (
+        {!widgetsData ? (
+          widgetsError ? (
+            <ListError error={widgetsError} subject="widgets" />
+          ) : (
+            <GridSkeleton />
+          )
+        ) : widgets.length === 0 && !editMode ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4 p-4 text-muted-foreground">
             <LayoutDashboard className="h-12 w-12 opacity-30" />
             <p>No widgets yet. Click Edit to add some.</p>
@@ -738,7 +781,9 @@ const DashboardPage = ({
               ))}
             </ResponsiveGridLayout>
           </div>
-        ) : null}
+        ) : (
+          <GridSkeleton />
+        )}
       </div>
 
       {/* Add Widget Dialog */}

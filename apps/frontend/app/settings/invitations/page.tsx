@@ -10,6 +10,11 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { formatDate } from "@/lib/format-date";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  ButtonSkeleton,
+  LoadingRegion,
+  SkeletonLine,
+} from "@/components/list-skeletons";
 import { useState } from "react";
 
 const UserInvitationsPage = () => {
@@ -65,7 +70,27 @@ const UserInvitationsPage = () => {
       </p>
 
       {isLoading ? (
-        <p>Loading invitations...</p>
+        <LoadingRegion label="Loading invitations" className="grid gap-4">
+          {[0, 1].map((i) => (
+            <div
+              key={i}
+              className="p-4 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card"
+            >
+              {/* Organization name, then invited-by and expiry. */}
+              <div className="space-y-1">
+                <SkeletonLine lineClassName="h-6" className="h-4 w-40" />
+                <div className="space-y-1">
+                  <SkeletonLine className="w-36" />
+                  <SkeletonLine className="w-32" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <ButtonSkeleton className="flex-1 md:flex-none md:w-24" />
+                <ButtonSkeleton className="flex-1 md:flex-none md:w-24" />
+              </div>
+            </div>
+          ))}
+        </LoadingRegion>
       ) : data?.results.length === 0 ? (
         <div className="text-center py-12 border border-dashed rounded-lg">
           <Mail className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />

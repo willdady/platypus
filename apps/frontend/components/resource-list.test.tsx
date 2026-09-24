@@ -195,6 +195,20 @@ describe.each(RESOURCES)(
       ).toBeInTheDocument();
     });
 
+    // Rows and the caller's own Add / Attach buttons, so neither pops in —
+    // and nothing clickable until the read lands.
+    it("holds the rows and action buttons with a skeleton while loading", () => {
+      authState.actor = "org-admin";
+      mockScopedSWR({ [`/${entity}`]: { isLoading: true } });
+      renderList(<List orgId="org1" workspaceId="ws1" />);
+
+      expect(
+        screen.getByRole("status", { name: `Loading ${fetchErrorNoun}` }),
+      ).toHaveAttribute("aria-busy", "true");
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+      expect(screen.queryByText(/configured/)).not.toBeInTheDocument();
+    });
+
     it("points the detach dialog's Org settings link at the organization page", () => {
       renderRows([item]);
       fireEvent.click(screen.getByText(item.name));

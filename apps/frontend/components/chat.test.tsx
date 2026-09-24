@@ -1198,3 +1198,97 @@ describe("restoring the selection on a new Chat", () => {
     expect(screen.getByPlaceholderText("Ask a1")).toBeInTheDocument();
   });
 });
+
+/**
+ * What stands in for the Chat until it can render for real. An existing Chat
+ * must not paint the empty-chat layout (composer centred) while its transcript
+ * is on the way, or the composer drops to the bottom once the messages land.
+ * A new Chat has nothing to wait for and keeps the centred composer.
+ */
+describe("loading", () => {
+  const PROVIDERS_KEY =
+    "http://test/organizations/org1/workspaces/ws1/providers";
+  const loadingSkeleton = () =>
+    screen.queryByRole("status", { name: "Loading chat" });
+  const composer = () =>
+    screen.queryByPlaceholderText("What would you like to know?");
+  const rowInFlight = () =>
+    harness.responses.set(CHAT_KEY, {
+      data: undefined,
+      isLoading: true,
+      mutate: harness.chatMutate,
+    });
+  const providersInFlight = () =>
+    harness.responses.set(PROVIDERS_KEY, {
+      data: undefined,
+      isLoading: true,
+      mutate: vi.fn(),
+    });
+
+  it("shows a centred composer skeleton for a new Chat while providers load", () => {
+    providersInFlight();
+    harness.data.set(`/chat/${CHAT_ID}`, null);
+
+    renderChat();
+
+    expect(loadingSkeleton()).toHaveClass("justify-center");
+    expect(composer()).not.toBeInTheDocument();
+  });
+
+  it("shows the transcript skeleton for an existing Chat while providers load", () => {
+    providersInFlight();
+    rowInFlight();
+
+    renderChat();
+
+    expect(loadingSkeleton()).not.toHaveClass("justify-center");
+  });
+
+  it("holds the skeleton, not a centred composer, while the row is in flight", () => {
+    rowInFlight();
+
+    renderChat();
+
+    expect(loadingSkeleton()).not.toHaveClass("justify-center");
+    expect(composer()).not.toBeInTheDocument();
+  });
+
+  it("holds it until the fetched messages reach the screen", () => {
+    const messages = [message("u1", "q"), message("a1", "answer")];
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages });
+
+    const view = renderChat();
+    expect(loadingSkeleton()).toBeInTheDocument();
+    expect(composer()).not.toBeInTheDocument();
+
+    harness.turn.messages = messages;
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(loadingSkeleton()).not.toBeInTheDocument();
+    expect(composer()).toBeInTheDocument();
+  });
+
+  // Deleting is local: the row keeps its messages, so reading "row has
+  // messages, screen has none" as loading would never let go.
+  it("does not come back when every message is deleted", () => {
+    const messages = [message("u1", "q")];
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages });
+    harness.turn.messages = messages;
+    const view = renderChat();
+
+    harness.turn.messages = [];
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(loadingSkeleton()).not.toBeInTheDocument();
+    expect(composer()).toBeInTheDocument();
+  });
+
+  it("renders a new Chat's composer straight away", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, null);
+
+    renderChat();
+
+    expect(loadingSkeleton()).not.toBeInTheDocument();
+    expect(composer()).toBeInTheDocument();
+  });
+});

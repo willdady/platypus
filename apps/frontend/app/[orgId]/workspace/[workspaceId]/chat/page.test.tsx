@@ -10,6 +10,7 @@ import { SWRConfig, type Cache } from "swr";
 const state = {
   replace: vi.fn(),
   search: "",
+  user: { id: "u1" } as { id: string } | null,
 };
 
 vi.mock("next/navigation", () => ({
@@ -20,7 +21,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "u1" } }),
+  useAuth: () => ({ user: state.user }),
 }));
 
 vi.mock("@/components/chat", () => ({
@@ -47,6 +48,7 @@ describe("ChatPage", () => {
   beforeEach(() => {
     state.replace.mockClear();
     state.search = "";
+    state.user = { id: "u1" };
   });
 
   it("renders the chat with the id it redirects to", () => {
@@ -81,6 +83,22 @@ describe("ChatPage", () => {
   });
 
   it("caches the new Chat's row as absent", () => {
+    const cache: Cache = new Map();
+
+    render(
+      <SWRConfig value={{ provider: () => cache }}>
+        <ChatPage />
+      </SWRConfig>,
+    );
+
+    const key = `http://test/organizations/org-1/workspaces/ws-1/chat/${chatProps().chatId}`;
+    expect(cache.get(key)?.data).toBeNull();
+  });
+
+  // On a cold load the session is still resolving when the id is minted; an
+  // unseeded row would read as an existing Chat still loading its transcript.
+  it("caches the row as absent before the session resolves", () => {
+    state.user = null;
     const cache: Cache = new Map();
 
     render(

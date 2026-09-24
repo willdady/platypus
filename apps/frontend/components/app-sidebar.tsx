@@ -24,8 +24,10 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -124,46 +126,67 @@ export function AppSidebar() {
     );
   };
 
-  const { data } = useScopedSWR<{ results: Workspace[] }>("workspaces", {
+  const { data, isLoading: isWorkspacesLoading } = useScopedSWR<{
+    results: Workspace[];
+  }>("workspaces", {
     orgId,
   });
 
-  const { data: chatData } = useScopedSWR<{ results: ChatListItem[] }>(
-    chatListEntity({ limit: 100, search: debouncedSearch }),
-    scope,
-    {
-      // Nothing else revalidates this list: not the per-chat spinner rendered
-      // off it, not the chat row the backend creates when a run starts, not
-      // the title written after that run ends. See `lib/chat-list-poll` for
-      // what each poll waits on and how it stops.
-      //
-      // SWR calls this when it arms the next timer — on every render and after
-      // every fetch — which is also when the set of chats being waited on is
-      // worth recomputing: a route change is a render, and a chat arriving is
-      // a fetch.
-      refreshInterval: (latest) => {
-        const { watched, intervalMs } = chatListPoll({
-          watched: watchedChatsRef.current,
-          listed: latest?.results,
-          activeChatId,
-          now: Date.now(),
-          isSearching: debouncedSearch !== "",
-        });
-        watchedChatsRef.current = watched;
-        return intervalMs;
-      },
+  const { data: chatData, isLoading: isChatListLoading } = useScopedSWR<{
+    results: ChatListItem[];
+  }>(chatListEntity({ limit: 100, search: debouncedSearch }), scope, {
+    // Nothing else revalidates this list: not the per-chat spinner rendered
+    // off it, not the chat row the backend creates when a run starts, not
+    // the title written after that run ends. See `lib/chat-list-poll` for
+    // what each poll waits on and how it stops.
+    //
+    // SWR calls this when it arms the next timer — on every render and after
+    // every fetch — which is also when the set of chats being waited on is
+    // worth recomputing: a route change is a render, and a chat arriving is
+    // a fetch.
+    refreshInterval: (latest) => {
+      const { watched, intervalMs } = chatListPoll({
+        watched: watchedChatsRef.current,
+        listed: latest?.results,
+        activeChatId,
+        now: Date.now(),
+        isSearching: debouncedSearch !== "",
+      });
+      watchedChatsRef.current = watched;
+      return intervalMs;
     },
-  );
+  });
 
-  const { data: orgData } = useScopedSWR<Organization>(
+  const { data: orgData, isLoading: isOrgLoading } = useScopedSWR<Organization>(
     organizationEntity(orgId),
     {},
   );
 
+  // Each search is its own SWR key, so the list would blank (and falsely read
+  // as "no matches") on every debounced keystroke. Keep showing the last
+  // settled list until the new one lands — but only within this Workspace:
+  // the sidebar outlives a Workspace switch, and SWR's `keepPreviousData`
+  // would show the old Workspace's chats under the new one's routes.
+  const chatListScopeKey = `${orgId}/${workspaceId}`;
+  const [settledChatList, setSettledChatList] = useState<{
+    scopeKey: string;
+    search: string;
+    data: { results: ChatListItem[] };
+  } | null>(null);
+  if (chatData && settledChatList?.data !== chatData) {
+    setSettledChatList({
+      scopeKey: chatListScopeKey,
+      search: debouncedSearch,
+      data: chatData,
+    });
+  }
+  const shownChatList =
+    settledChatList?.scopeKey === chatListScopeKey ? settledChatList : null;
+
   const workspaces = (data?.results ?? []).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const chats = chatData?.results ?? [];
+  const chats = shownChatList?.data.results ?? [];
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
   // Separate pinned chats from regular chats
@@ -304,14 +327,31 @@ export function AppSidebar() {
                 <DropdownMenuTrigger asChild>
                   <SidebarMenuButton className="h-auto py-2">
                     <div className="flex flex-col flex-1 items-start leading-none">
-                      <span className="text-xs text-muted-foreground mb-1">
-                        {orgData?.name}
-                      </span>
+                      {/* Placeholders keep the button's height and width
+                          steady until the names land. `text-xs` carries a
+                          16px line box, so the bar is padded out to it. */}
+                      {!orgData && isOrgLoading ? (
+                        <Skeleton
+                          data-testid="org-name-skeleton"
+                          className="mt-0.5 mb-1.5 h-3 w-24"
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground mb-1">
+                          {orgData?.name}
+                        </span>
+                      )}
                       <div className="flex items-center gap-2 w-full">
                         <FolderOpen className="size-4 shrink-0" />
-                        <span className="font-medium">
-                          {currentWorkspace?.name}
-                        </span>
+                        {!currentWorkspace && isWorkspacesLoading ? (
+                          <Skeleton
+                            data-testid="workspace-name-skeleton"
+                            className="h-3.5 w-28"
+                          />
+                        ) : (
+                          <span className="font-medium">
+                            {currentWorkspace?.name}
+                          </span>
+                        )}
                         <ChevronsUpDown className="ml-auto size-4 shrink-0" />
                       </div>
                     </div>
@@ -398,9 +438,12 @@ export function AppSidebar() {
         </div>
         <div className="relative min-h-0 flex flex-col flex-1 overflow-hidden">
           <SidebarContent className="pb-16">
-            {chatGroups.length === 0 && debouncedSearch && (
+            {!shownChatList && isChatListLoading && <ChatHistorySkeleton />}
+            {/* Names the search the shown list answered, not the one in
+                flight, so a pending search never reads as "no matches". */}
+            {chatGroups.length === 0 && shownChatList?.search && (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No chats match &ldquo;{debouncedSearch}&rdquo;
+                No chats match &ldquo;{shownChatList.search}&rdquo;
               </div>
             )}
             {chatGroups.map((group) => (
@@ -631,5 +674,26 @@ export function AppSidebar() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Stands in for the first chat-history group until the list first loads. */
+function ChatHistorySkeleton() {
+  return (
+    <SidebarGroup role="status" aria-label="Loading chats">
+      <SidebarGroupLabel>
+        <Skeleton className="mr-2 size-4" />
+        <Skeleton className="h-3 w-20" />
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {Array.from({ length: 5 }, (_, i) => (
+            <SidebarMenuItem key={i}>
+              <SidebarMenuSkeleton />
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }

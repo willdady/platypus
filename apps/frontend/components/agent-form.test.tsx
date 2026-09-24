@@ -11,6 +11,7 @@ import {
   setData,
   setDataFor,
   resetFormHarness,
+  setLoading,
   stubRejectedSave,
   stubSaveSequence,
 } from "@/lib/form-test-harness";
@@ -390,5 +391,39 @@ describe("AgentForm tool set load failure", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.toolSetIds).toEqual(["ts1", "ts2"]);
+  });
+});
+
+describe("AgentForm loading gate", () => {
+  beforeEach(() => {
+    resetFormHarness();
+    registerSwrData();
+  });
+
+  it("holds the form back until the Skills list lands, so its card can't pop in", () => {
+    setLoading("/skills");
+
+    renderCreateForm();
+
+    // A create page waits only on its lists, so it doesn't claim to be
+    // loading an agent.
+    expect(screen.getByLabelText("Loading form")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("holds the form back until the Sub-Agent candidates land", () => {
+    setLoading("/agents");
+
+    render(<AgentForm orgId="org1" workspaceId="ws1" toolSets={[]} />);
+
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("doesn't wait on an agents read when the page hands the list in", () => {
+    setLoading("/agents");
+
+    renderCreateForm();
+
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 });

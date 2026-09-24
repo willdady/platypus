@@ -29,6 +29,7 @@ import { cn, joinUrl } from "@/lib/utils";
 import { attachmentsEntity, writeAt } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useBackendUrl } from "@/components/auth-provider";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type ResourceType = "mcp" | "provider" | "skill" | "agent";
 
@@ -56,12 +57,20 @@ export const SharedWithBadge = ({
   resourceType: ResourceType;
   resourceId: string;
 }) => {
-  const { data } = useScopedSWR<{ results: AttachedWorkspace[] }>(
+  const { data, isLoading } = useScopedSWR<{ results: AttachedWorkspace[] }>(
     attachmentsEntity(resourceType, resourceId),
     { orgId },
   );
   const attached = data?.results ?? [];
   const count = attached.length;
+
+  // Sized to the loaded badge (icon + "N workspaces" at text-xs), so a count
+  // doesn't read as "0" before the read resolves.
+  if (isLoading) {
+    return (
+      <Skeleton className="h-4 w-20" aria-label="Loading shared workspaces" />
+    );
+  }
 
   return (
     <Tooltip>
@@ -110,14 +119,18 @@ export const ManageAttachmentsDialog = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: attData, mutate: mutateAtt } = useScopedSWR<{
+  const {
+    data: attData,
+    isLoading: attLoading,
+    mutate: mutateAtt,
+  } = useScopedSWR<{
     results: AttachedWorkspace[];
   }>(attachmentsEntity(resourceType, resourceId), { orgId });
   const attached = attData?.results ?? [];
   const attachedIds = new Set(attached.map((a) => a.workspaceId));
 
   // The full workspace list is only needed while the dialog is open.
-  const { data: wsData } = useScopedSWR<{
+  const { data: wsData, isLoading: wsLoading } = useScopedSWR<{
     results: { id: string; name: string }[];
   }>("workspaces", open ? { orgId } : null);
   const workspaces = [...(wsData?.results ?? [])].sort((a, b) =>
@@ -169,7 +182,15 @@ export const ManageAttachmentsDialog = ({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {/* Currently-attached workspaces as removable chips. */}
-        {count > 0 ? (
+        {attLoading ? (
+          <div
+            className="flex flex-wrap gap-1"
+            aria-label="Loading attachments"
+          >
+            <Skeleton className="h-[22px] w-24 rounded-full" />
+            <Skeleton className="h-[22px] w-20 rounded-full" />
+          </div>
+        ) : count > 0 ? (
           <div className="flex flex-wrap gap-1">
             {attached.map((a) => (
               <Badge key={a.workspaceId} variant="secondary" className="gap-1">
@@ -196,7 +217,20 @@ export const ManageAttachmentsDialog = ({
         <Command>
           <CommandInput placeholder="Search workspaces…" />
           <CommandList>
-            <CommandEmpty>No workspaces found.</CommandEmpty>
+            {/* Rows in place of the false "No workspaces found." while the
+                list is still loading. */}
+            {wsLoading ? (
+              <div className="p-1" aria-label="Loading workspaces">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="flex items-center gap-2 px-2 py-1.5">
+                    <Skeleton className="mr-2 size-4" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <CommandEmpty>No workspaces found.</CommandEmpty>
+            )}
             <CommandGroup>
               {workspaces.map((ws) => {
                 const isAtt = attachedIds.has(ws.id);

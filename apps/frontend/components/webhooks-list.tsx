@@ -6,6 +6,11 @@ import { Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { workspaceRoutes } from "@/lib/routes";
+import {
+  ButtonSkeleton,
+  ItemRowsSkeleton,
+  LoadingRegion,
+} from "./list-skeletons";
 
 interface Webhook {
   id: string;
@@ -29,7 +34,14 @@ const WebhooksList = ({
     { orgId, workspaceId },
   );
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <LoadingRegion label="Loading webhooks">
+        <ItemRowsSkeleton rows={2} secondLine />
+        <ButtonSkeleton className="w-36" />
+      </LoadingRegion>
+    );
+  }
   if (error) return <div>Failed to load webhooks.</div>;
 
   const webhooks: Webhook[] = data?.results ?? [];

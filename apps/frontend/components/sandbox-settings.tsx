@@ -39,6 +39,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type SandboxBackend = { backend: string; name: string };
 
@@ -217,6 +218,39 @@ const RowsEditor = ({
   </div>
 );
 
+// One label / control / description field, at the form's sizes.
+const FieldSkeleton = ({
+  control,
+  description = true,
+}: {
+  control: string;
+  description?: boolean;
+}) => (
+  <div className="flex flex-col gap-3">
+    <Skeleton className="h-4 w-28" />
+    <Skeleton className={control} />
+    {description && <Skeleton className="h-4 w-3/4" />}
+  </div>
+);
+
+// Mirrors the configured-sandbox form — the shape most workspaces land on —
+// rather than the Empty card: name, backend, the env editors, then Save.
+const SandboxSettingsSkeleton = ({
+  canConfigure,
+}: {
+  canConfigure: boolean;
+}) => (
+  <div aria-label="Loading sandbox">
+    <div className="mb-6 flex flex-col gap-7">
+      <FieldSkeleton control="h-9 w-full" description={false} />
+      <FieldSkeleton control="h-9 w-full" />
+      {canConfigure && <FieldSkeleton control="h-8 w-32" />}
+      <FieldSkeleton control="h-8 w-32" />
+    </div>
+    <Skeleton className="h-9 w-16" />
+  </div>
+);
+
 const SandboxSettings = ({
   orgId,
   workspaceId,
@@ -262,10 +296,9 @@ const SandboxSettings = ({
   const backends = useMemo(() => backendsData?.results ?? [], [backendsData]);
 
   // Operator network allowlist — admin-only endpoint (ADR-0005).
-  const { data: networksData } = useScopedSWR<{ results: string[] }>(
-    "sandbox/networks",
-    canConfigure ? scope : null,
-  );
+  const { data: networksData, isLoading: networksLoading } = useScopedSWR<{
+    results: string[];
+  }>("sandbox/networks", canConfigure ? scope : null);
   const allowedNetworks = networksData?.results ?? [];
 
   const [isConfiguring, setIsConfiguring] = useState(false);
@@ -552,7 +585,7 @@ const SandboxSettings = ({
   };
 
   if (isLoading || backendsLoading) {
-    return null;
+    return <SandboxSettingsSkeleton canConfigure={canConfigure} />;
   }
 
   if (error) {
@@ -668,7 +701,17 @@ const SandboxSettings = ({
                   declared by the operator in the deployment&apos;s plugin
                   configuration. Off by default.
                 </FieldDescription>
-                {allowedNetworks.length === 0 ? (
+                {networksLoading ? (
+                  // A network row, in place of the false "none declared"
+                  // while the allowlist is still loading.
+                  <div
+                    className="flex items-center justify-between gap-2"
+                    aria-label="Loading networks"
+                  >
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-[1.15rem] w-8 rounded-full" />
+                  </div>
+                ) : allowedNetworks.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No networks declared by the operator.
                   </p>

@@ -3,14 +3,6 @@ import { render, screen } from "@testing-library/react";
 import { ListError, ListState } from "./list-state";
 
 describe("ListState", () => {
-  it("renders loading copy in the muted tone", () => {
-    render(<ListState variant="loading">Loading agents...</ListState>);
-
-    const text = screen.getByText("Loading agents...");
-    expect(text).toBeInTheDocument();
-    expect(text).toHaveClass("text-muted-foreground");
-  });
-
   it("renders empty copy in the muted tone", () => {
     render(<ListState variant="empty">No blueprints yet.</ListState>);
 

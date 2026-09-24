@@ -24,12 +24,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  BadgeSkeleton,
+  IconButtonSkeleton,
+  InlineSkeleton,
+  LoadingRegion,
+  SkeletonLine,
+  TableSkeleton,
+} from "@/components/list-skeletons";
 import { useState } from "react";
 
 const OrgInvitationsPage = () => {
   const { orgId } = useParams<{ orgId: string }>();
   const backendUrl = useBackendUrl();
-  const { data: orgData } = useScopedSWR<Organization>(
+  const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
     organizationEntity(orgId),
     {},
   );
@@ -132,9 +140,13 @@ const OrgInvitationsPage = () => {
         <h1 className="text-2xl font-bold mb-4">Invitations</h1>
         <p className="text-muted-foreground mb-6">
           Manage invitations for users to join{" "}
-          <span className="font-bold">
-            {orgData?.name || "this organization"}
-          </span>
+          {isLoadingOrg ? (
+            <InlineSkeleton className="w-32" />
+          ) : (
+            <span className="font-bold">
+              {orgData?.name || "this organization"}
+            </span>
+          )}
           .
         </p>
         <InvitationForm orgId={orgId} onSuccess={() => mutate()} />
@@ -143,7 +155,35 @@ const OrgInvitationsPage = () => {
       <div>
         <h2 className="text-xl font-semibold mb-4">Sent Invitations</h2>
         {isLoading ? (
-          <p>Loading invitations...</p>
+          <LoadingRegion label="Loading invitations">
+            <TableSkeleton
+              tableClassName="min-w-[600px]"
+              columns={[
+                { header: "Email", cell: <SkeletonLine className="w-44" /> },
+                {
+                  header: "Workspace",
+                  cell: <SkeletonLine className="w-24" />,
+                },
+                {
+                  header: "Blueprints",
+                  cell: <SkeletonLine className="w-20" />,
+                },
+                { header: "Status", cell: <BadgeSkeleton /> },
+                { header: "Expires", cell: <SkeletonLine className="w-20" /> },
+                {
+                  header: "Actions",
+                  className: "text-right",
+                  // Copy link + Delete, both ghost icon buttons.
+                  cell: (
+                    <div className="flex justify-end">
+                      <IconButtonSkeleton />
+                      <IconButtonSkeleton />
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </LoadingRegion>
         ) : data?.results.length === 0 ? (
           <div className="text-center py-12 border border-dashed rounded-lg">
             <Mail className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />

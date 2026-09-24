@@ -16,6 +16,8 @@ const state = {
   size: 1,
   setSize: vi.fn(),
   isLoading: false,
+  /** False stands for no key yet (the session still resolving): no data. */
+  resolved: true,
   error: undefined as Error | undefined,
   triggers: [] as { id: string; name: string }[],
 };
@@ -35,7 +37,7 @@ vi.mock("swr/infinite", () => ({
       state.keys.push(getKey(i, state.pages[i - 1] ?? null));
     }
     return {
-      data: state.pages,
+      data: state.resolved ? state.pages : undefined,
       size: state.size,
       setSize: state.setSize,
       isLoading: state.isLoading,
@@ -141,6 +143,7 @@ beforeEach(() => {
   state.pages = [];
   state.size = 1;
   state.isLoading = false;
+  state.resolved = true;
   state.error = undefined;
   state.triggers = TRIGGERS;
 });
@@ -270,6 +273,16 @@ describe("Trigger runs filters", () => {
 // Filtering to 'failed' on a healthy workspace must not claim no trigger has
 // ever run.
 describe("Trigger runs empty states", () => {
+  // Before the session resolves there is no key: SWR reports no data and
+  // `isLoading: false`, which is not an empty workspace.
+  it("shows the placeholder, not an empty state, before the runs have loaded", async () => {
+    state.resolved = false;
+    await renderPage();
+
+    expect(screen.getByLabelText("Loading trigger runs")).toBeInTheDocument();
+    expect(screen.queryByText(/No runs yet/)).toBeNull();
+  });
+
   it("says the workspace has no runs when nothing is filtered", async () => {
     await renderRuns([]);
 

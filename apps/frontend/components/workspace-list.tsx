@@ -13,6 +13,7 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { ChevronRight, FolderClosed } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ListError } from "@/components/list-state";
 import { workspaceRoutes } from "@/lib/routes";
 
 const WorkspaceList = ({
@@ -27,7 +28,10 @@ const WorkspaceList = ({
     { orgId },
   );
 
-  if (error) return null;
+  // Only a cold failure replaces the list; a failed revalidation keeps it.
+  if (error && !data) {
+    return <ListError error={error} subject="workspaces" />;
+  }
 
   if (isLoading || !data) {
     return (
@@ -35,9 +39,12 @@ const WorkspaceList = ({
         {Array.from({ length: 3 }).map((_, i) => (
           <Item key={i} variant="outline" className="mb-2">
             <ItemContent>
+              {/* The 18px folder icon beside one line of title text. */}
               <ItemTitle>
-                <Skeleton className="size-4 shrink-0 rounded" />
-                <Skeleton className="h-4 w-40 rounded" />
+                <Skeleton className="size-[18px] shrink-0 rounded" />
+                <span className="flex h-lh items-center">
+                  <Skeleton className="h-4 w-40 rounded" />
+                </span>
               </ItemTitle>
             </ItemContent>
             <ItemActions>

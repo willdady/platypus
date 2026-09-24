@@ -11,6 +11,8 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Globe, FolderClosed } from "lucide-react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { ContextsList } from "@/components/contexts-list";
+import { ListError } from "@/components/list-state";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ContextWithWorkspaceName extends Context {
   workspaceName?: string | null;
@@ -23,9 +25,18 @@ const findGlobalContext = (contexts?: {
 const ContextsPage = () => {
   const backendUrl = useBackendUrl();
 
-  const { data: contexts, mutate } = useScopedSWR<{
+  const {
+    data: contexts,
+    error,
+    isLoading,
+    mutate,
+  } = useScopedSWR<{
     results: ContextWithWorkspaceName[];
   }>("users/me/contexts", {});
+  // Until the read lands there is no telling whether a global context exists,
+  // so the editor stays hidden and Save stays off: a save then would POST a
+  // duplicate, and anything typed would be overwritten when the data arrives.
+  const isLoaded = contexts !== undefined;
 
   const [globalContextContent, setGlobalContextContent] = useState(
     () => findGlobalContext(contexts)?.content || "",
@@ -41,6 +52,7 @@ const ContextsPage = () => {
   }
 
   const handleSaveGlobal = async () => {
+    if (!isLoaded) return;
     const globalCtx = findGlobalContext(contexts);
     setIsSavingGlobal(true);
 
@@ -91,17 +103,32 @@ const ContextsPage = () => {
           <div className="space-y-3">
             <div className="border rounded-lg p-4 bg-muted/30">
               <div className="space-y-3">
-                <ExpandableTextarea
-                  id="global-context-edit"
-                  label=""
-                  placeholder="Enter context about yourself, your preferences, or general instructions..."
-                  value={globalContextContent}
-                  onChange={(e) => setGlobalContextContent(e.target.value)}
-                  className="!font-mono"
-                  maxLength={1000}
-                />
+                {isLoaded ? (
+                  <ExpandableTextarea
+                    id="global-context-edit"
+                    label=""
+                    placeholder="Enter context about yourself, your preferences, or general instructions..."
+                    value={globalContextContent}
+                    onChange={(e) => setGlobalContextContent(e.target.value)}
+                    className="!font-mono"
+                    maxLength={1000}
+                  />
+                ) : isLoading || !error ? (
+                  // The textarea and its character counter.
+                  <div aria-label="Loading global context">
+                    <Skeleton className="h-16 w-full" />
+                    <div className="flex justify-end mt-1">
+                      <Skeleton className="h-4 w-14" />
+                    </div>
+                  </div>
+                ) : (
+                  <ListError error={error} subject="global context" />
+                )}
                 <div className="flex items-center justify-between">
-                  <Button onClick={handleSaveGlobal} disabled={isSavingGlobal}>
+                  <Button
+                    onClick={handleSaveGlobal}
+                    disabled={!isLoaded || isSavingGlobal}
+                  >
                     Save
                   </Button>
                 </div>

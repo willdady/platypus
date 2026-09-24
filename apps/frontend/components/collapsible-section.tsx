@@ -1,12 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+
+/**
+ * Whether the section persisted under `storageKey` was last left open. A
+ * section never toggled starts closed. Storage can throw (disabled, or a
+ * sandboxed frame), which reads as never toggled.
+ */
+export function readSectionOpen(storageKey: string): boolean {
+  try {
+    const stored = localStorage.getItem(storageKey);
+    return stored !== null && stored !== "false";
+  } catch {
+    return false;
+  }
+}
+
+const subscribeToStorage = (onChange: () => void) => {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+};
+
+/**
+ * The persisted open state, read during render so a section mounted on the
+ * client paints in its stored state on the first frame instead of painting
+ * closed and animating open a frame later. `useSyncExternalStore` keeps it
+ * SSR-safe: the server snapshot (closed) is what hydration sees, and the
+ * client value follows straight after. Shared with loading placeholders, so a
+ * skeleton draws each section collapsed or expanded as it will load.
+ */
+export function useSectionOpen(storageKey: string): boolean {
+  return useSyncExternalStore(
+    subscribeToStorage,
+    () => readSectionOpen(storageKey),
+    () => false,
+  );
+}
 
 interface CollapsibleSectionProps {
   title: React.ReactNode;
@@ -23,22 +58,19 @@ export function CollapsibleSection({
   children,
   className,
 }: CollapsibleSectionProps) {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    // Reads localStorage (client-only) to restore the persisted open state
-    // after mount. Doing this during render would break SSR/hydration, so the
-    // setState here is intentional.
-    const stored = localStorage.getItem(storageKey);
-    if (stored !== null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setOpen(stored !== "false");
-    }
-  }, [storageKey]);
+  const stored = useSectionOpen(storageKey);
+  // A toggle made here wins over what storage says, so the section still
+  // opens and closes where storage can't be written.
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const open = toggled ?? stored;
 
   const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    localStorage.setItem(storageKey, String(next));
+    setToggled(next);
+    try {
+      localStorage.setItem(storageKey, String(next));
+    } catch {
+      // Not persisted; the in-memory state above still applies.
+    }
   };
 
   return (

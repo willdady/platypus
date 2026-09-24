@@ -22,6 +22,14 @@ import { toast } from "sonner";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
+import {
+  BadgeSkeleton,
+  LoadingRegion,
+  SkeletonLine,
+  TableSkeleton,
+  UserCellSkeleton,
+} from "@/components/list-skeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface User {
   id: string;
@@ -65,7 +73,30 @@ export function UsersList() {
   });
 
   if (isLoading) {
-    return <ListState variant="loading">Loading users...</ListState>;
+    return (
+      <LoadingRegion label="Loading users">
+        <TableSkeleton
+          tableClassName="min-w-[800px]"
+          columns={[
+            { header: "User", cell: <UserCellSkeleton /> },
+            { header: "Role", cell: <BadgeSkeleton className="w-14" /> },
+            { header: "Status", cell: <BadgeSkeleton /> },
+            { header: "Created", cell: <SkeletonLine className="w-20" /> },
+            {
+              header: "Actions",
+              className: "text-right",
+              // Change password + Delete, both `size="sm"`.
+              cell: (
+                <div className="flex items-center justify-end gap-2">
+                  <Skeleton className="h-8 w-40" />
+                  <Skeleton className="h-8 w-20" />
+                </div>
+              ),
+            },
+          ]}
+        />
+      </LoadingRegion>
+    );
   }
 
   if (error) {

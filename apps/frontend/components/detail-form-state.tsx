@@ -12,7 +12,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DefaultFormSkeleton } from "@/components/form-skeleton";
 
 export type DetailFormStateProps = {
   /** True while the record is still being read. */
@@ -31,6 +31,18 @@ export type DetailFormStateProps = {
   subject: string;
   backHref: string;
   backLabel: string;
+  /**
+   * The placeholder shown while loading, shaped like the form it stands in
+   * for (built from `form-skeleton` blocks) so the swap doesn't shift the
+   * page. Defaults to a generic few-fields skeleton.
+   */
+  skeleton?: ReactNode;
+  /**
+   * The loading placeholder's accessible name. Defaults to
+   * `Loading {subject}`, which misreads on a create page that is only
+   * waiting on the form's own reads.
+   */
+  loadingLabel?: string;
   children: ReactNode;
 };
 
@@ -81,14 +93,18 @@ export const DetailFormState = ({
   subject,
   backHref,
   backLabel,
+  skeleton,
+  loadingLabel,
   children,
 }: DetailFormStateProps) => {
   if (isLoading) {
     return (
-      <div className="space-y-4 py-4" aria-label={`Loading ${subject}`}>
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-24 w-full" />
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label={loadingLabel ?? `Loading ${subject}`}
+      >
+        {skeleton ?? <DefaultFormSkeleton />}
       </div>
     );
   }

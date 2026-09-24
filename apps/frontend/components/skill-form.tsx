@@ -14,6 +14,15 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+  SwitchCardSkeleton,
+  SwitchRowSkeleton,
+  TextareaSkeleton,
+} from "@/components/form-skeleton";
 import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
@@ -46,6 +55,31 @@ const INITIAL_DATA = {
   disableModelInvocation: false,
 };
 
+const SkillFormSkeleton = ({
+  className,
+  editing,
+  agents,
+}: {
+  className?: string;
+  editing: boolean;
+  /** Whether the Agents card shows (the workspace surface). */
+  agents: boolean;
+}) => (
+  <div className={className}>
+    <FormSkeletonSet>
+      <FormSkeletonGroup className="gap-4">
+        <FieldSkeleton counter />
+        <TextareaSkeleton counter />
+        <TextareaSkeleton heightClassName="h-[200px]" counter />
+        <FieldSkeleton description={1} counter />
+        <SwitchRowSkeleton />
+      </FormSkeletonGroup>
+    </FormSkeletonSet>
+    {agents && <SwitchCardSkeleton className="mb-6" rows={2} description />}
+    <FooterSkeleton buttons={editing ? 2 : 1} />
+  </div>
+);
+
 const SkillForm = ({
   classNames,
   orgId,
@@ -66,10 +100,9 @@ const SkillForm = ({
   const scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
   // Agent associations are a workspace concern; only fetched on that surface.
-  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
-    "agents",
-    workspaceId ? scope : null,
-  );
+  const { data: agentsData, isLoading: agentsLoading } = useScopedSWR<{
+    results: Agent[];
+  }>("agents", workspaceId ? scope : null);
   const agents = agentsData?.results || [];
 
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
@@ -304,7 +337,17 @@ const SkillForm = ({
   return (
     <DetailFormState
       {...loadState}
+      // The Agents card renders only once its list lands; hold it back with
+      // the record rather than popping it in after.
+      isLoading={agentsLoading || loadState.isLoading}
       subject="skill"
+      skeleton={
+        <SkillFormSkeleton
+          className={classNames}
+          editing={!!skillId}
+          agents={!!workspaceId}
+        />
+      }
       backHref={returnPath}
       backLabel={workspaceId ? "Back to workspace" : "Back to skills"}
     >

@@ -22,6 +22,7 @@ import {
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import { AgentFormSkeleton } from "@/components/agent-form-skeleton";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -150,17 +151,15 @@ const AgentForm = ({
   );
 
   // Fetch skills
-  const { data: skillsData } = useScopedSWR<{ results: Skill[] }>(
-    "skills",
-    scope,
-  );
+  const { data: skillsData, isLoading: skillsLoading } = useScopedSWR<{
+    results: Skill[];
+  }>("skills", scope);
   const skills = skillsData?.results || [];
 
-  // Fetch agents for Sub-Agent selection
-  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
-    "agents",
-    scope,
-  );
+  // Fetch agents for Sub-Agent selection, unless the page handed them in
+  const { data: agentsData, isLoading: agentsLoading } = useScopedSWR<{
+    results: Agent[];
+  }>("agents", propAgents ? null : scope);
   const agents = propAgents || agentsData?.results || [];
 
   const router = useRouter();
@@ -911,8 +910,23 @@ const AgentForm = ({
   return (
     <DetailFormState
       {...loadState}
-      isLoading={providersLoading || loadState.isLoading}
+      // The Skills and Sub-Agents cards render only once their lists land,
+      // so they're held back with the record rather than popping in after.
+      isLoading={
+        providersLoading ||
+        skillsLoading ||
+        (!propAgents && agentsLoading) ||
+        loadState.isLoading
+      }
       subject="agent"
+      loadingLabel={agentId ? "Loading agent" : "Loading form"}
+      skeleton={
+        <AgentFormSkeleton
+          className={classNames}
+          editing={!!agentId}
+          tools={!toolSetsError && toolSets.length > 0}
+        />
+      }
       backHref={doneHref}
       backLabel={orgScoped ? "Back to agents" : "Back to workspace"}
     >

@@ -20,6 +20,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
 import { fetcher } from "@/lib/utils";
 import { mergeRunEvents, nextSinceSeq } from "@/lib/run-timeline";
 import { workspaceRoutes } from "@/lib/routes";
@@ -70,7 +71,7 @@ const TriggerRunDetailPage = ({
     [],
   );
 
-  const { data, error, isLoading } = useScopedSWR<TriggerRunDetailResponse>(
+  const { data, error } = useScopedSWR<TriggerRunDetailResponse>(
     `trigger-runs/${runId}`,
     { orgId, workspaceId },
     {
@@ -99,15 +100,7 @@ const TriggerRunDetailPage = ({
           Where this run&apos;s time went, and what it concluded.
         </p>
 
-        {isLoading && !data ? (
-          <div className="space-y-4">
-            <div className="border rounded-lg p-4">
-              <Skeleton className="h-5 w-40 mb-2" />
-              <Skeleton className="h-4 w-64" />
-            </div>
-            <Skeleton className="h-40 w-full rounded-lg" />
-          </div>
-        ) : error && !data ? (
+        {error && !data ? (
           <Empty className="border border-dashed">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -161,7 +154,21 @@ const TriggerRunDetailPage = ({
               </section>
             )}
           </div>
-        ) : null}
+        ) : (
+          // Anything short of data or an error is still loading, the frames
+          // before the session resolves included — never a blank page.
+          <div className="space-y-6" aria-label="Loading trigger run">
+            <div className="border rounded-lg">
+              <TriggerRunRowSkeleton linkToDetail={false} />
+            </div>
+            <section>
+              <div className="flex h-5 items-center mb-2">
+                <Skeleton className="h-3.5 w-20" />
+              </div>
+              <Skeleton className="h-40 w-full rounded-lg" />
+            </section>
+          </div>
+        )}
       </div>
     </div>
   );

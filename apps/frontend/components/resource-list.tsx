@@ -14,7 +14,12 @@ import {
 import { type Scope } from "@/lib/api-write";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { useSharedDetach } from "@/hooks/use-shared-resource-actions";
-import { ListError, ListState } from "./list-state";
+import { ListError } from "./list-state";
+import {
+  ButtonRowSkeleton,
+  ItemRowsSkeleton,
+  LoadingRegion,
+} from "./list-skeletons";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { Button } from "./ui/button";
 import {
@@ -112,7 +117,19 @@ export const ResourceList = ({
     : true;
 
   if (isLoading) {
-    return <ListState variant="loading">Loading...</ListState>;
+    // The same rows, then the same Add / Attach buttons the loaded list
+    // offers this caller, so neither pops in when the read lands.
+    return (
+      <LoadingRegion label={`Loading ${config.labels.plural}`}>
+        <ItemRowsSkeleton badge={Boolean(workspaceId)} />
+        <ButtonRowSkeleton
+          widths={[
+            ...(canManage ? ["w-32"] : []),
+            ...(canAttach && workspaceId ? ["w-48"] : []),
+          ]}
+        />
+      </LoadingRegion>
+    );
   }
 
   if (error) {

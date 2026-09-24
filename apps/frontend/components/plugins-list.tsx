@@ -41,23 +41,41 @@ const PluginsList = ({
   className?: string;
   orgId: string;
 }) => {
-  const { data, error, isLoading } = useScopedSWR<{
+  const { data, error } = useScopedSWR<{
     results: InstalledPlugin[];
   }>("plugins", { orgId });
 
-  if (isLoading) {
+  // No data and no error is still loading — gating on data rather than
+  // `isLoading` alone keeps "No plugins installed" from flashing first.
+  if (!data && !error) {
     return (
-      <ul className={cn(className)}>
+      <ul className={cn(className)} aria-label="Loading plugins">
         {[0, 1, 2].map((i) => (
           <li key={i} className="mb-2">
-            <Skeleton className="h-20 w-full rounded-md" />
+            <Item variant="outline" className="items-start">
+              <Skeleton className="size-8 shrink-0 rounded-sm" />
+              <ItemContent>
+                {/* Name, version badge, origin badge */}
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-[22px] w-12 rounded-full" />
+                  <Skeleton className="h-[22px] w-12 rounded-full" />
+                </div>
+                {/* One contribution row: its label, then an id badge */}
+                <div className="mt-1 flex items-center gap-1.5">
+                  <Skeleton className="mr-1 h-3 w-16" />
+                  <Skeleton className="h-[22px] w-20 rounded-full" />
+                </div>
+              </ItemContent>
+            </Item>
           </li>
         ))}
       </ul>
     );
   }
 
-  if (error) {
+  // Only a cold failure replaces the list; a failed revalidation keeps it.
+  if (error && !data) {
     return (
       <Empty className="border-2 border-dashed">
         <EmptyHeader>

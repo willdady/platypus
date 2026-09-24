@@ -32,10 +32,18 @@ import {
   BLUEPRINT_NAME_MAX_LENGTH,
   CONTEXT_MAX_LENGTH,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { retractFieldError } from "@/lib/form-errors";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import {
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+  SwitchCardSkeleton,
+  SwitchGridSkeleton,
+  TextareaSkeleton,
+} from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes } from "@/lib/routes";
 
 // The composer lists every Shared resource the org owns, grouped by type. A
@@ -81,13 +89,9 @@ const ResourceGroup = ({
   onToggle: (type: AttachmentResourceType, id: string, on: boolean) => void;
   disabled: boolean;
 }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
-  const { data } = useSWR<{ results: SharedResource[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/${collection}`)
-      : null,
-    fetcher,
+  const { data, isLoading } = useScopedSWR<{ results: SharedResource[] }>(
+    collection,
+    { orgId },
   );
   const resources = [...(data?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -101,7 +105,11 @@ const ResourceGroup = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {resources.length === 0 ? (
+        {/* Each group reads on its own, so each holds its own placeholder —
+            until its list lands, "none yet" would be a false claim. */}
+        {isLoading ? (
+          <SwitchGridSkeleton rows={2} />
+        ) : resources.length === 0 ? (
           <FieldDescription>
             No shared {label.toLowerCase()} in this organization yet.
           </FieldDescription>
@@ -140,6 +148,49 @@ const ResourceGroup = ({
   );
 };
 
+/** A section heading and its one-line lede, as the form's `h2` + `p`. */
+const SectionHeadingSkeleton = () => (
+  <>
+    <div className="mb-1 flex h-7 items-center">
+      <Skeleton className="h-5 w-40" />
+    </div>
+    <div className="mb-4 flex h-5 items-center">
+      <Skeleton className="h-3.5 w-3/4" />
+    </div>
+  </>
+);
+
+const BlueprintFormSkeleton = ({
+  className,
+  editing,
+}: {
+  className?: string;
+  editing: boolean;
+}) => (
+  <div className={className}>
+    <FormSkeletonSet>
+      <FormSkeletonGroup className="gap-4">
+        <FieldSkeleton counter />
+        <TextareaSkeleton counter />
+      </FormSkeletonGroup>
+    </FormSkeletonSet>
+    <SectionHeadingSkeleton />
+    {RESOURCE_GROUPS.map((group) => (
+      <SwitchCardSkeleton key={group.type} className="mb-4" rows={2} />
+    ))}
+    <SectionHeadingSkeleton />
+    <FormSkeletonSet>
+      <FormSkeletonGroup className="gap-4">
+        <TextareaSkeleton counter description={1} />
+        <FieldSkeleton description={1} />
+        <FieldSkeleton description={1} />
+        <FieldSkeleton description={1} />
+      </FormSkeletonGroup>
+    </FormSkeletonSet>
+    <FooterSkeleton buttons={editing ? 2 : 1} />
+  </div>
+);
+
 const RETRACTABLE_FIELDS = [
   "name",
   "description",
@@ -168,19 +219,13 @@ const BlueprintForm = ({
   orgId: string;
   blueprintId?: string;
 }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
-
   const returnPath = orgRoutes(orgId).settings.blueprints;
 
   // Org-scoped providers — the eligible set for Tier 2 pointer-settings, which
   // may only reference Shared resources (ADR-0008).
-  const { data: providersData } = useSWR<{ results: Provider[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/providers`)
-      : null,
-    fetcher,
-  );
+  const { data: providersData, isLoading: providersLoading } = useScopedSWR<{
+    results: Provider[];
+  }>("providers", { orgId });
   const providers = providersData?.results || [];
 
   // Selected items as a Set of `${type}:${id}` keys for cheap toggling.
@@ -492,7 +537,13 @@ const BlueprintForm = ({
   return (
     <DetailFormState
       {...loadState}
+      // The three provider selects resolve their stored ids against this
+      // list; without it they'd render blank over a saved Blueprint.
+      isLoading={providersLoading || loadState.isLoading}
       subject="blueprint"
+      skeleton={
+        <BlueprintFormSkeleton className={classNames} editing={!!blueprintId} />
+      }
       backHref={returnPath}
       backLabel="Back to blueprints"
     >

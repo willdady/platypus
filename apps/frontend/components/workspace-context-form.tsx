@@ -26,6 +26,14 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import useSWR from "swr";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+  TextareaSkeleton,
+} from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization, Workspace, Context } from "@platypus/schemas";
 import { CONTEXT_MAX_LENGTH } from "@platypus/schemas";
 import { userRoutes } from "@/lib/routes";
@@ -40,6 +48,33 @@ const INITIAL_DATA = {
   content: "",
   workspaceId: "",
 };
+
+/** An edit shows the fixed Organization and Workspace as plain text. */
+const ReadOnlyFieldSkeleton = () => (
+  <div className="flex w-full flex-col gap-3">
+    <Skeleton className="h-3.5 w-24" />
+    <Skeleton className="h-3.5 w-40" />
+  </div>
+);
+
+const WorkspaceContextFormSkeleton = ({ editing }: { editing: boolean }) => (
+  <div>
+    <FormSkeletonSet>
+      <FormSkeletonGroup className="gap-4">
+        {editing ? (
+          <>
+            <ReadOnlyFieldSkeleton />
+            <ReadOnlyFieldSkeleton />
+          </>
+        ) : (
+          <FieldSkeleton />
+        )}
+        <TextareaSkeleton counter />
+      </FormSkeletonGroup>
+    </FormSkeletonSet>
+    <FooterSkeleton buttons={editing ? 2 : 1} />
+  </div>
+);
 
 export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   const router = useRouter();
@@ -108,10 +143,9 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   );
 
   // Fetch all contexts to filter out workspaces that already have contexts
-  const { data: allContexts } = useSWR<{ results: Context[] }>(
-    user ? contextsUrl : null,
-    fetcher,
-  );
+  const { data: allContexts, error: allContextsError } = useSWR<{
+    results: Context[];
+  }>(user ? contextsUrl : null, fetcher);
 
   // Every workspace across every organization the user belongs to. The API has
   // no user-scoped workspace route, so the per-organization fan-out lives in
@@ -148,6 +182,14 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   // and a failure in either leaves it with nothing to offer, so both surface
   // the same notice and Retry.
   const workspacesLoadError = orgsError ?? workspacesError;
+  // Until both the workspaces and the contexts that filter them land, the
+  // picker would offer nothing (or too much) with no hint why. Keyed on data,
+  // not `isLoading`: the fan-out's key stays null until the organizations
+  // arrive, and SWR reports a null key as not loading.
+  const workspacesLoading =
+    !workspacesLoadError &&
+    (workspacesData === undefined ||
+      (allContexts === undefined && !allContextsError));
   const retryWorkspaces = () => {
     mutateOrgs();
     mutateWorkspaces();
@@ -187,6 +229,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
     <DetailFormState
       {...loadState}
       subject="workspace context"
+      skeleton={<WorkspaceContextFormSkeleton editing={!!contextId} />}
       backHref={userRoutes.contexts}
       backLabel="Back to contexts"
     >
@@ -229,13 +272,20 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
                   <Select
                     value={formData.workspaceId}
                     onValueChange={(value) => setField("workspaceId", value)}
+                    disabled={workspacesLoading}
                   >
                     <SelectTrigger
                       id="workspace"
                       className="cursor-pointer"
                       aria-invalid={!!validationErrors.workspaceId}
                     >
-                      <SelectValue placeholder="Select workspace" />
+                      <SelectValue
+                        placeholder={
+                          workspacesLoading
+                            ? "Loading workspaces…"
+                            : "Select workspace"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
                       {Object.entries(groupedWorkspaces).map(

@@ -16,7 +16,7 @@ import {
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
-import { ManageAttachmentsDialog } from "./manage-sharing";
+import { ManageAttachmentsDialog, SharedWithBadge } from "./manage-sharing";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -104,5 +104,51 @@ describe("ManageAttachmentsDialog detach", () => {
     expect(mutate).not.toHaveBeenCalled();
     // The chip stays — no optimistic removal on a refused detach.
     expect(screen.getByText("Engineering")).toBeInTheDocument();
+  });
+});
+
+describe("loading states", () => {
+  it("shows a placeholder, not a false empty, while the dialog's reads load", () => {
+    mockScopedSWR({
+      "/attachments?": { isLoading: true },
+      "/workspaces": { isLoading: true },
+    });
+    renderList(
+      <ManageAttachmentsDialog
+        orgId="org1"
+        resourceType="agent"
+        resourceId="a1"
+        resourceName="Support Bot"
+        open={true}
+        onOpenChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByLabelText("Loading attachments")).toBeInTheDocument();
+    expect(screen.getByLabelText("Loading workspaces")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Not shared with any workspace yet."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("No workspaces found.")).not.toBeInTheDocument();
+  });
+
+  it('shows the badge\'s placeholder, not "0 workspaces", while its read loads', () => {
+    mockScopedSWR({ "/attachments?": { isLoading: true } });
+    renderList(
+      <SharedWithBadge orgId="org1" resourceType="agent" resourceId="a1" />,
+    );
+
+    expect(
+      screen.getByLabelText("Loading shared workspaces"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/workspaces?$/)).not.toBeInTheDocument();
+  });
+
+  it("shows the badge's count once loaded", () => {
+    renderList(
+      <SharedWithBadge orgId="org1" resourceType="agent" resourceId="a1" />,
+    );
+
+    expect(screen.getByText("0 workspaces")).toBeInTheDocument();
   });
 });

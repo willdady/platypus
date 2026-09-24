@@ -241,6 +241,12 @@ describe("TriggerRunDetailPage", () => {
     expect(screen.queryByText("Response")).not.toBeInTheDocument();
   });
 
+  it("shows the placeholder, never a blank page, before the run has loaded", async () => {
+    await renderPage();
+
+    expect(screen.getByLabelText("Loading trigger run")).toBeInTheDocument();
+  });
+
   it("says so when the run cannot be read", async () => {
     state.error = new Error("404");
 

@@ -11,6 +11,12 @@ import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/field";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
+import {
+  FieldSkeleton,
+  FooterSkeleton,
+  TextareaSkeleton,
+} from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useBackendUrl } from "@/components/auth-provider";
 import { scopedUrl } from "@/lib/api-write";
 import { useEntityForm } from "@/hooks/use-entity-form";
@@ -133,6 +139,17 @@ export function KanbanBoardForm({
     <DetailFormState
       {...loadState}
       subject="board"
+      skeleton={
+        <div className="space-y-4">
+          <FieldSkeleton />
+          <TextareaSkeleton />
+          <div className="space-y-2">
+            <Skeleton className="h-3.5 w-16" />
+            <Skeleton className="mt-1 h-8 w-28" />
+          </div>
+          <FooterSkeleton buttons={isEditing && onDelete ? 2 : 1} />
+        </div>
+      }
       backHref={workspaceRoutes(orgId, workspaceId).root}
       backLabel="Back to workspace"
     >

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/empty";
 import type { Workspace } from "@platypus/schemas";
 import { use } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes } from "@/lib/routes";
 
 export default function OrgPage({
@@ -29,7 +30,7 @@ export default function OrgPage({
   const canCreate = canCreateWorkspace(actor);
   const routes = orgRoutes(orgId);
 
-  const { data: workspacesData } = useScopedSWR<{
+  const { data: workspacesData, error: workspacesError } = useScopedSWR<{
     results: Workspace[];
   }>("workspaces", { orgId });
 
@@ -38,14 +39,28 @@ export default function OrgPage({
   // canCreate is briefly false and the admin-only "Add workspace" button would
   // render late, shifting the toolbar. Gating on isAuthLoading keeps the button
   // row hidden until admin status is known so it appears fully formed.
-  const isReady = !!workspacesData && !isAuthLoading;
+  //
+  // A failed read settles it as well: the list then reports the failure, and
+  // the button row still offers the way to the org settings.
+  const isReady = (!!workspacesData || !!workspacesError) && !isAuthLoading;
   const workspaces = workspacesData?.results || [];
 
   return (
     <div className="space-y-6">
       {!isReady ? (
-        <WorkspaceList orgId={orgId} />
-      ) : workspaces.length > 0 ? (
+        <div className="space-y-4">
+          <WorkspaceList orgId={orgId} />
+          {/* The button row, reserved so it doesn't pop in below the list.
+            Until the membership resolves, whether "Add workspace" shows is
+            unknown, so both are drawn. */}
+          <div className="flex items-center gap-2">
+            {(isAuthLoading || canCreate) && (
+              <Skeleton className="h-9 w-36 rounded-md" />
+            )}
+            <Skeleton className="h-9 w-48 rounded-md" />
+          </div>
+        </div>
+      ) : workspaces.length > 0 || workspacesError ? (
         <div className="space-y-4">
           <WorkspaceList orgId={orgId} />
           <div className="flex items-center gap-2">

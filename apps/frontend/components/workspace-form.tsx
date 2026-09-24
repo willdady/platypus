@@ -31,15 +31,22 @@ import {
   WORKSPACE_MAX_DAILY_SUMMARIES_MAX,
   WORKSPACE_MAX_DAILY_SUMMARIES_MIN,
 } from "@platypus/schemas";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { retractFieldError } from "@/lib/form-errors";
 import {
   canListOrgMembers,
   canManageWorkspaceDelegation,
 } from "@/lib/authorization";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import {
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+  TextareaSkeleton,
+} from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 interface WorkspaceFormProps {
@@ -72,6 +79,52 @@ type WorkspaceFormData = {
   mcpSelfManagement: boolean;
 };
 
+/** A delegation flag: label and description, its Switch on the right. */
+const DelegationRowSkeleton = () => (
+  <div className="flex w-full items-center justify-between gap-3">
+    <div className="flex flex-1 flex-col gap-1.5">
+      <Skeleton className="h-3.5 w-44" />
+      <Skeleton className="h-3.5 w-3/4" />
+    </div>
+    <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
+  </div>
+);
+
+const WorkspaceFormSkeleton = ({
+  className,
+  editing,
+  delegation,
+}: {
+  className?: string;
+  editing: boolean;
+  delegation: boolean;
+}) => (
+  <div className={className}>
+    <FormSkeletonSet>
+      <FormSkeletonGroup>
+        <FieldSkeleton />
+        {!editing && <FieldSkeleton description={1} />}
+        <TextareaSkeleton counter description={1} />
+        {editing && (
+          <>
+            <FieldSkeleton description={2} />
+            <FieldSkeleton description={2} />
+            <FieldSkeleton description={2} />
+            <FieldSkeleton description={1} />
+            {delegation && (
+              <>
+                <DelegationRowSkeleton />
+                <DelegationRowSkeleton />
+              </>
+            )}
+          </>
+        )}
+      </FormSkeletonGroup>
+    </FormSkeletonSet>
+    <FooterSkeleton buttons={editing ? 2 : 1} />
+  </div>
+);
+
 const WorkspaceForm = ({
   classNames,
   orgId,
@@ -80,31 +133,19 @@ const WorkspaceForm = ({
   const { user, actor } = useAuth();
   const canListMembers = canListOrgMembers(actor);
   const canManageDelegation = canManageWorkspaceDelegation(actor);
-  const backendUrl = useBackendUrl();
   const router = useRouter();
 
   // Fetch providers
-  const { data: providersData } = useSWR<{ results: Provider[] }>(
-    workspaceId && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
-        )
-      : null,
-    fetcher,
-  );
+  const { data: providersData, isLoading: providersLoading } = useScopedSWR<{
+    results: Provider[];
+  }>("providers", workspaceId ? { orgId, workspaceId } : null);
   const providers = providersData?.results || [];
 
   // Org members, used to assign an owner when creating a workspace (ADR-0008).
   // Only admins can create workspaces and the members endpoint is admin-only.
-  const { data: membersData } = useSWR<{
+  const { data: membersData, isLoading: membersLoading } = useScopedSWR<{
     results: { userId: string; user: { name: string; email: string } }[];
-  }>(
-    !workspaceId && user && canListMembers
-      ? joinUrl(backendUrl, `/organizations/${orgId}/members`)
-      : null,
-    fetcher,
-  );
+  }>("members", !workspaceId && canListMembers ? { orgId } : null);
   const members = membersData?.results || [];
 
   // Owner options for the create form. A super-admin acting on an org they're
@@ -229,7 +270,18 @@ const WorkspaceForm = ({
   return (
     <DetailFormState
       {...loadState}
+      // The provider selects (edit) and the Owner select (create) resolve
+      // their values against these lists, so they'd render blank or partial
+      // without them.
+      isLoading={providersLoading || membersLoading || loadState.isLoading}
       subject="workspace"
+      skeleton={
+        <WorkspaceFormSkeleton
+          className={classNames}
+          editing={!!workspaceId}
+          delegation={canManageDelegation}
+        />
+      }
       backHref={
         workspaceId
           ? workspaceRoutes(orgId, workspaceId).root

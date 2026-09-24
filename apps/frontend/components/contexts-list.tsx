@@ -8,6 +8,8 @@ import Link from "next/link";
 import { Button } from "./ui/button";
 import type { Context } from "@platypus/schemas";
 import { userRoutes } from "@/lib/routes";
+import { Skeleton } from "./ui/skeleton";
+import { ListError } from "./list-state";
 
 interface ContextWithNames extends Context {
   workspaceName?: string | null;
@@ -19,7 +21,34 @@ const ContextsList = ({ className }: { className?: string }) => {
     results: ContextWithNames[];
   }>("users/me/contexts", {});
 
-  if (isLoading || error) return null;
+  if (isLoading) {
+    // Mirrors the loaded rows (organization label over workspace title) and
+    // the Add button below them.
+    return (
+      <div aria-label="Loading workspace contexts">
+        <ul className={cn("mb-4", className)}>
+          {[0, 1].map((i) => (
+            <li key={i} className="mb-2">
+              <Item variant="outline">
+                <ItemContent>
+                  <div>
+                    <Skeleton className="h-3 w-24 mb-1.5" />
+                    <Skeleton className="h-4 w-40 my-0.5" />
+                  </div>
+                </ItemContent>
+                <ItemActions>
+                  <Skeleton className="size-4" />
+                </ItemActions>
+              </Item>
+            </li>
+          ))}
+        </ul>
+        <Skeleton className="h-9 w-52" />
+      </div>
+    );
+  }
+
+  if (error) return <ListError error={error} subject="workspace contexts" />;
 
   const contexts = data?.results ?? [];
   const workspaceContexts = contexts.filter((c) => c.workspaceId);

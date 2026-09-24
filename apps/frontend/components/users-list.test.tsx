@@ -125,6 +125,13 @@ describe("UsersList list states", () => {
     mockScopedSWR({ "list-users": { isLoading: true } });
     renderList(<UsersList />);
 
-    expect(screen.getByText("Loading users...")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading users" }),
+    ).toHaveAttribute("aria-busy", "true");
+    // The table's real headings hold the frame while its rows load.
+    expect(
+      screen.getByRole("columnheader", { name: "Created" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No users found.")).not.toBeInTheDocument();
   });
 });

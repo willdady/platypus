@@ -43,6 +43,10 @@ vi.mock("sonner", () => ({
 }));
 
 let boardState: KanbanBoardState;
+// The board read's outcome beyond its data: whether it has resolved at all,
+// and the error a failed (initial or background) read left behind.
+let boardLoaded = true;
+let boardError: unknown;
 const mutateBoard = vi.fn();
 
 vi.mock("swr", () => ({
@@ -50,7 +54,11 @@ vi.mock("swr", () => ({
   default: (key: unknown) => {
     if (!key) return { data: undefined, error: undefined, mutate: vi.fn() };
     if (typeof key === "string" && key.endsWith("/state")) {
-      return { data: boardState, error: undefined, mutate: mutateBoard };
+      return {
+        data: boardLoaded ? boardState : undefined,
+        error: boardError,
+        mutate: mutateBoard,
+      };
     }
     return { data: { results: [] }, error: undefined, mutate: vi.fn() };
   },
@@ -775,5 +783,45 @@ describe("KanbanBoard transport", () => {
         ).toBeInTheDocument();
       });
     });
+  });
+});
+
+describe("KanbanBoard load states", () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }) as unknown as typeof window.matchMedia;
+    boardState = makeBoardState([makeColumn()]);
+  });
+
+  afterEach(() => {
+    boardLoaded = true;
+    boardError = undefined;
+    vi.restoreAllMocks();
+  });
+
+  it("shows the placeholder until the board has loaded", () => {
+    boardLoaded = false;
+    renderBoard();
+
+    expect(screen.getByLabelText("Loading board")).toBeInTheDocument();
+  });
+
+  it("reports a board that failed to load", () => {
+    boardLoaded = false;
+    boardError = new Error("boom");
+    renderBoard();
+
+    expect(screen.getByText("Failed to load board.")).toBeInTheDocument();
+  });
+
+  it("keeps a loaded board on screen when a background poll fails", () => {
+    boardError = new Error("boom");
+    renderBoard();
+
+    expect(screen.getByText("Test Board")).toBeInTheDocument();
+    expect(screen.queryByText("Failed to load board.")).toBeNull();
   });
 });

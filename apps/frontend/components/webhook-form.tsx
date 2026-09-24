@@ -16,6 +16,13 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  FieldSkeleton,
+  FooterSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+} from "@/components/form-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCallback, useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
@@ -83,6 +90,45 @@ const INITIAL_DATA = {
   events: [...ALL_EVENTS] as string[],
   headers: [] as { key: string; value: string }[],
 };
+
+/** A switch beside a single-line label, as the Enabled and event rows are. */
+const InlineSwitchSkeleton = () => (
+  <div className="flex items-center gap-3">
+    <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
+    <Skeleton className="h-3.5 w-32" />
+  </div>
+);
+
+const WebhookFormSkeleton = ({ editing }: { editing: boolean }) => (
+  <div>
+    <FormSkeletonSet>
+      <FormSkeletonGroup>
+        <FieldSkeleton />
+        <FieldSkeleton description={1} />
+        <div className="flex flex-col gap-3">
+          <InlineSwitchSkeleton />
+          <Skeleton className="h-3.5 w-1/2" />
+        </div>
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-3.5 w-16" />
+          <Skeleton className="mb-3 h-3.5 w-1/2" />
+          <div className="grid grid-cols-2 gap-3">
+            {ALL_EVENTS.map((event) => (
+              <InlineSwitchSkeleton key={event} />
+            ))}
+          </div>
+        </div>
+        {editing && <FieldSkeleton description={1} />}
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="mb-3 h-3.5 w-1/2" />
+          <Skeleton className="h-9 w-32" />
+        </div>
+      </FormSkeletonGroup>
+    </FormSkeletonSet>
+    <FooterSkeleton buttons={editing ? 2 : 1} />
+  </div>
+);
 
 const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   const backendUrl = useBackendUrl();
@@ -481,6 +527,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     <DetailFormState
       {...loadState}
       subject="webhook"
+      skeleton={<WebhookFormSkeleton editing={isEditMode} />}
       backHref={workspaceRoutes(orgId, workspaceId).settings.webhooks}
       backLabel="Back to webhooks"
     >

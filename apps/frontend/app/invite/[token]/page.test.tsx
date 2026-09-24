@@ -70,6 +70,17 @@ describe("InviteTokenPage", () => {
     expect(window.location.pathname).toBe("/invite");
   });
 
+  it("holds a skeleton, not the not-found message, while the link resolves", () => {
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
+
+    render(<InviteTokenPage />);
+
+    expect(
+      screen.getByRole("status", { name: "Loading invitation" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText("Invitation not found")).not.toBeInTheDocument();
+  });
+
   it("shows a not-found message for an invalid or already-redeemed token", async () => {
     vi.stubGlobal(
       "fetch",

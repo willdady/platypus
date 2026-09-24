@@ -61,6 +61,7 @@ import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { toast } from "sonner";
 import { ChatComposer } from "./chat-composer";
+import { ChatSkeleton } from "./chat-skeleton";
 import type { ModelSelection } from "./composer";
 import { skillsForAgent } from "@/lib/slash-commands";
 
@@ -392,6 +393,15 @@ export const Chat = ({
     );
   }, [chatData, setMessages]);
 
+  // The Chat whose messages have reached the screen at least once, adjusted
+  // during render so it is already set on the frame they first appear. Only
+  // that first arrival counts: deleting every message later must not bring the
+  // loading skeleton back over an empty Chat.
+  const [hydratedChatId, setHydratedChatId] = useState<string | null>(null);
+  if (messages.length > 0 && hydratedChatId !== chatId) {
+    setHydratedChatId(chatId);
+  }
+
   const handleCopyMessage = useCallback(
     async (content: string, messageId: string) => {
       try {
@@ -460,8 +470,23 @@ export const Chat = ({
     }),
   );
 
-  // TODO: Ideally show a loading indicator here
-  if (isLoading || !providersData) return null;
+  // Whether this Chat's transcript is still on its way: the row read is in
+  // flight (a new Chat's is seeded `null`, so never counts), or the row has
+  // landed with messages the hydrate effect has not applied yet. Rendering the
+  // empty-chat layout over either gap is what showed the composer centred and
+  // then dropped it to the bottom once the messages arrived.
+  const isTranscriptPending =
+    (isChatLoading && chatData === undefined) ||
+    (hydratedChatId !== chatId && snapshotMessages(chatData) !== undefined);
+
+  if (isLoading || !providersData) {
+    return (
+      <ChatSkeleton
+        transcript={isTranscriptPending}
+        readOnly={!canSendMessages}
+      />
+    );
+  }
 
   // Show alert if no providers are configured
   if (providers.length === 0) {
@@ -472,6 +497,10 @@ export const Chat = ({
         </div>
       </div>
     );
+  }
+
+  if (isTranscriptPending) {
+    return <ChatSkeleton transcript readOnly={!canSendMessages} />;
   }
 
   // A dropped connection to a run that is still going: an inline line, and the

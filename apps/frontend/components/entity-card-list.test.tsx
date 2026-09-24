@@ -134,6 +134,8 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
     mockScopedSWR({ [`/${entity}`]: { isLoading: true } });
     renderList(<List orgId="org1" workspaceId="ws1" />);
 
-    expect(screen.getByText("Loading...")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: `Loading ${entity}` }),
+    ).toHaveAttribute("aria-busy", "true");
   });
 });

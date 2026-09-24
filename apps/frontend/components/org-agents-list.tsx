@@ -13,6 +13,12 @@ import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import {
+  CardGridSkeleton,
+  IconButtonSkeleton,
+  LoadingRegion,
+  SkeletonLine,
+} from "@/components/list-skeletons";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -69,7 +75,22 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   });
 
   if (isLoading) {
-    return <ListState variant="loading">Loading...</ListState>;
+    return (
+      <LoadingRegion label="Loading shared agents">
+        <CardGridSkeleton
+          media
+          descriptionLines={2}
+          extra={
+            canManage && (
+              // The "Shared with N workspaces" badge.
+              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-32" />
+            )
+          }
+          // The row menu is an Org Admin's alone, as on the loaded card.
+          actions={canManage ? <IconButtonSkeleton /> : null}
+        />
+      </LoadingRegion>
+    );
   }
 
   if (error) {

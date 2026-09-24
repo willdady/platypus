@@ -767,12 +767,17 @@ export function KanbanBoard({
       ? columns.find((c) => c.id === activeId)
       : null;
 
-  if (error) {
+  // Only a cold failure replaces the board: a failed background poll keeps the
+  // last good state on screen rather than swapping a loaded board for an error.
+  if (error && !data) {
     return <div className="p-4 text-destructive">Failed to load board.</div>;
   }
   if (!data) {
     return (
-      <div className="flex flex-col h-full min-w-0 overflow-hidden">
+      <div
+        className="flex flex-col h-full min-w-0 overflow-hidden"
+        aria-label="Loading board"
+      >
         <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
           <Skeleton className="h-7 w-40" />
           <Skeleton className="size-9 rounded-md" />
@@ -784,8 +789,10 @@ export function KanbanBoard({
                 key={colIndex}
                 className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg"
               >
-                <div className="p-3">
-                  <Skeleton className="h-5 w-32" />
+                {/* Column header: name + count badge, menu button */}
+                <div className="flex items-center justify-between p-3">
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="size-6 rounded" />
                 </div>
                 <div className="flex-1 overflow-y-hidden p-2 space-y-2 min-h-[100px]">
                   {Array.from({
@@ -800,12 +807,20 @@ export function KanbanBoard({
                   }).map((_, cardIndex) => (
                     <Skeleton
                       key={cardIndex}
-                      className="h-20 w-full rounded-lg"
+                      className="h-[46px] w-full rounded-lg"
                     />
                   ))}
                 </div>
+                {/* "Add card" footer */}
+                <div className="p-2">
+                  <div className="flex h-9 items-center px-4">
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                </div>
               </div>
             ))}
+            {/* "Add column" tile */}
+            <div className="w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30" />
           </div>
         </div>
       </div>
