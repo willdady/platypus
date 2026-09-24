@@ -5,6 +5,7 @@ import {
   authMock,
   toastMock,
   swrMock,
+  authState,
   resetFormHarness,
   setDataFor,
   setError,
@@ -76,5 +77,21 @@ describe("WorkspaceForm secondary reads", () => {
 
     expect(screen.getByLabelText("Loading workspace")).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  });
+});
+
+describe("WorkspaceForm create", () => {
+  beforeEach(() => resetFormHarness());
+
+  // The members read is gated on the actor, which is still resolving on a hard
+  // refresh: without this the editable form showed, then the skeleton once the
+  // admin check passed and the read began, then the form again.
+  it("shows the skeleton while the membership resolves", () => {
+    Object.assign(authState, { actor: "anonymous", isAuthLoading: true });
+    render(<WorkspaceForm orgId="org1" />);
+
+    expect(screen.getByLabelText("Loading workspace")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    Object.assign(authState, { isAuthLoading: false });
   });
 });

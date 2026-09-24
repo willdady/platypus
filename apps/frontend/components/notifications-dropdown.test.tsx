@@ -22,6 +22,7 @@ const { swrCalls } = vi.hoisted(() => ({
 }));
 
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   __esModule: true,
   default: (key: string | null, _fn: unknown, config?: SwrCall["config"]) => {
     swrCalls.push({ key, config });

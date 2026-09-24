@@ -185,10 +185,12 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   // Until both the workspaces and the contexts that filter them land, the
   // picker would offer nothing (or too much) with no hint why. Keyed on data,
   // not `isLoading`: the fan-out's key stays null until the organizations
-  // arrive, and SWR reports a null key as not loading.
+  // arrive, and SWR reports a null key as not loading. No organizations means
+  // no fan-out at all (SWR never fetches an empty-array key), so nothing to wait on.
   const workspacesLoading =
     !workspacesLoadError &&
-    (workspacesData === undefined ||
+    (orgs === undefined ||
+      (orgs.results.length > 0 && workspacesData === undefined) ||
       (allContexts === undefined && !allContextsError));
   const retryWorkspaces = () => {
     mutateOrgs();

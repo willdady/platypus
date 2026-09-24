@@ -12,6 +12,7 @@ vi.mock("@/components/auth-provider", () => ({
 let orgRows: { id: string; name: string }[] = [];
 
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   __esModule: true,
   default: () => ({ data: { results: orgRows }, isLoading: false }),
 }));

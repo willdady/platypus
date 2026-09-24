@@ -50,6 +50,7 @@ let boardError: unknown;
 const mutateBoard = vi.fn();
 
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   __esModule: true,
   default: (key: unknown) => {
     if (!key) return { data: undefined, error: undefined, mutate: vi.fn() };

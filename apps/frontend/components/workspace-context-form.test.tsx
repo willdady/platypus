@@ -27,6 +27,8 @@ const state = vi.hoisted(() => ({
   workspacesError: undefined as Error | undefined,
   // The per-organization workspace fan-out still in flight.
   workspacesPending: false,
+  // The signed-in user belongs to no organization.
+  noOrgs: false,
 }));
 
 vi.mock("next/navigation", () => navigationMock);
@@ -45,6 +47,15 @@ vi.mock("swr", () => ({
   __esModule: true,
   default: (key: unknown) => {
     if (Array.isArray(key)) {
+      // SWR never fetches an empty-array key, so it stays without data.
+      if (key.length === 0) {
+        return {
+          data: undefined,
+          error: undefined,
+          isLoading: false,
+          mutate: vi.fn(),
+        };
+      }
       return {
         data:
           state.workspacesError || state.workspacesPending
@@ -75,7 +86,7 @@ vi.mock("swr", () => ({
       return {
         data: state.orgsError
           ? undefined
-          : { results: [{ id: "o1", name: "Org One" }] },
+          : { results: state.noOrgs ? [] : [{ id: "o1", name: "Org One" }] },
         error: state.orgsError,
         isLoading: false,
         mutate: vi.fn(),
@@ -233,6 +244,7 @@ describe("WorkspaceContextForm workspace read", () => {
     state.orgsError = undefined;
     state.workspacesError = undefined;
     state.workspacesPending = false;
+    state.noOrgs = false;
   });
 
   afterEach(() => {
@@ -247,6 +259,14 @@ describe("WorkspaceContextForm workspace read", () => {
 
     expect(screen.getByRole("combobox")).toBeDisabled();
     expect(screen.getByText("Loading workspaces…")).toBeInTheDocument();
+  });
+
+  it("does not hold the picker loading for a user in no organization", () => {
+    state.noOrgs = true;
+
+    render(<WorkspaceContextForm />);
+
+    expect(screen.queryByText("Loading workspaces…")).not.toBeInTheDocument();
   });
 
   it("surfaces a failed workspaces read in the UI, not the console", () => {

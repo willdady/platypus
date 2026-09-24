@@ -1,4 +1,8 @@
-import useSWR, { type SWRConfiguration, type SWRResponse } from "swr";
+import useSWR, {
+  useSWRConfig,
+  type SWRConfiguration,
+  type SWRResponse,
+} from "swr";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher } from "@/lib/utils";
 import { scopedUrl, type Scope } from "@/lib/api-write";
@@ -21,6 +25,9 @@ import { scopedUrl, type Scope } from "@/lib/api-write";
  * "loaded, empty" (a blank editable form, a false empty state). A read the
  * caller wants (non-null `scope`) is therefore reported as loading until the
  * session settles. A signed-out user, or a caller-withheld `scope`, is not.
+ * A value already cached under the key the read will get — a new Chat's row,
+ * seeded `null` before it exists — is an answer, not a pending read, so it is
+ * returned as loaded.
  */
 export function useScopedSWR<T>(
   entity: string,
@@ -29,12 +36,16 @@ export function useScopedSWR<T>(
 ): SWRResponse<T> {
   const { user, isPending } = useAuth();
   const backendUrl = useBackendUrl();
-  const key =
-    backendUrl && user && scope ? scopedUrl(backendUrl, entity, scope) : null;
+  const { cache } = useSWRConfig();
+  const pendingKey =
+    backendUrl && scope ? scopedUrl(backendUrl, entity, scope) : null;
+  const key = user ? pendingKey : null;
   const response = useSWR<T>(key, config?.fetcher ?? fetcher, config);
+  if (!(pendingKey && !user && isPending)) return response;
   // Spreading reads every SWR getter, subscribing this caller to all of its
   // state — fine only here, where no key means nothing is loading anyway.
-  return scope && !user && isPending
+  const cached = cache.get(pendingKey)?.data as T | undefined;
+  return cached === undefined
     ? { ...response, isLoading: true }
-    : response;
+    : { ...response, data: cached, isLoading: false };
 }

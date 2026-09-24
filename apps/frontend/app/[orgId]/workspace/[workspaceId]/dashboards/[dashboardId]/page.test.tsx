@@ -47,6 +47,7 @@ let dashboardData: Dashboard | undefined;
 let widgetsData: { results: Widget[] } | undefined;
 
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   __esModule: true,
   default: (key: string | null) => {
     if (!key) return { data: undefined, mutate: vi.fn() };

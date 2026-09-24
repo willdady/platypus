@@ -32,6 +32,7 @@ let comments: KanbanCardComment[] = [];
 const mutateCommentsSpy = vi.fn();
 
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   __esModule: true,
   default: (key: string | null) => {
     if (typeof key === "string" && key.includes("/comments")) {

@@ -130,7 +130,7 @@ const WorkspaceForm = ({
   orgId,
   workspaceId,
 }: WorkspaceFormProps) => {
-  const { user, actor } = useAuth();
+  const { user, actor, isAuthLoading } = useAuth();
   const canListMembers = canListOrgMembers(actor);
   const canManageDelegation = canManageWorkspaceDelegation(actor);
   const router = useRouter();
@@ -273,7 +273,14 @@ const WorkspaceForm = ({
       // The provider selects (edit) and the Owner select (create) resolve
       // their values against these lists, so they'd render blank or partial
       // without them.
-      isLoading={providersLoading || membersLoading || loadState.isLoading}
+      isLoading={
+        providersLoading ||
+        membersLoading ||
+        // Whether the members read runs hangs on the membership, which is
+        // still resolving on a hard refresh.
+        (!workspaceId && isAuthLoading) ||
+        loadState.isLoading
+      }
       subject="workspace"
       skeleton={
         <WorkspaceFormSkeleton

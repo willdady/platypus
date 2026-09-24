@@ -89,6 +89,7 @@ let dashboardError: unknown;
 let widgetsError: unknown;
 
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   __esModule: true,
   default: (
     key: string | null,

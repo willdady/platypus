@@ -54,6 +54,7 @@ const TRIGGERS = [
 
 // The triggers behind the filter dropdown, fetched separately from the runs.
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   default: () => ({ data: { results: state.triggers }, isLoading: false }),
 }));
 

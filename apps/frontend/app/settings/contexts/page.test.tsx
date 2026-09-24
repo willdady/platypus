@@ -34,6 +34,7 @@ const swrState = vi.hoisted(() => ({
 const mutate = vi.fn();
 
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   __esModule: true,
   default: () => ({ ...swrState.response, mutate }),
 }));

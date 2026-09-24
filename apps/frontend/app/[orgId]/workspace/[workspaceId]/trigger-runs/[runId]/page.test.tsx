@@ -23,6 +23,7 @@ const state = {
 };
 
 vi.mock("swr", () => ({
+  useSWRConfig: () => ({ cache: new Map() }),
   default: (
     key: string | null,
     fetcher: (url: string) => Promise<unknown>,

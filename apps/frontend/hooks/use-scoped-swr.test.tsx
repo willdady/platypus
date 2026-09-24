@@ -11,8 +11,10 @@ vi.mock("@/components/auth-provider", () => ({
 
 let capturedKey: unknown;
 let capturedFetcher: unknown;
+const cache = new Map<string, { data: unknown }>();
 vi.mock("swr", () => ({
   __esModule: true,
+  useSWRConfig: () => ({ cache }),
   default: (key: unknown, fn: unknown) => {
     capturedKey = key;
     capturedFetcher = fn;
@@ -27,6 +29,7 @@ describe("useScopedSWR", () => {
   afterEach(() => {
     authState.user = { id: "u1" };
     authState.isPending = false;
+    cache.clear();
   });
 
   it("resolves the workspace-scoped URL as the SWR key", () => {
@@ -66,6 +69,20 @@ describe("useScopedSWR", () => {
     );
     expect(capturedKey).toBeNull();
     expect(result.current.isLoading).toBe(true);
+  });
+
+  // A new Chat's row is seeded `null`: reporting it as loading showed the
+  // existing-Chat transcript skeleton on a hard refresh of a new Chat.
+  it("returns a value already cached under the pending key as loaded", () => {
+    authState.user = null;
+    authState.isPending = true;
+    cache.set("http://test/organizations/org1/chat/c1", { data: null });
+    const { result } = renderHook(() =>
+      useScopedSWR("chat/c1", { orgId: "org1" }),
+    );
+    expect(capturedKey).toBeNull();
+    expect(result.current.data).toBeNull();
+    expect(result.current.isLoading).toBe(false);
   });
 
   it("does not report loading for a caller-withheld scope, even mid-session", () => {
