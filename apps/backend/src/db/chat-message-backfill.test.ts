@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 
@@ -17,9 +17,19 @@ const apply = async (db: PGlite, name: string) => {
   }
 };
 
+// One Postgres for the file: booting PGlite compiles its WASM, which on a
+// loaded CI runner alone outlasts a test's default timeout.
+let db: PGlite;
+beforeAll(async () => {
+  db = await PGlite.create();
+}, 60_000);
+afterAll(() => db.close());
+
+/** A fresh schema holding `chat` as it stood before 0071, plus these rows. */
 const setup = async (chats: { id: string; messages: unknown }[]) => {
-  const db = new PGlite();
   await db.exec(`
+    DROP SCHEMA public CASCADE;
+    CREATE SCHEMA public;
     CREATE TABLE "chat" (
       "id" text PRIMARY KEY,
       "messages" jsonb,
