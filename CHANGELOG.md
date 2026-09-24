@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.9.3](https://github.com/willdady/platypus/compare/v3.9.2...v3.9.3) (2026-09-24)
+
+
+### Bug Fixes
+
+* **backend:** apply the egress guard to webhook URLs ([7998da7](https://github.com/willdady/platypus/commit/7998da755f43864af15d7a5bf5b8d80df516743f))
+* **frontend:** make loading skeletons match the loaded UI ([#1001](https://github.com/willdady/platypus/issues/1001)) ([9088525](https://github.com/willdady/platypus/commit/90885257d2f4833d69f7c32d53c7afb19e7ec8e2))
+* **frontend:** show the backend's reason in list load errors ([#1003](https://github.com/willdady/platypus/issues/1003)) ([138ac10](https://github.com/willdady/platypus/commit/138ac10c25774855c7c7067776dac8b610aae9ff))
+
 ## [3.9.2](https://github.com/willdady/platypus/compare/v3.9.1...v3.9.2) (2026-09-23)
 
 
