@@ -99,7 +99,7 @@ export type TurnTarget =
   | { trigger: "regenerate-message"; messageId: string };
 
 export type ResolvedTurn = {
-  /** The history the turn continues: the server's rows, never the client's. */
+  /** What the turn continues, from the server's rows, never the client's. */
   messages: PlatypusUIMessage[];
   /** The user message this turn adds, absent on a regenerate. */
   message?: PlatypusUIMessage;
@@ -112,9 +112,9 @@ export type ResolvedTurn = {
  * anything is written.
  *
  * - **Submit** adds the message under `parentId`, which may be deleted: a tab
- *   still showing a message another tab deleted adds its message as a sibling
- *   on the path it held. Only the path up to that parent is history, so a
- *   stale tab can never write over a newer path.
+ *   still showing a message another tab deleted adds its message as an
+ *   Alternative on the path it held. Only the path up to that parent is sent
+ *   to the model, so a stale tab can never write over a newer path.
  * - **Regenerate** runs again from the reply's parent, which must be a user
  *   message still in the Chat. The old reply stays, as an Alternative.
  *
@@ -134,10 +134,7 @@ export const resolveTurn = async ({
     const target = owned
       ? await findMessage(chatId, request.messageId)
       : undefined;
-    if (!target) {
-      throw new NotFoundError(`Message '${request.messageId}' not found`);
-    }
-    if (target.role !== "assistant" || target.deletedAt) {
+    if (target?.role !== "assistant" || target.deletedAt) {
       throw new ConflictError("Only a reply still in the Chat can regenerate");
     }
     const parent = target.parentId

@@ -102,16 +102,26 @@ export const useChatTurn = <T extends UIMessage>({
 
   /**
    * Drops the message at `truncateAt` and everything after it from the screen,
-   * then sends the edit as a new message under the edited one's parent. The
+   * then sends the edit as a new message under `parentId`, the edited one's
+   * parent — or under the message above it where that is not known yet. The
    * stored rows stay (ADR-0026). Never `sendMessage({ messageId })`: it
    * replaces the message in place under the same id, which is a row the server
    * already holds.
    */
   const resendEdited = useCallback(
-    (truncateAt: number, message: PromptInputMessage) =>
+    (
+      truncateAt: number,
+      message: PromptInputMessage,
+      parentId?: string | null,
+    ) =>
       start((options) => {
         setMessages((held) => held.slice(0, truncateAt));
-        sendMessage(outgoing(message), options);
+        sendMessage(
+          outgoing(message),
+          parentId === undefined
+            ? options
+            : { body: { ...options.body, parentId } },
+        );
       }),
     [sendMessage, setMessages, start],
   );

@@ -246,19 +246,8 @@ describe("chat messages", () => {
       expect(turn.message).toBeUndefined();
     });
 
-    it("404s a message that is not in the Chat", async () => {
-      seedDb({ chat_message: tree() });
-
-      await expect(
-        resolveTurn({
-          chatId: "chat-1",
-          owned: true,
-          request: regenerate("nope"),
-        }),
-      ).rejects.toBeInstanceOf(NotFoundError);
-    });
-
     it.each([
+      ["a message that is not in the Chat", (rows: Row[]) => rows, "nope"],
       ["a user message", (rows: Row[]) => rows, "u2"],
       [
         "a deleted reply",

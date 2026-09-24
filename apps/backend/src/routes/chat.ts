@@ -326,9 +326,9 @@ chat.delete(
 
     await requireOwned(db, "chat", { id: chatId, workspaceId });
 
-    // A run's reply hangs from the path it started on, and it writes the leaf
+    // A turn's reply hangs from the path it started on, and it writes the leaf
     // as it goes — a delete landing mid-run would race it (ADR-0026). A Chat
-    // run's id is its Chat's id.
+    // turn runs under its Chat's id.
     if (runRegistry.has(chatId)) {
       throw new ConflictError("A reply is still being written in this Chat");
     }

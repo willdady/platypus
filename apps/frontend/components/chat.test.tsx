@@ -657,6 +657,20 @@ describe("the server-owned Transcript", () => {
     });
   });
 
+  it("sends a new message under the parent an edit names", () => {
+    const { body } = prepare({
+      messages: [message("u1", "q"), message("u2-edit", "q2")],
+      body: { providerId: "p1", parentId: "a1" },
+    });
+
+    expect(body).toEqual({
+      providerId: "p1",
+      id: CHAT_ID,
+      message: message("u2-edit", "q2"),
+      parentId: "a1",
+    });
+  });
+
   it("sends a Chat's first message as following nothing", () => {
     const { body } = prepare({ messages: [message("u1", "q")] });
 
@@ -1025,6 +1039,27 @@ describe("editing a message", () => {
     expect(update(harness.turn.messages)).toEqual(
       harness.turn.messages.slice(0, 2),
     );
+  });
+
+  // u2 answers a1, which was deleted: on screen u1 is above u2, but the edit
+  // belongs beside u2, under a1.
+  it("sends the edit under the edited message's own parent", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, {
+      status: "succeeded",
+      messages: [],
+      tree: [
+        { id: "u1", parentId: null },
+        { id: "u2", parentId: "a1" },
+      ],
+    });
+    harness.turn.messages = [withAttachment(), message("u2", "And this?")];
+
+    openEditOn("u2");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(harness.sendMessage).toHaveBeenCalledWith(expect.anything(), {
+      body: expect.objectContaining({ parentId: "a1" }),
+    });
   });
 
   it("closes the surface once the edit is sent", () => {

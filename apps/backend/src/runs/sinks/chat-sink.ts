@@ -30,11 +30,11 @@ export type ChatSinkParams = {
 
 /**
  * Persists a Chat turn at run lifecycle boundaries, writing only the rows the
- * turn itself produced (ADR-0026) — never a row from history.
+ * turn itself produced (ADR-0026) — never a row it continues from.
  *
  * - `onStart`: flip the Chat row to `status: "running"` (creating it for a new
- *   Chat) and insert the submitted user message, so a disconnected client can
- *   read the in-progress state.
+ *   Chat), insert the submitted user message and point the leaf at the message
+ *   being answered, so a disconnected client can read the in-progress state.
  * - `onProgress`: drive a FlushScheduler that periodically upserts the reply
  *   while keeping `status: "running"`.
  * - `onFinish`: write the terminal status (`succeeded`, `failed`,
@@ -64,14 +64,14 @@ export class ChatSink implements RunSink {
     this.latestMessages = ctx.messages;
     const { workspaceId, parentId } = this.params;
     const [message] = this.params.message
-      ? await this.extract([this.params.message])
+      ? await this.storeFiles([this.params.message])
       : [];
 
     // Not caught: a turn whose message cannot be stored must not run. The
     // runner fails the run and the request with it. The pinned Memories block
     // (ADR-0020) is written so a re-take on this turn survives for the next.
     await db.transaction(async (tx) => {
-      const values = {
+      const running = {
         status: "running",
         memorySnapshot: ctx.memorySnapshot ?? null,
         lastTurnAt: new Date(),
@@ -79,7 +79,7 @@ export class ChatSink implements RunSink {
       };
       const updated = await tx
         .update(chatTable)
-        .set(values)
+        .set(running)
         .where(
           and(
             eq(chatTable.id, ctx.runId),
@@ -96,7 +96,7 @@ export class ChatSink implements RunSink {
           workspaceId,
           title: "Untitled",
           createdAt: new Date(),
-          ...values,
+          ...running,
         });
       }
 
@@ -108,11 +108,16 @@ export class ChatSink implements RunSink {
           role: "user",
           parts: message.parts,
         });
-        await tx
-          .update(chatTable)
-          .set({ activeLeafId: message.id })
-          .where(eq(chatTable.id, ctx.runId));
       }
+
+      // The message being answered: the new one on a submit, the regenerated
+      // reply's own on a regenerate. A reader arriving before the reply's first
+      // write sees that message, not the reply being replaced, and the
+      // hydration guard keeps a partial reply on screen over it.
+      await tx
+        .update(chatTable)
+        .set({ activeLeafId: message?.id ?? parentId })
+        .where(eq(chatTable.id, ctx.runId));
     });
   }
 
@@ -210,7 +215,9 @@ export class ChatSink implements RunSink {
   }
 
   /** Stores inline file bytes and swaps them for storage references. */
-  private extract(messages: PlatypusUIMessage[]): Promise<PlatypusUIMessage[]> {
+  private storeFiles(
+    messages: PlatypusUIMessage[],
+  ): Promise<PlatypusUIMessage[]> {
     const { orgId, workspaceId } = this.params;
     return extractFiles(messages, { orgId, workspaceId, chatId: this.runId });
   }
@@ -219,8 +226,8 @@ export class ChatSink implements RunSink {
    * Writes the Chat row with the resolved plan and the supplied status, and
    * upserts the turn's reply (after running it through `extractFiles`).
    *
-   * The reply is the trailing message when it is an assistant's. The history
-   * the server loaded always ends in a user message — the one submitted, or the
+   * The reply is the trailing message when it is an assistant's. What the
+   * server loaded for the turn always ends in a user message — the one submitted, or the
    * regenerated reply's parent — so a trailing assistant message is this
    * turn's own: the streamed reply, or the seeded `loadSkill` message the SDK
    * continues under the same id. Before the first step that is all there is.
@@ -237,7 +244,7 @@ export class ChatSink implements RunSink {
 
     let reply: PlatypusUIMessage | undefined;
     try {
-      [reply] = last?.role === "assistant" ? await this.extract([last]) : [];
+      [reply] = last?.role === "assistant" ? await this.storeFiles([last]) : [];
     } catch (error) {
       logger.error({ error, chatId: this.runId }, "Error extracting files");
       return;
@@ -257,8 +264,8 @@ export class ChatSink implements RunSink {
       frequencyPenalty: resolved.frequencyPenalty ?? null,
       maxSteps: resolved.maxSteps ?? null,
       // Every write points the leaf at the reply, so the first one moves it
-      // there. Nothing else moves it mid-run: a delete, like a switch between
-      // Alternatives, is refused while the run is in flight.
+      // there. Nothing else moves it mid-run: a delete is refused while the
+      // run is in flight.
       ...(reply ? { activeLeafId: reply.id } : {}),
       updatedAt: new Date(),
     };

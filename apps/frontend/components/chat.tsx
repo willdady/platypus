@@ -158,25 +158,27 @@ export const Chat = ({
       credentials: "include",
       // The AI SDK calls this before each fetch. The server owns the
       // Transcript (ADR-0026), so a turn carries only what is new: the message
-      // and the id it follows, or the reply to regenerate. Never the history.
+      // and the id it follows, or the reply to regenerate. Never the Transcript.
       prepareSendMessagesRequest: ({
         id,
         messages,
         body,
         trigger,
         messageId,
-      }) => ({
-        body: {
-          ...body,
-          id,
-          ...(trigger === "regenerate-message"
-            ? { trigger, messageId }
-            : {
-                message: messages.at(-1),
-                parentId: messages.at(-2)?.id ?? null,
-              }),
-        },
-      }),
+      }) => {
+        // An edit names its parent (`useChatTurn`); a composer send follows
+        // the last message on screen.
+        const { parentId = messages.at(-2)?.id ?? null, ...rest } = body ?? {};
+        return {
+          body: {
+            ...rest,
+            id,
+            ...(trigger === "regenerate-message"
+              ? { trigger, messageId }
+              : { message: messages.at(-1), parentId }),
+          },
+        };
+      },
     }),
   });
 
@@ -368,12 +370,28 @@ export const Chat = ({
     chatId,
   });
 
+  // An edit hangs from the edited message's own parent, which the tree keeps
+  // even once it is deleted. The message above it on screen is only the
+  // nearest one still in the Chat, and an edit hung there would sit beside the
+  // wrong message.
+  const { resendEdited } = turn;
+  const resendEdit = useCallback(
+    (truncateAt: number, message: PromptInputMessage) =>
+      resendEdited(
+        truncateAt,
+        message,
+        chatData?.tree?.find((node) => node.id === messages[truncateAt]?.id)
+          ?.parentId,
+      ),
+    [chatData?.tree, messages, resendEdited],
+  );
+
   const {
     editing,
     handleMessageEditStart,
     handleMessageEditCancel,
     handleMessageEditSubmit,
-  } = useMessageEditing(messages, turn.resendEdited);
+  } = useMessageEditing(messages, resendEdit);
 
   // Hydrate chat from persisted data on load (or when chatData changes).
   // We use a ref for status so that this effect only fires when chatData

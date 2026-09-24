@@ -199,7 +199,9 @@ describe("ChatSink", () => {
       expect(rowOf(fake, "chat_message", "u1")?.parentId).toBeNull();
     });
 
-    it("writes no message and leaves the leaf on a regenerate", async () => {
+    // So a reader arriving mid-run sees the message being answered, not the
+    // reply being replaced — the same shape a submit shows before its reply.
+    it("writes no message and moves the leaf to the reply's message on a regenerate", async () => {
       const fake = seedChat();
 
       await submitSink({ message: undefined, parentId: "u0" }).onStart({
@@ -209,7 +211,7 @@ describe("ChatSink", () => {
 
       expect(rowOf(fake, "chat", "chat-1")).toMatchObject({
         status: "running",
-        activeLeafId: "a0",
+        activeLeafId: "u0",
       });
       expect(fake.tables.chat_message).toHaveLength(2);
     });

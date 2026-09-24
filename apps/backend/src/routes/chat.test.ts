@@ -956,7 +956,7 @@ describe("Chat Routes", () => {
       parts: [{ type: "text", text }],
     });
 
-    /** What the turn was handed as its history. */
+    /** What the turn was handed to continue. */
     const historyIds = () =>
       (
         mockPrepareChatTurn.mock.calls.at(-1)![0] as {
@@ -1008,7 +1008,7 @@ describe("Chat Routes", () => {
           "metadata",
           { message: { ...message("u3"), metadata: { agentId: "agent-1" } } },
         ],
-        ["the whole history", { messages: [message("u3")] }],
+        ["the whole Transcript", { messages: [message("u3")] }],
       ])("400s %s and writes nothing", async (_, body) => {
         mockSession();
         const fake = seedChat();
@@ -1099,11 +1099,14 @@ describe("Chat Routes", () => {
         expect(res.status).toBe(200);
         expect(historyIds()).toEqual(["u1", "a1", "u2"]);
         expect(rowOf(fake, "a2")).toMatchObject({ deletedAt: null });
+        // Until the new reply is written, a reader sees the message it
+        // answers, not the reply it replaces.
+        expect(fake.tables.chat[0].activeLeafId).toBe("u2");
       });
 
       // Two tabs on one Chat. Tab 1 went on to u2 → a2; tab 2 still shows
       // u1 → a1 and sends from there.
-      it("stores a stale tab's message as a sibling on the path it held", async () => {
+      it("stores a stale tab's message as an Alternative on the path it held", async () => {
         mockSession();
         const fake = seedChat();
         startsTurn();

@@ -207,8 +207,8 @@ const chatTurnSchema = chatSchema
     providerId: z.string().optional(),
     modelId: z.string().optional(),
     search: z.boolean().optional(),
-    // The server owns the Transcript (ADR-0026) and rebuilds the history from
-    // its own rows. A client still sending its own is refused rather than
+    // The server owns the Transcript (ADR-0026) and rebuilds it from its own
+    // rows. A client still sending its own is refused rather than
     // half-honoured.
     messages: z.never().optional(),
   });

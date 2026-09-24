@@ -178,6 +178,27 @@ describe("useChatTurn starting a turn", () => {
     expect(update(["u1", "a1", "u2"])).toEqual(["u1"]);
   });
 
+  // The edited message's own parent, which may be a message since deleted.
+  it("sends an edit under the parent it names", () => {
+    const h = harness();
+
+    h.turn.resendEdited(1, edit, "a0");
+
+    expect(h.sendMessage).toHaveBeenCalledWith(edit, {
+      body: { ...body, parentId: "a0" },
+    });
+  });
+
+  it("sends an edit of a Chat's first message as opening it", () => {
+    const h = harness();
+
+    h.turn.resendEdited(0, edit, null);
+
+    expect(h.sendMessage).toHaveBeenCalledWith(edit, {
+      body: { ...body, parentId: null },
+    });
+  });
+
   it("sends an Agent turn as the Agent alone", () => {
     const h = harness({
       selection: { agentId: "a1", providerId: "", modelId: "" },
