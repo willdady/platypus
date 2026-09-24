@@ -22,11 +22,11 @@ can create one.
 
 <Callout type="warning">
   **Choose the Owner carefully: there is no owner field on the settings form
-  afterwards.** A Workspace's owner is fixed when it is created and the form
-  offers no way to reassign it. If the wrong person owns a Workspace, the
-  available moves are to recreate it under the right owner, or to work as a Super
-  Admin, who bypasses ownership checks entirely. Neither is pleasant once there
-  are Chats in it.
+  afterwards.** A Workspace's owner is fixed when it is created and nothing
+  reassigns it. Only the owner can chat in it — an Org Admin or Super Admin can
+  change its settings but only read its Chats. If the wrong person owns a
+  Workspace, the fix is to recreate it under the right owner, which is not
+  pleasant once there are Chats in it.
 </Callout>
 
 ## The Context field
@@ -103,9 +103,9 @@ say.
 ## Deleting a Workspace
 
 **Delete** asks you to type `Delete workspace` to confirm, and takes everything
-scoped to the Workspace — Chats, Agents, Skills, MCP servers, Providers,
-Triggers, Webhooks, memory, Boards, Dashboards, its Sandbox. It is not
-recoverable from inside the product — only from a database backup.
+scoped to the Workspace — including each member's own **Workspace Context** for
+it. Shared resources are only detached, not deleted. It is not recoverable from
+inside the product — only from a database backup.
 
 ## Where to next
 

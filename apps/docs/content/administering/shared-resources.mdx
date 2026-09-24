@@ -46,46 +46,54 @@ Promoting doesn't put a resource in front of anyone except the Workspace it came
 from. An **Attachment** is what makes a Shared resource visible in a particular
 Workspace, and there are two places to create one.
 
-**From the Organization surface**, for handing one resource to several Workspaces:
-open the resource's three-dot menu and choose **Manage attachments**. The dialog
+**From the Organization surface**, for handing an Agent or Skill to several
+Workspaces: open its three-dot menu and choose **Manage attachments**. The dialog
 is titled **Share** followed by the resource's name, and lists the Workspaces you
-can tick.
+can tick. Each card shows how many Workspaces it's in — **3 workspaces** — which
+is the quickest read on whether you've actually handed something out.
 
 **From inside a Workspace**, for fitting out one Workspace: use the button beneath
 the list — **Attach shared agent**, **Attach shared skill**, **Attach shared MCP**
 or **Attach shared provider**. Each opens an **Attach a shared** dialog listing
 the Organization's available resources of that type.
 
-To undo either, use **Detach**. On the Organization surface, each card also shows
-**Shared with N workspaces**, which is the quickest read on whether you've
-actually handed something out.
+<Callout type="info">
+  MCP servers and Providers have no **Manage attachments**. To hand one to several
+  Workspaces, attach it from inside each, or put it in a
+  [Blueprint](#blueprints-fitting-out-a-workspace-in-one-step).
+</Callout>
+
+To undo one, use **Detach** inside the Workspace, or untick the Workspace in
+**Manage attachments**.
 
 An Attachment governs more than what shows up in a list. A Workspace reaches a
 Shared resource only where one exists, background work included: a Trigger can
-run an attached Shared Agent, and a Workspace titles its chats with a Shared
-Provider only if that Provider is attached.
+run an attached Shared Agent, and a Workspace titles its chats and extracts its
+memories with a Shared Provider only while that Provider is attached.
 
 <Callout type="warning">
-  Pointing a Workspace's **Task Model Provider** at a Shared Provider you never
-  attached is the trap. Nothing reports an error — chats simply stay
-  **Untitled**, because the Workspace cannot see the Provider doing the titling.
-  Attach the Provider to that Workspace and titling resumes on the next chat.
+  Detaching a Shared Provider that a Workspace's **Task Model Provider** points at
+  is the trap. Nothing reports an error — chats simply stay **Untitled**, because
+  the Workspace can no longer see the Provider doing the titling. Attach the
+  Provider again, or pick another **Task Model Provider**, and titling resumes on
+  the next chat.
 </Callout>
 
 ## What a Workspace Owner sees
 
 An attached Shared resource appears in the Workspace list badged
 **Organization**. Owners can use it — grant a Shared Skill to their Agent, select
-a Shared Provider's model — but the edit form is read-only for them; clicking
-through takes them to a view, not an editor.
+a Shared Provider's model — but not change it. Clicking a Shared Skill, MCP
+server or Provider opens a note that it is managed at the organization level; a
+Shared Agent's card has no menu for them at all.
 
 That is the point: one definition, changed once by you, live everywhere at once.
 
 <Callout type="warning">
-  A Shared Agent or Skill **cannot be deleted while it is still attached**
-  anywhere. The delete confirmation tells you to detach it from every Workspace
-  first. Detach from each, then delete — and expect the Workspace Owners who were
-  using it to notice.
+  A Shared resource **cannot be deleted while it is attached** anywhere, or while
+  a Blueprint lists it. Detach it from every Workspace and remove it from every
+  Blueprint, then delete — and expect the Workspace Owners who were using it to
+  notice.
 </Callout>
 
 ## Blueprints: fitting out a Workspace in one step
@@ -98,22 +106,24 @@ Applying one attaches everything in it at once.
 ### Define it
 
 **Organization settings → Blueprints**. Give it a name and tick the Shared
-resources it should attach, along with the task and memory Provider defaults and a
-default Context.
+resources it should attach. Under **Workspace settings**, optionally set a
+**Default context** and the task and memory Providers. A Provider is offered there
+only once you've ticked it under **Shared resources** — a Blueprint can't point a
+Workspace at a Provider it doesn't also attach.
 
 ### Apply it
 
 From the Blueprints list, open a Blueprint's menu and choose **Apply to
 workspace**. The Shared resources it attaches are additive — it attaches
-whatever's missing and leaves existing attachments alone. The task and memory
-Provider defaults and the default Context are not: applying always overwrites
-those on the target Workspace, even if the Owner has since set their own.
-Reapply only when you intend to reset those too.
+whatever's missing and leaves existing attachments alone. Its Workspace settings
+are not: each one the Blueprint sets overwrites the target Workspace's value, even
+if the Owner has since set their own. Settings it leaves unset are kept. Reapply
+only when you intend to reset those too.
 
 ### Or apply it automatically
 
 On an invitation you can name one or more Blueprints, in order. The Workspace
-provisioned when that person accepts is fitted out before they first sign in — see
+provisioned when that person accepts is fitted out as they accept — see
 [Users & access](/self-hosting/users-and-access).
 
 </Steps>
@@ -129,7 +139,7 @@ provisioned when that person accepts is fitted out before they first sign in —
 
 <Callout type="info">
   A Blueprint referenced by a pending invitation can't be deleted — delete those
-  invitations first. The error says which.
+  invitations first.
 </Callout>
 
 ## Where to next
