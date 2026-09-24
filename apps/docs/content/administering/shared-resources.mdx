@@ -27,17 +27,19 @@ scope in the first place: **Organization settings → MCP → Add MCP**, or
 **Organization settings → Providers → Add provider**.
 
 <Callout type="warning">
-  A Workspace-scoped MCP or Provider stays Workspace-scoped for life. There is no
-  action that lifts one, so if you want to share it you recreate it at
+  A Workspace-scoped MCP or Provider can't be moved to Organization scope. There
+  is no action that lifts one, so if you want to share it you recreate it at
   Organization scope and delete the original. Hunting the Workspace list for a
   Promote button on a Provider is time you won't get back.
 </Callout>
 
 <Callout type="info">
   **Promote to organization** is refused if the resource points at something that
-  is still Workspace-scoped — an Agent using a Workspace Skill, for instance.
-  Promote the Skill first. Platypus won't pull it up for you, which is what stops
-  a resource becoming Organization-readable that you never named.
+  is still Workspace-scoped: an Agent's Provider, Skills, Sub-Agents, or MCP
+  servers. Promote the Skills and Sub-Agents first. A Provider or MCP can't be
+  promoted, so recreate it at Organization scope, attach it, and point the Agent
+  at that. Platypus won't pull any of them up for you, which is what stops a
+  resource becoming Organization-readable that you never named.
 </Callout>
 
 ## Making it appear in a Workspace
@@ -130,11 +132,11 @@ provisioned when that person accepts is fitted out as they accept — see
 
 <Callout type="warning">
   A Blueprint is a **snapshot taken at the moment it is applied**, not a live
-  link. Editing a Blueprint changes nothing about the Workspaces already
-  provisioned from it — only ones provisioned afterwards. Rolling out a new Shared
-  Skill to your existing Workspaces means attaching it to each, or using **Manage
-  attachments** on the Skill itself. Editing the Blueprint and waiting achieves
-  nothing.
+  link. Editing a Blueprint changes nothing about the Workspaces it was already
+  applied to until you apply it again. Rolling out a new Shared Skill to your
+  existing Workspaces means attaching it to each, using **Manage attachments** on
+  the Skill itself, or re-applying the Blueprint — which also resets every
+  Workspace setting it sets. Editing the Blueprint and waiting achieves nothing.
 </Callout>
 
 <Callout type="info">

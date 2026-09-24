@@ -56,8 +56,9 @@ that Workspace.
   and each Chat uses its own. Point it at something cheap and fast if your chat
   models are expensive.
 - **Memory Extraction Provider** — **this is the switch that turns Memory on.**
-  Leave it **Disabled** and nothing is ever extracted, so Memory is off for this
-  Workspace.
+  Leave it **Disabled** and nothing new is extracted. Summaries already written
+  stay in the prompt until they age out — see [Turning Memory
+  on](/concepts/memory-and-context#turning-memory-on).
 - **Memory Embedding Provider** — needed for semantic memory search. Separate
   from extraction; you can have one without the other.
 
