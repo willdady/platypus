@@ -520,14 +520,11 @@ export const ChatMessage = memo(function ChatMessage({
                 }
                 variant="ghost"
                 size="icon"
-                tooltip={`Previous ${alternativeNoun.toLowerCase()}`}
+                label={`Previous ${alternativeNoun.toLowerCase()}`}
               >
                 <ChevronLeftIcon className="size-4" />
               </MessageAction>
-              <span
-                title={alternativeLabel}
-                className="text-xs tabular-nums text-muted-foreground"
-              >
+              <span className="text-xs tabular-nums text-muted-foreground">
                 {alternatives.index + 1}/{alternatives.count}
               </span>
               <MessageAction
@@ -538,7 +535,7 @@ export const ChatMessage = memo(function ChatMessage({
                 }
                 variant="ghost"
                 size="icon"
-                tooltip={`Next ${alternativeNoun.toLowerCase()}`}
+                label={`Next ${alternativeNoun.toLowerCase()}`}
               >
                 <ChevronRightIcon className="size-4" />
               </MessageAction>
