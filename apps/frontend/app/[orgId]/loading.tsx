@@ -1,9 +1,11 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { SettingsShell } from "@/components/settings-shell";
 import { BackButton } from "@/components/back-button";
 import { HeaderHomeButton } from "@/components/header-home-button";
+import { OrgHome } from "@/components/org-home";
+import { OrgListSidebar } from "@/components/org-list-sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import WorkspaceShellLayout from "./workspace/layout";
 import WorkspaceLoading from "./workspace/loading";
@@ -37,6 +39,7 @@ const ContentSkeleton = () => (
 // the one being entered rather than one shape for all.
 export default function OrganizationLoading() {
   const pathname = usePathname();
+  const { orgId } = useParams<{ orgId: string }>();
   const [, , section] = pathname.split("/");
 
   if (section === "settings") {
@@ -74,16 +77,18 @@ export default function OrganizationLoading() {
     );
   }
 
-  // The Organization home.
+  // The Organization home draws itself: it reads only client-cached data, so
+  // a switch between Organizations repaints nothing, and a cold entry shows
+  // the home's own placeholders.
   return (
     <SettingsShell
-      menu={<MenuSkeleton />}
+      menu={<OrgListSidebar currentOrgId={orgId} />}
       headerLeft={<HeaderHomeButton />}
       columnWidth="narrow"
       menuWidth="wide"
       contentClassName="px-3"
     >
-      <ContentSkeleton />
+      <OrgHome orgId={orgId} />
     </SettingsShell>
   );
 }
