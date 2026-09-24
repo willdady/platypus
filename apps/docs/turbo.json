@@ -13,6 +13,8 @@
         "$TURBO_ROOT$/apps/backend/src/plugins/builtin.ts",
         "$TURBO_ROOT$/apps/backend/src/tools/closers.ts",
         "$TURBO_ROOT$/apps/backend/src/services/trigger-firing.ts",
+        "$TURBO_ROOT$/apps/backend/src/services/memory-retrieval.ts",
+        "$TURBO_ROOT$/apps/backend/src/services/file-extraction.ts",
         "$TURBO_ROOT$/packages/plugin-sdk/README.md",
         "$TURBO_ROOT$/docs/adr/0014-web-search-backend-extension-point.md",
         "$TURBO_ROOT$/package.json",

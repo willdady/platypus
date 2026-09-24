@@ -1484,6 +1484,64 @@ describe("the closer timeout", () => {
   });
 });
 
+// --- backend constants the concept pages quote -------------------------------
+
+/**
+ * Numbers a reader plans around that live only as a backend constant, not in a
+ * schema this file can import. Each is read as `NAME = <product of integers>`
+ * and rendered into the phrase the page uses.
+ */
+const BACKEND_CONSTANTS = [
+  {
+    source: "apps/backend/src/services/memory-retrieval.ts",
+    name: "MEMORY_SNAPSHOT_RE_PIN_HORIZON_MS",
+    phrase: (ms: number) =>
+      ms === 3_600_000 ? "an hour" : `${ms / 3_600_000} hours`,
+    files: ["concepts/memory-and-context.mdx", "concepts/system-prompt.mdx"],
+    cost: "A reader waiting out the stated idle gap for fresh Memories waits the wrong time.",
+  },
+  {
+    source: "apps/backend/src/services/memory-retrieval.ts",
+    name: "MEMORY_SUMMARY_WINDOW_DAYS",
+    phrase: (days: number) => `**${days} days**`,
+    files: ["concepts/memory-and-context.mdx"],
+    cost: "A reader who switched Memory off expects old summaries to leave the prompt on the stated schedule.",
+  },
+  {
+    source: "apps/backend/src/services/file-extraction.ts",
+    name: "MAX_EXTRACTION_INPUT_BYTES",
+    phrase: (bytes: number) => `**${bytes / 1024 / 1024} MB**`,
+    files: ["concepts/providers.mdx"],
+    cost: "A reader attaching a large PDF is refused at a size the page never warned of.",
+  },
+] as const;
+
+describe("backend constants the concept pages quote", () => {
+  it.each(BACKEND_CONSTANTS)(
+    "$name is stated where quoted",
+    ({ source, name, phrase, files, cost }) => {
+      const declared = readRepoFile(source).match(
+        new RegExp(`${name} = ([\\d_ *]+);`),
+      );
+      expect(
+        declared,
+        `No \`${name} = <number>\` in ${source} — re-anchor this test if it moved.`,
+      ).not.toBeNull();
+      const value = declared![1]
+        .split("*")
+        .reduce((product, n) => product * Number(n.replace(/[_\s]/g, "")), 1);
+      const expected = phrase(value);
+      for (const file of files) {
+        expect(
+          readDoc(file).includes(expected),
+          `${file} does not say "${expected}", but ${source} sets ${name} to ` +
+            `${declared![1].trim()}.\n${cost}`,
+        ).toBe(true);
+      }
+    },
+  );
+});
+
 // --- docker image tags -------------------------------------------------------
 
 /**

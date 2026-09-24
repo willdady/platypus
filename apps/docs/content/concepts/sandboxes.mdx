@@ -19,7 +19,7 @@ something — running a script, building a project, inspecting files. A Sandbox
 lets an Agent do that safely, because the work happens in an isolated environment
 rather than touching anything outside it.
 
-Like an MCP, a Sandbox resolves to a **[tool set](/concepts/tools)** at Chat-turn
+Like an MCP, a Sandbox resolves to a **[Tool set](/concepts/tools)** at Chat-turn
 time — the shell and filesystem tools it provides.
 
 ## Two switches, both required
@@ -27,40 +27,41 @@ time — the shell and filesystem tools it provides.
 Getting shell tools in front of an Agent takes two independent things, and
 neither one alone does anything:
 
-1. **The Workspace has a Sandbox** — a Sandbox row, configured by an Org Admin,
-   whose backend is registered on this deployment (the Operator has to have
-   listed its plugin).
+1. **The Workspace has a Sandbox** — one per Workspace, set up by an Org Admin
+   under **Workspace settings → Sandbox**, whose backend is registered on this
+   deployment (the Operator has to have listed its plugin).
 2. **The Agent is granted the Sandbox Tool set** — the **Sandbox** switch in the
    Agent form's **Tools** card.
 
 <Callout type="warning">
-  The half-configured case fails **silently**. Grant the Tool set to an Agent in
-  a Workspace with no Sandbox, and the turn resolves to zero shell tools with no
-  error, no warning in the UI, and no hint in the reply — the model simply
-  behaves as though it has no shell and often improvises around it. The same
-  happens when a Sandbox row names a backend whose plugin isn't loaded, or when
-  its config no longer validates. The only signal is a warning in the backend
-  log. If an Agent won't run commands, check both switches before debugging the
-  prompt.
+  The half-configured case fails **quietly**. Grant the Tool set to an Agent in
+  a Workspace with no Sandbox, and the turn gets zero shell tools, with no error
+  in the UI and nothing in the backend log — yet the Agent is still told it has
+  a Sandbox, so it may try to run a command and fail, or improvise around it.
+  The same happens when the Sandbox names a backend whose plugin isn't loaded,
+  or when its config or credentials no longer validate; those two cases do log a
+  warning. If an Agent won't run commands, open **Workspace settings → Sandbox**
+  first: it reads **No sandbox configured** when there is none.
 </Callout>
 
 ## Pluggable backends
 
-The Sandbox is designed to be pluggable: the same Agent-facing tools can be
-powered by different backends — a local container, a remote VM, or a hosted
-sandbox-as-a-service. Which backend a deployment offers is an Operator decision;
-contributors can add new ones (see [Extending](/extending)).
+The same Agent-facing tools can be powered by different backends. Platypus
+ships **Local Docker** and **SSH (Remote Host)**; others come from plugins. Which
+backends a deployment offers is an Operator decision — see [Extending → Sandbox
+backends](/extending/sandbox-backends).
 
 ## Default environment variables
 
 A Sandbox can also carry **environment variables** that are merged into every
-shell command it runs. This is handy for things like API keys or configuration a
-command needs — and importantly, those values are applied directly to the
-execution **without being sent through the model**, so secrets stay out of the
-conversation.
+shell command it runs — API keys, or configuration a command needs. The values
+are applied directly to the execution **without being sent through the model**,
+so secrets stay out of the conversation. The Agent is told the variable
+_names_, so it knows they exist.
 
 <Callout type="info">
   Setting up a Sandbox is an infrastructure task. See [Sandbox
   infrastructure](/self-hosting/sandbox) for how an Operator and Org Admin
-  configure the available backends.
+  configure the available backends, and [what a Workspace Owner can
+  change](/self-hosting/sandbox#who-can-configure-what).
 </Callout>

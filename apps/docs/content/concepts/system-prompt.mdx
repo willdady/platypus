@@ -8,8 +8,8 @@ import { Callout } from "nextra/components";
 # The system prompt
 
 The **Instructions** you write on an Agent are not the whole system prompt.
-They're the first of up to twelve fragments that Platypus assembles, in a fixed
-order, on every Chat turn. The rest come from the Organization, the Workspace,
+They're the first of the fragments that Platypus assembles, in a fixed order, on
+every Chat turn. The rest come from the Organization, the Workspace,
 you, the Agent's tools, and its Provider.
 
 This page is the canonical list. Read it once before you write long Instructions,
@@ -31,10 +31,10 @@ Workspace produces a short prompt — only fragments 1, 4 and 5 are always prese
 | **5**  | **User**                  | Always                                          | Your name and id. On an unattended run this becomes on-behalf-of framing instead, telling the model there's nobody to address.                                                                                                                                              |
 | **6**  | **User Contexts**         | When you've written Context                     | Your global and per-Workspace [Context](/concepts/memory-and-context#context) notes.                                                                                                                                                                                        |
 | **7**  | **Memories**              | When there are Memories to recall               | The [Memory](/concepts/memory-and-context#memory) summaries retrieved for you in this Workspace. Fixed for the life of an active Chat, and refreshed on the next message after an hour of no activity — not re-retrieved every turn.                                        |
-| **8**  | **Memory tools**          | When the Agent has the memory tool set          | A note that `memorySearch` and `memoryGet` are available for looking up memories beyond any summaries above.                                                                                                                                                                |
-| **9**  | **Skills**                | When the Agent has Skills                       | The name and description of each [Skill](/concepts/skills) — not its body, which the model requests on demand via `loadSkill`.                                                                                                                                              |
+| **8**  | **Memory tools**          | When the Agent has the **Memory** Tool set      | A note that `memorySearch` and `memoryGet` are available for looking up memories beyond any summaries above.                                                                                                                                                                |
+| **9**  | **Skills**                | When the Agent has Skills                       | The name and description of each [Skill](/concepts/skills) not marked **User-invocable only** — not its body, which the model requests on demand via `loadSkill`.                                                                                                           |
 | **10** | **Sub-Agents**            | When the Agent has Sub-Agents                   | Each [Sub-Agent](/concepts/agents#sub-agent) that loaded, by the name the parent delegates to it under, its description, and the rule that a delegated task must be self-contained. Any Sub-Agent that failed to load is listed separately as unavailable, with the reason. |
-| **11** | **Sandbox**               | When the Agent has the sandbox tool set         | How the [Sandbox](/concepts/sandboxes) works: the `/workspace` root, that files persist between turns, that each shell call starts fresh, output limits, timeouts, and the _names_ of any Workspace-default environment variables.                                          |
+| **11** | **Sandbox**               | When the Agent has the **Sandbox** Tool set     | How the [Sandbox](/concepts/sandboxes) works: the `/workspace` root, that files persist between turns, that each shell call starts fresh, output limits, timeouts, and the _names_ of any Workspace-default environment variables.                                          |
 | **12** | **Security guardrails**   | When the run's Provider has guardrails          | The Provider's [security guardrails](/concepts/providers#security-guardrails), verbatim and last.                                                                                                                                                                           |
 
 <Callout type="info">
@@ -84,5 +84,5 @@ for your Agent, point the Agent at a different Provider.
 <Callout type="info">
   There's no in-app viewer for the assembled prompt. This page and the helper
   text under the Instructions field are the reference. On a deployment you run
-  yourself, the backend logs the composed prompt at `debug` level.
+  yourself, the backend logs each Chat turn's composed prompt at `debug` level.
 </Callout>

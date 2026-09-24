@@ -10,12 +10,13 @@ import { Callout } from "nextra/components";
 ## Provider
 
 A **Provider** is a configured connection to an AI vendor. It's what lets
-Platypus actually talk to a model on your behalf.
+Platypus talk to a model on your behalf.
 
 There are five Provider types — OpenAI, OpenRouter, Bedrock, Google,
 Anthropic — and no others. Ollama, vLLM, Azure OpenAI and any other
 OpenAI-compatible endpoint are reached through the **OpenAI** type with its
-**Base URL** overridden; see [Supported
+**Base URL** overridden, and **API Mode** set to **Chat Completions** where the
+server has no Responses API; see [Supported
 vendors](/self-hosting/providers-and-auth#supported-vendors).
 
 A Provider carries:
@@ -23,8 +24,10 @@ A Provider carries:
 - the **credentials** (such as an API key) for that vendor,
 - an optional **base URL** for self-hosted or proxied endpoints,
 - the list of **models** that have been enabled for use,
-- and a default **task model** used for quick one-shot jobs (like generating a
-  title for a Chat) rather than full conversations.
+- a default **task model** used for quick one-shot jobs (like generating a
+  title for a Chat) rather than full conversations,
+- and the models used for memory extraction and embeddings, plus per-model
+  settings such as the context window.
 
 When you run a Chat turn, you either pick a Provider and one of its models
 directly, or you select an **[Agent](/concepts/agents)** that already points at a
@@ -40,9 +43,9 @@ A Provider lives at one of two levels:
 
 <Callout type="info">
   Providers carry credentials, so they're usually configured by an **Org
-  Admin**. A Workspace Owner can manage them only where an Org Admin has
-  delegated that. See [Providers &
-  authentication](/self-hosting/providers-and-auth) for setup.
+  Admin**. A Workspace Owner can manage Workspace-scoped ones only where an Org
+  Admin has turned on **Owner-managed providers** for that Workspace. See
+  [Providers & authentication](/self-hosting/providers-and-auth) for setup.
 </Callout>
 
 Stored credentials — the API key and any custom headers — are readable only by
@@ -75,10 +78,11 @@ conversation to the model it started on.
 <Callout type="warning">
   Aliases work on the **Agent and Chat model only**. A Provider's own **Task
   Model ID**, **Memory Extraction Model ID** and **Embedding Model ID** must
-  each name a real model id; entering an alias there is rejected when you save.
-  Those three point at one model from one Provider, so an alias would save you
-  no edits — and on the embedding model it would hide a change that has to
-  invalidate every stored memory embedding.
+  each name a real model id, and they don't resolve aliases: typing `flagship`
+  there saves, is sent to the vendor as if it were a model id, and the job
+  fails. Those three point at one model from one Provider, so an alias would
+  save you no edits — and on the embedding model it would hide a change that has
+  to invalidate every stored memory embedding.
 </Callout>
 
 Once a model has an alias, the picker offers the alias and not the underlying
@@ -90,12 +94,12 @@ An Agent that builds other Agents sees the same list you do, so the Agents it
 creates use the alias and move with your repoints too.
 
 **Renaming an alias is not a rename.** An alias is only its name, so changing it
-removes the old name and creates a new one. Platypus handles this for you:
-clearing or renaming an alias points every Agent and Chat that used it back at
-the concrete model id, so each keeps running on the same model as before, and
-the Provider form tells you how many moved. Delete the model itself at the same
-time and there is no id left to fall back to — those Agents and Chats fail their
-next turn, exactly as they would if you removed a model they named directly.
+removes the old name and creates a new one. Clearing or renaming an alias points
+every Agent and Chat that used it back at the concrete model id, so each keeps
+running on the same model as before, and the Provider form tells you how many
+moved. Delete the model itself at the same time and there is no id left to fall
+back to — those Agents and Chats fail their next turn, exactly as they would if
+you removed a model they named directly.
 
 ## Attaching files
 
@@ -104,9 +108,8 @@ part**, carried alongside the message's text. Which types a model takes
 **natively** is declared per model on the Provider, and what happens to each
 File part follows from that:
 
-- **It's a type the model reads natively** (usually images, and PDFs on the
-  frontier vendors) — the file goes through untouched.
-- **It's a text or code file** — `.md`, `.csv`, `.json`, `.py`, and friends — its
+- **It's a type the model reads natively** — the file goes through untouched.
+- **It's a text or code file** — `.md`, `.csv`, `.json`, `.py` and the like — its
   contents are inlined into the message, labelled with the filename. This works
   regardless of what the model natively accepts.
 - **It's a PDF or DOCX the model can't take natively** — the text is extracted
@@ -118,7 +121,8 @@ File part follows from that:
 
 <Callout type="info">
   Extracted text is **lossy**: tables, layout, and embedded images don't
-  survive, and a long document is truncated with a note saying so. If fidelity
+  survive, and a long document is truncated, with a note telling the model so. A
+  PDF or DOCX over **25 MB** is refused rather than extracted. If fidelity
   matters, use a model that reads the format natively. There's no OCR, so a
   scanned (image-only) PDF has no text to extract and is refused.
 </Callout>
@@ -132,27 +136,28 @@ authentication](/self-hosting/providers-and-auth).
 
 ## Web search
 
-Whether the Chat **Search** toggle finds anything is a property of the Provider,
-decided by one **Web search** field under **Advanced settings**.
+Whether a Chat offers the **Search** toggle, and what it searches with, is a
+property of the Provider, decided by one **Web search** field under **Advanced
+settings**.
 
-Choices: **None** (no web search at all), **the provider's built-in search**
-(offered only on a Provider whose model has one — Anthropic, Google,
-OpenRouter, and OpenAI on the Responses API), and any Web-search backend
-plugins your deployment has installed — SearXNG, a headless browser, whatever
-the Operator added. Selecting a backend gives the Search toggle to Providers
-that never had it otherwise: a self-hosted vLLM or LiteLLM endpoint, or
-Bedrock.
+Choices: **None** (no web search at all), **The provider's built-in search**
+(offered only on a Provider type that has one — Anthropic, Google, OpenRouter,
+and OpenAI with **API Mode** set to **Responses**), and any Web-search backend
+plugins the Operator has installed. Selecting a backend gives the Search toggle
+to Providers that never had it otherwise: a self-hosted vLLM or LiteLLM
+endpoint, or Bedrock.
 
 <Callout type="warning">
   **Selecting a backend can grant page reading as well as search.** A backend
   supplies its own search, and optionally a page reader; where it supplies both,
-  a searching turn on that Provider lets the model fetch pages by URL. The
-  vendors' built-in search does not — it returns results only. There is no
-  separate setting for it: the reader comes with the backend, so the decision is
-  which backend you select. What a fetch may reach is bounded by [the egress
-  guard](/self-hosting/configuration#the-egress-guard), and a backend's reader
-  ignores `robots.txt` — whereas the **Web Fetch** Tool set honours it unless an
-  Operator has turned that off.
+  a searching turn on that Provider lets the model fetch pages by URL from your
+  deployment. The vendors' built-in search runs on the vendor's side — some open
+  pages as part of searching, but nothing is fetched from your deployment. There
+  is no separate setting for it: the reader comes with the backend, so the
+  decision is which backend you select. What a fetch may reach is bounded by
+  [the egress guard](/self-hosting/configuration#the-egress-guard), and a
+  backend's reader ignores `robots.txt` — whereas the **Web Fetch** Tool set
+  honours it unless an Operator has turned that off.
 </Callout>
 
 Three things the field tells you about a selection:
@@ -163,34 +168,34 @@ Three things the field tells you about a selection:
 - **Platypus couldn't load the installed backends** — the field says so and
   leaves your stored selection alone; the list may be missing entries.
 - **The provider's built-in search, on a Provider that has none** — Bedrock, or
-  OpenAI on the Completions API — is marked **(unavailable here)**. It runs no
-  search, but the selection is kept rather than rewritten: switch that Provider
-  to a type or API mode that does have built-in search and it applies again. To
-  retire it instead, pick something else yourself.
+  OpenAI with **API Mode** set to **Chat Completions** — is marked
+  **(unavailable here)**. It runs no search, but the selection is kept rather
+  than rewritten: switch that Provider to a type or API mode that does have
+  built-in search and it applies again. To retire it instead, pick something
+  else yourself.
 
-Results are cited the same way whichever search ran: the pages used appear as
-**Sources** under the reply. Adding a backend to a deployment is an Operator task
-— see [Extending → Web-search
+Results are cited the same way whichever search ran: the pages used appear in a
+collapsible **Used N sources** row above the reply. Adding a backend to a
+deployment is an Operator task — see [Extending → Web-search
 backends](/extending/web-search-backends).
 
 ## Security guardrails
 
-A Provider carries an optional free-text **security guardrails** field. Whatever
+A Provider carries an optional free-text **Security guardrails** field. Whatever
 you write there is appended **last** in the system prompt — the final
 instructions the model reads before the conversation — for **every** run on that
 Provider, including Sub-Agent runs that resolve to it.
 
 It is provider-scoped on purpose: how susceptible a model is to prompt injection
-is a property of the endpoint. Frontier hosted models resist most attacks
-out of the box; smaller self-hosted or quantized models need more explicit
-steering. Put the guarding where the weakness is.
+is a property of the endpoint, and smaller self-hosted or quantized models need
+more explicit steering. Put the guarding where the weakness is.
 
 <Callout type="warning">
   Guardrails are a **floor, not a guarantee**. A capable model follows them most
   of the time, but a determined multi-turn injection can still occasionally slip
   — especially on smaller self-hosted models. For hard guarantees (blocking
   exfiltration, enforcing tool policy) pair the prompt-level layer with a proxy
-  in front of the Provider's `baseUrl`. See [Self-Hosting → Providers &
+  in front of the Provider's **Base URL**. See [Self-Hosting → Providers &
   authentication](/self-hosting/providers-and-auth) for the three-layer model.
 </Callout>
 
@@ -205,8 +210,8 @@ one per injection class, are in
 [Starter snippets](/self-hosting/providers-and-auth#starter-snippets).
 
 <Callout type="info">
-  Not to be confused with an Organization's **identity / context** field, which
-  is framing rendered *early* in the prompt — see [Memory &
+  Not to be confused with an Organization's **Organization identity / context**
+  field, which is framing rendered *early* in the prompt — see [Memory &
   context](/concepts/memory-and-context). Identity says *who the assistant is*;
   guardrails say *what it must not be tricked into doing*.
 </Callout>

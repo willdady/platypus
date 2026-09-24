@@ -12,7 +12,7 @@ clicking around, it helps to know how the pieces fit together. This section
 explains the main ideas in plain language — what each one is, and why you'd
 reach for it.
 
-If you just want to get a chat running, head to
+If you want to get a chat running, head to
 [Getting Started](/getting-started). Come back here when you want to understand
 _why_ things are arranged the way they are.
 
@@ -24,7 +24,7 @@ Everything in Platypus lives inside a nesting of three things:
 
 ### Organization
 
-An **Organization** is the top level — your company, your team, or just you.
+An **Organization** is the top level — your company, your team, or you alone.
 It's the boundary that everything else lives inside. An Organization owns its
 **Workspaces**, holds shared settings like AI **Providers**, and is where member
 roles are managed.
@@ -36,15 +36,16 @@ members, configuring credentials) are **Org Admins**.
 
 A **Workspace** is your own scoped environment inside an Organization. It holds
 your **Chats**, the **Agents** you've built, and the other resources they use.
-Each Workspace is owned by exactly one person — the **Workspace Owner** — and is
-not shared with other people. Think of it as your personal project space: what
-you build in one Workspace doesn't leak into anyone else's.
+Each Workspace is owned by exactly one person — the **Workspace Owner** — and has
+no other members. Think of it as your personal project space: what you build in
+one Workspace doesn't leak into anyone else's. It is not private from Org Admins,
+though: they can open any Workspace in the Organization.
 
 <Callout type="info">
   You don't create your own Workspaces — an Org Admin sets them up, often
   pre-loaded with everything you need via a [Blueprint](/concepts/sharing). When
-  you accept an invitation, a ready-to-use Workspace can be provisioned for you
-  automatically.
+  you accept an invitation, a Workspace is provisioned for you automatically,
+  fitted out by any Blueprints on the invitation.
 </Callout>
 
 ### Chat

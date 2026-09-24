@@ -20,8 +20,8 @@ either **Workspace scope** (private to one Workspace) or **Organization scope**
 
 A **Shared resource** is one of those resources defined once at the Organization
 level and _referenced_ by many Workspaces — not copied into each one. There's a
-single source of truth: only **Org Admins** edit it, and it shows up as **locked**
-to Workspace Owners, who can use it but not change it.
+single source of truth: only **Org Admins** edit it, and it appears badged
+**Organization** to Workspace Owners, who can use it but not change it.
 
 **Why this matters:** when the Org Admin updates a Shared Agent's Instructions or
 rotates a Shared Provider's credentials, every Workspace using it gets the change
@@ -34,11 +34,13 @@ at once. No drift, no copy-paste.
 
 ### Nothing is shared on your behalf
 
-That rule bites when you Promote. Promoting an Agent that references a
-Workspace-scoped Skill is **refused** — promote the Skill first, then the Agent.
-Platypus does not resolve the prerequisite for you by quietly pulling the Skill
-up alongside it, because that would make something Organization-readable that no
-Org Admin ever named.
+That rule bites when you Promote. Promoting an Agent is **refused** while its
+Provider, any of its Skills or Sub-Agents, or any MCP it's granted is still
+Workspace-scoped. Promote the Skills and Sub-Agents first; a Provider or MCP
+can't be promoted, so recreate it at Organization scope and point the Agent at
+that. Platypus does not resolve the prerequisite for you by quietly pulling it up
+alongside, because that would make something Organization-readable that no Org
+Admin ever named.
 
 The corollary is the useful half: nothing reaches Organization scope by accident.
 If a resource is Shared, somebody chose it.
@@ -52,42 +54,46 @@ Tool set, and it works in every Workspace it's attached to.
 That's because the Sandbox Tool set doesn't resolve to a fixed Sandbox. It
 rebinds at **Chat-turn time** to the Sandbox of the Workspace the turn is running
 in. One Shared "build and test" Agent therefore runs against each Workspace's own
-sandbox — the Agent is shared, the execution environment is not, and no
+Sandbox — the Agent is shared, the execution environment is not, and no
 Workspace's files are reachable from another's.
 
 The corollary: the same Shared Agent behaves differently per Workspace. Attached
-to a Workspace with no Sandbox configured, its shell and filesystem tools simply
-aren't there for that turn.
+to a Workspace with no Sandbox configured, its shell and filesystem tools aren't
+there for that turn — and nothing says so; see [Two switches, both
+required](/concepts/sandboxes#two-switches-both-required).
 
 ## Attachment
 
 A Shared resource doesn't automatically appear in every Workspace. An
 **Attachment** is the explicit link that makes a Shared resource show up inside a
-particular Workspace. No Attachment, no appearance — the resource simply isn't in
-that Workspace's lists.
+particular Workspace. No Attachment, and the resource isn't in that Workspace's
+lists and nothing in the Workspace can use it — Chats, Triggers, titling and
+memory extraction included.
 
 This keeps sharing deliberate: an Org Admin attaches exactly the Shared resources
-each Workspace should see, and manages all of them from the Organization surface
-regardless of where they're attached.
+each Workspace should see — from inside the Workspace, or, for Agents and Skills,
+from **Manage attachments** on the Organization surface. See [Making it appear in
+a Workspace](/administering/shared-resources#making-it-appear-in-a-workspace).
 
 ## Promote
 
-**Promote** is the Org Admin action that turns a Workspace-private resource into a
-Shared one. It re-scopes the resource up to the Organization, automatically
-attaches it back to the Workspace it came from, and hands governance of it to Org
-Admins.
+**Promote to organization** is the Org Admin action that turns a
+Workspace-private resource into a Shared one. It re-scopes the resource up to the
+Organization, automatically attaches it back to the Workspace it came from, and
+hands governance of it to Org Admins.
 
-**Why you'd use it:** you built a great Agent in your own Workspace, and now the
+**Why you'd use it:** you built an Agent in your own Workspace, and now the
 whole Organization should have it. Promoting it makes it shared without rebuilding
 it from scratch.
 
 <Callout type="info">
-  **Promote exists for Agents and Skills only.** There is no Promote action on an
-  MCP or a Provider — don't go looking for one. Those two reach Organization
-  scope a different way: create them there directly, under **Organization
-  settings → MCP → Add MCP** or **Organization settings → Providers → Add
-  provider**. A Workspace-scoped MCP or Provider stays Workspace-scoped for
-  life; to share one, recreate it at Organization scope.
+  **Promote exists for Agents and Skills only.** There is no Promote action on
+  an MCP or a Provider. Those two reach Organization scope a different way:
+  create them there directly, under **Organization settings → MCP → Add MCP** or
+  **Organization settings → Providers → Add provider**. A Workspace-scoped MCP
+  or Provider can't be moved up; to share one, recreate it at Organization
+  scope. A Skill can also be created there directly, under **Organization
+  settings → Skills → Create skill**.
 </Callout>
 
 ## Blueprint
@@ -100,11 +106,13 @@ in one step. Applying a Blueprint to a Workspace does two things at once:
    default **[Context](/concepts/memory-and-context)**.
 
 **Why you'd use one:** onboarding. Instead of hand-configuring every new
-Workspace, an Org Admin defines a Blueprint once and applies it whenever a
-Workspace is provisioned — often automatically when someone accepts an invitation.
+Workspace, an Org Admin defines a Blueprint once, then applies it with **Apply to
+workspace** or names it on an invitation, so the Workspace provisioned when that
+person accepts is fitted out automatically.
 
 <Callout type="warning">
-  A Blueprint runs **once**, at the moment it's applied — it isn't a live link.
-  Editing a Blueprint later only affects Workspaces provisioned _after_ the
-  edit; Workspaces already set up are left unchanged.
+  A Blueprint is a **snapshot**, not a live link: editing it changes nothing
+  already applied. Applying it again adds any Attachments the Workspace is
+  missing and overwrites every Workspace setting the Blueprint sets — even ones
+  the Owner has changed since.
 </Callout>

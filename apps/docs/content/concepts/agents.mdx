@@ -9,14 +9,17 @@ description: Agents are reusable presets that pin a model, Instructions, tools, 
 
 An **Agent** is a saved configuration for how the assistant should behave. Rather
 than choosing a model and writing instructions every time you start a
-conversation, you set it all up once on an Agent and then just pick that Agent on
-a Chat.
+conversation, you set it all up once on an Agent and then pick that Agent on a
+Chat.
 
 An Agent pins together:
 
+- a **Name** and a **Description** — the Description is also what a parent Agent
+  reads when deciding whether to delegate to it,
 - a **Provider** and a specific **model** to run on,
 - **Instructions** that shape its personality and behaviour,
-- **generation parameters** (such as temperature),
+- **generation parameters** (such as temperature), and **Max steps**, which caps
+  how many tool-calling steps a turn can take,
 - the **tools** it's allowed to use (see [Tools, tool sets & MCP](/concepts/tools)),
 - any **[Skills](/concepts/skills)** it can draw on,
 - and any **Sub-Agents** it can delegate to.
@@ -25,8 +28,9 @@ When you select an Agent on a Chat turn, that selection takes the place of
 choosing a Provider and model by hand — the Agent already carries those choices.
 
 Your Instructions are the first part of the system prompt the model receives, not
-all of it: Platypus composes the rest from the Workspace, your Context, the
-Agent's Skills and tools, and its Provider. [The system
+all of it: Platypus composes the rest from the Organization and Workspace, you
+and your Context, your Memories, the Agent's Skills, Sub-Agents and tools, and
+its Provider. [The system
 prompt](/concepts/system-prompt) lists every part in order.
 
 **Why you'd use one:** consistency and reuse. A "Research assistant" Agent, a
@@ -36,7 +40,7 @@ tweak them in one place.
 
 ## Sub-Agent
 
-A **Sub-Agent** is simply an Agent that another Agent can call on. When you add an
+A **Sub-Agent** is an Agent that another Agent can call on. When you add an
 Agent as a Sub-Agent of a parent Agent, the parent gains the ability to hand off
 work to it — the parent gets one delegation tool and a list of the Sub-Agents
 it can name as the target.

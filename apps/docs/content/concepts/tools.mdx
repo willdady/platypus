@@ -1,6 +1,6 @@
 ---
 title: Tools, tool sets & MCP
-description: Tools let an agent do things, not just talk. Tool sets bundle them, and MCP servers contribute tool sets from outside Platypus.
+description: Tools let an agent do things, not just talk. Tool sets bundle them, and MCP servers contribute Tool sets from outside Platypus.
 ---
 
 # Tools, tool sets & MCP
@@ -12,33 +12,32 @@ explains how tools are bundled and where they come from.
 ## Tool set
 
 A **Tool set** is a named bundle of tools you can grant to an **Agent**. Instead
-of wiring up individual tools one by one, you give an Agent a whole tool set.
+of wiring up individual tools one by one, you give an Agent a whole Tool set.
 
 Tool sets come from two kinds of source:
 
-- **contributed by a plugin** — a plugin declares tool sets in its manifest and
-  core loads them at boot. This covers both the **core built-ins** that ship
-  with Platypus and **third-party plugins** installed as npm packages. Which
-  ones a deployment has depends on which plugins its Operator enabled; the
-  Agent form's **Tools** card is the live list. The built-in ones are catalogued
-  in [Tool sets](/building-with-platypus/tool-sets); [Extending → Tool
-  sets](/extending/tool-sets) covers contributing your own.
+- **built into Platypus or contributed by a plugin** — the **core built-ins** ship
+  with Platypus; **third-party plugins** are installed as npm packages. Some core
+  Tool sets are always present; the rest depend on which plugins the Operator
+  enabled. The Agent form's **Tools** card is the live list. The built-in ones
+  are catalogued in [Tool sets](/building-with-platypus/tool-sets); [Extending →
+  Tool sets](/extending/tool-sets) covers contributing your own.
 - **backed by an MCP server** — contributed at runtime from outside Platypus,
   without a code change or a plugin install (see below).
 
-When an Agent runs, each tool set it's been granted is resolved into the actual
+When an Agent runs, each Tool set it's been granted is resolved into the actual
 tools the model can call.
 
 ## MCP
 
 **MCP** stands for the Model Context Protocol — an open standard for exposing
 tools to AI models. An **MCP** in Platypus is a registered MCP server. At
-Chat-turn time it resolves to a **tool set**, so the tools that server offers
+Chat-turn time it resolves to a **Tool set**, so the tools that server offers
 become available to the Agent.
 
 **Why you'd use one:** MCP is how you connect Platypus to capabilities that don't
 ship with it — your own internal services, third-party integrations, or community
-MCP servers. Register the server once, then grant its tool set to any Agent that
+MCP servers. Register the server once, then grant its Tool set to any Agent that
 needs it.
 
 An MCP can live at **Workspace scope** (private to one Workspace) or be shared at
@@ -48,10 +47,10 @@ one up.
 
 ## How it fits together
 
-> An **Agent** is granted zero or more **tool sets**. Each tool set is either
-> contributed by a **plugin** (a core built-in or a third-party plugin) or
-> backed by an **MCP** server, and resolves to a concrete set of tools the model
-> can call during a **Chat turn**.
+> An **Agent** is granted zero or more **Tool sets**. Each Tool set is a core
+> built-in, contributed by a third-party **plugin**, or backed by an **MCP**
+> server, and resolves to a concrete set of tools the model can call during a
+> **Chat turn**.
 
-A **[Sandbox](/concepts/sandboxes)** also resolves to a tool set — its shell and
-filesystem tools — which is why sandboxes get their own page.
+A **[Sandbox](/concepts/sandboxes)** also resolves to a Tool set — its shell and
+filesystem tools — which is why Sandboxes get their own page.
