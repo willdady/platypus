@@ -200,6 +200,10 @@ export const chat = pgTable(
     memoryExtractionStatus: t
       .text("memory_extraction_status")
       .default("pending"), // "pending" | "processing" | "completed" | "failed"
+    // The last Active-path message a successful extraction pass included: the
+    // next pass reads only what follows it, with what came before as context.
+    // Null until a pass succeeds.
+    memoryCursorId: t.text("memory_cursor_id"),
 
     // The pinned Memories block (ADR-0020): the rendered summaries fragment,
     // snapshotted here while the Chat is active and re-taken only when the gap
@@ -228,10 +232,15 @@ export const chat = pgTable(
       t.lastMemoryProcessedAt,
       t.updatedAt,
     ),
-    // NO ACTION rather than a cascade or set-null: a message row is never
-    // hard-deleted on its own, only with its Chat, so the leaf cannot dangle.
+    // NO ACTION rather than a cascade or set-null, for the leaf and the memory
+    // cursor alike: a message row is never hard-deleted on its own, only with
+    // its Chat, so neither can dangle.
     foreignKey({
       columns: [t.id, t.activeLeafId],
+      foreignColumns: [chatMessage.chatId, chatMessage.id],
+    }),
+    foreignKey({
+      columns: [t.id, t.memoryCursorId],
       foreignColumns: [chatMessage.chatId, chatMessage.id],
     }),
   ],

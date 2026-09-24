@@ -260,6 +260,7 @@ describe("Chat Routes", () => {
             workspaceId,
             title: "Chat 1",
             activeLeafId: "a1",
+            memoryCursorId: "a1",
             memorySnapshot: "pinned",
             lastTurnAt: new Date(),
           },
@@ -305,6 +306,7 @@ describe("Chat Routes", () => {
         { id: "a1b", parentId: "u1" },
       ]);
       expect(body).not.toHaveProperty("activeLeafId");
+      expect(body).not.toHaveProperty("memoryCursorId");
       expect(body).not.toHaveProperty("memorySnapshot");
       expect(body).not.toHaveProperty("lastTurnAt");
     });

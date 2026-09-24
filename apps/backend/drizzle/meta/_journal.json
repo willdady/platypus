@@ -519,6 +519,13 @@
       "when": 1790244804439,
       "tag": "0073_drop_chat_messages_column",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1790255811454,
+      "tag": "0074_chat_memory_cursor",
+      "breakpoints": true
     }
   ]
 }

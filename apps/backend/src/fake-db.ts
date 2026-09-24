@@ -177,6 +177,10 @@ const matchesSql = (
     const value = resolve(refOf(left));
     return typeof value === "string" && value.toLowerCase() === right;
   }
+  if (shape === "?ISDISTINCTFROM?") {
+    // Null-safe: two nulls are not distinct, a null and a value are.
+    return (resolve(refOf(left)) ?? null) !== (resolve(refOf(right)) ?? null);
+  }
   throw new Error(
     `fake db cannot interpret this SQL fragment: \`${marker.strings.join("?")}\``,
   );

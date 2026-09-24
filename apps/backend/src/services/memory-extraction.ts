@@ -2,11 +2,9 @@ import { generateText } from "ai";
 import {
   eq,
   ne,
-  gt,
   lt,
   and,
   or,
-  isNull,
   isNotNull,
   sql,
   inArray,
@@ -24,32 +22,54 @@ import type { Provider } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { openProvider } from "./provider.ts";
-import { pointerSettingModelId } from "./model-capability.ts";
+import {
+  contextWindowForModel,
+  pointerSettingModelId,
+} from "./model-capability.ts";
 import { generateEmbedding } from "./embedding.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { loadActivePath } from "./chat-messages.ts";
 
 /**
- * Formats conversation messages for the summary prompt.
+ * How much one pass may send, in tokens estimated as characters ÷ 4: half the
+ * extraction model's context window, or 32k when it declares none. The context
+ * gets at most a quarter of it, and only what the new messages leave.
  */
-const formatConversation = (messages: PlatypusUIMessage[]): string => {
-  return messages
-    .map((m) => {
-      const textParts = m.parts
-        .filter((p) => p.type === "text")
-        .map((p) => p.text)
-        .join("");
-      return `${m.role}: ${textParts}`;
-    })
-    .join("\n\n");
+const BUDGET_SHARE = 0.5;
+const DEFAULT_BUDGET_TOKENS = 32_000;
+const CONTEXT_SHARE = 0.25;
+const CHARS_PER_TOKEN = 4;
+
+const SEPARATOR = "\n\n";
+const TRUNCATED = " [truncated]";
+
+/** One message as the summary prompt shows it: its text parts only. */
+const formatMessage = (m: PlatypusUIMessage): string =>
+  `${m.role}: ${m.parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text)
+    .join("")}`;
+
+/** How many of `lines`, from the first, fit in `room` characters once joined. */
+const countFitting = (lines: string[], room: number): number => {
+  let used = 0;
+  let count = 0;
+  for (const line of lines) {
+    used += (count ? SEPARATOR.length : 0) + line.length;
+    if (used > room) break;
+    count++;
+  }
+  return count;
 };
 
 /**
- * Builds the summary prompt for the LLM.
+ * Builds the summary prompt for the LLM: the new messages to extract from, and
+ * the earlier ones a previous pass already read, as context for them.
  */
 const buildSummaryPrompt = (
-  conversationText: string,
   existingSummary: string | null,
+  contextText: string,
+  newText: string,
 ): string => {
   return `You are a memory consolidation assistant. You maintain a daily summary of what is known about the user from their conversations.
 
@@ -57,18 +77,23 @@ const buildSummaryPrompt = (
 ${existingSummary || "No summary yet."}
 </existing-summary>
 
-<conversation>
-${conversationText}
-</conversation>
+<context>
+${contextText}
+</context>
+
+<new-messages>
+${newText}
+</new-messages>
 
 <instructions>
-- Produce an updated daily summary incorporating any new information from the conversation
+- Produce an updated daily summary incorporating any new information from the new messages
+- Add facts only from <new-messages>. <context> holds earlier messages from the same conversation that were already read: use it only to interpret the new messages, never as a source of facts
 - Use a compact markdown format with bulleted lists under topic headings
 - Write in third person (about the user)
 - Preserve specific details (names, numbers, preferences) — do not generalize
-- If the conversation contradicts something in the existing summary, update it
+- If the new messages contradict something in the existing summary, update it
 - If the user asks to forget something, remove it from the summary
-- If the conversation reveals nothing worth remembering, return the existing summary unchanged
+- If the new messages reveal nothing worth remembering, return the existing summary unchanged
 - Aim for 100-500 words total
 - Return ONLY the updated summary text, no preamble or explanation
 </instructions>`;
@@ -76,19 +101,22 @@ ${conversationText}
 
 /**
  * Updates the chat's memory extraction status. `readAt` is when the job read
- * the Chat's messages, not when the pass finished: a turn that starts mid-pass
- * lands after it, so the Chat is due again on a later run.
+ * the Chat, not when the pass finished; the failed-pass backoff counts from it.
+ * `cursor` is passed only by a pass that succeeded, so a failed one leaves it
+ * where it was and the retry covers the same messages.
  */
 const updateChatExtractionStatus = async (
   chatId: string,
   status: "processing" | "completed" | "failed",
   readAt: Date,
+  cursor?: string | null,
 ) => {
   await db
     .update(chatTable)
     .set({
       memoryExtractionStatus: status,
       lastMemoryProcessedAt: readAt,
+      ...(cursor !== undefined && { memoryCursorId: cursor }),
       updatedAt: new Date(),
     })
     .where(eq(chatTable.id, chatId));
@@ -115,10 +143,27 @@ const processChat = async (
   // something they said.
   const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
 
-  // Only process chats with at least 2 messages (user + assistant)
-  if (messages.length < 2) {
-    logger.debug(`Chat ${chat.id} has insufficient messages, skipping`);
-    await updateChatExtractionStatus(chat.id, "completed", readAt);
+  // Everything after the cursor is new; what a pass already read is context.
+  let readCount = 0;
+  if (chat.memoryCursorId) {
+    readCount = messages.findIndex((m) => m.id === chat.memoryCursorId) + 1;
+    if (readCount === 0) {
+      // The cursor is off the Active path: the User moved to another
+      // Alternative, or deleted it. The messages the two paths share were
+      // read; everything after the deepest of them is new.
+      const cursorPath = await loadActivePath(chat.id, chat.memoryCursorId);
+      const readIds = new Set(cursorPath.messages.map((m) => m.id));
+      readCount = messages.findLastIndex((m) => readIds.has(m.id)) + 1;
+    }
+  }
+  const fresh = messages.slice(readCount);
+  if (fresh.length === 0) {
+    await updateChatExtractionStatus(
+      chat.id,
+      "completed",
+      readAt,
+      chat.activeLeafId,
+    );
     return;
   }
 
@@ -140,25 +185,73 @@ const processChat = async (
 
   const existingSummary = existingSummaryRow?.summary || null;
 
-  // Format conversation and build prompt
-  const conversationText = formatConversation(messages);
-  const summaryPrompt = buildSummaryPrompt(conversationText, existingSummary);
+  const provider = extractionProvider as Provider;
+  const modelId = pointerSettingModelId(
+    extractionProvider.memoryExtractionModelId,
+  );
+  const contextWindow = contextWindowForModel(provider, modelId);
+  const budgetChars =
+    (contextWindow ? contextWindow * BUDGET_SHARE : DEFAULT_BUDGET_TOKENS) *
+    CHARS_PER_TOKEN;
+  const room = budgetChars - buildSummaryPrompt(existingSummary, "", "").length;
+
+  // The new messages first, oldest first, as many as fit.
+  const freshLines = fresh.map(formatMessage);
+  let included = countFitting(freshLines, room);
+  let newText = freshLines.slice(0, included).join(SEPARATOR);
+  if (included === 0) {
+    // One message larger than the whole budget: cut to fit, marked as cut, and
+    // moved past like any other.
+    included = 1;
+    newText =
+      freshLines[0].slice(0, Math.max(0, room - TRUNCATED.length)) + TRUNCATED;
+    logger.warn(
+      {
+        chatId: chat.id,
+        messageId: fresh[0].id,
+        length: freshLines[0].length,
+        room,
+      },
+      "Memory extraction truncated a message larger than its budget",
+    );
+  }
+  const cursor = fresh[included - 1].id;
+
+  // Then the most recent of what came before, in what is left.
+  const contextLines = messages
+    .slice(0, readCount)
+    .map(formatMessage)
+    .reverse();
+  const contextText = contextLines
+    .slice(
+      0,
+      countFitting(
+        contextLines,
+        Math.min(room - newText.length, budgetChars * CONTEXT_SHARE),
+      ),
+    )
+    .reverse()
+    .join(SEPARATOR);
+
+  const summaryPrompt = buildSummaryPrompt(
+    existingSummary,
+    contextText,
+    newText,
+  );
 
   logger.debug(
     {
       chatId: chat.id,
-      messageCount: messages.length,
+      messageCount: included,
       hasExistingSummary: !!existingSummary,
-      modelId: extractionProvider.memoryExtractionModelId,
+      modelId,
       promptLength: summaryPrompt.length,
     },
     "Running memory summary extraction",
   );
 
   // Create the model
-  const model = openProvider(extractionProvider as Provider).languageModel(
-    pointerSettingModelId(extractionProvider.memoryExtractionModelId),
-  );
+  const model = openProvider(provider).languageModel(modelId);
 
   // Call the LLM for summary generation
   let result;
@@ -174,7 +267,7 @@ const processChat = async (
       {
         err: error,
         chatId: chat.id,
-        modelId: extractionProvider.memoryExtractionModelId,
+        modelId,
       },
       `Memory summary extraction LLM call failed: ${message}`,
     );
@@ -184,9 +277,11 @@ const processChat = async (
 
   const updatedSummary = result.text.trim();
 
+  // Not a pass that succeeded: a reply cut off before any text (a reasoning
+  // model out of output tokens) would otherwise skip these messages for good.
   if (!updatedSummary) {
-    logger.warn(`Empty summary returned for chat ${chat.id}, skipping`);
-    await updateChatExtractionStatus(chat.id, "completed", readAt);
+    logger.warn(`Empty summary returned for chat ${chat.id}`);
+    await updateChatExtractionStatus(chat.id, "failed", readAt);
     return;
   }
 
@@ -259,7 +354,7 @@ const processChat = async (
   }
 
   // Mark chat as processed
-  await updateChatExtractionStatus(chat.id, "completed", readAt);
+  await updateChatExtractionStatus(chat.id, "completed", readAt, cursor);
 
   logger.info(`Memory summary extraction completed for chat ${chat.id}`);
 };
@@ -267,7 +362,7 @@ const processChat = async (
 type ChatToProcess = {
   chat: Pick<
     typeof chatTable.$inferSelect,
-    "id" | "workspaceId" | "activeLeafId"
+    "id" | "workspaceId" | "activeLeafId" | "memoryCursorId"
   >;
   workspace: typeof workspaceTable.$inferSelect;
   extractionProvider: typeof providerTable.$inferSelect;
@@ -277,10 +372,9 @@ type ChatToProcess = {
 /**
  * Finds chats that need memory extraction processing, and when they were read.
  *
- * A Chat is due when it is not mid-turn and it has never been read, a turn
- * started after it was last read, or its last pass failed over an hour ago.
- * The turn signal is `lastTurnAt`, never `updatedAt`, which this job and
- * auto-titling bump themselves (see `db/schema.ts`).
+ * A Chat is due when it is not mid-turn and its Active path ends somewhere its
+ * cursor does not: a turn, an edit, a move to another Alternative or a
+ * Delete. A Chat whose last pass failed waits an hour before its retry.
  */
 const findChatsToProcess = async (): Promise<{
   readAt: Date;
@@ -350,19 +444,17 @@ const findChatsToProcess = async (): Promise<{
       id: chatTable.id,
       workspaceId: chatTable.workspaceId,
       activeLeafId: chatTable.activeLeafId,
+      memoryCursorId: chatTable.memoryCursorId,
     })
     .from(chatTable)
     .where(
       and(
         inArray(chatTable.workspaceId, workspaceIds),
         ne(chatTable.status, "running"),
+        sql`${chatTable.activeLeafId} IS DISTINCT FROM ${chatTable.memoryCursorId}`,
         or(
-          isNull(chatTable.lastMemoryProcessedAt),
-          gt(chatTable.lastTurnAt, chatTable.lastMemoryProcessedAt),
-          and(
-            eq(chatTable.memoryExtractionStatus, "failed"),
-            lt(chatTable.lastMemoryProcessedAt, oneHourAgo),
-          ),
+          ne(chatTable.memoryExtractionStatus, "failed"),
+          lt(chatTable.lastMemoryProcessedAt, oneHourAgo),
         ),
       ),
     )

@@ -135,13 +135,15 @@ chat.get(
 
     const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
 
-    // The pinned Memories block and previous-turn stamp (ADR-0020), and the
-    // active leaf (ADR-0026), are internal — absent from the Chat response
-    // schema, never surfaced in the product. Strip them before serialising;
-    // the row read by the run sink still carries them.
+    // The pinned Memories block and previous-turn stamp (ADR-0020), the
+    // active leaf (ADR-0026) and the memory extraction cursor are internal —
+    // absent from the Chat response schema, never surfaced in the product.
+    // Strip them before serialising; the row read by the run sink still
+    // carries them.
     const {
       memorySnapshot: _memorySnapshot,
       lastTurnAt: _lastTurnAt,
+      memoryCursorId: _memoryCursorId,
       activeLeafId,
       ...chatResponse
     } = chat;
@@ -403,12 +405,14 @@ chat.put(
       throw new NotFoundError("Chat not found");
     }
 
-    // The pinned Memories block (ADR-0020) and the active leaf (ADR-0026) are
-    // internal — absent from the Chat response schema, never surfaced in the
-    // product. Strip the internal columns before serialising.
+    // The pinned Memories block (ADR-0020), the active leaf (ADR-0026) and the
+    // memory extraction cursor are internal — absent from the Chat response
+    // schema, never surfaced in the product. Strip the internal columns before
+    // serialising.
     const {
       memorySnapshot: _memorySnapshot,
       lastTurnAt: _lastTurnAt,
+      memoryCursorId: _memoryCursorId,
       activeLeafId: _activeLeafId,
       ...chatResponse
     } = result;
