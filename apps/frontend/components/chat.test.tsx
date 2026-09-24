@@ -35,6 +35,7 @@ const { harness } = vi.hoisted(() => ({
     data: new Map<string, unknown>(),
     /** Built once per key so the identity a hydrate effect keys off is stable. */
     responses: new Map<string, unknown>(),
+    auth: { user: { id: "u1" }, ownsWorkspace: true, isAuthLoading: false },
     turn: {
       status: "ready" as ChatStatus,
       error: undefined as Error | undefined,
@@ -108,7 +109,7 @@ const useChatState = () => ({
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "u1" }, ownsWorkspace: true }),
+  useAuth: () => harness.auth,
 }));
 vi.mock("sonner", () => ({
   toast: { error: harness.toastError, info: vi.fn() },
@@ -441,6 +442,11 @@ beforeEach(() => {
   ]);
   harness.responses = new Map();
   harness.turn = { status: "ready", error: undefined, messages: [] };
+  harness.auth = {
+    user: { id: "u1" },
+    ownsWorkspace: true,
+    isAuthLoading: false,
+  };
   localStorage.clear();
   harness.setMessages.mockReset();
   harness.sendMessage.mockReset();
@@ -1472,6 +1478,37 @@ describe("loading", () => {
 
     expect(loadingSkeleton()).not.toBeInTheDocument();
     expect(composer()).toBeInTheDocument();
+  });
+
+  // Until the session and the Workspace row land, nobody knows whether the
+  // reader may send. Guessing read-only and swapping to the composer is the
+  // flicker a reload showed.
+  describe("while ownership is unknown", () => {
+    const messages = [message("u1", "q"), message("a1", "answer")];
+    beforeEach(() => {
+      harness.auth = {
+        user: { id: "u1" },
+        ownsWorkspace: false,
+        isAuthLoading: true,
+      };
+      harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages });
+    });
+
+    it("holds the skeleton, drawing the composer rather than the read-only notice", () => {
+      renderChat();
+
+      expect(loadingSkeleton()?.querySelector(".border-input")).toBeTruthy();
+      expect(composer()).not.toBeInTheDocument();
+      expect(screen.queryByText(/Read-only mode/)).toBeNull();
+    });
+
+    it("keeps the docked skeleton over messages that have already landed", () => {
+      harness.turn.messages = messages;
+
+      renderChat();
+
+      expect(loadingSkeleton()).not.toHaveClass("justify-center");
+    });
   });
 
   it("renders a new Chat's composer straight away", () => {

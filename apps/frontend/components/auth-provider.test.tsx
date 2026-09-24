@@ -1,21 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 
-const { sessionData } = vi.hoisted(() => ({
-  sessionData: {
+const { sessionData, sessionState } = vi.hoisted(() => {
+  const sessionData = {
     user: { id: "u1", role: "user" },
     session: { token: "t" },
-  },
-}));
+  };
+  return {
+    sessionData,
+    sessionState: {
+      data: sessionData as typeof sessionData | null,
+      isPending: false,
+    },
+  };
+});
 
 vi.mock("better-auth/react", () => ({
   createAuthClient: () => ({
-    useSession: () => ({
-      data: sessionData,
-      isPending: false,
-      error: null,
-    }),
+    useSession: () => ({ ...sessionState, error: null }),
   }),
 }));
 
@@ -67,6 +70,8 @@ const Consumer = memo(function Consumer() {
 beforeEach(() => {
   swrCalls.length = 0;
   onRender.mockClear();
+  sessionState.data = sessionData;
+  sessionState.isPending = false;
 });
 
 describe("AuthProvider", () => {
@@ -89,6 +94,48 @@ describe("AuthProvider", () => {
     );
 
     expect(screen.getByText("org-admin|true|true|admin")).toBeInTheDocument();
+  });
+
+  // Neither the session nor the Workspace row is known yet, and `undefined ===
+  // undefined` used to answer that question with "yes".
+  it("reports no owner while the session is still loading", () => {
+    sessionState.data = null;
+    sessionState.isPending = true;
+
+    render(
+      <AuthProvider backendUrl="http://test">
+        <Consumer />
+      </AuthProvider>,
+    );
+
+    expect(screen.getByText(/\|false\|/)).toBeInTheDocument();
+  });
+
+  // What a protected page mounting straight after sign-in reads first. A value
+  // that lagged here would still say signed out, and the page would redirect
+  // to /sign-in.
+  it("hands a page mounted as the session lands the new session", () => {
+    sessionState.data = null;
+    function Mounted() {
+      const { user } = useAuth();
+      const first = useRef(user?.id ?? "signed out");
+      return <p>first saw {first.current}</p>;
+    }
+    const view = render(
+      <AuthProvider backendUrl="http://test">
+        <Consumer />
+      </AuthProvider>,
+    );
+
+    sessionState.data = sessionData;
+    view.rerender(
+      <AuthProvider backendUrl="http://test">
+        <Consumer />
+        <Mounted />
+      </AuthProvider>,
+    );
+
+    expect(screen.getByText("first saw u1")).toBeInTheDocument();
   });
 
   it("keeps the context value stable so an unrelated parent render doesn't reach consumers", () => {

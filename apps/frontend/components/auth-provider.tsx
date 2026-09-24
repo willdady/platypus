@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, ReactNode, useMemo } from "react";
+import {
+  createContext,
+  useContext,
+  ReactNode,
+  useDeferredValue,
+  useMemo,
+} from "react";
 import { createAuthClient } from "better-auth/react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
@@ -112,7 +118,9 @@ export function AuthProvider({
   // Computed permissions
   const isSuperAdmin =
     (data?.user as unknown as User | undefined)?.role === "admin";
-  const ownsWorkspace = workspace?.ownerId === data?.user?.id;
+  // Both sides must be known: while neither has loaded, `undefined ===
+  // undefined` would report an owner.
+  const ownsWorkspace = !!userId && workspace?.ownerId === userId;
   const actor = resolveActor({
     isOperator: isSuperAdmin,
     orgRole: orgMembership?.role ?? null,
@@ -165,7 +173,21 @@ export function AuthProvider({
     ],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  // The session lands as a synchronous store update, often while the page
+  // below is still hydrating. Reaching a Suspense boundary that has not
+  // hydrated yet, a synchronous update makes React throw away its server HTML
+  // and show the route's loading fallback again: a reload flickered from the
+  // page's skeleton to a blank one and back. Deferred, it waits for hydration.
+  //
+  // Only a loading value may lag, and consumers wait on it anyway. A settled
+  // one never does: a stale signed-out value after sign-in would send a
+  // protected page to /sign-in.
+  const deferredValue = useDeferredValue(value);
+  const provided = deferredValue.isAuthLoading ? deferredValue : value;
+
+  return (
+    <AuthContext.Provider value={provided}>{children}</AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

@@ -78,7 +78,7 @@ export const Chat = ({
   chatId: string;
   initialAgentId?: string;
 }) => {
-  const { ownsWorkspace } = useAuth();
+  const { ownsWorkspace, isAuthLoading } = useAuth();
   const canSendMessages = canSendChatMessages(ownsWorkspace);
   const backendUrl = useBackendUrl();
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
@@ -551,11 +551,17 @@ export const Chat = ({
     );
   }
 
-  if (isLoading || !providersData) {
+  // Held while auth loads too: until the session and the Workspace row land,
+  // nobody knows whether the reader may send, and the page drawn meanwhile
+  // would swap between the read-only notice and the composer. The skeleton
+  // draws the composer until then, rather than guess read-only and swap.
+  // Messages can reach the screen while auth is still loading; the skeleton
+  // keeps the docked layout over them rather than centre the composer.
+  if (isLoading || !providersData || isAuthLoading) {
     return (
       <ChatSkeleton
-        transcript={isTranscriptPending}
-        readOnly={!canSendMessages}
+        transcript={isTranscriptPending || messages.length > 0}
+        readOnly={!isAuthLoading && !canSendMessages}
       />
     );
   }
