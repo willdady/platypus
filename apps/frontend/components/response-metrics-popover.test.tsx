@@ -6,23 +6,18 @@ import {
 } from "./response-metrics-popover";
 
 describe("ResponseMetricsPopover", () => {
-  it("renders no control when the message carries no metric at all", () => {
+  it.each([
+    { name: "carries no metric at all", metadata: { agentId: "agent-1" } },
+    { name: "has no metadata", metadata: undefined },
+  ])("renders no control when the message $name", ({ metadata }) => {
     const { container } = render(
-      <ResponseMetricsPopover metadata={{ agentId: "agent-1" }} />,
+      <ResponseMetricsPopover metadata={metadata} />,
     );
 
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders no control for a message with no metadata", () => {
-    const { container } = render(
-      <ResponseMetricsPopover metadata={undefined} />,
-    );
-
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("opens the panel on click, not merely on hover", async () => {
+  it("opens on click to Input, Output and Total, with Total equal to their sum", async () => {
     render(
       <ResponseMetricsPopover
         metadata={{
@@ -31,25 +26,13 @@ describe("ResponseMetricsPopover", () => {
       />,
     );
 
+    // Closed until clicked, not merely hovered.
     expect(screen.queryByText("Input")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Response metrics" }));
 
     expect(await screen.findByText("Input")).toBeInTheDocument();
-  });
-
-  it("shows Input, Output and Total, with Total equal to their sum", async () => {
-    render(
-      <ResponseMetricsPopover
-        metadata={{
-          tokenUsage: { inputTokens: 5_200, outputTokens: 100 },
-        }}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Response metrics" }));
-
-    expect(await screen.findByText("5,200")).toBeInTheDocument();
+    expect(screen.getByText("5,200")).toBeInTheDocument();
     expect(screen.getByText("100")).toBeInTheDocument();
     expect(screen.getByText("5,300")).toBeInTheDocument();
   });

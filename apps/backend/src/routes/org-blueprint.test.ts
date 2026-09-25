@@ -361,6 +361,58 @@ describe("Organization Blueprint Routes", () => {
       });
       expect(res.status).toBe(422);
     });
+
+    it("409s when renamed to another blueprint's name", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "bp-1" }]); // existing blueprint
+      mockDb.transaction.mockImplementationOnce(() => {
+        throw { code: "23505" };
+      });
+
+      const res = await app.request(`${baseUrl}/bp-1`, {
+        method: "PUT",
+        body: JSON.stringify({ name: "Taken", items: [] }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(409);
+    });
+
+    it("422s when a Tier 2 provider is not attached by the blueprint", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "bp-1" }]); // existing blueprint
+
+      const res = await app.request(`${baseUrl}/bp-1`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Starter kit v2",
+          items: [],
+          taskModelProviderId: "prov-1",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(422);
+      expect(await res.json()).toMatchObject({
+        invalidProviderIds: ["prov-1"],
+      });
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
+
+    it("403s for a non-admin", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+
+      const res = await app.request(`${baseUrl}/bp-1`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(403);
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+    });
   });
 
   describe("DELETE /:blueprintId", () => {

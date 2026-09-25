@@ -34,8 +34,6 @@ function setup(
 }
 
 afterEach(() => {
-  toastInfoSpy.mockClear();
-  toastErrorSpy.mockClear();
   vi.clearAllMocks();
 });
 
@@ -53,17 +51,17 @@ describe("useDeleteFlow", () => {
     expect(result.current.deleting).toBe(false);
   });
 
-  it("opens on request and clears any stale error", () => {
-    const { result } = setup({
-      outcome: "success",
-      data: null,
-      revalidateKeys: [],
-    });
-
+  it("opens on request and clears the last refusal's error", async () => {
+    const { result } = setup({ outcome: "conflict", message: "In use" });
     act(() => result.current.request(target));
+    await act(async () => result.current.confirm());
+    expect(result.current.error).toBe("In use");
+
+    const other = { id: "a2", name: "Other Agent" };
+    act(() => result.current.request(other));
 
     expect(result.current.open).toBe(true);
-    expect(result.current.target).toEqual(target);
+    expect(result.current.target).toEqual(other);
     expect(result.current.error).toBeNull();
   });
 
@@ -78,7 +76,7 @@ describe("useDeleteFlow", () => {
     await act(async () => result.current.confirm());
 
     expect(perform).toHaveBeenCalledWith(target, "http://test");
-    expect(mutate).toHaveBeenCalled();
+    expect(mutate).toHaveBeenCalledTimes(1);
     expect(onSuccess).toHaveBeenCalledWith(target);
     expect(result.current.open).toBe(false);
     expect(result.current.target).toBeNull();

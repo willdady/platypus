@@ -151,7 +151,13 @@ describe("Context Routes", () => {
         createdAt: mockContext.createdAt.toISOString(),
         updatedAt: mockContext.updatedAt.toISOString(),
       });
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId,
+          workspaceId: null,
+          content: "New global context",
+        }),
+      );
     });
 
     // The three lookups `userMayUseWorkspace` makes, in order: the Workspace's
@@ -195,7 +201,9 @@ describe("Context Routes", () => {
         createdAt: mockContext.createdAt.toISOString(),
         updatedAt: mockContext.updatedAt.toISOString(),
       });
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ userId, workspaceId: "ws-1" }),
+      );
     });
 
     it("should return 409 if context already exists for the scope", async () => {
@@ -357,8 +365,9 @@ describe("Context Routes", () => {
         createdAt: updatedContext.createdAt.toISOString(),
         updatedAt: updatedContext.updatedAt.toISOString(),
       });
-      expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ content: "Updated content" }),
+      );
     });
 
     it("should return 404 if context not found", async () => {

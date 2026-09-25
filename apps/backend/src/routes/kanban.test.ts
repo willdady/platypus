@@ -1257,6 +1257,53 @@ describe("Kanban Routes", () => {
     });
   });
 
+  describe("GET /:boardId/cards/:cardId/history", () => {
+    const historyWorld = () => {
+      const fake = boardWorld({
+        cards: [
+          { id: "card-1", columnId: "col-1" },
+          { id: "card-b", columnId: "col-b" },
+        ],
+      });
+      const at = (day: number) => new Date(`2026-01-0${day}T00:00:00.000Z`);
+      fake.tables.kanban_card_history = [
+        { id: "h1", cardId: "card-1", actorUserId: "user-1", createdAt: at(1) },
+        { id: "h2", cardId: "card-1", actorUserId: null, createdAt: at(3) },
+        { id: "h3", cardId: "card-1", actorUserId: "gone", createdAt: at(2) },
+        { id: "hb", cardId: "card-b", actorUserId: null, createdAt: at(4) },
+      ];
+      return fake;
+    };
+
+    it("lists the card's history newest first, with actor names", async () => {
+      historyWorld();
+      mockSession();
+
+      const res = await app.request(
+        `${baseUrl}/${boardId}/cards/card-1/history`,
+      );
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        results: { id: string; actorName: string | null }[];
+      };
+      // A deleted actor keeps its entry, nameless.
+      expect(body.results.map((h) => [h.id, h.actorName])).toEqual([
+        ["h2", null],
+        ["h3", null],
+        ["h1", "Ada"],
+      ]);
+    });
+
+    it("returns 404 for a card on another Workspace's board", async () => {
+      historyWorld();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/board-b/cards/card-b/history`);
+      expect(res.status).toBe(404);
+    });
+  });
+
   // Card comments — shared constants
   const cardId = "card-1";
   const commentId = "comment-1";
@@ -1453,6 +1500,25 @@ describe("Kanban Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(404);
+    });
+
+    it("returns 404 for a comment that belongs to a different card", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ...mockComment, cardId: "card-2", createdByUserId: "user-1" },
+      ]); // comment lookup — on the same board, but another card
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ body: "Updated" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(404);
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
 
     it("should return 403 if user does not own comment", async () => {

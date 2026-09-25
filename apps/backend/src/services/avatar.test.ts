@@ -114,7 +114,10 @@ describe("storeAvatar", () => {
     );
     expect(result.ok).toBe(true);
     expect(deleteMock).toHaveBeenCalledWith("agents/agent-1/avatar-old.webp");
-    expect(putMock).toHaveBeenCalled();
+    expect(putMock).toHaveBeenCalledTimes(1);
+    expect(deleteMock.mock.invocationCallOrder[0]).toBeLessThan(
+      putMock.mock.invocationCallOrder[0],
+    );
   });
 });
 

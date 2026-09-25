@@ -4,8 +4,16 @@ import {
   mockSession,
   mockNoSession,
   resetMockDb,
+  seedDb,
+  type FakeDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
+import { deleteAvatar, storeAvatar } from "../services/avatar.ts";
+
+vi.mock("../services/avatar.ts", () => ({
+  storeAvatar: vi.fn(),
+  deleteAvatar: vi.fn(),
+}));
 
 describe("Agent Routes", () => {
   beforeEach(() => {
@@ -104,7 +112,9 @@ describe("Agent Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(mockAgent);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId, organizationId: null }),
+      );
     });
 
     it("creates an agent that references an attached Shared agent as a sub-agent", async () => {
@@ -149,7 +159,9 @@ describe("Agent Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ subAgentIds: ["shared-sub"] }),
+      );
     });
 
     it("should return 400 if description is too long", async () => {
@@ -393,7 +405,9 @@ describe("Agent Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ subAgentIds: ["shared-sub"] }),
+      );
     });
 
     it("rejects a sub-agent that is not visible in this workspace at either scope", async () => {
@@ -540,6 +554,126 @@ describe("Agent Routes", () => {
     });
   });
 
+  describe("avatar routes", () => {
+    /**
+     * `agent-1` is this Workspace's own Agent; `shared-1` is a Shared Agent
+     * attached here (visible, but locked on this surface); `agent-2` belongs to
+     * another Workspace of the same org.
+     */
+    const world = (): FakeDb =>
+      seedDb({
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
+        ],
+        workspace: [
+          { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
+          { id: "ws-2", organizationId: orgId, ownerId: "user-1" },
+        ],
+        agent: [
+          {
+            id: "agent-1",
+            workspaceId,
+            organizationId: null,
+            avatarKey: "old",
+          },
+          { id: "agent-2", workspaceId: "ws-2", organizationId: null },
+          { id: "shared-1", workspaceId: null, organizationId: orgId },
+        ],
+        attachment: [
+          {
+            id: "att-1",
+            workspaceId,
+            resourceType: "agent",
+            resourceId: "shared-1",
+          },
+        ],
+      });
+
+    const upload = (agentId: string) => {
+      const form = new FormData();
+      form.append("file", new File(["x"], "a.png", { type: "image/png" }));
+      return app.request(`${baseUrl}/${agentId}/avatar`, {
+        method: "POST",
+        body: form,
+      });
+    };
+
+    const keyOf = (fake: FakeDb, id: string) =>
+      fake.tables.agent.find((a) => a.id === id)?.avatarKey;
+
+    it("stores the upload and persists its key on the agent", async () => {
+      mockSession();
+      const fake = world();
+      vi.mocked(storeAvatar).mockResolvedValueOnce({ ok: true, key: "new" });
+
+      const res = await upload("agent-1");
+
+      expect(res.status).toBe(200);
+      expect(storeAvatar).toHaveBeenCalledWith(
+        expect.any(File),
+        "agent-1",
+        "old",
+      );
+      expect(keyOf(fake, "agent-1")).toBe("new");
+    });
+
+    it("returns 400 with the rejection when the upload is invalid", async () => {
+      mockSession();
+      const fake = world();
+      vi.mocked(storeAvatar).mockResolvedValueOnce({
+        ok: false,
+        error: "Invalid file type",
+      });
+
+      const res = await upload("agent-1");
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Invalid file type" });
+      expect(keyOf(fake, "agent-1")).toBe("old");
+    });
+
+    it.each([
+      ["locks an attached Shared agent", "shared-1", 403],
+      ["404s another workspace's agent", "agent-2", 404],
+    ])("POST %s", async (_label, id, status) => {
+      mockSession();
+      world();
+
+      const res = await upload(id);
+
+      expect(res.status).toBe(status);
+      expect(storeAvatar).not.toHaveBeenCalled();
+    });
+
+    it("DELETE removes the stored avatar and clears the key", async () => {
+      mockSession();
+      const fake = world();
+
+      const res = await app.request(`${baseUrl}/agent-1/avatar`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(deleteAvatar).toHaveBeenCalledWith("old");
+      expect(keyOf(fake, "agent-1")).toBeNull();
+    });
+
+    it.each([
+      ["locks an attached Shared agent", "shared-1", 403],
+      ["404s another workspace's agent", "agent-2", 404],
+    ])("DELETE %s", async (_label, id, status) => {
+      mockSession();
+      world();
+
+      const res = await app.request(`${baseUrl}/${id}/avatar`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(status);
+      expect(deleteAvatar).not.toHaveBeenCalled();
+    });
+  });
+
   describe("POST /:agentId/promote", () => {
     const promoteUrl = `${baseUrl}/agent-1/promote`;
 
@@ -640,7 +774,13 @@ describe("Agent Routes", () => {
         workspaceId: null,
         scope: "organization",
       });
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceId,
+          resourceType: "agent",
+          resourceId: "agent-1",
+        }),
+      );
       expect(mockDb.onConflictDoNothing).toHaveBeenCalled();
     });
   });

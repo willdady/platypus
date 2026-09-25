@@ -106,12 +106,22 @@ describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
    * The composed options, run for real: the same `emailAndPassword` block and
    * plugins, with an in-memory database in place of Postgres. The tables are
    * pre-declared because the adapter reads a missing one as an error, not as
-   * empty.
+   * empty. Password hashing is swapped for a reversible stand-in: which
+   * endpoints the fence leaves open does not depend on the hash, and scrypt
+   * costs seconds per test.
    */
   const runnableAuth = async () => {
     const { options } = await loadAuth();
     return betterAuth({
       ...options,
+      emailAndPassword: {
+        ...options.emailAndPassword,
+        password: {
+          hash: (password) => Promise.resolve(`hashed:${password}`),
+          verify: ({ hash, password }) =>
+            Promise.resolve(hash === `hashed:${password}`),
+        },
+      },
       database: memoryAdapter({
         user: [],
         session: [],

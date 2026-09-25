@@ -1,119 +1,109 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { describe, it, expect, beforeEach } from "vitest";
+import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { findNonSharedReferences } from "./agent-scope-validation.ts";
 import { SANDBOX_TOOLSET_ID } from "../tools/index.ts";
 
 const orgId = "org-1";
 
+/**
+ * Per table: `shared-*` is Shared in org-1; `ws-*` is Workspace-private;
+ * `foreign-*` is Shared in another Organization; `dual-*` carries a Workspace
+ * as well as org-1 (the scope columns are mutually exclusive on write, not by a
+ * database constraint, and such a row is workspace-private in every other
+ * query).
+ */
+const rowsFor = (prefix: string): Row[] => [
+  {
+    id: `shared-${prefix}`,
+    name: `Shared ${prefix}`,
+    organizationId: orgId,
+    workspaceId: null,
+  },
+  {
+    id: `ws-${prefix}`,
+    name: `WS ${prefix}`,
+    organizationId: null,
+    workspaceId: "ws-1",
+  },
+  {
+    id: `foreign-${prefix}`,
+    name: `Foreign ${prefix}`,
+    organizationId: "org-2",
+    workspaceId: null,
+  },
+  {
+    id: `dual-${prefix}`,
+    name: `Dual ${prefix}`,
+    organizationId: orgId,
+    workspaceId: "ws-1",
+  },
+];
+
 describe("findNonSharedReferences (no-cascade rule)", () => {
   beforeEach(() => {
     resetMockDb();
-    vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
+    seedDb({
+      provider: rowsFor("p"),
+      skill: rowsFor("s"),
+      agent: rowsFor("a"),
+      mcp: rowsFor("m"),
+    });
   });
 
-  it("returns no blockers when every reference is org-scoped", async () => {
-    // Query order: provider, skills, sub-agents, MCPs.
-    mockDb.where
-      .mockResolvedValueOnce([{ id: "p1", name: "P", organizationId: orgId }])
-      .mockResolvedValueOnce([{ id: "s1", name: "S", organizationId: orgId }])
-      .mockResolvedValueOnce([{ id: "a1", name: "A", organizationId: orgId }])
-      .mockResolvedValueOnce([
-        { id: "mcp1", name: "M", organizationId: orgId },
-      ]);
-
+  it("returns no blockers when every reference is Shared in this organization", async () => {
     const blockers = await findNonSharedReferences(orgId, {
-      providerId: "p1",
-      skillIds: ["s1"],
-      subAgentIds: ["a1"],
-      toolSetIds: ["mcp1"],
+      providerId: "shared-p",
+      skillIds: ["shared-s"],
+      subAgentIds: ["shared-a"],
+      toolSetIds: ["shared-m"],
     });
 
     expect(blockers).toEqual([]);
   });
 
-  it("flags every workspace-private reference as a blocker", async () => {
-    mockDb.where
-      .mockResolvedValueOnce([
-        { id: "p1", name: "WS Provider", organizationId: null },
-      ])
-      .mockResolvedValueOnce([
-        { id: "s1", name: "WS Skill", organizationId: null },
-      ])
-      .mockResolvedValueOnce([
-        { id: "a1", name: "WS Agent", organizationId: null },
-      ])
-      .mockResolvedValueOnce([
-        { id: "mcp1", name: "WS Mcp", organizationId: null },
-      ]);
+  it.each(["ws", "foreign", "dual"])(
+    "flags every %s reference as a blocker, named by its row",
+    async (kind) => {
+      const blockers = await findNonSharedReferences(orgId, {
+        providerId: `${kind}-p`,
+        skillIds: ["shared-s", `${kind}-s`],
+        subAgentIds: [`${kind}-a`, "shared-a"],
+        toolSetIds: [`${kind}-m`],
+      });
 
+      const name = { ws: "WS", foreign: "Foreign", dual: "Dual" }[kind];
+      expect(blockers).toEqual([
+        { type: "provider", id: `${kind}-p`, name: `${name} p` },
+        { type: "skill", id: `${kind}-s`, name: `${name} s` },
+        { type: "subAgent", id: `${kind}-a`, name: `${name} a` },
+        { type: "mcp", id: `${kind}-m`, name: `${name} m` },
+      ]);
+    },
+  );
+
+  it("flags missing references using their id as the name fallback", async () => {
     const blockers = await findNonSharedReferences(orgId, {
-      providerId: "p1",
-      skillIds: ["s1"],
-      subAgentIds: ["a1"],
-      toolSetIds: ["mcp1"],
+      providerId: "ghost-p",
+      skillIds: ["ghost-s"],
+      subAgentIds: ["ghost-a"],
+      toolSetIds: ["ghost-m"],
     });
 
     expect(blockers).toEqual([
-      { type: "provider", id: "p1", name: "WS Provider" },
-      { type: "skill", id: "s1", name: "WS Skill" },
-      { type: "subAgent", id: "a1", name: "WS Agent" },
-      { type: "mcp", id: "mcp1", name: "WS Mcp" },
+      { type: "provider", id: "ghost-p", name: "ghost-p" },
+      { type: "skill", id: "ghost-s", name: "ghost-s" },
+      { type: "subAgent", id: "ghost-a", name: "ghost-a" },
+      { type: "mcp", id: "ghost-m", name: "ghost-m" },
     ]);
   });
 
   it("treats statically-registered tool sets (incl. Sandbox) as always allowed", async () => {
-    // Only the provider is queried; the Sandbox/static tool set never hits the
-    // MCP table because it is registered, so no MCP lookup runs.
-    mockDb.where.mockResolvedValueOnce([
-      { id: "p1", name: "Shared Provider", organizationId: orgId },
-    ]);
-
     const blockers = await findNonSharedReferences(orgId, {
-      providerId: "p1",
+      providerId: "shared-p",
+      skillIds: null,
       toolSetIds: [SANDBOX_TOOLSET_ID],
     });
 
     expect(blockers).toEqual([]);
-  });
-
-  it("flags a reference that carries a workspace as well as the org", async () => {
-    // The scope columns are mutually exclusive on write, not by a database
-    // constraint. A row holding both is workspace-private in every other query,
-    // so counting it as Shared here would promote an Agent that borrows it.
-    mockDb.where
-      .mockResolvedValueOnce([
-        { id: "p1", name: "P", organizationId: orgId, workspaceId: null },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "a1",
-          name: "Dual-scope Agent",
-          organizationId: orgId,
-          workspaceId: "ws-1",
-        },
-      ]);
-
-    const blockers = await findNonSharedReferences(orgId, {
-      providerId: "p1",
-      subAgentIds: ["a1"],
-    });
-
-    expect(blockers).toEqual([
-      { type: "subAgent", id: "a1", name: "Dual-scope Agent" },
-    ]);
-  });
-
-  it("flags a missing reference using its id as the name fallback", async () => {
-    mockDb.where
-      .mockResolvedValueOnce([{ id: "p1", name: "P", organizationId: orgId }])
-      .mockResolvedValueOnce([]); // skill 'ghost' does not exist
-
-    const blockers = await findNonSharedReferences(orgId, {
-      providerId: "p1",
-      skillIds: ["ghost"],
-    });
-
-    expect(blockers).toEqual([{ type: "skill", id: "ghost", name: "ghost" }]);
   });
 });

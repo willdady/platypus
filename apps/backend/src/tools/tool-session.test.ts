@@ -717,7 +717,10 @@ describe("openToolSession", () => {
       await expect(session.dispose()).resolves.toBeUndefined();
       expect(failing).toHaveBeenCalled();
       expect(second).toHaveBeenCalled();
-      expect(logger.warn).toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ error: new Error("socket gone") }),
+        "Error closing a tool session's connection",
+      );
     });
   });
 

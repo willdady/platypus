@@ -1,37 +1,85 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { mockNanoid } from "../test-setup.ts";
+import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 
 vi.mock("./sub-agent-validation.ts", () => ({
-  validateSubAgentAssignment: vi.fn().mockResolvedValue({ valid: true }),
+  validateSubAgentAssignment: vi.fn(),
   SUB_AGENT_SELF_ASSIGNMENT_ERROR:
     "An agent cannot assign itself as a sub-agent",
 }));
 
 vi.mock("./agent-scope-validation.ts", () => ({
-  findNonSharedReferences: vi.fn().mockResolvedValue([]),
+  findNonSharedReferences: vi.fn(),
 }));
 
 vi.mock("./agent-references.ts", () => ({
-  scrubDeletedAgentReference: vi.fn().mockResolvedValue(undefined),
+  scrubDeletedAgentReference: vi.fn(),
 }));
 
-// deleteAgent's avatar cleanup goes through avatar.ts's own getStorage() call,
-// not one agent.ts makes directly — mocked here so that cleanup is a no-op.
+// deleteAgent's avatar cleanup goes through avatar.ts's own getStorage() call.
+const { storageDelete } = vi.hoisted(() => ({ storageDelete: vi.fn() }));
 vi.mock("../storage/index.ts", () => ({
-  getStorage: vi.fn(() => ({
-    delete: vi.fn().mockResolvedValue(undefined),
-  })),
+  getStorage: () => ({ delete: storageDelete }),
 }));
 
 import { createAgent, updateAgent, deleteAgent } from "./agent.ts";
 import { validateSubAgentAssignment } from "./sub-agent-validation.ts";
 import { findNonSharedReferences } from "./agent-scope-validation.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
-import { LockedError, NotFoundError } from "../errors.ts";
+import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 
 const ctx = { orgId: "org-1", workspaceId: "ws-1" };
 const workspaceScope = { kind: "workspace" as const, ctx };
 const orgScope = { kind: "organization" as const, orgId: "org-1" };
+
+const agentRow = (
+  id: string,
+  workspaceId: string | null,
+  organizationId: string | null,
+  extra: Row = {},
+): Row => ({
+  id,
+  name: id,
+  workspaceId,
+  organizationId,
+  avatarKey: null,
+  ...extra,
+});
+
+/**
+ * `a1` is ws-1's own; `other` belongs to ws-2; `shared` is org-1's and attached
+ * to ws-1; `loose` is org-1's and unattached; `foreign` is org-2's.
+ */
+const world = () =>
+  seedDb({
+    agent: [
+      agentRow("a1", "ws-1", null, { avatarKey: "agents/a1/avatar.webp" }),
+      agentRow("other", "ws-2", null),
+      agentRow("shared", null, "org-1"),
+      agentRow("loose", null, "org-1", {
+        avatarKey: "agents/loose/avatar.webp",
+      }),
+      agentRow("foreign", null, "org-2"),
+    ],
+    attachment: [
+      {
+        id: "att-1",
+        workspaceId: "ws-1",
+        resourceType: "agent",
+        resourceId: "shared",
+      },
+    ],
+  });
+
+const createFields = {
+  name: "New Agent",
+  description: "desc",
+  providerId: "p1",
+  modelId: "m1",
+};
+
+const find = (fake: ReturnType<typeof world>, id: string) =>
+  fake.tables.agent.find((row) => row.id === id);
 
 describe("agent module", () => {
   beforeEach(() => {
@@ -40,138 +88,115 @@ describe("agent module", () => {
     vi.mocked(validateSubAgentAssignment).mockResolvedValue({ valid: true });
     vi.mocked(findNonSharedReferences).mockResolvedValue([]);
     vi.mocked(scrubDeletedAgentReference).mockResolvedValue(undefined);
+    storageDelete.mockResolvedValue(undefined);
   });
 
   describe("createAgent", () => {
-    it("inserts a workspace-scoped agent with a generated id", async () => {
-      const inserted = { id: "a1", workspaceId: "ws-1", name: "New Agent" };
-      mockDb.returning.mockResolvedValueOnce([inserted]);
+    it("inserts a workspace-scoped agent under a generated id, deduping id arrays", async () => {
+      mockNanoid.mockReturnValueOnce("new-agent");
+      const fake = world();
 
       const result = await createAgent(ctx, {
-        name: "New Agent",
-        description: "desc",
-        providerId: "p1",
-        modelId: "m1",
-      });
-
-      expect(result).toEqual({ row: inserted });
-      expect(mockDb.insert).toHaveBeenCalled();
-      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
-      expect(values.workspaceId).toBe("ws-1");
-      expect(values.organizationId).toBeNull();
-      expect(typeof values.id).toBe("string");
-    });
-
-    it("dedupes toolSetIds, skillIds and subAgentIds before insert", async () => {
-      mockDb.returning.mockResolvedValueOnce([{ id: "a1" }]);
-
-      await createAgent(ctx, {
-        name: "New Agent",
-        description: "desc",
-        providerId: "p1",
-        modelId: "m1",
+        ...createFields,
         toolSetIds: ["t1", "t1"],
         skillIds: ["s1", "s1"],
         subAgentIds: ["sub1", "sub1"],
       });
 
-      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
-      expect(values.toolSetIds).toEqual(["t1"]);
-      expect(values.skillIds).toEqual(["s1"]);
-      expect(values.subAgentIds).toEqual(["sub1"]);
+      const stored = {
+        id: "new-agent",
+        ...createFields,
+        toolSetIds: ["t1"],
+        skillIds: ["s1"],
+        subAgentIds: ["sub1"],
+        workspaceId: "ws-1",
+        organizationId: null,
+      };
+      expect(result).toEqual({ row: stored });
+      expect(find(fake, "new-agent")).toEqual(stored);
+      expect(validateSubAgentAssignment).toHaveBeenCalledWith(
+        ctx,
+        "new-agent",
+        ["sub1"],
+      );
+    });
+
+    it("skips sub-agent validation when none are assigned", async () => {
+      world();
+      await createAgent(ctx, { ...createFields, subAgentIds: [] });
+      expect(validateSubAgentAssignment).not.toHaveBeenCalled();
     });
 
     it("returns an error and does not insert when sub-agent validation fails", async () => {
+      const fake = world();
       vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
         valid: false,
         error: "One or more sub-agents are not available in this workspace",
       });
 
       const result = await createAgent(ctx, {
-        name: "New Agent",
-        description: "desc",
-        providerId: "p1",
-        modelId: "m1",
+        ...createFields,
         subAgentIds: ["missing"],
       });
 
       expect(result).toEqual({
         error: "One or more sub-agents are not available in this workspace",
       });
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.tables.agent).toHaveLength(5);
     });
   });
 
-  describe("updateAgent", () => {
-    it("updates a workspace-scoped agent", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "a1", workspaceId: "ws-1" }]);
-      const updated = { id: "a1", workspaceId: "ws-1", name: "Renamed" };
-      mockDb.returning.mockResolvedValueOnce([updated]);
+  describe("updateAgent (workspace scope)", () => {
+    it("updates only this Workspace's agent", async () => {
+      const fake = world();
 
       const result = await updateAgent(workspaceScope, "a1", {
         name: "Renamed",
       });
 
-      expect(result).toEqual({ row: updated });
-      expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "Renamed" }),
-      );
+      expect(result).toEqual({
+        row: expect.objectContaining({ id: "a1", name: "Renamed" }) as unknown,
+      });
+      expect(find(fake, "a1")).toMatchObject({
+        name: "Renamed",
+        updatedAt: expect.any(Date) as unknown,
+      });
+      expect(find(fake, "other")?.name).toBe("other");
     });
 
     it("persists a cleared sampling param as null (#263)", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "a1", workspaceId: "ws-1" }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "a1", temperature: null }]);
+      const fake = world();
+      find(fake, "a1")!.temperature = 0.7;
 
       await updateAgent(workspaceScope, "a1", { temperature: null });
 
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ temperature: null }),
-      );
+      expect(find(fake, "a1")?.temperature).toBeNull();
     });
 
-    it("throws NotFoundError when the agent is not visible here", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+    it.each(["other", "loose", "foreign", "missing"])(
+      "throws NotFoundError for %s, which is not visible here",
+      async (id) => {
+        const fake = world();
+        const before = structuredClone(fake.tables.agent);
 
-      await expect(
-        updateAgent(workspaceScope, "missing", { name: "x" }),
-      ).rejects.toThrow(NotFoundError);
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
+        await expect(
+          updateAgent(workspaceScope, id, { name: "x" }),
+        ).rejects.toThrow(NotFoundError);
+        expect(fake.tables.agent).toEqual(before);
+      },
+    );
 
     it("throws LockedError for an attached Shared agent", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([
-          { id: "a1", organizationId: "org-1", workspaceId: null },
-        ])
-        .mockResolvedValueOnce([{ id: "att-1" }]);
+      const fake = world();
 
       await expect(
-        updateAgent(workspaceScope, "a1", { name: "x" }),
+        updateAgent(workspaceScope, "shared", { name: "x" }),
       ).rejects.toThrow(LockedError);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(find(fake, "shared")?.name).toBe("shared");
     });
 
-    it("returns an error and does not update when sub-agent validation fails", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "a1", workspaceId: "ws-1" }]);
-      vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
-        valid: false,
-        error: "An agent cannot assign itself as a sub-agent",
-      });
-
-      const result = await updateAgent(workspaceScope, "a1", {
-        subAgentIds: ["a1"],
-      });
-
-      expect(result).toEqual({
-        error: "An agent cannot assign itself as a sub-agent",
-      });
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it("dedupes id arrays before validating and updating", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "a1", workspaceId: "ws-1" }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "a1" }]);
+    it("dedupes subAgentIds before validating and updating", async () => {
+      const fake = world();
 
       await updateAgent(workspaceScope, "a1", {
         subAgentIds: ["sub1", "sub1"],
@@ -180,153 +205,188 @@ describe("agent module", () => {
       expect(validateSubAgentAssignment).toHaveBeenCalledWith(ctx, "a1", [
         "sub1",
       ]);
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ subAgentIds: ["sub1"] }),
-      );
+      expect(find(fake, "a1")?.subAgentIds).toEqual(["sub1"]);
     });
 
-    it("updates an organization-scoped agent after checking it is visible here (#605)", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "a1", organizationId: "org-1", workspaceId: null },
-      ]); // requireOrgScoped
-      const updated = { id: "a1", organizationId: "org-1", name: "Renamed" };
-      mockDb.returning.mockResolvedValueOnce([updated]);
-
-      const result = await updateAgent(orgScope, "a1", {
-        providerId: "p1",
-        name: "Renamed",
+    it("returns an error and does not update when sub-agent validation fails", async () => {
+      const fake = world();
+      vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
+        valid: false,
+        error: "An agent cannot assign itself as a sub-agent",
       });
 
-      expect(result).toEqual({ row: updated });
-      expect(findNonSharedReferences).toHaveBeenCalledWith(
-        "org-1",
-        expect.objectContaining({ providerId: "p1" }),
-      );
-    });
-
-    it("throws NotFoundError for an organization-scoped agent that is not Shared here", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // requireOrgScoped: not found
-
-      await expect(
-        updateAgent(orgScope, "missing", { providerId: "p1" }),
-      ).rejects.toThrow(NotFoundError);
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it("rejects an organization-scoped self-assignment before checking references", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "a1", organizationId: "org-1", workspaceId: null },
-      ]); // requireOrgScoped
-
-      const result = await updateAgent(orgScope, "a1", {
-        providerId: "p1",
+      const result = await updateAgent(workspaceScope, "a1", {
+        name: "x",
         subAgentIds: ["a1"],
       });
 
       expect(result).toEqual({
         error: "An agent cannot assign itself as a sub-agent",
       });
-      expect(findNonSharedReferences).not.toHaveBeenCalled();
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(find(fake, "a1")?.name).toBe("a1");
+    });
+  });
+
+  describe("updateAgent (organization scope)", () => {
+    it("updates this organization's Shared agent after checking its references (#605)", async () => {
+      const fake = world();
+
+      const result = await updateAgent(orgScope, "loose", {
+        providerId: "p1",
+        name: "Renamed",
+        skillIds: ["s1", "s1"],
+      });
+
+      expect(result).toEqual({
+        row: expect.objectContaining({
+          id: "loose",
+          name: "Renamed",
+        }) as unknown,
+      });
+      expect(find(fake, "loose")).toMatchObject({
+        name: "Renamed",
+        skillIds: ["s1"],
+      });
+      expect(findNonSharedReferences).toHaveBeenCalledWith("org-1", {
+        providerId: "p1",
+        skillIds: ["s1"],
+        subAgentIds: undefined,
+        toolSetIds: undefined,
+      });
     });
 
-    it("blocks an organization-scoped update that references a workspace-private resource", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "a1", organizationId: "org-1", workspaceId: null },
-      ]); // requireOrgScoped
+    it.each(["a1", "foreign", "missing"])(
+      "throws NotFoundError for %s, which is not Shared in this organization",
+      async (id) => {
+        const fake = world();
+        const before = structuredClone(fake.tables.agent);
+
+        await expect(
+          updateAgent(orgScope, id, { providerId: "p1", name: "x" }),
+        ).rejects.toThrow(NotFoundError);
+        expect(fake.tables.agent).toEqual(before);
+      },
+    );
+
+    it("rejects a self-assignment before checking references", async () => {
+      const fake = world();
+
+      const result = await updateAgent(orgScope, "loose", {
+        providerId: "p1",
+        subAgentIds: ["loose"],
+      });
+
+      expect(result).toEqual({
+        error: "An agent cannot assign itself as a sub-agent",
+      });
+      expect(findNonSharedReferences).not.toHaveBeenCalled();
+      expect(find(fake, "loose")?.subAgentIds).toBeUndefined();
+    });
+
+    it("blocks an update that references a workspace-private resource", async () => {
+      const fake = world();
       vi.mocked(findNonSharedReferences).mockResolvedValueOnce([
         { type: "provider", id: "p1", name: "WS Provider" },
       ]);
 
-      const result = await updateAgent(orgScope, "a1", { providerId: "p1" });
+      const result = await updateAgent(orgScope, "loose", {
+        providerId: "p1",
+        name: "x",
+      });
 
       expect(result).toEqual({
         error:
           "A shared agent may only reference other shared (organization-scoped) resources",
         blockers: [{ type: "provider", id: "p1", name: "WS Provider" }],
       });
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(find(fake, "loose")?.name).toBe("loose");
     });
   });
 
-  describe("deleteAgent", () => {
-    it("deletes a workspace-scoped agent and cleans up its avatar", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "a1", workspaceId: "ws-1", avatarKey: "agents/a1/avatar.webp" },
-      ]);
+  describe("deleteAgent (workspace scope)", () => {
+    it("deletes only this Workspace's agent and its avatar", async () => {
+      const fake = world();
 
       await deleteAgent(workspaceScope, "a1");
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(find(fake, "a1")).toBeUndefined();
+      expect(fake.tables.agent).toHaveLength(4);
+      expect(storageDelete).toHaveBeenCalledWith("agents/a1/avatar.webp");
     });
 
-    it("deletes an agent with no avatar", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "a1", workspaceId: "ws-1", avatarKey: null },
-      ]);
+    it("skips storage for an agent with no avatar", async () => {
+      const fake = world();
+      find(fake, "a1")!.avatarKey = null;
 
       await deleteAgent(workspaceScope, "a1");
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(find(fake, "a1")).toBeUndefined();
+      expect(storageDelete).not.toHaveBeenCalled();
     });
 
-    it("throws NotFoundError when the agent is not visible here", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+    it.each(["other", "loose", "missing"])(
+      "throws NotFoundError for %s, which is not visible here",
+      async (id) => {
+        const fake = world();
 
-      await expect(deleteAgent(workspaceScope, "missing")).rejects.toThrow(
-        NotFoundError,
-      );
-      expect(mockDb.delete).not.toHaveBeenCalled();
-    });
+        await expect(deleteAgent(workspaceScope, id)).rejects.toThrow(
+          NotFoundError,
+        );
+        expect(fake.tables.agent).toHaveLength(5);
+      },
+    );
 
     it("throws LockedError for an attached Shared agent", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([
-          { id: "a1", organizationId: "org-1", workspaceId: null },
-        ])
-        .mockResolvedValueOnce([{ id: "att-1" }]);
+      const fake = world();
 
-      await expect(deleteAgent(workspaceScope, "a1")).rejects.toThrow(
+      await expect(deleteAgent(workspaceScope, "shared")).rejects.toThrow(
         LockedError,
       );
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(find(fake, "shared")).toBeDefined();
     });
+  });
 
-    it("deletes an organization-scoped agent and scrubs it from other agents' subAgentIds", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment
-        .mockResolvedValueOnce([]); // requireSharedDeletable: no blueprint
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "a1", avatarKey: "agents/a1/avatar.webp" },
-      ]);
+  describe("deleteAgent (organization scope)", () => {
+    it("deletes the Shared agent, scrubs sub-agent references, then its avatar", async () => {
+      const fake = world();
 
-      await deleteAgent(orgScope, "a1");
+      await deleteAgent(orgScope, "loose");
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(find(fake, "loose")).toBeUndefined();
       expect(scrubDeletedAgentReference).toHaveBeenCalledWith(
         expect.anything(),
         "subAgentIds",
-        "a1",
+        "loose",
       );
+      expect(storageDelete).toHaveBeenCalledWith("agents/loose/avatar.webp");
     });
 
-    it("throws ConflictError while an Attachment still references the organization-scoped agent", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attached
+    it("still succeeds when the avatar cannot be removed from storage", async () => {
+      const fake = world();
+      storageDelete.mockRejectedValueOnce(new Error("storage down"));
 
-      await expect(deleteAgent(orgScope, "a1")).rejects.toThrow();
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      await expect(deleteAgent(orgScope, "loose")).resolves.toBeUndefined();
+      expect(find(fake, "loose")).toBeUndefined();
     });
 
-    it("throws NotFoundError when the organization-scoped delete matches no row", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment
-        .mockResolvedValueOnce([]); // requireSharedDeletable: no blueprint
-      mockDb.returning.mockResolvedValueOnce([]); // delete matched nothing
+    it("throws ConflictError while an Attachment still references the agent", async () => {
+      const fake = world();
 
-      await expect(deleteAgent(orgScope, "missing")).rejects.toThrow(
-        NotFoundError,
+      await expect(deleteAgent(orgScope, "shared")).rejects.toThrow(
+        ConflictError,
       );
-      expect(scrubDeletedAgentReference).not.toHaveBeenCalled();
+      expect(find(fake, "shared")).toBeDefined();
     });
+
+    it.each(["a1", "foreign", "missing"])(
+      "throws NotFoundError for %s, which is not Shared in this organization",
+      async (id) => {
+        const fake = world();
+
+        await expect(deleteAgent(orgScope, id)).rejects.toThrow(NotFoundError);
+        expect(fake.tables.agent).toHaveLength(5);
+        expect(scrubDeletedAgentReference).not.toHaveBeenCalled();
+      },
+    );
   });
 });

@@ -100,31 +100,38 @@ const startRecordedRun = (timeouts?: {
   return { run, outcome, terminated: done };
 };
 
-const planOf = (backend: SandboxBackend) => ({
-  model: shellExecModel(),
-  tools: createSandboxTools(backend, ctx),
-  maxSteps: 3,
-});
+/** Drives one turn against `backend`, draining its snapshots as a sink would. */
+const driveAgainst = (
+  backend: SandboxBackend,
+  run: ReturnType<typeof startRun>,
+) => {
+  const drive = driveDelegate({
+    plan: {
+      model: shellExecModel(),
+      tools: createSandboxTools(backend, ctx),
+      maxSteps: 3,
+    },
+    run,
+    prompt: "run something long",
+    agentId: "sub-1",
+  });
+  const drained = (async () => {
+    for await (const _ of drive.snapshots) void _;
+  })();
+  return { done: drive.done, drained };
+};
 
 describe("a sandbox tool in flight when the run aborts", () => {
   it("finishes the run as cancelled when the turn is stopped", async () => {
     const { run, outcome } = startRecordedRun();
     const { backend, entered } = neverSettlingBackend();
 
-    const drive = driveDelegate({
-      plan: planOf(backend),
-      run,
-      prompt: "run something long",
-      agentId: "sub-1",
-    });
-    const drained = (async () => {
-      for await (const _ of drive.snapshots) void _;
-    })();
+    const drive = driveAgainst(backend, run);
 
     await entered;
     runRegistry.cancel(run.handle.runId);
 
-    await drained;
+    await drive.drained;
     const result = await drive.done;
 
     expect(result.status).toBe("cancelled");
@@ -144,22 +151,14 @@ describe("a sandbox tool in flight when the run aborts", () => {
       const { run, outcome, terminated } = startRecordedRun(timeouts);
       const { backend } = neverSettlingBackend();
 
-      const drive = driveDelegate({
-        plan: planOf(backend),
-        run,
-        prompt: "run something long",
-        agentId: "sub-1",
-      });
-      const drained = (async () => {
-        for await (const _ of drive.snapshots) void _;
-      })();
+      const drive = driveAgainst(backend, run);
 
       await terminated;
-      await drained;
+      await drive.drained;
       await drive.done;
 
-      expect(outcome).toHaveLength(1);
-      expect(["failed", "cancelled"]).toContain(outcome[0].status);
+      // A timeout is a failure, not a user cancel.
+      expect(outcome).toEqual([{ status: "failed" }]);
     },
   );
 });

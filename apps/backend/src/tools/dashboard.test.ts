@@ -1,14 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { z } from "zod";
 import {
   widgetTypeRegistry,
   type AgentWritableWidgetType,
 } from "@platypus/schemas";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { callTool, resetMockDb, seedDb, type FakeDb } from "../test-utils.ts";
 
 import { createDashboardTools } from "./dashboard.ts";
-
-const ctx = { toolCallId: "test", messages: [], context: {} };
 
 const agentWritableTypes = Object.entries(widgetTypeRegistry)
   .filter(([, definition]) => definition.agentWritable)
@@ -62,11 +60,50 @@ const workspaceId = "ws-1";
 const dashboardId = "dash-1";
 const widgetId = "widget-1";
 
+const dashboard = (id: string, ws: string, createdAt: string) => ({
+  id,
+  workspaceId: ws,
+  name: id,
+  createdAt: new Date(createdAt),
+});
+
+const widget = (
+  id: string,
+  type: string,
+  data: unknown,
+  over: Record<string, unknown> = {},
+) => ({
+  id,
+  dashboardId,
+  type,
+  title: id,
+  data,
+  createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+  ...over,
+});
+
 describe("createDashboardTools", () => {
   let tools: ReturnType<typeof createDashboardTools>;
+  let db: FakeDb;
+
+  /** Seeds this workspace's dashboard holding one widget of `type`. */
+  const seedWidget = (type: string, data: unknown = {}) => {
+    db = seedDb({
+      dashboard: [dashboard(dashboardId, workspaceId, "2026-01-01")],
+      widget: [widget(widgetId, type, data)],
+    });
+  };
+
+  const update = (type: AgentWritableWidgetType, data: unknown) =>
+    callTool(tools.updateWidgetData, {
+      dashboardId,
+      widgetId,
+      type,
+      data: data as never,
+    });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     resetMockDb();
     tools = createDashboardTools(workspaceId);
   });
@@ -80,74 +117,78 @@ describe("createDashboardTools", () => {
     ]);
   });
 
-  describe("listDashboards", () => {
-    it("returns dashboards in workspace", async () => {
-      const dashboards = [{ id: dashboardId, name: "Sales" }];
-      mockDb.orderBy.mockResolvedValueOnce(dashboards);
-
-      expect(await tools.listDashboards.execute!({}, ctx)).toEqual(dashboards);
+  it("listDashboards returns this workspace's dashboards, oldest first", async () => {
+    seedDb({
+      dashboard: [
+        dashboard("newer", workspaceId, "2026-02-01"),
+        dashboard("theirs", "ws-2", "2026-01-15"),
+        dashboard("older", workspaceId, "2026-01-01"),
+      ],
     });
+
+    expect(await callTool(tools.listDashboards, {})).toMatchObject([
+      { id: "older" },
+      { id: "newer" },
+    ]);
   });
 
   describe("listWidgets", () => {
+    it("lists this dashboard's widgets as id, type and title only", async () => {
+      seedDb({
+        dashboard: [dashboard(dashboardId, workspaceId, "2026-01-01")],
+        widget: [
+          widget("w1", "metric", validPayloads.metric),
+          widget("w-other", "text", validPayloads.text, {
+            dashboardId: "dash-2",
+          }),
+        ],
+      });
+
+      expect(await callTool(tools.listWidgets, { dashboardId })).toEqual([
+        { id: "w1", type: "metric", title: "w1" },
+      ]);
+    });
+
     it("refuses a dashboard from another workspace", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+      seedDb({
+        dashboard: [dashboard(dashboardId, "ws-2", "2026-01-01")],
+        widget: [widget(widgetId, "metric", validPayloads.metric)],
+      });
 
-      expect(await tools.listWidgets.execute!({ dashboardId }, ctx)).toEqual({
+      expect(await callTool(tools.listWidgets, { dashboardId })).toEqual({
         error: "Dashboard not found",
       });
-    });
-
-    it("returns error when dashboard not found", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      expect(await tools.listWidgets.execute!({ dashboardId }, ctx)).toEqual({
-        error: "Dashboard not found",
-      });
-    });
-
-    it("returns widgets for a dashboard", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      const widgets = [
-        { id: widgetId, dashboardId, type: "metric" },
-        { id: "widget-embed", dashboardId, type: "embed" },
-      ];
-      mockDb.orderBy.mockResolvedValueOnce(widgets);
-
-      expect(await tools.listWidgets.execute!({ dashboardId }, ctx)).toEqual(
-        widgets,
-      );
     });
   });
 
   describe("getWidget", () => {
-    it("refuses a widget outside the requested dashboard", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      mockDb.limit.mockResolvedValueOnce([]);
+    it("returns an embed widget's data, though agents cannot write it", async () => {
+      seedWidget("embed", { url: "https://status.example.com/embed" });
 
       expect(
-        await tools.getWidget.execute!({ dashboardId, widgetId }, ctx),
-      ).toEqual({
-        error: "Widget not found",
-      });
+        await callTool(tools.getWidget, { dashboardId, widgetId }),
+      ).toEqual(
+        widget(widgetId, "embed", { url: "https://status.example.com/embed" }),
+      );
     });
 
-    it("returns embed widget data without exposing it to agent writes", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      const widget = {
-        id: widgetId,
-        dashboardId,
-        title: "Status",
-        type: "embed",
-        data: { url: "https://status.example.com/embed" },
-        createdAt: new Date("2026-01-01T00:00:00.000Z"),
-        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-      };
-      mockDb.limit.mockResolvedValueOnce([widget]);
+    it("refuses a widget on another dashboard", async () => {
+      seedWidget("metric", validPayloads.metric);
 
       expect(
-        await tools.getWidget.execute!({ dashboardId, widgetId }, ctx),
-      ).toEqual(widget);
+        await callTool(tools.getWidget, { dashboardId, widgetId: "missing" }),
+      ).toEqual({ error: "Widget not found" });
+    });
+
+    it("refuses a dashboard from another workspace", async () => {
+      seedDb({
+        dashboard: [dashboard(dashboardId, "ws-2", "2026-01-01")],
+        widget: [widget(widgetId, "metric", validPayloads.metric)],
+      });
+
+      expect(
+        await callTool(tools.getWidget, { dashboardId, widgetId }),
+      ).toEqual({ error: "Dashboard not found" });
     });
   });
 
@@ -194,40 +235,44 @@ describe("createDashboardTools", () => {
       }
     });
 
-    // The hole this pair of tests closes: `type` and `data` are two
-    // independent input fields, and `data` is an undiscriminated union, so the
-    // input schema alone cannot tell that a payload belongs to another type.
-    // The pairing is enforced in the shared update path, which is what these
-    // exercise through the tool.
-    it("refuses a payload belonging to another widget type, for every agent-writable type", async () => {
-      for (const type of agentWritableTypes) {
-        resetMockDb();
-        vi.clearAllMocks();
-        mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: widgetId, dashboardId, type },
-        ]);
+    it.each(agentWritableTypes)(
+      "stores the matching payload for a %s widget",
+      async (type) => {
+        seedWidget(type);
 
-        const result = (await tools.updateWidgetData.execute!(
-          { dashboardId, widgetId, type, data: foreignPayload(type) },
-          ctx,
-        )) as { error: string };
+        expect(await update(type, validPayloads[type])).toMatchObject({
+          id: widgetId,
+          type,
+          data: validPayloads[type],
+        });
+        expect(db.tables.widget[0].data).toEqual(validPayloads[type]);
+      },
+    );
 
-        expect(result.error, type).toContain(type);
-        expect(mockDb.update, type).not.toHaveBeenCalled();
-      }
-    });
+    // The hole this closes: `type` and `data` are two independent input
+    // fields, and `data` is an undiscriminated union, so the input schema
+    // alone cannot tell that a payload belongs to another type. The pairing
+    // is enforced in the shared update path, exercised here through the tool.
+    it.each(agentWritableTypes)(
+      "refuses another type's payload for a %s widget",
+      async (type) => {
+        seedWidget(type);
+
+        const result: unknown = await update(type, foreignPayload(type));
+
+        expect(result).toEqual({
+          error: expect.stringContaining(`"${type}"`) as unknown,
+        });
+        expect(db.tables.widget[0].data).toEqual({});
+      },
+    );
 
     it("names the widget type and the failing field, without echoing the input", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: widgetId, dashboardId, type: "metric" },
-      ]);
+      seedWidget("metric");
 
-      const result = (await tools.updateWidgetData.execute!(
-        { dashboardId, widgetId, type: "metric", data: { content: "hello" } },
-        ctx,
-      )) as { error: string };
+      const result = (await update("metric", { content: "hello" })) as {
+        error: string;
+      };
 
       expect(result.error).toContain("metric");
       expect(result.error).toContain("data.value");
@@ -235,134 +280,32 @@ describe("createDashboardTools", () => {
       expect(result.error).not.toContain("hello");
     });
 
-    it("accepts the matching payload for every agent-writable widget type", async () => {
-      for (const type of agentWritableTypes) {
-        resetMockDb();
-        vi.clearAllMocks();
-        mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: widgetId, dashboardId, type },
-        ]);
-        const updated = {
-          id: widgetId,
-          dashboardId,
-          type,
-          data: validPayloads[type],
-        };
-        mockDb.returning.mockResolvedValueOnce([updated]);
+    it("refuses when the stored widget is a different type", async () => {
+      seedWidget("text", validPayloads.text);
 
-        expect(
-          await tools.updateWidgetData.execute!(
-            { dashboardId, widgetId, type, data: validPayloads[type] },
-            ctx,
-          ),
-          type,
-        ).toEqual(updated);
-      }
+      expect(await update("metric", validPayloads.metric)).toEqual({
+        error: "Widget type mismatch",
+      });
+      expect(db.tables.widget[0].data).toEqual(validPayloads.text);
     });
 
-    it("returns error when dashboard not found", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+    it("refuses a widget on another dashboard", async () => {
+      seedWidget("metric");
+      db.tables.widget[0].dashboardId = "dash-2";
 
-      expect(
-        await tools.updateWidgetData.execute!(
-          {
-            dashboardId,
-            widgetId,
-            type: "metric",
-            data: { value: 100, label: "Revenue" },
-          },
-          ctx,
-        ),
-      ).toEqual({ error: "Dashboard not found" });
+      expect(await update("metric", validPayloads.metric)).toEqual({
+        error: "Widget not found",
+      });
     });
 
-    it("returns error when widget not found", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      mockDb.limit.mockResolvedValueOnce([]);
+    it("refuses a dashboard from another workspace", async () => {
+      seedWidget("metric");
+      db.tables.dashboard[0].workspaceId = "ws-2";
 
-      expect(
-        await tools.updateWidgetData.execute!(
-          {
-            dashboardId,
-            widgetId,
-            type: "metric",
-            data: { value: 100, label: "Revenue" },
-          },
-          ctx,
-        ),
-      ).toEqual({ error: "Widget not found" });
-    });
-
-    it("returns error on widget type mismatch", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: widgetId, dashboardId, type: "text" },
-      ]);
-
-      expect(
-        await tools.updateWidgetData.execute!(
-          {
-            dashboardId,
-            widgetId,
-            type: "metric",
-            data: { value: 100, label: "Revenue" },
-          },
-          ctx,
-        ),
-      ).toEqual({ error: "Widget type mismatch" });
-    });
-
-    it("updates metric widget data", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: widgetId, dashboardId, type: "metric" },
-      ]);
-      const updated = {
-        id: widgetId,
-        dashboardId,
-        type: "metric",
-        data: { value: 100, label: "Revenue" },
-      };
-      mockDb.returning.mockResolvedValueOnce([updated]);
-
-      expect(
-        await tools.updateWidgetData.execute!(
-          {
-            dashboardId,
-            widgetId,
-            type: "metric",
-            data: { value: 100, label: "Revenue" },
-          },
-          ctx,
-        ),
-      ).toEqual(updated);
-    });
-
-    it("updates text widget data", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: widgetId, dashboardId, type: "text" },
-      ]);
-      const updated = {
-        id: widgetId,
-        dashboardId,
-        type: "text",
-        data: { content: "# Status\nAll good" },
-      };
-      mockDb.returning.mockResolvedValueOnce([updated]);
-
-      expect(
-        await tools.updateWidgetData.execute!(
-          {
-            dashboardId,
-            widgetId,
-            type: "text",
-            data: { content: "# Status\nAll good" },
-          },
-          ctx,
-        ),
-      ).toEqual(updated);
+      expect(await update("metric", validPayloads.metric)).toEqual({
+        error: "Dashboard not found",
+      });
+      expect(db.tables.widget[0].data).toEqual({});
     });
   });
 });

@@ -268,6 +268,21 @@ describe("useModelSelection — workspace and stale references", () => {
     });
   });
 
+  it("ignores and clears a stored selection past its expiry", () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        value: { type: "agent", id: "a1" },
+        expiresAt: Date.now() - 1,
+      }),
+    );
+
+    const { result } = renderTracked({ ...base, providers: [] });
+
+    expect(result.current.isResolved).toBe(false);
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
   it("does not refresh the stored selection's expiry on a bare revalidation", () => {
     const { rerender } = renderTracked(base);
     const written = localStorage.getItem(STORAGE_KEY);

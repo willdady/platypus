@@ -38,6 +38,8 @@ async function countPngFiles(root: string): Promise<number> {
   return all.filter((f) => String(f).endsWith(".png")).length;
 }
 
+const CONTEXT = { orgId: "org-1", workspaceId: "ws-1", chatId: "chat-1" };
+
 describe("Storage Utils", () => {
   let tempDir: string;
 
@@ -66,13 +68,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", dataUrl),
       ];
 
-      const context = {
-        orgId: "org-1",
-        workspaceId: "ws-1",
-        chatId: "chat-1",
-      };
-
-      const result = await extractFiles(messages, context);
+      const result = await extractFiles(messages, CONTEXT);
 
       expect(result).toHaveLength(1);
       expect(result[0].parts).toHaveLength(2);
@@ -130,13 +126,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", httpUrl),
       ];
 
-      const context = {
-        orgId: "org-1",
-        workspaceId: "ws-1",
-        chatId: "chat-1",
-      };
-
-      const result = await extractFiles(messages, context);
+      const result = await extractFiles(messages, CONTEXT);
 
       const filePart = result[0].parts[1];
       expect((filePart as FileUIPart).url).toBe(httpUrl);
@@ -147,13 +137,7 @@ describe("Storage Utils", () => {
         { id: "msg-1", role: "user", parts: [] },
       ];
 
-      const context = {
-        orgId: "org-1",
-        workspaceId: "ws-1",
-        chatId: "chat-1",
-      };
-
-      const result = await extractFiles(messages, context);
+      const result = await extractFiles(messages, CONTEXT);
       expect(result).toHaveLength(1);
       expect(result[0].parts).toHaveLength(0);
     });
@@ -164,13 +148,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", dataUrl),
       ];
 
-      const context = {
-        orgId: "org-1",
-        workspaceId: "ws-1",
-        chatId: "chat-1",
-      };
-
-      await extractFiles(messages, context);
+      await extractFiles(messages, CONTEXT);
 
       // Check that files were created in temp dir
       const files = await fs.readdir(tempDir, { recursive: true });
@@ -254,13 +232,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", dataUrl),
       ];
 
-      const context = {
-        orgId: "org-1",
-        workspaceId: "ws-1",
-        chatId: "chat-1",
-      };
-
-      const storedMessages = await extractFiles(messages, context);
+      const storedMessages = await extractFiles(messages, CONTEXT);
 
       // Now inline the storage:// URLs back to data URLs
       const inlined = await inlineFileUrls(storedMessages, backendOrigin, chat);
@@ -276,13 +248,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", dataUrl),
       ];
 
-      const context = {
-        orgId: "org-1",
-        workspaceId: "ws-1",
-        chatId: "chat-1",
-      };
-
-      const storedMessages = await extractFiles(storeMessages, context);
+      const storedMessages = await extractFiles(storeMessages, CONTEXT);
 
       // Rewrite to HTTP URLs
       const httpMessages = rewriteStorageUrls(storedMessages, backendOrigin);

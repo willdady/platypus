@@ -1117,8 +1117,8 @@ describe("Chat Routes", () => {
 
         expect(res.status).toBe(200);
         expect(historyIds()).toEqual(["u1", "a1", "u2-tab2"]);
-        expect(rowOf(fake, "u2")).toBeDefined();
-        expect(rowOf(fake, "a2")).toBeDefined();
+        expect(rowOf(fake, "u2")).toMatchObject({ deletedAt: null });
+        expect(rowOf(fake, "a2")).toMatchObject({ deletedAt: null });
         expect(rowOf(fake, "u2-tab2")?.parentId).toBe("a1");
       });
 

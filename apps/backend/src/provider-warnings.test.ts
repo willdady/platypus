@@ -38,10 +38,6 @@ describe("installProviderWarningLogger", () => {
     delete globalThis.AI_SDK_LOG_WARNINGS;
   });
 
-  it("installs itself on the global the SDK reads", () => {
-    expect(typeof globalThis.AI_SDK_LOG_WARNINGS).toBe("function");
-  });
-
   it("logs an unsupported parameter with its feature, provider and model", () => {
     emit({
       warnings: [
@@ -247,7 +243,11 @@ describe("warnings raised by a generation", () => {
     delete globalThis.AI_SDK_LOG_WARNINGS;
   });
 
-  it("reaches the log without the call site asking for them", async () => {
+  it("reaches the log without the call site asking, in place of the SDK's own logger", async () => {
+    const emitWarning = vi
+      .spyOn(process, "emitWarning")
+      .mockImplementation(() => {});
+
     await generateText({
       model: model([{ type: "unsupported", feature: "seed" }]),
       prompt: "hello",
@@ -259,19 +259,6 @@ describe("warnings raised by a generation", () => {
       model: "anthropic.claude-opus-4-5-v1:0",
       feature: "seed",
     });
-  });
-
-  it("replaces the SDK's own logger rather than adding to it", async () => {
-    const emitWarning = vi
-      .spyOn(process, "emitWarning")
-      .mockImplementation(() => {});
-
-    await generateText({
-      model: model([{ type: "unsupported", feature: "seed" }]),
-      prompt: "hello",
-    });
-
-    expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(emitWarning).not.toHaveBeenCalled();
     emitWarning.mockRestore();
   });

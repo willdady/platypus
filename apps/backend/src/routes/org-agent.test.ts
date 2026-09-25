@@ -1,11 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// test-utils installs the drizzle-orm mock; `isNull` is a spy only through it,
-// so that import must come first.
+// test-utils installs the drizzle-orm mock, whose operators return comparable
+// markers — so a route's `WHERE` can be asserted against `orgScopedWhere`.
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
-import { isNull } from "drizzle-orm";
-import { agent as agentTable } from "../db/schema.ts";
+import { orgScopedWhere } from "../services/scoped-resource.ts";
 import app from "../server.ts";
-import { deleteAvatar } from "../services/avatar.ts";
+import { deleteAvatar, storeAvatar } from "../services/avatar.ts";
 
 vi.mock("../services/avatar.ts", () => ({
   storeAvatar: vi.fn(),
@@ -100,7 +99,9 @@ describe("Organization Agent Routes", () => {
       // The write matches the Shared predicate, not `organizationId` alone: a
       // row carrying both scope columns belongs to its Workspace and must not
       // be editable from the Organization surface (ADR-0007).
-      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        orgScopedWhere("agent", "agent-1", orgId),
+      );
     });
 
     it("blocks an update that references a workspace-private resource", async () => {
@@ -274,6 +275,59 @@ describe("Organization Agent Routes", () => {
       expect(res.status).toBe(403);
     });
 
+    const upload = () => {
+      const form = new FormData();
+      form.append("file", new File(["x"], "a.png", { type: "image/png" }));
+      return app.request(`${baseUrl}/agent-1/avatar`, {
+        method: "POST",
+        body: form,
+      });
+    };
+
+    it("POST avatar stores the upload and persists its key on the Shared agent", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "agent-1", avatarKey: "old" }]); // agent lookup
+      vi.mocked(storeAvatar).mockResolvedValueOnce({ ok: true, key: "new" });
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "agent-1", avatarKey: "new" },
+      ]);
+
+      const res = await upload();
+
+      expect(res.status).toBe(200);
+      expect(storeAvatar).toHaveBeenCalledWith(
+        expect.any(File),
+        "agent-1",
+        "old",
+      );
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ avatarKey: "new" }),
+      );
+      // The write matches the Shared predicate (ADR-0007), as PUT does.
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        orgScopedWhere("agent", "agent-1", orgId),
+      );
+    });
+
+    it("POST avatar returns 400 when the upload is rejected", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "agent-1", avatarKey: null }]); // agent lookup
+      vi.mocked(storeAvatar).mockResolvedValueOnce({
+        ok: false,
+        error: "Invalid file type",
+      });
+
+      const res = await upload();
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Invalid file type" });
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
     it("POST avatar 404s when the org agent does not exist", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
@@ -297,6 +351,9 @@ describe("Organization Agent Routes", () => {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ avatarKey: null }),
+      );
     });
 
     it("DELETE avatar 404s when the org agent does not exist", async () => {

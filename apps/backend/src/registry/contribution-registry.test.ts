@@ -96,7 +96,8 @@ describe("createContributionRegistry", () => {
     registry.clear();
     expect(registry.get("alpha")).toBeUndefined();
     expect(registry.list()).toEqual([]);
-    expect(() => registry.register("alpha", { label: "Again" })).not.toThrow();
+    registry.register("alpha", { label: "Again" });
+    expect(registry.get("alpha")?.label).toBe("Again");
   });
 
   it("keeps instances independent", () => {

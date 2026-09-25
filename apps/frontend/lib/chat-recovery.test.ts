@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import type { ChatStatus as RunStatus } from "@platypus/schemas";
 import type { ChatStatus as TurnStatus } from "ai";

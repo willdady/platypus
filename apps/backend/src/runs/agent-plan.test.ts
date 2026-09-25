@@ -62,15 +62,42 @@ describe("resolveGenerationPlan", () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it("throws ValidationError when the model id is not enabled on the Provider", async () => {
-    await expect(
-      resolveGenerationPlan(
-        { providerId: "p1", modelId: "gpt-5" },
+  // Tenant isolation: a Provider id is only resolvable inside the Workspace
+  // (and Organization) the turn runs in.
+  it.each([
+    ["another Workspace", { workspaceId: "ws-2" }],
+    ["another Organization", { organizationId: "org-2" }],
+  ])(
+    "throws NotFoundError for a Provider that belongs to %s",
+    async (_label, owner) => {
+      await expect(
+        resolveGenerationPlan(
+          { providerId: "p1", modelId: "gpt-4" },
+          scope,
+          queriesWith([{ ...baseProvider, ...owner }]),
+        ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    },
+  );
+
+  it.each([
+    ["gpt-5", "Model id 'gpt-5' not enabled for provider 'p1'"],
+    [
+      "alias:flagship",
+      "Model alias 'flagship' is not defined on provider 'p1'",
+    ],
+  ])(
+    "throws ValidationError when %s does not resolve on the Provider",
+    async (modelId, message) => {
+      const result = resolveGenerationPlan(
+        { providerId: "p1", modelId },
         scope,
         queriesWith([baseProvider]),
-      ),
-    ).rejects.toBeInstanceOf(ValidationError);
-  });
+      );
+      await expect(result).rejects.toBeInstanceOf(ValidationError);
+      await expect(result).rejects.toThrow(message);
+    },
+  );
 
   // A direct (no-Agent) selection has no Agent row to declare a ceiling, so it
   // falls back to DEFAULT_DIRECT_MAX_STEPS rather than 1 — a Direct turn can

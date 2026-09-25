@@ -1,23 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Tool } from "ai";
 import type { ToolSetContribution } from "@platypuschat/plugin-sdk";
-
-// Mock the db used by transitive imports (the sandbox tool set, etc.)
-vi.mock("../index.ts", () => ({
-  db: {},
-}));
-
-vi.mock("../services/event-dispatch.ts", () => ({
-  dispatchEvent: vi.fn(),
-}));
-
-vi.mock("../services/sub-agent-validation.ts", () => ({
-  validateSubAgentAssignment: vi.fn(),
-}));
-
-vi.mock("../storage/index.ts", () => ({
-  getStorage: vi.fn(),
-}));
+// First, so its `db` mock is registered before `./index.ts` pulls in the real one.
+import {
+  callTool,
+  makePluginContext,
+  resetMockDb,
+  seedDb,
+} from "../test-utils.ts";
 
 import {
   MAX_PLUGIN_TOOL_NAME_LENGTH,
@@ -38,7 +28,12 @@ import {
   RESERVED_TURN_TOOL_NAMES,
   WEB_SEARCH_TOOL_NAME,
 } from "./turn-tool-names.ts";
-import { makePluginContext } from "../test-utils.ts";
+import { z } from "zod";
+import {
+  clearSandboxBackends,
+  registerSandboxBackend,
+} from "../sandbox/index.ts";
+import type { SandboxBackend } from "../sandbox/types.ts";
 
 // The store's own contract — miss semantics, duplicate rejection, prototype-key
 // safety, listing, reset — is covered once in
@@ -510,5 +505,131 @@ describe("composeToolSet tool-name namespacing", () => {
       }).buildTurnTools(ctx);
       expect(Object.keys(tools)).toEqual([`acme__${LOAD_SKILL_TOOL_NAME}`]);
     });
+  });
+});
+
+// The one Tool set core registers itself: it reads the Workspace's sandbox row
+// and builds the registered adapter's tools. Every failure degrades to "no
+// sandbox tools this turn" rather than failing the turn.
+describe("the sandbox tool set", () => {
+  const turn = {
+    orgId: "org-1",
+    workspaceId: "ws-1",
+    agentId: "agent-1",
+    userId: "user-1",
+    frontendUrl: undefined,
+    registerCloser: () => {},
+  };
+  const shellExec = vi.fn();
+  const create = vi.fn(() => ({ shellExec }) as unknown as SandboxBackend);
+
+  const sandboxRow = (over: Record<string, unknown> = {}) => ({
+    id: "sb-1",
+    workspaceId: "ws-1",
+    backend: "test-backend",
+    config: { image: "node" },
+    credentials: { token: "secret" },
+    userEnv: {},
+    adminEnv: {},
+    ...over,
+  });
+
+  const build = () => getToolSet(SANDBOX_TOOLSET_ID)!.buildTurnTools(turn);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockDb();
+    clearSandboxBackends();
+    registerSandboxBackend({
+      backend: "test-backend",
+      name: "Test",
+      configSchema: z.object({ image: z.string() }),
+      credentialsSchema: z.object({ token: z.string() }),
+      create,
+    });
+    shellExec.mockResolvedValue({
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      truncated: false,
+      durationMs: 0,
+    });
+  });
+
+  it("builds the adapter from the workspace's validated config and credentials", async () => {
+    seedDb({ sandbox: [sandboxRow()] });
+
+    const tools = await build();
+
+    expect(Object.keys(tools).sort()).toEqual([
+      "fsEdit",
+      "fsList",
+      "fsRead",
+      "fsWrite",
+      "shellExec",
+    ]);
+    expect(create).toHaveBeenCalledWith({ image: "node" }, { token: "secret" });
+  });
+
+  it("merges the workspace env over the model's, the admin tier winning", async () => {
+    seedDb({
+      sandbox: [
+        sandboxRow({
+          userEnv: { SHARED: "user", USER_ONLY: "user" },
+          adminEnv: { SHARED: "admin" },
+        }),
+      ],
+    });
+    const tools = await build();
+
+    const abortSignal = new AbortController().signal;
+    await callTool(
+      tools.shellExec,
+      { command: "env", env: { SHARED: "model", USER_ONLY: "model", M: "1" } },
+      { toolCallId: "t", messages: [], context: undefined, abortSignal },
+    );
+
+    expect(shellExec).toHaveBeenCalledWith(
+      { orgId: "org-1", workspaceId: "ws-1", userId: "user-1" },
+      {
+        command: "env",
+        env: { SHARED: "admin", USER_ONLY: "user", M: "1" },
+      },
+      { signal: abortSignal },
+    );
+  });
+
+  it("serves nothing when this workspace has no sandbox, even if another does", async () => {
+    seedDb({ sandbox: [sandboxRow({ workspaceId: "ws-2" })] });
+
+    expect(await build()).toEqual({});
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "the backend is not registered",
+      { backend: "gone" },
+      "Sandbox backend not registered; skipping sandbox tools for this turn",
+    ],
+    [
+      "the config fails the adapter's schema",
+      { config: { image: 1 } },
+      "Sandbox config failed adapter validation; skipping sandbox tools",
+    ],
+    [
+      "the credentials fail the adapter's schema",
+      { credentials: {} },
+      "Sandbox credentials failed adapter validation; skipping sandbox tools",
+    ],
+  ])("serves nothing and warns when %s", async (_label, over, message) => {
+    seedDb({ sandbox: [sandboxRow(over)] });
+
+    expect(await build()).toEqual({});
+    expect(create).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ sandboxId: "sb-1", plugin: null }),
+      message,
+    );
   });
 });

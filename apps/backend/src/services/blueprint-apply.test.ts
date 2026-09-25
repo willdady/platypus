@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb, asDb } from "../test-utils.ts";
+import { eq } from "drizzle-orm";
+import { workspace as workspaceTable } from "../db/schema.ts";
 import { applyBlueprintsToWorkspace } from "./blueprint-apply.ts";
 
 // The service runs entirely on the executor it is handed; tests pass `mockDb`
@@ -103,7 +105,10 @@ describe("applyBlueprintsToWorkspace", () => {
 
     expect(result).toEqual({ attached: 0, skipped: 0, total: 0 });
     expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.update).toHaveBeenCalledWith(workspaceTable);
+    expect(mockDb.where).toHaveBeenLastCalledWith(
+      eq(workspaceTable.id, "ws-1"),
+    );
     const set = mockDb.set.mock.calls.at(-1)?.[0];
     expect(set).toMatchObject({
       taskModelProviderId: "prov-B", // later blueprint wins

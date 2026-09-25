@@ -3,7 +3,6 @@ import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 import { plugin } from "./index.ts";
 import { loadPlugins } from "../loader.ts";
 import { getToolSet, getToolSets } from "../../tools/index.ts";
-import { makePluginContext } from "../../test-utils.ts";
 
 describe("@platypus/web-fetch plugin manifest", () => {
   it("declares its identity and API version", () => {
@@ -18,31 +17,11 @@ describe("@platypus/web-fetch plugin manifest", () => {
   });
 
   it("declares a plugin-level configSchema (ignoreRobotsTxt, deploy-time)", () => {
-    expect(plugin.configSchema).toBeDefined();
     // Defaults to robots.txt-respecting when the Operator supplies nothing.
     expect(plugin.configSchema?.parse({})).toEqual({ ignoreRobotsTxt: false });
     expect(plugin.configSchema?.parse({ ignoreRobotsTxt: true })).toEqual({
       ignoreRobotsTxt: true,
     });
-  });
-
-  it("exposes web-fetch as a config-driven tool factory yielding fetchUrl", () => {
-    const [webFetch] = plugin.contributes.toolSets ?? [];
-    expect(typeof webFetch.tools).toBe("function");
-    if (typeof webFetch.tools !== "function")
-      throw new Error("expected factory");
-    const tools = webFetch.tools(
-      {
-        workspaceId: "w",
-        agentId: "a",
-        orgId: "o",
-        frontendUrl: undefined,
-        userId: "u",
-        registerCloser: () => {},
-      },
-      makePluginContext({ config: { ignoreRobotsTxt: false } }),
-    );
-    expect(tools).toHaveProperty("fetchUrl");
   });
 
   it("registers the web-fetch tool set into the core registry when loaded", async () => {

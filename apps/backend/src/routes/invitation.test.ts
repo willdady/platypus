@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { mockDb, mockSession, resetMockDb, seedDb } from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("Invitation Routes", () => {
@@ -224,6 +224,20 @@ describe("Invitation Routes", () => {
         error: "You cannot invite yourself",
       });
     });
+
+    it("returns 403 for a non-admin member", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({ email: "user@example.com" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(403);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
   });
 
   describe("GET /", () => {
@@ -257,19 +271,53 @@ describe("Invitation Routes", () => {
   });
 
   describe("DELETE /:invitationId", () => {
+    const seedInvites = (role: "admin" | "member" = "admin") =>
+      seedDb({
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role },
+        ],
+        invitation: [
+          { id: "inv-1", organizationId: orgId },
+          { id: "inv-other", organizationId: "org-2" },
+        ],
+      });
+
+    const remove = (id: string) =>
+      app.request(`${baseUrl}/${id}`, { method: "DELETE" });
+
+    const ids = (fake: ReturnType<typeof seedInvites>) =>
+      fake.tables.invitation.map((i) => i.id);
+
     it("should delete invitation", async () => {
       mockSession();
-      // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      const fake = seedInvites();
 
-      mockDb.where.mockReturnValueOnce(mockDb).mockReturnValueOnce(mockDb);
-      mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
+      const res = await remove("inv-1");
 
-      const res = await app.request(`${baseUrl}/inv-1`, {
-        method: "DELETE",
-      });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Invitation deleted" });
+      expect(ids(fake)).toEqual(["inv-other"]);
+    });
+
+    it("returns 404 for another organization's invitation", async () => {
+      mockSession();
+      const fake = seedInvites();
+
+      const res = await remove("inv-other");
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Invitation not found" });
+      expect(ids(fake)).toEqual(["inv-1", "inv-other"]);
+    });
+
+    it("returns 403 for a non-admin member", async () => {
+      mockSession();
+      const fake = seedInvites("member");
+
+      const res = await remove("inv-1");
+
+      expect(res.status).toBe(403);
+      expect(ids(fake)).toEqual(["inv-1", "inv-other"]);
     });
   });
 });

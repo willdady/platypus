@@ -14,6 +14,7 @@ import { fireEvent, screen } from "@testing-library/react";
  */
 
 export const push = vi.fn();
+export const refresh = vi.fn();
 export const toastError = vi.fn();
 export const toastSuccess = vi.fn();
 export const toastInfo = vi.fn();
@@ -34,7 +35,7 @@ export const authMock = {
   useAuth: () => authState,
   useBackendUrl: () => "http://test",
 };
-export const navigationMock = { useRouter: () => ({ push }) };
+export const navigationMock = { useRouter: () => ({ push, refresh }) };
 export const toastMock = {
   toast: { error: toastError, success: toastSuccess, info: toastInfo },
 };
@@ -42,6 +43,7 @@ export const toastMock = {
 /** Resets the shared spies and the signed-in reader between tests. */
 export function resetSharedSpies() {
   push.mockReset();
+  refresh.mockReset();
   toastError.mockReset();
   toastSuccess.mockReset();
   toastInfo.mockReset();

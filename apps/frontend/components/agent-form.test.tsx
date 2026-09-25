@@ -28,6 +28,7 @@ vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { AgentForm } from "./agent-form";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -78,7 +79,7 @@ describe("AgentForm validation error surfacing", () => {
     expect(trigger).toHaveAttribute("aria-invalid", "true");
 
     // A validation failure is never silent.
-    expect(toastError).toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
   });
 
   it("shows a generic error toast when the failure maps to no inline field", async () => {
@@ -129,7 +130,9 @@ describe("AgentForm validation error surfacing", () => {
     const saveButton = screen.getByRole("button", { name: "Save" });
     fireEvent.click(saveButton);
 
-    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE),
+    );
     expect(saveButton).not.toBeDisabled();
   });
 });
@@ -229,22 +232,7 @@ describe("AgentForm tool set load failure", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders the form instead of crashing when the tool sets could not be loaded", () => {
-    render(
-      <AgentForm
-        orgId="org1"
-        workspaceId="ws1"
-        toolSets={[]}
-        agents={[]}
-        toolSetsError="unauthorized"
-      />,
-    );
-
-    // The rest of the form is still usable.
-    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
-  });
-
-  it("names authentication as the cause when the tool sets request was rejected as unauthorized", () => {
+  it("names authentication as the cause, and keeps the form usable, when the tool sets request was rejected as unauthorized", () => {
     render(
       <AgentForm
         orgId="org1"
@@ -258,6 +246,7 @@ describe("AgentForm tool set load failure", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent(/tools couldn't be loaded/i);
     expect(alert).toHaveTextContent(/sign(ed)? in|authenticat/i);
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
   it("does not blame authentication when the tool sets request failed for another reason", () => {

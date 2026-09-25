@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import type { Agent, Provider } from "@platypus/schemas";
 import { resolveModel } from "./resolve-model";

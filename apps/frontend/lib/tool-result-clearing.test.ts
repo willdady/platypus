@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 import { clearedToolCallIds } from "./tool-result-clearing";

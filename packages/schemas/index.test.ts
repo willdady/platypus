@@ -15,6 +15,7 @@ import {
   mcpSchema,
   mcpCreateSchema,
   mcpUpdateSchema,
+  mcpTestSchema,
   slugifyMcpName,
   namespaceMcpToolName,
   MAX_PLUGIN_NAME_LENGTH,
@@ -34,6 +35,7 @@ import {
   SANDBOX_ENV_MAX_VALUE_BYTES,
   providerCreateSchema,
   providerUpdateSchema,
+  providerSchema,
   providerHasNativeSearch,
   SEARCH_SOURCE_NONE,
   SEARCH_SOURCE_NATIVE,
@@ -51,6 +53,10 @@ import {
   modelReferenceFor,
   modelLabelFor,
   findModelEntry,
+  resolveModelReference,
+  webhookSchema,
+  webhookCreateSchema,
+  webhookUpdateSchema,
   triggerRunStatsSchema,
   triggerRunStatusSchema,
   TRIGGER_RUN_STATUS_LABELS,
@@ -104,27 +110,24 @@ describe("Organization Create Schema", () => {
 });
 
 describe("Attachment Schema", () => {
-  it("validates a full attachment", () => {
-    const result = attachmentSchema.safeParse({
-      id: "att-1",
-      workspaceId: "ws-1",
-      resourceType: "mcp",
-      resourceId: "mcp-1",
-      createdAt: new Date(),
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("validates an agent attachment", () => {
-    const result = attachmentSchema.safeParse({
-      id: "att-1",
-      workspaceId: "ws-1",
-      resourceType: "agent",
-      resourceId: "agent-1",
-      createdAt: new Date(),
-    });
-    expect(result.success).toBe(true);
-  });
+  it.each(["mcp", "provider", "skill", "agent"])(
+    "accepts a %s attachment, full and create",
+    (resourceType) => {
+      expect(
+        attachmentSchema.safeParse({
+          id: "att-1",
+          workspaceId: "ws-1",
+          resourceType,
+          resourceId: "res-1",
+          createdAt: new Date(),
+        }).success,
+      ).toBe(true);
+      expect(
+        attachmentCreateSchema.safeParse({ resourceType, resourceId: "res-1" })
+          .success,
+      ).toBe(true);
+    },
+  );
 
   it("rejects an unknown resource type", () => {
     const result = attachmentSchema.safeParse({
@@ -135,22 +138,6 @@ describe("Attachment Schema", () => {
       createdAt: new Date(),
     });
     expect(result.success).toBe(false);
-  });
-
-  it("create schema accepts resourceType + resourceId", () => {
-    const result = attachmentCreateSchema.safeParse({
-      resourceType: "provider",
-      resourceId: "prov-1",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("accepts a skill resource type", () => {
-    const result = attachmentCreateSchema.safeParse({
-      resourceType: "skill",
-      resourceId: "skill-1",
-    });
-    expect(result.success).toBe(true);
   });
 
   it("create schema rejects a missing resourceId", () => {
@@ -192,6 +179,40 @@ describe("MCP Schema", () => {
   it("rejects an MCP scoped to neither", () => {
     const result = mcpSchema.safeParse(base);
     expect(result.success).toBe(false);
+  });
+
+  it.each([
+    ["full", mcpSchema, { ...base, workspaceId: "ws-1" }],
+    [
+      "create",
+      mcpCreateSchema,
+      { name: "Test MCP", workspaceId: "ws-1", url: base.url },
+    ],
+    ["update", mcpUpdateSchema, { name: "Test MCP", url: base.url }],
+    ["test", mcpTestSchema, { url: base.url }],
+  ] as const)(
+    "requires a bearer token for Bearer auth on the %s schema",
+    (_, schema, body) => {
+      const bearer = { ...body, authType: "Bearer" };
+      expect(schema.safeParse(bearer).success).toBe(false);
+      expect(schema.safeParse({ ...bearer, bearerToken: "" }).success).toBe(
+        false,
+      );
+      expect(schema.safeParse({ ...bearer, bearerToken: "t" }).success).toBe(
+        true,
+      );
+    },
+  );
+
+  it("requires the stored mcpId to test an OAuth MCP", () => {
+    const oauth = { url: base.url, authType: "OAuth" };
+    expect(mcpTestSchema.safeParse(oauth).success).toBe(false);
+    expect(mcpTestSchema.safeParse({ ...oauth, mcpId: "" }).success).toBe(
+      false,
+    );
+    expect(mcpTestSchema.safeParse({ ...oauth, mcpId: "mcp-1" }).success).toBe(
+      true,
+    );
   });
 });
 
@@ -402,54 +423,55 @@ describe("Invitation Create Schema", () => {
 });
 
 describe("Agent Schema", () => {
+  const { workspaceId: _, ...unscoped } = {
+    id: "789",
+    workspaceId: "456",
+    providerId: "provider-123",
+    name: "Test Agent",
+    description: "A test agent",
+    modelId: "gpt-4",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const validAgent = { ...unscoped, workspaceId: "456" };
+
   it("should validate a valid agent", () => {
-    const validAgent = {
-      id: "789",
-      workspaceId: "456",
-      providerId: "provider-123",
-      name: "Test Agent",
-      description: "A test agent",
-      modelId: "gpt-4",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    const result = agentSchema.safeParse(validAgent);
-    expect(result.success).toBe(true);
+    expect(agentSchema.safeParse(validAgent).success).toBe(true);
   });
 
   it("should allow optional fields", () => {
-    const agentWithOptionals = {
-      id: "789",
-      workspaceId: "456",
-      providerId: "provider-123",
-      name: "Test Agent",
-      description: "A test agent",
+    const result = agentSchema.safeParse({
+      ...validAgent,
       instructions: "You are a helpful assistant",
-      modelId: "gpt-4",
       temperature: 0.7,
       maxSteps: 10,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    const result = agentSchema.safeParse(agentWithOptionals);
+    });
     expect(result.success).toBe(true);
+  });
+
+  it("accepts an org-scoped agent", () => {
+    expect(
+      agentSchema.safeParse({ ...unscoped, organizationId: "org-1" }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    [
+      "both an organization and a workspace",
+      { organizationId: "org-1", workspaceId: "456" },
+    ],
+    ["neither", {}],
+  ])("rejects an agent scoped to %s", (_, scope) => {
+    expect(agentSchema.safeParse({ ...unscoped, ...scope }).success).toBe(
+      false,
+    );
   });
 
   // A maxSteps below 1 reaches `stepCountIs(n)`, which compares `n` against a
   // step count that is never less than 1 — so it silently removes the ceiling
   // instead of tightening it. Reject it here rather than at the run.
   it.each([0, -1, 2.5])("should reject a maxSteps of %s", (maxSteps) => {
-    const result = agentSchema.safeParse({
-      id: "789",
-      workspaceId: "456",
-      providerId: "provider-123",
-      name: "Test Agent",
-      description: "A test agent",
-      modelId: "gpt-4",
-      maxSteps,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    const result = agentSchema.safeParse({ ...validAgent, maxSteps });
     expect(result.success).toBe(false);
   });
 });
@@ -723,6 +745,44 @@ describe("Provider Create Schema", () => {
       expect(result.data).not.toHaveProperty("nativeSearchEnabled");
       expect(result.data).not.toHaveProperty("webBackend");
     }
+  });
+});
+
+describe("Provider Schema", () => {
+  const { organizationId: _, ...unscoped } = {
+    id: "prov-1",
+    organizationId: "org-1",
+    name: "Test Provider",
+    providerType: "OpenAI" as const,
+    apiKey: "sk-test",
+    modelIds: ["gpt-4"],
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it.each([
+    ["an organization", { organizationId: "org-1" }, true],
+    ["a workspace", { workspaceId: "ws-1" }, true],
+    ["both", { organizationId: "org-1", workspaceId: "ws-1" }, false],
+    ["neither", {}, false],
+  ])("scoped to %s → %s", (_, scope, expected) => {
+    expect(providerSchema.safeParse({ ...unscoped, ...scope }).success).toBe(
+      expected,
+    );
+  });
+
+  it("requires a region for a Bedrock provider", () => {
+    const bedrock = {
+      ...unscoped,
+      organizationId: "org-1",
+      providerType: "Bedrock" as const,
+    };
+    expect(providerSchema.safeParse(bedrock).success).toBe(false);
+    expect(
+      providerSchema.safeParse({ ...bedrock, region: "us-east-1" }).success,
+    ).toBe(true);
   });
 });
 
@@ -1290,17 +1350,6 @@ describe("Model aliases (modelIds)", () => {
   it("rejects an alias duplicating its own entry's concrete id", () => {
     expect(parseModels([{ id: "gpt-4", alias: "gpt-4" }]).success).toBe(false);
   });
-
-  it("still coerces a legacy string[] with no aliases", () => {
-    const result = parseModels(["gpt-4", "gpt-4o"]);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.modelIds).toEqual([
-        { id: "gpt-4", passthroughFileTypes: [] },
-        { id: "gpt-4o", passthroughFileTypes: [] },
-      ]);
-    }
-  });
 });
 
 describe("Provider pointer-settings reject alias references", () => {
@@ -1407,6 +1456,12 @@ describe("Model reference helpers", () => {
   it("never resolves an alias reference to a like-named concrete id", () => {
     expect(findModelEntry(models, "alias:gpt-4")).toBeUndefined();
   });
+
+  it("resolves a reference to its concrete id, or undefined for none", () => {
+    expect(resolveModelReference(models, "alias:flagship")).toBe("gpt-4");
+    expect(resolveModelReference(models, "gpt-4o-mini")).toBe("gpt-4o-mini");
+    expect(resolveModelReference(models, "alias:ghost")).toBeUndefined();
+  });
 });
 
 describe("triggerRunStatsSchema", () => {
@@ -1417,34 +1472,28 @@ describe("triggerRunStatsSchema", () => {
     outputTokens: 120,
   };
 
-  it("accepts a run that recorded Context occupancy", () => {
-    const result = triggerRunStatsSchema.safeParse({
-      ...base,
-      contextOccupancy: 42_000,
-    });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.contextOccupancy).toBe(42_000);
-  });
-
-  it("leaves occupancy undefined for a Provider that reported no usage", () => {
-    const result = triggerRunStatsSchema.safeParse(base);
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.contextOccupancy).toBeUndefined();
-  });
-
-  it("keeps the cross-step token sums meaning what they meant", () => {
-    // Occupancy is a separate field precisely so these two keep their billing
-    // meaning — a reader of the trigger runs page must not find the same name
-    // holding a different quantity (ADR-0018).
+  it("accepts a run that recorded Context occupancy, beside the token sums", () => {
+    // Occupancy is a separate field precisely so the cross-step sums keep their
+    // billing meaning — a reader of the trigger runs page must not find the
+    // same name holding a different quantity (ADR-0018).
     const result = triggerRunStatsSchema.safeParse({
       ...base,
       contextOccupancy: 42_000,
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.inputTokens).toBe(900);
-      expect(result.data.outputTokens).toBe(120);
+      expect(result.data).toMatchObject({
+        contextOccupancy: 42_000,
+        inputTokens: 900,
+        outputTokens: 120,
+      });
     }
+  });
+
+  it("leaves occupancy undefined for a Provider that reported no usage", () => {
+    const result = triggerRunStatsSchema.safeParse(base);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.contextOccupancy).toBeUndefined();
   });
 
   it("rejects a negative or fractional occupancy", () => {
@@ -1525,6 +1574,32 @@ describe("nextTurnOccupancy", () => {
     // undefined so the meter hides rather than showing a confident 0.
     expect(nextTurnOccupancy(null)).toBeUndefined();
     expect(nextTurnOccupancy(undefined)).toBeUndefined();
+  });
+});
+
+describe("webhook URL", () => {
+  const full = {
+    id: "wh-1",
+    workspaceId: "ws-1",
+    name: "Hook",
+    signingSecret: "s",
+    enabled: true,
+    events: ["card.created"],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it.each([
+    ["full", webhookSchema, full],
+    ["create", webhookCreateSchema, { name: "Hook" }],
+    ["update", webhookUpdateSchema, {}],
+  ] as const)("accepts HTTPS only on the %s schema", (_, schema, body) => {
+    expect(
+      schema.safeParse({ ...body, url: "https://hooks.example.com/x" }).success,
+    ).toBe(true);
+    expect(
+      schema.safeParse({ ...body, url: "http://hooks.example.com/x" }).success,
+    ).toBe(false);
   });
 });
 

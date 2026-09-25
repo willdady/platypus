@@ -46,6 +46,21 @@ describe("createKanbanTools", () => {
     ]);
   });
 
+  const comment = (
+    id: string,
+    cardId: string,
+    createdAt: string,
+    by: { user?: string; agent?: string },
+  ) => ({
+    id,
+    cardId,
+    body: `${id} body`,
+    createdByUserId: by.user ?? null,
+    createdByAgentId: by.agent ?? null,
+    createdAt: new Date(createdAt),
+    updatedAt: new Date(createdAt),
+  });
+
   /** Two Workspaces, each with a Board, over the fake that reads `WHERE`s. */
   const seedBoards = () =>
     seedDb({
@@ -119,6 +134,15 @@ describe("createKanbanTools", () => {
           priority: "none",
         },
       ],
+      kanban_card_comment: [
+        comment("comment-2", "card-1", "2026-01-03", { agent: "agent-1" }),
+        comment("comment-1", "card-1", "2026-01-02", { user: "user-1" }),
+        comment("comment-other", "card-other", "2026-01-01", {
+          user: "user-1",
+        }),
+      ],
+      user: [{ id: "user-1", name: "Alice" }],
+      agent: [{ id: "agent-1", name: "Helper", workspaceId }],
     });
 
   describe("listBoards", () => {
@@ -145,17 +169,6 @@ describe("createKanbanTools", () => {
   });
 
   describe("getBoardState", () => {
-    it("returns error when board not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
-
-      expect(
-        await tools.getBoardState.execute!(
-          { boardId: "bad-id", label: "test" },
-          ctx,
-        ),
-      ).toEqual({ error: "Board not found" });
-    });
-
     it("does not reach another Workspace's board", async () => {
       seedBoards();
 
@@ -215,28 +228,25 @@ describe("createKanbanTools", () => {
   });
 
   describe("getCard", () => {
-    it("returns error when card not found (verifyCard fails)", async () => {
-      mockDb.limit.mockResolvedValue([]);
+    it("does not reach another Workspace's card", async () => {
+      seedBoards();
 
       expect(
-        await tools.getCard.execute!({ cardId: "bad-id", label: "test" }, ctx),
+        await callTool(tools.getCard, { cardId: "card-other", label: "x" }),
       ).toEqual({ error: "Card not found" });
     });
 
     // History is opt-in: most reads want what the card says now, and the flag
     // is what keeps the common call from paying for a past it will not use.
     it("omits the history unless it is asked for", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]) // card guard
-        .mockResolvedValueOnce([{ id: "card-1", title: "Card" }]); // the card row
+      seedBoards();
 
-      const result = (await tools.getCard.execute!(
-        { cardId: "card-1", label: "test" },
-        ctx,
-      )) as Record<string, unknown>;
+      const result: unknown = await callTool(tools.getCard, {
+        cardId: "card-1",
+        label: "test",
+      });
 
+      expect(result).toMatchObject({ id: "card-1", title: "First" });
       expect(result).not.toHaveProperty("history");
     });
 
@@ -284,135 +294,69 @@ describe("createKanbanTools", () => {
       });
     });
 
-    it("returns error when column not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
+    it("does not create in another Workspace's column", async () => {
+      const db = seedBoards();
 
       expect(
-        await tools.upsertCard.execute!(
-          { columnId: "bad-col", title: "Card", label: "test" },
-          ctx,
-        ),
+        await callTool(tools.upsertCard, {
+          columnId: "col-other",
+          title: "Card",
+          label: "test",
+        }),
       ).toEqual({ error: "Column not found" });
+      expect(db.tables.kanban_card).toHaveLength(3);
     });
   });
 
   describe("upsertCard (update)", () => {
-    it("returns error when card not found during update", async () => {
-      mockDb.limit.mockResolvedValue([]);
+    it("does not reach another Workspace's card", async () => {
+      const db = seedBoards();
 
       expect(
-        await tools.upsertCard.execute!(
-          { cardId: "bad-id", title: "Updated", label: "test" },
-          ctx,
-        ),
+        await callTool(tools.upsertCard, {
+          cardId: "card-other",
+          title: "Updated",
+          label: "test",
+        }),
       ).toEqual({ error: "Card not found" });
+      expect(
+        db.tables.kanban_card.find((c) => c.id === "card-other"),
+      ).toMatchObject({ title: "Theirs" });
     });
   });
 
+  // Every diff mode is unit-tested on `applyBodyDiff` in services/kanban.test.ts;
+  // here, that the tool applies one to the stored body and reports a stale one.
   describe("upsertCard (update) — bodyDiff", () => {
-    function setupCardUpdate(existingBody: string, updatedCard: object) {
-      // The card guard resolves the card and its board (limit call #1), then
-      // the diff is applied to the body it holds now (limit call #2).
-      mockDb.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]) // card guard
-        .mockResolvedValueOnce([{ body: existingBody }]); // SELECT body
-      mockDb.returning.mockResolvedValueOnce([updatedCard]);
-    }
+    it("applies the diff to the card's stored body", async () => {
+      const db = seedBoards();
 
-    it("applies search-replace to existing body", async () => {
-      setupCardUpdate("Hello world", { id: "card-1", body: "Hello there" });
+      await callOkTool(tools.upsertCard, {
+        cardId: "card-2",
+        label: "test",
+        bodyDiff: [{ search: "long body", replace: "short body" }],
+      });
 
-      await tools.upsertCard.execute!(
-        {
-          cardId: "card-1",
-          label: "test",
-          bodyDiff: [{ search: "world", replace: "there" }],
-        },
-        ctx,
+      expect(db.tables.kanban_card.find((c) => c.id === "card-2")?.body).toBe(
+        "A short body the summary leaves out",
       );
-
-      const setCall = mockDb.set.mock.calls[0][0] as { body: string };
-      expect(setCall.body).toBe("Hello there");
     });
 
-    it("returns error when search string not found", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]) // card guard
-        .mockResolvedValueOnce([{ body: "Hello world" }]); // SELECT body
+    it("reports a search string the body does not contain", async () => {
+      const db = seedBoards();
 
       expect(
-        await tools.upsertCard.execute!(
-          {
-            cardId: "card-1",
-            label: "test",
-            bodyDiff: [{ search: "missing text", replace: "replacement" }],
-          },
-          ctx,
-        ),
+        await callTool(tools.upsertCard, {
+          cardId: "card-2",
+          label: "test",
+          bodyDiff: [{ search: "missing text", replace: "replacement" }],
+        }),
       ).toEqual({
         error: 'bodyDiff search string not found: "missing text"',
       });
-    });
-
-    it("applies multiple search-replace operations sequentially", async () => {
-      setupCardUpdate("foo bar baz", { id: "card-1", body: "qux quux baz" });
-
-      await tools.upsertCard.execute!(
-        {
-          cardId: "card-1",
-          label: "test",
-          bodyDiff: [
-            { search: "foo", replace: "qux" },
-            { search: "bar", replace: "quux" },
-          ],
-        },
-        ctx,
+      expect(db.tables.kanban_card.find((c) => c.id === "card-2")?.body).toBe(
+        "A long body the summary leaves out",
       );
-
-      const setCall = mockDb.set.mock.calls[0][0] as { body: string };
-      expect(setCall.body).toBe("qux quux baz");
-    });
-
-    it("appends content to existing body", async () => {
-      setupCardUpdate("existing content", {
-        id: "card-1",
-        body: "existing content\nnew line",
-      });
-
-      await tools.upsertCard.execute!(
-        {
-          cardId: "card-1",
-          label: "test",
-          bodyDiff: { mode: "append", content: "\nnew line" },
-        },
-        ctx,
-      );
-
-      const setCall = mockDb.set.mock.calls[0][0] as { body: string };
-      expect(setCall.body).toBe("existing content\nnew line");
-    });
-
-    it("prepends content to existing body", async () => {
-      setupCardUpdate("existing content", {
-        id: "card-1",
-        body: "new line\nexisting content",
-      });
-
-      await tools.upsertCard.execute!(
-        {
-          cardId: "card-1",
-          label: "test",
-          bodyDiff: { mode: "prepend", content: "new line\n" },
-        },
-        ctx,
-      );
-
-      const setCall = mockDb.set.mock.calls[0][0] as { body: string };
-      expect(setCall.body).toBe("new line\nexisting content");
     });
 
     it("rejects when both body and bodyDiff are provided", () => {
@@ -545,6 +489,24 @@ describe("createKanbanTools", () => {
   });
 
   describe("bulkEditCards — label and assignee rules", () => {
+    it.each([{ addLabelIds: ["lbl-1"] }, { removeLabelIds: ["lbl-1"] }])(
+      "rejects labelIds alongside %o",
+      (edit) => {
+        const result = (tools.bulkEditCards.inputSchema as z.ZodType).safeParse(
+          {
+            cardIds: ["card-1"],
+            label: "test",
+            labelIds: ["lbl-1"],
+            ...edit,
+          },
+        );
+
+        expect(result.error?.issues[0]?.message).toBe(
+          "labelIds is mutually exclusive with addLabelIds and removeLabelIds",
+        );
+      },
+    );
+
     // A bulk edit works over cards that already exist, so it follows the
     // update rule: an unknown label is dropped rather than failing the batch.
     it("drops unknown label IDs", async () => {
@@ -770,54 +732,149 @@ describe("createKanbanTools", () => {
   });
 
   describe("deleteCard", () => {
-    it("returns error when card not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
+    it("deletes this Workspace's cards", async () => {
+      const db = seedBoards();
 
       expect(
-        await tools.deleteCard.execute!(
-          { cardIds: ["bad-id"], label: "test" },
-          ctx,
-        ),
-      ).toEqual({ error: "Card not found: bad-id" });
+        await callTool(tools.deleteCard, {
+          cardIds: ["card-1", "card-2"],
+          label: "First, Second",
+        }),
+      ).toEqual({ success: true });
+      expect(db.tables.kanban_card.map((c) => c.id)).toEqual(["card-other"]);
+    });
+
+    it("deletes nothing when any card is out of reach, naming it", async () => {
+      const db = seedBoards();
+
+      expect(
+        await callTool(tools.deleteCard, {
+          cardIds: ["card-1", "card-other"],
+          label: "test",
+        }),
+      ).toEqual({ error: "Card not found: card-other" });
+      expect(db.tables.kanban_card).toHaveLength(3);
     });
   });
 
-  describe("upsertComment (create)", () => {
-    it("returns error when cardId missing", async () => {
+  describe("comments", () => {
+    it("listComments returns a card's comments oldest first, with author names", async () => {
+      seedBoards();
+
       expect(
-        await tools.upsertComment.execute!(
-          { body: "Comment text", label: "test" },
-          ctx,
-        ),
-      ).toEqual({
-        error: "cardId is required when creating a new comment",
+        await callTool(tools.listComments, {
+          cardId: "card-1",
+          label: "First",
+        }),
+      ).toMatchObject([
+        { id: "comment-1", createdByName: "Alice" },
+        { id: "comment-2", createdByName: "Helper" },
+      ]);
+    });
+
+    it("upsertComment creates a comment attributed to this agent", async () => {
+      const db = seedBoards();
+
+      const result: unknown = await callTool(tools.upsertComment, {
+        cardId: "card-2",
+        body: "Looks good",
+        label: "test",
       });
-    });
-  });
 
-  describe("upsertComment (update)", () => {
-    it("returns error when comment not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
+      expect(result).toMatchObject({
+        cardId: "card-2",
+        body: "Looks good",
+        createdByAgentId: agentId,
+      });
+      expect(db.tables.kanban_card_comment).toContainEqual(result);
+    });
+
+    it("upsertComment requires a cardId to create", async () => {
+      expect(
+        await callTool(tools.upsertComment, {
+          body: "Comment text",
+          label: "test",
+        }),
+      ).toEqual({ error: "cardId is required when creating a new comment" });
+    });
+
+    it("upsertComment updates a comment's body by commentId", async () => {
+      const db = seedBoards();
 
       expect(
-        await tools.upsertComment.execute!(
-          { commentId: "bad-id", body: "Updated", label: "test" },
-          ctx,
-        ),
-      ).toEqual({ error: "Comment not found" });
+        await callTool(tools.upsertComment, {
+          commentId: "comment-1",
+          body: "Edited",
+          label: "test",
+        }),
+      ).toMatchObject({ id: "comment-1", body: "Edited" });
+      expect(
+        db.tables.kanban_card_comment.find((c) => c.id === "comment-1")?.body,
+      ).toBe("Edited");
     });
-  });
 
-  describe("deleteComment", () => {
-    it("returns error when comment not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
+    it("deleteComment deletes a comment", async () => {
+      const db = seedBoards();
 
       expect(
-        await tools.deleteComment.execute!(
-          { commentId: "bad-id", label: "test" },
-          ctx,
-        ),
-      ).toEqual({ error: "Comment not found" });
+        await callTool(tools.deleteComment, {
+          commentId: "comment-1",
+          label: "test",
+        }),
+      ).toEqual({ success: true });
+      expect(db.tables.kanban_card_comment.map((c) => c.id)).not.toContain(
+        "comment-1",
+      );
     });
+
+    it.each([
+      [
+        "listComments",
+        () =>
+          callTool(tools.listComments, { cardId: "card-other", label: "x" }),
+        "Card not found",
+      ],
+      [
+        "upsertComment create",
+        () =>
+          callTool(tools.upsertComment, {
+            cardId: "card-other",
+            body: "x",
+            label: "x",
+          }),
+        "Card not found",
+      ],
+      [
+        "upsertComment update",
+        () =>
+          callTool(tools.upsertComment, {
+            commentId: "comment-other",
+            body: "x",
+            label: "x",
+          }),
+        "Comment not found",
+      ],
+      [
+        "deleteComment",
+        () =>
+          callTool(tools.deleteComment, {
+            commentId: "comment-other",
+            label: "x",
+          }),
+        "Comment not found",
+      ],
+    ])(
+      "%s does not reach another Workspace's card",
+      async (_name, call, error) => {
+        const db = seedBoards();
+
+        expect(await call()).toEqual({ error });
+        expect(db.tables.kanban_card_comment).toHaveLength(3);
+        expect(
+          db.tables.kanban_card_comment.find((c) => c.id === "comment-other")
+            ?.body,
+        ).toBe("comment-other body");
+      },
+    );
   });
 });

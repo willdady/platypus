@@ -6,6 +6,8 @@ import {
   notificationEvent,
   resetMockDb,
 } from "../test-utils.ts";
+import { and, eq } from "drizzle-orm";
+import { trigger as triggerTable } from "../db/schema.ts";
 import { clearPendingTriggers } from "./event-trigger-debounce.ts";
 
 const { mockDeliverWebhook, mockFireTrigger } = vi.hoisted(() => ({
@@ -199,6 +201,14 @@ describe("event-dispatch", () => {
         payload: created,
         entityId: "c1",
       });
+      // Only this Workspace's enabled event Triggers are candidates.
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        and(
+          eq(triggerTable.workspaceId, "ws-1"),
+          eq(triggerTable.type, "event"),
+          eq(triggerTable.enabled, true),
+        ),
+      );
     });
 
     it("should skip triggers not subscribed to the event", async () => {
@@ -890,20 +900,6 @@ describe("event-dispatch", () => {
       await flushMicrotasks();
 
       expect(mockFireTrigger).toHaveBeenCalled();
-    });
-
-    it("should dispatch to both webhooks and triggers for the same event", async () => {
-      const webhook = makeWebhook();
-      const trigger = makeEventTrigger();
-      mockDb.where
-        .mockResolvedValueOnce([webhook])
-        .mockResolvedValueOnce([trigger]);
-
-      dispatchEvent("org-1", "ws-1", cardEvent("card.created", { id: "c1" }));
-      await flushMicrotasks();
-
-      expect(mockDeliverWebhook).toHaveBeenCalledTimes(1);
-      expect(mockFireTrigger).toHaveBeenCalledTimes(1);
     });
 
     it("should not fire a trigger on its own agent's notification writes", async () => {

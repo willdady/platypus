@@ -1,11 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 import { createWebFetchTools } from "./fetch.ts";
 import { callTool, callOkTool } from "../test-utils.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 
-// `ignoreRobotsTxt` is now a plugin-config value (ADR-0013) passed into the
-// factory, not a module-level env read — so tests build the tool with the flag
-// they want rather than mutating process.env.
+// `ignoreRobotsTxt` is a plugin-config value (ADR-0013) passed into the
+// factory, so tests build the tool with the flag they want.
 
 // The egress guard resolves hostnames, so it is mocked here to keep these tests
 // off real DNS — `example.com` and friends are stand-ins, not lookups. The
@@ -21,205 +20,163 @@ vi.mock("../utils/egress-guard.ts", async (importOriginal) => {
 });
 
 const mockCheckEgress = vi.mocked(checkEgress);
+const mockFetch = vi.fn();
 
 beforeEach(() => {
   mockCheckEgress.mockResolvedValue({ allowed: true });
+  mockFetch.mockReset();
+  vi.stubGlobal("fetch", mockFetch);
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+/** A page response; `contentType: null` sends no content-type header. */
+const page = (
+  body: string,
+  contentType: string | null = "text/plain",
+  url = "https://example.com/page",
+) => ({
+  url,
+  headers: new Headers(contentType ? { "content-type": contentType } : {}),
+  text: () => Promise.resolve(body),
+});
+
+const robots = (body: string) => ({
+  ok: true,
+  text: () => Promise.resolve(body),
+});
+
+const input = (
+  over: Partial<{ max_length: number; start_index: number; raw: boolean }> = {},
+  url = "https://example.com/page",
+) => ({ url, max_length: 5000, start_index: 0, raw: false, ...over });
+
 describe("fetchUrl", () => {
-  // Build with robots.txt checks skipped so these content tests don't need to
-  // mock a robots.txt round-trip.
+  // robots.txt checks skipped so content tests need no robots round-trip.
   const { fetchUrl } = createWebFetchTools(true);
-  const mockFetch = vi.fn();
 
-  beforeEach(() => {
-    global.fetch = mockFetch;
-    mockFetch.mockReset();
+  it.each([
+    ["plain text", "text/plain"],
+    ["markdown", "text/markdown; charset=utf-8"],
+    ["an untyped body", null],
+  ])("returns %s content as-is", async (_label, contentType) => {
+    mockFetch.mockResolvedValue(page("# Title\n\n<b>bold</b>", contentType));
+
+    expect(await callOkTool(fetchUrl, input())).toEqual({
+      content: "# Title\n\n<b>bold</b>",
+      url: "https://example.com/page",
+      content_type: contentType ?? "",
+      truncated: false,
+    });
   });
 
-  it("fetches and returns plain text content", async () => {
-    mockFetch.mockResolvedValue({
-      url: "https://example.com/data.txt",
-      headers: new Headers({ "content-type": "text/plain" }),
-      text: vi.fn().mockResolvedValue("Hello, world!"),
-    });
+  it("truncates content and points at the next start index", async () => {
+    mockFetch.mockResolvedValue(page("A".repeat(200)));
 
-    const result = await callOkTool(fetchUrl, {
-      url: "https://example.com/data.txt",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
+    expect(await callOkTool(fetchUrl, input({ max_length: 50 }))).toEqual({
+      content: `${"A".repeat(50)}\n\n[Content truncated. Pass start_index=50 to continue reading.]`,
+      url: "https://example.com/page",
+      content_type: "text/plain",
+      truncated: true,
+      next_start_index: 50,
     });
-
-    expect(result.content).toBe("Hello, world!");
-    expect(result.url).toBe("https://example.com/data.txt");
-    expect(result.truncated).toBe(false);
   });
 
-  it("returns markdown content directly", async () => {
-    const mdContent = "# Title\n\nSome **bold** text.";
-    mockFetch.mockResolvedValue({
-      url: "https://example.com/page.md",
-      headers: new Headers({ "content-type": "text/markdown" }),
-      text: vi.fn().mockResolvedValue(mdContent),
-    });
+  it("paginates from start_index, reaching the end untruncated", async () => {
+    mockFetch.mockResolvedValue(page("AABBCC"));
 
-    const result = await callOkTool(fetchUrl, {
-      url: "https://example.com/page.md",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
-    });
-
-    expect(result.content).toBe(mdContent);
+    expect(
+      await callOkTool(fetchUrl, input({ start_index: 2, max_length: 4 })),
+    ).toMatchObject({ content: "BBCC", truncated: false });
   });
 
-  it("truncates content and provides next_start_index", async () => {
-    const longContent = "A".repeat(200);
-    mockFetch.mockResolvedValue({
-      url: "https://example.com/long.txt",
-      headers: new Headers({ "content-type": "text/plain" }),
-      text: vi.fn().mockResolvedValue(longContent),
-    });
+  it("converts the readable article of an HTML page to markdown", async () => {
+    mockFetch.mockResolvedValue(
+      page(
+        `<html><body><nav>Menu</nav><article><h1>Title</h1><p>${"A long paragraph of article text. ".repeat(20)}</p></article></body></html>`,
+        "text/html",
+      ),
+    );
 
-    const result = await callOkTool(fetchUrl, {
-      url: "https://example.com/long.txt",
-      max_length: 50,
-      start_index: 0,
-      raw: false,
-    });
+    const { content } = await callOkTool(fetchUrl, input());
 
-    expect(result.truncated).toBe(true);
-    expect(result.next_start_index).toBe(50);
-    expect(result.content).toContain("[Content truncated");
+    expect(content).toContain("A long paragraph of article text.");
+    expect(content).not.toMatch(/<\/?(p|article|h1)>/);
   });
 
-  it("supports pagination with start_index", async () => {
-    const content = "AABBCC";
-    mockFetch.mockResolvedValue({
-      url: "https://example.com/page.txt",
-      headers: new Headers({ "content-type": "text/plain" }),
-      text: vi.fn().mockResolvedValue(content),
+  it("falls back to converting the whole page when no article is found", async () => {
+    mockFetch.mockResolvedValue(page("", "text/html"));
+
+    expect(await callOkTool(fetchUrl, input())).toMatchObject({
+      content: "",
+      content_type: "text/html",
     });
-
-    const result = await callOkTool(fetchUrl, {
-      url: "https://example.com/page.txt",
-      max_length: 5000,
-      start_index: 2,
-      raw: false,
-    });
-
-    expect(result.content).toBe("BBCC");
-    expect(result.truncated).toBe(false);
-  });
-
-  it("converts HTML to markdown when not raw", async () => {
-    const html = `
-      <html><body>
-        <article><h1>Title</h1><p>Paragraph</p></article>
-      </body></html>
-    `;
-    mockFetch.mockResolvedValue({
-      url: "https://example.com/page.html",
-      headers: new Headers({ "content-type": "text/html" }),
-      text: vi.fn().mockResolvedValue(html),
-    });
-
-    const result = await callOkTool(fetchUrl, {
-      url: "https://example.com/page.html",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
-    });
-
-    // Should contain converted markdown, not raw HTML tags
-    expect(result.content).not.toContain("<h1>");
-    expect(result.content_type).toBe("text/html");
   });
 
   it("returns raw HTML when raw=true", async () => {
     const html = "<html><body><p>Hello</p></body></html>";
-    mockFetch.mockResolvedValue({
-      url: "https://example.com/page.html",
-      headers: new Headers({ "content-type": "text/html" }),
-      text: vi.fn().mockResolvedValue(html),
-    });
+    mockFetch.mockResolvedValue(page(html, "text/html"));
 
-    const result = await callOkTool(fetchUrl, {
-      url: "https://example.com/page.html",
-      max_length: 5000,
-      start_index: 0,
-      raw: true,
+    expect(await callOkTool(fetchUrl, input({ raw: true }))).toMatchObject({
+      content: html,
     });
-
-    expect(result.content).toContain("<p>Hello</p>");
   });
 
-  it("tracks the final redirect URL", async () => {
-    mockFetch.mockResolvedValue({
-      url: "https://example.com/final-page",
-      headers: new Headers({ "content-type": "text/plain" }),
-      text: vi.fn().mockResolvedValue("redirected"),
-    });
+  it("reports the final URL after redirects", async () => {
+    mockFetch.mockResolvedValue(
+      page("redirected", "text/plain", "https://example.com/final-page"),
+    );
 
-    const result = await callOkTool(fetchUrl, {
-      url: "https://example.com/redirect",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
-    });
-
-    expect(result.url).toBe("https://example.com/final-page");
+    expect(
+      await callOkTool(fetchUrl, input({}, "https://example.com/redirect")),
+    ).toMatchObject({ url: "https://example.com/final-page" });
   });
 });
 
 describe("robots.txt checking", () => {
-  // Build with robots.txt checks ENABLED (ignoreRobotsTxt = false).
   const { fetchUrl } = createWebFetchTools(false);
-  const mockFetch = vi.fn();
 
-  beforeEach(() => {
-    global.fetch = mockFetch;
-    mockFetch.mockReset();
+  it("refuses a path robots.txt disallows, without fetching it", async () => {
+    mockFetch.mockResolvedValueOnce(
+      robots("User-agent: *\nDisallow: /private"),
+    );
+
+    const result = await callTool(
+      fetchUrl,
+      input({}, "https://blocked.com/private/page"),
+    );
+
+    expect(result).toEqual({
+      error: expect.stringContaining("disallowed by robots.txt") as unknown,
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://blocked.com/robots.txt",
+      expect.objectContaining({
+        headers: { "User-Agent": "PlatypusBot/1.0" },
+      }),
+    );
   });
 
-  it("blocks fetching when robots.txt disallows", async () => {
-    // First call: robots.txt
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: vi.fn().mockResolvedValue("User-agent: *\nDisallow: /"),
+  it.each([
+    [
+      "robots.txt allows the path",
+      () => robots("User-agent: *\nDisallow: /private"),
+    ],
+    ["robots.txt cannot be fetched", () => ({ ok: false })],
+    [
+      "the robots.txt request throws",
+      () => Promise.reject(new Error("ECONNRESET")),
+    ],
+  ])("fetches the page when %s", async (_label, robotsResponse) => {
+    mockFetch.mockImplementationOnce(robotsResponse);
+    mockFetch.mockResolvedValueOnce(page("content"));
+
+    expect(await callOkTool(fetchUrl, input())).toMatchObject({
+      content: "content",
     });
-
-    const result = await callTool(fetchUrl, {
-      url: "https://blocked.com/page",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
-    });
-
-    expect(result).toHaveProperty("error");
-    if (!("error" in result)) throw new Error("expected an error result");
-    expect(result.error).toContain("robots.txt");
-  });
-
-  it("allows fetching when robots.txt fetch fails", async () => {
-    // robots.txt fetch fails
-    mockFetch.mockResolvedValueOnce({ ok: false });
-    // Actual page fetch
-    mockFetch.mockResolvedValueOnce({
-      url: "https://example.com/page",
-      headers: new Headers({ "content-type": "text/plain" }),
-      text: vi.fn().mockResolvedValue("content"),
-    });
-
-    const result = await callOkTool(fetchUrl, {
-      url: "https://example.com/page",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
-    });
-
-    expect(result.content).toBe("content");
   });
 });
 
@@ -227,65 +184,18 @@ describe("egress guarding", () => {
   // robots.txt checks enabled, to prove the guard runs first: a blocked URL must
   // not even reach the robots.txt probe, which would itself hit the network.
   const { fetchUrl } = createWebFetchTools(false);
-  const mockFetch = vi.fn();
 
-  beforeEach(() => {
-    global.fetch = mockFetch;
-    mockFetch.mockReset();
-  });
-
-  it("refuses a URL the guard blocks and makes no request at all", async () => {
-    mockCheckEgress.mockResolvedValue({
-      allowed: false,
-      reason: "'x' resolves to 169.254.169.254 (link-local)",
-    });
-
-    const result = await callTool(fetchUrl, {
-      url: "http://169.254.169.254/latest/meta-data/",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
-    });
-
-    expect(result).toHaveProperty("error");
-    if (!("error" in result)) throw new Error("expected an error result");
-    expect(result.error).toBe(EGRESS_BLOCKED_MESSAGE);
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it("does not leak the block reason to the model", async () => {
+  it("refuses a URL the guard blocks, makes no request, and does not leak the reason", async () => {
     mockCheckEgress.mockResolvedValue({
       allowed: false,
       reason: "'secret.internal' resolves to 10.1.2.3 (private network)",
     });
 
-    const result = await callTool(fetchUrl, {
-      url: "http://secret.internal/",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
-    });
-
-    if (!("error" in result)) throw new Error("expected an error result");
-    expect(result.error).not.toContain("secret.internal");
-    expect(result.error).not.toContain("10.1.2.3");
-  });
-
-  it("consults the guard with the model-supplied URL", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false });
-    mockFetch.mockResolvedValueOnce({
-      url: "https://example.com/page",
-      headers: new Headers({ "content-type": "text/plain" }),
-      text: vi.fn().mockResolvedValue("content"),
-    });
-
-    await callOkTool(fetchUrl, {
-      url: "https://example.com/page",
-      max_length: 5000,
-      start_index: 0,
-      raw: false,
-    });
-
-    expect(mockCheckEgress).toHaveBeenCalledWith("https://example.com/page");
+    expect(
+      await callTool(fetchUrl, input({}, "http://secret.internal/")),
+    ).toEqual({ error: EGRESS_BLOCKED_MESSAGE });
+    expect(EGRESS_BLOCKED_MESSAGE).not.toMatch(/secret\.internal|10\.1\.2\.3/);
+    expect(mockCheckEgress).toHaveBeenCalledWith("http://secret.internal/");
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

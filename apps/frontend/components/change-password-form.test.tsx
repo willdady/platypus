@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
 import { ChangePasswordForm } from "./change-password-form";
 
 const mockChangePassword = vi.fn();
@@ -20,84 +21,96 @@ vi.mock("sonner", () => ({
   },
 }));
 
+const fields = () => ({
+  current: screen.getByLabelText("Current Password"),
+  next: screen.getByLabelText("New Password"),
+  confirm: screen.getByLabelText("Confirm New Password"),
+});
+
+const fill = (current: string, next: string, confirm: string) => {
+  const f = fields();
+  fireEvent.change(f.current, { target: { value: current } });
+  fireEvent.change(f.next, { target: { value: next } });
+  fireEvent.change(f.confirm, { target: { value: confirm } });
+  fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+// Toggle independence is RevealableInput's own; here, only that each field is
+// masked and its toggle is wired to it.
 describe("ChangePasswordForm revealable inputs", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  it.each([
+    ["Show current password", "current"],
+    ["Show new password", "next"],
+    ["Show confirm new password", "confirm"],
+  ] as const)(
+    "masks all three fields; %s reveals only its own",
+    (toggle, key) => {
+      render(<ChangePasswordForm />);
+      const all = fields();
 
-  it("defaults all three password fields to masked type='password'", () => {
+      for (const input of Object.values(all)) {
+        expect(input).toHaveAttribute("type", "password");
+      }
+      fireEvent.click(screen.getByRole("button", { name: toggle }));
+
+      for (const [name, input] of Object.entries(all)) {
+        expect(input).toHaveAttribute(
+          "type",
+          name === key ? "text" : "password",
+        );
+      }
+    },
+  );
+});
+
+describe("ChangePasswordForm submit", () => {
+  it("refuses a confirmation that doesn't match, without calling the auth client", () => {
     render(<ChangePasswordForm />);
 
-    const currentPassword = screen.getByLabelText("Current Password");
-    const newPassword = screen.getByLabelText("New Password");
-    const confirmPassword = screen.getByLabelText("Confirm New Password");
+    fill("old-pass", "new-pass-1", "new-pass-2");
 
-    expect(currentPassword).toHaveAttribute("type", "password");
-    expect(newPassword).toHaveAttribute("type", "password");
-    expect(confirmPassword).toHaveAttribute("type", "password");
-
-    expect(
-      screen.getByRole("button", { name: "Show current password" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Show new password" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Show confirm new password" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Passwords do not match")).toBeInTheDocument();
+    expect(fields().confirm).toHaveAttribute("aria-invalid", "true");
+    expect(mockChangePassword).not.toHaveBeenCalled();
   });
 
-  it("revealing Current Password leaves the other two masked", () => {
+  it("changes the password, signs other sessions out, and clears the form", async () => {
+    mockChangePassword.mockResolvedValue({ error: null });
     render(<ChangePasswordForm />);
 
-    const currentPassword = screen.getByLabelText("Current Password");
-    const newPassword = screen.getByLabelText("New Password");
-    const confirmPassword = screen.getByLabelText("Confirm New Password");
+    fill("old-pass", "new-pass-1", "new-pass-1");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Show current password" }),
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Password changed successfully",
+      ),
     );
-
-    expect(currentPassword).toHaveAttribute("type", "text");
-    expect(newPassword).toHaveAttribute("type", "password");
-    expect(confirmPassword).toHaveAttribute("type", "password");
-
-    expect(
-      screen.getByRole("button", { name: "Hide current password" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Show new password" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Show confirm new password" }),
-    ).toBeInTheDocument();
+    expect(mockChangePassword).toHaveBeenCalledWith({
+      currentPassword: "old-pass",
+      newPassword: "new-pass-1",
+      revokeOtherSessions: true,
+    });
+    const { current, next, confirm } = fields();
+    expect(current).toHaveValue("");
+    expect(next).toHaveValue("");
+    expect(confirm).toHaveValue("");
   });
 
-  it("toggles all fields independently", () => {
+  it("shows the auth client's reason and keeps what was typed", async () => {
+    mockChangePassword.mockResolvedValue({
+      error: { message: "Invalid password" },
+    });
     render(<ChangePasswordForm />);
 
-    const currentPassword = screen.getByLabelText("Current Password");
-    const newPassword = screen.getByLabelText("New Password");
-    const confirmPassword = screen.getByLabelText("Confirm New Password");
+    fill("wrong-pass", "new-pass-1", "new-pass-1");
 
-    // Reveal New Password
-    fireEvent.click(screen.getByRole("button", { name: "Show new password" }));
-    expect(currentPassword).toHaveAttribute("type", "password");
-    expect(newPassword).toHaveAttribute("type", "text");
-    expect(confirmPassword).toHaveAttribute("type", "password");
-
-    // Reveal Confirm New Password
-    fireEvent.click(
-      screen.getByRole("button", { name: "Show confirm new password" }),
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Invalid password"),
     );
-    expect(currentPassword).toHaveAttribute("type", "password");
-    expect(newPassword).toHaveAttribute("type", "text");
-    expect(confirmPassword).toHaveAttribute("type", "text");
-
-    // Conceal New Password
-    fireEvent.click(screen.getByRole("button", { name: "Hide new password" }));
-    expect(currentPassword).toHaveAttribute("type", "password");
-    expect(newPassword).toHaveAttribute("type", "password");
-    expect(confirmPassword).toHaveAttribute("type", "text");
+    expect(fields().current).toHaveValue("wrong-pass");
   });
 });

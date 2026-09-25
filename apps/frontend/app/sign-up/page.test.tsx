@@ -4,9 +4,10 @@ import { SWRConfig } from "swr";
 import SignUpPage from "./page";
 
 const mockSignUpEmail = vi.fn();
+const mockPush = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock("@/components/auth-provider", () => ({
@@ -73,69 +74,12 @@ describe("SignUpPage when an invitation is required", () => {
   });
 });
 
-describe("SignUpPage password reveal toggle", () => {
+describe("SignUpPage form", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSignUpEmail.mockResolvedValue({});
   });
 
-  it("renders password masked as type='password' by default", async () => {
-    await renderOpen();
-
-    const passwordInput = screen.getByLabelText("Password");
-    expect(passwordInput).toHaveAttribute("type", "password");
-    expect(
-      screen.getByRole("button", { name: "Show password" }),
-    ).toBeInTheDocument();
-  });
-
-  it("toggles password visibility between text and password on click", async () => {
-    await renderOpen();
-
-    const passwordInput = screen.getByLabelText("Password");
-    const toggleButton = screen.getByRole("button", { name: "Show password" });
-
-    // Click to reveal
-    fireEvent.click(toggleButton);
-    expect(passwordInput).toHaveAttribute("type", "text");
-    expect(
-      screen.getByRole("button", { name: "Hide password" }),
-    ).toBeInTheDocument();
-
-    // Click to conceal
-    fireEvent.click(screen.getByRole("button", { name: "Hide password" }));
-    expect(passwordInput).toHaveAttribute("type", "password");
-    expect(
-      screen.getByRole("button", { name: "Show password" }),
-    ).toBeInTheDocument();
-  });
-
-  it("preserves typed password value across multiple toggle clicks", async () => {
-    await renderOpen();
-
-    const passwordInput = screen.getByLabelText("Password");
-    fireEvent.change(passwordInput, {
-      target: { value: "my-secure-password" },
-    });
-    expect(passwordInput).toHaveValue("my-secure-password");
-
-    const toggleButton = screen.getByRole("button", { name: "Show password" });
-
-    // Repeated stress toggling
-    for (let i = 0; i < 5; i++) {
-      fireEvent.click(toggleButton);
-      expect(passwordInput).toHaveAttribute("type", "text");
-      expect(passwordInput).toHaveValue("my-secure-password");
-
-      fireEvent.click(toggleButton);
-      expect(passwordInput).toHaveAttribute("type", "password");
-      expect(passwordInput).toHaveValue("my-secure-password");
-    }
-  });
-
-  it("submits the credentials when the form is submitted", async () => {
-    const { container } = await renderOpen();
-
+  const submit = (container: HTMLElement) => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Ada Lovelace" },
     });
@@ -146,28 +90,57 @@ describe("SignUpPage password reveal toggle", () => {
       target: { value: "my-secure-password" },
     });
     fireEvent.submit(container.querySelector("form")!);
+  };
 
-    await waitFor(() => {
-      expect(mockSignUpEmail).toHaveBeenCalledWith({
-        email: "ada@example.com",
-        password: "my-secure-password",
-        name: "Ada Lovelace",
-      });
+  // The reveal toggle itself is covered in components/ui/revealable-input.
+  it("masks the password field", async () => {
+    await renderOpen();
+
+    expect(screen.getByLabelText("Password")).toHaveAttribute(
+      "type",
+      "password",
+    );
+  });
+
+  it("submits the credentials and enters the app", async () => {
+    mockSignUpEmail.mockResolvedValue({});
+    const { container } = await renderOpen();
+
+    submit(container);
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/"));
+    expect(mockSignUpEmail).toHaveBeenCalledWith({
+      email: "ada@example.com",
+      password: "my-secure-password",
+      name: "Ada Lovelace",
     });
   });
 
-  it("does not trigger form submission when clicking the reveal button", async () => {
-    await renderOpen();
+  it.each([
+    [
+      "the backend's reason",
+      () => ({ error: { message: "User already exists" } }),
+      "User already exists",
+    ],
+    [
+      "a fallback for a reasonless refusal",
+      () => ({ error: {} }),
+      "Sign up failed",
+    ],
+    [
+      "a generic failure when the request throws",
+      () => {
+        throw new Error("network");
+      },
+      "An unexpected error occurred",
+    ],
+  ])("shows %s and stays on the page", async (_name, impl, message) => {
+    mockSignUpEmail.mockImplementation(async () => impl());
+    const { container } = await renderOpen();
 
-    const toggleButton = screen.getByRole("button", { name: "Show password" });
+    submit(container);
 
-    // fireEvent.click does not run jsdom's form-submission algorithm, so the
-    // type attribute is what actually pins this: a submit-typed toggle would
-    // post the form in a real browser while leaving the mock untouched here.
-    expect(toggleButton).toHaveAttribute("type", "button");
-
-    fireEvent.click(toggleButton);
-
-    expect(mockSignUpEmail).not.toHaveBeenCalled();
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

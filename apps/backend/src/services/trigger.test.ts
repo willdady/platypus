@@ -278,6 +278,42 @@ describe("trigger module", () => {
       expect(fake.tables.trigger[0].name).toBe("Renamed");
     });
 
+    it("writes every scalar field the update carries", async () => {
+      const fake = world({ trigger: [triggerRow()] });
+
+      await updateTrigger(ctx, "trig-1", {
+        description: "About it",
+        instruction: "Do the other thing",
+        enabled: false,
+        maxRunsToKeep: 3,
+        search: true,
+        includeMemories: true,
+      });
+
+      expect(fake.tables.trigger[0]).toMatchObject({
+        description: "About it",
+        instruction: "Do the other thing",
+        enabled: false,
+        maxRunsToKeep: 3,
+        search: true,
+        includeMemories: true,
+        updatedAt: expect.any(Date) as unknown,
+      });
+    });
+
+    it("refuses to update a stored row of an unknown type unless the update names one", async () => {
+      const fake = world({
+        trigger: [triggerRow({ type: "webhook", name: "Legacy" })],
+      });
+
+      await expect(
+        updateTrigger(ctx, "trig-1", { name: "Renamed" }),
+      ).rejects.toThrow(
+        new ValidationError("Invalid trigger type. Must be 'cron' or 'event'."),
+      );
+      expect(fake.tables.trigger[0].name).toBe("Legacy");
+    });
+
     it("recomputes nextRunAt when a cron trigger's config changes", async () => {
       const fake = world({ trigger: [triggerRow()] });
 

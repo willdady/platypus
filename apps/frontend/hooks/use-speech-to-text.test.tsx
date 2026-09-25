@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
   installSpeechRecognition,
@@ -18,10 +18,14 @@ describe("useSpeechToText", () => {
 
   afterEach(uninstallSpeechRecognition);
 
-  it("reports unsupported when no Web Speech API is present", () => {
+  it("reports unsupported, and says why on toggle, when no Web Speech API is present", () => {
     uninstallSpeechRecognition();
     const { result } = renderHook(() => useSpeechToText());
     expect(result.current.isSupported).toBe(false);
+
+    act(() => result.current.toggleListening());
+
+    expect(result.current.fault).toEqual({ code: "unsupported" });
   });
 
   it("reports supported and toggles listening state via start/stop", () => {
@@ -261,16 +265,6 @@ describe("useSpeechToText", () => {
     act(() => result.current.toggleListening());
 
     expect(result.current.fault).toEqual({ code: "insecure-context" });
-  });
-
-  it("says why when the browser has no Web Speech API", () => {
-    Reflect.deleteProperty(window, "SpeechRecognition");
-
-    const { result } = renderHook(() => useSpeechToText());
-
-    act(() => result.current.toggleListening());
-
-    expect(result.current.fault).toEqual({ code: "unsupported" });
   });
 
   it("stops recognition on unmount", () => {

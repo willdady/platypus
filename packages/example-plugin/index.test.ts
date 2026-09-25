@@ -47,12 +47,19 @@ describe("@platypus-examples/tool-set", () => {
     expect(plugin.contributes.toolSets).toHaveLength(1);
   });
 
+  it("declares the API major whose contract it reads unguarded", () => {
+    // The plugin reads `plugin.logger` and would read `ctx.registerCloser`
+    // without a guard. Both are required from v2 on, so the manifest has to ask
+    // for a core that supplies them — a v1 core refuses this plugin at boot
+    // rather than letting it fail inside somebody's Chat turn.
+    expect(plugin.apiVersion).toBeGreaterThanOrEqual(2);
+  });
+
   it("contributes a bare (unprefixed) tool set id", () => {
     // Authors write bare ids; core prefixes at load. The package must NOT
     // pre-namespace its own ids.
     const toolSet = plugin.contributes.toolSets?.[0];
     expect(toolSet?.id).toBe("greeting");
-    expect(toolSet).not.toBeUndefined();
   });
 
   it("greet returns a greeting for the given name", async () => {
@@ -61,7 +68,7 @@ describe("@platypus-examples/tool-set", () => {
       { name: "Ada" },
       { toolCallId: "t1", messages: [], context: {} },
     );
-    expect(result).toContain("Ada");
+    expect(result).toBe("Hello, Ada! 👋");
   });
 
   it("logs through the logger core puts on the plugin block", async () => {
@@ -82,14 +89,5 @@ describe("@platypus-examples/tool-set", () => {
       expect.any(String),
     );
     expect(logger.info).not.toHaveBeenCalled();
-  });
-
-  it("declares the API major whose contract it reads unguarded", async () => {
-    // The plugin reads `plugin.logger` and would read `ctx.registerCloser`
-    // without a guard. Both are required from v2 on, so the manifest has to ask
-    // for a core that supplies them — a v1 core refuses this plugin at boot
-    // rather than letting it fail inside somebody's Chat turn.
-    expect(plugin.apiVersion).toBeGreaterThanOrEqual(2);
-    await expect(resolveTools()).resolves.toHaveProperty("greet");
   });
 });

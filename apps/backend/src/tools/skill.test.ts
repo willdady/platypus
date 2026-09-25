@@ -1,144 +1,98 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { describe, it, expect, beforeEach } from "vitest";
+import { callTool, resetMockDb, seedDb } from "../test-utils.ts";
 
 import { createLoadSkillTool } from "./skill.ts";
 
-const ctx = { toolCallId: "test", messages: [], context: {} };
+const orgId = "org-1";
+const workspaceId = "ws-1";
+
+const skill = (
+  id: string,
+  name: string,
+  scope: { workspaceId?: string; organizationId?: string },
+  over: Record<string, unknown> = {},
+) => ({
+  id,
+  name,
+  body: `${id} body`,
+  workspaceId: scope.workspaceId ?? null,
+  organizationId: scope.organizationId ?? null,
+  disableModelInvocation: false,
+  ...over,
+});
+
+const attached = (resourceId: string, ws = workspaceId) => ({
+  id: `att-${resourceId}-${ws}`,
+  workspaceId: ws,
+  resourceType: "skill",
+  resourceId,
+});
 
 describe("createLoadSkillTool", () => {
-  const orgId = "org-1";
-  const workspaceId = "ws-1";
-  let loadSkill: ReturnType<typeof createLoadSkillTool>;
-
   beforeEach(() => {
-    vi.clearAllMocks();
     resetMockDb();
-    loadSkill = createLoadSkillTool(orgId, workspaceId, ["s1"]);
-  });
-
-  it("returns a tool with the correct description", () => {
-    expect(loadSkill.description).toContain("skill");
-  });
-
-  it("returns workspace skill data when found", async () => {
-    const skillData = {
-      id: "s1",
-      name: "my-skill",
-      body: "Skill instructions here",
-      disableModelInvocation: false,
-    };
-    // First query (workspace-scoped) resolves with the skill.
-    mockDb.limit.mockResolvedValueOnce([skillData]);
-
-    expect(await loadSkill.execute({ name: "my-skill" }, ctx)).toEqual({
-      name: "my-skill",
-      body: "Skill instructions here",
+    seedDb({
+      skill: [
+        skill("ws-skill", "my-skill", { workspaceId }),
+        skill("shared", "shared-skill", { organizationId: orgId }),
+        skill("unattached", "unattached-skill", { organizationId: orgId }),
+        skill("elsewhere", "elsewhere-skill", { workspaceId: "ws-2" }),
+        skill("other-org", "other-org-skill", { organizationId: "org-2" }),
+        // An unassigned workspace skill shadowing an assigned Shared one.
+        skill("shadow", "shadowed", { workspaceId }),
+        skill("shadowed-shared", "shadowed", { organizationId: orgId }),
+        skill("unassigned", "unassigned-skill", { workspaceId }),
+        skill(
+          "human-only",
+          "human-only",
+          { workspaceId },
+          { disableModelInvocation: true },
+        ),
+      ],
+      attachment: [
+        attached("shared"),
+        attached("shadowed-shared"),
+        attached("unattached", "ws-2"),
+        attached("other-org"),
+      ],
     });
   });
 
-  it("falls back to an attached org-scoped skill", async () => {
-    const orgSkill = {
-      id: "s1",
-      name: "shared-skill",
-      body: "Shared instructions",
-      organizationId: "org-1",
-      workspaceId: null,
-      disableModelInvocation: false,
-    };
-    mockDb.limit
-      .mockResolvedValueOnce([]) // no workspace-scoped skill of this name
-      .mockResolvedValueOnce([orgSkill]) // the Shared skill
-      .mockResolvedValueOnce([{ id: "att-1" }]); // attached to this workspace
+  const load = (name: string, permitted: string[]) =>
+    callTool(createLoadSkillTool(orgId, workspaceId, permitted), { name });
 
-    expect(await loadSkill.execute({ name: "shared-skill" }, ctx)).toEqual({
-      name: "shared-skill",
-      body: "Shared instructions",
-    });
+  it.each([
+    ["a workspace skill", "my-skill", "ws-skill"],
+    ["an attached Shared skill", "shared-skill", "shared"],
+    [
+      "an assigned Shared skill shadowed by an unassigned workspace skill",
+      "shadowed",
+      "shadowed-shared",
+    ],
+  ])("loads %s", async (_label, name, id) => {
+    expect(await load(name, [id])).toEqual({ name, body: `${id} body` });
   });
 
-  it("refuses an org-scoped skill that is not attached here", async () => {
-    mockDb.limit
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          id: "s2",
-          name: "shared-skill",
-          body: "Shared instructions",
-          organizationId: "org-1",
-          workspaceId: null,
-        },
-      ])
-      .mockResolvedValueOnce([]); // no attachment → not visible here
-
-    expect(await loadSkill.execute({ name: "shared-skill" }, ctx)).toEqual({
-      error: "Skill 'shared-skill' not found",
-    });
-  });
-
-  it("returns error when skill not found at either scope", async () => {
-    mockDb.limit.mockResolvedValue([]);
-
-    expect(await loadSkill.execute({ name: "nonexistent" }, ctx)).toEqual({
-      error: "Skill 'nonexistent' not found",
-    });
-  });
-
-  it("loads an assigned Shared Skill when an unassigned Workspace Skill shadows its name", async () => {
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "shadow",
-          name: "shared-name",
-          body: "The unassigned workspace version",
-          workspaceId: "ws-1",
-          disableModelInvocation: false,
-        },
-      ])
-      .mockResolvedValueOnce([]) // shadow is excluded by the permitted ids
-      .mockResolvedValueOnce([
-        {
-          id: "s1",
-          name: "shared-name",
-          body: "The assigned Shared version",
-          organizationId: "org-1",
-          workspaceId: null,
-          disableModelInvocation: false,
-        },
-      ])
-      .mockResolvedValueOnce([{ id: "att-1" }]);
-
-    expect(await loadSkill.execute({ name: "shared-name" }, ctx)).toEqual({
-      name: "shared-name",
-      body: "The assigned Shared version",
+  it.each([
+    ["a Shared skill attached only to another workspace", "unattached"],
+    ["another workspace's skill", "elsewhere"],
+    ["another organization's skill", "other-org"],
+    ["a name that does not exist", "missing"],
+  ])("does not find %s, even when assigned", async (_label, id) => {
+    const name = `${id}-skill`;
+    expect(await load(name, [id])).toEqual({
+      error: `Skill '${name}' not found`,
     });
   });
 
   it("refuses a skill that is not assigned to the running Agent", async () => {
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        id: "unassigned",
-        name: "unassigned-skill",
-        body: "Instructions for an unassigned skill",
-        disableModelInvocation: false,
-      },
-    ]);
-
-    expect(await loadSkill.execute({ name: "unassigned-skill" }, ctx)).toEqual({
+    expect(await load("unassigned-skill", ["ws-skill"])).toEqual({
       error: "Skill 'unassigned-skill' is not assigned to this agent",
     });
   });
 
   it("refuses a user-invocable-only skill from the model", async () => {
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        id: "s1",
-        name: "human-only",
-        body: "Instructions reserved for direct user invocation",
-        disableModelInvocation: true,
-      },
-    ]);
-
-    expect(await loadSkill.execute({ name: "human-only" }, ctx)).toEqual({
+    expect(await load("human-only", ["human-only"])).toEqual({
       error: "Skill 'human-only' can only be invoked by a user",
     });
   });

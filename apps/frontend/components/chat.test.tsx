@@ -1229,7 +1229,9 @@ describe("starting a turn", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Regenerate a1" }));
 
-    expect(screen.getByRole("button", { name: "Regenerate a2" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Regenerate a2" }),
+    ).toBeInTheDocument();
     expect(harness.regenerate).toHaveBeenCalledWith(
       expect.objectContaining({ messageId: "a1" }),
     );

@@ -2789,6 +2789,22 @@ describe("validateTurnAttachments", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("leaves an unresolvable turn to prepareChatTurn instead of judging its files", async () => {
+    // The unknown Agent is prepareChatTurn's NotFoundError to raise; this gate
+    // must not preempt it with a file rejection.
+    await expect(
+      validateTurnAttachments(
+        {
+          request: { agentId: "missing" },
+          messages: [fileMessage("application/zip", "bundle.zip")],
+          orgId: "org-1",
+          workspaceId: "ws-1",
+        },
+        queries(),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it("is a no-op when the turn carries no file parts", async () => {
     await expect(
       validateTurnAttachments(

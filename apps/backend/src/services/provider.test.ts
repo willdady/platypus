@@ -5,12 +5,21 @@ import type { ConcreteModelId, Provider } from "@platypus/schemas";
 /** These tests drive the SDK surface directly; the resolver is covered elsewhere. */
 const concrete = (id: string) => id as ConcreteModelId;
 
+type Sentinel = Mock<(arg: unknown) => { sentinel: string; arg: unknown }>;
+
 type ProviderInstance = Mock<
   (modelId: string) => { modelId: string; _sentinel: boolean }
 > & {
   chat: Mock<
     (modelId: string) => { modelId: string; _sentinel: boolean; _mode: string }
   >;
+  embeddingModel: Sentinel;
+  textEmbeddingModel: Sentinel;
+  tools: {
+    webSearch: Sentinel;
+    webSearch_20250305: Sentinel;
+    googleSearch: Sentinel;
+  };
 };
 
 const {
@@ -31,6 +40,17 @@ const {
       _sentinel: true,
       _mode: "chat",
     }));
+    // Each returns what it was called with, tagged by name, so a test can tell
+    // which SDK entry point a slot reached and with what.
+    const sentinel = (name: string): Sentinel =>
+      vi.fn((arg: unknown) => ({ sentinel: name, arg }));
+    instance.embeddingModel = sentinel("embeddingModel");
+    instance.textEmbeddingModel = sentinel("textEmbeddingModel");
+    instance.tools = {
+      webSearch: sentinel("webSearch"),
+      webSearch_20250305: sentinel("webSearch_20250305"),
+      googleSearch: sentinel("googleSearch"),
+    };
     const creator = vi.fn(() => instance);
     return { creator, instance };
   };
@@ -146,14 +166,6 @@ describe("openProvider", () => {
     }).languageModel(concrete("gpt-4"));
     expect(mockCreateOpenAICompatible.creator).not.toHaveBeenCalled();
     expect(mockCreateOpenAI.instance).toHaveBeenCalledWith("gpt-4");
-  });
-
-  it("dispatches OpenRouter to the OpenRouter SDK", () => {
-    openProvider({
-      ...baseProvider,
-      providerType: "OpenRouter" as const,
-    }).languageModel(concrete("openai/gpt-4"));
-    expect(mockCreateOpenRouter.creator).toHaveBeenCalled();
   });
 
   describe("OpenRouter app attribution", () => {
@@ -283,30 +295,6 @@ describe("openProvider", () => {
     );
   });
 
-  it("dispatches Bedrock to the Amazon Bedrock SDK", () => {
-    openProvider({
-      ...baseProvider,
-      providerType: "Bedrock" as const,
-    }).languageModel(concrete("anthropic.claude-v2"));
-    expect(mockCreateAmazonBedrock.creator).toHaveBeenCalled();
-  });
-
-  it("dispatches Google to the Google Generative AI SDK", () => {
-    openProvider({
-      ...baseProvider,
-      providerType: "Google" as const,
-    }).languageModel(concrete("gemini-pro"));
-    expect(mockCreateGoogleGenerativeAI.creator).toHaveBeenCalled();
-  });
-
-  it("dispatches Anthropic to the Anthropic SDK", () => {
-    openProvider({
-      ...baseProvider,
-      providerType: "Anthropic" as const,
-    }).languageModel(concrete("claude-3-opus-20240229"));
-    expect(mockCreateAnthropic.creator).toHaveBeenCalled();
-  });
-
   it("throws for unknown provider type", () => {
     expect(() =>
       openProvider({
@@ -316,25 +304,79 @@ describe("openProvider", () => {
     ).toThrow("Unrecognized provider type 'Unknown'");
   });
 
-  it("omits embeddingModel for Anthropic (no embedding API)", () => {
-    const opened = openProvider({
-      ...baseProvider,
-      providerType: "Anthropic" as const,
-    });
-    expect(Object.hasOwn(opened, "embeddingModel")).toBe(false);
-  });
+  const sentinelOf = (name: string, arg: unknown) => ({ sentinel: name, arg });
 
-  it("omits searchTools for Bedrock (no vendor-native search)", () => {
-    const opened = openProvider({
-      ...baseProvider,
-      providerType: "Bedrock" as const,
-    });
-    expect(Object.hasOwn(opened, "searchTools")).toBe(false);
-  });
+  it.each([
+    {
+      providerType: "OpenRouter",
+      sdk: mockCreateOpenRouter,
+      config: {},
+      embedding: sentinelOf("textEmbeddingModel", "embed-1"),
+      search: { web_search: sentinelOf("webSearch", {}) },
+    },
+    {
+      providerType: "Bedrock",
+      sdk: mockCreateAmazonBedrock,
+      config: { region: "us-east-1" },
+      embedding: sentinelOf("embeddingModel", "embed-1"),
+      // No vendor-native search.
+      search: undefined,
+    },
+    {
+      providerType: "Google",
+      sdk: mockCreateGoogleGenerativeAI,
+      config: {},
+      embedding: sentinelOf("embeddingModel", "embed-1"),
+      search: { google_search: sentinelOf("googleSearch", {}) },
+    },
+    {
+      providerType: "Anthropic",
+      sdk: mockCreateAnthropic,
+      config: {},
+      // No embedding API.
+      embedding: undefined,
+      search: {
+        web_search: sentinelOf("webSearch_20250305", { maxUses: 5 }),
+      },
+    },
+    {
+      providerType: "OpenAI",
+      sdk: mockCreateOpenAI,
+      config: {},
+      embedding: sentinelOf("embeddingModel", "embed-1"),
+      search: {
+        web_search: sentinelOf("webSearch", {
+          externalWebAccess: true,
+          searchContextSize: "high",
+        }),
+      },
+    },
+  ] as const)(
+    "wires every $providerType slot to its own SDK",
+    ({ providerType, sdk, config, embedding, search }) => {
+      const opened = openProvider({
+        ...baseProvider,
+        providerType,
+        apiMode: "responses",
+        baseUrl: "https://llm.example.com",
+        region: "us-east-1",
+      });
 
-  it("exposes embeddingModel and searchTools for OpenAI", () => {
-    const opened = openProvider(baseProvider);
-    expect(typeof opened.embeddingModel).toBe("function");
-    expect(typeof opened.searchTools).toBe("function");
-  });
+      expect(sdk.creator).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: "https://llm.example.com",
+          apiKey: "sk-test",
+          ...config,
+        }),
+      );
+      expect(opened.languageModel(concrete("model-1"))).toEqual({
+        modelId: "model-1",
+        _sentinel: true,
+      });
+      expect(opened.embeddingModel?.(concrete("embed-1"))).toEqual(embedding);
+      expect(Object.hasOwn(opened, "embeddingModel")).toBe(!!embedding);
+      expect(opened.searchTools?.()).toEqual(search);
+      expect(Object.hasOwn(opened, "searchTools")).toBe(!!search);
+    },
+  );
 });

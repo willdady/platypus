@@ -1,14 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import {
   authMock,
   authState,
   swrMock,
   toastMock,
   mockScopedSWR,
+  mutate,
   resetListHarness,
   renderList,
+  stubAcceptedSave,
+  stubSaveSequence,
+  toastSuccess,
 } from "@/lib/list-test-harness";
+import { savedBody } from "@/lib/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -54,7 +59,13 @@ function mockReads({
 const renderSettings = () =>
   renderList(<SandboxSettings orgId="org1" workspaceId="ws1" />);
 
+const SANDBOX_URL = "http://test/organizations/org1/workspaces/ws1/sandbox";
+
+const save = () =>
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
 beforeEach(resetListHarness);
+afterEach(() => vi.unstubAllGlobals());
 
 // --- Tests -------------------------------------------------------------------
 
@@ -103,5 +114,215 @@ describe("SandboxSettings loading", () => {
     renderSettings();
 
     expect(screen.getByText("No sandbox configured")).toBeInTheDocument();
+  });
+});
+
+describe("SandboxSettings save", () => {
+  it("creates the first sandbox on the first registered backend", async () => {
+    const fetchMock = stubAcceptedSave({});
+    mockReads({ sandbox: { data: null } });
+    renderSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: /Configure sandbox/ }));
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Dev box" },
+    });
+    save();
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Sandbox configured"),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      SANDBOX_URL,
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(savedBody(fetchMock)).toEqual({
+      workspaceId: "ws1",
+      name: "Dev box",
+      backend: "docker",
+      config: { networks: [], extraHosts: [] },
+      credentials: {},
+      adminEnv: {},
+      userEnv: {},
+    });
+    expect(mutate).toHaveBeenCalled();
+  });
+
+  it("sends an admin's docker reachability and both env tiers on an edit", async () => {
+    const fetchMock = stubAcceptedSave({});
+    mockReads({
+      sandbox: {
+        data: {
+          ...DOCKER_SANDBOX,
+          // Split on the first colon only, so an IPv6 target survives.
+          config: { networks: [], extraHosts: ["v6:::1"] },
+          adminEnv: { SECRET: "s" },
+          userEnv: { FOO: "1" },
+        },
+      },
+      networks: ["bridge-a"],
+    });
+    renderSettings();
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Attach network bridge-a" }),
+    );
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      SANDBOX_URL,
+      expect.objectContaining({ method: "PUT" }),
+    );
+    expect(savedBody(fetchMock)).toEqual({
+      name: "Dev box",
+      backend: "docker",
+      config: { networks: ["bridge-a"], extraHosts: ["v6:::1"] },
+      credentials: {},
+      adminEnv: { SECRET: "s" },
+      userEnv: { FOO: "1" },
+    });
+  });
+
+  // ADR-0006: a Workspace owner manages only the name and their own env.
+  it("sends a non-admin's name and env only, showing admin keys read-only", async () => {
+    authState.actor = "workspace-owner";
+    const fetchMock = stubAcceptedSave({});
+    mockReads({
+      sandbox: {
+        data: { ...DOCKER_SANDBOX, adminEnv: { SECRET: "" }, userEnv: {} },
+      },
+    });
+    renderSettings();
+
+    expect(screen.queryByText("Admin environment variables")).toBeNull();
+    expect(screen.queryByText("Networks")).toBeNull();
+    expect(
+      screen.getByText("Managed by admin (read-only):"),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue("SECRET")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Delete/ })).toBeNull();
+
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedBody(fetchMock)).toEqual({
+      name: "Dev box",
+      backend: "docker",
+      userEnv: {},
+    });
+  });
+
+  it("refuses to save a duplicate env key", () => {
+    authState.actor = "workspace-owner";
+    const fetchMock = stubAcceptedSave({});
+    mockReads({
+      sandbox: { data: { ...DOCKER_SANDBOX, userEnv: { FOO: "1" } } },
+    });
+    renderSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add variable" }));
+    fireEvent.change(screen.getByLabelText("KEY 2"), {
+      target: { value: " FOO " },
+    });
+    save();
+
+    expect(screen.getByText("Duplicate env key: FOO")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // ADR-0012: GET strips the SSH credentials, so a blank key on an edit must
+  // leave the stored one alone rather than clear it.
+  describe("SSH", () => {
+    const SSH_SANDBOX = {
+      ...DOCKER_SANDBOX,
+      backend: "ssh",
+      config: { host: "ssh.example.com", port: 2222, user: "platypus" },
+    };
+    const renderSsh = () => {
+      mockReads({
+        sandbox: { data: SSH_SANDBOX },
+        backends: [{ backend: "ssh", name: "SSH" }],
+      });
+      renderSettings();
+    };
+
+    it("omits credentials when the private key is left blank", async () => {
+      const fetchMock = stubAcceptedSave({});
+      renderSsh();
+
+      expect(screen.getByLabelText("Private key")).toHaveAttribute(
+        "placeholder",
+        "Leave blank to keep the stored key",
+      );
+      save();
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(savedBody(fetchMock)).toEqual({
+        name: "Dev box",
+        backend: "ssh",
+        config: { host: "ssh.example.com", port: 2222, user: "platypus" },
+        adminEnv: {},
+        userEnv: {},
+      });
+    });
+
+    it("sends a newly entered key with its passphrase and optional pins", async () => {
+      const fetchMock = stubAcceptedSave({});
+      renderSsh();
+
+      fireEvent.change(screen.getByLabelText("Private key"), {
+        target: { value: "-----KEY-----" },
+      });
+      fireEvent.change(screen.getByLabelText("Key passphrase (optional)"), {
+        target: { value: "pw" },
+      });
+      fireEvent.change(screen.getByLabelText("Host key (optional)"), {
+        target: { value: " ssh-ed25519 AAAA " },
+      });
+      fireEvent.change(screen.getByLabelText("Workspace root (optional)"), {
+        target: { value: "/srv/box" },
+      });
+      save();
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(savedBody(fetchMock)).toMatchObject({
+        config: {
+          host: "ssh.example.com",
+          port: 2222,
+          user: "platypus",
+          rootDir: "/srv/box",
+          hostKey: "ssh-ed25519 AAAA",
+        },
+        credentials: { privateKey: "-----KEY-----", passphrase: "pw" },
+      });
+    });
+  });
+
+  // A backend switch tears the old sandbox down first; when that fails the
+  // backend asks for `force=true`, which the reader has to opt into.
+  it("offers a forced switch when tearing down the previous sandbox fails", async () => {
+    const fetchMock = stubSaveSequence(
+      {
+        status: 500,
+        body: { error: "Teardown failed, retry with force=true" },
+      },
+      { status: 200, body: {} },
+    );
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    renderSettings();
+
+    save();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Switch anyway" }),
+    );
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Sandbox configured"),
+    );
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      SANDBOX_URL,
+      `${SANDBOX_URL}?force=true`,
+    ]);
   });
 });

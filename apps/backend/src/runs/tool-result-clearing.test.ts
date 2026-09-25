@@ -32,24 +32,24 @@ const userMessage = (text: string): ModelMessage => ({
 const POLICY: ClearingPolicy = { thresholdFraction: 0.7, keepRecent: 2 };
 
 describe("isClearableToolName", () => {
-  it("allows the core read-only, disposable-result tools", () => {
-    expect(isClearableToolName("web_search")).toBe(true);
-    expect(isClearableToolName("read_url")).toBe(true);
-    expect(isClearableToolName("fetchUrl")).toBe(true);
-    expect(isClearableToolName("fsRead")).toBe(true);
-    expect(isClearableToolName("fsList")).toBe(true);
-  });
+  it.each(["web_search", "read_url", "fetchUrl", "fsRead", "fsList"])(
+    "allows the core read-only, disposable-result tool %s",
+    (name) => {
+      expect(isClearableToolName(name)).toBe(true);
+    },
+  );
 
-  it("denies by default — mutating tools, delegation, and skill loading", () => {
-    expect(isClearableToolName("fsWrite")).toBe(false);
-    expect(isClearableToolName("fsEdit")).toBe(false);
-    expect(isClearableToolName("shellExec")).toBe(false);
-    expect(isClearableToolName("loadSkill")).toBe(false);
-    expect(isClearableToolName("delegate")).toBe(false);
-    expect(isClearableToolName("delegateToResearchAgent")).toBe(false);
-    expect(isClearableToolName("some_new_tool_nobody_classified_yet")).toBe(
-      false,
-    );
+  // Denied by default — mutating tools, delegation, and skill loading.
+  it.each([
+    "fsWrite",
+    "fsEdit",
+    "shellExec",
+    "loadSkill",
+    "delegate",
+    "delegateToResearchAgent",
+    "some_new_tool_nobody_classified_yet",
+  ])("denies %s", (name) => {
+    expect(isClearableToolName(name)).toBe(false);
   });
 
   // The MCP read-only hint (ADR-0021, issue #626): a caller-supplied resolver,
@@ -201,48 +201,30 @@ describe("applyToolResultClearing", () => {
     toolResultMessage("read_url", "t3", "content"),
   ];
 
-  it("leaves messages byte-identical below the threshold", () => {
-    const result = applyToolResultClearing(
-      messages,
-      { occupancy: 69, contextWindow: 100 },
-      POLICY,
-    );
-    expect(result).toBe(messages);
-  });
+  // Below the threshold — or with either figure unknown, however high the
+  // other reads — the messages go out byte-identical.
+  it.each([
+    [69, 100, false],
+    [70, 100, true],
+    [95, 100, true],
+    [1_000_000, undefined, false],
+    [undefined, 100, false],
+  ])(
+    "at occupancy %s of a %s-token window, clears: %s",
+    (occupancy, contextWindow, clears) => {
+      const result = applyToolResultClearing(
+        messages,
+        { occupancy, contextWindow },
+        POLICY,
+      );
 
-  it("clears at and above the threshold", () => {
-    const atThreshold = applyToolResultClearing(
-      messages,
-      { occupancy: 70, contextWindow: 100 },
-      POLICY,
-    );
-    expect(atThreshold).not.toBe(messages);
-
-    const above = applyToolResultClearing(
-      messages,
-      { occupancy: 95, contextWindow: 100 },
-      POLICY,
-    );
-    expect(above).not.toBe(messages);
-  });
-
-  it("clears nothing when the Context window is undeclared, however high occupancy reads", () => {
-    const result = applyToolResultClearing(
-      messages,
-      { occupancy: 1_000_000, contextWindow: undefined },
-      POLICY,
-    );
-    expect(result).toBe(messages);
-  });
-
-  it("clears nothing when occupancy is unknown", () => {
-    const result = applyToolResultClearing(
-      messages,
-      { occupancy: undefined, contextWindow: 100 },
-      POLICY,
-    );
-    expect(result).toBe(messages);
-  });
+      if (clears) {
+        expect(JSON.stringify(result[0])).toContain(CLEARED_TOOL_RESULT_MARKER);
+      } else {
+        expect(result).toBe(messages);
+      }
+    },
+  );
 
   it("passes isReadOnlyTool through to the underlying clearing pass", () => {
     const mcpMessages: ModelMessage[] = [
@@ -257,6 +239,6 @@ describe("applyToolResultClearing", () => {
       POLICY,
       () => true,
     );
-    expect(result).not.toBe(mcpMessages);
+    expect(JSON.stringify(result[0])).toContain(CLEARED_TOOL_RESULT_MARKER);
   });
 });

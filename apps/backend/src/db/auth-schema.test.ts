@@ -27,17 +27,13 @@ describe("the Drizzle auth schema covers what better-auth expects", () => {
     );
   };
 
-  it.each(Object.keys(expected))("declares the %s table", (table) => {
-    expect(drizzleFieldsFor(table)).toBeDefined();
-  });
-
   it.each(
     Object.entries(expected).map(([table, def]) => ({
       table,
       fields: Object.keys(def.fields),
     })),
   )(
-    "carries every field better-auth expects on $table",
+    "declares $table with every field better-auth expects",
     ({ table, fields }) => {
       const present = drizzleFieldsFor(table);
       expect(present).toBeDefined();

@@ -79,23 +79,22 @@ describe("withHeartbeatFrames", () => {
   // A heartbeat frame inside another frame would corrupt the event the client
   // is parsing, so they may only ever land on a frame boundary.
   it("never splits a source frame", async () => {
+    vi.useFakeTimers();
     const source = controllable();
     const kept = withHeartbeatFrames(source.stream, HEARTBEAT_MS);
     const collected = readAll(kept);
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       source.write(`data: {"seq":${i}}\n\n`);
-      await new Promise((r) => setTimeout(r, HEARTBEAT_MS + 5));
+      await vi.advanceTimersByTimeAsync(HEARTBEAT_MS);
     }
     source.end();
 
-    const text = await collected;
-    expect(heartbeats(text)).toBeGreaterThanOrEqual(3);
-    for (const frame of text.split("\n\n").filter(Boolean)) {
-      expect(
-        frame === ": heartbeat" || /^data: \{"seq":\d\}$/.test(frame),
-      ).toBe(true);
-    }
+    expect(await collected).toBe(
+      `data: {"seq":0}\n\n${SSE_HEARTBEAT_FRAME}` +
+        `data: {"seq":1}\n\n${SSE_HEARTBEAT_FRAME}` +
+        `data: {"seq":2}\n\n${SSE_HEARTBEAT_FRAME}`,
+    );
   });
 
   // Wrapping must not turn the run into a buffer on a slow client's behalf. A
@@ -117,7 +116,9 @@ describe("withHeartbeatFrames", () => {
 
     const reader = withHeartbeatFrames(source, 10_000).getReader();
     await reader.read();
-    await new Promise((r) => setTimeout(r, 30));
+    // One macrotask: long enough for a pump driven by microtasks to drain all
+    // 100 chunks.
+    await new Promise((r) => setTimeout(r, 0));
 
     expect(produced).toBeLessThan(10);
     await reader.cancel();
@@ -132,20 +133,21 @@ describe("withHeartbeatFrames", () => {
     const kept = withHeartbeatFrames(source.stream, HEARTBEAT_MS);
     const reader = kept.getReader();
 
+    expect(vi.getTimerCount()).toBe(1);
     await reader.cancel("client gone");
-    vi.advanceTimersByTime(HEARTBEAT_MS * 10);
 
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("stops beating once the source ends", async () => {
+    vi.useFakeTimers();
     const source = controllable();
     const kept = withHeartbeatFrames(source.stream, HEARTBEAT_MS);
     const collected = readAll(kept);
+    expect(vi.getTimerCount()).toBe(1);
     source.end();
     await collected;
 
-    vi.useFakeTimers();
     expect(vi.getTimerCount()).toBe(0);
   });
 

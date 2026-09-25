@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "./egress-guard.ts";
 
-// Every test injects `resolve`, so nothing here touches real DNS. Literal IP
-// hosts skip resolution entirely and pass no resolver at all.
+// Tests inject `resolve`, so nothing here touches real DNS. Literal IP hosts
+// skip resolution entirely and pass no resolver at all; `localhost` exercises
+// the default resolver.
 const resolvesTo =
   (...addresses: string[]) =>
   () =>
@@ -25,6 +26,7 @@ describe("checkEgress", () => {
       ["IPv6 loopback", "http://[::1]/"],
       ["IPv6 unspecified", "http://[::]/"],
       ["IPv6 link-local", "http://[fe80::1]/"],
+      ["IPv4-compatible IPv6", "http://[::169.254.169.254]/"],
     ])("blocks %s", async (_label, url) => {
       expectBlocked(await checkEgress(url, { allowPrivateNetworks: true }));
     });
@@ -215,6 +217,24 @@ describe("checkEgress", () => {
           resolve: resolvesTo(),
         }),
       );
+    });
+
+    it("blocks a resolved record it cannot parse as an address", async () => {
+      const reason = expectBlocked(
+        await checkEgress("http://odd.example.com/", {
+          allowPrivateNetworks: true,
+          resolve: resolvesTo("not-an-address"),
+        }),
+      );
+      expect(reason).toContain("unrecognised address form");
+    });
+
+    it("resolves through the system resolver when none is injected", async () => {
+      // `localhost` resolves from the hosts file, so no network is touched.
+      const reason = expectBlocked(
+        await checkEgress("http://localhost/", { allowPrivateNetworks: true }),
+      );
+      expect(reason).toContain("loopback");
     });
 
     it("does not resolve a literal IP host", async () => {

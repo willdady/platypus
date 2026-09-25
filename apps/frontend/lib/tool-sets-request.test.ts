@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchToolSets } from "./tool-sets-request";
 
@@ -61,48 +62,30 @@ describe("fetchToolSets", () => {
     );
   });
 
-  it("reports an unauthorized failure on 401 rather than throwing", async () => {
-    stubFetch(() => httpResponse({ error: "Unauthorized" }, 401));
+  it.each([401, 403])(
+    "reports an unauthorized failure on %i rather than throwing",
+    async (status) => {
+      stubFetch(() => httpResponse({ error: "Unauthorized" }, status));
 
-    const result = await fetchToolSets("/organizations/o1/tools", cookie);
+      const result = await fetchToolSets("/organizations/o1/tools", cookie);
 
-    expect(result).toEqual({ ok: false, reason: "unauthorized" });
-  });
+      expect(result).toEqual({ ok: false, reason: "unauthorized" });
+    },
+  );
 
-  it("reports an unauthorized failure on 403", async () => {
-    stubFetch(() => httpResponse({ error: "Forbidden" }, 403));
-
-    const result = await fetchToolSets("/organizations/o1/tools", cookie);
-
-    expect(result).toEqual({ ok: false, reason: "unauthorized" });
-  });
-
-  it("reports an unavailable failure on a server error", async () => {
-    stubFetch(() => httpResponse({ error: "Boom" }, 500));
-
-    const result = await fetchToolSets("/organizations/o1/tools", cookie);
-
-    expect(result).toEqual({ ok: false, reason: "unavailable" });
-  });
-
-  it("reports an unavailable failure when the body is not valid JSON", async () => {
-    stubFetch(() => new Response("<html>gateway</html>", { status: 200 }));
-
-    const result = await fetchToolSets("/organizations/o1/tools", cookie);
-
-    expect(result).toEqual({ ok: false, reason: "unavailable" });
-  });
-
-  it("reports an unavailable failure when a 200 body carries no results array", async () => {
-    stubFetch(() => httpResponse({ unexpected: true }));
-
-    const result = await fetchToolSets("/organizations/o1/tools", cookie);
-
-    expect(result).toEqual({ ok: false, reason: "unavailable" });
-  });
-
-  it("reports an unavailable failure when the fetch itself rejects", async () => {
-    stubFetch(() => Promise.reject(new Error("ECONNREFUSED")));
+  it.each([
+    ["a server error", () => httpResponse({ error: "Boom" }, 500)],
+    [
+      "a body that is not valid JSON",
+      () => new Response("<html>gateway</html>", { status: 200 }),
+    ],
+    [
+      "a 200 body with no results array",
+      () => httpResponse({ unexpected: true }),
+    ],
+    ["a rejected fetch", () => Promise.reject(new Error("ECONNREFUSED"))],
+  ])("reports an unavailable failure on %s", async (_name, impl) => {
+    stubFetch(impl);
 
     const result = await fetchToolSets("/organizations/o1/tools", cookie);
 

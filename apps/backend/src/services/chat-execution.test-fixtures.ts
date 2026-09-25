@@ -63,18 +63,28 @@ export const createInMemoryChatTurnQueries = (
     );
 
   /**
-   * The Agent visibility rule both Agent lookups apply: Workspace-scoped in the
-   * invoking workspace, or org-scoped (Shared) and attached here (ADR-0007).
+   * The visibility rule every lookup applies, as `resolveScoped` does:
+   * Workspace-scoped in the invoking workspace, or org-scoped (Shared) and
+   * attached here (ADR-0007). A row carrying both scope columns belongs to its
+   * Workspace, so it is not Shared.
    */
-  const isAgentVisible = (
-    a: AgentRow,
+  const isVisible = (
+    resourceType: "mcp" | "provider" | "skill" | "agent",
+    row: {
+      id: string;
+      workspaceId?: string | null;
+      organizationId?: string | null;
+    },
     orgId: string,
     workspaceId: string,
   ): boolean =>
-    a.workspaceId === workspaceId ||
-    (a.organizationId === orgId &&
-      !a.workspaceId &&
-      isAttached("agent", a.id, workspaceId));
+    row.workspaceId === workspaceId ||
+    (row.organizationId === orgId &&
+      !row.workspaceId &&
+      isAttached(resourceType, row.id, workspaceId));
+
+  const isAgentVisible = (a: AgentRow, orgId: string, workspaceId: string) =>
+    isVisible("agent", a, orgId, workspaceId);
 
   return {
     getWorkspace(id) {
@@ -94,40 +104,29 @@ export const createInMemoryChatTurnQueries = (
     },
 
     getProvider(id, orgId, workspaceId) {
-      const p =
-        fx.providers?.find(
-          (p) =>
-            p.id === id &&
-            (p.workspaceId === workspaceId || p.organizationId === orgId),
-        ) ?? null;
-      if (!p) return Promise.resolve(null);
-      // Org-scoped (no workspace) → resolves only where attached (ADR-0007).
-      if (
-        p.organizationId &&
-        !p.workspaceId &&
-        !isAttached("provider", id, workspaceId)
-      )
-        return Promise.resolve(null);
-      return Promise.resolve(p);
+      const p = fx.providers?.find((p) => p.id === id);
+      return Promise.resolve(
+        p && isVisible("provider", p, orgId, workspaceId) ? p : null,
+      );
     },
 
     getSkillsByIds(ids, orgId, workspaceId) {
       if (ids.length === 0) {
         return Promise.resolve({ skills: [], permittedSkillIds: [] });
       }
-      const visible = (fx.skills ?? []).filter((s) => {
-        if (!ids.includes(s.id)) return false;
-        // Workspace-scoped Skill in this workspace.
-        if (s.workspaceId === workspaceId) return true;
-        // Org-scoped (Shared) Skill resolves only where attached (ADR-0007).
-        return (
-          s.organizationId === orgId &&
-          !s.workspaceId &&
-          isAttached("skill", s.id, workspaceId)
-        );
-      });
+      const visible = (fx.skills ?? []).filter(
+        (s) => ids.includes(s.id) && isVisible("skill", s, orgId, workspaceId),
+      );
+      // A Workspace Skill wins a name collision with an attached Shared one,
+      // as the real query does; both stay loadable by id.
+      const workspaceNames = new Set(
+        visible.filter((s) => s.workspaceId === workspaceId).map((s) => s.name),
+      );
+      const advertised = visible.filter(
+        (s) => s.workspaceId === workspaceId || !workspaceNames.has(s.name),
+      );
       return Promise.resolve({
-        skills: visible
+        skills: advertised
           .filter((s) => !s.disableModelInvocation)
           .map((s) => ({ name: s.name, description: s.description })),
         permittedSkillIds: visible.map((s) => s.id),
@@ -135,21 +134,10 @@ export const createInMemoryChatTurnQueries = (
     },
 
     getMcp(id, orgId, workspaceId) {
-      const m =
-        fx.mcps?.find(
-          (m) =>
-            m.id === id &&
-            (m.workspaceId === workspaceId || m.organizationId === orgId),
-        ) ?? null;
-      if (!m) return Promise.resolve(null);
-      // Org-scoped (no workspace) → resolves only where attached (ADR-0007).
-      if (
-        m.organizationId &&
-        !m.workspaceId &&
-        !isAttached("mcp", id, workspaceId)
-      )
-        return Promise.resolve(null);
-      return Promise.resolve(m);
+      const m = fx.mcps?.find((m) => m.id === id);
+      return Promise.resolve(
+        m && isVisible("mcp", m, orgId, workspaceId) ? m : null,
+      );
     },
 
     getSubAgentsByIds(ids, orgId, workspaceId) {

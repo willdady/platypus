@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, expectTypeOf } from "vitest";
 import { z } from "zod";
 import { tool } from "ai";
 import {
@@ -29,19 +29,12 @@ describe("@platypuschat/plugin-sdk", () => {
   });
 
   it("supports one previous major (N and N−1), floored at 1 (no phantom v0)", () => {
+    // At v2 this opens a genuine N−1 slot: a plugin built against v1 is inside
+    // `[1, 2]` and keeps loading on this core. That is the whole of what the
+    // major bump promises an author who has not migrated yet.
     expect(OLDEST_SUPPORTED_API_VERSION).toBe(
       Math.max(1, PLUGIN_API_VERSION - 1),
     );
-    // There is no major 0, so the oldest supported major is never below 1.
-    expect(OLDEST_SUPPORTED_API_VERSION).toBeGreaterThanOrEqual(1);
-  });
-
-  it("opens a genuine N−1 slot at v2, so a v1 plugin still loads", () => {
-    // The floor stopped deciding the window at v2: a plugin built against v1 is
-    // inside `[1, 2]` and keeps loading on this core. That is the whole of what
-    // the major bump promises an author who has not migrated yet.
-    expect(OLDEST_SUPPORTED_API_VERSION).toBe(1);
-    expect(PLUGIN_API_VERSION).toBeGreaterThan(OLDEST_SUPPORTED_API_VERSION);
   });
 
   it("accepts a well-formed manifest with a static-map tool set", () => {
@@ -84,10 +77,7 @@ describe("@platypuschat/plugin-sdk", () => {
             name: "Scoped",
             category: "Productivity",
             description: "Needs runtime scope",
-            tools: (ctx) => {
-              expect(ctx.workspaceId).toBeDefined();
-              return {};
-            },
+            tools: () => ({}),
           },
         ],
       },
@@ -209,7 +199,7 @@ describe("@platypuschat/plugin-sdk", () => {
     ).resolves.toMatchObject({ stdout: "ls" });
   });
 
-  it("carries an optional logger on the shared block, callable both ways", () => {
+  it("carries a required logger on the shared block, callable both ways", () => {
     const calls: unknown[][] = [];
     const record =
       () =>
@@ -312,23 +302,11 @@ describe("@platypuschat/plugin-sdk", () => {
     // structurally compatible with the `(obj, msg?)` / `(msg)` pair pino exposes
     // — including the trailing interpolation args pino accepts and this SDK's
     // narrower contract does not mention.
-    const pinoish = {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      trace: vi.fn(),
-      fatal: vi.fn(),
-      child: vi.fn(),
-    } as unknown as {
-      debug: (obj: unknown, msg?: string, ...args: unknown[]) => void;
-      info: (obj: unknown, msg?: string, ...args: unknown[]) => void;
-      warn: (obj: unknown, msg?: string, ...args: unknown[]) => void;
-      error: (obj: unknown, msg?: string, ...args: unknown[]) => void;
-    };
-    const asPluginLogger: PluginLogger = pinoish;
-    asPluginLogger.info({ a: 1 }, "hello");
-    expect(pinoish.info).toHaveBeenCalledWith({ a: 1 }, "hello");
+    // Compile-time only: the assignment is the assertion, and `pnpm typecheck`
+    // is what fails if the interface stops accepting this shape.
+    type PinoMethod = (obj: unknown, msg?: string, ...args: unknown[]) => void;
+    type Pinoish = Record<"debug" | "info" | "warn" | "error", PinoMethod>;
+    expectTypeOf<Pinoish>().toExtend<PluginLogger>();
   });
 
   it("accepts a web-backend contribution supplying executors only", async () => {

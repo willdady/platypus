@@ -374,6 +374,54 @@ describe("recordUiChunk", () => {
     });
   });
 
+  // The model produced an input the tool could not take: the call never ran,
+  // and that rejection is the failure the event records.
+  it("records a tool call whose input was rejected as an error, never left running", () => {
+    const { scope, recorder } = scopeOf();
+
+    recordUiChunk(scope, {
+      type: "tool-input-error",
+      toolCallId: "tc1",
+      toolName: "search",
+      input: { query: "secret things" },
+      errorText: "Invalid input for tool search",
+    });
+
+    expect(recorder.events).toEqual([
+      expect.objectContaining({
+        type: "tool-call",
+        toolName: "search",
+        status: "error",
+        error: expect.objectContaining({
+          message: "Invalid input for tool search",
+          truncated: false,
+        }) as unknown,
+      }),
+    ]);
+    expect(JSON.stringify(recorder.events)).not.toContain("secret things");
+  });
+
+  it("keeps a tool call running through a preliminary output, and records a denied one as cancelled", () => {
+    const { scope, recorder } = scopeOf();
+
+    recordUiChunk(scope, {
+      type: "tool-input-available",
+      toolCallId: "tc1",
+      toolName: "search",
+      input: {},
+    });
+    recordUiChunk(scope, {
+      type: "tool-output-available",
+      toolCallId: "tc1",
+      output: "working",
+      preliminary: true,
+    });
+    expect(recorder.events[0].status).toBe("running");
+
+    recordUiChunk(scope, { type: "tool-output-denied", toolCallId: "tc1" });
+    expect(recorder.events[0].status).toBe("cancelled");
+  });
+
   it("records a delegation as a delegate event named for its target", () => {
     const { scope, recorder } = scopeOf();
 

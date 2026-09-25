@@ -527,6 +527,13 @@ describe("ChatSink", () => {
 
       expect(rowOf(fake, "chat", "chat-1")?.status).toBe("cancelled");
     });
+
+    // Currently fails: `writeRow` returns before the status write when
+    // `extractFiles` throws, so the Chat stays `running` until the stuck-Chat
+    // sweep. Enable with the fix for #1023.
+    it.todo(
+      "still writes the terminal status when storing the reply's files fails",
+    );
   });
 
   describe("onFinish — adhoc path", () => {

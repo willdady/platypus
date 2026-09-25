@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
-import { mockAuth, mockSession, mockNoSession } from "../test-utils.ts";
+import { mockAuth, mockNoSession } from "../test-utils.ts";
 import { requireAuth } from "./authentication.ts";
 
 describe("Authentication Middleware", () => {
@@ -25,8 +25,6 @@ describe("Authentication Middleware", () => {
       user: { id: "u1", email: "test@example.com" },
       session: { id: "s1" },
     };
-    mockSession(sessionData.user);
-    // Overwrite session id if needed, but mockSession sets it to session-1
     mockAuth.api.getSession.mockResolvedValue(sessionData);
 
     const app = new Hono<{

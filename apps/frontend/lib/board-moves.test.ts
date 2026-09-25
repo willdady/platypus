@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { KanbanCard } from "@platypus/schemas";
 import {

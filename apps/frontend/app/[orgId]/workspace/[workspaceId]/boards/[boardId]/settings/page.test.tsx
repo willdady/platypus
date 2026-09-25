@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { Suspense } from "react";
 import {
@@ -17,7 +18,10 @@ import {
   setDataFor,
   setError,
   stubAcceptedSave,
+  stubRejectedSave,
   savedBody,
+  push,
+  toastError,
 } from "@/lib/form-test-harness";
 
 vi.mock("next/navigation", () => navigationMock);
@@ -85,5 +89,59 @@ describe("BoardSettingsPage", () => {
     await waitFor(() =>
       expect(configuredMutate).toHaveBeenCalledWith(`${BOARD}/state`),
     );
+  });
+
+  describe("deleting", () => {
+    const confirmDelete = () => {
+      fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
+      const dialog = screen.getByRole("dialog");
+      fireEvent.change(
+        within(dialog).getByPlaceholderText("Type 'delete board' to confirm"),
+        { target: { value: "delete board" } },
+      );
+      fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    };
+
+    it("deletes it and returns to the workspace", async () => {
+      setDataFor("/boards/b1", {
+        id: "b1",
+        name: "Roadmap",
+        description: null,
+        labels: [],
+      });
+      const fetchMock = stubAcceptedSave();
+      await renderPage();
+
+      confirmDelete();
+
+      await waitFor(() =>
+        expect(push).toHaveBeenCalledWith("/org1/workspace/ws1"),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        BOARD,
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+
+    it("reports a refused delete and stays on the page", async () => {
+      setDataFor("/boards/b1", {
+        id: "b1",
+        name: "Roadmap",
+        description: null,
+        labels: [],
+      });
+      stubRejectedSave("Not allowed", 403);
+      await renderPage();
+
+      confirmDelete();
+
+      await waitFor(() =>
+        expect(toastError).toHaveBeenCalledWith("Not allowed"),
+      );
+      expect(push).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+    });
   });
 });

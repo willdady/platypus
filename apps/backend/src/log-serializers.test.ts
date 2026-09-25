@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { beforeAll, describe, it, expect } from "vitest";
 import { generateText } from "ai";
 import { Writable } from "node:stream";
 import pino from "pino";
@@ -60,6 +60,13 @@ const invalidPromptError = async () => {
   throw new Error("expected the prompt to be rejected");
 };
 
+// Built once: the SDK round-trip costs hundreds of milliseconds, and nothing
+// here mutates the error.
+let promptError: unknown;
+beforeAll(async () => {
+  promptError = await invalidPromptError();
+});
+
 /**
  * A real pino instance writing in-process, so the registration is exercised
  * through pino's own serializer dispatch rather than by calling the function
@@ -79,13 +86,8 @@ const logLine = (payload: Record<string, unknown>): string => {
 };
 
 describe("errorSerializers", () => {
-  it("registers the same treatment for both keys pino might see", () => {
-    expect(errorSerializers.error).toBe(serializeLoggedError);
-    expect(errorSerializers.err).toBe(serializeLoggedError);
-  });
-
-  it("caps the reported failure identically under either key", async () => {
-    const error = await invalidPromptError();
+  it("caps the reported failure identically under either key", () => {
+    const error = promptError;
 
     const underError = logLine({ error });
     const underErr = logLine({ err: error });
@@ -114,64 +116,45 @@ describe("errorSerializers", () => {
 
 describe("serializeLoggedError", () => {
   describe("the reported failure", () => {
-    it("collapses a 320 KB nested ZodError into a readable entry", async () => {
-      const error = await invalidPromptError();
-
-      // The unserialized error is the problem this change exists to fix.
-      expect(sizeOf(error)).toBeGreaterThan(100_000);
-      expect(sizeOf(serializeLoggedError(error))).toBeLessThan(4096);
+    let serialized: string;
+    beforeAll(() => {
+      serialized = JSON.stringify(serializeLoggedError(promptError));
     });
 
-    it("keeps the one sentence that names the failure", async () => {
-      const serialized = serializeLoggedError(await invalidPromptError());
+    it("collapses a 320 KB nested ZodError into a readable entry", () => {
+      // The unserialized error is the problem this change exists to fix.
+      expect(sizeOf(promptError)).toBeGreaterThan(100_000);
+      expect(serialized.length).toBeLessThan(4096);
+    });
 
+    it("keeps the one sentence that names the failure", () => {
       // Non-enumerable on `Error`, so today it is absent from the log entirely.
-      expect(JSON.stringify(serialized)).toContain(
+      expect(serialized).toContain(
         "The messages do not match the ModelMessage[] schema",
       );
     });
 
-    it("keeps the absolute path of an offending field, indices included", async () => {
-      const serialized = JSON.stringify(
-        serializeLoggedError(await invalidPromptError()),
-      );
-
+    it("keeps the absolute path of an offending field, indices included", () => {
       expect(serialized).toMatch(/content\[0\]\.output\.value\.columns\[\d+\]/);
       expect(serialized).toContain("createdAt");
     });
 
-    it("does not complain about the message role it actually matched", async () => {
+    it("does not complain about the message role it actually matched", () => {
       // A tool message also fits the shape of an assistant message carrying a
       // tool result, so both union branches reach the offending field. Leading
       // with `expected "assistant"` sends the reader after the wrong thing.
-      const serialized = JSON.stringify(
-        serializeLoggedError(await invalidPromptError()),
-      );
-
       expect(serialized).not.toContain('expected \\"assistant\\"');
     });
 
-    it("drops the union search space", async () => {
-      const serialized = JSON.stringify(
-        serializeLoggedError(await invalidPromptError()),
-      );
-
+    it("drops the union search space", () => {
       expect(serialized).not.toContain("invalid_union");
     });
 
-    it("says so when it had to leave issues out", async () => {
-      const serialized = JSON.stringify(
-        serializeLoggedError(await invalidPromptError()),
-      );
-
+    it("says so when it had to leave issues out", () => {
       expect(serialized).toMatch(/\+\d+ more/);
     });
 
-    it("does not echo the rejected payload back", async () => {
-      const serialized = JSON.stringify(
-        serializeLoggedError(await invalidPromptError()),
-      );
-
+    it("does not echo the rejected payload back", () => {
       // `TypeValidationError` carries the entire offending value as an
       // enumerable property, which serializes today.
       expect(serialized).not.toContain("Card 7");

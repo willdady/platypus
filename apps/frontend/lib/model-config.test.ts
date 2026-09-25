@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import type { ConcreteModelId, Provider } from "@platypus/schemas";
 import {

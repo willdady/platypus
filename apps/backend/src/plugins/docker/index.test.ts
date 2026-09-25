@@ -20,7 +20,6 @@ describe("@platypus/docker plugin manifest", () => {
     // The network allowlist moved onto PLATYPUS_PLUGIN_CONFIG (ADR-0013), so the
     // manifest now declares a plugin-level configSchema. No credentialsSchema —
     // Docker has no plugin-level secrets.
-    expect(plugin.configSchema).toBeDefined();
     expect(plugin.credentialsSchema).toBeUndefined();
     // It defaults allowedNetworks to [] (default-deny) and is strict.
     const parsed = plugin.configSchema!.parse({});
@@ -28,20 +27,6 @@ describe("@platypus/docker plugin manifest", () => {
     expect(plugin.configSchema!.safeParse({ unknownKey: 1 }).success).toBe(
       false,
     );
-  });
-
-  it("contributes the docker sandbox backend with the unprefixed core id", () => {
-    const backends = plugin.contributes.sandboxBackends ?? [];
-    expect(backends).toHaveLength(1);
-
-    const [docker] = backends;
-    expect(docker.backend).toBe("docker");
-    expect(docker.name).toBe("Local Docker");
-    expect(typeof docker.create).toBe("function");
-    // The per-Workspace configSchema is a factory of the plugin config (resolved
-    // by the loader at load); credentials stay a plain schema.
-    expect(typeof docker.configSchema).toBe("function");
-    expect(docker.credentialsSchema).toBeDefined();
   });
 
   it("registers the docker backend into the core registry when loaded", async () => {

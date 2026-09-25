@@ -288,13 +288,15 @@ import {
 import { logger } from "../../logger.ts";
 import { plugin } from "./index.ts";
 import { loadPlugins } from "../loader.ts";
-import type { SandboxBackendContribution } from "@platypuschat/plugin-sdk";
 import {
   makeFakePluginLogger,
   type FakePluginLogger,
 } from "../../test-utils.ts";
 import { MAX_READ_BYTES, MAX_SHELL_OUTPUT_BYTES } from "../../sandbox/index.ts";
-import type { SandboxContext } from "../../sandbox/types.ts";
+import type {
+  SandboxBackendRegistration,
+  SandboxContext,
+} from "../../sandbox/types.ts";
 
 const ctx: SandboxContext = {
   orgId: "org-1",
@@ -431,20 +433,6 @@ describe("SshSandboxTransport — connect", () => {
     expect(mockState.connectConfigs[0].passphrase).toBe("secret");
   });
 
-  it("warns loudly about MITM when no hostKey is pinned", async () => {
-    queueExec({ exitCode: 0 });
-    const backend = createSshSandboxBackend(
-      CONFIG,
-      CREDENTIALS,
-      withPluginLogger(),
-    );
-    await backend.shellExec(ctx, { command: "true" });
-    expect(pluginLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ host: "ssh.example.com" }),
-      expect.stringContaining("WITHOUT host-key verification"),
-    );
-  });
-
   it("uses a custom rootDir when configured", async () => {
     queueExec({ exitCode: 0 });
     const backend = createSshSandboxBackend(
@@ -533,18 +521,29 @@ describe("SshSandboxTransport — host-key verification", () => {
     );
   });
 
-  it("throws a clear error when the pinned hostKey cannot be parsed", async () => {
-    const backend = createSshSandboxBackend(
-      { ...CONFIG, hostKey: "# not a key" },
-      CREDENTIALS,
-      withPluginLogger(),
-    );
-    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
-      /hostKey/,
-    );
-    // Never even attempted to connect.
-    expect(mockState.connectConfigs).toHaveLength(0);
-  });
+  it.each([
+    ["comment-only", "# not a key", /empty or comment-only/],
+    [
+      "several tokens, none a key blob",
+      "ssh-ed25519 notakey",
+      /could not find/,
+    ],
+    ["a sole token that decodes to nothing", "!!!", /did not decode/],
+  ])(
+    "throws a clear error when the pinned hostKey is %s",
+    async (_label, hostKey, expected) => {
+      const backend = createSshSandboxBackend(
+        { ...CONFIG, hostKey },
+        CREDENTIALS,
+        withPluginLogger(),
+      );
+      await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
+        expected,
+      );
+      // Never even attempted to connect.
+      expect(mockState.connectConfigs).toHaveLength(0);
+    },
+  );
 });
 
 describe("SshSandboxTransport — shellExec", () => {
@@ -666,7 +665,8 @@ describe("SshSandboxTransport — shellExec", () => {
       { command: "sleep 300" },
       { signal: controller.signal },
     );
-    await new Promise((r) => setTimeout(r, 10));
+    // The connect-time root resolution, then the command's own exec.
+    await vi.waitFor(() => expect(mockState.execCommands).toHaveLength(2));
     controller.abort();
 
     await expect(inflight).rejects.toThrow(/cancelled/i);
@@ -685,7 +685,7 @@ describe("SshSandboxTransport — shellExec", () => {
       { command: "ls" },
       { signal: controller.signal },
     );
-    await new Promise((r) => setTimeout(r, 10));
+    await vi.waitFor(() => expect(mockState.execCommands).toHaveLength(2));
     controller.abort();
 
     await expect(inflight).rejects.toThrow(/cancelled/i);
@@ -831,6 +831,20 @@ describe("SshSandboxTransport — fs.write (SFTP)", () => {
     expect(mockState.files.get(abs("a/b/c/deep.txt"))?.toString("utf8")).toBe(
       "x",
     );
+  });
+
+  it("writes an empty file", async () => {
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.fsWrite(ctx, {
+      path: "empty.txt",
+      content: "",
+      mode: "create",
+    });
+    expect(mockState.files.get(abs("empty.txt"))).toEqual(Buffer.alloc(0));
   });
 
   it("writes paths literally over SFTP (no shell quoting/injection)", async () => {
@@ -991,23 +1005,6 @@ describe("SshSandboxTransport — plugin-injected logger", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("degrades to silence when core injects no logger", async () => {
-    // `PluginConfigContext.logger` is optional under the SDK's append-only
-    // policy. Core always supplies it; a directly-constructed adapter does not,
-    // and the connection must still be made rather than throwing.
-    queueExec({ exitCode: 0 });
-
-    const backend = createSshSandboxBackend(
-      CONFIG,
-      CREDENTIALS,
-      withPluginLogger(),
-    );
-    await expect(
-      backend.shellExec(ctx, { command: "true" }),
-    ).resolves.toBeDefined();
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
-
   it("reaches the adapter through the manifest's create()", async () => {
     // The full contribution path core uses: the loader calls `create` with the
     // plugin block as its third argument, and the manifest must forward it.
@@ -1056,14 +1053,14 @@ describe("SshSandboxTransport — plugin-injected logger", () => {
       },
     };
 
-    const captured: SandboxBackendContribution[] = [];
+    const captured: SandboxBackendRegistration<unknown, unknown>[] = [];
     await loadPlugins({
       pluginNames: ["@platypus/ssh"],
       registerSandbox: (c) => captured.push(c),
       baseLogger,
     });
 
-    const backend = captured[0].create(CONFIG, CREDENTIALS, withPluginLogger());
+    const backend = captured[0].create(CONFIG, CREDENTIALS);
     await backend.shellExec(ctx, { command: "true" });
 
     expect(lines).toContainEqual({

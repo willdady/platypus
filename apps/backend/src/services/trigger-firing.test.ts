@@ -394,6 +394,33 @@ describe("fireTrigger", () => {
       expect(triggerRow(fake).lastRunAt).toBeNull();
     });
 
+    it("drops the firing, and says so, when the breaker itself fails", async () => {
+      const trigger = eventTrigger();
+      const fake = world(trigger);
+      vi.spyOn(
+        fake.handle as { select: () => unknown },
+        "select",
+      ).mockImplementationOnce(() => {
+        throw new Error("db down");
+      });
+
+      await expect(
+        fireTrigger(trigger, {
+          kind: "event",
+          payload: cardEvent("card.updated", { id: "c1" }),
+          entityId: "c1",
+        }),
+      ).resolves.toBe("failed");
+
+      // Failing closed: no run, and no bookkeeping as if one happened.
+      expect(mockGenerate).not.toHaveBeenCalled();
+      expect(triggerRow(fake).lastRunAt).toBeNull();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { triggerId: "trigger-1", error: "db down" },
+        "Trigger run-rate breaker failed; firing dropped",
+      );
+    });
+
     it("bounds suppressed rows by their own budget", async () => {
       process.env.TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP = "2";
       try {

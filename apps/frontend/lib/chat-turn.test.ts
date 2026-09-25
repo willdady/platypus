@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { CHAT_MAX_STEPS_MAX, CHAT_MAX_STEPS_MIN } from "@platypus/schemas";
 import type { ChatSettings } from "@/hooks/use-chat-settings";

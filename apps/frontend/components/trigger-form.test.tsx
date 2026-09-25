@@ -66,7 +66,7 @@ describe("TriggerForm — board and column filters", () => {
 });
 
 describe("TriggerForm — changed-fields filter", () => {
-  it("hides the changed-fields filter until card.updated is selected", async () => {
+  it("hides the changed-fields filter until card.updated is selected, and offers no Column in it", async () => {
     await renderEventTriggerForm();
 
     expect(
@@ -78,13 +78,8 @@ describe("TriggerForm — changed-fields filter", () => {
     expect(
       screen.getByText("Only when these fields change (card.updated)"),
     ).toBeInTheDocument();
-  });
-
-  it("does not offer Column as a changed field — card.moved is that event", async () => {
-    await renderEventTriggerForm();
-
-    fireEvent.click(screen.getByLabelText("card.updated"));
-
+    expect(screen.getByLabelText("Assignees")).toBeInTheDocument();
+    // card.moved is the event for a Column change.
     expect(screen.queryByLabelText("Column")).toBeNull();
   });
 
@@ -161,6 +156,76 @@ describe("TriggerForm — Include Memories", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(savedBody(fetchMock).includeMemories).toBe(true);
+  });
+});
+
+describe("TriggerForm — editing a saved trigger", () => {
+  const saved = (config: unknown, type = "cron") => ({
+    id: "trigger-1",
+    workspaceId: "ws1",
+    agentId: "agent-1",
+    name: "Nightly",
+    instruction: "Do it",
+    type,
+    config,
+    enabled: true,
+    maxRunsToKeep: 10,
+  });
+
+  const update = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+  // A saved schedule is read back into the simple editor where it fits one of
+  // its frequencies, and left as a raw expression where it doesn't; either
+  // way an untouched save must send the same schedule back.
+  it.each([
+    "*/15 * * * *",
+    "5 * * * *",
+    "30 9 * * *",
+    "30 9 * * 1",
+    "30 9 15 * *",
+    "0 9 1-5 * *",
+  ])("sends %s back unchanged", async (cronExpression) => {
+    setDataFor(
+      "/triggers/trigger-1",
+      saved({ cronExpression, timezone: "UTC", isOneOff: false }),
+    );
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
+    render(
+      <TriggerForm orgId="org1" workspaceId="ws1" triggerId="trigger-1" />,
+    );
+
+    update();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedConfig(fetchMock)).toEqual({
+      cronExpression,
+      timezone: "UTC",
+      isOneOff: false,
+    });
+  });
+
+  it("seeds an event trigger's events and filters, and sends them back", async () => {
+    const config = {
+      events: ["card.updated"],
+      filters: {
+        boardId: "board-1",
+        columnId: "col-1",
+        changedFields: ["assignees"],
+      },
+    };
+    setDataFor("/triggers/trigger-1", saved(config, "event"));
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
+    render(
+      <TriggerForm orgId="org1" workspaceId="ws1" triggerId="trigger-1" />,
+    );
+
+    expect(screen.getByLabelText("card.updated")).toBeChecked();
+    expect(screen.getByLabelText("Assignees")).toBeChecked();
+    update();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedBody(fetchMock)).toMatchObject({ type: "event", config });
   });
 });
 

@@ -38,6 +38,7 @@ describe("Organization Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(403);
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
     it("should create organization if super admin", async () => {
@@ -53,41 +54,49 @@ describe("Organization Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(mockOrg);
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "New Org" }),
+      );
     });
   });
 
   describe("GET /organizations", () => {
-    it("should return all organizations for super admin", async () => {
-      mockSession({ id: "admin-1", role: "admin" });
-      const mockOrgs = [
-        { id: "org-1", name: "Org 1" },
-        { id: "org-2", name: "Org 2" },
-      ];
-      // Mock the chain: select().from() -> resolves to mockOrgs
-      mockDb.from.mockResolvedValueOnce(mockOrgs);
+    const seedOrgs = () =>
+      seedDb({
+        organization: [{ id: "org-1" }, { id: "org-2" }, { id: "org-3" }],
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: "org-1" },
+          { id: "m2", userId: "user-1", organizationId: "org-3" },
+          { id: "m3", userId: "user-2", organizationId: "org-2" },
+        ],
+      });
 
+    const listIds = async () => {
       const res = await app.request("/organizations");
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockOrgs });
+      const body = (await res.json()) as { results: { id: string }[] };
+      return body.results.map((o) => o.id);
+    };
+
+    it("should return all organizations for super admin", async () => {
+      mockSession({ id: "admin-1", role: "admin" });
+      seedOrgs();
+
+      expect(await listIds()).toEqual(["org-1", "org-2", "org-3"]);
     });
 
     it("should return only user's organizations for regular user", async () => {
       mockSession({ id: "user-1", role: "user" });
-      const mockMemberships = [{ organizationId: "org-1" }];
-      const mockOrgs = [{ id: "org-1", name: "Org 1" }];
+      seedOrgs();
 
-      // First call: memberships query
-      // db.select().from().where()
-      mockDb.where.mockResolvedValueOnce(mockMemberships);
+      expect(await listIds()).toEqual(["org-1", "org-3"]);
+    });
 
-      // Second call: organizations query
-      // db.select().from().where()
-      mockDb.where.mockResolvedValueOnce(mockOrgs);
+    it("returns an empty list for a user with no memberships", async () => {
+      mockSession({ id: "user-9", role: "user" });
+      seedOrgs();
 
-      const res = await app.request("/organizations");
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockOrgs });
+      expect(await listIds()).toEqual([]);
     });
   });
 
@@ -117,7 +126,49 @@ describe("Organization Routes", () => {
     });
   });
 
+  describe("GET /organizations/:orgId/membership", () => {
+    it("returns the caller's membership", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      seedDb({
+        organization_member: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: "org-1",
+            role: "member",
+          },
+        ],
+      });
+
+      const res = await app.request("/organizations/org-1/membership");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ id: "m1", role: "member" });
+    });
+
+    it("returns a synthetic admin membership for a super admin", async () => {
+      mockSession({ id: "admin-1", role: "admin" });
+      seedDb();
+
+      const res = await app.request("/organizations/org-1/membership");
+      expect(await res.json()).toEqual({ role: "admin", isSuperAdmin: true });
+    });
+  });
+
   describe("PUT /organizations/:orgId", () => {
+    it("returns 403 for a non-admin member", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+
+      const res = await app.request("/organizations/org-1", {
+        method: "PUT",
+        body: JSON.stringify({ name: "Renamed" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(403);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
     it("should accept and persist identityContext for an admin", async () => {
       mockSession({ id: "admin-1", role: "user" });
       const updated = {

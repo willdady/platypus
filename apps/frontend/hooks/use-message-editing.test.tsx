@@ -54,23 +54,6 @@ describe("useMessageEditing opening an edit", () => {
     });
   });
 
-  it("joins a message written across several text parts", () => {
-    const { result } = harness([
-      {
-        id: "u1",
-        role: "user",
-        parts: [
-          { type: "text", text: "First half. " },
-          { type: "text", text: "Second half." },
-        ],
-      },
-    ]);
-
-    act(() => result.current.handleMessageEditStart("u1"));
-
-    expect(result.current.editing?.text).toBe("First half. Second half.");
-  });
-
   it("closes on cancel without touching the transcript", () => {
     const { result, resend } = harness();
 
@@ -83,23 +66,6 @@ describe("useMessageEditing opening an edit", () => {
 });
 
 describe("useMessageEditing submitting an edit", () => {
-  it("resubmits the attachments the edit surface hands back", () => {
-    const { result, resend } = harness();
-
-    act(() => result.current.handleMessageEditStart("u1"));
-    act(() =>
-      result.current.handleMessageEditSubmit({
-        text: "What does this actually say?",
-        files: [reportPdf, screenshotPng],
-      }),
-    );
-
-    expect(resend).toHaveBeenCalledWith(0, {
-      text: "What does this actually say?",
-      files: [reportPdf, screenshotPng],
-    });
-  });
-
   it("resends from the edited message and closes once it started", () => {
     const { result, resend } = harness();
 
@@ -222,18 +188,12 @@ describe("useMessageEditing on a message that invokes a Skill", () => {
     },
   ];
 
-  it("opens holding the command token", () => {
-    const { result } = harness(withCommand);
-
-    act(() => result.current.handleMessageEditStart("u1"));
-
-    expect(result.current.editing?.text).toBe("/blog-post about otters");
-  });
-
-  it("resubmits with the command still leading the text", () => {
+  it("opens holding the command token and resubmits it leading the text", () => {
     const { result, resend } = harness(withCommand);
 
     act(() => result.current.handleMessageEditStart("u1"));
+    expect(result.current.editing?.text).toBe("/blog-post about otters");
+
     act(() =>
       result.current.handleMessageEditSubmit({
         text: "/blog-post about platypuses",

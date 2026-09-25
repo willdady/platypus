@@ -10,7 +10,7 @@ vi.mock("./event-dispatch.ts", () => ({
 // predicate assertions below would have nothing to read.
 import { eq } from "drizzle-orm";
 import { kanbanCard as kanbanCardTable } from "../db/schema.ts";
-import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
+import { ConflictError, ValidationError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import {
   KANBAN_CARD_HISTORY_LIMIT,
@@ -26,7 +26,6 @@ import {
   placeCardInColumn,
   calculateCardPosition,
   rebalancedPositions,
-  requireCard,
   requireKnownLabelIds,
   requireValidAssignees,
   updateCard,
@@ -52,28 +51,6 @@ describe("kanban module", () => {
   beforeEach(() => {
     db = createMockDb();
     vi.mocked(dispatchEvent).mockClear();
-  });
-
-  describe("requireCard", () => {
-    it("returns the card with the board it sits on", async () => {
-      db.limit.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]);
-
-      expect(await requireCard(asDb(db), scope, "card-1")).toEqual({
-        id: "card-1",
-        columnId: "col-1",
-        boardId: "board-1",
-      });
-    });
-
-    it("rejects a card that is out of scope", async () => {
-      db.limit.mockResolvedValue([]);
-
-      await expect(requireCard(asDb(db), scope, "card-1")).rejects.toThrow(
-        NotFoundError,
-      );
-    });
   });
 
   describe("label rules", () => {

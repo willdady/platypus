@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { mockLogger } from "../test-setup.ts";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 import type { ProviderUpdateData } from "@platypus/schemas";
 
@@ -12,18 +13,30 @@ describe("nullifyEmbeddingsForProvider", () => {
     resetMockDb();
   });
 
-  it("executes an UPDATE that nullifies embeddings for the provider's workspaces", async () => {
+  it("nullifies embeddings in the workspaces that embed with the provider, and logs the count", async () => {
     mockDb.execute.mockResolvedValue({ rowCount: 3 });
 
     await nullifyEmbeddingsForProvider("p1");
 
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
+    const [statement] = mockDb.execute.mock.calls[0] as [
+      { strings: string[]; values: unknown[] },
+    ];
+    expect(statement.values).toEqual(["p1"]);
+    expect(statement.strings.join("?")).toMatch(
+      /UPDATE memory_daily_summary\s+SET embedding = NULL.*memory_embedding_provider_id = \?/s,
+    );
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      { providerId: "p1", rowCount: 3 },
+      expect.any(String),
+    );
   });
 
-  it("does not throw when no rows are affected", async () => {
+  it("stays quiet when no rows are affected", async () => {
     mockDb.execute.mockResolvedValue({ rowCount: 0 });
 
     await expect(nullifyEmbeddingsForProvider("p1")).resolves.toBeUndefined();
+    expect(mockLogger.info).not.toHaveBeenCalled();
   });
 });
 

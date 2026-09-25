@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
+import { and, eq, inArray, notInArray, type SQL } from "drizzle-orm";
+import { agent as agentTable, skill as skillTable } from "../db/schema.ts";
 
 import {
   createSkill,
@@ -8,6 +10,7 @@ import {
   deleteSkill,
   type SkillCreateFields,
 } from "./skill.ts";
+import { orgScopedWhere, workspaceScopedWhere } from "./scoped-resource.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 
 const workspaceCtx = { orgId: "org-1", workspaceId: "ws-1" };
@@ -17,6 +20,13 @@ const createFields = (): SkillCreateFields => ({
   description: "A skill used in tests",
   body: "The skill body",
 });
+
+/**
+ * A `sql` fragment interpolating exactly `values` — an asymmetric matcher typed
+ * as the fragment it stands in for, so it composes into `and(...)`.
+ */
+const sqlWith = (...values: unknown[]) =>
+  expect.objectContaining({ op: "sql", values }) as unknown as SQL;
 
 const updateFields = () => ({
   name: "Renamed",
@@ -74,9 +84,32 @@ describe("skill write model", () => {
         { ...createFields(), agentIds: ["agent-1", "agent-2"] },
       );
 
-      expect(mockDb.update).toHaveBeenCalledTimes(1);
-      const set = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(set.skillIds).toBeDefined();
+      expect(mockDb.update).toHaveBeenCalledWith(agentTable);
+      expect(mockDb.set).toHaveBeenCalledWith({
+        skillIds: sqlWith(agentTable.skillIds, '["s1"]'),
+        updatedAt: expect.any(Date) as unknown,
+      });
+      // Only this Workspace's named agents that do not already hold the skill.
+      expect(mockDb.where).toHaveBeenCalledWith(
+        and(
+          eq(agentTable.workspaceId, "ws-1"),
+          inArray(agentTable.id, ["agent-1", "agent-2"]),
+          sqlWith(agentTable.skillIds, '["s1"]'),
+        ),
+      );
+    });
+
+    it("writes no agents when the workspace create carries an empty agentIds", async () => {
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "s1", workspaceId: "ws-1" },
+      ]);
+
+      await createSkill(
+        { kind: "workspace", ctx: workspaceCtx },
+        { ...createFields(), agentIds: [] },
+      );
+
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 
@@ -93,6 +126,13 @@ describe("skill write model", () => {
       );
 
       expect(row).toEqual(updated);
+      expect(mockDb.set).toHaveBeenCalledWith({
+        ...updateFields(),
+        updatedAt: expect.any(Date) as unknown,
+      });
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        workspaceScopedWhere("skill", "s1", "ws-1"),
+      );
     });
 
     it("throws NotFoundError for a workspace skill not visible here, before the write", async () => {
@@ -139,6 +179,9 @@ describe("skill write model", () => {
       );
 
       expect(row).toEqual(updated);
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        orgScopedWhere("skill", "s1", "org-1"),
+      );
     });
 
     it("throws NotFoundError for an org skill that is not Shared here, before the write", async () => {
@@ -182,6 +225,57 @@ describe("skill write model", () => {
 
       // Skill row update, then agent removal + append.
       expect(mockDb.update).toHaveBeenCalledTimes(3);
+      // Removal: this Workspace's agents holding the skill but no longer listed.
+      expect(mockDb.where).toHaveBeenCalledWith(
+        and(
+          eq(agentTable.workspaceId, "ws-1"),
+          sqlWith(agentTable.skillIds, '["s1"]'),
+          notInArray(agentTable.id, ["agent-1"]),
+        ),
+      );
+      expect(mockDb.where).toHaveBeenCalledWith(
+        and(
+          eq(agentTable.workspaceId, "ws-1"),
+          inArray(agentTable.id, ["agent-1"]),
+          sqlWith(agentTable.skillIds, '["s1"]'),
+        ),
+      );
+    });
+
+    it("unassigns the skill from every workspace agent when agentIds is emptied", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "s1", workspaceId: "ws-1" },
+      ]);
+
+      await updateSkill({ kind: "workspace", ctx: workspaceCtx }, "s1", {
+        ...updateFields(),
+        agentIds: [],
+      });
+
+      // Skill row update, then removal only — nothing to append.
+      expect(mockDb.update).toHaveBeenCalledTimes(2);
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        and(
+          eq(agentTable.workspaceId, "ws-1"),
+          sqlWith(agentTable.skillIds, '["s1"]'),
+        ),
+      );
+    });
+
+    it("leaves agent assignments alone when the update carries no agentIds", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "s1", workspaceId: "ws-1" },
+      ]);
+
+      await updateSkill(
+        { kind: "workspace", ctx: workspaceCtx },
+        "s1",
+        updateFields(),
+      );
+
+      expect(mockDb.update).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -202,7 +296,10 @@ describe("skill write model", () => {
         target: unknown[];
         set: Record<string, unknown>;
       };
-      expect(conflict.target).toHaveLength(2);
+      expect(conflict.target).toEqual([
+        skillTable.workspaceId,
+        skillTable.name,
+      ]);
       expect(conflict.set.description).toBe("A skill used in tests");
     });
   });
@@ -215,7 +312,17 @@ describe("skill write model", () => {
 
       await deleteSkill({ kind: "workspace", ctx: workspaceCtx }, "s1");
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      // The reference check only looks at this Workspace's agents.
+      expect(mockDb.where).toHaveBeenCalledWith(
+        and(
+          eq(agentTable.workspaceId, "ws-1"),
+          sqlWith(agentTable.skillIds, '["s1"]'),
+        ),
+      );
+      expect(mockDb.delete).toHaveBeenCalledTimes(1);
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        workspaceScopedWhere("skill", "s1", "ws-1"),
+      );
     });
 
     it("throws ConflictError while a workspace agent references the skill", async () => {
@@ -250,9 +357,12 @@ describe("skill write model", () => {
 
       await deleteSkill({ kind: "organization", orgId: "org-1" }, "s1");
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockDb.where).toHaveBeenCalledWith(
+        orgScopedWhere("skill", "s1", "org-1"),
+      );
       // The dead id is scrubbed from the same transaction's agent update.
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.update).toHaveBeenCalledWith(agentTable);
     });
 
     it("throws ConflictError while an Attachment still references the org skill", async () => {

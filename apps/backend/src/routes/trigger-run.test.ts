@@ -158,20 +158,19 @@ describe("Trigger runs routes", () => {
       const res = await app.request(`${baseUrl}?${query}`);
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error?: string };
-      expect(body.error).toBeTruthy();
+      expect(body.error).toMatch(/^Invalid query parameters: /);
       expect(mockDb.offset).not.toHaveBeenCalled();
     };
 
-    it("rejects an unrecognised status", async () => {
-      await expectRejected("status=exploded");
-    });
-
-    it("rejects an unparseable limit", async () => {
-      await expectRejected("limit=lots");
-    });
-
-    it("rejects a limit above the cap", async () => {
-      await expectRejected("limit=101");
+    it.each([
+      ["an unrecognised status", "status=exploded"],
+      ["an unparseable limit", "limit=lots"],
+      ["a limit above the cap", "limit=101"],
+      ["a limit below one", "limit=0"],
+      ["a negative offset", "offset=-1"],
+      ["an unparseable offset", "offset=later"],
+    ])("rejects %s", async (_label, query) => {
+      await expectRejected(query);
     });
 
     it("names the parameter it rejected", async () => {
@@ -181,18 +180,6 @@ describe("Trigger runs routes", () => {
 
       const body = (await res.json()) as { error: string };
       expect(body.error).toContain("limit");
-    });
-
-    it("rejects a limit below one", async () => {
-      await expectRejected("limit=0");
-    });
-
-    it("rejects a negative offset", async () => {
-      await expectRejected("offset=-1");
-    });
-
-    it("rejects an unparseable offset", async () => {
-      await expectRejected("offset=later");
     });
   });
 });

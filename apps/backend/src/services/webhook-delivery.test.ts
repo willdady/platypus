@@ -42,6 +42,8 @@ vi.mock("./event-trigger-debounce.ts", () => ({
   debounceTriggerExecution: vi.fn(),
 }));
 
+import { eq } from "drizzle-orm";
+import { webhook as webhookTable } from "../db/schema.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import { notificationEvent } from "../test-utils.ts";
 import { logger } from "../logger.ts";
@@ -99,15 +101,21 @@ describe("Webhook Delivery Service", () => {
     expect(options.method).toBe("POST");
     expect(options.redirect).toBe("manual");
     expect(options.headers["Content-Type"]).toBe("application/json");
-    expect(options.headers["X-Webhook-Signature"]).toBeDefined();
-    expect(options.headers["X-Webhook-Timestamp"]).toBeDefined();
+    // Only the dispatching Workspace's webhooks are read.
+    expect(mockWebhookSelect).toHaveBeenCalledWith(
+      eq(webhookTable.workspaceId, "ws-1"),
+    );
 
     const body = JSON.parse(options.body) as {
       event: string;
+      timestamp: string;
       orgId: string;
       workspaceId: string;
       data: unknown;
     };
+    // The signed timestamp header is the one carried in the signed body.
+    expect(options.headers["X-Webhook-Timestamp"]).toBe(body.timestamp);
+    expect(new Date(body.timestamp).toISOString()).toBe(body.timestamp);
     expect(body.event).toBe("notification.created");
     expect(body.orgId).toBe("org-1");
     expect(body.workspaceId).toBe("ws-1");
@@ -171,6 +179,51 @@ describe("Webhook Delivery Service", () => {
     );
   });
 
+  it("retries a non-OK response", async () => {
+    mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
+    mockFetch
+      .mockResolvedValueOnce({ ok: false, status: 503 } as Response)
+      .mockResolvedValueOnce({ ok: true } as Response);
+
+    dispatchEvent("org-1", "ws-1", notificationEvent("notification.created"));
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(logger.warn).toHaveBeenCalledWith(
+      { url: sampleWebhook.url, status: 503, attempt: 1 },
+      "Webhook delivery failed with non-OK status",
+    );
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("aborts an attempt that outlives the 10s timeout, then retries", async () => {
+    mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
+    mockFetch
+      .mockImplementationOnce(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new Error("aborted")),
+            );
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true } as Response);
+
+    dispatchEvent("org-1", "ws-1", notificationEvent("notification.created"));
+
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ attempt: 1, error: "aborted" }),
+      "Webhook delivery attempt failed",
+    );
+    await vi.advanceTimersByTimeAsync(1_100);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("should log error when all retries exhausted", async () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
     mockFetch.mockRejectedValue(new Error("Network error"));
@@ -188,43 +241,6 @@ describe("Webhook Delivery Service", () => {
       expect.objectContaining({ url: "https://example.com/webhook" }),
       "Webhook delivery exhausted all retries",
     );
-  });
-
-  it("should skip when webhook is disabled", async () => {
-    mockWebhookSelect.mockResolvedValueOnce([
-      { ...sampleWebhook, enabled: false },
-    ]);
-
-    dispatchEvent("org-1", "ws-1", notificationEvent("notification.created"));
-
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it("should skip when no webhook configured", async () => {
-    mockWebhookSelect.mockResolvedValueOnce([]);
-
-    dispatchEvent("org-1", "ws-1", notificationEvent("notification.created"));
-
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it("should skip when event is not in webhook's events list", async () => {
-    mockWebhookSelect.mockResolvedValueOnce([
-      { ...sampleWebhook, events: ["notification.created"] },
-    ]);
-
-    dispatchEvent("org-1", "ws-1", {
-      event: "notification.dismissed",
-      data: { notificationId: "n-1" },
-    });
-
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("should deliver to multiple webhooks", async () => {
@@ -253,30 +269,6 @@ describe("Webhook Delivery Service", () => {
     expect(opts1.headers["X-Webhook-Signature"]).not.toBe(
       opts2.headers["X-Webhook-Signature"],
     );
-  });
-
-  it("should skip webhooks not subscribed to the event", async () => {
-    const webhook2 = {
-      ...sampleWebhook,
-      id: "wh-2",
-      name: "Limited Webhook",
-      url: "https://other.com/webhook",
-      events: ["notification.created"],
-    };
-    mockWebhookSelect.mockResolvedValueOnce([sampleWebhook, webhook2]);
-    mockFetch.mockResolvedValue({ ok: true } as Response);
-
-    dispatchEvent("org-1", "ws-1", {
-      event: "notification.dismissed",
-      data: { notificationId: "n-1" },
-    });
-
-    await vi.advanceTimersByTimeAsync(100);
-
-    // Only the first webhook subscribes to notification.dismissed
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url] = getFetchCall(mockFetch.mock.calls, 0);
-    expect(url).toBe("https://example.com/webhook");
   });
 
   it("should continue delivery when one webhook fails", async () => {

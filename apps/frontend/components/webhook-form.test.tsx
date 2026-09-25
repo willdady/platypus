@@ -9,6 +9,7 @@ import {
   resetFormHarness,
   jsonResponse,
   stubRejectedSave,
+  savedBody,
 } from "@/lib/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -74,7 +75,16 @@ describe("WebhookForm validation error surfacing", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
     fireEvent.click(saveButton);
 
-    await waitFor(() => expect(push).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(
+        "/org1/workspace/ws1/settings/webhooks",
+      ),
+    );
+    // Every event starts subscribed, so the toggle above dropped one.
+    const body = savedBody(fetchMock);
+    expect(body.events).not.toContain("notification.created");
+    expect(body.events).toContain("notification.updated");
+    expect(body.headers).toBeNull();
   });
 
   it("clears the enabled field's error when the switch is toggled", async () => {

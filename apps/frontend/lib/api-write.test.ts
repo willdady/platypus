@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   writeEntity,
@@ -11,24 +12,26 @@ import { jsonResponse } from "./test-utils";
 
 const BACKEND_URL = "http://localhost:4000";
 
-describe("writeEntity — transport", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+/** Stubs `fetch` to answer every request with `status` and `body`. */
+const respond = (status: number, body: unknown = {}) => {
+  const fetchMock = vi.fn().mockResolvedValue(jsonResponse(status, body));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+};
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("writeEntity — transport", () => {
   it("POSTs to the org-scoped collection path when creating with no workspace scope", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(201, { id: "a1" }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = respond(201, { id: "a1" });
 
     await writeEntity(
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      {
-        data: { name: "Bot" },
-      },
+      { data: { name: "Bot" } },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -43,8 +46,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("POSTs to the workspace-scoped collection path when a workspaceId is present", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = respond(201);
 
     await writeEntity(
       BACKEND_URL,
@@ -60,8 +62,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("PUTs to the item path when an id and data are both given (update)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = respond(200);
 
     await writeEntity(
       BACKEND_URL,
@@ -80,8 +81,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("DELETEs the item path with no body when an id is given without data", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = respond(200);
 
     await writeEntity(
       BACKEND_URL,
@@ -98,10 +98,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("POSTs to the root collection path when the scope carries no orgId", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(201, { id: "org1" }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = respond(201, { id: "org1" });
 
     await writeEntity(
       BACKEND_URL,
@@ -120,8 +117,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("PUTs to the root item path when the scope carries no orgId but an id is given", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = respond(200);
 
     await writeEntity(
       BACKEND_URL,
@@ -136,25 +132,8 @@ describe("writeEntity — transport", () => {
     );
   });
 
-  it("always sends credentials: include", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await writeEntity(
-      BACKEND_URL,
-      "agents",
-      { orgId: "org1" },
-      {
-        id: "a1",
-      },
-    );
-
-    expect(fetchMock.mock.calls[0][1].credentials).toBe("include");
-  });
-
   it("DELETEs the root item path when the scope carries no orgId", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = respond(200);
 
     await writeEntity(BACKEND_URL, "organizations", {}, { id: "org1" });
 
@@ -211,23 +190,14 @@ describe("the query-parameterized key builders", () => {
 });
 
 describe("writeEntity — outcomes", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("maps a 2xx response to a success outcome carrying the parsed body", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(jsonResponse(201, { id: "a1", name: "Bot" })),
-    );
+    respond(201, { id: "a1", name: "Bot" });
 
     const result = await writeEntity(
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      {
-        data: { name: "Bot" },
-      },
+      { data: { name: "Bot" } },
     );
 
     expect(result).toEqual({
@@ -238,202 +208,139 @@ describe("writeEntity — outcomes", () => {
   });
 
   it("declares both the collection and item keys to revalidate after an update", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, {})));
+    respond(200);
 
     const result = await writeEntity(
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      {
-        id: "a1",
-        data: { name: "Renamed" },
-      },
+      { id: "a1", data: { name: "Renamed" } },
     );
 
-    expect(result.outcome).toBe("success");
-    if (result.outcome === "success") {
-      expect(result.revalidateKeys).toEqual([
+    expect(result).toMatchObject({
+      outcome: "success",
+      revalidateKeys: [
         "http://localhost:4000/organizations/org1/agents",
         "http://localhost:4000/organizations/org1/agents/a1",
-      ]);
-    }
+      ],
+    });
   });
 
   it("declares only the collection key to revalidate after a delete", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, {})));
+    respond(200);
 
     const result = await writeEntity(
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      {
-        id: "a1",
-      },
+      { id: "a1" },
     );
 
-    expect(result.outcome).toBe("success");
-    if (result.outcome === "success") {
-      expect(result.revalidateKeys).toEqual([
-        "http://localhost:4000/organizations/org1/agents",
-      ]);
-    }
-  });
-
-  it("maps 404 (NotFoundError) to a notFound outcome", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(jsonResponse(404, { error: "Agent not found" })),
-    );
-
-    const result = await writeEntity(
-      BACKEND_URL,
-      "agents",
-      { orgId: "org1" },
-      {
-        id: "missing",
-        data: { name: "x" },
-      },
-    );
-
-    expect(result).toEqual({ outcome: "notFound", message: "Agent not found" });
-  });
-
-  it("falls back to a default message when a 404 body carries none", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, {})));
-
-    const result = await writeEntity(
-      BACKEND_URL,
-      "agents",
-      { orgId: "org1" },
-      {
-        id: "missing",
-        data: {},
-      },
-    );
-
-    expect(result).toEqual({ outcome: "notFound", message: "Not found" });
-  });
-
-  it("maps a 403 with a message (LockedError or an authorization refusal) to a forbidden outcome, passing the message through", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(403, {
-          error: "This resource is managed at the organization level",
-        }),
-      ),
-    );
-
-    const result = await writeEntity(
-      BACKEND_URL,
-      "agents",
-      { orgId: "org1" },
-      {
-        id: "a1",
-        data: { name: "x" },
-      },
-    );
-
-    expect(result).toEqual({
-      outcome: "forbidden",
-      message: "This resource is managed at the organization level",
+    expect(result).toMatchObject({
+      outcome: "success",
+      revalidateKeys: ["http://localhost:4000/organizations/org1/agents"],
     });
   });
 
-  it("maps a 403 with an empty body to a forbidden outcome with the neutral default message", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(403, {})));
+  // One row per backend error class, and the neutral default a bare body gets.
+  it.each([
+    [
+      "404 (NotFoundError)",
+      404,
+      { error: "Agent not found" },
+      { outcome: "notFound", message: "Agent not found" },
+    ],
+    [
+      "404 with no message",
+      404,
+      {},
+      { outcome: "notFound", message: "Not found" },
+    ],
+    [
+      "403 (LockedError or an authorization refusal)",
+      403,
+      { error: "This resource is managed at the organization level" },
+      {
+        outcome: "forbidden",
+        message: "This resource is managed at the organization level",
+      },
+    ],
+    [
+      "403 with no message",
+      403,
+      {},
+      {
+        outcome: "forbidden",
+        message: "You do not have permission to do this.",
+      },
+    ],
+    [
+      "409 (ConflictError / unique violation)",
+      409,
+      { error: "A resource with that name already exists" },
+      {
+        outcome: "conflict",
+        message: "A resource with that name already exists",
+      },
+    ],
+    [
+      "400 with a plain string error (ValidationError)",
+      400,
+      { error: "Invalid label ID" },
+      { outcome: "invalid", message: "Invalid label ID", fieldErrors: {} },
+    ],
+    [
+      "an unmapped status",
+      500,
+      { error: "Internal Server Error" },
+      { outcome: "error", message: "Internal Server Error", httpStatus: 500 },
+    ],
+  ])("maps a %s", async (_name, status, body, expected) => {
+    respond(status, body);
 
     const result = await writeEntity(
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      {
-        id: "a1",
-        data: { name: "x" },
-      },
+      { id: "a1", data: { name: "x" } },
     );
 
-    expect(result).toEqual({
-      outcome: "forbidden",
-      message: "You do not have permission to do this.",
-    });
-  });
-
-  it("maps 409 (ConflictError / unique violation) to a conflict outcome", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(409, {
-          error: "A resource with that name already exists",
-        }),
-      ),
-    );
-
-    const result = await writeEntity(
-      BACKEND_URL,
-      "agents",
-      { orgId: "org1" },
-      {
-        data: { name: "dup" },
-      },
-    );
-
-    expect(result).toEqual({
-      outcome: "conflict",
-      message: "A resource with that name already exists",
-    });
+    expect(result).toEqual(expected);
   });
 
   it("maps a 400 with sValidator's issue-array shape to invalid with dot-path field errors", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(400, {
-          data: {},
-          success: false,
-          error: [
-            {
-              path: ["modelIds", 1, "alias"],
-              message: "Alias 'dup' duplicates",
-            },
-            { path: ["name"], message: "Name is required" },
-          ],
-        }),
-      ),
-    );
+    respond(400, {
+      data: {},
+      success: false,
+      error: [
+        { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
+        { path: ["name"], message: "Name is required" },
+      ],
+    });
 
     const result = await writeEntity(
       BACKEND_URL,
       "providers",
       { orgId: "org1" },
-      {
-        data: {},
-      },
+      { data: {} },
     );
 
-    expect(result.outcome).toBe("invalid");
-    if (result.outcome === "invalid") {
-      expect(result.fieldErrors).toEqual({
+    expect(result).toEqual({
+      outcome: "invalid",
+      message: "Alias 'dup' duplicates",
+      fieldErrors: {
         "modelIds.1.alias": "Alias 'dup' duplicates",
         modelIds: "Alias 'dup' duplicates",
         name: "Name is required",
-      });
-      expect(result.message).toBe("Alias 'dup' duplicates");
-    }
+      },
+    });
   });
 
   it("maps a 400 with a files array (FileValidationError) to invalid, carrying the offending files", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(400, {
-          error: "Some files could not be processed: scan.pdf",
-          files: ["scan.pdf"],
-        }),
-      ),
-    );
+    respond(400, {
+      error: "Some files could not be processed: scan.pdf",
+      files: ["scan.pdf"],
+    });
 
     const result = await writeEntity(BACKEND_URL, "attachments", {
       orgId: "org1",
@@ -447,52 +354,6 @@ describe("writeEntity — outcomes", () => {
     });
   });
 
-  it("maps a 400 with a plain string error (ValidationError) to invalid with no field errors", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(jsonResponse(400, { error: "Invalid label ID" })),
-    );
-
-    const result = await writeEntity(BACKEND_URL, "boards", {
-      orgId: "org1",
-      workspaceId: "ws1",
-    });
-
-    expect(result).toEqual({
-      outcome: "invalid",
-      message: "Invalid label ID",
-      fieldErrors: {},
-    });
-  });
-
-  it("maps an unmapped status to a generic error outcome carrying the HTTP status", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse(500, { error: "Internal Server Error" }),
-        ),
-    );
-
-    const result = await writeEntity(
-      BACKEND_URL,
-      "agents",
-      { orgId: "org1" },
-      {
-        data: {},
-      },
-    );
-
-    expect(result).toEqual({
-      outcome: "error",
-      message: "Internal Server Error",
-      httpStatus: 500,
-    });
-  });
-
   it("maps a network failure to an error outcome instead of throwing", async () => {
     vi.stubGlobal(
       "fetch",
@@ -503,9 +364,7 @@ describe("writeEntity — outcomes", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      {
-        data: {},
-      },
+      { data: {} },
     );
 
     expect(result).toEqual({
@@ -531,48 +390,38 @@ describe("writeEntity — outcomes", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      {
-        id: "a1",
-      },
+      { id: "a1" },
     );
 
-    expect(result.outcome).toBe("success");
-    if (result.outcome === "success") {
-      expect(result.data).toBeNull();
-    }
+    expect(result).toMatchObject({ outcome: "success", data: null });
   });
 });
 
 describe("writeAt", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  it.each(["POST", "PATCH"] as const)(
+    "sends a %s and its body to the given URL",
+    async (method) => {
+      const fetchMock = respond(200, { id: "c1" });
 
-  it("sends the given method and body to the given URL", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(201, { id: "c1" }));
-    vi.stubGlobal("fetch", fetchMock);
+      await writeAt(`${BACKEND_URL}/users/me/contexts`, {
+        method,
+        data: { content: "hi" },
+      });
 
-    await writeAt(`${BACKEND_URL}/users/me/contexts`, {
-      method: "POST",
-      data: { content: "hi" },
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${BACKEND_URL}/users/me/contexts`,
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "hi" }),
-      }),
-    );
-  });
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BACKEND_URL}/users/me/contexts`,
+        expect.objectContaining({
+          method,
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: "hi" }),
+        }),
+      );
+    },
+  );
 
   it("sends no body for a DELETE", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = respond(200);
 
     await writeAt(`${BACKEND_URL}/users/me/contexts/c1`, {
       method: "DELETE",
@@ -585,10 +434,7 @@ describe("writeAt", () => {
   });
 
   it("defaults revalidateKeys to an empty array when omitted", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(jsonResponse(200, { ok: true })),
-    );
+    respond(200, { ok: true });
 
     const result = await writeAt(`${BACKEND_URL}/oauth/mcp/callback`, {
       method: "POST",
@@ -603,7 +449,7 @@ describe("writeAt", () => {
   });
 
   it("carries caller-supplied revalidateKeys on success", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, {})));
+    respond(200);
 
     const result = await writeAt(`${BACKEND_URL}/users/me/contexts/c1`, {
       method: "PUT",
@@ -611,23 +457,14 @@ describe("writeAt", () => {
       revalidateKeys: [`${BACKEND_URL}/users/me/contexts`],
     });
 
-    expect(result.outcome).toBe("success");
-    if (result.outcome === "success") {
-      expect(result.revalidateKeys).toEqual([
-        `${BACKEND_URL}/users/me/contexts`,
-      ]);
-    }
+    expect(result).toMatchObject({
+      outcome: "success",
+      revalidateKeys: [`${BACKEND_URL}/users/me/contexts`],
+    });
   });
 
   it("maps outcomes through the same ADR-0010 mapping as writeEntity", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(409, {
-          error: "You already have a context for this scope",
-        }),
-      ),
-    );
+    respond(409, { error: "You already have a context for this scope" });
 
     const result = await writeAt(`${BACKEND_URL}/users/me/contexts`, {
       method: "POST",
@@ -638,27 +475,5 @@ describe("writeAt", () => {
       outcome: "conflict",
       message: "You already have a context for this scope",
     });
-  });
-
-  it("sends a PATCH with a body, for a partial update", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(200, { id: "m1", role: "admin" }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await writeAt(`${BACKEND_URL}/organizations/org1/members/m1`, {
-      method: "PATCH",
-      data: { role: "admin" },
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${BACKEND_URL}/organizations/org1/members/m1`,
-      expect.objectContaining({
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: "admin" }),
-      }),
-    );
   });
 });

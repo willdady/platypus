@@ -136,6 +136,19 @@ describe("seedFirstBoot", () => {
     expect(fake.tables.organization).toHaveLength(0);
   });
 
+  it("names both variables when neither is set", async () => {
+    const fake = createFakeDb();
+
+    await expect(
+      seedFirstBoot(asSeedDb(fake), {
+        createUser: createUserApi(fake.tables),
+        env: {},
+      }),
+    ).rejects.toThrow(
+      "ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required",
+    );
+  });
+
   // The administrative create-user API the seed goes through hashes whatever
   // it is given; public sign-up would have refused a short password, so the
   // seed keeps that refusal itself.
@@ -176,6 +189,37 @@ describe("seedFirstBoot", () => {
     // The User is written by better-auth outside the transaction, so rollback
     // cannot remove it — the seed compensates explicitly.
     expect(fake.tables.user).toHaveLength(0);
+  });
+
+  it("tells the operator which User to delete when the compensation itself fails", async () => {
+    const fake = createFakeDb({
+      onInsert: (table) => {
+        if (table === "workspace") throw new Error("connection terminated");
+      },
+    });
+    const handle = asSeedDb(fake);
+    const noDelete = new Proxy(handle, {
+      get: (target, prop, receiver) =>
+        prop === "delete"
+          ? () => {
+              throw new Error("database gone");
+            }
+          : (Reflect.get(target, prop, receiver) as unknown),
+    });
+    const error = vi.spyOn(logger, "error");
+
+    await expect(
+      seedFirstBoot(noDelete, {
+        createUser: createUserApi(fake.tables),
+        env: VALID_ENV,
+      }),
+    ).rejects.toThrow(/connection terminated/);
+
+    expect(fake.tables.user).toHaveLength(1);
+    expect(error).toHaveBeenCalledWith(
+      { err: expect.any(Error) as unknown, userId: fake.tables.user[0].id },
+      expect.stringContaining("Delete that user before the next attempt"),
+    );
   });
 
   it("seeds successfully on a retry after a failed attempt (regression: #369)", async () => {
@@ -317,7 +361,9 @@ describe("seedFirstBoot", () => {
     });
 
     expect(result).toEqual({ seeded: false });
-    expect(error).toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("no organization members"),
+    );
     expect(fake.tables.organization).toHaveLength(1);
     expect(fake.tables.user).toHaveLength(0);
   });

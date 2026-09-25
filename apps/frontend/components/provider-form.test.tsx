@@ -187,16 +187,18 @@ describe("ProviderForm model rows", () => {
     ]);
   });
 
-  // The field is optional on both create and update: a row that never touches
-  // it must not start sending a number the Org Admin did not declare.
-  it("declares no window for a row that was left alone", async () => {
+  // Both fields are optional on create and update: a row that never touches
+  // them must not start sending a number the Org Admin did not declare.
+  it("declares no window and no output ceiling for a row that was left alone", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedModelIds(fetchMock)[0].contextWindow).toBeUndefined();
+    expect(savedModelIds(fetchMock)).toEqual([
+      { id: "gpt-4o", passthroughFileTypes: [] },
+    ]);
   });
 
   // Editing a Custom value types straight through, bounds included, so a `128`
@@ -275,66 +277,45 @@ describe("ProviderForm model rows", () => {
 
   // `Number.parseInt` truncated at the first unreadable character, so `1e5` and
   // `1.9` both saved as 1 — accepted by the schema, and every reply on the model
-  // then stopped after one token. A ceiling must reach the server as typed or
-  // not at all.
-  it("reads an exponent in the output ceiling as the number it denotes", async () => {
-    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+  // then stopped after one token. A number must reach the server as typed or
+  // not at all: a fraction is left for the schema's `.int()` to reject with a
+  // message the reader can act on. The extracted-text cap shares the parser.
+  it.each([
+    {
+      field: "maxOutputTokens",
+      label: "Max output tokens",
+      typed: "1e5",
+      sent: 100_000,
+    },
+    {
+      field: "maxOutputTokens",
+      label: "Max output tokens",
+      typed: "1.9",
+      sent: 1.9,
+    },
+    {
+      field: "maxExtractedTextChars",
+      label: "Max extracted text characters",
+      typed: "2e4",
+      sent: 20_000,
+    },
+  ])(
+    "sends $label typed as $typed as the number it denotes",
+    async ({ field, label, typed, sent }) => {
+      const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
-    ]);
-    fireEvent.change(screen.getByLabelText("Max output tokens"), {
-      target: { value: "1e5" },
-    });
-    save();
+      renderEditForm([
+        { id: "gpt-4o", passthroughFileTypes: [], [field]: 1000 },
+      ]);
+      fireEvent.change(screen.getByLabelText(label), {
+        target: { value: typed },
+      });
+      save();
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedModelIds(fetchMock)[0].maxOutputTokens).toBe(100_000);
-  });
-
-  // Passed through as typed rather than floored to 1: the schema's `.int()`
-  // rejects it with a message the reader can act on, which is the whole point of
-  // not coercing here.
-  it("sends a fractional output ceiling as typed, for the schema to reject", async () => {
-    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
-    ]);
-    fireEvent.change(screen.getByLabelText("Max output tokens"), {
-      target: { value: "1.9" },
-    });
-    save();
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedModelIds(fetchMock)[0].maxOutputTokens).toBe(1.9);
-  });
-
-  // The extracted-text cap shares the parser, so it shares the fix.
-  it("reads an exponent in the extracted-text cap as the number it denotes", async () => {
-    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: [], maxExtractedTextChars: 1000 },
-    ]);
-    fireEvent.change(screen.getByLabelText("Max extracted text characters"), {
-      target: { value: "2e4" },
-    });
-    save();
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedModelIds(fetchMock)[0].maxExtractedTextChars).toBe(20_000);
-  });
-
-  it("declares no output ceiling for a row that was left alone", async () => {
-    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
-    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
-    save();
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedModelIds(fetchMock)[0].maxOutputTokens).toBeUndefined();
-  });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(savedModelIds(fetchMock)[0][field]).toBe(sent);
+    },
+  );
 
   it("expands only the row that has config, leaving its neighbours collapsed", () => {
     renderEditForm([
@@ -618,12 +599,6 @@ describe("ProviderForm Web search selector", () => {
   const searchSelect = () =>
     screen.queryByRole("combobox", { name: "Web search" });
 
-  it("is always present, even on a deployment with no backend installed", () => {
-    renderWithAdvancedOpen({});
-
-    expect(searchSelect()).not.toBeNull();
-  });
-
   it("offers the installed backends, annotated with the plugin that contributed them", () => {
     setDataFor("/web-backends", { results: CATALOG });
     renderWithAdvancedOpen({
@@ -651,22 +626,24 @@ describe("ProviderForm Web search selector", () => {
 
   // A row backfilled to "native" (ADR-0014) with no native search of its own
   // — the default fixture here is exactly that shape, vLLM (chat mode) — must
-  // not leave the select showing a value nothing in the list matches.
-  it("names a stale native selection as unavailable, for a Provider with no native search", () => {
-    renderWithAdvancedOpen({});
+  // not leave the select showing a value nothing in the list matches. The
+  // field is present even with no backend installed (the default catalog).
+  it.each([
+    { name: "a chat-mode OpenAI Provider", overrides: {} },
+    {
+      name: "Bedrock",
+      overrides: { providerType: "Bedrock" } as Partial<Provider>,
+    },
+  ])(
+    "names a stale native selection as unavailable, for $name",
+    ({ overrides }) => {
+      renderWithAdvancedOpen(overrides);
 
-    expect(searchSelect()).toHaveTextContent(
-      "The provider's built-in search (unavailable here)",
-    );
-  });
-
-  it("names a stale native selection as unavailable, for Bedrock too", () => {
-    renderWithAdvancedOpen({ providerType: "Bedrock" });
-
-    expect(searchSelect()).toHaveTextContent(
-      "The provider's built-in search (unavailable here)",
-    );
-  });
+      expect(searchSelect()).toHaveTextContent(
+        "The provider's built-in search (unavailable here)",
+      );
+    },
+  );
 
   // Naming it must not become rewriting it. `doSubmit` sends `searchSource` on
   // every save, so coercing the stored value would let a save that touched only
@@ -681,8 +658,7 @@ describe("ProviderForm Web search selector", () => {
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body.searchSource).toBe("native");
+    expect(savedBody(fetchMock).searchSource).toBe("native");
   });
 
   // The other half of keeping it: picking None explicitly is a real edit, and
@@ -696,8 +672,7 @@ describe("ProviderForm Web search selector", () => {
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body.searchSource).toBe("none");
+    expect(savedBody(fetchMock).searchSource).toBe("none");
   });
 
   // Switching Provider Type away from native search after "The provider's
@@ -760,29 +735,17 @@ describe("ProviderForm Web search selector", () => {
     expect(searchSelect()).not.toHaveTextContent("not installed");
   });
 
-  it("round-trips the stored backend through a save", async () => {
-    setDataFor("/web-backends", { results: CATALOG });
-    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+  it.each(["acme-search.searx", "none"])(
+    "round-trips %s through a save",
+    async (searchSource) => {
+      setDataFor("/web-backends", { results: CATALOG });
+      const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
-    renderWithAdvancedOpen({
-      searchSource: "acme-search.searx",
-    } as Partial<Provider>);
-    save();
+      renderWithAdvancedOpen({ searchSource } as Partial<Provider>);
+      save();
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body.searchSource).toBe("acme-search.searx");
-  });
-
-  it("round-trips none through a save", async () => {
-    setDataFor("/web-backends", { results: CATALOG });
-    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
-    renderWithAdvancedOpen({ searchSource: "none" } as Partial<Provider>);
-    save();
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body.searchSource).toBe("none");
-  });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(savedBody(fetchMock).searchSource).toBe(searchSource);
+    },
+  );
 });

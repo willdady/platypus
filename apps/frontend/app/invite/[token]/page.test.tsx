@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import InviteTokenPage from "./page";
+import { jsonResponse } from "@/lib/test-utils";
 
 const mockPush = vi.fn();
 const mockSignOut = vi.fn();
@@ -45,6 +46,37 @@ const ACCEPT_BODY = {
 };
 const WORKSPACE_PATH = "/org-9/workspace/ws-9";
 
+/**
+ * Stubs `fetch` to answer the link's resolution with `RESOLUTION_BODY`, and
+ * `/register` or `/accept` with whatever the test stages for them.
+ */
+const stubInvite = (
+  routes: Partial<Record<"register" | "accept", [number, unknown]>> = {},
+) => {
+  const fetchMock = vi.fn(async (url: string) => {
+    const route = (["register", "accept"] as const).find((r) =>
+      String(url).endsWith(`/${r}`),
+    );
+    const [status, body] = (route && routes[route]) ?? [200, RESOLUTION_BODY];
+    return jsonResponse(status, body);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+};
+
+const called = (fetchMock: ReturnType<typeof stubInvite>, suffix: string) =>
+  fetchMock.mock.calls.some(([url]) => String(url).endsWith(suffix));
+
+const fillRegistration = async () => {
+  fireEvent.change(await screen.findByLabelText("Name"), {
+    target: { value: "Robin" },
+  });
+  fireEvent.change(screen.getByLabelText("Password"), {
+    target: { value: "at-least-8-chars" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: /accept invitation/i }));
+};
+
 describe("InviteTokenPage", () => {
   let tokenCounter = 0;
 
@@ -55,15 +87,12 @@ describe("InviteTokenPage", () => {
     window.history.replaceState(null, "", `/invite/${mockToken}`);
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("scrubs the token from the visible URL on mount", () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => RESOLUTION_BODY,
-      }),
-    );
+    stubInvite();
 
     render(<InviteTokenPage />);
 
@@ -82,12 +111,7 @@ describe("InviteTokenPage", () => {
   });
 
   it("shows a not-found message for an invalid or already-redeemed token", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValue({ ok: false, status: 404, json: async () => ({}) }),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, {})));
 
     render(<InviteTokenPage />);
 
@@ -96,14 +120,7 @@ describe("InviteTokenPage", () => {
 
   describe("no session", () => {
     it("renders a registration form with the invited email fixed and non-editable", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 200,
-          json: async () => RESOLUTION_BODY,
-        }),
-      );
+      stubInvite();
 
       render(<InviteTokenPage />);
 
@@ -116,33 +133,10 @@ describe("InviteTokenPage", () => {
     });
 
     it("registers via /register and redirects on success", async () => {
-      const fetchMock = vi.fn().mockImplementation((url: string) => {
-        if (String(url).endsWith("/register")) {
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            json: async () => ACCEPT_BODY,
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => RESOLUTION_BODY,
-        });
-      });
-      vi.stubGlobal("fetch", fetchMock);
+      const fetchMock = stubInvite({ register: [200, ACCEPT_BODY] });
 
       render(<InviteTokenPage />);
-
-      fireEvent.change(await screen.findByLabelText("Name"), {
-        target: { value: "Robin" },
-      });
-      fireEvent.change(screen.getByLabelText("Password"), {
-        target: { value: "at-least-8-chars" },
-      });
-      fireEvent.click(
-        screen.getByRole("button", { name: /accept invitation/i }),
-      );
+      await fillRegistration();
 
       // Straight into the Workspace the accept provisioned -- not "/", which
       // for a member of other Organizations may not resolve to this one.
@@ -153,36 +147,35 @@ describe("InviteTokenPage", () => {
 
       const registerCall = fetchMock.mock.calls.find(([url]) =>
         String(url).endsWith("/register"),
-      );
-      expect(registerCall?.[1]).toMatchObject({
+      ) as unknown as [string, RequestInit];
+      expect(registerCall[1]).toMatchObject({
         method: "POST",
         credentials: "include",
       });
-      expect(JSON.parse(registerCall![1].body)).toEqual({
+      expect(JSON.parse(String(registerCall[1].body))).toEqual({
         name: "Robin",
         password: "at-least-8-chars",
       });
+    });
+
+    it("keeps the registration form, with the reason, when it is refused", async () => {
+      stubInvite({ register: [400, { error: "Password is too short" }] });
+
+      render(<InviteTokenPage />);
+      await fillRegistration();
+
+      expect(
+        await screen.findByText("Password is too short"),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Name")).toHaveValue("Robin");
+      expect(mockPush).not.toHaveBeenCalled();
     });
   });
 
   describe("signed in as the invited address", () => {
     it("shows a single Accept action and redirects on success", async () => {
       mockUser = { email: "invitee@example.com" };
-      const fetchMock = vi.fn().mockImplementation((url: string) => {
-        if (String(url).endsWith("/accept")) {
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            json: async () => ACCEPT_BODY,
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => RESOLUTION_BODY,
-        });
-      });
-      vi.stubGlobal("fetch", fetchMock);
+      const fetchMock = stubInvite({ accept: [200, ACCEPT_BODY] });
 
       render(<InviteTokenPage />);
 
@@ -194,21 +187,33 @@ describe("InviteTokenPage", () => {
         expect(mockPush).toHaveBeenCalledWith(WORKSPACE_PATH),
       );
       expect(mockPush).not.toHaveBeenCalledWith("/");
+      expect(called(fetchMock, "/accept")).toBe(true);
+    });
+
+    it("says why and stays put when the accept is refused", async () => {
+      mockUser = { email: "invitee@example.com" };
+      stubInvite({ accept: [404, { error: "Invitation link not found" }] });
+
+      render(<InviteTokenPage />);
+
+      fireEvent.click(
+        await screen.findByRole("button", { name: /accept invitation/i }),
+      );
+
       expect(
-        fetchMock.mock.calls.some(([url]) => String(url).endsWith("/accept")),
-      ).toBe(true);
+        await screen.findByText("Invitation link not found"),
+      ).toBeInTheDocument();
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("button", { name: /accept invitation/i }),
+      ).toBeEnabled();
     });
   });
 
   describe("signed in as a different address", () => {
     it("refuses, explains, and offers sign-out without calling accept or register", async () => {
       mockUser = { email: "someone-else@example.com" };
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => RESOLUTION_BODY,
-      });
-      vi.stubGlobal("fetch", fetchMock);
+      const fetchMock = stubInvite();
 
       render(<InviteTokenPage />);
 
@@ -220,13 +225,8 @@ describe("InviteTokenPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
       expect(mockSignOut).toHaveBeenCalled();
 
-      expect(
-        fetchMock.mock.calls.some(
-          ([url]) =>
-            String(url).endsWith("/accept") ||
-            String(url).endsWith("/register"),
-        ),
-      ).toBe(false);
+      expect(called(fetchMock, "/accept")).toBe(false);
+      expect(called(fetchMock, "/register")).toBe(false);
     });
   });
 });

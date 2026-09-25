@@ -243,10 +243,13 @@ describe("Dashboard editor mutations", () => {
         screen.getByPlaceholderText("Markdown content…"),
       ).toBeInTheDocument();
 
-      stubFetch({ widgetPut: true });
+      const fetchMock = stubFetch();
       fireEvent.click(widgetSaveButton());
 
       await waitFor(() => expect(mutateWidgets).toHaveBeenCalled());
+      expect(writes(fetchMock)).toEqual([
+        ["PUT", expect.stringMatching(/\/dashboards\/dash-1\/widgets\/w-1$/)],
+      ]);
       expect(
         screen.queryByPlaceholderText("Markdown content…"),
       ).not.toBeInTheDocument();
@@ -388,15 +391,8 @@ describe("Dashboard editor mutations", () => {
       await renderDashboard();
       clickEdit();
 
-      stubFetch({ addWidget: true });
-      fireEvent.click(screen.getByRole("button", { name: /add widget/i }));
-      fireEvent.change(screen.getByPlaceholderText("Widget title"), {
-        target: { value: "My New Widget" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Add" }));
-      await waitFor(() =>
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-      );
+      stubFetch();
+      await addWidget("My New Widget");
 
       stubFetch({ deleteWidget: false });
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

@@ -7,6 +7,12 @@ import {
 } from "@ai-sdk/mcp";
 import { mcp as mcpTable } from "../db/schema.ts";
 import type { McpRecord } from "./mcp-oauth-provider.ts";
+import { logger } from "../logger.ts";
+import {
+  authorizeMcpOAuth,
+  clearOAuthTokens,
+  probeMcpConnection,
+} from "./mcp-connection.ts";
 
 /** A real SQL fragment — the functions under test just pass it through to `.where(...)`. */
 const someWhere = eq(mcpTable.id, "mcp-1");
@@ -49,7 +55,6 @@ describe("mcp-connection", () => {
 
   describe("probeMcpConnection", () => {
     it("connects and namespaces tool names under the given name", async () => {
-      const { probeMcpConnection } = await import("./mcp-connection.ts");
       const result = await probeMcpConnection(
         {
           url: "http://mcp.example.com",
@@ -66,8 +71,6 @@ describe("mcp-connection", () => {
     });
 
     it("adds a Bearer Authorization header for Bearer auth", async () => {
-      const { probeMcpConnection } = await import("./mcp-connection.ts");
-
       await probeMcpConnection(
         {
           url: "http://mcp.example.com",
@@ -86,7 +89,6 @@ describe("mcp-connection", () => {
     });
 
     it("returns a 404 result when the OAuth mcpId has no resolved row", async () => {
-      const { probeMcpConnection } = await import("./mcp-connection.ts");
       const result = await probeMcpConnection(
         { authType: "OAuth", mcpId: "mcp-1" } as never,
         null,
@@ -99,7 +101,6 @@ describe("mcp-connection", () => {
     });
 
     it("returns a 400 result when the resolved OAuth row has no access token", async () => {
-      const { probeMcpConnection } = await import("./mcp-connection.ts");
       const result = await probeMcpConnection(
         { authType: "OAuth", mcpId: "mcp-1" } as never,
         { ...baseMcp, authType: "OAuth", oauthAccessToken: null },
@@ -117,8 +118,6 @@ describe("mcp-connection", () => {
         tools: vi.fn().mockRejectedValue(new Error("boom")),
         close,
       } as never);
-
-      const { probeMcpConnection } = await import("./mcp-connection.ts");
       const result = await probeMcpConnection(
         { url: "http://mcp.example.com", authType: "None" } as never,
         null,
@@ -127,11 +126,34 @@ describe("mcp-connection", () => {
       expect(result).toEqual({ success: false, error: "boom", status: 400 });
       expect(close).toHaveBeenCalled();
     });
+
+    it("still reports the original error when closing the client also fails", async () => {
+      const closeError = new Error("close failed");
+      vi.mocked(createMCPClient).mockResolvedValueOnce({
+        // A thrown string, not an Error, is reported verbatim.
+        tools: vi.fn().mockRejectedValue("server said no"),
+        close: vi.fn().mockRejectedValue(closeError),
+      } as never);
+
+      const result = await probeMcpConnection(
+        { url: "http://mcp.example.com", authType: "None" } as never,
+        null,
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error: "server said no",
+        status: 400,
+      });
+      expect(logger.error).toHaveBeenCalledWith(
+        { error: closeError },
+        "Error closing MCP client",
+      );
+    });
   });
 
   describe("clearOAuthTokens", () => {
     it("nulls the four oauth token columns for the given where clause", async () => {
-      const { clearOAuthTokens } = await import("./mcp-connection.ts");
       mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       await clearOAuthTokens(asDb(mockDb), someWhere);
@@ -149,7 +171,6 @@ describe("mcp-connection", () => {
 
   describe("authorizeMcpOAuth", () => {
     it("errors when the resolved row's auth type is not OAuth", async () => {
-      const { authorizeMcpOAuth } = await import("./mcp-connection.ts");
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "None" },
@@ -163,7 +184,6 @@ describe("mcp-connection", () => {
     });
 
     it("errors when the resolved row has no URL configured", async () => {
-      const { authorizeMcpOAuth } = await import("./mcp-connection.ts");
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth", url: null },
@@ -186,15 +206,16 @@ describe("mcp-connection", () => {
         },
       );
       mockDb.returning.mockResolvedValueOnce([]);
-
-      const { authorizeMcpOAuth } = await import("./mcp-connection.ts");
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },
         { force: true, clearTokensWhere: someWhere },
       );
 
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ oauthAccessToken: null, oauthScope: null }),
+      );
+      expect(mockDb.where).toHaveBeenCalledWith(someWhere);
       expect(result).toEqual({
         kind: "redirect",
         authorizationUrl: "https://provider.example.com/authorize?x=1",
@@ -203,8 +224,6 @@ describe("mcp-connection", () => {
 
     it("reports alreadyAuthorized without clearing tokens when not forced", async () => {
       vi.mocked(mcpAuth).mockResolvedValueOnce("AUTHORIZED");
-
-      const { authorizeMcpOAuth } = await import("./mcp-connection.ts");
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },
@@ -215,10 +234,40 @@ describe("mcp-connection", () => {
       expect(result).toEqual({ kind: "alreadyAuthorized" });
     });
 
+    it("reports a 500 error when the SDK asks for a redirect but none was captured", async () => {
+      vi.mocked(mcpAuth).mockResolvedValueOnce("REDIRECT");
+
+      const result = await authorizeMcpOAuth(
+        asDb(mockDb),
+        { ...baseMcp, authType: "OAuth" },
+        { force: false, clearTokensWhere: someWhere },
+      );
+
+      expect(result).toEqual({
+        kind: "error",
+        message: "Failed to generate authorization URL",
+        status: 500,
+      });
+    });
+
+    it("reports a generic 500 error when the SDK throws a non-Error", async () => {
+      vi.mocked(mcpAuth).mockRejectedValueOnce("nope");
+
+      const result = await authorizeMcpOAuth(
+        asDb(mockDb),
+        { ...baseMcp, authType: "OAuth" },
+        { force: false, clearTokensWhere: someWhere },
+      );
+
+      expect(result).toEqual({
+        kind: "error",
+        message: "OAuth authorization failed",
+        status: 500,
+      });
+    });
+
     it("reports a 500 error when the SDK throws", async () => {
       vi.mocked(mcpAuth).mockRejectedValueOnce(new Error("network down"));
-
-      const { authorizeMcpOAuth } = await import("./mcp-connection.ts");
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },

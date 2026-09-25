@@ -1,14 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   navigationMock,
   authMock,
   toastMock,
   swrMock,
+  push,
+  toastSuccess,
   resetFormHarness,
   setData,
   setError,
   setLoading,
+  stubAcceptedSave,
+  savedBody,
 } from "@/lib/form-test-harness";
 
 vi.mock("next/navigation", () => navigationMock);
@@ -53,5 +57,25 @@ describe("OrganizationForm record read", () => {
     render(<OrganizationForm />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("");
+  });
+});
+
+describe("OrganizationForm create", () => {
+  beforeEach(() => resetFormHarness());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("creates the organization and opens it", async () => {
+    const fetchMock = stubAcceptedSave({ id: "org9", name: "Acme" });
+    render(<OrganizationForm />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Acme" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/org9"));
+    expect(toastSuccess).toHaveBeenCalledWith("Organization created");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://test/organizations");
+    expect(savedBody(fetchMock)).toEqual({ name: "Acme" });
   });
 });

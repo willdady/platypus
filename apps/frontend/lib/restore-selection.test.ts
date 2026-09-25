@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { Agent, Chat, Provider } from "@platypus/schemas";
 import { resolveRestoredSelection } from "./restore-selection";
@@ -158,6 +159,34 @@ describe("resolveRestoredSelection — priority 2 (localStorage, new chats only)
       providerId: "p1",
     });
   });
+
+  it.each([
+    ["an Agent that was deleted", { type: "agent", id: "gone" }],
+    [
+      "a model its Provider no longer offers",
+      { type: "provider", providerId: "p1", modelId: "removed-model" },
+    ],
+    [
+      "a Provider that was removed",
+      { type: "provider", providerId: "gone", modelId: "gpt-4" },
+    ],
+  ] as const)(
+    "falls through to priority 3 when the stored value names %s",
+    (_name, storedSelection) => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const result = resolveRestoredSelection({
+        chatData: undefined,
+        storedSelection,
+        providers: [provider()],
+        agents: [agent()],
+      });
+      expect(result).toEqual({
+        agentId: "",
+        modelId: "gpt-4",
+        providerId: "p1",
+      });
+    },
+  );
 
   it("is never consulted when a chat already exists", () => {
     // A chat exists but has neither agentId nor providerId/modelId set — an

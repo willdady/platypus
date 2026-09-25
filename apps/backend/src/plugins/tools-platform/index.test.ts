@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeAll, describe, it, expect, vi } from "vitest";
 import type { ToolSetContext } from "@platypuschat/plugin-sdk";
 import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 
@@ -14,7 +14,7 @@ vi.mock("../../services/sub-agent-validation.ts", () => ({
 vi.mock("../../storage/index.ts", () => ({ getStorage: vi.fn() }));
 
 import { plugin } from "./index.ts";
-import { loadPlugins } from "../loader.ts";
+import { loadPlugins, type LoadedPlugin } from "../loader.ts";
 import { getToolSet, getToolSets } from "../../tools/index.ts";
 
 const EXPECTED_IDS = [
@@ -44,11 +44,6 @@ describe("@platypus/tools-platform plugin manifest", () => {
     expect(plugin.apiVersion).toBe(PLUGIN_API_VERSION);
   });
 
-  it("contributes the domain tool sets with unprefixed core ids", () => {
-    const ids = (plugin.contributes.toolSets ?? []).map((t) => t.id);
-    expect(ids).toEqual(EXPECTED_IDS);
-  });
-
   it("exposes every tool set as a context factory", () => {
     for (const ts of plugin.contributes.toolSets ?? []) {
       expect(typeof ts.tools).toBe("function");
@@ -57,28 +52,29 @@ describe("@platypus/tools-platform plugin manifest", () => {
 });
 
 describe("@platypus/tools-platform — loaded into the core registry", () => {
-  it("registers all eight domain tool sets with bare ids", async () => {
-    // Module-global registry; vitest isolates modules per file so this doesn't
-    // leak. Exercise the real path: loader → registerToolSet → getToolSet.
-    const registeredIds = () => getToolSets().map((s) => s.id);
-    for (const id of EXPECTED_IDS) {
-      expect(registeredIds()).not.toContain(id);
-    }
+  // Module-global registry; vitest isolates modules per file so this doesn't
+  // leak. Exercise the real path: loader → registerToolSet → getToolSet.
+  const registeredIds = () => getToolSets().map((s) => s.id);
+  let before: string[];
+  let loaded: LoadedPlugin[];
 
-    const { plugins: loaded } = await loadPlugins({
+  beforeAll(async () => {
+    before = registeredIds();
+    ({ plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-platform"],
-    });
+    }));
+  });
 
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0]).toMatchObject({
-      name: "@platypus/tools-platform",
-      origin: "core",
-      toolSetIds: EXPECTED_IDS,
-    });
-
-    for (const id of EXPECTED_IDS) {
-      expect(registeredIds()).toContain(id);
-    }
+  it("registers all eight domain tool sets with bare ids", () => {
+    expect(before.filter((id) => EXPECTED_IDS.includes(id))).toEqual([]);
+    expect(loaded).toEqual([
+      expect.objectContaining({
+        name: "@platypus/tools-platform",
+        origin: "core",
+        toolSetIds: EXPECTED_IDS,
+      }),
+    ]);
+    expect(registeredIds()).toEqual(expect.arrayContaining(EXPECTED_IDS));
   });
 
   it("resolves each tool set to a non-empty tool map at chat-turn time", async () => {

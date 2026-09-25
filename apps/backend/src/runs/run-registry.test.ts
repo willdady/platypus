@@ -6,7 +6,7 @@ import {
   DEFAULT_PER_RUN_TIMEOUT_MS,
   describeTimeout,
 } from "./run-registry.ts";
-import { ConflictError, mapError } from "../errors.ts";
+import { ConflictError } from "../errors.ts";
 
 describe("RunRegistry", () => {
   let registry: RunRegistry;
@@ -37,11 +37,10 @@ describe("RunRegistry", () => {
   // run does, ahead of any persistence, so this rejection is what protects the
   // live run's state. Typed as a `ConflictError` because ADR-0010's central
   // handler answers 409 for one; a plain `Error` became a 500.
-  it("rejects a duplicate runId with a ConflictError the handler maps to 409", () => {
+  it("rejects a duplicate runId with a ConflictError", () => {
     registry.register("dup-1");
 
     expect(() => registry.register("dup-1")).toThrow(ConflictError);
-    expect(mapError(new ConflictError("x"))?.status).toBe(409);
   });
 
   it("frees the id for a later run once the first unregisters", () => {
@@ -93,6 +92,7 @@ describe("RunRegistry", () => {
     const err = onTimeout.mock.calls[0][0] as TimeoutError;
     expect(err).toBeInstanceOf(TimeoutError);
     expect(err.kind).toBe("step");
+    expect(err.limitMs).toBe(1000);
   });
 
   it("per-run timeout fires onTimeout with kind=run", () => {
@@ -108,6 +108,7 @@ describe("RunRegistry", () => {
     expect(handle.signal.aborted).toBe(true);
     const err = onTimeout.mock.calls[0][0] as TimeoutError;
     expect(err.kind).toBe("run");
+    expect(err.limitMs).toBe(500);
   });
 
   it("bumpStep resets the per-step timer", () => {

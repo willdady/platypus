@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, MotionGlobalConfig } from "motion/react";
 
 import { ContextMeter, ContextMeterEntrance } from "./context-meter";
 
@@ -22,6 +22,7 @@ vi.mock("motion/react", async (importOriginal) => {
 });
 
 afterEach(() => {
+  MotionGlobalConfig.instantAnimations = false;
   motionPreference.isMobile = true;
   motionPreference.reducedMotion = false;
 });
@@ -54,6 +55,8 @@ describe("ContextMeterEntrance", () => {
   });
 
   it("animates a mobile meter that becomes available without restarting on rerender", async () => {
+    // The 0.5s tween is Motion's to run; where it starts and lands is ours.
+    MotionGlobalConfig.instantAnimations = true;
     const view = renderPresence(false);
 
     view.rerender(
@@ -69,9 +72,8 @@ describe("ContextMeterEntrance", () => {
     // two cancel and it occupies nothing without pulling the toolbar upward.
     expect(entrance).toHaveStyle({ height: "0.75rem", opacity: "0" });
 
-    await waitFor(
-      () => expect(entrance).toHaveStyle({ height: "auto", opacity: "1" }),
-      { timeout: 1_500 },
+    await waitFor(() =>
+      expect(entrance).toHaveStyle({ height: "auto", opacity: "1" }),
     );
 
     view.rerender(

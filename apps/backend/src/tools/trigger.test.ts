@@ -1,31 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  callOkTool,
-  callTool,
-  mockDb,
-  resetMockDb,
-  seedDb,
-} from "../test-utils.ts";
+import { callTool, resetMockDb, seedDb } from "../test-utils.ts";
 
-vi.mock("../utils/cron.ts", () => ({
-  validateCronExpression: vi.fn((expr: string) => {
-    if (expr === "invalid") return null;
-    return new Date("2026-01-01T10:00:00Z");
-  }),
+// The Trigger rules (config validation, nextRunAt, agent visibility, workspace
+// scoping of reads and writes) are unit-tested in services/trigger.test.ts;
+// here the Trigger module is a seam and this file covers the adapter: which
+// fields it forwards, how it shapes a result, and how it reports a refusal.
+vi.mock("../services/trigger.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/trigger.ts")>()),
+  createTrigger: vi.fn(),
+  updateTrigger: vi.fn(),
+  listTriggers: vi.fn(),
+  getTrigger: vi.fn(),
+  deleteTrigger: vi.fn(),
 }));
 
 import { createTriggerTools } from "./trigger.ts";
+import {
+  createTrigger,
+  deleteTrigger,
+  getTrigger,
+  listTriggers,
+  updateTrigger,
+} from "../services/trigger.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
 
-const ctx = { toolCallId: "test", messages: [], context: {} };
 const workspaceId = "ws-1";
 const orgId = "org-1";
 const frontendUrl = "http://localhost:3000";
+const ctx = { orgId, workspaceId };
 
-type TriggerResult = {
-  success?: boolean;
-  error?: string;
-  trigger?: unknown;
-  url?: string;
+const cronCreate = {
+  label: "Daily",
+  name: "Daily",
+  agentId: "a1",
+  instruction: "Run daily",
+  type: "cron" as const,
+  config: { cronExpression: "0 9 * * *" },
+  description: "Runs every day",
 };
 
 describe("createTriggerTools", () => {
@@ -47,404 +58,235 @@ describe("createTriggerTools", () => {
     ]);
   });
 
-  describe("listAgents", () => {
-    it("returns workspace agents and the Shared agents attached here", async () => {
-      mockDb.where
-        .mockResolvedValueOnce([
-          {
-            id: "a1",
-            name: "Agent 1",
-            description: "desc",
-            createdAt: new Date("2024-01-01"),
-          },
-        ])
-        // attached Shared agents arrive from an inner join, keyed by table name.
-        .mockResolvedValueOnce([
-          {
-            agent: {
-              id: "a2",
-              name: "Shared Agent",
-              description: "shared",
-              createdAt: new Date("2024-02-01"),
-            },
-          },
-        ]);
-
-      expect(await tools.listAgents.execute!({}, ctx)).toEqual({
-        // Newest first, across both scopes.
-        agents: [
-          { id: "a2", name: "Shared Agent", description: "shared" },
-          { id: "a1", name: "Agent 1", description: "desc" },
-        ],
-        count: 2,
-      });
-    });
-  });
-
-  describe("listTriggers", () => {
-    it("returns all triggers by default", async () => {
-      const triggers = [{ id: "t1", name: "Trigger 1" }];
-      mockDb.orderBy.mockResolvedValue(triggers);
-
-      expect(
-        await tools.listTriggers.execute!({ enabledOnly: false }, ctx),
-      ).toEqual({ triggers, count: 1 });
-    });
-  });
-
-  describe("Workspace scoping", () => {
-    const trigger = (id: string, ws: string, createdAt: string) => ({
+  it("listAgents returns this workspace's agents and attached Shared ones, newest first", async () => {
+    const agent = (id: string, scope: object, createdAt: string) => ({
       id,
-      workspaceId: ws,
-      agentId: "a1",
       name: id,
-      type: "cron",
-      enabled: true,
+      description: `${id} description`,
+      workspaceId: null,
+      organizationId: null,
       createdAt: new Date(createdAt),
+      ...scope,
+    });
+    const attached = (resourceId: string, ws = workspaceId) => ({
+      id: `att-${resourceId}`,
+      workspaceId: ws,
+      resourceType: "agent",
+      resourceId,
+    });
+    seedDb({
+      agent: [
+        agent("mine", { workspaceId }, "2024-01-01"),
+        agent("shared", { organizationId: orgId }, "2024-02-01"),
+        agent("elsewhere", { workspaceId: "ws-2" }, "2024-03-01"),
+        agent("unattached", { organizationId: orgId }, "2024-04-01"),
+      ],
+      attachment: [attached("shared"), attached("unattached", "ws-2")],
     });
 
-    beforeEach(() => {
-      seedDb({
-        trigger: [
-          trigger("mine-old", workspaceId, "2026-01-01"),
-          trigger("theirs", "ws-2", "2026-03-01"),
-          trigger("mine-new", workspaceId, "2026-02-01"),
-        ],
-      });
+    expect(await callTool(tools.listAgents, {})).toEqual({
+      agents: [
+        { id: "shared", name: "shared", description: "shared description" },
+        { id: "mine", name: "mine", description: "mine description" },
+      ],
+      count: 2,
     });
+  });
 
-    it("lists only this workspace's triggers, newest first", async () => {
-      expect(
-        await callOkTool(tools.listTriggers, { enabledOnly: false }),
-      ).toMatchObject({
-        triggers: [{ id: "mine-new" }, { id: "mine-old" }],
-        count: 2,
-      });
-    });
+  it("listTriggers forwards enabledOnly and returns a summary of each trigger", async () => {
+    const createdAt = new Date("2026-01-01");
+    vi.mocked(listTriggers).mockResolvedValueOnce([
+      {
+        id: "t1",
+        name: "Daily",
+        description: "d",
+        agentId: "a1",
+        type: "cron",
+        enabled: true,
+        nextRunAt: null,
+        lastRunAt: null,
+        createdAt,
+        instruction: "a long prompt the summary leaves out",
+        config: { cronExpression: "0 9 * * *" },
+      },
+    ] as never);
 
-    it("does not get another workspace's trigger", async () => {
-      expect(await callTool(tools.getTrigger, { triggerId: "theirs" })).toEqual(
+    expect(await callTool(tools.listTriggers, { enabledOnly: true })).toEqual({
+      triggers: [
         {
-          error:
-            "Trigger not found in this workspace. Use listTriggers to find valid IDs.",
+          id: "t1",
+          name: "Daily",
+          description: "d",
+          agentId: "a1",
+          type: "cron",
+          enabled: true,
+          nextRunAt: null,
+          lastRunAt: null,
+          createdAt,
         },
-      );
+      ],
+      count: 1,
     });
+    expect(listTriggers).toHaveBeenCalledWith(ctx, { enabledOnly: true });
   });
 
   describe("getTrigger", () => {
-    it("returns full trigger details", async () => {
-      const trigger = {
-        id: "t1",
-        name: "Trigger 1",
-        instruction: "Do something",
-        config: { cronExpression: "0 9 * * *", timezone: "UTC" },
-      };
-      mockDb.limit.mockResolvedValue([trigger]);
+    it("returns the trigger in full", async () => {
+      const trigger = { id: "t1", instruction: "Do something" };
+      vi.mocked(getTrigger).mockResolvedValueOnce(trigger as never);
 
-      expect(await tools.getTrigger.execute!({ triggerId: "t1" }, ctx)).toEqual(
-        { trigger },
-      );
+      expect(await callTool(tools.getTrigger, { triggerId: "t1" })).toEqual({
+        trigger,
+      });
+      expect(getTrigger).toHaveBeenCalledWith(ctx, "t1");
     });
 
-    it("returns error when trigger not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
+    it("points at listTriggers when the trigger is not found", async () => {
+      vi.mocked(getTrigger).mockRejectedValueOnce(new NotFoundError());
 
-      const result = (await tools.getTrigger.execute!(
-        { triggerId: "bad-id" },
-        ctx,
-      )) as TriggerResult;
-      expect(result).toHaveProperty("error");
-      expect(result.error).toContain("Trigger not found");
+      expect(await callTool(tools.getTrigger, { triggerId: "t1" })).toEqual({
+        error:
+          "Trigger not found in this workspace. Use listTriggers to find valid IDs.",
+      });
+    });
+
+    it("lets any other failure throw", async () => {
+      vi.mocked(getTrigger).mockRejectedValueOnce(new Error("connection lost"));
+
+      await expect(
+        callTool(tools.getTrigger, { triggerId: "t1" }),
+      ).rejects.toThrow("connection lost");
     });
   });
 
   describe("upsertTrigger", () => {
-    it("returns error when required fields missing for create", async () => {
-      const result = (await tools.upsertTrigger.execute!(
-        { label: "test" },
-        ctx,
-      )) as TriggerResult;
-      expect(result).toHaveProperty("error");
-      expect(result.error).toContain("required");
-    });
+    it("creates through the Trigger module and links the new trigger", async () => {
+      vi.mocked(createTrigger).mockResolvedValueOnce({ id: "t9" } as never);
 
-    it("creates a cron trigger when all fields provided", async () => {
-      const trigger = {
-        id: "t1",
-        name: "Daily",
-        type: "cron",
-        config: { cronExpression: "0 9 * * *", timezone: "UTC" },
-      };
-      // Agent exists check
-      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
-      // Insert returning
-      mockDb.returning.mockResolvedValue([trigger]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        {
-          label: "Daily",
-          name: "Daily",
-          agentId: "a1",
-          instruction: "Run daily",
-          type: "cron",
-          config: { cronExpression: "0 9 * * *" },
-        },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(true);
-      expect(result.trigger).toEqual(trigger);
-      expect(result.url).toContain("triggers/");
-    });
-
-    it("creates an event trigger", async () => {
-      const trigger = {
-        id: "t2",
-        name: "On Card",
-        type: "event",
-        config: { events: ["card.created"] },
-      };
-      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
-      mockDb.returning.mockResolvedValue([trigger]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        {
-          label: "On Card",
-          name: "On Card",
-          agentId: "a1",
-          instruction: "Handle card",
-          type: "event",
-          config: { events: ["card.created"] },
-        },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(true);
-    });
-
-    it("creates an event trigger with a full filters shape (columnId, changedFields)", async () => {
-      const config = {
-        events: ["card.created", "card.updated"],
-        filters: {
-          boardId: "board-1",
-          columnId: "col-1",
-          changedFields: ["title"],
-        },
-      };
-      const trigger = { id: "t2", name: "On Card", type: "event", config };
-      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
-      mockDb.returning.mockResolvedValue([trigger]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        {
-          label: "On Card",
-          name: "On Card",
-          agentId: "a1",
-          instruction: "Handle card",
-          type: "event",
-          config,
-        },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(true);
-      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
-      expect(values.config).toEqual(config);
-    });
-
-    it("returns error when agent not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        {
-          label: "Test",
-          name: "Test",
-          agentId: "nonexistent",
-          instruction: "Do something",
-          type: "cron",
-          config: { cronExpression: "0 9 * * *" },
-        },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe(
-        "Agent not found in this workspace. Use listAgents to find valid agent IDs.",
-      );
-    });
-
-    it("accepts a Shared agent attached to this workspace", async () => {
-      const trigger = { id: "t3", name: "Shared", type: "cron" };
-      mockDb.limit
-        .mockResolvedValueOnce([
-          { id: "a2", organizationId: orgId, workspaceId: null },
-        ])
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attached → usable here
-      mockDb.returning.mockResolvedValue([trigger]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        {
-          label: "Shared",
-          name: "Shared",
-          agentId: "a2",
-          instruction: "Run daily",
-          type: "cron",
-          config: { cronExpression: "0 9 * * *" },
-        },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(true);
-    });
-
-    it("returns error for invalid trigger type", async () => {
-      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        {
-          label: "Bad",
-          name: "Bad",
-          agentId: "a1",
-          instruction: "Do something",
-          type: "invalid" as never,
-          config: {},
-        },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Invalid trigger type");
-    });
-
-    it("returns error when trigger not found during update", async () => {
-      mockDb.limit.mockResolvedValue([]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        { triggerId: "bad-id", label: "test" },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Trigger not found");
-    });
-
-    it("round-trips a columnId/changedFields filter through a config update", async () => {
-      mockDb.limit.mockResolvedValue([
-        {
-          id: "t1",
-          agentId: "a1",
-          type: "event",
-          config: { events: ["card.created"] },
-        },
-      ]);
-      const newConfig = {
-        events: ["card.updated"],
-        filters: {
-          boardId: "board-1",
-          columnId: "col-2",
-          changedFields: ["priority"],
-        },
-      };
-      mockDb.returning.mockResolvedValue([
-        { id: "t1", name: "On Card", config: newConfig },
-      ]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        { triggerId: "t1", label: "On Card", config: newConfig },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(true);
-      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setArg.config).toEqual(newConfig);
-    });
-
-    it("creates with includeMemories off unless the tool call opts in", async () => {
-      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
-      mockDb.returning.mockResolvedValue([{ id: "t1", name: "Daily" }]);
-
-      await tools.upsertTrigger.execute!(
-        {
-          label: "Daily",
-          name: "Daily",
-          agentId: "a1",
-          instruction: "Run daily",
-          type: "cron",
-          config: { cronExpression: "0 9 * * *" },
-        },
-        ctx,
-      );
-
-      let values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
-      expect(values.includeMemories).toBe(false);
-
-      vi.clearAllMocks();
-      resetMockDb();
-      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
-      mockDb.returning.mockResolvedValue([{ id: "t1", name: "Daily" }]);
-
-      await tools.upsertTrigger.execute!(
-        {
-          label: "Daily",
-          name: "Daily",
-          agentId: "a1",
-          instruction: "Run daily",
-          type: "cron",
-          config: { cronExpression: "0 9 * * *" },
+      expect(
+        await callTool(tools.upsertTrigger, {
+          ...cronCreate,
           includeMemories: true,
-        },
-        ctx,
-      );
-
-      values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
-      expect(values.includeMemories).toBe(true);
+        }),
+      ).toEqual({
+        success: true,
+        trigger: { id: "t9" },
+        url: "http://localhost:3000/org-1/workspace/ws-1/triggers/t9",
+      });
+      expect(createTrigger).toHaveBeenCalledWith(ctx, {
+        agentId: "a1",
+        type: "cron",
+        name: "Daily",
+        description: "Runs every day",
+        instruction: "Run daily",
+        enabled: undefined,
+        maxRunsToKeep: undefined,
+        search: undefined,
+        includeMemories: true,
+        config: { cronExpression: "0 9 * * *" },
+      });
     });
 
-    it("round-trips includeMemories through an update", async () => {
-      mockDb.limit.mockResolvedValue([
-        {
-          id: "t1",
-          agentId: "a1",
-          type: "cron",
-          config: { cronExpression: "0 9 * * *", timezone: "UTC" },
-        },
-      ]);
-      mockDb.returning.mockResolvedValue([
-        { id: "t1", name: "Daily", includeMemories: true },
-      ]);
+    it.each(["name", "agentId", "instruction", "type", "config"] as const)(
+      "refuses a create without %s",
+      async (field) => {
+        const input: Record<string, unknown> = { ...cronCreate };
+        delete input[field];
 
-      const result = (await tools.upsertTrigger.execute!(
-        { triggerId: "t1", label: "Daily", includeMemories: true },
+        expect(
+          await callTool(tools.upsertTrigger, input as typeof cronCreate),
+        ).toEqual({
+          error:
+            "name, agentId, instruction, type, and config are required when creating a new trigger",
+        });
+        expect(createTrigger).not.toHaveBeenCalled();
+      },
+    );
+
+    it("updates by triggerId, forwarding only what the call carries, and links it", async () => {
+      vi.mocked(updateTrigger).mockResolvedValueOnce({ id: "t1" } as never);
+
+      expect(
+        await callTool(tools.upsertTrigger, {
+          triggerId: "t1",
+          label: "Daily",
+          description: "Runs every day",
+          includeMemories: true,
+        }),
+      ).toEqual({
+        success: true,
+        trigger: { id: "t1" },
+        url: "http://localhost:3000/org-1/workspace/ws-1/triggers/t1",
+      });
+      expect(updateTrigger).toHaveBeenCalledWith(
         ctx,
-      )) as TriggerResult;
+        "t1",
+        expect.objectContaining({
+          description: "Runs every day",
+          includeMemories: true,
+          agentId: undefined,
+          config: undefined,
+        }),
+      );
+      expect(createTrigger).not.toHaveBeenCalled();
+    });
 
-      expect(result.success).toBe(true);
-      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setArg.includeMemories).toBe(true);
+    describe.each([
+      {
+        mode: "create",
+        service: createTrigger,
+        input: cronCreate,
+      },
+      {
+        mode: "update",
+        service: updateTrigger,
+        input: { ...cronCreate, triggerId: "t1" },
+      },
+    ])("$mode refusals", ({ service, input }) => {
+      it.each([
+        [
+          new NotFoundError("Agent not found in this workspace"),
+          "Agent not found in this workspace. Use listAgents to find valid agent IDs.",
+        ],
+        [new NotFoundError("Trigger not found"), "Trigger not found"],
+        [
+          new ValidationError("Invalid cron expression"),
+          "Invalid cron expression",
+        ],
+      ])("reports %s as a failed result", async (error, message) => {
+        vi.mocked(service).mockRejectedValueOnce(error);
+
+        expect(await callTool(tools.upsertTrigger, input)).toEqual({
+          success: false,
+          error: message,
+        });
+      });
+
+      it("lets any other failure throw", async () => {
+        vi.mocked(service).mockRejectedValueOnce(new Error("connection lost"));
+
+        await expect(callTool(tools.upsertTrigger, input)).rejects.toThrow(
+          "connection lost",
+        );
+      });
     });
   });
 
   describe("deleteTrigger", () => {
-    it("deletes a trigger", async () => {
-      mockDb.returning.mockResolvedValue([{ id: "t1" }]);
+    it("deletes this workspace's trigger", async () => {
+      vi.mocked(deleteTrigger).mockResolvedValueOnce(true);
 
       expect(
-        await tools.deleteTrigger.execute!(
-          { triggerId: "t1", label: "test" },
-          ctx,
-        ),
+        await callTool(tools.deleteTrigger, { triggerId: "t1", label: "x" }),
       ).toEqual({ success: true });
+      expect(deleteTrigger).toHaveBeenCalledWith(ctx, "t1");
     });
 
-    it("returns error when trigger not found", async () => {
-      mockDb.returning.mockResolvedValue([]);
+    it("returns an error when nothing was deleted", async () => {
+      vi.mocked(deleteTrigger).mockResolvedValueOnce(false);
 
       expect(
-        await tools.deleteTrigger.execute!(
-          { triggerId: "bad-id", label: "test" },
-          ctx,
-        ),
+        await callTool(tools.deleteTrigger, { triggerId: "t1", label: "x" }),
       ).toEqual({ error: "Trigger not found" });
     });
   });

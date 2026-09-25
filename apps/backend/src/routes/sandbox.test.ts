@@ -707,4 +707,83 @@ describe("Sandbox Routes", () => {
       expect(body.error).toMatch(/ADMIN_KEY/);
     });
   });
+
+  describe("admin input validation", () => {
+    const stored = {
+      id: "sbx-1",
+      workspaceId,
+      name: "Creds backend",
+      backend: CREDS_BACKEND,
+      config: {},
+      adminEnv: { ADMIN_KEY: "x" },
+      userEnv: {},
+    };
+
+    const asAdmin = (existing?: unknown) => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      if (existing) mockDb.limit.mockResolvedValueOnce([existing]);
+    };
+
+    const send = (method: "POST" | "PUT", body: unknown) =>
+      app.request(baseUrl, {
+        method,
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
+
+    it.each([
+      [
+        "POST: config failing the backend's schema",
+        "POST",
+        { config: { unexpected: true }, credentials: { privateKey: "k" } },
+        /^Invalid sandbox config: /,
+      ],
+      [
+        "PUT: config failing the backend's schema",
+        "PUT",
+        { config: { unexpected: true } },
+        /^Invalid sandbox config: /,
+      ],
+      [
+        "PUT: credentials failing the backend's schema",
+        "PUT",
+        { config: {}, credentials: {} },
+        /^Invalid sandbox credentials: /,
+      ],
+      [
+        "PUT: userEnv colliding with the stored adminEnv",
+        "PUT",
+        { config: {}, userEnv: { ADMIN_KEY: "y" } },
+        /ADMIN_KEY/,
+      ],
+    ] as const)("rejects %s (400)", async (_label, method, over, error) => {
+      asAdmin(method === "PUT" ? stored : undefined);
+
+      const res = await send(method, {
+        workspaceId,
+        name: "Creds backend",
+        backend: CREDS_BACKEND,
+        ...over,
+      });
+
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(error);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it("GET /networks lists the allowed Docker networks for an admin", async () => {
+      asAdmin();
+
+      const res = await app.request(`${baseUrl}/networks`);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { results: unknown };
+      expect(Array.isArray(body.results)).toBe(true);
+    });
+  });
 });

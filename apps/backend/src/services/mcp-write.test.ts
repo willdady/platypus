@@ -3,6 +3,8 @@ import { mockDb, resetMockDb } from "../test-utils.ts";
 
 import { createMcp, updateMcp, deleteMcp } from "./mcp-write.ts";
 import type { McpCreateFields, McpUpdateFields } from "./mcp-write.ts";
+import { agent as agentTable } from "../db/schema.ts";
+import { orgScopedWhere, workspaceScopedWhere } from "./scoped-resource.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 
 const workspaceCtx = { orgId: "org-1", workspaceId: "ws-1" };
@@ -14,6 +16,17 @@ const createFields = (): McpCreateFields => ({
 });
 
 const updateFields = (): McpUpdateFields => createFields();
+
+/** The dead id is scrubbed from referencing Agents' toolSetIds (#689). */
+const expectToolSetScrub = (mcpId: string) => {
+  expect(mockDb.update).toHaveBeenCalledWith(agentTable);
+  expect(mockDb.where).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      op: "sql",
+      values: [agentTable.toolSetIds, JSON.stringify([mcpId])],
+    }),
+  );
+};
 
 describe("mcp write model", () => {
   beforeEach(() => {
@@ -78,6 +91,15 @@ describe("mcp write model", () => {
       );
 
       expect(row).toEqual(updated);
+      expect(mockDb.set).toHaveBeenCalledWith({
+        ...updateFields(),
+        name: "Renamed",
+        slug: "renamed",
+        updatedAt: expect.any(Date) as unknown,
+      });
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        workspaceScopedWhere("mcp", "mcp-1", "ws-1"),
+      );
     });
 
     it("clears OAuth tokens and the OAuth client when the URL changes", async () => {
@@ -181,6 +203,9 @@ describe("mcp write model", () => {
       );
 
       expect(row).toEqual(updated);
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        orgScopedWhere("mcp", "mcp-1", "org-1"),
+      );
     });
 
     it("throws NotFoundError for an org MCP that is not Shared here, before the write", async () => {
@@ -228,10 +253,12 @@ describe("mcp write model", () => {
 
       await deleteMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1");
 
-      expect(mockDb.delete).toHaveBeenCalled();
-      // The dead id is scrubbed from the same transaction's agent update — this
-      // is the bug fix: workspace-scope delete never did this before.
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockDb.where).toHaveBeenCalledWith(
+        workspaceScopedWhere("mcp", "mcp-1", "ws-1"),
+      );
+      // Workspace-scope delete never scrubbed before #689.
+      expectToolSetScrub("mcp-1");
     });
 
     it("does not scrub when a concurrent delete already removed the row", async () => {
@@ -267,8 +294,11 @@ describe("mcp write model", () => {
 
       await deleteMcp({ kind: "organization", orgId: "org-1" }, "mcp-1");
 
-      expect(mockDb.delete).toHaveBeenCalled();
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockDb.where).toHaveBeenCalledWith(
+        orgScopedWhere("mcp", "mcp-1", "org-1"),
+      );
+      expectToolSetScrub("mcp-1");
     });
 
     it("throws ConflictError while an Attachment still references the org MCP", async () => {
@@ -300,6 +330,7 @@ describe("mcp write model", () => {
       await expect(
         deleteMcp({ kind: "organization", orgId: "org-1" }, "missing"),
       ).rejects.toThrow(NotFoundError);
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 });

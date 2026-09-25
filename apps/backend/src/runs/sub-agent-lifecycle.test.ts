@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
+import { MockLanguageModelV3, convertArrayToReadableStream } from "ai/test";
 import { z } from "zod";
 
 import { startRun } from "./run-lifecycle.ts";
@@ -51,7 +51,7 @@ const modelOf = (...steps: LanguageModelV3StreamPart[][]) => {
       const parts = steps[Math.min(index, steps.length - 1)];
       index += 1;
       return Promise.resolve({
-        stream: simulateReadableStream({ chunks: parts }),
+        stream: convertArrayToReadableStream(parts),
       });
     },
   });
@@ -65,7 +65,7 @@ const parentScope: WorkspaceScope = workspaceScope(
   true,
 );
 
-/** The parent's stall threshold. Small enough to fire inside a fast test. */
+/** The parent's stall threshold. */
 const PER_STEP_MS = 60;
 /** How long the delegated run takes — several times the parent's threshold. */
 const SUB_AGENT_MS = 250;
@@ -89,6 +89,11 @@ describe("a delegated run inside a parent run", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   // The acceptance criterion: before this, the only thing keeping the parent
@@ -152,12 +157,16 @@ describe("a delegated run inside a parent run", () => {
       }
     ).execute;
 
-    for await (const _ of execute(
-      { subAgent: "Slow Agent", task: "Take your time" },
-      { abortSignal: parent.handle.signal },
-    )) {
-      void _;
-    }
+    const drained = (async () => {
+      for await (const _ of execute(
+        { subAgent: "Slow Agent", task: "Take your time" },
+        { abortSignal: parent.handle.signal },
+      )) {
+        void _;
+      }
+    })();
+    await vi.advanceTimersByTimeAsync(SUB_AGENT_MS);
+    await drained;
 
     expect(parent.handle.signal.aborted).toBe(false);
     expect(outcomes).toEqual([]);
@@ -171,7 +180,7 @@ describe("a delegated run inside a parent run", () => {
   it("still stalls a parent that is idle for the same span", async () => {
     startParent();
 
-    await sleep(PER_STEP_MS * 2);
+    await vi.advanceTimersByTimeAsync(PER_STEP_MS * 2);
 
     expect(parentHandle.signal.aborted).toBe(true);
     expect(outcomes.map((o) => o.status)).toEqual(["failed"]);

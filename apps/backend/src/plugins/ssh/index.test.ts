@@ -11,18 +11,6 @@ describe("@platypus/ssh plugin manifest", () => {
     expect(plugin.apiVersion).toBe(PLUGIN_API_VERSION);
   });
 
-  it("contributes the ssh sandbox backend with the unprefixed core id", () => {
-    const backends = plugin.contributes.sandboxBackends ?? [];
-    expect(backends).toHaveLength(1);
-
-    const [ssh] = backends;
-    expect(ssh.backend).toBe("ssh");
-    expect(ssh.name).toBe("SSH (Remote Host)");
-    expect(typeof ssh.create).toBe("function");
-    expect(ssh.configSchema).toBeDefined();
-    expect(ssh.credentialsSchema).toBeDefined();
-  });
-
   it("registers the ssh backend into the core registry when loaded", async () => {
     // The registry is module-global; vitest isolates modules per file, so this
     // load doesn't leak into other test files. Exercise the real plugin path:

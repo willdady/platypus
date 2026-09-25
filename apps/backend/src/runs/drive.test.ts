@@ -9,7 +9,12 @@ import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
 import { z } from "zod";
 import { startRun } from "./run-lifecycle.ts";
 import { runRegistry, TimeoutError } from "./run-registry.ts";
-import { driveChat, driveDelegate, driveOnce } from "./drive.ts";
+import {
+  driveChat,
+  driveDelegate,
+  driveOnce,
+  failBeforeDrive,
+} from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import type { RunStatus } from "./types.ts";
 import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
@@ -369,6 +374,10 @@ describe("driveOnce", () => {
     expect(outcome[0].error?.message).toMatch(
       new RegExp(`no_progress:.*${STUCK_TOOL}`),
     );
+    // The false positive the step-ceiling flag's two-part condition exists to
+    // prevent: a no-progress abort ends on the same terminal finish reason,
+    // and is never relabelled as a ceiling stop.
+    expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
   });
 
   // Issue #540: the run did the work it was allowed to do, so it still
@@ -398,23 +407,6 @@ describe("driveOnce", () => {
     });
 
     expect(stats).not.toHaveProperty("stoppedAtStepLimit");
-    expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
-  });
-
-  // The false positive the two-part condition exists to prevent: a no-progress
-  // abort ends on the same terminal finish reason. It keeps its own failed
-  // status and `no_progress:` message and is never relabelled.
-  it("does not report a no-progress abort as a step-ceiling stop", async () => {
-    const { run, outcome } = startRecordedRun();
-
-    const { stats } = await driveOnce({
-      plan: stuckPlanOf(stuckStreamingModel()),
-      run,
-      prompt: "hi",
-    });
-
-    expect(stats).not.toHaveProperty("stoppedAtStepLimit");
-    expect(outcome[0].status).toBe("failed");
     expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
   });
 
@@ -560,6 +552,10 @@ describe("driveDelegate", () => {
     expect(result.status).toBe("failed");
     expect(result.failure).toMatch(new RegExp(`no_progress:.*${STUCK_TOOL}`));
     expect(outcome[0].error?.name).toBe("NoProgressError");
+    // Its stop condition trips below the ceiling, and on a low ceiling could
+    // trip on the ceiling step itself, so the teardown defers to it either way.
+    expect(result.stoppedAtStepLimit).toBe(false);
+    expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
   });
 
   // Issue #540. The delegate's parent has to tell a stopped delegation from a
@@ -592,25 +588,6 @@ describe("driveDelegate", () => {
     const result = await drive.done;
 
     expect(result.stoppedAtStepLimit).toBe(false);
-    expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
-  });
-
-  // The no-progress abort keeps its own reporting on the streamed path too: its
-  // stop condition trips below the ceiling, and on a low ceiling could trip on
-  // the ceiling step itself, so the teardown defers to it either way.
-  it("does not report a no-progress abort as a step-ceiling stop", async () => {
-    const { run, outcome } = startRecordedRun();
-    const drive = driveDelegate({
-      plan: stuckPlanOf(stuckStreamingModel()),
-      run,
-      prompt: "hi",
-      agentId: "sub-1",
-    });
-    for await (const _ of drive.snapshots) void _;
-    const result = await drive.done;
-
-    expect(result.stoppedAtStepLimit).toBe(false);
-    expect(result.failure).toMatch(new RegExp(`no_progress:.*${STUCK_TOOL}`));
     expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
   });
 
@@ -662,23 +639,29 @@ describe("driveDelegate", () => {
   });
 });
 
+describe("failBeforeDrive", () => {
+  // A delegate's tool setup throwing: no drive ever started, but the run
+  // still ends under the rule a drive would have applied.
+  it("fails the run with the setup failure as its error", async () => {
+    const { run, outcome } = startRecordedRun();
+
+    const result = await failBeforeDrive(run, "tools unavailable");
+
+    expect(result).toEqual({
+      status: "failed",
+      failure: "tools unavailable",
+      truncated: false,
+      stoppedAtStepLimit: false,
+    });
+    expect(outcome).toHaveLength(1);
+    expect(outcome[0].status).toBe("failed");
+    expect(outcome[0].error?.message).toBe("tools unavailable");
+  });
+});
+
 describe("driveChat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it("hands back a client stream branch alongside the snapshots", async () => {
-    const { run } = startRecordedRun();
-    const drive = driveChat({
-      plan: planOf(modelOf(text("t1", "Hi"))),
-      run,
-      modelMessages: [{ role: "user", content: "hi" }],
-    });
-
-    expect(drive.response).toBeInstanceOf(ReadableStream);
-    for await (const _ of drive.snapshots) void _;
-    await drive.done;
-    await drive.response.cancel();
   });
 
   // The interactive counterpart of the delegate rule above: a Chat turn renders
@@ -760,9 +743,15 @@ describe("driveChat", () => {
       run,
       modelMessages: [{ role: "user", content: "hi" }],
     });
-    setTimeout(() => runRegistry.cancel(run.handle.runId), 20);
-
-    const chunks = await collect(drive.response);
+    // Stopped once the answer has started streaming, as a user pressing stop
+    // would.
+    const chunks: { type: string }[] = [];
+    for await (const chunk of drive.response as unknown as AsyncIterable<{
+      type: string;
+    }>) {
+      chunks.push(chunk);
+      if (chunk.type === "text-delta") runRegistry.cancel(run.handle.runId);
+    }
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;
 
@@ -1003,7 +992,7 @@ describe("Tool-result clearing inheritance", () => {
     expect(JSON.stringify(record.prompt)).toContain(CLEARED_TOOL_RESULT_MARKER);
   });
 
-  it("clears nothing below threshold, on any of the three drive shapes", async () => {
+  it("clears nothing below threshold", async () => {
     const { run } = startRecordedRun();
     const record: { prompt?: unknown } = {};
     await driveOnce({
@@ -1151,7 +1140,7 @@ describe("driveOnce run events", () => {
       plan: {
         model,
         tools: toolsOf(async () => {
-          await sleep(40);
+          await sleep(10);
           return "ok";
         }),
         maxSteps: 3,

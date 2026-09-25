@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { DiskStorage } from "./disk.ts";
 import { ValidationError } from "../errors.ts";
+import { mockLogger } from "../test-setup.ts";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -8,6 +9,12 @@ import * as os from "node:os";
 describe("DiskStorage", () => {
   let tempDir: string;
   let storage: DiskStorage;
+
+  const exists = (key: string) =>
+    fs.access(path.join(tempDir, key)).then(
+      () => true,
+      () => false,
+    );
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "disk-storage-test-"));
@@ -19,96 +26,120 @@ describe("DiskStorage", () => {
   });
 
   describe("put", () => {
-    it("should store a file with metadata", async () => {
+    it("writes the object and a content-type sidecar, creating nested directories", async () => {
       const key = "org-1/ws-1/chat-1/msg-1/0-abc12345.png";
-      const data = Buffer.from("test file content");
-      const contentType = "image/png";
 
-      await storage.put(key, data, contentType);
+      await storage.put(key, Buffer.from("test file content"), "image/png");
 
-      // Verify file exists
       const filePath = path.join(tempDir, key);
-      const metaPath = `${filePath}.meta`;
-
-      const fileContent = await fs.readFile(filePath);
-      expect(fileContent.toString()).toBe("test file content");
-
-      const metaContent = await fs.readFile(metaPath, "utf-8");
-      const meta = JSON.parse(metaContent) as { contentType: string };
-      expect(meta.contentType).toBe("image/png");
+      expect((await fs.readFile(filePath)).toString()).toBe(
+        "test file content",
+      );
+      expect(
+        JSON.parse(await fs.readFile(`${filePath}.meta`, "utf-8")),
+      ).toEqual({ contentType: "image/png" });
     });
 
-    it("should create nested directories", async () => {
-      const key = "deeply/nested/path/file.txt";
-      const data = Buffer.from("nested content");
+    it("overwrites an existing object", async () => {
+      await storage.put("k.txt", Buffer.from("initial"), "text/plain");
+      await storage.put("k.txt", Buffer.from("updated"), "text/markdown");
 
-      await storage.put(key, data, "text/plain");
-
-      const filePath = path.join(tempDir, key);
-      const fileContent = await fs.readFile(filePath);
-      expect(fileContent.toString()).toBe("nested content");
+      const result = await storage.get("k.txt");
+      expect(result!.data.toString()).toBe("updated");
+      expect(result!.contentType).toBe("text/markdown");
     });
   });
 
   describe("get", () => {
-    it("should retrieve a stored file", async () => {
-      const key = "test-file.bin";
-      const data = Buffer.from([0, 1, 2, 3, 4, 5]);
-      const contentType = "application/octet-stream";
+    it("round-trips every byte value and the content type", async () => {
+      const data = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
 
-      await storage.put(key, data, contentType);
-      const result = await storage.get(key);
+      await storage.put("binary.bin", data, "application/octet-stream");
 
-      expect(result).not.toBeNull();
-      expect(result!.data).toEqual(data);
-      expect(result!.contentType).toBe(contentType);
+      expect(await storage.get("binary.bin")).toEqual({
+        data,
+        contentType: "application/octet-stream",
+      });
     });
 
-    it("should return null for non-existent file", async () => {
-      const result = await storage.get("non-existent-file");
-      expect(result).toBeNull();
+    it("returns null for a missing object", async () => {
+      expect(await storage.get("non-existent-file")).toBeNull();
     });
 
-    it("should handle binary content correctly", async () => {
-      const key = "binary.bin";
-      // Create a buffer with all byte values
-      const data = Buffer.alloc(256);
-      for (let i = 0; i < 256; i++) {
-        data[i] = i;
-      }
+    it("rethrows a read failure other than a missing file", async () => {
+      await storage.put("dir/file.txt", Buffer.from("x"), "text/plain");
+      await fs.writeFile(path.join(tempDir, "dir.meta"), "{}");
 
-      await storage.put(key, data, "application/octet-stream");
-      const result = await storage.get(key);
-
-      expect(result!.data).toEqual(data);
+      // `dir` is a directory, so reading it fails with EISDIR, not ENOENT.
+      await expect(storage.get("dir")).rejects.toMatchObject({
+        code: "EISDIR",
+      });
     });
   });
 
   describe("delete", () => {
-    it("should delete a stored file and its metadata", async () => {
-      const key = "to-delete.txt";
-      const data = Buffer.from("delete me");
+    it("removes the object and its sidecar", async () => {
+      await storage.put(
+        "to-delete.txt",
+        Buffer.from("delete me"),
+        "text/plain",
+      );
 
-      await storage.put(key, data, "text/plain");
-      await storage.delete(key);
+      await storage.delete("to-delete.txt");
 
-      const result = await storage.get(key);
-      expect(result).toBeNull();
+      expect(await exists("to-delete.txt")).toBe(false);
+      expect(await exists("to-delete.txt.meta")).toBe(false);
     });
 
-    it("should not throw for non-existent file", async () => {
-      // Should not throw
-      await expect(storage.delete("non-existent")).resolves.not.toThrow();
+    it("resolves quietly for a missing object", async () => {
+      await expect(storage.delete("non-existent")).resolves.toBeUndefined();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it("logs, rather than throws, an unlink failure other than a missing file", async () => {
+      // Both paths are directories, so each unlink fails with something other
+      // than ENOENT.
+      await fs.mkdir(path.join(tempDir, "k"));
+      await fs.mkdir(path.join(tempDir, "k.meta"));
+
+      await expect(storage.delete("k")).resolves.toBeUndefined();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ key: "k" }),
+        "Error deleting file from disk",
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ key: "k" }),
+        "Error deleting meta file from disk",
+      );
+    });
+  });
+
+  // The Agent avatar path composes its own key without the `keys.ts` gate, so
+  // this is the only containment guard on the disk backend.
+  describe("containment", () => {
+    const escapes = () => [
+      "../outside.txt",
+      "a/../../outside.txt",
+      path.join("..", `${path.basename(tempDir)}_secret`, "x.txt"),
+      path.join(os.tmpdir(), "absolute.txt"),
+      "a/..",
+      "",
+    ];
+
+    it("refuses every operation on a key that resolves outside the root", async () => {
+      for (const key of escapes()) {
+        await expect(
+          storage.put(key, Buffer.from("x"), "text/plain"),
+        ).rejects.toThrow(ValidationError);
+        await expect(storage.get(key)).rejects.toThrow(ValidationError);
+        await expect(storage.delete(key)).rejects.toThrow(ValidationError);
+      }
+      expect(await fs.readdir(tempDir)).toEqual([]);
     });
   });
 
   describe("deletePrefix", () => {
-    const exists = (key: string) =>
-      fs.access(path.join(tempDir, key)).then(
-        () => true,
-        () => false,
-      );
-
     it("removes every object and sidecar under the prefix and nothing beside it", async () => {
       const inside = ["o/w/c1/m1/0-a.png", "o/w/c2/m1/0-b.png"];
       const outside = ["o/w2/c1/m1/0-c.png", "o/w-other/c1/m1/0-d.png"];
@@ -144,28 +175,5 @@ describe("DiskStorage", () => {
         expect(await exists("o/w/c/m/0-a.png")).toBe(true);
       },
     );
-  });
-
-  describe("integration", () => {
-    it("should support full CRUD cycle", async () => {
-      const key = "crud-test/file.txt";
-      const data1 = Buffer.from("initial content");
-      const data2 = Buffer.from("updated content");
-
-      // Create
-      await storage.put(key, data1, "text/plain");
-      let result = await storage.get(key);
-      expect(result!.data.toString()).toBe("initial content");
-
-      // Update (put overwrites)
-      await storage.put(key, data2, "text/plain");
-      result = await storage.get(key);
-      expect(result!.data.toString()).toBe("updated content");
-
-      // Delete
-      await storage.delete(key);
-      result = await storage.get(key);
-      expect(result).toBeNull();
-    });
   });
 });

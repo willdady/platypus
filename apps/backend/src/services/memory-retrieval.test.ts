@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
+import { and, desc, eq, type SQL } from "drizzle-orm";
+import { memoryDailySummary as memoryDailySummaryTable } from "../db/schema.ts";
 
 import {
   retrieveRecentSummaries,
@@ -30,7 +32,7 @@ describe("retrieveRecentSummaries", () => {
     resetMockDb();
   });
 
-  it("queries the daily summary table ordered by summary_date desc", async () => {
+  it("reads only this user's summaries in this workspace, inside the window, newest first", async () => {
     const rows = [makeSummary()];
     mockDb.orderBy.mockResolvedValueOnce(rows);
 
@@ -41,8 +43,20 @@ describe("retrieveRecentSummaries", () => {
     );
 
     expect(result).toBe(rows);
-    expect(mockDb.select).toHaveBeenCalled();
-    expect(mockDb.orderBy).toHaveBeenCalled();
+    expect(mockDb.from).toHaveBeenCalledWith(memoryDailySummaryTable);
+    expect(mockDb.where).toHaveBeenCalledWith(
+      and(
+        eq(memoryDailySummaryTable.userId, "u1"),
+        eq(memoryDailySummaryTable.workspaceId, "ws-1"),
+        expect.objectContaining({
+          op: "sql",
+          values: [memoryDailySummaryTable.summaryDate, "2026-05-01"],
+        }) as unknown as SQL,
+      ),
+    );
+    expect(mockDb.orderBy).toHaveBeenCalledWith(
+      desc(memoryDailySummaryTable.summaryDate),
+    );
   });
 });
 
@@ -141,18 +155,6 @@ describe("resolveMemoryPin", () => {
       }),
     ).toEqual({ reuse: false });
   });
-
-  it("compares the idle gap, never the snapshot's own age", () => {
-    // An eight-hour-old snapshot within an active Chat (short gaps) is kept.
-    const previousTurnAt = new Date(now.getTime() - 60 * 1000);
-    expect(
-      resolveMemoryPin({
-        existingSnapshot: "block",
-        previousTurnAt,
-        now,
-      }),
-    ).toEqual({ reuse: true, block: "block" });
-  });
 });
 
 describe("formatSummariesForSystemPrompt", () => {
@@ -176,13 +178,17 @@ describe("formatSummariesForSystemPrompt", () => {
 
     const out = formatSummariesForSystemPrompt(summaries);
 
-    expect(out).toContain(
-      "Recent memory summaries from previous conversations:",
+    expect(out).toBe(
+      [
+        "Recent memory summaries from previous conversations:",
+        "",
+        "### 2026-04-29",
+        "Likes coffee.",
+        "",
+        "### 2026-04-28",
+        "Has a cat.",
+      ].join("\n"),
     );
-    expect(out).toContain("### 2026-04-29");
-    expect(out).toContain("Likes coffee.");
-    expect(out).toContain("### 2026-04-28");
-    expect(out).toContain("Has a cat.");
   });
 
   it("filters out blank summaries while keeping populated ones", () => {

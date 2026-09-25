@@ -10,7 +10,9 @@ import {
   resetFormHarness,
   stubAcceptedSave,
   stubRejectedSave,
+  savedBody,
 } from "@/lib/form-test-harness";
+import { installResizeObserverStub } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -80,7 +82,7 @@ describe("InvitationForm conflict handling", () => {
   });
 
   it("clears the form and reports success once the invite is accepted", async () => {
-    stubAcceptedSave({ id: "inv-1" }, 201);
+    const fetchMock = stubAcceptedSave({ id: "inv-1" }, 201);
 
     renderForm();
     submit();
@@ -89,5 +91,43 @@ describe("InvitationForm conflict handling", () => {
       expect(toastSuccess).toHaveBeenCalledWith("Invitation created"),
     );
     expect(screen.getByLabelText("Email")).toHaveValue("");
+    // A blank Workspace name and no Blueprints are left to the backend's
+    // defaults rather than sent empty.
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "http://test/organizations/org1/invitations",
+    );
+    expect(savedBody(fetchMock)).toEqual({ email: "user@example.com" });
+  });
+});
+
+describe("InvitationForm Blueprints", () => {
+  // ADR-0009: Blueprints apply in the order listed, so the order the reader
+  // arranged is the order that goes on the wire.
+  it("sends the chosen Blueprints in the arranged order, with the trimmed Workspace name", async () => {
+    setData({
+      results: [
+        { id: "b1", name: "Alpha" },
+        { id: "b2", name: "Beta" },
+      ],
+    });
+    const fetchMock = stubAcceptedSave({ id: "inv-1" }, 201);
+    // Radix's Switch measures itself.
+    installResizeObserverStub();
+    renderForm();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Alpha" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Beta" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Move earlier" })[1]);
+    fireEvent.change(screen.getByLabelText("Workspace name"), {
+      target: { value: "  Team space  " },
+    });
+    submit();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedBody(fetchMock)).toEqual({
+      email: "user@example.com",
+      workspaceName: "Team space",
+      blueprintIds: ["b2", "b1"],
+    });
   });
 });

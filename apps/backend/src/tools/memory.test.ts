@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { z } from "zod";
-import { callTool, mockDb, resetMockDb } from "../test-utils.ts";
+import { callTool, mockDb, resetMockDb, seedDb } from "../test-utils.ts";
 
 // The embedding call is the tool's one outbound dependency; mocking it keeps
 // these tests off a real provider. Its own behaviour is the embedding
@@ -143,6 +143,25 @@ describe("createMemoryTools", () => {
       );
     });
 
+    it("searches only this user's memories in this workspace, up to the limit", async () => {
+      mockEmbeddingConfig();
+      mockDb.execute.mockResolvedValueOnce({ rows: [] });
+
+      await callTool(tools.memorySearch, { query: "x", limit: 7 });
+
+      // The raw SQL reaches `execute` as the test-utils `sql` marker: the
+      // template's literal strings, and the values bound between them.
+      const { strings, values } = mockDb.execute.mock.calls[0][0] as {
+        strings: string[];
+        values: unknown[];
+      };
+      const boundAfter = (fragment: RegExp) =>
+        values[strings.findIndex((part) => fragment.test(part))];
+      expect(boundAfter(/user_id =\s*$/)).toBe(userId);
+      expect(boundAfter(/workspace_id =\s*$/)).toBe(workspaceId);
+      expect(boundAfter(/LIMIT\s*$/)).toBe(7);
+    });
+
     it("maps matched rows to date, summary and relevance", async () => {
       mockEmbeddingConfig();
       mockDb.execute.mockResolvedValueOnce({
@@ -244,10 +263,23 @@ describe("createMemoryTools", () => {
   });
 
   describe("memoryGet", () => {
-    it("returns the summary for a date", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { summaryDate: "2026-08-01", summary: "Shipped the plugin API" },
-      ]);
+    const summary = (over: Record<string, unknown>) => ({
+      id: `m-${String(over.summary)}`,
+      userId,
+      workspaceId,
+      summaryDate: "2026-08-01",
+      ...over,
+    });
+
+    it("returns this user's summary for a date in this workspace", async () => {
+      seedDb({
+        memory_daily_summary: [
+          summary({ userId: "user-2", summary: "Another user's day" }),
+          summary({ workspaceId: "ws-2", summary: "Another workspace's day" }),
+          summary({ summaryDate: "2026-07-31", summary: "The day before" }),
+          summary({ summary: "Shipped the plugin API" }),
+        ],
+      });
 
       expect(await callTool(tools.memoryGet, { date: "2026-08-01" })).toEqual({
         date: "2026-08-01",
@@ -255,11 +287,16 @@ describe("createMemoryTools", () => {
       });
     });
 
-    it("returns an error when there is no summary for that date", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+    it("does not return another user's or workspace's summary for that date", async () => {
+      seedDb({
+        memory_daily_summary: [
+          summary({ userId: "user-2", summary: "Another user's day" }),
+          summary({ workspaceId: "ws-2", summary: "Another workspace's day" }),
+        ],
+      });
 
-      expect(await callTool(tools.memoryGet, { date: "2026-08-02" })).toEqual({
-        error: "No memory summary found for date 2026-08-02",
+      expect(await callTool(tools.memoryGet, { date: "2026-08-01" })).toEqual({
+        error: "No memory summary found for date 2026-08-01",
       });
     });
 

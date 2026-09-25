@@ -126,7 +126,7 @@ describe("Composer model picker focus", () => {
 
     fireEvent.click(openPicker(trigger));
 
-    expect(onModelChange).toHaveBeenCalled();
+    expect(onModelChange).toHaveBeenCalledWith("provider:provider-1:gpt-4o");
     await waitFor(() => expect(document.activeElement).toBe(textarea));
   });
 
@@ -186,7 +186,7 @@ describe("Composer model picker focus", () => {
     fireEvent.mouseUp(item);
     fireEvent.click(item);
 
-    expect(onModelChange).toHaveBeenCalled();
+    expect(onModelChange).toHaveBeenCalledWith("provider:provider-1:gpt-4o");
     await waitFor(() => expect(document.activeElement).toBe(textarea));
   });
 });

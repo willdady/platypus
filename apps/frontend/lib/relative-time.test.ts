@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { formatRelativeTime } from "./relative-time";
 

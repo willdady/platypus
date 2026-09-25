@@ -1,27 +1,15 @@
+// @vitest-environment node
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { fetcher, joinUrl, optionalFetcher } from "./utils";
 
 describe("joinUrl", () => {
-  it("should join base URL and path", () => {
-    expect(joinUrl("http://localhost:4000", "/api/test")).toBe(
-      "http://localhost:4000/api/test",
-    );
-  });
-
-  it("should handle base URL with trailing slash", () => {
-    expect(joinUrl("http://localhost:4000/", "/api/test")).toBe(
-      "http://localhost:4000/api/test",
-    );
-  });
-
-  it("should handle path without leading slash", () => {
-    expect(joinUrl("http://localhost:4000", "api/test")).toBe(
-      "http://localhost:4000/api/test",
-    );
-  });
-
-  it("should return path when base is empty", () => {
-    expect(joinUrl("", "/api/test")).toBe("/api/test");
+  it.each([
+    ["http://localhost:4000", "/api/test", "http://localhost:4000/api/test"],
+    ["http://localhost:4000/", "/api/test", "http://localhost:4000/api/test"],
+    ["http://localhost:4000", "api/test", "http://localhost:4000/api/test"],
+    ["", "/api/test", "/api/test"],
+  ])("joins %j and %j as %j", (base, path, expected) => {
+    expect(joinUrl(base, path)).toBe(expected);
   });
 });
 

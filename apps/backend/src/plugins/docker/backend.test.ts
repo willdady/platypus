@@ -95,6 +95,8 @@ type MockState = {
   putArchiveCalls: PutArchiveCall[];
   execCalls: Record<string, unknown>[];
   pullCalls: string[];
+  // What the image pull's progress stream finishes with.
+  pullError: Error | null;
   // Recorded network.connect() calls (additional networks beyond the primary).
   networkConnectCalls: NetworkConnectCall[];
   // Per-container stop/remove handlers (keyed by container name).
@@ -200,7 +202,7 @@ vi.mock("dockerode", () => {
           _stream: PassThrough,
           cb: (err: Error | null) => void,
         ) => {
-          cb(null);
+          cb(mockState.pullError);
         },
         demuxStream: () => {
           // unused at the top level — production code reaches via container.modem
@@ -281,7 +283,6 @@ import {
 import { logger } from "../../logger.ts";
 import { plugin } from "./index.ts";
 import { loadPlugins } from "../loader.ts";
-import type { SandboxBackendContribution } from "@platypuschat/plugin-sdk";
 import {
   makeFakePluginLogger,
   makePluginContext,
@@ -293,7 +294,10 @@ import {
   SANDBOX_WORKSPACE_ROOT,
 } from "../../sandbox/index.ts";
 import { buildFindArgs } from "../../sandbox/posix.ts";
-import type { SandboxContext } from "../../sandbox/types.ts";
+import type {
+  SandboxBackendRegistration,
+  SandboxContext,
+} from "../../sandbox/types.ts";
 
 const ctx: SandboxContext = {
   orgId: "org-1",
@@ -312,6 +316,7 @@ function resetMockState() {
     putArchiveCalls: [],
     execCalls: [],
     pullCalls: [],
+    pullError: null,
     networkConnectCalls: [],
     containerStop: () => Promise.resolve(undefined),
     containerRemove: () => Promise.resolve(undefined),
@@ -461,6 +466,32 @@ describe("DockerSandboxTransport — provisioning", () => {
     expect(mockState.createContainerCalls).toHaveLength(0);
   });
 
+  it("surfaces a daemon failure that is not a missing container", async () => {
+    mockState.containerInspects.push(() =>
+      Promise.reject(makeStatusError("daemon unavailable", 500)),
+    );
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+
+    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
+      "daemon unavailable",
+    );
+    expect(mockState.createContainerCalls).toHaveLength(0);
+  });
+
+  it("fails provisioning when the image pull fails", async () => {
+    setContainerMissing();
+    setImageMissing();
+    mockState.pullError = new Error("pull access denied");
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+
+    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
+      "pull access denied",
+    );
+    expect(mockState.createContainerCalls).toHaveLength(0);
+  });
+
   it("in-flight memoisation: concurrent calls share one provisioning", async () => {
     setupFreshProvision();
     // Two parallel tool calls share the same provisioning. Each needs its own exec slot.
@@ -523,6 +554,59 @@ describe("DockerSandboxTransport — argv safety", () => {
     expect(call.Cmd).toEqual(
       buildFindArgs(SANDBOX_WORKSPACE_ROOT, { glob: "**/*.ts" }),
     );
+  });
+
+  it.each([
+    [
+      "the command's stderr",
+      "cat: nope: No such file or directory\n",
+      /No such file/,
+    ],
+    ["a generic reason when stderr is empty", "", /read failed/],
+  ])("fsRead reports %s when cat fails", async (_label, stderr, expected) => {
+    setupFreshProvision();
+    queueExec({ stderr, exitCode: 1 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+
+    await expect(backend.fsRead(ctx, { path: "nope" })).rejects.toThrow(
+      expected,
+    );
+  });
+
+  it("fsWrite creates a nested parent first and extracts into it", async () => {
+    mockState.existingContainer = makeFakeContainer();
+    queueExec({ exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.fsWrite(ctx, {
+      path: "a/b/c.txt",
+      content: "x",
+      mode: "overwrite",
+    });
+
+    expect(mockState.execCalls).toEqual([
+      expect.objectContaining({ Cmd: ["mkdir", "-p", "/workspace/a/b"] }),
+    ]);
+    expect(mockState.putArchiveCalls[0].opts).toEqual({
+      path: "/workspace/a/b",
+    });
+  });
+
+  it("fsWrite refuses to extract when the parent cannot be created", async () => {
+    mockState.existingContainer = makeFakeContainer();
+    queueExec({ exitCode: 1 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+
+    await expect(
+      backend.fsWrite(ctx, {
+        path: "a/b/c.txt",
+        content: "x",
+        mode: "overwrite",
+      }),
+    ).rejects.toThrow("failed to create parent directory: /workspace/a/b");
+    expect(mockState.putArchiveCalls).toHaveLength(0);
   });
 
   it("fsWrite create-mode probes with [test, -e, <path>] and throws if exists", async () => {
@@ -592,6 +676,15 @@ describe("DockerSandboxTransport — tar builder", () => {
     const nul = nameBytes.indexOf(0);
     expect(nameBytes.slice(0, nul).toString("utf8")).toBe("leading");
   });
+
+  it("buildSingleFileTar refuses an entry name over the 100-byte ustar field", () => {
+    expect(() =>
+      buildSingleFileTar("a".repeat(100), Buffer.from("x")),
+    ).not.toThrow();
+    expect(() => buildSingleFileTar("a".repeat(101), Buffer.from("x"))).toThrow(
+      /too long/,
+    );
+  });
 });
 
 describe("DockerSandboxTransport — destroy() idempotence", () => {
@@ -627,7 +720,7 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
     expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
-  it("logs but proceeds when stop returns 500", async () => {
+  it("logs to the injected logger but proceeds when stop returns 500", async () => {
     mockState.existingContainer = makeFakeContainer();
     mockState.containerStop = () =>
       Promise.reject(makeStatusError("internal", 500));
@@ -646,6 +739,11 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
     await backend.destroy(ctx);
 
     expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-abc" }),
+      "sandbox destroy: stop failed (continuing)",
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
     expect(removeCalled).toBe(true);
     expect(volRemoveCalled).toBe(true);
   });
@@ -679,7 +777,8 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
       { command: "sleep 300" },
       { signal: controller.signal },
     );
-    await new Promise((r) => setTimeout(r, 10));
+    // Provisioning's mkdir, then the command's own exec.
+    await vi.waitFor(() => expect(mockState.execCalls).toHaveLength(2));
     controller.abort();
 
     await expect(inflight).rejects.toThrow(/cancelled/i);
@@ -698,7 +797,7 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
       { command: "ls" },
       { signal: controller.signal },
     );
-    await new Promise((r) => setTimeout(r, 10));
+    await vi.waitFor(() => expect(mockState.execCalls).toHaveLength(2));
     controller.abort();
 
     await expect(inflight).rejects.toThrow(/cancelled/i);
@@ -893,21 +992,6 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
     expect(logger.info).not.toHaveBeenCalled();
   });
 
-  it("writes the destroy() warnings to the injected logger, not core's", async () => {
-    mockState.existingContainer = makeFakeContainer();
-    mockState.containerStop = () =>
-      Promise.reject(makeStatusError("internal", 500));
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.destroy(ctx);
-
-    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
-    expect(pluginLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "ws-abc" }),
-      "sandbox destroy: stop failed (continuing)",
-    );
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
-
   it("names each teardown step it could not complete", async () => {
     mockState.existingContainer = makeFakeContainer();
     mockState.containerStop = () =>
@@ -926,19 +1010,6 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
       "sandbox destroy: container remove failed (continuing)",
       "sandbox destroy: volume remove failed",
     ]);
-  });
-
-  it("degrades to silence when core injects no logger", async () => {
-    // `PluginConfigContext.logger` is optional under the SDK's append-only
-    // policy, so the adapter must not assume it. Core always supplies it; a
-    // directly-constructed adapter does not, and that must not throw.
-    mockState.existingContainer = makeFakeContainer();
-    mockState.containerStop = () =>
-      Promise.reject(makeStatusError("internal", 500));
-
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await expect(backend.destroy(ctx)).resolves.toBeUndefined();
-    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("reaches the adapter through the manifest's create()", async () => {
@@ -989,14 +1060,14 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
 
     // A capturing registrar so this load does not collide with the
     // module-global sandbox registry other suites in this file seed.
-    const captured: SandboxBackendContribution[] = [];
+    const captured: SandboxBackendRegistration<unknown, unknown>[] = [];
     await loadPlugins({
       pluginNames: ["@platypus/docker"],
       registerSandbox: (c) => captured.push(c),
       baseLogger,
     });
 
-    const backend = captured[0].create({}, {}, withPluginLogger());
+    const backend = captured[0].create({}, {});
     await backend.shellExec(ctx, { command: "echo hi" });
 
     expect(lines).toContainEqual({

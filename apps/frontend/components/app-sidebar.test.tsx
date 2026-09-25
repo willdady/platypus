@@ -7,9 +7,20 @@ import {
   beforeEach,
   afterEach,
 } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { installMatchMediaStub } from "@/lib/test-utils";
+import {
+  installMatchMediaStub,
+  installRadixPointerPolyfills,
+  jsonResponse,
+} from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -32,6 +43,8 @@ vi.mock("@/components/auth-provider", () => ({
 }));
 
 vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: vi.fn() }) }));
+
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 const LOADING = { data: undefined, isLoading: true };
 
@@ -189,5 +202,56 @@ describe("AppSidebar workspace switcher", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("Acme")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
+  });
+});
+
+describe("AppSidebar chat actions", () => {
+  beforeEach(() => {
+    // The writes resolve on real promises; nothing here needs the debounce.
+    vi.useRealTimers();
+    installRadixPointerPolyfills();
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Opens a chat row's menu. Its trigger has no accessible name. */
+  const openChatMenu = (title: string) => {
+    const trigger = screen
+      .getByText(title)
+      .closest("li")!
+      .querySelector('[aria-haspopup="menu"]')!;
+    fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
+    fireEvent.click(trigger, { button: 0 });
+    return screen.getByRole("menu");
+  };
+
+  // The update is a full PUT, so pinning must carry the title and tags over
+  // rather than blank them.
+  it("pins a chat, keeping its title and tags", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    seedHeader();
+    setRead("ws1", CHAT_LIST, {
+      results: [{ ...chat("c1", "First chat"), tags: ["ops"] }],
+    });
+    renderSidebar();
+
+    fireEvent.click(
+      within(openChatMenu("First chat")).getByRole("menuitem", {
+        name: "Pin",
+      }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://test/organizations/org1/workspaces/ws1/chat/c1");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body)).toEqual({
+      workspaceId: "ws1",
+      title: "First chat",
+      isPinned: true,
+      tags: ["ops"],
+    });
   });
 });

@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import {
+  mockDb,
+  mockSession,
+  resetMockDb,
+  seedDb,
+  type Row,
+} from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("User Invitation Routes", () => {
@@ -12,30 +18,50 @@ describe("User Invitation Routes", () => {
 
   const baseUrl = "/users/me/invitations";
 
+  const DAY = 24 * 60 * 60 * 1000;
+
+  /**
+   * Invitations around the session user (`user@example.com`): one live pending
+   * invite, plus one each that is expired, already declined, and addressed to
+   * someone else — none of which the user may list or decline.
+   */
+  const seedInvitations = () => {
+    const invite = (over: Row): Row => ({
+      organizationId: "org-1",
+      invitedBy: "admin-1",
+      email: "user@example.com",
+      status: "pending",
+      expiresAt: new Date(Date.now() + 7 * DAY),
+      ...over,
+    });
+    return seedDb({
+      organization: [{ id: "org-1", name: "Org 1" }],
+      user: [{ id: "admin-1", name: "Admin" }],
+      invitation: [
+        invite({ id: "inv-live" }),
+        invite({ id: "inv-expired", expiresAt: new Date(Date.now() - DAY) }),
+        invite({ id: "inv-declined", status: "declined" }),
+        invite({ id: "inv-other", email: "someone@example.com" }),
+      ],
+    });
+  };
+
   describe("GET /", () => {
-    it("should list pending invitations for user", async () => {
+    it("lists only the user's live pending invitations", async () => {
       mockSession({ id: "u1", email: "user@example.com", role: "user" });
-
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 7);
-
-      const mockInvitations = [
-        {
-          id: "inv-1",
-          email: "user@example.com",
-          status: "pending",
-          expiresAt: futureDate.toISOString(),
-          organizationName: "Org 1",
-          workspaceName: "WS 1",
-          invitedByName: "Admin",
-        },
-      ];
-
-      mockDb.where.mockResolvedValueOnce(mockInvitations);
+      seedInvitations();
 
       const res = await app.request(baseUrl);
+
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockInvitations });
+      const body = (await res.json()) as { results: Row[] };
+      expect(body.results).toEqual([
+        expect.objectContaining({
+          id: "inv-live",
+          organizationName: "Org 1",
+          invitedByName: "Admin",
+        }),
+      ]);
     });
   });
 
@@ -375,21 +401,41 @@ describe("User Invitation Routes", () => {
   });
 
   describe("POST /:invitationId/decline", () => {
+    const decline = (id: string) =>
+      app.request(`${baseUrl}/${id}/decline`, { method: "POST" });
+
     it("should decline invitation", async () => {
       mockSession({ id: "u1", email: "user@example.com", role: "user" });
+      const fake = seedInvitations();
 
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "inv-1", status: "declined" },
-      ]);
-
-      const res = await app.request(`${baseUrl}/inv-1/decline`, {
-        method: "POST",
-      });
+      const res = await decline("inv-live");
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Invitation declined" });
+      expect(
+        fake.tables.invitation.find((i) => i.id === "inv-live")?.status,
+      ).toBe("declined");
+    });
+
+    it.each([
+      ["someone else's invitation", "inv-other", "pending"],
+      ["an already-processed invitation", "inv-declined", "declined"],
+    ])("returns 404 for %s", async (_label, id, status) => {
+      mockSession({ id: "u1", email: "user@example.com", role: "user" });
+      const fake = seedInvitations();
+
+      const res = await decline(id);
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: "Invitation not found or already processed",
+      });
+      expect(fake.tables.invitation.find((i) => i.id === id)?.status).toBe(
+        status,
+      );
     });
   });
+
   // #548: an invitation created for a mixed-case address was stored verbatim,
   // while better-auth lower-cases `user.email` on sign-up. Every read here
   // matches the column with an exact equality predicate, so the invitee never

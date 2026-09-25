@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 import { logger } from "../logger.ts";
+import { and, eq } from "drizzle-orm";
+import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
+import { UNTITLED_CHAT_TITLE } from "@platypus/schemas";
 
 const { mockGenerateText, mockLanguageModel, mockLoadActivePath } = vi.hoisted(
   () => ({
@@ -123,6 +126,63 @@ describe("generateChatMetadata", () => {
     expect(setArg.title).toBe("Centering a div");
     // kebab-cased + deduped
     expect(setArg.tags).toEqual(["css", "layout"]);
+    // Read and written only within this Workspace; the write only while the
+    // Chat is still Untitled.
+    expect(mockDb.where).toHaveBeenCalledWith(
+      and(eq(chatTable.id, "chat-1"), eq(chatTable.workspaceId, "ws-1")),
+    );
+    expect(mockDb.where).toHaveBeenLastCalledWith(
+      and(
+        eq(chatTable.id, "chat-1"),
+        eq(chatTable.workspaceId, "ws-1"),
+        eq(chatTable.title, UNTITLED_CHAT_TITLE),
+      ),
+    );
+  });
+
+  it("offers the workspace's existing tags and sends only the text of each message", async () => {
+    stubReads({
+      chat: {
+        id: "chat-1",
+        title: "Untitled",
+        messages: [
+          {
+            id: "m-1",
+            role: "user",
+            parts: [
+              { type: "file", mediaType: "image/png", url: "data:," },
+              { type: "text", text: "What is this?" },
+            ],
+          },
+        ],
+      },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider,
+      existingTags: ["css", "web-browser"],
+    });
+    mockGenerateText.mockResolvedValueOnce({
+      output: { title: "Titled", tags: ["css"] },
+    });
+    mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+
+    await generateChatMetadata(params);
+
+    const { prompt } = mockGenerateText.mock.calls[0][0] as { prompt: string };
+    expect(prompt).toContain(
+      "Existing tags in this workspace: css, web-browser",
+    );
+    expect(prompt).toContain("Conversation:\nuser:\nWhat is this?");
+    expect(prompt).not.toContain("data:,");
+  });
+
+  it("returns null when the workspace does not exist", async () => {
+    stubReads({
+      chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+      workspace: null as never,
+    });
+
+    await expect(generateChatMetadata(params)).resolves.toBeNull();
+    expect(mockGenerateText).not.toHaveBeenCalled();
   });
 
   it("truncates a title longer than 30 characters", async () => {
@@ -159,8 +219,8 @@ describe("generateChatMetadata", () => {
 
     const result = await generateChatMetadata(params);
     expect(result).not.toBeNull();
-    // The provider lookup ran (workspace + provider reads consumed).
-    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(eq).toHaveBeenCalledWith(providerTable.id, "override-provider");
+    expect(eq).not.toHaveBeenCalledWith(providerTable.id, "p1");
   });
 
   it("skips (returns null) when the chat is already titled", async () => {

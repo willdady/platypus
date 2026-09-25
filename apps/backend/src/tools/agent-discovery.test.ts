@@ -1,38 +1,66 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { describe, it, expect, beforeEach } from "vitest";
+import { callTool, resetMockDb, seedDb } from "../test-utils.ts";
 
 import { createAgentDiscoveryTools } from "./agent-discovery.ts";
+import { registerToolSet } from "./index.ts";
 
-const ctx = { toolCallId: "test", messages: [], context: {} };
 const workspaceId = "ws-1";
 const orgId = "org-1";
 const frontendUrl = "http://localhost:3000";
 
+type Scope = { workspaceId?: string; organizationId?: string };
+const mine: Scope = { workspaceId };
+const org: Scope = { organizationId: orgId };
+
+const row = (id: string, scope: Scope, over: Record<string, unknown> = {}) => ({
+  id,
+  name: id,
+  workspaceId: scope.workspaceId ?? null,
+  organizationId: scope.organizationId ?? null,
+  ...over,
+});
+
+const attached = (
+  resourceType: string,
+  resourceId: string,
+  ws = workspaceId,
+) => ({
+  id: `att-${resourceId}-${ws}`,
+  workspaceId: ws,
+  resourceType,
+  resourceId,
+});
+
 /**
- * Stubs the two queries every scoped lookup runs: the workspace-scoped rows,
- * then the org-scoped (Shared) rows inner-joined to this workspace's
- * Attachments. A join result is keyed by table name, which is why the second
- * argument wraps each row.
+ * One visible row of `type` per scope (this workspace's own, and a Shared one
+ * attached here), plus the rows that must never reach this workspace: another
+ * workspace's, a Shared one attached only elsewhere, and another org's.
  */
-const stubScopedList = (
-  resourceType: "agent" | "mcp" | "provider",
-  workspaceRows: Record<string, unknown>[],
-  attachedOrgRows: Record<string, unknown>[],
+const seedScoped = (
+  type: "agent" | "mcp" | "provider",
+  fields: (id: string) => Record<string, unknown> = () => ({}),
 ) => {
-  mockDb.where.mockResolvedValueOnce(workspaceRows);
-  mockDb.where.mockResolvedValueOnce(
-    attachedOrgRows.map((row) => ({
-      [resourceType]: row,
-      attachment: { id: `att-${String(row.id)}` },
-    })),
-  );
+  const seeded = (id: string, scope: Scope) => row(id, scope, fields(id));
+  return {
+    [type]: [
+      seeded(`${type}-mine`, mine),
+      seeded(`${type}-shared`, org),
+      seeded(`${type}-elsewhere`, { workspaceId: "ws-2" }),
+      seeded(`${type}-unattached`, org),
+      seeded(`${type}-other-org`, { organizationId: "org-2" }),
+    ],
+    attachment: [
+      attached(type, `${type}-shared`),
+      attached(type, `${type}-unattached`, "ws-2"),
+      attached(type, `${type}-other-org`),
+    ],
+  };
 };
 
 describe("createAgentDiscoveryTools", () => {
   let tools: ReturnType<typeof createAgentDiscoveryTools>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     resetMockDb();
     tools = createAgentDiscoveryTools(workspaceId, orgId, frontendUrl);
   });
@@ -47,67 +75,28 @@ describe("createAgentDiscoveryTools", () => {
   });
 
   describe("listModelProviders", () => {
-    it("returns workspace providers and attached shared providers", async () => {
-      stubScopedList(
-        "provider",
-        [{ id: "p1", name: "Provider 1", modelIds: ["model-a", "model-b"] }],
-        [{ id: "p-org", name: "Shared Provider", modelIds: ["model-c"] }],
-      );
-
-      expect(await tools.listModelProviders.execute!({}, ctx)).toEqual([
-        { id: "p1", name: "Provider 1", modelIds: ["model-a", "model-b"] },
-        { id: "p-org", name: "Shared Provider", modelIds: ["model-c"] },
-      ]);
-    });
-
-    it("omits a shared provider that is not attached to this workspace", async () => {
+    it("lists only this workspace's providers and the Shared ones attached here", async () => {
       // An unattached Shared Provider cannot resolve at Chat-turn time, so
       // offering it would only produce an Agent that cannot run.
-      stubScopedList(
-        "provider",
-        [{ id: "p1", name: "Provider 1", modelIds: ["model-a"] }],
-        [],
-      );
+      seedDb(seedScoped("provider", () => ({ modelIds: ["model-a"] })));
 
-      expect(await tools.listModelProviders.execute!({}, ctx)).toEqual([
-        { id: "p1", name: "Provider 1", modelIds: ["model-a"] },
-      ]);
-      // The org-scoped half is gated by a join on the Attachment table. Without
-      // it the whole organization's providers would be listed, attached or not.
-      expect(mockDb.innerJoin).toHaveBeenCalledTimes(1);
-    });
-
-    it("flattens per-model object modelIds to plain id strings", async () => {
-      stubScopedList(
-        "provider",
-        [
-          {
-            id: "p1",
-            name: "Provider 1",
-            modelIds: [
-              { id: "model-a", passthroughFileTypes: ["image/*"] },
-              { id: "model-b", passthroughFileTypes: [] },
-            ],
-          },
-        ],
-        [],
-      );
-
-      expect(await tools.listModelProviders.execute!({}, ctx)).toEqual([
-        { id: "p1", name: "Provider 1", modelIds: ["model-a", "model-b"] },
+      expect(await callTool(tools.listModelProviders, {})).toEqual([
+        { id: "provider-mine", name: "provider-mine", modelIds: ["model-a"] },
+        {
+          id: "provider-shared",
+          name: "provider-shared",
+          modelIds: ["model-a"],
+        },
       ]);
     });
 
-    it("advertises an aliased model by its alias reference, not its id", async () => {
+    it("advertises per-model objects by id, and an aliased model by its alias reference", async () => {
       // The tool is the agentic counterpart of the Agent model picker, so it
       // offers what the picker submits — otherwise an agent it creates pins the
       // concrete id and misses the next repoint (#386, ADR-0017).
-      stubScopedList(
-        "provider",
-        [
-          {
-            id: "p1",
-            name: "Provider 1",
+      seedDb({
+        provider: [
+          row("p1", mine, {
             modelIds: [
               {
                 id: "gpt-4",
@@ -116,143 +105,100 @@ describe("createAgentDiscoveryTools", () => {
               },
               { id: "gpt-4o-mini", passthroughFileTypes: [] },
             ],
-          },
+          }),
         ],
-        [],
-      );
+      });
 
-      expect(await tools.listModelProviders.execute!({}, ctx)).toEqual([
-        {
-          id: "p1",
-          name: "Provider 1",
-          modelIds: ["alias:flagship", "gpt-4o-mini"],
-        },
+      expect(await callTool(tools.listModelProviders, {})).toEqual([
+        { id: "p1", name: "p1", modelIds: ["alias:flagship", "gpt-4o-mini"] },
       ]);
     });
   });
 
-  describe("listToolSets", () => {
-    it("includes attached shared MCPs alongside the registered tool sets", async () => {
-      stubScopedList(
-        "mcp",
-        [{ id: "mcp-ws", name: "Workspace MCP" }],
-        [{ id: "mcp-org", name: "Shared MCP" }],
-      );
-
-      const result = (await tools.listToolSets.execute!({}, ctx)) as Array<{
-        id: string;
-        name: string;
-        category: string;
-      }>;
-
-      expect(result).toEqual(
-        expect.arrayContaining([
-          { id: "mcp-ws", name: "Workspace MCP", category: "MCP" },
-          { id: "mcp-org", name: "Shared MCP", category: "MCP" },
-        ]),
-      );
-      // The statically registered sets are still listed.
-      expect(result.some((entry) => entry.category !== "MCP")).toBe(true);
+  it("listToolSets lists the registered tool sets and this workspace's visible MCPs", async () => {
+    registerToolSet("test-set", {
+      name: "Test set",
+      category: "Testing",
+      description: "A registered set",
+      buildTurnTools: () => Promise.resolve({}),
     });
+    seedDb(seedScoped("mcp"));
+
+    const result = (await callTool(tools.listToolSets, {})) as {
+      category: string;
+    }[];
+
+    expect(result).toContainEqual({
+      id: "test-set",
+      name: "Test set",
+      category: "Testing",
+      description: "A registered set",
+    });
+    expect(result.filter((entry) => entry.category === "MCP")).toEqual([
+      { id: "mcp-mine", name: "mcp-mine", category: "MCP" },
+      { id: "mcp-shared", name: "mcp-shared", category: "MCP" },
+    ]);
   });
 
-  describe("listAgents", () => {
-    it("returns workspace agents and attached shared agents, each tagged with its scope", async () => {
-      stubScopedList(
-        "agent",
-        [
-          {
-            id: "a1",
-            name: "Agent 1",
-            description: "Local",
-            modelId: "m1",
-            providerId: "p1",
-          },
-        ],
-        [
-          {
-            id: "a-org",
-            name: "Shared Agent",
-            description: "Shared",
-            modelId: "m1",
-            providerId: "p-org",
-          },
-        ],
-      );
+  it("listAgents lists this workspace's agents and attached Shared ones, tagged with scope", async () => {
+    seedDb(
+      seedScoped("agent", (id) => ({
+        description: `${id} description`,
+        modelId: "m1",
+        providerId: "p1",
+      })),
+    );
 
-      expect(await tools.listAgents.execute!({}, ctx)).toEqual([
-        {
-          id: "a1",
-          name: "Agent 1",
-          description: "Local",
-          modelId: "m1",
-          providerId: "p1",
-          scope: "workspace",
-        },
-        {
-          id: "a-org",
-          name: "Shared Agent",
-          description: "Shared",
-          modelId: "m1",
-          providerId: "p-org",
-          scope: "organization",
-        },
-      ]);
-    });
+    expect(await callTool(tools.listAgents, {})).toEqual([
+      {
+        id: "agent-mine",
+        name: "agent-mine",
+        description: "agent-mine description",
+        modelId: "m1",
+        providerId: "p1",
+        scope: "workspace",
+      },
+      {
+        id: "agent-shared",
+        name: "agent-shared",
+        description: "agent-shared description",
+        modelId: "m1",
+        providerId: "p1",
+        scope: "organization",
+      },
+    ]);
   });
 
   describe("getAgent", () => {
-    it("returns error when agent not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
-
-      expect(
-        await tools.getAgent.execute!(
-          { agentId: "bad-id", label: "test" },
-          ctx,
-        ),
-      ).toEqual({ error: "Agent not found" });
+    beforeEach(() => {
+      seedDb(seedScoped("agent", () => ({ avatarKey: "agents/a.png" })));
     });
 
-    it("returns error for a shared agent that is not attached to this workspace", async () => {
-      // The row exists at org scope; the attachment lookup finds nothing.
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "a-org", name: "Shared Agent", organizationId: orgId },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-
+    it("returns every field but the avatar key, tagged with scope, with a link", async () => {
       expect(
-        await tools.getAgent.execute!(
-          { agentId: "a-org", label: "Shared Agent" },
-          ctx,
-        ),
-      ).toEqual({ error: "Agent not found" });
-    });
-
-    it("returns agent details when found, tagged with its scope", async () => {
-      mockDb.limit.mockResolvedValue([
-        {
-          id: "a1",
-          name: "Agent 1",
-          workspaceId,
-          modelId: "m1",
-          providerId: "p1",
-          avatarKey: "agents/a1.png",
-        },
-      ]);
-
-      const result = (await tools.getAgent.execute!(
-        { agentId: "a1", label: "Agent 1" },
-        ctx,
-      )) as { id: string; name: string; scope: string; url?: string };
-
-      expect(result).toMatchObject({
-        id: "a1",
-        name: "Agent 1",
+        await callTool(tools.getAgent, { agentId: "agent-mine", label: "A" }),
+      ).toEqual({
+        ...row("agent-mine", mine),
         scope: "workspace",
+        url: "http://localhost:3000/org-1/workspace/ws-1/agents/agent-mine",
       });
-      expect(result.url).toContain("agents/a1");
-      // The avatar key is not a field the model has any use for.
-      expect(result).not.toHaveProperty("avatarKey");
+    });
+
+    it("returns an attached Shared agent", async () => {
+      expect(
+        await callTool(tools.getAgent, { agentId: "agent-shared", label: "A" }),
+      ).toMatchObject({ id: "agent-shared", scope: "organization" });
+    });
+
+    it.each([
+      "agent-elsewhere",
+      "agent-unattached",
+      "agent-other-org",
+      "missing",
+    ])("does not find %s", async (agentId) => {
+      expect(await callTool(tools.getAgent, { agentId, label: "A" })).toEqual({
+        error: "Agent not found",
+      });
     });
   });
 });

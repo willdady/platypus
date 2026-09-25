@@ -402,26 +402,6 @@ describe("loadPlugins", () => {
     ).rejects.toThrow(/@bad\/plugin.*contributes/s);
   });
 
-  it("aborts (fail-loud) on a non-numeric apiVersion", async () => {
-    const { register } = makeRegister();
-    await expect(
-      loadPlugins({
-        pluginNames: ["@bad/plugin"],
-        builtinPlugins: {},
-        importPlugin: () =>
-          Promise.resolve({
-            plugin: {
-              name: "@bad/plugin",
-              version: "0.1.0",
-              apiVersion: "1",
-              contributes: {},
-            },
-          }),
-        register,
-      }),
-    ).rejects.toThrow(/@bad\/plugin.*apiVersion/s);
-  });
-
   it("aborts (fail-loud) when a module exports no manifest", async () => {
     const { register } = makeRegister();
     await expect(
@@ -1728,7 +1708,11 @@ describe("loadPlugins — deploy-time config targeting (ADR-0013)", () => {
 });
 
 describe("loadPlugins — apiVersion integer hardening (ADR-0013)", () => {
-  it("rejects a non-integer apiVersion", async () => {
+  it.each([
+    ["a non-numeric", "1"],
+    ["a non-integer", 1.5],
+    ["a zero (no phantom v0)", 0],
+  ])("rejects %s apiVersion", async (_label, apiVersion) => {
     await expect(
       loadPlugins({
         pluginNames: ["@bad/plugin"],
@@ -1738,26 +1722,7 @@ describe("loadPlugins — apiVersion integer hardening (ADR-0013)", () => {
             plugin: {
               name: "bad",
               version: "0.1.0",
-              apiVersion: 1.5,
-              contributes: {},
-            },
-          }),
-        register: () => {},
-      }),
-    ).rejects.toThrow(/@bad\/plugin.*apiVersion.*positive integer/s);
-  });
-
-  it("rejects a zero apiVersion (no phantom v0)", async () => {
-    await expect(
-      loadPlugins({
-        pluginNames: ["@bad/plugin"],
-        builtinPlugins: {},
-        importPlugin: () =>
-          Promise.resolve({
-            plugin: {
-              name: "bad",
-              version: "0.1.0",
-              apiVersion: 0,
+              apiVersion,
               contributes: {},
             },
           }),

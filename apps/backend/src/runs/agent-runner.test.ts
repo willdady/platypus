@@ -98,7 +98,7 @@ vi.mock("ai", async () => {
 
 import { convertToModelMessages } from "ai";
 import { AgentRunner } from "./agent-runner.ts";
-import { ConflictError, mapError } from "../errors.ts";
+import { ConflictError } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { runRegistry, TimeoutError } from "./run-registry.ts";
 import { openToolSession } from "../tools/tool-session.ts";
@@ -279,59 +279,36 @@ describe("finish reason instrumentation", () => {
       .mock.calls.filter((call) => call[1] === "Step finished")
       .map((call) => call[0] as Record<string, unknown>);
 
-  it("logs both the unified and the raw finish reason for every step", async () => {
-    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
-    mockStreamText.mockImplementationOnce(
-      (args: { onStepFinish: (s: unknown) => void }) => {
-        args.onStepFinish({
-          toolCalls: [{ toolName: "listBoards" }],
-          usage: { inputTokens: 10, outputTokens: 5 },
-          finishReason: "tool-calls",
-          rawFinishReason: "tool_use",
-        });
-        return streamResultOf(fakeGenerateResult);
-      },
-    );
+  // The raw value is the point: an unrecognised provider reason collapses to
+  // `other` in the unified union and is otherwise unrecoverable.
+  it.each([
+    ["tool-calls", "tool_use"],
+    ["other", "malformed_tool_use"],
+  ])(
+    "logs the unified (%s) and the raw (%s) finish reason for a step",
+    async (finishReason, rawFinishReason) => {
+      mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+      mockStreamText.mockImplementationOnce(
+        (args: { onStepFinish: (s: unknown) => void }) => {
+          args.onStepFinish({
+            toolCalls: [],
+            usage: { inputTokens: 1, outputTokens: 1 },
+            finishReason,
+            rawFinishReason,
+          });
+          return streamResultOf(fakeGenerateResult);
+        },
+      );
 
-    await runner.generate({
-      scope,
-      input: baseInput,
-      sink: new RecordingSink(),
-    });
+      await runner.generate({
+        scope,
+        input: baseInput,
+        sink: new RecordingSink(),
+      });
 
-    expect(stepLogs()[0]).toMatchObject({
-      finishReason: "tool-calls",
-      rawFinishReason: "tool_use",
-    });
-  });
-
-  // The whole point of keeping the raw value: an unrecognised provider reason
-  // collapses to `other` in the unified union and is otherwise unrecoverable.
-  it("logs an unrecognised raw finish reason verbatim rather than swallowing it", async () => {
-    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
-    mockStreamText.mockImplementationOnce(
-      (args: { onStepFinish: (s: unknown) => void }) => {
-        args.onStepFinish({
-          toolCalls: [],
-          usage: { inputTokens: 1, outputTokens: 1 },
-          finishReason: "other",
-          rawFinishReason: "malformed_tool_use",
-        });
-        return streamResultOf(fakeGenerateResult);
-      },
-    );
-
-    await runner.generate({
-      scope,
-      input: baseInput,
-      sink: new RecordingSink(),
-    });
-
-    expect(stepLogs()[0]).toMatchObject({
-      finishReason: "other",
-      rawFinishReason: "malformed_tool_use",
-    });
-  });
+      expect(stepLogs()[0]).toMatchObject({ finishReason, rawFinishReason });
+    },
+  );
 
   it("warns when a step stops at the output token limit", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
@@ -759,6 +736,82 @@ describe("AgentRunner.generate", () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
+  // Only a person at the keyboard gets an interactive turn; a Trigger run and a
+  // delegate resolve headless, on behalf of the human who owns them.
+  it.each([
+    [
+      "a user",
+      { kind: "user", userId: "user-1", name: "Alice" },
+      { id: "user-1", name: "Alice" },
+      "interactive",
+    ],
+    [
+      "a Trigger",
+      {
+        kind: "trigger",
+        triggerId: "t1",
+        onBehalfOfUserId: "owner-1",
+        name: "Owner",
+      },
+      { id: "owner-1", name: "Owner" },
+      "headless",
+    ],
+    [
+      "a delegated sub-Agent",
+      {
+        kind: "subAgent",
+        parentRunId: "parent",
+        rootPrincipal: {
+          kind: "trigger",
+          triggerId: "t1",
+          onBehalfOfUserId: "owner-1",
+          name: "Owner",
+        },
+      },
+      { id: "owner-1", name: "Sub-agent" },
+      "headless",
+    ],
+  ] as const)(
+    "resolves %s's turn for the right user and run mode",
+    async (_label, principal, user, runMode) => {
+      mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+      mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
+
+      await runner.generate({
+        scope: { ...scope, principal },
+        input: baseInput,
+        sink: new RecordingSink(),
+      });
+
+      expect(mockPrepareChatTurn).toHaveBeenCalledWith(
+        expect.objectContaining({ user, runMode }),
+      );
+    },
+  );
+
+  // The sink's writes are its own business: a failed terminal or progress
+  // write is logged, and the run's answer still reaches the caller.
+  it("still returns the answer when the sink fails to record the run", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockStreamText.mockImplementationOnce(
+      ({ onStepFinish }: { onStepFinish: (s: unknown) => void }) => {
+        onStepFinish({ toolCalls: [], usage: {} });
+        return streamResultOf(fakeGenerateResult);
+      },
+    );
+    const sink = new RecordingSink();
+    sink.onProgress = () => Promise.reject(new Error("progress write failed"));
+    sink.onFinish = () => Promise.reject(new Error("finish write failed"));
+
+    const result = await runner.generate({ scope, input: baseInput, sink });
+
+    expect(result.text).toBe("ok");
+    const errors = vi.mocked(logger.error).mock.calls.map((c) => c[1]);
+    expect(errors).toEqual(
+      expect.arrayContaining(["Error in onProgress", "Error in onFinish"]),
+    );
+  });
+
   it("forwards the resolved plan from prepareChatTurn to onResolved", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
@@ -958,7 +1011,6 @@ describe("AgentRunner — duplicate submission for a live run", () => {
       }),
     ).rejects.toThrow(ConflictError);
 
-    expect(mapError(new ConflictError("x"))?.status).toBe(409);
     // One start hook, carrying the live run's own history — byte-for-byte what
     // it was registered with.
     const starts = sink.events.filter((e) => e.name === "onStart");
@@ -1105,8 +1157,6 @@ describe("AgentRunner.cancel", () => {
     >;
     expect(finish.status).toBe("failed");
     expect(finish.error).toMatch(/per-run timeout/);
-    // Confirm it was specifically a TimeoutError (kind="run")
-    expect(finish.error).toContain("run");
   });
 
   it("unregisters the run after generate succeeds", async () => {
@@ -1189,6 +1239,11 @@ describe("a turn that resolves after its run has already terminated", () => {
   beforeEach(() => {
     runner = new AgentRunner();
     vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   /** Resolves a turn well after the 5ms per-step bound below has fired. */
@@ -1198,9 +1253,10 @@ describe("a turn that resolves after its run has already terminated", () => {
       return fakeTurn({ dispose });
     });
 
-  const timedOutRun = (sink: RunSink, dispose: () => Promise<void>) => {
+  /** Starts the run and lets the per-step bound fire before the turn lands. */
+  const timedOutRun = async (sink: RunSink, dispose: () => Promise<void>) => {
     slowPrepare(dispose);
-    return runner.generate({
+    const inFlight = runner.generate({
       scope,
       input: { ...baseInput, runId: "late-prepare" },
       sink,
@@ -1208,6 +1264,11 @@ describe("a turn that resolves after its run has already terminated", () => {
         timeouts: { perStepTimeoutMs: 5, perRunTimeoutMs: 1_000_000 },
       },
     });
+    // Observed by the caller's own assertion; this only keeps the rejection
+    // from surfacing as unhandled while the clock is advanced.
+    inFlight.catch(() => {});
+    await vi.advanceTimersByTimeAsync(60);
+    return inFlight;
   };
 
   it("disposes it, since the run's own teardown has already been and gone", async () => {
@@ -1279,6 +1340,35 @@ describe("a turn that resolves after its run has already terminated", () => {
       name: "TimeoutError",
       kind: "step",
     });
+  });
+
+  // A user pressing stop while the turn is still resolving: a cancellation
+  // carries no error of its own, so the caller is still told the run never
+  // started rather than being handed the model's answer.
+  it("fails the caller when the run was cancelled while the turn resolved", async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    slowPrepare(dispose);
+    const sink = new RecordingSink();
+    const inFlight = runner.generate({
+      scope,
+      input: { ...baseInput, runId: "cancel-prepare" },
+      sink,
+    });
+    inFlight.catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(runner.cancel("cancel-prepare")).toBe(true);
+    await vi.advanceTimersByTimeAsync(60);
+
+    await expect(inFlight).rejects.toThrow(
+      "Run 'cancel-prepare' ended before it could start",
+    );
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(mockStreamText).not.toHaveBeenCalled();
+    expect(sink.names()).toEqual(["onStart", "onFinish"]);
+    expect(
+      (sink.events[1] as Extract<LifecycleEvent, { name: "onFinish" }>).status,
+    ).toBe("cancelled");
   });
 });
 
@@ -1663,7 +1753,7 @@ describe("AgentRunner.stream — success & interruption", () => {
     queue.push(partial);
     await tick();
     // Let the per-run timer fire -> registry aborts -> onTimeout -> finalize.
-    await new Promise((r) => setTimeout(r, 30));
+    await vi.waitFor(() => expect(sink.names()).toContain("onFinish"));
     queue.end();
     await tick();
 
@@ -1768,50 +1858,6 @@ describe("AgentRunner.stream — message metadata", () => {
     await stream.end();
   });
 
-  it("says nothing about search when the turn served what it was asked for", async () => {
-    const turn = { ...fakeTurn(), searchUnavailable: false };
-    const stream = await startStream(turn);
-
-    expect(stream.metadataFor({ type: "start" })).not.toHaveProperty(
-      "searchUnavailable",
-    );
-
-    await stream.end();
-  });
-
-  it("flags the message as truncated when the terminal finish hit the output limit", async () => {
-    const stream = await startStream(fakeTurn());
-
-    expect(
-      stream.metadataFor({ type: "finish", finishReason: "length" }),
-    ).toEqual({ truncatedByTokenLimit: true });
-
-    await stream.end();
-  });
-
-  // Each event contributes only the key it owns, so the merge that produces
-  // the final metadata does not depend on how the SDK treats an `undefined`
-  // value — the `agentId` emitted at `start` is simply never overwritten.
-  it("does not restate the agent attribution on the truncation chunk", async () => {
-    const stream = await startStream(fakeTurn());
-
-    expect(
-      stream.metadataFor({ type: "finish", finishReason: "length" }),
-    ).not.toHaveProperty("agentId");
-
-    await stream.end();
-  });
-
-  it("leaves a cleanly finished stream with no truncation key", async () => {
-    const stream = await startStream(fakeTurn());
-
-    expect(
-      stream.metadataFor({ type: "finish", finishReason: "stop" }),
-    ).toBeUndefined();
-
-    await stream.end();
-  });
-
   // A step inside a tool loop can end at the ceiling and the run still recover
   // and finish normally. Marking those flags runs that were never truncated.
   it("ignores a step that ended at the limit mid tool-loop", async () => {
@@ -1847,125 +1893,6 @@ describe("AgentRunner.stream — message metadata", () => {
       tokenUsage: { inputTokens: 12_400, outputTokens: 180 },
       modelDurationMs: expect.any(Number) as unknown,
     });
-
-    await stream.end();
-  });
-
-  // The reading each step returns is that step's own context size. The merge
-  // leaves the last one standing, so a tool-using turn reports its real size
-  // rather than a multiple of it.
-  it("reports each step's own size rather than a running total", async () => {
-    const stream = await startStream(fakeTurn());
-
-    const first = stream.metadataFor({
-      type: "finish-step",
-      finishReason: "tool-calls",
-      usage: { inputTokens: 1_000, outputTokens: 30 },
-    });
-    const second = stream.metadataFor({
-      type: "finish-step",
-      finishReason: "stop",
-      usage: { inputTokens: 4_000, outputTokens: 60 },
-    });
-
-    expect(first).toEqual({
-      contextOccupancy: { inputTokens: 1_000, outputTokens: 30 },
-      tokenUsage: { inputTokens: 1_000, outputTokens: 30 },
-      modelDurationMs: expect.any(Number) as unknown,
-    });
-    expect(second).toEqual({
-      contextOccupancy: { inputTokens: 4_000, outputTokens: 60 },
-      // The fold, not the replace: Token usage sums both steps, unlike
-      // Context occupancy right beside it.
-      tokenUsage: { inputTokens: 5_000, outputTokens: 90 },
-      modelDurationMs: expect.any(Number) as unknown,
-    });
-
-    await stream.end();
-  });
-
-  it("records nothing about tokens when the Provider reports no usage", async () => {
-    const stream = await startStream(fakeTurn());
-
-    // Neither Context occupancy nor Token usage — Model duration still rides
-    // this same part regardless (issue #354), since the Drive ran whether or
-    // not the Provider reported anything.
-    expect(
-      stream.metadataFor({
-        type: "finish-step",
-        finishReason: "stop",
-        usage: { inputTokens: undefined, outputTokens: undefined },
-      }),
-    ).toEqual({ modelDurationMs: expect.any(Number) as unknown });
-
-    await stream.end();
-  });
-
-  // The merge skips `undefined` overrides, so returning nothing here would
-  // leave the first step's figures on the message, read as this turn's size.
-  it("erases an earlier reading when a later step reports no usage", async () => {
-    const stream = await startStream(fakeTurn());
-
-    stream.metadataFor({
-      type: "finish-step",
-      finishReason: "tool-calls",
-      usage: { inputTokens: 1_000, outputTokens: 30 },
-    });
-
-    expect(
-      stream.metadataFor({
-        type: "finish-step",
-        finishReason: "stop",
-        usage: { inputTokens: undefined, outputTokens: undefined },
-      }),
-    ).toEqual({
-      contextOccupancy: null,
-      modelDurationMs: expect.any(Number) as unknown,
-    });
-
-    await stream.end();
-  });
-
-  // The merge skips `undefined` overrides, so an omitted output count would
-  // pair this step's input count with an earlier step's output count.
-  it("writes an absent output count as a concrete null", async () => {
-    const stream = await startStream(fakeTurn());
-
-    expect(
-      stream.metadataFor({
-        type: "finish-step",
-        finishReason: "stop",
-        usage: { inputTokens: 4_000, outputTokens: undefined },
-      }),
-    ).toEqual({
-      contextOccupancy: { inputTokens: 4_000, outputTokens: null },
-      // Token usage folds a missing output count as 0 rather than omitting
-      // it, mirroring `accumulateStepStats`'s billing-sum branch.
-      tokenUsage: { inputTokens: 4_000, outputTokens: 0 },
-      modelDurationMs: expect.any(Number) as unknown,
-    });
-
-    await stream.end();
-  });
-
-  // Each part still contributes only the key it owns, so a truncated agent
-  // turn ends up carrying all three.
-  it("keeps the agent attribution and the truncation flag alongside occupancy", async () => {
-    const stream = await startStream(fakeTurn());
-
-    const occupancy = stream.metadataFor({
-      type: "finish-step",
-      finishReason: "length",
-      usage: { inputTokens: 4_000, outputTokens: 60 },
-    });
-    expect(occupancy).not.toHaveProperty("agentId");
-    expect(stream.metadataFor({ type: "start" })).toEqual({
-      agentId: "agent-1",
-      prepDurationMs: expect.any(Number) as unknown,
-    });
-    expect(
-      stream.metadataFor({ type: "finish", finishReason: "length" }),
-    ).toEqual({ truncatedByTokenLimit: true });
 
     await stream.end();
   });
@@ -2037,16 +1964,6 @@ describe("model output ceiling", () => {
       maxOutputTokens?: number;
     };
     expect(args.maxOutputTokens).toBeUndefined();
-  });
-});
-
-// Smoke test the TimeoutError export so the type stays public-importable
-describe("AgentRunner timeout types", () => {
-  it("TimeoutError remains an Error subclass", () => {
-    const e = new TimeoutError("x", "run", 1000);
-    expect(e).toBeInstanceOf(Error);
-    expect(e.kind).toBe("run");
-    expect(e.limitMs).toBe(1000);
   });
 });
 

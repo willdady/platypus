@@ -25,28 +25,18 @@ describe("Storage index", () => {
   });
 
   describe("getStorage", () => {
-    it("should return DiskStorage by default", () => {
-      const storage = getStorage();
-      expect(storage).toBeInstanceOf(DiskStorage);
-    });
-
-    it("should return DiskStorage when STORAGE_BACKEND is 'disk'", () => {
-      process.env.STORAGE_BACKEND = "disk";
-      const storage = getStorage();
-      expect(storage).toBeInstanceOf(DiskStorage);
-    });
-
-    it("should return S3Storage when STORAGE_BACKEND is 's3'", () => {
-      process.env.STORAGE_BACKEND = "s3";
-      const storage = getStorage();
-      expect(storage).toBeInstanceOf(S3Storage);
-    });
-
-    it("should default to disk for invalid STORAGE_BACKEND values", () => {
-      process.env.STORAGE_BACKEND = "invalid";
-      const storage = getStorage();
-      expect(storage).toBeInstanceOf(DiskStorage);
-    });
+    it.each([
+      ["unset", undefined, DiskStorage],
+      ["'disk'", "disk", DiskStorage],
+      ["'s3'", "s3", S3Storage],
+      ["an unknown value", "invalid", DiskStorage],
+    ])(
+      "picks the backend for STORAGE_BACKEND %s",
+      (_label, backend, expected) => {
+        if (backend !== undefined) process.env.STORAGE_BACKEND = backend;
+        expect(getStorage()).toBeInstanceOf(expected);
+      },
+    );
 
     it("should return the same singleton instance on subsequent calls", () => {
       const storage1 = getStorage();

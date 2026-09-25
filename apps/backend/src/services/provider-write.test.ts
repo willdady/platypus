@@ -28,6 +28,7 @@ import {
   currentProviderModels,
   deMigrateOrphanedAliases,
 } from "./model-alias-migration.ts";
+import { orgScopedWhere, workspaceScopedWhere } from "./scoped-resource.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 
 const workspaceCtx = { orgId: "org-1", workspaceId: "ws-1" };
@@ -119,9 +120,12 @@ describe("provider-write module", () => {
       );
 
       expect(result).toEqual({ row: updated, aliasRepoints: [] });
-      expect(handleEmbeddingConfigChange).toHaveBeenCalledWith(
-        "p1",
-        expect.objectContaining({ name: "Renamed" }),
+      expect(handleEmbeddingConfigChange).toHaveBeenCalledWith("p1", {
+        ...updateFields(),
+        name: "Renamed",
+      });
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        workspaceScopedWhere("provider", "p1", "ws-1"),
       );
     });
 
@@ -171,7 +175,13 @@ describe("provider-write module", () => {
       );
 
       expect(result).toEqual({ row: updated, aliasRepoints: [] });
-      expect(handleEmbeddingConfigChange).toHaveBeenCalled();
+      expect(handleEmbeddingConfigChange).toHaveBeenCalledWith(
+        "p1",
+        updateFields(),
+      );
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        orgScopedWhere("provider", "p1", "org-1"),
+      );
     });
 
     it("throws NotFoundError for an organization-scoped provider that is not Shared here, before touching embeddings (#605)", async () => {
@@ -230,7 +240,9 @@ describe("provider-write module", () => {
 
       expect(nullifyEmbeddingsForProvider).toHaveBeenCalledWith("p1");
       expect(deMigrateOrphanedAliases).not.toHaveBeenCalled();
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        workspaceScopedWhere("provider", "p1", "ws-1"),
+      );
     });
 
     it("throws LockedError for an attached Shared provider on the workspace surface, before invalidating embeddings", async () => {
@@ -256,7 +268,9 @@ describe("provider-write module", () => {
       await deleteProvider({ kind: "organization", orgId: "org-1" }, "p1");
 
       expect(nullifyEmbeddingsForProvider).toHaveBeenCalledWith("p1");
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockDb.where).toHaveBeenLastCalledWith(
+        orgScopedWhere("provider", "p1", "org-1"),
+      );
     });
 
     it("throws ConflictError while an Attachment still references the organization-scoped provider", async () => {

@@ -12,17 +12,12 @@ describe("avatarKeyToUrl", () => {
     }
   });
 
-  it("should return null when avatarKey is null", () => {
-    expect(avatarKeyToUrl(null, "http://localhost:4000")).toBeNull();
-  });
-
-  it("should return null when avatarKey is undefined", () => {
-    expect(avatarKeyToUrl(undefined, "http://localhost:4000")).toBeNull();
-  });
-
-  it("should return null when avatarKey is an empty string", () => {
-    expect(avatarKeyToUrl("", "http://localhost:4000")).toBeNull();
-  });
+  it.each([null, undefined, ""])(
+    "returns null when avatarKey is %j",
+    (avatarKey) => {
+      expect(avatarKeyToUrl(avatarKey, "http://localhost:4000")).toBeNull();
+    },
+  );
 
   it("should use STORAGE_PUBLIC_URL when set", () => {
     process.env.STORAGE_PUBLIC_URL = "https://cdn.example.com";

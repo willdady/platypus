@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
   type Actor,
@@ -23,54 +24,34 @@ const ACTORS: Actor[] = [
 ];
 
 describe("resolveActor", () => {
-  it("names the Operator regardless of any other signal", () => {
-    expect(
-      resolveActor({
-        isOperator: true,
-        orgRole: "member",
-        ownsWorkspace: false,
-      }),
-    ).toBe("operator");
-  });
-
-  it("names the Org Admin when not the Operator", () => {
-    expect(
-      resolveActor({
-        isOperator: false,
-        orgRole: "admin",
-        ownsWorkspace: false,
-      }),
-    ).toBe("org-admin");
-  });
-
-  it("names the Workspace Owner when neither Operator nor Org Admin", () => {
-    expect(
-      resolveActor({
-        isOperator: false,
-        orgRole: "member",
-        ownsWorkspace: true,
-      }),
-    ).toBe("workspace-owner");
-  });
-
-  it("falls back to a plain Org member", () => {
-    expect(
-      resolveActor({
-        isOperator: false,
-        orgRole: "member",
-        ownsWorkspace: false,
-      }),
-    ).toBe("org-member");
-  });
-
-  it("falls back to a plain Org member outside any Organization", () => {
-    expect(
-      resolveActor({
-        isOperator: false,
-        orgRole: null,
-        ownsWorkspace: false,
-      }),
-    ).toBe("org-member");
+  it.each([
+    [
+      "the Operator regardless of any other signal",
+      { isOperator: true, orgRole: "member", ownsWorkspace: false },
+      "operator",
+    ],
+    [
+      "the Org Admin when not the Operator",
+      { isOperator: false, orgRole: "admin", ownsWorkspace: false },
+      "org-admin",
+    ],
+    [
+      "the Workspace Owner when neither Operator nor Org Admin",
+      { isOperator: false, orgRole: "member", ownsWorkspace: true },
+      "workspace-owner",
+    ],
+    [
+      "a plain Org member otherwise",
+      { isOperator: false, orgRole: "member", ownsWorkspace: false },
+      "org-member",
+    ],
+    [
+      "a plain Org member outside any Organization",
+      { isOperator: false, orgRole: null, ownsWorkspace: false },
+      "org-member",
+    ],
+  ] as const)("names %s", (_name, input, expected) => {
+    expect(resolveActor(input)).toBe(expected);
   });
 });
 
@@ -79,20 +60,14 @@ describe("canManageSharedResource — attach/detach/Promote (ADR-0007)", () => {
     expect(canManageSharedResource(actor, undefined)).toBe(false);
   });
 
-  it("Operator inside a Workspace is allowed", () => {
-    expect(canManageSharedResource("operator", "ws-1")).toBe(true);
-  });
-
-  it("Org Admin inside a Workspace is allowed", () => {
-    expect(canManageSharedResource("org-admin", "ws-1")).toBe(true);
-  });
-
-  it("Workspace Owner inside their own Workspace is refused", () => {
-    expect(canManageSharedResource("workspace-owner", "ws-1")).toBe(false);
-  });
-
-  it("a plain Org member inside a Workspace is refused", () => {
-    expect(canManageSharedResource("org-member", "ws-1")).toBe(false);
+  it.each([
+    ["operator", true],
+    ["org-admin", true],
+    // Even inside their own Workspace.
+    ["workspace-owner", false],
+    ["org-member", false],
+  ] as const)("%s inside a Workspace: allowed=%s", (actor, allowed) => {
+    expect(canManageSharedResource(actor, "ws-1")).toBe(allowed);
   });
 });
 
@@ -215,20 +190,15 @@ describe("canAccessOrganization", () => {
 });
 
 describe("canAccessWorkspace", () => {
-  it("the Operator reaches every Workspace", () => {
-    expect(canAccessWorkspace("operator")).toBe(true);
-  });
-
-  it("the Org Admin reaches every Workspace", () => {
-    expect(canAccessWorkspace("org-admin")).toBe(true);
-  });
-
-  it("the Workspace Owner reaches their own Workspace", () => {
-    expect(canAccessWorkspace("workspace-owner")).toBe(true);
-  });
-
-  it("a plain Org member reaches no Workspace", () => {
-    expect(canAccessWorkspace("org-member")).toBe(false);
+  // The Workspace Owner case is their own Workspace; the caller resolves
+  // ownership before it gets here.
+  it.each([
+    ["operator", true],
+    ["org-admin", true],
+    ["workspace-owner", true],
+    ["org-member", false],
+  ] as const)("%s: allowed=%s", (actor, allowed) => {
+    expect(canAccessWorkspace(actor)).toBe(allowed);
   });
 });
 

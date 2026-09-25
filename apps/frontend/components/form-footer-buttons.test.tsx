@@ -12,12 +12,6 @@ describe("FormFooterButtons", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the delete button when deleteVisible is true", () => {
-    render(<FormFooterButtons submitText="Update" deleteVisible />);
-
-    expect(screen.getByRole("button", { name: /Delete/ })).toBeInTheDocument();
-  });
-
   it("fires onSubmit on click when type is 'button'", () => {
     const onSubmit = vi.fn();
     render(<FormFooterButtons submitText="Save" onSubmit={onSubmit} />);
@@ -45,7 +39,7 @@ describe("FormFooterButtons", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("fires onDelete when the delete button is clicked", () => {
+  it("shows the delete button when deleteVisible, and fires onDelete from it", () => {
     const onDelete = vi.fn();
     render(
       <FormFooterButtons submitText="Save" deleteVisible onDelete={onDelete} />,

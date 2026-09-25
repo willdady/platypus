@@ -21,6 +21,8 @@ vi.mock("./chat-messages.ts", async (importActual) => {
 import { processMemoryExtractionBatch } from "./memory-extraction.ts";
 import { loadActivePath } from "./chat-messages.ts";
 import { logger } from "../logger.ts";
+import { eq } from "drizzle-orm";
+import { memoryDailySummary as memoryDailySummaryTable } from "../db/schema.ts";
 
 const makeWorkspace = (overrides: Record<string, unknown> = {}) => ({
   id: "ws-1",
@@ -151,7 +153,9 @@ describe("processMemoryExtractionBatch", () => {
     await processMemoryExtractionBatch();
 
     expect(mockGenerateText).not.toHaveBeenCalled();
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenLastCalledWith(
+      expect.objectContaining({ memoryExtractionStatus: "completed" }),
+    );
   });
 
   it("calls the LLM and inserts a new daily summary when none exists", async () => {
@@ -195,7 +199,91 @@ describe("processMemoryExtractionBatch", () => {
     await processMemoryExtractionBatch();
 
     expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith({
+      summary: "Updated summary",
+      embedding: null,
+      updatedAt: expect.any(Date) as unknown,
+    });
+    expect(mockDb.where).toHaveBeenCalledWith(
+      eq(memoryDailySummaryTable.id, "existing-1"),
+    );
+  });
+
+  it("logs how many old summaries it pruned past the workspace's cap", async () => {
+    setupWhere([makeWorkspace({ maxDailySummaries: 5 })], [makeProvider()]);
+    mockDb.limit.mockResolvedValueOnce([makeChat()]).mockResolvedValueOnce([]);
+    mockDb.execute.mockResolvedValue({ rowCount: 2 });
+    mockOpenProvider.mockReturnValue({
+      languageModel: vi.fn(() => ({ id: "model" })),
+    });
+    mockGenerateText.mockResolvedValue({ text: "Updated summary" });
+
+    await processMemoryExtractionBatch();
+
+    const [statement] = mockDb.execute.mock.calls[0] as [{ values: unknown[] }];
+    // Scoped to this user and Workspace, keeping the newest `maxDailySummaries`.
+    expect(statement.values).toEqual(["u1", "ws-1", 5]);
+    expect(logger.info).toHaveBeenCalledWith(
+      "Pruned 2 old daily summaries for user u1 in workspace ws-1",
+    );
+  });
+
+  it("still saves the summary, without an embedding, when embedding fails", async () => {
+    const workspace = makeWorkspace({ memoryEmbeddingProviderId: "p-embed" });
+    setupWhere(
+      [workspace],
+      [
+        makeProvider(),
+        makeProvider({ id: "p-embed", embeddingModelId: "embed-model" }),
+      ],
+    );
+    mockDb.limit.mockResolvedValueOnce([makeChat()]).mockResolvedValueOnce([]);
+    mockDb.execute.mockResolvedValue({ rowCount: 0 });
+    mockOpenProvider.mockReturnValue({
+      languageModel: vi.fn(() => ({ id: "model" })),
+    });
+    mockGenerateText.mockResolvedValue({ text: "Updated summary" });
+    mockGenerateEmbedding.mockRejectedValue(new Error("embed down"));
+
+    await processMemoryExtractionBatch();
+
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: "Updated summary", embedding: null }),
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: "chat-1" }),
+      "Failed to generate embedding for daily summary: embed down",
+    );
+    expect(mockDb.set).toHaveBeenLastCalledWith(
+      expect.objectContaining({ memoryExtractionStatus: "completed" }),
+    );
+  });
+
+  it("marks the chat failed and carries on when processing it throws", async () => {
+    setupWhere([makeWorkspace()], [makeProvider()]);
+    mockDb.limit.mockResolvedValueOnce([makeChat()]);
+    vi.mocked(loadActivePath).mockRejectedValueOnce(new Error("db hiccup"));
+
+    await expect(processMemoryExtractionBatch()).resolves.toBeUndefined();
+
+    expect(mockDb.set).toHaveBeenLastCalledWith(
+      expect.objectContaining({ memoryExtractionStatus: "failed" }),
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: "chat-1" }),
+      "Error processing chat for memory extraction",
+    );
+  });
+
+  it("logs and rethrows when the batch itself fails", async () => {
+    const boom = new Error("db down");
+    mockDb.where.mockRejectedValueOnce(boom);
+
+    await expect(processMemoryExtractionBatch()).rejects.toBe(boom);
+    expect(logger.error).toHaveBeenCalledWith(
+      { error: boom },
+      "Error in memory extraction batch",
+    );
   });
 
   it("marks the chat as failed when the LLM call throws", async () => {

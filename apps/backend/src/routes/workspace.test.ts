@@ -164,38 +164,39 @@ describe("Workspace Routes", () => {
   });
 
   describe("GET /organizations/:orgId/workspaces", () => {
-    it("should return all workspaces for org admin", async () => {
-      mockSession({ id: "user-1", role: "user" });
-      const mockWorkspaces = [{ id: "ws-1", name: "WS 1" }];
+    // ws-a/ws-b sit in org-1 (the caller owns ws-a); ws-c is the caller's own
+    // Workspace in another org, so a list that dropped its org scope shows it.
+    const seedWorkspaces = (role: "admin" | "member") =>
+      seedDb({
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: "org-1", role },
+        ],
+        workspace: [
+          { id: "ws-a", organizationId: "org-1", ownerId: "user-1" },
+          { id: "ws-b", organizationId: "org-1", ownerId: "user-2" },
+          { id: "ws-c", organizationId: "org-2", ownerId: "user-1" },
+        ],
+      });
 
-      // Mock requireOrgAccess: return admin role
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-
-      // Mock list workspaces
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(mockWorkspaces);
-
+    const listIds = async () => {
       const res = await app.request("/organizations/org-1/workspaces");
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockWorkspaces });
+      const body = (await res.json()) as { results: { id: string }[] };
+      return body.results.map((w) => w.id);
+    };
+
+    it("should return all of the org's workspaces for org admin", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      seedWorkspaces("admin");
+
+      expect(await listIds()).toEqual(["ws-a", "ws-b"]);
     });
 
     it("should return only owned workspaces for regular member", async () => {
       mockSession({ id: "user-1", role: "user" });
-      const mockWorkspaces = [{ id: "ws-1", name: "WS 1" }];
+      seedWorkspaces("member");
 
-      // Mock requireOrgAccess: return member role
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-
-      // Mock get owned workspaces (single query with and(orgId, ownerId))
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce(mockWorkspaces); // owned workspaces
-
-      const res = await app.request("/organizations/org-1/workspaces");
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockWorkspaces });
+      expect(await listIds()).toEqual(["ws-a"]);
     });
   });
 
@@ -216,6 +217,24 @@ describe("Workspace Routes", () => {
       const res = await app.request("/organizations/org-1/workspaces/ws-1");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockWorkspace);
+    });
+
+    it("returns 404 for a workspace of another organization", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      seedDb({
+        organization_member: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: "org-1",
+            role: "admin",
+          },
+        ],
+        workspace: [{ id: "ws-c", organizationId: "org-2", ownerId: "user-1" }],
+      });
+
+      const res = await app.request("/organizations/org-1/workspaces/ws-c");
+      expect(res.status).toBe(404);
     });
 
     it("should return 404 if workspace not found", async () => {
@@ -349,7 +368,84 @@ describe("Workspace Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ memoryExtractionProviderId: "provider-1" }),
+      );
+    });
+
+    const putAsOwner = (body: Record<string, unknown>) => {
+      mockSession({ id: "user-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      return app.request("/organizations/org-1/workspaces/ws-1", {
+        method: "PUT",
+        body: JSON.stringify({ name: "My Workspace", ...body }),
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const visibleProvider = (row: Record<string, unknown>) =>
+      resolveScopedMock.mockResolvedValueOnce({
+        row: { id: "provider-1", ...row } as never,
+        scope: "workspace",
+      });
+
+    it.each([
+      [
+        "extraction",
+        "memoryExtractionProviderId",
+        "Selected provider does not have a memory extraction model configured",
+      ],
+      [
+        "embedding",
+        "memoryEmbeddingProviderId",
+        "Selected provider does not have an embedding model configured",
+      ],
+    ])(
+      "rejects a memory %s provider without the needed model",
+      async (_kind, field, error) => {
+        visibleProvider({});
+
+        const res = await putAsOwner({ [field]: "provider-1" });
+
+        expect(res.status).toBe(400);
+        expect(await res.json()).toEqual({ error });
+        expect(mockDb.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it("rejects a memory embedding provider not visible in the workspace", async () => {
+      resolveScopedMock.mockResolvedValueOnce(null);
+
+      const res = await putAsOwner({
+        memoryEmbeddingProviderId: "provider-other-org",
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: "Memory embedding provider not found",
+      });
+      expect(resolveScopedMock).toHaveBeenCalledWith(
+        expect.anything(),
+        "provider",
+        "provider-other-org",
+        expect.objectContaining({ orgId: "org-1", workspaceId: "ws-1" }),
+      );
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it("accepts a workspace-visible memory embedding provider that has the model", async () => {
+      visibleProvider({ embeddingModelId: "embed-x" });
+      mockDb.returning.mockResolvedValueOnce([{ id: "ws-1" }]);
+
+      const res = await putAsOwner({ memoryEmbeddingProviderId: "provider-1" });
+
+      expect(res.status).toBe(200);
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ memoryEmbeddingProviderId: "provider-1" }),
+      );
     });
 
     it("lets an org admin set delegation flags", async () => {

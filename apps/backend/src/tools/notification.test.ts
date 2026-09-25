@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { callTool, resetMockDb, seedDb, type FakeDb } from "../test-utils.ts";
 
 vi.mock("../services/event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
@@ -8,17 +8,38 @@ vi.mock("../services/event-dispatch.ts", () => ({
 import { createNotificationTools } from "./notification.ts";
 import { dispatchEvent } from "../services/event-dispatch.ts";
 
-const ctx = { toolCallId: "test", messages: [], context: {} };
 const workspaceId = "ws-1";
 const agentId = "agent-1";
 const orgId = "org-1";
 
+const notification = (
+  id: string,
+  over: Record<string, unknown> = {},
+): Record<string, unknown> => ({
+  id,
+  workspaceId,
+  agentId,
+  title: null,
+  body: id,
+  createdAt: new Date("2026-01-01"),
+  ...over,
+});
+
 describe("createNotificationTools", () => {
   let tools: ReturnType<typeof createNotificationTools>;
+  let db: FakeDb;
 
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockDb();
+    db = seedDb({
+      notification: [
+        notification("mine-old"),
+        notification("mine-new", { createdAt: new Date("2026-02-01") }),
+        notification("other-agent", { agentId: "agent-2" }),
+        notification("other-workspace", { workspaceId: "ws-2" }),
+      ],
+    });
     tools = createNotificationTools(workspaceId, agentId, orgId);
   });
 
@@ -31,107 +52,89 @@ describe("createNotificationTools", () => {
     ]);
   });
 
-  describe("createNotification", () => {
-    it("inserts a notification and dispatches event", async () => {
-      const record = {
-        id: "notif-1",
-        workspaceId,
-        agentId,
-        title: "Test",
-        body: "Hello",
-      };
-      mockDb.returning.mockResolvedValue([record]);
+  it("createNotification stores it for this agent and workspace, unescaping newlines, and dispatches", async () => {
+    const result: unknown = await callTool(tools.createNotification, {
+      title: "Test",
+      body: "line 1\\nline 2",
+    });
 
-      expect(
-        await tools.createNotification.execute!(
-          { title: "Test", body: "Hello" },
-          ctx,
-        ),
-      ).toEqual(record);
-      expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
-        event: "notification.created",
-        data: record,
-      });
+    expect(result).toMatchObject({
+      workspaceId,
+      agentId,
+      title: "Test",
+      body: "line 1\nline 2",
+    });
+    expect(db.tables.notification).toContainEqual(result);
+    expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
+      event: "notification.created",
+      data: result,
     });
   });
 
-  describe("listNotifications", () => {
-    it("returns notifications with default limit", async () => {
-      const notifications = [
-        { id: "n1", body: "First" },
-        { id: "n2", body: "Second" },
-      ];
-      mockDb.limit.mockResolvedValue(notifications);
-
-      expect(await tools.listNotifications.execute!({}, ctx)).toEqual(
-        notifications,
-      );
-    });
+  it("listNotifications returns only this agent's, in this workspace, newest first, up to the limit", async () => {
+    expect(await callTool(tools.listNotifications, {})).toMatchObject([
+      { id: "mine-new" },
+      { id: "mine-old" },
+    ]);
+    expect(await callTool(tools.listNotifications, { limit: 1 })).toMatchObject(
+      [{ id: "mine-new" }],
+    );
   });
 
   describe("updateNotification", () => {
-    it("refuses a notification from another workspace or agent", async () => {
-      mockDb.returning.mockResolvedValueOnce([]);
+    it("updates and dispatches", async () => {
+      const result: unknown = await callTool(tools.updateNotification, {
+        notificationId: "mine-old",
+        body: "Updated",
+      });
 
-      expect(
-        await tools.updateNotification.execute!(
-          { notificationId: "other-workspace", body: "Updated" },
-          ctx,
-        ),
-      ).toEqual({ error: "Notification not found" });
-    });
-
-    it("returns error when notification not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
-
-      expect(
-        await tools.updateNotification.execute!(
-          { notificationId: "bad-id", body: "Updated" },
-          ctx,
-        ),
-      ).toEqual({ error: "Notification not found" });
-    });
-
-    it("updates and dispatches event when found", async () => {
-      const updated = { id: "n1", body: "Updated" };
-      mockDb.limit.mockResolvedValue([{ id: "n1" }]);
-      mockDb.returning.mockResolvedValue([updated]);
-
-      expect(
-        await tools.updateNotification.execute!(
-          { notificationId: "n1", body: "Updated" },
-          ctx,
-        ),
-      ).toEqual(updated);
+      expect(result).toMatchObject({ id: "mine-old", body: "Updated" });
       expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
         event: "notification.updated",
-        data: updated,
+        data: result,
       });
     });
+
+    it.each(["other-agent", "other-workspace", "missing"])(
+      "refuses %s",
+      async (notificationId) => {
+        expect(
+          await callTool(tools.updateNotification, {
+            notificationId,
+            body: "Updated",
+          }),
+        ).toEqual({ error: "Notification not found" });
+        expect(db.tables.notification.map((n) => n.body)).not.toContain(
+          "Updated",
+        );
+        expect(dispatchEvent).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe("deleteNotification", () => {
-    it("returns error when notification not found", async () => {
-      mockDb.limit.mockResolvedValue([]);
-
+    it("deletes and dispatches", async () => {
       expect(
-        await tools.deleteNotification.execute!(
-          { notificationId: "bad-id" },
-          ctx,
-        ),
-      ).toEqual({ error: "Notification not found" });
-    });
-
-    it("deletes and dispatches event when found", async () => {
-      mockDb.limit.mockResolvedValue([{ id: "n1" }]);
-
-      expect(
-        await tools.deleteNotification.execute!({ notificationId: "n1" }, ctx),
+        await callTool(tools.deleteNotification, {
+          notificationId: "mine-old",
+        }),
       ).toEqual({ success: true });
+      expect(db.tables.notification.map((n) => n.id)).not.toContain("mine-old");
       expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
         event: "notification.dismissed",
-        data: { notificationId: "n1" },
+        data: { notificationId: "mine-old" },
       });
     });
+
+    it.each(["other-agent", "other-workspace", "missing"])(
+      "refuses %s",
+      async (notificationId) => {
+        expect(
+          await callTool(tools.deleteNotification, { notificationId }),
+        ).toEqual({ error: "Notification not found" });
+        expect(db.tables.notification).toHaveLength(4);
+        expect(dispatchEvent).not.toHaveBeenCalled();
+      },
+    );
   });
 });

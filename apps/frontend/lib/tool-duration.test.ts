@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { formatToolDuration, toolCallDurationMs } from "./tool-duration";
 
@@ -38,17 +39,6 @@ describe("toolCallDurationMs", () => {
     expect(toolCallDurationMs({ durationMs: 1234 }, undefined, "call-1")).toBe(
       1234,
     );
-  });
-
-  it("ignores part metadata that carries no usable duration", () => {
-    expect(toolCallDurationMs(undefined, undefined, "call-1")).toBeUndefined();
-    expect(toolCallDurationMs({}, undefined, "call-1")).toBeUndefined();
-    expect(
-      toolCallDurationMs({ durationMs: "1234" }, undefined, "call-1"),
-    ).toBeUndefined();
-    expect(
-      toolCallDurationMs({ durationMs: null }, undefined, "call-1"),
-    ).toBeUndefined();
   });
 
   it("prefers the part's own recorded duration", () => {
@@ -114,6 +104,9 @@ describe("toolCallDurationMs", () => {
   it("ignores a non-numeric value in either carrier", () => {
     expect(
       toolCallDurationMs({ durationMs: "500" }, undefined, "call-1"),
+    ).toBeUndefined();
+    expect(
+      toolCallDurationMs({ durationMs: null }, undefined, "call-1"),
     ).toBeUndefined();
     expect(
       toolCallDurationMs(

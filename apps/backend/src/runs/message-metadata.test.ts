@@ -290,6 +290,11 @@ describe("Context occupancy over a real multi-step stream", () => {
       inputTokens: 4_200,
       outputTokens: null,
     });
+    // Token usage, a sum rather than a reading, folds the missing count as 0.
+    expect(message?.metadata?.tokenUsage).toEqual({
+      inputTokens: 5_200,
+      outputTokens: 30,
+    });
   });
 });
 
@@ -341,11 +346,11 @@ describe("tool durations over a real multi-step stream", () => {
     return { message, toolDurations };
   };
 
-  it("delivers the executed tool's duration on the reduced message", async () => {
-    const { message } = await runToolTurn({ ping: slowPing });
+  it("delivers the duration the SDK measured on the reduced message", async () => {
+    const { message, toolDurations } = await runToolTurn({ ping: slowPing });
 
     const delivered = message?.metadata?.toolDurations?.["call-1"];
-    expect(typeof delivered).toBe("number");
+    expect(delivered).toBe(Math.round(toolDurations.get("call-1")!));
     expect(delivered).toBeGreaterThanOrEqual(15);
   });
 
@@ -362,14 +367,6 @@ describe("tool durations over a real multi-step stream", () => {
       (toolPart as { toolMetadata?: Record<string, unknown> }).toolMetadata
         ?.durationMs,
     ).toBeUndefined();
-  });
-
-  it("agrees with the figure the SDK measured", async () => {
-    const { message, toolDurations } = await runToolTurn({ ping: slowPing });
-
-    expect(message?.metadata?.toolDurations?.["call-1"]).toBe(
-      Math.round(toolDurations.get("call-1")!),
-    );
   });
 
   it("records no durations for a turn that ran no tools", async () => {
@@ -389,14 +386,6 @@ describe("tool durations over a real multi-step stream", () => {
   });
 });
 
-/**
- * The search-was-unavailable flag (issue #522).
- *
- * Driven through a real stream for one reason the unit shape cannot show: the
- * fact is emitted on `start`, and `start` is the only part guaranteed to have
- * been sent by the time a turn is cancelled. A `finish`-derived flag would be
- * absent on exactly the turns a reader most needs it on.
- */
 /**
  * Token usage (issue #354), driven through the same real multi-step stream as
  * Context occupancy above — the two must diverge on exactly this fixture, or
@@ -760,6 +749,14 @@ describe("read-only Tool names over a real multi-step stream", () => {
   });
 });
 
+/**
+ * The search-was-unavailable flag (issue #522).
+ *
+ * Driven through a real stream for one reason the unit shape cannot show: the
+ * fact is emitted on `start`, and `start` is the only part guaranteed to have
+ * been sent by the time a turn is cancelled. A `finish`-derived flag would be
+ * absent on exactly the turns a reader most needs it on.
+ */
 describe("search availability over a real stream", () => {
   const answerOnly = () =>
     streamText({
@@ -981,6 +978,9 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
 
     expect(message?.metadata?.truncatedByTokenLimit).toBe(true);
     expect(message?.metadata).not.toHaveProperty("stoppedAtStepLimit");
+    // Each part contributes only the key it owns, so the flag lands beside
+    // the attribution `start` stamped rather than over it.
+    expect(message?.metadata?.agentId).toBe("agent-1");
   });
 
   // The extractor is constructed without a ceiling on any path that has none to
