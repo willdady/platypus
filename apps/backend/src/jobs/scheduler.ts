@@ -102,7 +102,7 @@ export function scheduleAligned(
 ): void {
   function scheduleNext() {
     const now = Date.now();
-    const nextTick = Math.ceil(now / intervalMs) * intervalMs;
+    const nextTick = (Math.floor(now / intervalMs) + 1) * intervalMs;
     const delay = nextTick - now;
 
     setTimeout(() => {

@@ -407,6 +407,19 @@ describe("scheduleAligned", () => {
     expect(job).toHaveBeenCalledTimes(2);
   });
 
+  it("waits a full interval after a job that finishes on the boundary", async () => {
+    const job = vi.fn(async () => {});
+
+    scheduleAligned("test", 60_000, job);
+
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(job).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(job).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(job).toHaveBeenCalledTimes(2);
+  });
+
   it("logs a failed run and keeps the schedule going", async () => {
     const job = vi.fn(takesTime).mockImplementationOnce(async () => {
       await takesTime();
