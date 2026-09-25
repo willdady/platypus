@@ -126,8 +126,9 @@ describe("NotificationsDropdown feed", () => {
   it("counts unread notifications and pending invitations on the bell", () => {
     renderWithFeed();
 
-    // The bell has no accessible name of its own, so the badge is read as text.
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Notifications (2)" }),
+    ).toBeInTheDocument();
     openDropdownMenu();
     expect(screen.getByText("Nightly digest")).toBeInTheDocument();
     expect(screen.getByText("Acme")).toBeInTheDocument();

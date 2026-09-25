@@ -134,7 +134,14 @@ export function NotificationsDropdown({
       }}
     >
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          aria-label={
+            totalCount > 0 ? `Notifications (${totalCount})` : "Notifications"
+          }
+        >
           <Bell className="h-5 w-5" />
           {totalCount > 0 && (
             <span className="absolute -top-0 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-white">

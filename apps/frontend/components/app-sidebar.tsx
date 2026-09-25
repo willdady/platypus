@@ -475,7 +475,10 @@ export function AppSidebar() {
                           </SidebarMenuButton>
                           <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
-                              <SidebarMenuAction className="cursor-pointer text-muted-foreground">
+                              <SidebarMenuAction
+                                className="cursor-pointer text-muted-foreground"
+                                aria-label="Chat options"
+                              >
                                 <EllipsisVertical className="h-4 w-4" />
                               </SidebarMenuAction>
                             </DropdownMenuTrigger>

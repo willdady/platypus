@@ -214,12 +214,12 @@ describe("AppSidebar chat actions", () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  /** Opens a chat row's menu. Its trigger has no accessible name. */
+  /** Opens a chat row's menu. */
   const openChatMenu = (title: string) => {
-    const trigger = screen
-      .getByText(title)
-      .closest("li")!
-      .querySelector('[aria-haspopup="menu"]')!;
+    const trigger = within(screen.getByText(title).closest("li")!).getByRole(
+      "button",
+      { name: "Chat options" },
+    );
     fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
     fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
     fireEvent.click(trigger, { button: 0 });
