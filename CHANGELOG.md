@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.10.2](https://github.com/willdady/platypus/compare/v3.10.1...v3.10.2) (2026-09-25)
+
+
+### Bug Fixes
+
+* **backend:** read a zone-less convertTimezone input in fromTimezone ([#1031](https://github.com/willdady/platypus/issues/1031)) ([43aae57](https://github.com/willdady/platypus/commit/43aae57912ac3a51e0ba9f065c3decadd24977f7))
+* **backend:** return the updated organization object from PUT /organizations/:orgId ([#1029](https://github.com/willdady/platypus/issues/1029)) ([697b202](https://github.com/willdady/platypus/commit/697b202e4c0aca2033ba559eab9706bad66e2487))
+* **backend:** stop scheduleAligned firing twice on an interval boundary ([#1030](https://github.com/willdady/platypus/issues/1030)) ([31eb097](https://github.com/willdady/platypus/commit/31eb0973bfe28cde91e29a589f5ad7d7b6a982e6))
+* **backend:** write the Chat terminal status even when storing the reply fails ([#1033](https://github.com/willdady/platypus/issues/1033)) ([b3bde68](https://github.com/willdady/platypus/commit/b3bde68ea295aa9c843d19fb483fed75c74b2c83))
+* **frontend:** drop tooltips from the Alternative switcher ([#1035](https://github.com/willdady/platypus/issues/1035)) ([e03f1f0](https://github.com/willdady/platypus/commit/e03f1f0d59cdc40a10366b6ffcc43a200371cd84))
+* **frontend:** give the notifications bell and sidebar chat menu buttons accessible names ([#1032](https://github.com/willdady/platypus/issues/1032)) ([e9022a7](https://github.com/willdady/platypus/commit/e9022a7523ed17d332554ab3aadfccbe19923131))
+
 ## [3.10.1](https://github.com/willdady/platypus/compare/v3.10.0...v3.10.1) (2026-09-25)
 
 
