@@ -413,6 +413,22 @@ describe("ChatSink", () => {
       expect(rowOf(fake, "chat", "chat-1")?.activeLeafId).toBe("u1");
     });
 
+    // The leaf sat on the reply's message for the run; with no new reply to
+    // move on to, the old one goes back on the path rather than being left
+    // off it with no arrows leading back.
+    it("puts the leaf back on a regenerate that ended before a reply began", async () => {
+      const fake = seedChat();
+
+      await runTurn(
+        submitSink({ message: undefined, parentId: "u0" }),
+        [u0],
+        [u0],
+      );
+
+      expect(fake.tables.chat_message).toHaveLength(2);
+      expect(rowOf(fake, "chat", "chat-1")?.activeLeafId).toBe("a0");
+    });
+
     it("does not bring back a reply deleted since the last write", async () => {
       const deletedAt = new Date("2026-01-01T00:00:00Z");
       const fake = seedChat([
@@ -574,6 +590,23 @@ describe("ChatSink", () => {
       });
       expect(rowOf(fake, "chat_message", "r1")).toBeUndefined();
       expect(rowOf(fake, "chat", "chat-1")?.agentId).toBeUndefined();
+    });
+
+    it("puts the leaf back on a regenerate", async () => {
+      const fake = seedChat();
+      const sink = submitSink({ message: undefined, parentId: "u0" });
+      await sink.onStart({ runId: "chat-1", messages: [u0] });
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "failed",
+        messages: [u0],
+        stats: {},
+      });
+
+      expect(rowOf(fake, "chat", "chat-1")).toMatchObject({
+        status: "failed",
+        activeLeafId: "a0",
+      });
     });
 
     it("does not attempt titling when no plan resolved", async () => {

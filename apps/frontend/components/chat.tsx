@@ -30,6 +30,7 @@ import {
   classifyChatError,
   composerTurnStatus,
   isRunHeldElsewhere,
+  isTurnInFlight,
   snapshotMayLand,
   snapshotMessages,
 } from "@/lib/chat-recovery";
@@ -83,6 +84,10 @@ export const Chat = ({
   const canSendMessages = canSendChatMessages(ownsWorkspace);
   const backendUrl = useBackendUrl();
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
+  const chatUrl = joinUrl(
+    backendUrl || "",
+    `${scopedPath("chat", scope)}/${chatId}`,
+  );
 
   // Fetch providers
   const {
@@ -375,16 +380,16 @@ export const Chat = ({
   // even once it is deleted. The message above it on screen is only the
   // nearest one still in the Chat, and an edit hung there would sit beside the
   // wrong message.
+  const tree = chatData?.tree;
+  const parentOf = useMemo(
+    () => new Map(tree?.map((node) => [node.id, node.parentId])),
+    [tree],
+  );
   const { resendEdited } = turn;
   const resendEdit = useCallback(
     (truncateAt: number, message: PromptInputMessage) =>
-      resendEdited(
-        truncateAt,
-        message,
-        chatData?.tree?.find((node) => node.id === messages[truncateAt]?.id)
-          ?.parentId,
-      ),
-    [chatData?.tree, messages, resendEdited],
+      resendEdited(truncateAt, message, parentOf.get(messages[truncateAt]?.id)),
+    [parentOf, messages, resendEdited],
   );
 
   const {
@@ -406,11 +411,12 @@ export const Chat = ({
     statusRef.current = status;
   }, [status]);
 
-  // The switch between Alternatives in flight, and the path to go back to if
-  // it fails: the one on screen before the first of a run of clicks.
+  // A run of switches between Alternatives: the path to go back to if it
+  // fails, the one on screen before its first click, and the Alternative a
+  // click made while a request was in flight asks for next.
   const switchRef = useRef<{
-    controller: AbortController;
     before: PlatypusUIMessage[];
+    next?: string;
   } | null>(null);
   // Messages this tab has switched away from, so switching back to one shows
   // it at once.
@@ -430,12 +436,7 @@ export const Chat = ({
   // and landing it would drag the view back.
   useEffect(() => {
     const snapshot = snapshotMessages(chatData);
-    if (
-      !snapshot ||
-      statusRef.current === "streaming" ||
-      statusRef.current === "submitted" ||
-      switchRef.current
-    ) {
+    if (!snapshot || isTurnInFlight(statusRef.current) || switchRef.current) {
       return;
     }
     setMessages((held) =>
@@ -473,25 +474,24 @@ export const Chat = ({
   // whole transcript per token (#869).
   const handleMessageDelete = useCallback(
     (messageId: string) => {
-      void writeAt(
-        joinUrl(
-          backendUrl || "",
-          `${scopedPath("chat", scope)}/${chatId}/messages/${messageId}`,
-        ),
-        { method: "DELETE" },
-      ).then((outcome) => {
+      void writeAt(`${chatUrl}/messages/${messageId}`, {
+        method: "DELETE",
+      }).then((outcome) => {
         if (outcome.outcome === "success") refreshChat();
         else toast.error(outcome.message);
       });
     },
-    [backendUrl, chatId, refreshChat, scope],
+    [chatUrl, refreshChat],
   );
 
   // Shows the Alternative `toId` in place of `fromId` straight away, then asks
-  // the server for the path under it. Not debounced: a second click aborts
-  // the first request and sends its own. The local swap has only what this
-  // tab has already shown, or an empty message in its place, and nothing
-  // below it; the server's answer fills the rest in.
+  // the server for the path under it. Not debounced, but one request at a
+  // time: a click while one is in flight waits for it, replacing any click
+  // already waiting. An aborted request could still be saved after a later
+  // one, and a reload would then show the earlier choice; in order, the last
+  // click is the one saved. The local swap has only what this tab has already
+  // shown, or an empty message in its place, and nothing below it; the
+  // server's answer fills the rest in.
   const handleSwitchAlternative = useCallback(
     async (fromId: string, toId: string) => {
       let before: PlatypusUIMessage[] = [];
@@ -507,30 +507,27 @@ export const Chat = ({
         return [...held.slice(0, at), target];
       });
 
-      const pending = switchRef.current;
-      pending?.controller.abort();
-      const controller = new AbortController();
-      switchRef.current = { controller, before: pending?.before ?? before };
-
-      const outcome = await writeAt<Pick<ChatType, "messages" | "tree">>(
-        joinUrl(
-          backendUrl || "",
-          `${scopedPath("chat", scope)}/${chatId}/active-leaf`,
-        ),
-        { method: "PUT", data: { messageId: toId }, signal: controller.signal },
-      );
-      // Superseded by a later click, which settles the run.
-      if (controller.signal.aborted) return;
-      const revertTo = switchRef.current.before;
+      if (switchRef.current) {
+        switchRef.current.next = toId;
+        return;
+      }
+      const run: { before: PlatypusUIMessage[]; next?: string } = { before };
+      switchRef.current = run;
+      const put = (messageId: string) =>
+        writeAt<Pick<ChatType, "messages" | "tree">>(`${chatUrl}/active-leaf`, {
+          method: "PUT",
+          data: { messageId },
+        });
+      let outcome = await put(toId);
+      while (run.next) {
+        const messageId = run.next;
+        run.next = undefined;
+        outcome = await put(messageId);
+      }
       switchRef.current = null;
       // A turn started meanwhile, from the swapped-in message, owns the screen
       // now, and its run moves the path itself.
-      if (
-        statusRef.current === "submitted" ||
-        statusRef.current === "streaming"
-      ) {
-        return;
-      }
+      if (isTurnInFlight(statusRef.current)) return;
 
       if (outcome.outcome === "success") {
         const { messages, tree } = outcome.data;
@@ -540,17 +537,16 @@ export const Chat = ({
           { revalidate: false },
         );
       } else {
-        setMessages(revertTo);
+        setMessages(run.before);
         toast.error(outcome.message);
       }
     },
-    [backendUrl, chatId, mutateChat, scope, setMessages],
+    [chatUrl, mutateChat, setMessages],
   );
 
   // Keyed on the ids alone, so a streamed token (new messages, same ids)
   // keeps each position's identity and the `ChatMessage` memo with it (#869).
   const pathKey = messages.map((message) => message.id).join("\n");
-  const tree = chatData?.tree;
   const positions = useMemo(
     () => alternativePositions(tree, pathKey.split("\n")),
     [tree, pathKey],
@@ -561,10 +557,6 @@ export const Chat = ({
   // deleted there is nothing to answer, and the server refuses (409). A reply
   // the tree does not list yet is the one this tab just streamed, from the
   // message above it.
-  const parentOf = useMemo(
-    () => new Map(tree?.map((node) => [node.id, node.parentId])),
-    [tree],
-  );
   const isRegenerable = (index: number) => {
     const above = messages[index - 1];
     const parentId = parentOf.get(messages[index].id);
@@ -674,7 +666,7 @@ export const Chat = ({
   const isRecoveringRun = errorTreatment === "recovering";
 
   const handleSubmit = (message: PromptInputMessage) => {
-    if (effectiveStatus === "streaming" || effectiveStatus === "submitted") {
+    if (isTurnInFlight(effectiveStatus)) {
       return turn.cancel();
     }
     if (!message.text && !message.files?.length) return;

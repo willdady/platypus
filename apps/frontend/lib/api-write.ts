@@ -168,14 +168,12 @@ async function performWrite<TResult, TData>(
   data: TData | undefined,
   revalidateKeys: readonly string[],
   extraHeaders?: Record<string, string>,
-  signal?: AbortSignal,
 ): Promise<WriteOutcome<TResult>> {
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       credentials: "include",
-      signal,
       headers:
         method !== "DELETE"
           ? { "Content-Type": "application/json", ...extraHeaders }
@@ -271,11 +269,6 @@ export interface WriteAtOptions<TData> {
    * better-auth admin actions that must echo the browser's `Origin`.
    */
   readonly headers?: Record<string, string>;
-  /**
-   * Aborts the request. An aborted write resolves as an `error` outcome, so a
-   * caller that aborts checks `signal.aborted` before acting on it.
-   */
-  readonly signal?: AbortSignal;
 }
 
 /**
@@ -288,13 +281,12 @@ export async function writeAt<TResult = unknown, TData = unknown>(
   url: string,
   options: WriteAtOptions<TData>,
 ): Promise<WriteOutcome<TResult>> {
-  const { method, data, revalidateKeys = [], headers, signal } = options;
+  const { method, data, revalidateKeys = [], headers } = options;
   return performWrite<TResult, TData>(
     url,
     method,
     data,
     revalidateKeys,
     headers,
-    signal,
   );
 }

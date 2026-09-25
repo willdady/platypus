@@ -149,6 +149,13 @@ a message id.
   deduplicated, because an edit's Alternative may point at the same stored files
   as the message it replaced. Walking only the path is the #715 bug again, one
   level down.
+
+  > **Note (#711):** the delete that shipped removes the Chat's stored files by
+  > the Chat's storage prefix instead of collecting keys from its rows. Every
+  > file a message references, on the Active path or off it, is stored under
+  > that prefix, so the prefix covers what walking every row would, with no
+  > walk and nothing to deduplicate.
+
 - **`ChatSink` writes only the rows its own turn produced**: the new user
   message, any seeded message, and the assistant message, upserted by id on each
   flush. It never rewrites a row from history. No write path holds the

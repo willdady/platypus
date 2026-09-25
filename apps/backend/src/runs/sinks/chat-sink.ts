@@ -38,7 +38,9 @@ export type ChatSinkParams = {
  * - `onProgress`: drive a FlushScheduler that periodically upserts the reply
  *   while keeping `status: "running"`.
  * - `onFinish`: write the terminal status (`succeeded`, `failed`,
- *   `cancelled`) and the final reply.
+ *   `cancelled`) and the final reply. A regenerate that wrote no reply puts
+ *   back the leaf `onStart` moved, so the reply it meant to replace is not left
+ *   off the Active path.
  *
  * The sink intentionally only persists what `prepareChatTurn` resolved
  * (agent vs direct provider/model nulling already done) — it does not
@@ -50,9 +52,15 @@ export class ChatSink implements RunSink {
   private flusher?: FlushScheduler;
   private runId = "";
   private readonly params: ChatSinkParams;
+  /** The message the reply answers: the submitted one, or the reply's parent. */
+  private readonly answeredId: string | null;
+  /** On a regenerate, the leaf before `onStart` moved it to `answeredId`. */
+  private leafBefore?: string | null;
+  private replyWritten = false;
 
   constructor(params: ChatSinkParams) {
     this.params = params;
+    this.answeredId = params.message?.id ?? params.parentId;
   }
 
   async onStart(ctx: {
@@ -63,9 +71,8 @@ export class ChatSink implements RunSink {
     this.runId = ctx.runId;
     this.latestMessages = ctx.messages;
     const { workspaceId, parentId } = this.params;
-    const [message] = this.params.message
-      ? await this.storeFiles([this.params.message])
-      : [];
+    const message =
+      this.params.message && (await this.storeFiles(this.params.message));
 
     // Not caught: a turn whose message cannot be stored must not run. The
     // runner fails the run and the request with it. The pinned Memories block
@@ -86,7 +93,8 @@ export class ChatSink implements RunSink {
             eq(chatTable.workspaceId, workspaceId),
           ),
         )
-        .returning({ id: chatTable.id });
+        .returning({ id: chatTable.id, activeLeafId: chatTable.activeLeafId });
+      if (!message) this.leafBefore = updated[0]?.activeLeafId;
 
       if (updated.length === 0) {
         // Fails on a Chat id another Workspace holds, before any message is
@@ -116,7 +124,7 @@ export class ChatSink implements RunSink {
       // hydration guard keeps a partial reply on screen over it.
       await tx
         .update(chatTable)
-        .set({ activeLeafId: message?.id ?? parentId })
+        .set({ activeLeafId: this.answeredId })
         .where(eq(chatTable.id, ctx.runId));
     });
   }
@@ -175,18 +183,46 @@ export class ChatSink implements RunSink {
           "Error writing terminal status without plan",
         );
       }
-      return;
+    } else {
+      this.latestMessages = ctx.messages;
+      await this.writeRow({ status: ctx.status, messages: ctx.messages });
+
+      // Fire-and-forget authoritative titling. Runs for every terminal status
+      // (succeeded / failed / cancelled) so a chat is titled even when the
+      // first run errored, was cancelled, or the client tab closed before the
+      // old client-side path could fire. Deliberately not awaited: it must
+      // never block or delay run completion, and any failure is caught and
+      // logged.
+      this.generateMetadata();
     }
 
-    this.latestMessages = ctx.messages;
-    await this.writeRow({ status: ctx.status, messages: ctx.messages });
+    await this.restoreLeaf();
+  }
 
-    // Fire-and-forget authoritative titling. Runs for every terminal status
-    // (succeeded / failed / cancelled) so a chat is titled even when the first
-    // run errored, was cancelled, or the client tab closed before the old
-    // client-side path could fire. Deliberately not awaited: it must never
-    // block or delay run completion, and any failure is caught and logged.
-    this.generateMetadata();
+  /**
+   * Puts back the leaf a regenerate moved in `onStart`, when the turn ended
+   * without writing a reply: a resolution that failed, or a run stopped before
+   * its first chunk. Left at the reply's parent, the reply it meant to replace
+   * would be off the Active path with no arrows leading back to it.
+   */
+  private async restoreLeaf(): Promise<void> {
+    if (this.replyWritten || !this.leafBefore) return;
+    try {
+      await db
+        .update(chatTable)
+        .set({ activeLeafId: this.leafBefore })
+        .where(
+          and(
+            eq(chatTable.id, this.runId),
+            eq(chatTable.workspaceId, this.params.workspaceId),
+          ),
+        );
+    } catch (error) {
+      logger.error(
+        { error, chatId: this.runId },
+        "Error restoring the leaf after a regenerate wrote no reply",
+      );
+    }
   }
 
   /**
@@ -214,12 +250,17 @@ export class ChatSink implements RunSink {
     });
   }
 
-  /** Stores inline file bytes and swaps them for storage references. */
-  private storeFiles(
-    messages: PlatypusUIMessage[],
-  ): Promise<PlatypusUIMessage[]> {
+  /** Stores a message's inline file bytes and swaps them for storage references. */
+  private async storeFiles(
+    message: PlatypusUIMessage,
+  ): Promise<PlatypusUIMessage> {
     const { orgId, workspaceId } = this.params;
-    return extractFiles(messages, { orgId, workspaceId, chatId: this.runId });
+    const [stored] = await extractFiles([message], {
+      orgId,
+      workspaceId,
+      chatId: this.runId,
+    });
+    return stored;
   }
 
   /**
@@ -244,7 +285,8 @@ export class ChatSink implements RunSink {
 
     let reply: PlatypusUIMessage | undefined;
     try {
-      [reply] = last?.role === "assistant" ? await this.storeFiles([last]) : [];
+      reply =
+        last?.role === "assistant" ? await this.storeFiles(last) : undefined;
     } catch (error) {
       logger.error({ error, chatId: this.runId }, "Error extracting files");
       return;
@@ -293,7 +335,7 @@ export class ChatSink implements RunSink {
             await tx.insert(chatMessage).values({
               chatId: this.runId,
               id: reply.id,
-              parentId: this.params.message?.id ?? this.params.parentId,
+              parentId: this.answeredId,
               role: "assistant",
               ...content,
             });
@@ -310,6 +352,7 @@ export class ChatSink implements RunSink {
             ),
           );
       });
+      if (reply) this.replyWritten = true;
     } catch (error) {
       logger.error(
         { error, chatId: this.runId, workspaceId },

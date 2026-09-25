@@ -1101,9 +1101,9 @@ describe("Chat Routes", () => {
         expect(res.status).toBe(200);
         expect(historyIds()).toEqual(["u1", "a1", "u2"]);
         expect(rowOf(fake, "a2")).toMatchObject({ deletedAt: null });
-        // Until the new reply is written, a reader sees the message it
-        // answers, not the reply it replaces.
-        expect(fake.tables.chat[0].activeLeafId).toBe("u2");
+        // The stubbed stream ends before any reply, so the leaf goes back to
+        // the reply it would have replaced rather than stranding it.
+        expect(fake.tables.chat[0].activeLeafId).toBe("a2");
       });
 
       // Two tabs on one Chat. Tab 1 went on to u2 → a2; tab 2 still shows

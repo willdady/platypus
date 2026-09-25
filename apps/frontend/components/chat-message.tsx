@@ -49,7 +49,9 @@ import {
 } from "lucide-react";
 import { toolCallDurationMs } from "@/lib/tool-duration";
 import type { AlternativePosition } from "@/lib/chat-alternatives";
+import { isTurnInFlight as isInFlight } from "@/lib/chat-recovery";
 import { ResponseMetricsPopover } from "./response-metrics-popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { TurnNotice } from "./turn-notice";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
@@ -434,7 +436,7 @@ export const ChatMessage = memo(function ChatMessage({
     },
   ];
 
-  const isTurnInFlight = status === "submitted" || status === "streaming";
+  const isTurnInFlight = isInFlight(status);
   const isAwaitedReply =
     message.role === "assistant" && isLastMessage && isTurnInFlight;
   // Named for what it sits under, never "version" or "branch" (ADR-0026).
@@ -520,13 +522,21 @@ export const ChatMessage = memo(function ChatMessage({
                 }
                 variant="ghost"
                 size="icon"
-                label={`Previous ${alternativeNoun.toLowerCase()}`}
+                tooltip={`Previous ${alternativeNoun.toLowerCase()}`}
               >
                 <ChevronLeftIcon className="size-4" />
               </MessageAction>
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {alternatives.index + 1}/{alternatives.count}
-              </span>
+              {/* The group's label, shown on hover over the count. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {alternatives.index + 1}/{alternatives.count}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{alternativeLabel}</p>
+                </TooltipContent>
+              </Tooltip>
               <MessageAction
                 className="cursor-pointer text-muted-foreground"
                 disabled={isTurnInFlight || !alternatives.nextId}
@@ -535,7 +545,7 @@ export const ChatMessage = memo(function ChatMessage({
                 }
                 variant="ghost"
                 size="icon"
-                label={`Next ${alternativeNoun.toLowerCase()}`}
+                tooltip={`Next ${alternativeNoun.toLowerCase()}`}
               >
                 <ChevronRightIcon className="size-4" />
               </MessageAction>

@@ -34,6 +34,10 @@ export const CHAT_POLL_INTERVAL_MS = 3_000;
 const isRunOver = (status: RunStatus | undefined): boolean =>
   status === "succeeded" || status === "failed" || status === "cancelled";
 
+/** Whether this tab's own turn is under way: sent, or its reply streaming. */
+export const isTurnInFlight = (status: TurnStatus): boolean =>
+  status === "submitted" || status === "streaming";
+
 /** Everything the client knows about whether a turn is in flight. */
 export type RunBelief = {
   /** The status on the fetched Chat row; absent before the row exists. */
@@ -69,7 +73,7 @@ export const runMayBeLive = ({
   turnEstablished,
 }: RunBelief): boolean => {
   if (runStatus === "running") return true;
-  if (turnStatus === "submitted" || turnStatus === "streaming") return true;
+  if (isTurnInFlight(turnStatus)) return true;
   return turnStatus === "error" && turnEstablished && !isRunOver(runStatus);
 };
 
@@ -87,9 +91,7 @@ export const chatPollIntervalMs = (belief: RunBelief): number =>
  * to stop the user asking for something they can't have.
  */
 export const isRunHeldElsewhere = (belief: RunBelief): boolean =>
-  runMayBeLive(belief) &&
-  belief.turnStatus !== "streaming" &&
-  belief.turnStatus !== "submitted";
+  runMayBeLive(belief) && !isTurnInFlight(belief.turnStatus);
 
 /** How a Chat error should be surfaced. */
 export type ChatErrorTreatment = "none" | "recovering" | "failure";

@@ -1380,7 +1380,7 @@ describe("switching between Alternatives", () => {
     expect(harness.chatMutate).not.toHaveBeenCalled();
   });
 
-  it("aborts an earlier switch for a later one, and ends on the later", async () => {
+  it("sends a later switch only once the earlier one has answered, and ends on the later", async () => {
     const answers: ((body: unknown) => void)[] = [];
     const fetchMock = vi.fn(
       () =>
@@ -1395,33 +1395,64 @@ describe("switching between Alternatives", () => {
     rerenderChat(view);
     fireEvent.click(screen.getByRole("button", { name: "Next u2b" }));
 
-    const signals = fetchMock.mock.calls.map(
-      (call) => (call as unknown as [string, RequestInit])[1].signal!,
+    // One request at a time, so the server saves them in click order.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onScreen()).toEqual(["u1", "a1", "u2c"]);
+
+    // The earlier one answering changes nothing on screen.
+    answers[0]({ messages: edited, tree });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      SWITCH_URL,
+      expect.objectContaining({ body: JSON.stringify({ messageId: "u2c" }) }),
     );
-    expect(signals.map((signal) => signal.aborted)).toEqual([true, false]);
     expect(onScreen()).toEqual(["u1", "a1", "u2c"]);
 
     const last = path("u1", "a1", "u2c");
     answers[1]({ messages: last, tree });
-    await waitFor(() => expect(onScreen()).toEqual(["u1", "a1", "u2c"]));
-    // The aborted one answering late changes nothing.
-    answers[0]({ messages: edited, tree });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() => expect(harness.chatMutate).toHaveBeenCalled());
 
     expect(onScreen()).toEqual(["u1", "a1", "u2c"]);
     expect(harness.toastError).not.toHaveBeenCalled();
   });
 
+  it("sends only the last of the clicks made while a switch was in flight", async () => {
+    const answers: ((body: unknown) => void)[] = [];
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answers.push((body) => resolve(jsonResponse(200, body)));
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const view = showing(original);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next u2" }));
+    rerenderChat(view);
+    fireEvent.click(screen.getByRole("button", { name: "Next u2b" }));
+    rerenderChat(view);
+    fireEvent.click(screen.getByRole("button", { name: "Previous u2c" }));
+
+    answers[0]({ messages: edited, tree });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      SWITCH_URL,
+      expect.objectContaining({ body: JSON.stringify({ messageId: "u2b" }) }),
+    );
+  });
+
   it("reverts a run of switches to where the first one started", async () => {
-    const { answer } = deferredFetch();
+    const { fetchMock, answer } = deferredFetch();
     const view = showing(original);
 
     fireEvent.click(screen.getByRole("button", { name: "Next u2" }));
     rerenderChat(view);
     fireEvent.click(screen.getByRole("button", { name: "Next u2b" }));
     answer({ error: "Request failed" }, 500);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    answer({ error: "Request failed" }, 500);
 
-    await waitFor(() => expect(harness.toastError).toHaveBeenCalled());
+    await waitFor(() => expect(harness.toastError).toHaveBeenCalledTimes(1));
     expect(harness.turn.messages).toBe(original);
   });
 });

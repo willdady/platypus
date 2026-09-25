@@ -58,6 +58,31 @@ import type { PlatypusUIMessage } from "../types.ts";
 const servedMessages = (messages: PlatypusUIMessage[], origin: string) =>
   normalizeWebToolParts(rewriteStorageUrls(messages, origin));
 
+/**
+ * A Chat row as a reader gets it. The pinned Memories block and previous-turn
+ * stamp (ADR-0020), the active leaf (ADR-0026) and the memory extraction
+ * cursor are internal — absent from the Chat response schema, never surfaced
+ * in the product. The row read by the run sink still carries them.
+ */
+const chatResponse = ({
+  memorySnapshot: _memorySnapshot,
+  lastTurnAt: _lastTurnAt,
+  memoryCursorId: _memoryCursorId,
+  activeLeafId: _activeLeafId,
+  ...response
+}: typeof chatTable.$inferSelect) => response;
+
+/**
+ * A run moves the leaf onto its own reply as it goes, and a delete or a switch
+ * landing mid-run would race it (ADR-0026). A Chat turn runs under its Chat's
+ * id.
+ */
+const refuseWhileRunning = (chatId: string) => {
+  if (runRegistry.has(chatId)) {
+    throw new ConflictError("A reply is still being written in this Chat");
+  }
+};
+
 // --- Routes ---
 
 const chat = new Hono<{ Variables: Variables }>();
@@ -134,24 +159,10 @@ chat.get(
     const { workspaceId } = workspaceScopeOf(c);
 
     const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
-
-    // The pinned Memories block and previous-turn stamp (ADR-0020), the
-    // active leaf (ADR-0026) and the memory extraction cursor are internal —
-    // absent from the Chat response schema, never surfaced in the product.
-    // Strip them before serialising; the row read by the run sink still
-    // carries them.
-    const {
-      memorySnapshot: _memorySnapshot,
-      lastTurnAt: _lastTurnAt,
-      memoryCursorId: _memoryCursorId,
-      activeLeafId,
-      ...chatResponse
-    } = chat;
-
-    const { messages, tree } = await loadActivePath(chatId, activeLeafId);
+    const { messages, tree } = await loadActivePath(chatId, chat.activeLeafId);
 
     return c.json({
-      ...chatResponse,
+      ...chatResponse(chat),
       messages: servedMessages(messages, getOrigin(c)),
       tree,
     });
@@ -337,13 +348,7 @@ chat.delete(
     const { workspaceId } = workspaceScopeOf(c);
 
     await requireOwned(db, "chat", { id: chatId, workspaceId });
-
-    // A turn's reply hangs from the path it started on, and it writes the leaf
-    // as it goes — a delete landing mid-run would race it (ADR-0026). A Chat
-    // turn runs under its Chat's id.
-    if (runRegistry.has(chatId)) {
-      throw new ConflictError("A reply is still being written in this Chat");
-    }
+    refuseWhileRunning(chatId);
 
     await deleteMessage(chatId, messageId);
 
@@ -364,12 +369,7 @@ chat.put(
     const { messageId } = c.req.valid("json");
 
     await requireOwned(db, "chat", { id: chatId, workspaceId });
-
-    // A run moves the leaf onto its own reply as it goes, and a switch landing
-    // mid-run would race it (ADR-0026).
-    if (runRegistry.has(chatId)) {
-      throw new ConflictError("A reply is still being written in this Chat");
-    }
+    refuseWhileRunning(chatId);
 
     const { messages, tree } = await switchActivePath(chatId, messageId);
 
@@ -405,19 +405,7 @@ chat.put(
       throw new NotFoundError("Chat not found");
     }
 
-    // The pinned Memories block (ADR-0020), the active leaf (ADR-0026) and the
-    // memory extraction cursor are internal — absent from the Chat response
-    // schema, never surfaced in the product. Strip the internal columns before
-    // serialising.
-    const {
-      memorySnapshot: _memorySnapshot,
-      lastTurnAt: _lastTurnAt,
-      memoryCursorId: _memoryCursorId,
-      activeLeafId: _activeLeafId,
-      ...chatResponse
-    } = result;
-
-    return c.json(chatResponse);
+    return c.json(chatResponse(result));
   },
 );
 

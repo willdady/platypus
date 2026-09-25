@@ -102,21 +102,36 @@ ${newText}
 /**
  * Updates the chat's memory extraction status. `readAt` is when the job read
  * the Chat, not when the pass finished; the failed-pass backoff counts from it.
- * `cursor` is passed only by a pass that succeeded, so a failed one leaves it
- * where it was and the retry covers the same messages.
+ * The cursor stays where it was, so a failed pass's retry covers the same
+ * messages.
  */
 const updateChatExtractionStatus = async (
   chatId: string,
-  status: "processing" | "completed" | "failed",
+  status: "processing" | "failed",
   readAt: Date,
-  cursor?: string | null,
 ) => {
   await db
     .update(chatTable)
     .set({
       memoryExtractionStatus: status,
       lastMemoryProcessedAt: readAt,
-      ...(cursor !== undefined && { memoryCursorId: cursor }),
+      updatedAt: new Date(),
+    })
+    .where(eq(chatTable.id, chatId));
+};
+
+/** Records a pass that succeeded, moving the cursor to the last message it read. */
+const completeChatExtraction = async (
+  chatId: string,
+  readAt: Date,
+  cursor: string | null,
+) => {
+  await db
+    .update(chatTable)
+    .set({
+      memoryExtractionStatus: "completed",
+      lastMemoryProcessedAt: readAt,
+      memoryCursorId: cursor,
       updatedAt: new Date(),
     })
     .where(eq(chatTable.id, chatId));
@@ -158,12 +173,7 @@ const processChat = async (
   }
   const fresh = messages.slice(readCount);
   if (fresh.length === 0) {
-    await updateChatExtractionStatus(
-      chat.id,
-      "completed",
-      readAt,
-      chat.activeLeafId,
-    );
+    await completeChatExtraction(chat.id, readAt, chat.activeLeafId);
     return;
   }
 
@@ -354,7 +364,7 @@ const processChat = async (
   }
 
   // Mark chat as processed
-  await updateChatExtractionStatus(chat.id, "completed", readAt, cursor);
+  await completeChatExtraction(chat.id, readAt, cursor);
 
   logger.info(`Memory summary extraction completed for chat ${chat.id}`);
 };
@@ -370,16 +380,13 @@ type ChatToProcess = {
 };
 
 /**
- * Finds chats that need memory extraction processing, and when they were read.
+ * Finds chats that need memory extraction processing.
  *
  * A Chat is due when it is not mid-turn and its Active path ends somewhere its
  * cursor does not: a turn, an edit, a move to another Alternative or a
  * Delete. A Chat whose last pass failed waits an hour before its retry.
  */
-const findChatsToProcess = async (): Promise<{
-  readAt: Date;
-  chats: ChatToProcess[];
-}> => {
+const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
   // Find workspaces with memory extraction enabled
   const workspacesWithExtraction = await db
     .select()
@@ -429,14 +436,13 @@ const findChatsToProcess = async (): Promise<{
 
   if (workspaceMap.size === 0) {
     logger.debug("No workspaces have memory extraction enabled, skipping");
-    return { readAt: new Date(), chats: [] };
+    return [];
   }
 
   const workspaceIds = [...workspaceMap.keys()];
 
   // Find chats in those workspaces that need processing
-  const readAt = new Date();
-  const oneHourAgo = new Date(readAt.getTime() - 60 * 60 * 1000);
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
   // Not the messages: those are read per Chat as it is processed.
   const chatsToProcess = await db
@@ -467,7 +473,7 @@ const findChatsToProcess = async (): Promise<{
     if (resolved) result.push({ chat, ...resolved });
   }
 
-  return { readAt, chats: result };
+  return result;
 };
 
 /**
@@ -478,7 +484,7 @@ export const processMemoryExtractionBatch = async (): Promise<void> => {
   logger.info("Starting memory extraction batch");
 
   try {
-    const { readAt, chats: chatsToProcess } = await findChatsToProcess();
+    const chatsToProcess = await findChatsToProcess();
 
     if (chatsToProcess.length === 0) {
       logger.info("No chats to process for memory extraction");
@@ -494,6 +500,10 @@ export const processMemoryExtractionBatch = async (): Promise<void> => {
       extractionProvider,
       embeddingProvider,
     } of chatsToProcess) {
+      // Taken per Chat, just before its Active path is read: the pass is a
+      // snapshot of that moment, not of the scan, which may be minutes earlier
+      // by the time a Chat late in the batch is reached.
+      const readAt = new Date();
       try {
         // Mark as processing
         await updateChatExtractionStatus(chat.id, "processing", readAt);

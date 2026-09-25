@@ -246,9 +246,19 @@ describe("chat messages", () => {
       expect(turn.message).toBeUndefined();
     });
 
+    const notAReply = "Only a reply still in the Chat can regenerate";
+    const messageGone =
+      "This reply's message is no longer in the Chat, so it cannot regenerate";
+    const notYours = "Only a reply to one of your messages can regenerate";
+
     it.each([
-      ["a message that is not in the Chat", (rows: Row[]) => rows, "nope"],
-      ["a user message", (rows: Row[]) => rows, "u2"],
+      [
+        "a message that is not in the Chat",
+        (rows: Row[]) => rows,
+        "nope",
+        notAReply,
+      ],
+      ["a user message", (rows: Row[]) => rows, "u2", notAReply],
       [
         "a deleted reply",
         (rows: Row[]) => {
@@ -256,6 +266,7 @@ describe("chat messages", () => {
           return rows;
         },
         "a2",
+        notAReply,
       ],
       [
         "a reply whose message was deleted",
@@ -264,22 +275,34 @@ describe("chat messages", () => {
           return rows;
         },
         "a2",
+        messageGone,
       ],
       [
         "a reply that opens the Chat",
         () => [row("a0", null, "assistant", 1)],
         "a0",
+        notYours,
       ],
-    ])("409s %s", async (_, shape, messageId) => {
+      [
+        "a reply that follows another reply",
+        () => [
+          row("u1", null, "user", 1),
+          row("a1", "u1", "assistant", 2),
+          row("a2", "a1", "assistant", 3),
+        ],
+        "a2",
+        notYours,
+      ],
+    ])("409s %s", async (_, shape, messageId, error) => {
       seedDb({ chat_message: shape(tree()) });
 
-      await expect(
-        resolveTurn({
-          chatId: "chat-1",
-          owned: true,
-          request: regenerate(messageId),
-        }),
-      ).rejects.toBeInstanceOf(ConflictError);
+      const turn = resolveTurn({
+        chatId: "chat-1",
+        owned: true,
+        request: regenerate(messageId),
+      });
+      await expect(turn).rejects.toBeInstanceOf(ConflictError);
+      await expect(turn).rejects.toThrow(error);
     });
   });
 

@@ -13,6 +13,28 @@ import type { PlatypusUIMessage } from "../types.ts";
 /** A live message's place in the tree. */
 export type ChatTreeNode = { id: string; parentId: string | null };
 
+/** A path through a Chat's tree, and every live message's place in it. */
+export type ActivePath = {
+  messages: PlatypusUIMessage[];
+  tree: ChatTreeNode[];
+};
+
+/**
+ * The shape of a Chat's whole tree, oldest first, without any content: a
+ * Chat's Alternatives can be long, and nothing reads them.
+ */
+const loadTree = (chatId: string) =>
+  db
+    .select({
+      id: chatMessage.id,
+      parentId: chatMessage.parentId,
+      deletedAt: chatMessage.deletedAt,
+      createdAt: chatMessage.createdAt,
+    })
+    .from(chatMessage)
+    .where(eq(chatMessage.chatId, chatId))
+    .orderBy(asc(chatMessage.createdAt));
+
 /**
  * The path ending at `leafId` — the Active path when that is the Chat's
  * `activeLeafId` — plus every live message's place in the tree, oldest first.
@@ -24,19 +46,14 @@ export type ChatTreeNode = { id: string; parentId: string | null };
 export const loadActivePath = async (
   chatId: string,
   leafId: string | null,
-): Promise<{ messages: PlatypusUIMessage[]; tree: ChatTreeNode[] }> => {
-  // The whole tree's shape first, then the content of only the path: a Chat's
-  // Alternatives can be long, and nothing here reads them.
-  const nodes = await db
-    .select({
-      id: chatMessage.id,
-      parentId: chatMessage.parentId,
-      deletedAt: chatMessage.deletedAt,
-    })
-    .from(chatMessage)
-    .where(eq(chatMessage.chatId, chatId))
-    .orderBy(asc(chatMessage.createdAt));
+): Promise<ActivePath> => pathThrough(chatId, await loadTree(chatId), leafId);
 
+/** `loadActivePath` over a tree already loaded: reads only the path's content. */
+const pathThrough = async (
+  chatId: string,
+  nodes: Awaited<ReturnType<typeof loadTree>>,
+  leafId: string | null,
+): Promise<ActivePath> => {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const pathIds: string[] = [];
   for (
@@ -140,9 +157,14 @@ export const resolveTurn = async ({
     const parent = target.parentId
       ? await findMessage(chatId, target.parentId)
       : undefined;
-    if (!parent || parent.deletedAt || parent.role !== "user") {
+    if (parent?.deletedAt) {
       throw new ConflictError(
         "This reply's message is no longer in the Chat, so it cannot regenerate",
+      );
+    }
+    if (parent?.role !== "user") {
+      throw new ConflictError(
+        "Only a reply to one of your messages can regenerate",
       );
     }
     const { messages } = await loadActivePath(chatId, parent.id);
@@ -185,16 +207,8 @@ export const resolveTurn = async ({
 export const switchActivePath = async (
   chatId: string,
   messageId: string,
-): Promise<{ messages: PlatypusUIMessage[]; tree: ChatTreeNode[] }> => {
-  const nodes = await db
-    .select({
-      id: chatMessage.id,
-      parentId: chatMessage.parentId,
-      deletedAt: chatMessage.deletedAt,
-      createdAt: chatMessage.createdAt,
-    })
-    .from(chatMessage)
-    .where(eq(chatMessage.chatId, chatId));
+): Promise<ActivePath> => {
+  const nodes = await loadTree(chatId);
 
   const target = nodes.find((node) => node.id === messageId);
   if (!target || target.deletedAt) {
@@ -214,7 +228,7 @@ export const switchActivePath = async (
     .update(chat)
     .set({ activeLeafId: leaf.id })
     .where(eq(chat.id, chatId));
-  return loadActivePath(chatId, leaf.id);
+  return pathThrough(chatId, nodes, leaf.id);
 };
 
 /**

@@ -1,6 +1,6 @@
 ---
 title: Tools, tool sets & MCP
-description: Tools let an agent do things, not just talk. Tool sets bundle them, and MCP servers contribute Tool sets from outside Platypus.
+description: Tools are how an Agent acts. Tool sets bundle them, and MCP servers contribute Tool sets from outside Platypus.
 ---
 
 # Tools, tool sets & MCP
@@ -16,9 +16,9 @@ of wiring up individual tools one by one, you give an Agent a whole Tool set.
 
 Tool sets come from two kinds of source:
 
-- **built into Platypus or contributed by a plugin** — the **core built-ins** ship
-  with Platypus; **third-party plugins** are installed as npm packages. Some core
-  Tool sets are always present; the rest depend on which plugins the Operator
+- **built into Platypus or contributed by a Plugin** — the **core built-ins** ship
+  with Platypus; **third-party Plugins** are installed as npm packages. Some core
+  Tool sets are always present; the rest depend on which Plugins the Operator
   enabled. The Agent form's **Tools** card is the live list. The built-in ones
   are catalogued in [Tool sets](/building-with-platypus/tool-sets); [Extending →
   Tool sets](/extending/tool-sets) covers contributing your own.
@@ -48,7 +48,7 @@ one up.
 ## How it fits together
 
 > An **Agent** is granted zero or more **Tool sets**. Each Tool set is a core
-> built-in, contributed by a third-party **plugin**, or backed by an **MCP**
+> built-in, contributed by a third-party **Plugin**, or backed by an **MCP**
 > server, and resolves to a concrete set of tools the model can call during a
 > **Chat turn**.
 

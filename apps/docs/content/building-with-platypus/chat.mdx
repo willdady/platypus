@@ -371,13 +371,13 @@ above.
 
 Hover a message for its actions:
 
-| Action         | On                                  | Does                                              |
-| -------------- | ----------------------------------- | ------------------------------------------------- |
-| **Edit**       | Your own messages                   | Reopens the message for rewriting — see below     |
-| **Copy**       | Any message                         | Copies the message text to the clipboard          |
-| **Delete**     | Any message                         | Removes it from the Chat for good                 |
-| **Regenerate** | Any assistant reply                 | Runs the turn again, same message, fresh response |
-| **‹ 2/3 ›**    | Any message that has Alternatives   | Moves between its Alternatives — see below        |
+| Action         | On                                | Does                                              |
+| -------------- | --------------------------------- | ------------------------------------------------- |
+| **Edit**       | Your own messages                 | Reopens the message for rewriting — see below     |
+| **Copy**       | Any message                       | Copies the message text to the clipboard          |
+| **Delete**     | Any message                       | Removes it from the Chat for good                 |
+| **Regenerate** | Any reply to one of your messages | Runs the turn again, same message, fresh response |
+| **‹ 2/3 ›**    | Any message that has Alternatives | Moves between its Alternatives — see below        |
 
 The actions are hidden on a reply that is still streaming, and **Regenerate**
 and the arrows on the rest of the Chat wait until it finishes. **Edit**,
@@ -426,10 +426,10 @@ same way: the new reply takes the old one's place, and the old one stays.
 
 A message with Alternatives shows arrows among its actions, with its place
 between them — **‹ 2/3 ›**. The arrows show the one before or after, oldest
-first, together with the conversation that carried on from it. A screen reader
-reads the control as "Message 2 of 3" under your own message and "Response 2 of
-3" under a reply, and the arrows as "Previous message" and "Next message", or
-"Previous response" and "Next response".
+first, together with the conversation that carried on from it. Hover the count
+for its label, "Message 2 of 3" under your own message and "Response 2 of 3"
+under a reply, and an arrow for "Previous message" and "Next message", or
+"Previous response" and "Next response". A screen reader reads the same labels.
 
 Whichever you land on is the Chat from then on: it is what a reload shows, what
 the model is sent, and what your next message follows.
