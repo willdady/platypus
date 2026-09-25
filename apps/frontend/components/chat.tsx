@@ -243,6 +243,20 @@ export const Chat = ({
     void mutateChat().catch(() => {});
   }, [mutateChat]);
 
+  // A turn's rows — its message and reply, and with them the tree that gives a
+  // new Alternative its arrows — reach this tab only through this read. The
+  // poll stops once nothing says a run is live, so a turn that ends inside one
+  // poll interval would otherwise leave the read as it was before the turn.
+  const turnWasInFlight = useRef(false);
+  useEffect(() => {
+    if (isTurnInFlight(status)) {
+      turnWasInFlight.current = true;
+    } else if (turnWasInFlight.current) {
+      turnWasInFlight.current = false;
+      refreshChat();
+    }
+  }, [status, refreshChat]);
+
   // A restored page's poll was frozen the whole time it was away, and a bfcache
   // restore is neither a focus nor a reconnect.
   useRevalidateOnRestore(refreshChat);

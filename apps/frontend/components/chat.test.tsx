@@ -1164,6 +1164,34 @@ describe("starting a turn", () => {
     expect(harness.chatMutate).toHaveBeenCalledTimes(1);
   });
 
+  // The turn's rows, and with them the tree that gives a new Alternative its
+  // arrows, reach this tab only through the Chat read. A turn that ends inside
+  // one poll interval leaves nothing else to re-read it.
+  it.each(["ready", "error"] as const)(
+    "re-reads the row when this tab's turn ends at %s",
+    (end) => {
+      harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
+      harness.turn.status = "streaming";
+      const view = renderChat();
+      expect(harness.chatMutate).not.toHaveBeenCalled();
+
+      harness.turn.status = end;
+      view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+      expect(harness.chatMutate).toHaveBeenCalledTimes(1);
+      expect(harness.chatMutate).toHaveBeenCalledWith();
+    },
+  );
+
+  it("does not re-read the row on a render with no turn ending", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
+    const view = renderChat();
+
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(harness.chatMutate).not.toHaveBeenCalled();
+  });
+
   // The reply's message was deleted: there is nothing to answer, and the
   // server refuses the regenerate (409).
   it("offers no Regenerate once the reply's message has left the Chat", () => {
