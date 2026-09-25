@@ -39,9 +39,10 @@ COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY .npmrc ./
 # Disable auto-install of peer dependencies to avoid pulling in
-# unnecessary packages like next, react, react-dom from better-auth
-RUN echo "auto-install-peers=false" >> .npmrc
-RUN pnpm install --prod && \
+# unnecessary packages like next, react, react-dom from better-auth. It is a
+# flag rather than a line appended to .npmrc: that file has no trailing newline,
+# so an appended line merges into its last one and pnpm silently ignores it.
+RUN pnpm install --prod --config.auto-install-peers=false && \
     pnpm store prune && \
     rm -rf /tmp/* /root/.cache
 
