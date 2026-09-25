@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.10.1](https://github.com/willdady/platypus/compare/v3.10.0...v3.10.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **frontend:** show the Alternatives arrows as soon as an edit or regenerate finishes ([#1018](https://github.com/willdady/platypus/issues/1018)) ([fe62371](https://github.com/willdady/platypus/commit/fe62371cc584e9d0bc9b0dc85ae42f4f09b0e807))
+* **frontend:** stop re-reading the whole Chat every 3s while its reply streams ([#1020](https://github.com/willdady/platypus/issues/1020)) ([354666b](https://github.com/willdady/platypus/commit/354666bd336e027bd30b9847677ae395f5d4d1b2))
+
 ## [3.10.0](https://github.com/willdady/platypus/compare/v3.9.4...v3.10.0) (2026-09-25)
 
 
