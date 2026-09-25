@@ -51,7 +51,6 @@ import { toolCallDurationMs } from "@/lib/tool-duration";
 import type { AlternativePosition } from "@/lib/chat-alternatives";
 import { isTurnInFlight as isInFlight } from "@/lib/chat-recovery";
 import { ResponseMetricsPopover } from "./response-metrics-popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { TurnNotice } from "./turn-notice";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
@@ -522,21 +521,13 @@ export const ChatMessage = memo(function ChatMessage({
                 }
                 variant="ghost"
                 size="icon"
-                tooltip={`Previous ${alternativeNoun.toLowerCase()}`}
+                label={`Previous ${alternativeNoun.toLowerCase()}`}
               >
                 <ChevronLeftIcon className="size-4" />
               </MessageAction>
-              {/* The group's label, shown on hover over the count. */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {alternatives.index + 1}/{alternatives.count}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{alternativeLabel}</p>
-                </TooltipContent>
-              </Tooltip>
+              <span className="cursor-default text-xs tabular-nums text-muted-foreground">
+                {alternatives.index + 1}/{alternatives.count}
+              </span>
               <MessageAction
                 className="cursor-pointer text-muted-foreground"
                 disabled={isTurnInFlight || !alternatives.nextId}
@@ -545,7 +536,7 @@ export const ChatMessage = memo(function ChatMessage({
                 }
                 variant="ghost"
                 size="icon"
-                tooltip={`Next ${alternativeNoun.toLowerCase()}`}
+                label={`Next ${alternativeNoun.toLowerCase()}`}
               >
                 <ChevronRightIcon className="size-4" />
               </MessageAction>
