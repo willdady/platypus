@@ -126,9 +126,10 @@ export const convertTimezone = tool({
       formatter.formatToParts(date).map((p) => [p.type, p.value]),
     );
     // ICU renders the longOffset sign as U+2212; normalise to ASCII so the
-    // output stays valid ISO
+    // output stays valid ISO. UTC is "GMT" or "GMT+00:00" depending on the
+    // ICU version; both become Z
     const offset =
-      parts.timeZoneName.replace(/^GMT/, "").replace("−", "-") || "Z";
+      parts.timeZoneName.replace(/^GMT(\+00:00)?/, "").replace("−", "-") || "Z";
     const isoDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}`;
 
     return {
