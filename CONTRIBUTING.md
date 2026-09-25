@@ -27,7 +27,7 @@ This is the from-source workflow for contributors. (To simply run Platypus, use 
 ### Prerequisites
 
 - **Docker** (for the local Postgres database with [pgvector](https://github.com/pgvector/pgvector))
-- **Node.js v24+**
+- **Node.js v26+**
 - **pnpm**
 - An AI Provider API Key (e.g., OpenRouter, OpenAI)
 

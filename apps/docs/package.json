@@ -26,7 +26,7 @@
     "@opennextjs/cloudflare": "1.20.6",
     "@platypus/schemas": "workspace:*",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^24.13.6",
+    "@types/node": "^26.6.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^10.11.0",

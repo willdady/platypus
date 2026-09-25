@@ -1,6 +1,6 @@
 # syntax=docker.io/docker/dockerfile:1
 
-FROM node:24-alpine AS base
+FROM node:26-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -9,7 +9,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Install pnpm
-RUN corepack enable pnpm
+RUN npm install -g corepack && corepack enable pnpm
 
 # Copy monorepo files
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json .npmrc ./
@@ -27,7 +27,7 @@ FROM base AS builder
 WORKDIR /app
 
 # Install pnpm
-RUN corepack enable pnpm
+RUN npm install -g corepack && corepack enable pnpm
 
 # Copy installed dependencies
 COPY --from=deps app/ ./

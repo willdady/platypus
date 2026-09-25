@@ -77,17 +77,13 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Trusted publishing needs npm CLI >= 11.5.1; Node's bundled npm is too old,
-      # so upgrade and publish in the SAME step (a global upgrade in a prior step
-      # doesn't reliably become the `npm` this step resolves) with `hash -r` so
-      # bash re-resolves the binary. `--provenance` is what forces the OIDC
-      # exchange (see the setup-node note above); no token env is needed.
+      # Trusted publishing needs npm CLI >= 11.5.1, which Node's bundled npm
+      # meets. `--provenance` is what forces the OIDC exchange (see the
+      # setup-node note above); no token env is needed.
       - name: Publish to npm
         if: steps.check.outputs.publish == 'true'
         working-directory: packages/plugin-sdk
         run: |
-          npm install -g npm@latest
-          hash -r
           echo "Publishing with npm $(npm --version) on node $(node --version)"
           echo "OIDC token endpoint present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
           npm publish --provenance

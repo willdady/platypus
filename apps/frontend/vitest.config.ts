@@ -7,6 +7,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    // Node 25+ ships its own `localStorage` global, which is undefined without
+    // --localstorage-file and stops Vitest installing jsdom's in its place.
+    execArgv: ["--no-experimental-webstorage"],
     include: ["**/*.test.ts", "**/*.test.tsx"],
     setupFiles: ["./vitest.setup.ts"],
     coverage: {
