@@ -43,7 +43,7 @@ Platypus is an open-source, full-stack application for building AI Agents that r
 - **🔔 Notifications & Webhooks:** Agents post Notifications to the Workspace, and HMAC-signed webhooks push Board and Notification events to your own systems, with per-event filtering and automatic retries.
 - **🏢 Multi-Tenancy:** Organizations and Workspaces isolate data and keep one team's work out of another's.
 - **📐 Blueprints:** Package shared Agents, Skills, MCP servers, and Providers once, then stand up a new team's Workspace with them in one step.
-- **🌐 Provider Agnostic:** Powered by the Vercel AI SDK — OpenAI, Anthropic, Google, Bedrock, and OpenRouter, plus Ollama, vLLM, Azure OpenAI, and any OpenAI-compatible endpoint.
+- **🌐 Provider Agnostic:** Powered by the Vercel AI SDK — OpenAI, Anthropic, Google, Bedrock, and OpenRouter, plus Ollama, vLLM, and any OpenAI-compatible endpoint.
 - **🧩 Plugins:** Add Tool sets, Sandbox backends, and web-search backends without forking, using the typed [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk).
 - **⚖️ MIT Licensed:** Open source and free to use, on hardware you control.
 
