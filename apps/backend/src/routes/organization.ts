@@ -107,7 +107,7 @@ organization.put(
       })
       .where(eq(organizationTable.id, orgId))
       .returning();
-    return c.json(record, 200);
+    return c.json(record[0], 200);
   },
 );
 

@@ -192,8 +192,7 @@ describe("Organization Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      // Handler returns the raw returning() array.
-      expect(await res.json()).toEqual([updated]);
+      expect(await res.json()).toEqual(updated);
       expect(mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({ identityContext: "We are Acme." }),
       );
