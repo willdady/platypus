@@ -28,6 +28,7 @@ vi.mock("../../services/chat-metadata.ts", () => ({
 }));
 
 import { ChatSink, type ChatSinkParams } from "./chat-sink.ts";
+import { extractFiles } from "../../storage/utils.ts";
 import type { ResolvedRunPlan } from "../types.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 
@@ -528,12 +529,22 @@ describe("ChatSink", () => {
       expect(rowOf(fake, "chat", "chat-1")?.status).toBe("cancelled");
     });
 
-    // Currently fails: `writeRow` returns before the status write when
-    // `extractFiles` throws, so the Chat stays `running` until the stuck-Chat
-    // sweep. Enable with the fix for #1023.
-    it.todo(
-      "still writes the terminal status when storing the reply's files fails",
-    );
+    it("still writes the terminal status when storing the reply's files fails", async () => {
+      const fake = seedChat();
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+      vi.mocked(extractFiles).mockRejectedValueOnce(new Error("storage down"));
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "succeeded",
+        messages: [u0, a0, u1, reply("r1")],
+        stats: {},
+      });
+
+      expect(rowOf(fake, "chat", "chat-1")?.status).toBe("failed");
+      expect(rowOf(fake, "chat_message", "r1")).toBeUndefined();
+    });
   });
 
   describe("onFinish — adhoc path", () => {

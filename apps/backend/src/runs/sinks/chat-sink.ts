@@ -167,25 +167,15 @@ export class ChatSink implements RunSink {
     if (!this.plan) {
       // Resolution failed before we had any plan to persist; just update
       // the status on the row that onStart inserted.
-      try {
-        await db
-          .update(chatTable)
-          .set({ status: ctx.status, updatedAt: new Date() })
-          .where(
-            and(
-              eq(chatTable.id, ctx.runId),
-              eq(chatTable.workspaceId, this.params.workspaceId),
-            ),
-          );
-      } catch (error) {
-        logger.error(
-          { error, chatId: ctx.runId },
-          "Error writing terminal status without plan",
-        );
-      }
+      await this.writeStatus(ctx.status);
     } else {
       this.latestMessages = ctx.messages;
-      await this.writeRow({ status: ctx.status, messages: ctx.messages });
+      const written = await this.writeRow({
+        status: ctx.status,
+        messages: ctx.messages,
+      });
+      // A reply that could not be stored must not leave the Chat `running`.
+      if (!written) await this.writeStatus("failed");
 
       // Fire-and-forget authoritative titling. Runs for every terminal status
       // (succeeded / failed / cancelled) so a chat is titled even when the
@@ -197,6 +187,26 @@ export class ChatSink implements RunSink {
     }
 
     await this.restoreLeaf();
+  }
+
+  /** Writes only the Chat row's status. */
+  private async writeStatus(status: RunStatus): Promise<void> {
+    try {
+      await db
+        .update(chatTable)
+        .set({ status, updatedAt: new Date() })
+        .where(
+          and(
+            eq(chatTable.id, this.runId),
+            eq(chatTable.workspaceId, this.params.workspaceId),
+          ),
+        );
+    } catch (error) {
+      logger.error(
+        { error, chatId: this.runId },
+        "Error writing terminal status",
+      );
+    }
   }
 
   /**
@@ -266,6 +276,7 @@ export class ChatSink implements RunSink {
   /**
    * Writes the Chat row with the resolved plan and the supplied status, and
    * upserts the turn's reply (after running it through `extractFiles`).
+   * Resolves `false`, having written nothing, when either step fails.
    *
    * The reply is the trailing message when it is an assistant's. What the
    * server loaded for the turn always ends in a user message — the one submitted, or the
@@ -276,8 +287,8 @@ export class ChatSink implements RunSink {
   private async writeRow(args: {
     status: RunStatus;
     messages: PlatypusUIMessage[];
-  }): Promise<void> {
-    if (!this.plan) return;
+  }): Promise<boolean> {
+    if (!this.plan) return false;
 
     const { resolved } = this.plan;
     const { workspaceId } = this.params;
@@ -289,7 +300,7 @@ export class ChatSink implements RunSink {
         last?.role === "assistant" ? await this.storeFiles(last) : undefined;
     } catch (error) {
       logger.error({ error, chatId: this.runId }, "Error extracting files");
-      return;
+      return false;
     }
 
     const dbValues = {
@@ -353,11 +364,13 @@ export class ChatSink implements RunSink {
           );
       });
       if (reply) this.replyWritten = true;
+      return true;
     } catch (error) {
       logger.error(
         { error, chatId: this.runId, workspaceId },
         "Error upserting chat record",
       );
+      return false;
     }
   }
 }
