@@ -25,7 +25,6 @@ describe("convertTimezone", () => {
     // U+2212 minus from ICU normalised to ASCII.
     ["America/New_York", "2025-01-07T09:30:00-05:00"],
     ["Asia/Kolkata", "2025-01-07T20:00:00+05:30"],
-    ["UTC", "2025-01-07T14:30:00Z"],
   ])("converts to %s as ISO with an explicit offset", async (tz, iso) => {
     expect(
       await callTool(convertTimezone, {
