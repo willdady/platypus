@@ -44,28 +44,22 @@ const belief = (
 ) => ({ runStatus, turnStatus, turnEstablished });
 
 describe("chatPollIntervalMs", () => {
-  // The reported bug in one assertion. An existing Chat's row still reads
-  // `succeeded` from the previous turn at the moment the next one is sent, and
-  // gating on that alone is a deadlock: only the poll would refresh it.
-  it("polls a turn just submitted into a Chat whose row still reads succeeded", () => {
-    expect(chatPollIntervalMs(belief("succeeded", "submitted"))).toBe(
-      CHAT_POLL_INTERVAL_MS,
-    );
-  });
-
-  it("polls while this tab is streaming", () => {
-    expect(chatPollIntervalMs(belief("succeeded", "streaming"))).toBe(
-      CHAT_POLL_INTERVAL_MS,
-    );
-  });
-
-  // A brand-new Chat is read before its row exists, so there is no status at
-  // all to gate on.
-  it("polls a turn on a Chat that has no row yet", () => {
-    expect(chatPollIntervalMs(belief(undefined, "submitted"))).toBe(
-      CHAT_POLL_INTERVAL_MS,
-    );
-  });
+  // This tab's own stream is the live source; a read under it lands nowhere.
+  // A row already reading `running` (the read taken at submit) is no reason
+  // either.
+  it.each([
+    ["succeeded", "submitted"],
+    ["succeeded", "streaming"],
+    ["running", "submitted"],
+    ["running", "streaming"],
+    [undefined, "submitted"],
+    [undefined, "streaming"],
+  ] as const)(
+    "does not poll under this tab's own stream (row %s, turn %s)",
+    (runStatus, turnStatus) => {
+      expect(chatPollIntervalMs(belief(runStatus, turnStatus, true))).toBe(0);
+    },
+  );
 
   // The recovery itself: a dropped stream leaves the turn at `error` while the
   // run carries on, and this is what gets the partial answer moving again.
@@ -89,6 +83,9 @@ describe("chatPollIntervalMs", () => {
     );
   });
 
+  // Including a `succeeded` left over from the previous turn: the read taken
+  // when the turn ends replaces it with this turn's status, and polling
+  // resumes from that.
   it("stops once the server reports an outcome for a dropped turn", () => {
     for (const runStatus of ["succeeded", "failed", "cancelled"] as const) {
       expect(chatPollIntervalMs(belief(runStatus, "error", true))).toBe(0);

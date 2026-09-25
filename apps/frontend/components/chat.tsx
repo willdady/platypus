@@ -205,13 +205,12 @@ export const Chat = ({
     else if (status === "streaming") setTurnEstablished(true);
   });
 
-  // Fetch existing chat data, and re-read it while there is reason to believe a
-  // run is live so a client that lost its stream sees the partial answer keep
-  // filling in. `chatPollIntervalMs` owns that decision, and reads THIS tab's
-  // turn status as well as the fetched one: gated on the fetched status alone
-  // the poll could never start, because on an existing Chat that status is the
-  // previous turn's `succeeded` until something refetches it — and the only
-  // thing that would was the poll (issue #648).
+  // Fetch existing chat data, and re-read it while a run this tab is not
+  // streaming may be live, so a client that lost its stream, or never had one,
+  // sees the partial answer keep filling in. `chatPollIntervalMs` owns that
+  // decision (issue #648). Under this tab's own stream it does not poll: the
+  // read taken when the turn ends, below, is what a dropped stream resumes
+  // from.
   //
   // Focus and reconnect revalidation are deliberately left on (SWR's defaults).
   // They are the "the user came back" and "the network returned" signals, and a
@@ -237,8 +236,8 @@ export const Chat = ({
   });
 
   // Re-read the row from the authority. Nothing here awaits it and a failure is
-  // not worth reporting: the poll gate reads this tab's own turn status too, so
-  // recovery never depends on one refresh landing.
+  // not worth reporting: SWR retries a failed read, and reconnect and focus
+  // read again, so recovery never depends on one refresh landing.
   const refreshChat = useCallback(() => {
     void mutateChat().catch(() => {});
   }, [mutateChat]);

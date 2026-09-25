@@ -15,10 +15,11 @@ import type { PlatypusUIMessage } from "@platypus/backend/src/types";
  * - **Whether a run may be underway.** {@link runMayBeLive}, which the poll and
  *   the composer guard are both derived from. The trap is deriving it from the
  *   fetched status alone: on an existing Chat that status is last turn's
- *   `succeeded` until something refetches it, so a poll gated on it can never
- *   start — it only polls once the fetched row says a run is live, and only the
- *   poll would put that there. On a brand-new Chat there is no status at all,
- *   because the row does not exist until the run creates it.
+ *   `succeeded` until something refetches it. On a brand-new Chat there is no
+ *   status at all, because the row does not exist until the run creates it.
+ *   A poll never runs under this tab's own stream, and the Chat re-reads the
+ *   row when the turn ends, dropped or not, so the poll resumes from a status
+ *   that is this turn's.
  * - **What to say about the drop.** {@link classifyChatError}. A dropped
  *   connection to a healthy run is not a failed turn and must not be reported
  *   as one.
@@ -55,9 +56,9 @@ export type RunBelief = {
  *
  * - The fetched row says `running`. Covers a tab that arrived mid-run and a
  *   second tab open on the same Chat — neither has a local turn to go on.
- * - This tab has a turn in flight. Covers the reason the poll never used to
- *   start: nothing has refetched the row since the previous turn finished, so
- *   its status still reads `succeeded` while a run is in fact underway.
+ * - This tab has a turn in flight. Nothing may have refetched the row since
+ *   the previous turn finished, so its status can still read `succeeded` while
+ *   a run is in fact underway.
  * - This tab's turn ended at `error` having streamed. That is a dropped
  *   connection to a run that is still going, and treating it as settled is what
  *   left the answer frozen forever. Having streamed is the qualifier: a request
@@ -77,10 +78,6 @@ export const runMayBeLive = ({
   return turnStatus === "error" && turnEstablished && !isRunOver(runStatus);
 };
 
-/** How long until the Chat row should be read again, or `0` for "don't". */
-export const chatPollIntervalMs = (belief: RunBelief): number =>
-  runMayBeLive(belief) ? CHAT_POLL_INTERVAL_MS : 0;
-
 /**
  * Whether a run may be underway that this tab is not streaming.
  *
@@ -92,6 +89,18 @@ export const chatPollIntervalMs = (belief: RunBelief): number =>
  */
 export const isRunHeldElsewhere = (belief: RunBelief): boolean =>
   runMayBeLive(belief) && !isTurnInFlight(belief.turnStatus);
+
+/**
+ * How long until the Chat row should be read again, or `0` for "don't".
+ *
+ * Only for a run this tab is not streaming: another tab's, or its own after the
+ * stream dropped. Under its own stream a read lands nowhere — the hydrate
+ * effect skips it — and a Chat with a long Transcript pays for the whole of it
+ * on every read. A stream that drops ends the turn, and the read taken then
+ * brings the status up to date for this to resume from.
+ */
+export const chatPollIntervalMs = (belief: RunBelief): number =>
+  isRunHeldElsewhere(belief) ? CHAT_POLL_INTERVAL_MS : 0;
 
 /** How a Chat error should be surfaced. */
 export type ChatErrorTreatment = "none" | "recovering" | "failure";

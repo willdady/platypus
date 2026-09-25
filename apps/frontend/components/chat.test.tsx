@@ -530,31 +530,35 @@ describe("Chat detail read", () => {
   });
 });
 
-// The wiring the pure-function tests cannot see. Gating the interval on the
-// fetched status ALONE is the bootstrap deadlock: on an existing Chat that
-// status is the previous turn's `succeeded` until something refetches it, and
-// the only thing that would was the poll.
+// The wiring the pure-function tests cannot see. Under this tab's own stream
+// nothing polls; the read taken when the turn ends is what a dropped stream
+// resumes from.
 describe("polling a live run", () => {
-  it("polls a turn this tab just submitted, though the row reads succeeded", () => {
-    harness.turn.status = "submitted";
-    renderChat();
+  it.each([
+    ["submitted", { status: "succeeded" }],
+    ["streaming", { status: "succeeded" }],
+    ["streaming", { status: "running" }],
+    ["submitted", null],
+  ] as const)(
+    "does not poll while this tab's turn is %s (row %j)",
+    (turnStatus, row) => {
+      harness.turn.status = turnStatus;
+      renderChat();
 
-    expect(pollFor({ status: "succeeded" })).toBe(CHAT_POLL_INTERVAL_MS);
-  });
+      expect(pollFor(row)).toBe(0);
+    },
+  );
 
-  it("polls while this tab is streaming", () => {
-    harness.turn.status = "streaming";
-    renderChat();
+  // The row still reads the previous turn's `succeeded` when the stream drops.
+  // The read taken as the turn ends learns the run is still going, and the
+  // poll picks up from there.
+  it("resumes polling from the read taken when a stream drops", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
+    renderThrough(...DROPPED);
 
-    expect(pollFor({ status: "succeeded" })).toBe(CHAT_POLL_INTERVAL_MS);
-  });
-
-  // A brand-new Chat has no row to read a status off at all.
-  it("polls a turn on a Chat with no row yet", () => {
-    harness.turn.status = "submitted";
-    renderChat();
-
-    expect(pollFor(null)).toBe(CHAT_POLL_INTERVAL_MS);
+    expect(harness.chatMutate).toHaveBeenCalledWith();
+    expect(pollFor({ status: "succeeded" })).toBe(0);
+    expect(pollFor({ status: "running" })).toBe(CHAT_POLL_INTERVAL_MS);
   });
 
   it("polls a run this tab did not start", () => {
