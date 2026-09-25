@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.10.0](https://github.com/willdady/platypus/compare/v3.9.4...v3.10.0) (2026-09-25)
+
+
+### Features
+
+* keep edited and regenerated messages as Alternatives you can switch between ([#1014](https://github.com/willdady/platypus/issues/1014)) ([0a34eb0](https://github.com/willdady/platypus/commit/0a34eb015a4b1b63ee83bc8feb2e37117ac0d7c5))
+
+
+### Bug Fixes
+
+* **backend:** extract memory only from messages added since the last pass ([#1015](https://github.com/willdady/platypus/issues/1015)) ([38274db](https://github.com/willdady/platypus/commit/38274dbbcb3e0f99b6d6c6dc26eb8726d5e8bff4))
+* correct the Concepts and Administering docs against the code ([#1016](https://github.com/willdady/platypus/issues/1016)) ([6353dc6](https://github.com/willdady/platypus/commit/6353dc6d9d19ace670bbf6913715e92b9ca43ca5))
+* **frontend:** stop the Chat skeleton flickering on reload ([#1013](https://github.com/willdady/platypus/issues/1013)) ([410788d](https://github.com/willdady/platypus/commit/410788df2f9a19a3a9b8bde83c3b55fe403e76de))
+* keep a failed regenerate's reply reachable and save the last Alternative clicked ([#1017](https://github.com/willdady/platypus/issues/1017)) ([882a67c](https://github.com/willdady/platypus/commit/882a67c9437d1b76669186d94fa90f0cddd25253))
+* persist message deletion immediately and stop edits destroying stored messages ([#1010](https://github.com/willdady/platypus/issues/1010)) ([243c036](https://github.com/willdady/platypus/commit/243c0368f9c2295ed5675885c94be4382aa8c82d))
+
 ## [3.9.4](https://github.com/willdady/platypus/compare/v3.9.3...v3.9.4) (2026-09-24)
 
 
