@@ -9,7 +9,7 @@ import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canConfigureSandbox } from "@/lib/authorization";
-import { scopedUrl, writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt, type FormDraft } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -255,9 +255,13 @@ const SandboxSettingsSkeleton = ({
 const SandboxSettings = ({
   orgId,
   workspaceId,
+  draft,
 }: {
   orgId: string;
-  workspaceId: string;
+  /** Absent only for a draft, whose Workspace does not exist yet. */
+  workspaceId?: string;
+  /** Collect the Sandbox rather than save it (see `FormDraft`). */
+  draft?: FormDraft;
 }) => {
   const { actor } = useAuth();
   const backendUrl = useBackendUrl();
@@ -287,19 +291,19 @@ const SandboxSettings = ({
 
   const { data, error, isLoading, mutate } = useScopedSWR<Sandbox | null>(
     "sandbox",
-    scope,
+    draft ? null : scope,
     { fetcher: sandboxFetcher },
   );
 
   const { data: backendsData, isLoading: backendsLoading } = useScopedSWR<{
     results: SandboxBackend[];
-  }>("sandbox/backends", scope);
+  }>("sandbox-backends", { orgId });
   const backends = useMemo(() => backendsData?.results ?? [], [backendsData]);
 
   // Operator network allowlist — admin-only endpoint (ADR-0005).
   const { data: networksData, isLoading: networksLoading } = useScopedSWR<{
     results: string[];
-  }>("sandbox/networks", canConfigure ? scope : null);
+  }>("sandbox-backends/networks", canConfigure ? { orgId } : null);
   const allowedNetworks = networksData?.results ?? [];
 
   const [isConfiguring, setIsConfiguring] = useState(false);
@@ -429,7 +433,7 @@ const SandboxSettings = ({
     // else is admin-controlled and ignored server-side, so we don't send it.
     const payload = canConfigure
       ? {
-          ...(isCreate ? { workspaceId } : {}),
+          ...(isCreate && !draft ? { workspaceId } : {}),
           name: formData.name,
           backend: formData.backend,
           config,
@@ -443,7 +447,9 @@ const SandboxSettings = ({
           userEnv: rowsToRecord(formData.userEnv),
         };
 
-    const outcome = await writeAt(url, { method, data: payload });
+    const outcome = draft
+      ? await draft.write(payload)
+      : await writeAt(url, { method, data: payload });
 
     if (outcome.outcome === "success") return { ok: true };
 
@@ -480,7 +486,8 @@ const SandboxSettings = ({
     setIsSubmitting(true);
     try {
       const result = await performSave();
-      if (result.ok) {
+      // A draft stays put: the wizard moves on once `write` accepts it.
+      if (result.ok && !draft) {
         await mutate();
         toast.success("Sandbox configured");
         setIsConfiguring(false);
@@ -594,7 +601,7 @@ const SandboxSettings = ({
   }
 
   const hasSandbox = !!data;
-  const showForm = hasSandbox || isConfiguring;
+  const showForm = hasSandbox || isConfiguring || !!draft;
   const noBackends = backends.length === 0;
 
   if (!showForm) {
@@ -632,9 +639,9 @@ const SandboxSettings = ({
       <FieldSet className="mb-6">
         <FieldGroup>
           <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="name">Name</FieldLabel>
+            <FieldLabel htmlFor="sandbox-name">Name</FieldLabel>
             <Input
-              id="name"
+              id="sandbox-name"
               placeholder="My sandbox"
               value={formData.name}
               onChange={(e) => {
@@ -1012,41 +1019,56 @@ const SandboxSettings = ({
         </FieldGroup>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button
-          className="cursor-pointer"
-          onClick={handleSave}
-          disabled={isSubmitting}
-        >
-          Save
-        </Button>
-
-        {hasSandbox ? (
-          canConfigure && (
-            <Button
-              className="cursor-pointer"
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(true)}
-              disabled={isSubmitting}
-            >
-              <Trash2 /> Delete
-            </Button>
-          )
-        ) : (
+      {draft ? (
+        <div className="flex gap-2">
           <Button
-            className="cursor-pointer"
-            variant="ghost"
-            onClick={() => {
-              setIsConfiguring(false);
-              setFormData(DEFAULT_FORM);
-              setValidationErrors({});
-            }}
+            variant="outline"
+            onClick={draft.onBack}
             disabled={isSubmitting}
           >
-            Cancel
+            Back
           </Button>
-        )}
-      </div>
+          <Button onClick={handleSave} disabled={isSubmitting}>
+            {draft.submitText}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button
+            className="cursor-pointer"
+            onClick={handleSave}
+            disabled={isSubmitting}
+          >
+            Save
+          </Button>
+
+          {hasSandbox ? (
+            canConfigure && (
+              <Button
+                className="cursor-pointer"
+                variant="outline"
+                onClick={() => setIsDeleteDialogOpen(true)}
+                disabled={isSubmitting}
+              >
+                <Trash2 /> Delete
+              </Button>
+            )
+          ) : (
+            <Button
+              className="cursor-pointer"
+              variant="ghost"
+              onClick={() => {
+                setIsConfiguring(false);
+                setFormData(DEFAULT_FORM);
+                setValidationErrors({});
+              }}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
+      )}
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

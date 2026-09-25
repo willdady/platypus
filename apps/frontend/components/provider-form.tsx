@@ -72,6 +72,7 @@ import {
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
+import type { FormDraft } from "@/lib/api-write";
 import {
   getModelConfigs,
   defaultPassthroughFileTypes,
@@ -518,11 +519,14 @@ const ProviderForm = ({
   orgId,
   workspaceId,
   providerId,
+  draft,
 }: {
   classNames?: string;
   orgId: string;
   workspaceId?: string;
   providerId?: string;
+  /** Collect the Provider rather than save it (see `FormDraft`). */
+  draft?: FormDraft;
 }) => {
   // Add scope to Provider type for this component
   type ProviderWithScope = Provider & { scope: "organization" | "workspace" };
@@ -564,7 +568,8 @@ const ProviderForm = ({
     submit,
   } = useEntityForm<
     ProviderFormData,
-    { id: string; aliasRepoints?: unknown },
+    // Undefined only for a draft, whose `write` saves nothing.
+    { id: string; aliasRepoints?: unknown } | undefined,
     ProviderWithScope
   >({
     initialData: {
@@ -628,9 +633,26 @@ const ProviderForm = ({
         provider.embeddingDimensions?.toString() || null,
       );
     },
-    buildPayload: (data) => ({
-      workspaceId: workspaceId || undefined,
-      organizationId: !workspaceId ? orgId : undefined,
+    buildPayload,
+    write: draft && ((data) => draft.write(buildPayload(data))),
+    onConflict: (message) => setError(message),
+    onError: toastGuidanceOrError,
+    failureMessage: "Failed to save provider",
+    onSuccess: (data) => {
+      // A draft stays put: the wizard moves on once `write` accepts it.
+      if (draft) return;
+      reportAliasRepoints(data?.aliasRepoints);
+      router.push(listHref);
+    },
+  });
+
+  function buildPayload(data: ProviderFormData) {
+    return {
+      // A draft's scope is the Workspace it will be created with.
+      ...(!draft && {
+        workspaceId: workspaceId || undefined,
+        organizationId: !workspaceId ? orgId : undefined,
+      }),
       name: data.name,
       providerType: data.providerType,
       apiKey: data.apiKey,
@@ -650,15 +672,8 @@ const ProviderForm = ({
       embeddingDimensions: data.embeddingDimensions
         ? parseInt(data.embeddingDimensions)
         : null,
-    }),
-    onConflict: (message) => setError(message),
-    onError: toastGuidanceOrError,
-    failureMessage: "Failed to save provider",
-    onSuccess: (data) => {
-      reportAliasRepoints(data.aliasRepoints);
-      router.push(listHref);
-    },
-  });
+    };
+  }
 
   const {
     isDeleteDialogOpen,
@@ -1273,23 +1288,41 @@ const ProviderForm = ({
         </Collapsible>
       </FieldSet>
 
-      {!isReadOnly && (
-        <FormFooterButtons
-          submitText={providerId ? "Update" : "Save"}
-          onSubmit={handleSubmit}
-          submitDisabled={
-            isSubmitting || !!headersError || !!extraBodyError
-            // No `canSubmit` gate: several fields here (apiMode, organization,
-            // project) render only for certain provider types, so a
-            // server-returned error can outlive the input that would retract
-            // it. Re-submitting simply re-validates. The JSON errors above are
-            // different: they are computed here as the user types and always
-            // clear themselves.
-          }
-          deleteVisible={!!providerId}
-          deleteDisabled={isSubmitting}
-          onDelete={openDeleteDialog}
-        />
+      {draft ? (
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={draft.onBack}
+            disabled={isSubmitting}
+          >
+            Back
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !!headersError || !!extraBodyError}
+          >
+            {draft.submitText}
+          </Button>
+        </div>
+      ) : (
+        !isReadOnly && (
+          <FormFooterButtons
+            submitText={providerId ? "Update" : "Save"}
+            onSubmit={handleSubmit}
+            submitDisabled={
+              isSubmitting || !!headersError || !!extraBodyError
+              // No `canSubmit` gate: several fields here (apiMode, organization,
+              // project) render only for certain provider types, so a
+              // server-returned error can outlive the input that would retract
+              // it. Re-submitting simply re-validates. The JSON errors above are
+              // different: they are computed here as the user types and always
+              // clear themselves.
+            }
+            deleteVisible={!!providerId}
+            deleteDisabled={isSubmitting}
+            onDelete={openDeleteDialog}
+          />
+        )
       )}
 
       <EntityDeleteDialog

@@ -7,6 +7,8 @@ import {
   organizationMember,
   provider as providerTable,
   agent as agentTable,
+  attachment as attachmentTable,
+  sandbox as sandboxTable,
 } from "../db/schema.ts";
 import { deleteStoredPrefix } from "../storage/utils.ts";
 import { workspaceStorageKeyPrefix } from "../storage/keys.ts";
@@ -23,7 +25,13 @@ import {
   requireWorkspaceAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import { resolveScoped } from "../services/scoped-resource.ts";
+import {
+  resolveOrgScoped,
+  resolveScoped,
+} from "../services/scoped-resource.ts";
+import { createProvider } from "../services/provider-write.ts";
+import { sandboxCreateError } from "../sandbox/validate.ts";
+import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 import { destroyWorkspaceSandboxes } from "../sandbox/teardown.ts";
 
@@ -65,19 +73,65 @@ workspace.post(
       }
     }
 
-    const record = await db
-      .insert(workspaceTable)
-      .values({
-        id: nanoid(),
-        ...data,
-        // The route's organization has already passed requireOrgAccess. Never
-        // take this tenancy boundary from client input: an admin of one org
-        // must not be able to create a workspace in another org.
-        organizationId: orgId,
-        ownerId,
-      })
-      .returning();
-    return c.json(record[0], 201);
+    const {
+      provider,
+      sharedProviderIds = [],
+      sandbox,
+      ...workspaceFields
+    } = data;
+
+    // Everything that can fail on its own is checked before anything is
+    // written, so the transaction below only fails on the database.
+    for (const providerId of sharedProviderIds) {
+      if (!(await resolveOrgScoped(db, "provider", providerId, orgId))) {
+        throw new NotFoundError(
+          "Org-scoped resource not found in this organization",
+        );
+      }
+    }
+    if (sandbox) {
+      const sandboxError = sandboxCreateError(sandbox);
+      if (sandboxError) return c.json({ error: sandboxError }, 400);
+    }
+
+    // The Workspace and the resources it is provisioned with land together or
+    // not at all — a failed Provider must not leave an unusable Workspace.
+    const record = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(workspaceTable)
+        .values({
+          id: nanoid(),
+          ...workspaceFields,
+          // The route's organization has already passed requireOrgAccess.
+          // Never take this tenancy boundary from client input: an admin of one
+          // org must not be able to create a workspace in another org.
+          organizationId: orgId,
+          ownerId,
+        })
+        .returning();
+      const ctx = { orgId, workspaceId: row.id };
+
+      if (provider) {
+        await createProvider({ kind: "workspace", ctx }, provider, tx);
+      }
+      if (sharedProviderIds.length > 0) {
+        await tx.insert(attachmentTable).values(
+          [...new Set(sharedProviderIds)].map((resourceId) => ({
+            id: nanoid(),
+            workspaceId: row.id,
+            resourceType: "provider" as const,
+            resourceId,
+          })),
+        );
+      }
+      if (sandbox) {
+        await tx
+          .insert(sandboxTable)
+          .values({ id: nanoid(), ...sandbox, workspaceId: row.id });
+      }
+      return row;
+    });
+    return c.json(record, 201);
   },
 );
 

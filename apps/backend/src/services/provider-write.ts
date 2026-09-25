@@ -45,6 +45,8 @@ import {
 
 export type ProviderRow = typeof providerTable.$inferSelect;
 
+type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /** The fields a create carries — every field but the id and its scope. */
 export type ProviderCreateFields = Omit<
   z.infer<typeof providerCreateSchema>,
@@ -91,10 +93,12 @@ const dedupeModels = <T extends { modelIds?: unknown }>(fields: T): T =>
 export async function createProvider(
   scope: ProviderScope,
   fields: ProviderCreateFields,
+  // A transaction handle, when the create is one step of a larger write.
+  exec: Executor = db,
 ): Promise<ProviderRow> {
   const data = dedupeModels(fields);
 
-  const [row] = await db
+  const [row] = await exec
     .insert(providerTable)
     .values({
       id: nanoid(),

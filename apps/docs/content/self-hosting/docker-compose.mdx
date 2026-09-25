@@ -197,8 +197,8 @@ database on first boot), then starts the frontend.
 ### Sign in
 
 Open `http://localhost:3000` and sign in with the `ADMIN_EMAIL` /
-`ADMIN_PASSWORD` you configured. You land in the **Default Organization**, which
-already holds a **Default Workspace** you own.
+`ADMIN_PASSWORD` you configured. You land in the **Default Organization**, ready
+to create its first Workspace.
 
 </Steps>
 
@@ -210,11 +210,12 @@ When the backend starts against a database with **no Organizations**, it seeds:
 
 - a **Default Organization**,
 - an **admin user** from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (granted the platform
-  `admin` role — the **Operator**),
-- that user's membership of the Default Organization, and
-- a **Default Workspace** named _Default Workspace_, owned by that user.
+  `admin` role — the **Operator**), and
+- that user's membership of the Default Organization.
 
-You do not create your first Workspace — it is already there when you sign in.
+No Workspace: a Workspace cannot run a Chat until it has a Provider, so you
+create the first one yourself with **Add workspace**, which asks for a Provider
+as part of creating it.
 
 **The seeding rule, stated once:** the seed runs when the `organization` table
 is empty, and only then. It is not "when no matching admin exists". Once one

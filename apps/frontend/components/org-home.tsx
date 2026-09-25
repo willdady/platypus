@@ -95,7 +95,7 @@ export function OrgHome({ orgId }: { orgId: string }) {
               {canCreate && (
                 <Button asChild className="flex-1">
                   <Link href={routes.createWorkspace}>
-                    <Plus className="h-4 w-4" /> Create workspace
+                    <Plus className="size-4" /> Add workspace
                   </Link>
                 </Button>
               )}

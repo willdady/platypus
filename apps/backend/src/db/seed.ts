@@ -2,7 +2,7 @@ import { count, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { db } from "../index.ts";
 import { logger } from "../logger.ts";
-import { organization, organizationMember, workspace, user } from "./schema.ts";
+import { organization, organizationMember, user } from "./schema.ts";
 
 /** The Drizzle handle the seed writes through. */
 export type SeedDatabase = typeof db;
@@ -39,7 +39,6 @@ export type SeedResult =
       seeded: true;
       organizationId: string;
       userId: string;
-      workspaceId: string;
     };
 
 /**
@@ -77,12 +76,13 @@ const MIN_ADMIN_PASSWORD_LENGTH = 8;
 
 /**
  * Bootstraps an empty database with the Default Organization, the admin User
- * from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, that User's Organization membership and
- * the Default Workspace.
+ * from `ADMIN_EMAIL` / `ADMIN_PASSWORD` and that User's Organization membership.
+ * No Workspace: one without a Provider cannot run a Chat, so the admin creates
+ * the first one through the same flow as every other, which asks for a Provider.
  *
  * The invariant is that no partially seeded state survives a failure (#369).
- * Configuration is validated before anything is written; the Organization,
- * membership and Workspace are written in one transaction; and the User — which
+ * Configuration is validated before anything is written; the Organization and
+ * membership are written in one transaction; and the User — which
  * better-auth writes outside that transaction — is deleted again if the
  * transaction fails. A database that already has an Organization is left
  * untouched and nothing is logged, so restarts stay a silent no-op.
@@ -152,29 +152,19 @@ export const seedFirstBoot = async (
         role: "admin",
       });
 
-      const workspaceId = nanoid();
-      await tx.insert(workspace).values({
-        id: workspaceId,
-        organizationId,
-        ownerId: adminId,
-        name: "Default Workspace",
-      });
-
       return {
         seeded: true as const,
         organizationId,
         userId: adminId,
-        workspaceId,
       };
     });
 
     logger.info(
       {
         organizationId: result.organizationId,
-        workspaceId: result.workspaceId,
         userId: result.userId,
       },
-      "Seeded Default Organization, admin user, membership and Default Workspace",
+      "Seeded Default Organization, admin user and membership",
     );
     logger.info(`- Default credentials: ${email} / ${password}`);
     logger.info("⚠️  Please change the default password after first login!");

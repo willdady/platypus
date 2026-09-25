@@ -35,6 +35,7 @@ import { webhook } from "./routes/webhook.ts";
 import { mcpOauthCallback } from "./routes/mcp-oauth-callback.ts";
 import { plugins } from "./routes/plugins.ts";
 import { webBackends } from "./routes/web-backends.ts";
+import { sandboxBackends } from "./routes/sandbox-backends.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 import { mapError } from "./errors.ts";
@@ -203,6 +204,7 @@ app.route("/organizations/:orgId/plugins", plugins);
 // `plugins` above — and org-scoped rather than workspace-scoped because a
 // Provider can be org-scoped (ADR-0007) while a sandbox cannot. See the route.
 app.route("/organizations/:orgId/web-backends", webBackends);
+app.route("/organizations/:orgId/sandbox-backends", sandboxBackends);
 
 // Central error seam (ADR-0010): typed domain errors and Postgres unique
 // violations map to their HTTP status here, so routes throw instead of

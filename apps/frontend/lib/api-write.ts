@@ -58,6 +58,18 @@ export type WriteOutcome<TResult> =
       readonly httpStatus?: number;
     };
 
+/**
+ * Hands a form's payload to `write` instead of saving it, for a form that is
+ * one step of a larger write — the Workspace wizard collects a Provider and a
+ * Sandbox and creates them with the Workspace. The outcome `write` returns is
+ * shown on the form as a save's would be; success keeps the user on it.
+ */
+export type FormDraft = {
+  write: (payload: Record<string, unknown>) => Promise<WriteOutcome<undefined>>;
+  onBack: () => void;
+  submitText: string;
+};
+
 const DEFAULT_MESSAGES = {
   notFound: "Not found",
   forbidden: "You do not have permission to do this.",

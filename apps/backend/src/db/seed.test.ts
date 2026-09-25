@@ -10,8 +10,8 @@ import { logger } from "../logger.ts";
 
 /**
  * The one fake executor the suite shares (`seedDb()` in `test-utils.ts`),
- * seeded with the four tables the seed touches and told about the one
- * constraint these tests turn on: `user.email` is unique in the real schema, so
+ * seeded with the tables the seed touches (plus `workspace`, to pin that it
+ * writes none) and told about the one constraint these tests turn on: `user.email` is unique in the real schema, so
  * a leftover User makes a second sign-up fail the way Postgres would.
  *
  * The executor's `transaction` really rolls back — the callback gets a handle
@@ -74,7 +74,7 @@ describe("seedFirstBoot", () => {
     vi.restoreAllMocks();
   });
 
-  it("seeds an organization, admin user, membership and workspace on an empty database", async () => {
+  it("seeds an organization, admin user and membership, and no workspace, on an empty database", async () => {
     const fake = createFakeDb();
     const createUser = createUserApi(fake.tables);
 
@@ -87,7 +87,7 @@ describe("seedFirstBoot", () => {
     expect(fake.tables.organization).toHaveLength(1);
     expect(fake.tables.user).toHaveLength(1);
     expect(fake.tables.organization_member).toHaveLength(1);
-    expect(fake.tables.workspace).toHaveLength(1);
+    expect(fake.tables.workspace).toHaveLength(0);
 
     const [admin] = fake.tables.user;
     expect(admin).toMatchObject({
@@ -99,11 +99,6 @@ describe("seedFirstBoot", () => {
       organizationId: fake.tables.organization[0].id,
       userId: admin.id,
       role: "admin",
-    });
-    expect(fake.tables.workspace[0]).toMatchObject({
-      organizationId: fake.tables.organization[0].id,
-      ownerId: admin.id,
-      name: "Default Workspace",
     });
   });
 
@@ -172,7 +167,8 @@ describe("seedFirstBoot", () => {
   it("leaves no organization behind when a write after the organization insert fails", async () => {
     const fake = createFakeDb({
       onInsert: (table) => {
-        if (table === "workspace") throw new Error("connection terminated");
+        if (table === "organization_member")
+          throw new Error("connection terminated");
       },
     });
 
@@ -194,7 +190,8 @@ describe("seedFirstBoot", () => {
   it("tells the operator which User to delete when the compensation itself fails", async () => {
     const fake = createFakeDb({
       onInsert: (table) => {
-        if (table === "workspace") throw new Error("connection terminated");
+        if (table === "organization_member")
+          throw new Error("connection terminated");
       },
     });
     const handle = asSeedDb(fake);
@@ -226,7 +223,7 @@ describe("seedFirstBoot", () => {
     let failing = true;
     const fake = createFakeDb({
       onInsert: (table) => {
-        if (failing && table === "workspace") {
+        if (failing && table === "organization_member") {
           throw new Error("connection terminated");
         }
       },
@@ -248,7 +245,6 @@ describe("seedFirstBoot", () => {
     expect(fake.tables.organization).toHaveLength(1);
     expect(fake.tables.user).toHaveLength(1);
     expect(fake.tables.organization_member).toHaveLength(1);
-    expect(fake.tables.workspace).toHaveLength(1);
   });
 
   it("refuses to promote a User that already holds ADMIN_EMAIL", async () => {
@@ -295,7 +291,6 @@ describe("seedFirstBoot", () => {
     expect(result).toEqual({ seeded: false });
     expect(fake.tables.organization).toHaveLength(1);
     expect(fake.tables.user).toHaveLength(1);
-    expect(fake.tables.workspace).toHaveLength(1);
     expect(warn).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
   });

@@ -79,15 +79,6 @@ export const workspaceSchema = z.object({
 
 export type Workspace = z.infer<typeof workspaceSchema>;
 
-export const workspaceCreateSchema = workspaceSchema
-  .pick({
-    name: true,
-    context: true,
-  })
-  // ownerId is admin-assignable (ADR-0008). When omitted, the create handler
-  // defaults the owner to the calling admin.
-  .extend({ ownerId: z.string().optional() });
-
 export const workspaceUpdateSchema = workspaceSchema.pick({
   name: true,
   context: true,
@@ -1800,6 +1791,27 @@ export const sandboxCreateSchema = sandboxBaseSchema.pick({
   adminEnv: true,
   userEnv: true,
 });
+
+// Declared after the Provider and Sandbox schemas it nests.
+export const workspaceCreateSchema = workspaceSchema
+  .pick({
+    name: true,
+    context: true,
+  })
+  .extend({
+    // ownerId is admin-assignable (ADR-0008). When omitted, the create handler
+    // defaults the owner to the calling admin.
+    ownerId: z.string().optional(),
+    // Optional resources created with the Workspace in one transaction, so a
+    // Workspace can be provisioned ready to use in a single write. Their scope
+    // is the new Workspace, never the body.
+    provider: providerCreateSchema
+      .omit({ organizationId: true, workspaceId: true })
+      .optional(),
+    // Shared Providers of this Organization to attach (ADR-0007).
+    sharedProviderIds: z.array(z.string()).optional(),
+    sandbox: sandboxCreateSchema.omit({ workspaceId: true }).optional(),
+  });
 
 export const sandboxUpdateSchema = sandboxBaseSchema.pick({
   name: true,

@@ -102,10 +102,10 @@ is in
 
 ## First run & the default admin
 
-First boot creates a **Default Organization**, a **Default Workspace**, and an
-admin account from `ADMIN_EMAIL` / `ADMIN_PASSWORD` that owns the Workspace.
-That account is the **Operator** — the platform super-admin. Sign in with it and
-you are already inside a usable Workspace; you don't have to create one.
+First boot creates a **Default Organization** and an admin account from
+`ADMIN_EMAIL` / `ADMIN_PASSWORD`. That account is the **Operator** — the platform
+super-admin. It creates no Workspace: you create the first one yourself, and
+connect it to a model as you do.
 
 Editing `ADMIN_EMAIL` / `ADMIN_PASSWORD` after first boot changes nothing —
 change the password from within the app. The full rule, and the recovery path
@@ -121,14 +121,11 @@ Once you're signed in, here's the end-to-end loop to a working agent reply.
 
 <Steps>
 
-### Open your Workspace
+### Create your Workspace
 
-After signing in you land on the **Default Organization**, which already
-contains a **Default Workspace** you own — first boot created it. Click into it
-to reach the Workspace dashboard, and skip straight to the next step.
-
-Want a separate one anyway? Click **Add workspace**, give it a **Name**, leave
-yourself as the **Owner**, and click **Save**.
+After signing in you land on the **Default Organization**, which has no
+Workspaces yet. Click **Add workspace**, give it a **Name**, leave yourself as
+the **Owner**, and click **Next**.
 
 > A **Workspace** is your scoped environment — it holds your Chats, Agents,
 > Skills, MCP servers, and Providers. See [Concepts](/concepts) for how
@@ -136,12 +133,8 @@ yourself as the **Owner**, and click **Save**.
 
 ### Configure a Provider
 
-A Workspace can't run an agent until it can reach a model. The dashboard shows
-a **No providers configured** prompt — click **Add provider**, then **Add
-provider** again on the Providers page that opens (or go to **Settings →
-Providers → Add provider**).
-
-Fill in the form:
+A Workspace can't run an agent until it can reach a model, so the next step asks
+for a Provider. Stay on **New provider** and fill in the form:
 
 - **Provider Type** — your AI vendor. Exactly five: OpenAI, OpenRouter,
   Anthropic, Google, Bedrock. Running Ollama, vLLM or Azure OpenAI? Pick
@@ -163,7 +156,9 @@ Fill in the form:
 - **Task Model ID** — one of the model ids you just added. Platypus uses it to
   name your Chats; left empty, every Chat stays _Untitled_.
 
-Click **Save**.
+Click **Next**. The last step offers a Sandbox; leave **Configure a sandbox**
+off for now and click **Save**. Nothing is created until you do — the Workspace
+and its Provider are saved together, and you land on the Workspace dashboard.
 
 <Callout type="info">
   Don't have a key yet? [OpenRouter](https://openrouter.ai) gives you a single

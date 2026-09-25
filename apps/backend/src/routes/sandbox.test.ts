@@ -11,9 +11,9 @@ import { registerSandboxBackend } from "../sandbox/index.ts";
 import { setLoadedPlugins } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
 
-// Register a backend directly (bypassing the loader) so the /backends catalog
-// has a stable entry to assert against, and record its owning plugin in the
-// registry so the annotation (ADR-0013) has something to resolve.
+// Register a backend directly (bypassing the loader) so the route has a stable
+// entry to write against, and record its owning plugin in the registry so the
+// annotation (ADR-0013) has something to resolve.
 const ANNOTATED_BACKEND = "test-annotated";
 registerSandboxBackend({
   backend: ANNOTATED_BACKEND,
@@ -56,56 +56,6 @@ describe("Sandbox Routes", () => {
     config: { image: "debian:stable-slim" },
     credentials: { token: "secret-123" },
   };
-
-  describe("GET /backends", () => {
-    it("returns registered backends with id, name, and originating plugin", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // Attribute the pre-registered backend to a plugin (ADR-0013).
-      setLoadedPlugins(
-        loadedPluginsFixture(
-          [
-            {
-              name: "@platypus/test",
-              version: "1.0.0",
-              origin: "core",
-              toolSetIds: [],
-              sandboxBackendIds: [ANNOTATED_BACKEND],
-              webBackendIds: [],
-            },
-          ],
-          { sandboxBackends: new Map([[ANNOTATED_BACKEND, "@platypus/test"]]) },
-        ),
-      );
-
-      const res = await app.request(`${baseUrl}/backends`);
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as {
-        results: Array<{
-          backend: string;
-          name: string;
-          plugin: string | null;
-        }>;
-      };
-      // Every entry carries backend/name/plugin — plugin is `null` when the id
-      // belongs to no loaded plugin, and the contributing plugin's name when it
-      // does.
-      expect(Array.isArray(body.results)).toBe(true);
-      for (const r of body.results) {
-        expect(typeof r.backend).toBe("string");
-        expect(typeof r.name).toBe("string");
-        expect(Object.keys(r).sort()).toEqual(["backend", "name", "plugin"]);
-      }
-      expect(body.results).toContainEqual({
-        backend: ANNOTATED_BACKEND,
-        name: "Test Annotated",
-        plugin: "@platypus/test",
-      });
-    });
-  });
 
   describe("POST /", () => {
     it("creates a sandbox and returns 201 with credentials stripped", async () => {
@@ -596,17 +546,6 @@ describe("Sandbox Routes", () => {
       expect(res.status).toBe(403);
     });
 
-    it("GET /networks returns 403 for a non-admin workspace owner", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      const res = await app.request(`${baseUrl}/networks`);
-      expect(res.status).toBe(403);
-    });
-
     it("POST / rejects userEnv keys that collide with adminEnv (400)", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
@@ -774,16 +713,6 @@ describe("Sandbox Routes", () => {
       expect(((await res.json()) as { error: string }).error).toMatch(error);
       expect(mockDb.insert).not.toHaveBeenCalled();
       expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it("GET /networks lists the allowed Docker networks for an admin", async () => {
-      asAdmin();
-
-      const res = await app.request(`${baseUrl}/networks`);
-
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as { results: unknown };
-      expect(Array.isArray(body.results)).toBe(true);
     });
   });
 });

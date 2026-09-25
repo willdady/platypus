@@ -163,6 +163,99 @@ describe("Workspace Routes", () => {
     });
   });
 
+  describe("POST /organizations/:orgId/workspaces with provisioned resources", () => {
+    const post = (body: unknown) =>
+      app.request("/organizations/org-1/workspaces", {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
+
+    const provider = {
+      name: "OpenAI",
+      providerType: "OpenAI",
+      apiKey: "sk-test",
+      modelIds: [{ id: "gpt-5" }],
+      taskModelId: "gpt-5",
+      memoryExtractionModelId: "gpt-5",
+    };
+
+    it("creates the Workspace, its Provider, Attachments and Sandbox in one transaction", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "shared-1", organizationId: "org-1" },
+      ]); // the Shared Provider resolves in this org
+      mockDb.returning.mockResolvedValueOnce([{ id: "ws-1", name: "Ready" }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "p-1" }]);
+
+      const res = await post({
+        name: "Ready",
+        provider,
+        sharedProviderIds: ["shared-1"],
+        sandbox: { name: "Local", backend: "docker" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      const inserted = mockDb.values.mock.calls.map((call) => call[0]);
+      expect(inserted).toEqual([
+        expect.objectContaining({ name: "Ready", organizationId: "org-1" }),
+        // The new Provider is scoped to the new Workspace, never the body.
+        expect.objectContaining({
+          name: "OpenAI",
+          workspaceId: "ws-1",
+          organizationId: null,
+        }),
+        [
+          expect.objectContaining({
+            workspaceId: "ws-1",
+            resourceType: "provider",
+            resourceId: "shared-1",
+          }),
+        ],
+        expect.objectContaining({ name: "Local", workspaceId: "ws-1" }),
+      ]);
+      // The nested resources are not columns of the Workspace row.
+      expect(inserted[0]).not.toHaveProperty("provider");
+      expect(inserted[0]).not.toHaveProperty("sandbox");
+    });
+
+    it("returns 404 and writes nothing when a Shared Provider is not in this org", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([]); // not an org-scoped Provider here
+
+      const res = await post({
+        name: "Ready",
+        sharedProviderIds: ["elsewhere"],
+      });
+
+      expect(res.status).toBe(404);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 and writes nothing when the Sandbox is invalid", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+
+      const res = await post({
+        name: "Ready",
+        provider,
+        sandbox: {
+          name: "Local",
+          backend: "docker",
+          adminEnv: { TOKEN: "a" },
+          userEnv: { TOKEN: "b" },
+        },
+      });
+
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/TOKEN/);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+  });
+
   describe("GET /organizations/:orgId/workspaces", () => {
     // ws-a/ws-b sit in org-1 (the caller owns ws-a); ws-c is the caller's own
     // Workspace in another org, so a list that dropped its org scope shows it.

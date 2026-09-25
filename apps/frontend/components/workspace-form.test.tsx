@@ -6,7 +6,6 @@ import {
   swrMock,
   authState,
   navigationMock,
-  push,
   refresh,
   toastSuccess,
   resetFormHarness,
@@ -16,7 +15,7 @@ import {
   stubAcceptedSave,
   savedBody,
 } from "@/lib/form-test-harness";
-import { installResizeObserverStub, selectOption } from "@/lib/test-utils";
+import { installResizeObserverStub } from "@/lib/test-utils";
 
 vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
@@ -101,64 +100,8 @@ describe("WorkspaceForm secondary reads", () => {
   });
 });
 
-describe("WorkspaceForm create", () => {
-  beforeEach(() => resetFormHarness());
-
-  // The members read is gated on the actor, which is still resolving on a hard
-  // refresh: without this the editable form showed, then the skeleton once the
-  // admin check passed and the read began, then the form again.
-  it("shows the skeleton while the membership resolves", () => {
-    Object.assign(authState, { actor: "anonymous", isAuthLoading: true });
-    render(<WorkspaceForm orgId="org1" />);
-
-    expect(screen.getByLabelText("Loading workspace")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
-    Object.assign(authState, { isAuthLoading: false });
-  });
-});
-
 describe("WorkspaceForm save", () => {
   beforeEach(() => resetFormHarness());
-
-  // ADR-0008: an admin assigns the owner on creation.
-  it("creates the workspace for the member the admin picked, and opens it", async () => {
-    setDataFor("/organizations/org1/members", {
-      results: [{ userId: "u2", user: { name: "Bea", email: "bea@x.test" } }],
-    });
-    const fetchMock = stubAcceptedSave({ id: "ws9" });
-    render(<WorkspaceForm orgId="org1" />);
-
-    fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "Research" },
-    });
-    await selectOption(" (you)", "Bea");
-    save();
-
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("/org1/workspace/ws9"),
-    );
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      "http://test/organizations/org1/workspaces",
-    );
-    expect(savedBody(fetchMock)).toEqual({
-      name: "Research",
-      context: null,
-      ownerId: "u2",
-    });
-  });
-
-  it("defaults the owner to the admin creating it", async () => {
-    const fetchMock = stubAcceptedSave({ id: "ws9" });
-    render(<WorkspaceForm orgId="org1" />);
-
-    fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "Research" },
-    });
-    save();
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock).ownerId).toBe("u1");
-  });
 
   it("sends the edited settings, with an unset provider as null, and refreshes", async () => {
     installResizeObserverStub();

@@ -36,9 +36,9 @@ const DOCKER_SANDBOX = {
 };
 
 /**
- * Registers the sandbox's three reads. The backends and networks fragments go
- * first: matching is by URL fragment in registration order, and both URLs
- * also contain `/sandbox`.
+ * Registers the sandbox's three reads. Matching is by URL fragment in
+ * registration order, so the networks fragment goes before the backends one it
+ * contains.
  */
 function mockReads({
   sandbox,
@@ -50,9 +50,9 @@ function mockReads({
   networks?: Parameters<typeof mockScopedSWR>[0][string];
 }) {
   mockScopedSWR({
-    "/sandbox/backends": backends,
-    "/sandbox/networks": networks,
-    "/sandbox": sandbox,
+    "/sandbox-backends/networks": networks,
+    "/sandbox-backends": backends,
+    "/ws1/sandbox": sandbox,
   });
 }
 

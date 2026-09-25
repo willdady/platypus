@@ -13,12 +13,21 @@ looks — a name, some text, three Provider dropdowns, a number, and two switche
 
 ## Creating a Workspace
 
-**Add workspace**, from the Workspace switcher in the sidebar. Only an Org Admin
-can create one.
+**Add workspace**, from the Organization page or the Workspace switcher in the
+sidebar. Only an Org Admin can create one. It takes three steps, and **Back**
+keeps what you entered; nothing is created until **Save** on the last one.
 
-- **Name** — what to call it (3–30 characters).
-- **Owner** — the member who will own it. Defaults to you.
-- **Context** — optional text about the Workspace.
+1. **Workspace**
+   - **Name** — what to call it (3–30 characters).
+   - **Owner** — the member who will own it. Defaults to you.
+   - **Context** — optional text about the Workspace.
+2. **Provider** — required, because a Workspace cannot run a Chat without one.
+   Either fill in a **New provider**, scoped to this Workspace, or switch to
+   **Shared provider** and turn on one or more of the Organization's Shared
+   Providers to attach.
+3. **Sandbox** — optional. Turn on **Configure a sandbox** to set one up now,
+   or leave it off and add one later from the Workspace's settings. The switch
+   is unavailable when the deployment has no Sandbox backend installed.
 
 <Callout type="warning">
   **Choose the Owner carefully: there is no owner field on the settings form

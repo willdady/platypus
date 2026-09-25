@@ -19,17 +19,14 @@ import {
 } from "../services/workspace-resource.ts";
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
-import { getSandboxBackend, getSandboxBackends } from "../sandbox/index.ts";
-import { readAllowedDockerNetworks } from "../plugins/docker/backend.ts";
-import {
-  getPluginConfig,
-  getSandboxBackendPlugin,
-} from "../plugins/registry.ts";
+import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
-
-// Manifest name of the core Docker plugin — the key its boot-resolved config
-// (the network allowlist) is stored under in the plugin registry (ADR-0013).
-const DOCKER_PLUGIN = "@platypus/docker";
+import {
+  envCollisions,
+  sandboxCreateError,
+  validateSandboxConfig,
+  validateSandboxCredentials,
+} from "../sandbox/validate.ts";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;
 
@@ -38,50 +35,6 @@ type SandboxRecord = typeof sandboxTable.$inferSelect;
 const requireSandboxAdmin = requireWorkspaceConfigAccess();
 
 const sandbox = new Hono<{ Variables: Variables }>();
-
-// Validate adapter-specific config at write time when the backend is
-// registered, so errors (e.g. a network outside the operator allowlist, a
-// malformed extraHosts entry) surface as an immediate 400 instead of silently
-// degrading to "no sandbox tools" at chat-turn time. Returns an error message
-// string, or null when valid / backend not registered.
-const validateSandboxConfig = (
-  backend: string,
-  config: Record<string, unknown> | undefined,
-): string | null => {
-  const registration = getSandboxBackend(backend);
-  if (!registration) return null;
-  const result = registration.configSchema.safeParse(config ?? {});
-  if (result.success) return null;
-  return result.error.issues.map((i) => i.message).join("; ");
-};
-
-// Validate adapter-specific credentials at write time, same rationale as
-// {@link validateSandboxConfig}: catch e.g. an SSH sandbox saved without a
-// private key as an immediate 400 rather than a silent "no sandbox tools" at
-// chat-turn time. Returns an error message, or null when valid / backend not
-// registered. Callers pass `undefined` to skip (a PUT that preserves stored
-// credentials, which GET never returns).
-const validateSandboxCredentials = (
-  backend: string,
-  credentials: Record<string, unknown> | undefined,
-): string | null => {
-  const registration = getSandboxBackend(backend);
-  if (!registration) return null;
-  const result = registration.credentialsSchema.safeParse(credentials ?? {});
-  if (result.success) return null;
-  return result.error.issues.map((i) => i.message).join("; ");
-};
-
-// The owner may never override an admin-set env key (ADR-0004 amendment).
-// Returns the colliding keys, or [] when there is no overlap.
-const envCollisions = (
-  adminEnv: Record<string, string> | undefined,
-  userEnv: Record<string, string> | undefined,
-): string[] => {
-  if (!adminEnv || !userEnv) return [];
-  const adminKeys = new Set(Object.keys(adminEnv));
-  return Object.keys(userEnv).filter((k) => adminKeys.has(k));
-};
 
 // Credentials are server-side only. Stripping here is a quiet improvement over
 // the Provider/MCP routes which still return their secret fields; revisit when
@@ -98,42 +51,6 @@ const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
     : Object.fromEntries(Object.keys(adminEnv ?? {}).map((k) => [k, ""]));
   return { ...rest, adminEnv: safeAdminEnv };
 };
-
-// List the Sandbox backends registered in this process. Returns metadata only
-// (no Zod schemas); the frontend renders forms per known backend type for v1.
-// Each entry is annotated with the `plugin` that contributed it (ADR-0013
-// observability); `null` when the id belongs to no loaded plugin. Declared
-// before "/" so the literal "/backends" path takes precedence.
-sandbox.get(
-  "/backends",
-  requireAuth,
-  requireOrgAccess(),
-  requireWorkspaceAccess,
-  (c) => {
-    const results = getSandboxBackends().map((r) => ({
-      backend: r.backend,
-      name: r.name,
-      plugin: getSandboxBackendPlugin(r.backend) ?? null,
-    }));
-    return c.json({ results });
-  },
-);
-
-// Operator-declared Docker network allowlist (ADR-0005) for the admin
-// multi-select. Admin-only — a non-admin owner has no business enumerating the
-// host's network topology. Declared before "/" so the literal path wins.
-sandbox.get(
-  "/networks",
-  requireAuth,
-  requireOrgAccess(),
-  requireWorkspaceAccess,
-  requireSandboxAdmin,
-  (c) => {
-    return c.json({
-      results: readAllowedDockerNetworks(getPluginConfig(DOCKER_PLUGIN)),
-    });
-  },
-);
 
 /** Get the workspace's sandbox (404 if none configured) */
 sandbox.get(
@@ -161,31 +78,8 @@ sandbox.post(
     const { workspaceId } = workspaceScopeOf(c);
     const data = c.req.valid("json");
 
-    const configError = validateSandboxConfig(data.backend, data.config);
-    if (configError) {
-      return c.json({ error: `Invalid sandbox config: ${configError}` }, 400);
-    }
-
-    const credentialsError = validateSandboxCredentials(
-      data.backend,
-      data.credentials,
-    );
-    if (credentialsError) {
-      return c.json(
-        { error: `Invalid sandbox credentials: ${credentialsError}` },
-        400,
-      );
-    }
-
-    const collisions = envCollisions(data.adminEnv, data.userEnv);
-    if (collisions.length > 0) {
-      return c.json(
-        {
-          error: `userEnv may not override admin-managed keys: ${collisions.join(", ")}`,
-        },
-        400,
-      );
-    }
+    const createError = sandboxCreateError(data);
+    if (createError) return c.json({ error: createError }, 400);
 
     const existing = await resolveOwned(db, "sandbox", { workspaceId });
     if (existing) {
