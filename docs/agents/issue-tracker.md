@@ -13,6 +13,10 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
+## Planned breaking changes
+
+A break that must wait for the next major, such as removing a deprecated env var, is tracked as its own issue on that major's milestone (`v<N>.0.0`, e.g. `gh issue create --milestone v4.0.0`). It is labelled `ready-for-human`, because when it lands depends on the major being cut. It is blocked by the issue that introduces the deprecation, and that issue should add a boot warning and a docs note so Operators get notice during the current major. `/pre-release-check` reads the milestone before a major ships. When a major ships, create the next one's milestone.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_

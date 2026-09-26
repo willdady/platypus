@@ -107,6 +107,14 @@ Report:
   and a patch bump on the PR is a **hold**.
 - Anything breaking: a removed or renamed env var, a changed default, an API or schema shift
   a self-hoster upgrades into. Breaking work in a non-major release is a **hold**.
+- The next major's milestone (`v<N>.0.0`, e.g. `gh issue list --milestone v4.0.0 --state
+  all`). It holds one issue per planned breaking change, each deprecated during the
+  current major. If this release is a major, list every issue that is still open. Each
+  one is a break this major was meant to carry, and whether to hold the release or move
+  the issue to the following major's milestone is the user's call. If it isn't a major,
+  an issue from the milestone that closed in the range is breaking work shipping early,
+  which is a **hold**. A deprecation this range introduces with no removal issue on the
+  milestone will be forgotten, so name it.
 - Commentary in the previous notes that this range settles, contradicts, or strands — a
   deprecation this range removes, a migration step it invalidates, a "lands next release"
   it either delivers or silently skips.
