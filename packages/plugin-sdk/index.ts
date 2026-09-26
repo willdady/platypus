@@ -54,20 +54,27 @@ import type { z } from "zod";
  * Migrating a v1 plugin: set `apiVersion` to 2, drop the `?.` guards, and — if
  * you use the `configSchema` factory form — read `plugin.config` where the
  * argument itself used to be the config.
+ *
+ * ## What v3 changed
+ *
+ * The {@link SandboxCallOptions} argument on the five {@link SandboxBackend}
+ * tool methods is now **required**. It was optional only because a v2 manifest
+ * could still reach a core that never passed it, where an unguarded
+ * `options.signal` threw. A v3 manifest is refused by such a core at boot, so
+ * the guard is no longer load-bearing. v1 leaves the window: the accepted range
+ * is `[2, 3]`, and a v1 plugin is rejected at boot.
+ *
+ * Migrating a v2 plugin: set `apiVersion` to 3 and drop any `options?.` guard. A
+ * v1 plugin migrates through v2 first.
  */
-export const PLUGIN_API_VERSION = 2 as const;
+export const PLUGIN_API_VERSION = 3 as const;
 
 /**
  * The oldest plugin API major core still accepts — one below the current major
  * (the "N−1" of the N-and-N−1 window). A plugin whose `apiVersion` is below this
  * targets a dropped major and is rejected at boot. See {@link PLUGIN_API_VERSION}.
- *
- * Floored at `1`: there is no major `0`, so at the first major (N = 1) the window
- * collapsed to `[1, 1]` rather than admitting a phantom `v0`. At v2 the floor is
- * no longer what decides it — the window is a genuine `[1, 2]`, and every v1
- * plugin in the field keeps loading on a v2 core.
  */
-export const OLDEST_SUPPORTED_API_VERSION = Math.max(1, PLUGIN_API_VERSION - 1);
+export const OLDEST_SUPPORTED_API_VERSION = PLUGIN_API_VERSION - 1;
 
 /**
  * Hand core something to close when the Chat turn ends.
@@ -296,9 +303,11 @@ export interface FsListOutput {
  * the work actually happens — kill the command, close the channel — and the
  * work stops with the turn instead of running on as an orphan.
  *
- * **Consuming it is optional.** A backend that ignores it behaves exactly as
- * every adapter did before this parameter existed: core stops waiting either
- * way, so the turn is never held open by a call that does not come back.
+ * **Required as of API v3** (see {@link PLUGIN_API_VERSION}): core passes it on
+ * every call, so read `options.signal` unguarded. **Honouring it is still your
+ * choice.** A backend that ignores it behaves exactly as every adapter did
+ * before this parameter existed: core stops waiting either way, so the turn is
+ * never held open by a call that does not come back.
  *
  * Named for the call, not for `SandboxExecOptions` — that is core's *internal*
  * per-command shape (`timeoutMs`, output caps) beneath the POSIX transport
@@ -317,36 +326,36 @@ export interface SandboxCallOptions {
  * This is append-only within a major API version: new capability arrives as an
  * optional member, never a new required method.
  *
- * The five tool methods take {@link SandboxCallOptions} as an **optional**
- * appended argument, on the same terms the Web-search executors do. Core always
- * supplies it; an adapter written before it existed declares two parameters,
- * still satisfies this interface, and still works.
+ * The five tool methods take {@link SandboxCallOptions} as a **required**
+ * appended argument (as of API v3), on the same terms the Web-search executors
+ * do. An adapter written before it existed declares two parameters, still
+ * satisfies this interface, and still works.
  */
 export interface SandboxBackend {
   shellExec(
     ctx: SandboxContext,
     input: ShellExecInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<ShellExecOutput>;
   fsRead(
     ctx: SandboxContext,
     input: FsReadInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<FsReadOutput>;
   fsWrite(
     ctx: SandboxContext,
     input: FsWriteInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<FsWriteOutput>;
   fsEdit(
     ctx: SandboxContext,
     input: FsEditInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<FsEditOutput>;
   fsList(
     ctx: SandboxContext,
     input: FsListInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<FsListOutput>;
   destroy(ctx: SandboxContext): Promise<void>;
 }

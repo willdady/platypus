@@ -59,3 +59,7 @@ That is permanent rather than merely delayed.
 - `AbortSignal` is a platform global the SDK does not declare, so an adapter
   whose `tsconfig.json` has `"lib": ["esnext"]` and no `@types/node` will not
   compile against the new signature until it adds one or the other.
+
+## Update (2026-09-26): required from API v3
+
+[#1048](https://github.com/willdady/platypus/issues/1048) makes the argument **required** under plugin API v3 (see ADR-0013's API v3 update). The "make the parameter required" option above was rejected _within a major_; the v3 bump is the windowed major that permits it. An adapter declaring two parameters still satisfies `SandboxBackend`, so implementers are unaffected; only callers must now pass it. Core passes a never-firing signal on the one path the AI SDK leaves without one. The race is unchanged.

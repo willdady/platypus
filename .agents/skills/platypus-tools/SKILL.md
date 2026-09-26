@@ -115,11 +115,8 @@ tools: ({ workspaceId, agentId, orgId, frontendUrl }) =>
 Keep the factory in the tool's own file, returning `Record<string, Tool>`.
 
 The context also carries `registerCloser` for anything needing teardown at end
-of turn. **Call it guarded — `ctx.registerCloser?.(close)`.** It is optional
-on purpose and must stay so: a manifest declares only a major api version, so
-a plugin cannot ask for a core new enough to have it, and an unguarded call on
-older core throws out of your factory and costs the turn *every* tool in the
-set.
+of turn. Call it unguarded — `ctx.registerCloser(close)`. It is required from
+plugin API v2, and every core that accepts the current `apiVersion` supplies it.
 
 ## Sharing one tool across sets
 

@@ -29,6 +29,7 @@ const ctx: SandboxContext = {
   workspaceId: "ws-abc",
   userId: "user-1",
 };
+const callOptions = { signal: new AbortController().signal };
 
 const ROOT = "/workspace";
 
@@ -106,7 +107,11 @@ const findOutput = (
 describe("createPosixSandbox — shell.exec", () => {
   it("runs the command under /bin/sh -c in the workspace root", async () => {
     const { transport, execCalls } = makeTransport();
-    await createPosixSandbox(transport).shellExec(ctx, { command: "ls -la" });
+    await createPosixSandbox(transport).shellExec(
+      ctx,
+      { command: "ls -la" },
+      callOptions,
+    );
 
     expect(execCalls).toHaveLength(1);
     expect(execCalls[0].argv).toEqual(["/bin/sh", "-c", "ls -la"]);
@@ -115,20 +120,28 @@ describe("createPosixSandbox — shell.exec", () => {
 
   it("resolves cwd against the transport's root", async () => {
     const { transport, execCalls } = makeTransport({ rootDir: "/srv/agent" });
-    await createPosixSandbox(transport).shellExec(ctx, {
-      command: "ls",
-      cwd: "sub/dir",
-    });
+    await createPosixSandbox(transport).shellExec(
+      ctx,
+      {
+        command: "ls",
+        cwd: "sub/dir",
+      },
+      callOptions,
+    );
 
     expect(execCalls[0].opts.cwd).toBe("/srv/agent/sub/dir");
   });
 
   it("passes the caller's env through untouched", async () => {
     const { transport, execCalls } = makeTransport();
-    await createPosixSandbox(transport).shellExec(ctx, {
-      command: "env",
-      env: { FOO: "bar" },
-    });
+    await createPosixSandbox(transport).shellExec(
+      ctx,
+      {
+        command: "env",
+        env: { FOO: "bar" },
+      },
+      callOptions,
+    );
 
     expect(execCalls[0].opts.env).toEqual({ FOO: "bar" });
   });
@@ -144,7 +157,11 @@ describe("createPosixSandbox — shell.exec", () => {
     });
 
     await expect(
-      createPosixSandbox(transport).shellExec(ctx, { command: "x" }),
+      createPosixSandbox(transport).shellExec(
+        ctx,
+        { command: "x" },
+        callOptions,
+      ),
     ).resolves.toEqual({
       stdout: "out",
       stderr: "err",
@@ -156,7 +173,11 @@ describe("createPosixSandbox — shell.exec", () => {
 
   it("defaults the timeout and caps output at the Platypus bounds", async () => {
     const { transport, execCalls } = makeTransport();
-    await createPosixSandbox(transport).shellExec(ctx, { command: "x" });
+    await createPosixSandbox(transport).shellExec(
+      ctx,
+      { command: "x" },
+      callOptions,
+    );
 
     expect(execCalls[0].opts).toMatchObject({
       timeoutMs: DEFAULT_SHELL_TIMEOUT_MS,
@@ -167,10 +188,14 @@ describe("createPosixSandbox — shell.exec", () => {
 
   it("honours a caller timeout below the maximum", async () => {
     const { transport, execCalls } = makeTransport();
-    await createPosixSandbox(transport).shellExec(ctx, {
-      command: "x",
-      timeoutMs: 5_000,
-    });
+    await createPosixSandbox(transport).shellExec(
+      ctx,
+      {
+        command: "x",
+        timeoutMs: 5_000,
+      },
+      callOptions,
+    );
 
     expect(execCalls[0].opts.timeoutMs).toBe(5_000);
   });
@@ -179,10 +204,14 @@ describe("createPosixSandbox — shell.exec", () => {
     // The bound is core's, so no adapter can be talked into waiting longer —
     // this is the clamp both adapters used to hold a private copy of.
     const { transport, execCalls } = makeTransport();
-    await createPosixSandbox(transport).shellExec(ctx, {
-      command: "x",
-      timeoutMs: MAX_SHELL_TIMEOUT_MS + 60_000,
-    });
+    await createPosixSandbox(transport).shellExec(
+      ctx,
+      {
+        command: "x",
+        timeoutMs: MAX_SHELL_TIMEOUT_MS + 60_000,
+      },
+      callOptions,
+    );
 
     expect(execCalls[0].opts.timeoutMs).toBe(MAX_SHELL_TIMEOUT_MS);
   });
@@ -192,9 +221,13 @@ describe("createPosixSandbox — shell.exec", () => {
       exec: () => ({ stdout: Buffer.alloc(MAX_SHELL_OUTPUT_BYTES, 0x61) }),
     });
 
-    const res = await createPosixSandbox(transport).shellExec(ctx, {
-      command: "x",
-    });
+    const res = await createPosixSandbox(transport).shellExec(
+      ctx,
+      {
+        command: "x",
+      },
+      callOptions,
+    );
     expect(res.stdout).toHaveLength(MAX_SHELL_OUTPUT_BYTES);
     expect(res.truncated).toBe(true);
   });
@@ -205,7 +238,11 @@ describe("createPosixSandbox — shell.exec", () => {
     });
 
     await expect(
-      createPosixSandbox(transport).shellExec(ctx, { command: "x" }),
+      createPosixSandbox(transport).shellExec(
+        ctx,
+        { command: "x" },
+        callOptions,
+      ),
     ).resolves.toMatchObject({ truncated: true });
   });
 
@@ -215,7 +252,11 @@ describe("createPosixSandbox — shell.exec", () => {
     });
 
     await expect(
-      createPosixSandbox(transport).shellExec(ctx, { command: "sleep 999" }),
+      createPosixSandbox(transport).shellExec(
+        ctx,
+        { command: "sleep 999" },
+        callOptions,
+      ),
     ).resolves.toMatchObject({ exitCode: 124 });
   });
 });
@@ -228,7 +269,11 @@ describe("createPosixSandbox — fs.read", () => {
     const { transport } = withFile("one\ntwo\nthree\n");
 
     await expect(
-      createPosixSandbox(transport).fsRead(ctx, { path: "notes.txt" }),
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        { path: "notes.txt" },
+        callOptions,
+      ),
     ).resolves.toEqual({
       content: "one\ntwo\nthree\n",
       lineCount: 3,
@@ -240,7 +285,11 @@ describe("createPosixSandbox — fs.read", () => {
     const { transport } = withFile("a\nb\nc");
 
     await expect(
-      createPosixSandbox(transport).fsRead(ctx, { path: "notes.txt" }),
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        { path: "notes.txt" },
+        callOptions,
+      ),
     ).resolves.toMatchObject({ lineCount: 3 });
   });
 
@@ -248,7 +297,11 @@ describe("createPosixSandbox — fs.read", () => {
     const { transport } = withFile("");
 
     await expect(
-      createPosixSandbox(transport).fsRead(ctx, { path: "notes.txt" }),
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        { path: "notes.txt" },
+        callOptions,
+      ),
     ).resolves.toEqual({ content: "", lineCount: 0, truncated: false });
   });
 
@@ -257,7 +310,11 @@ describe("createPosixSandbox — fs.read", () => {
     const { transport } = makeTransport({ files });
     const spy = vi.spyOn(transport, "readFile");
 
-    await createPosixSandbox(transport).fsRead(ctx, { path: "big.txt" });
+    await createPosixSandbox(transport).fsRead(
+      ctx,
+      { path: "big.txt" },
+      callOptions,
+    );
 
     expect(spy).toHaveBeenCalledWith(ctx, `${ROOT}/big.txt`, MAX_READ_BYTES);
   });
@@ -272,9 +329,13 @@ describe("createPosixSandbox — fs.read", () => {
       ]),
     });
 
-    const res = await createPosixSandbox(transport).fsRead(ctx, {
-      path: "big.txt",
-    });
+    const res = await createPosixSandbox(transport).fsRead(
+      ctx,
+      {
+        path: "big.txt",
+      },
+      callOptions,
+    );
     expect(res.content).toHaveLength(MAX_READ_BYTES);
     expect(res.truncated).toBe(true);
   });
@@ -285,7 +346,11 @@ describe("createPosixSandbox — fs.read", () => {
     });
 
     await expect(
-      createPosixSandbox(transport).fsRead(ctx, { path: "small.txt" }),
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        { path: "small.txt" },
+        callOptions,
+      ),
     ).resolves.toMatchObject({ truncated: false });
   });
 
@@ -295,7 +360,11 @@ describe("createPosixSandbox — fs.read", () => {
     });
 
     await expect(
-      createPosixSandbox(transport).fsRead(ctx, { path: "bin.dat" }),
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        { path: "bin.dat" },
+        callOptions,
+      ),
     ).rejects.toThrow(/fs\.read: file is not valid UTF-8 \(bin\.dat\)/);
   });
 
@@ -303,10 +372,14 @@ describe("createPosixSandbox — fs.read", () => {
     const { transport } = withFile("one\ntwo\nthree\nfour\nfive\n");
 
     await expect(
-      createPosixSandbox(transport).fsRead(ctx, {
-        path: "notes.txt",
-        lineRange: [2, 4],
-      }),
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        {
+          path: "notes.txt",
+          lineRange: [2, 4],
+        },
+        callOptions,
+      ),
     ).resolves.toEqual({
       content: "two\nthree\nfour\n",
       lineCount: 3,
@@ -318,7 +391,11 @@ describe("createPosixSandbox — fs.read", () => {
     const { transport } = makeTransport();
 
     await expect(
-      createPosixSandbox(transport).fsRead(ctx, { path: "missing.txt" }),
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        { path: "missing.txt" },
+        callOptions,
+      ),
     ).rejects.toThrow(/^fs\.read: No such file: \/workspace\/missing\.txt$/);
   });
 });
@@ -328,11 +405,15 @@ describe("createPosixSandbox — fs.write", () => {
     const { transport, writes } = makeTransport();
 
     await expect(
-      createPosixSandbox(transport).fsWrite(ctx, {
-        path: "a/b.txt",
-        content: "hello",
-        mode: "create",
-      }),
+      createPosixSandbox(transport).fsWrite(
+        ctx,
+        {
+          path: "a/b.txt",
+          content: "hello",
+          mode: "create",
+        },
+        callOptions,
+      ),
     ).resolves.toEqual({ bytesWritten: 5 });
 
     expect(writes[0]).toMatchObject({
@@ -346,11 +427,15 @@ describe("createPosixSandbox — fs.write", () => {
     const { transport } = makeTransport();
 
     await expect(
-      createPosixSandbox(transport).fsWrite(ctx, {
-        path: "e.txt",
-        content: "héllo 👋",
-        mode: "overwrite",
-      }),
+      createPosixSandbox(transport).fsWrite(
+        ctx,
+        {
+          path: "e.txt",
+          content: "héllo 👋",
+          mode: "overwrite",
+        },
+        callOptions,
+      ),
     ).resolves.toEqual({ bytesWritten: Buffer.byteLength("héllo 👋", "utf8") });
   });
 
@@ -358,11 +443,15 @@ describe("createPosixSandbox — fs.write", () => {
     const { transport } = makeTransport();
 
     await expect(
-      createPosixSandbox(transport).fsWrite(ctx, {
-        path: "empty.txt",
-        content: "",
-        mode: "create",
-      }),
+      createPosixSandbox(transport).fsWrite(
+        ctx,
+        {
+          path: "empty.txt",
+          content: "",
+          mode: "create",
+        },
+        callOptions,
+      ),
     ).resolves.toEqual({ bytesWritten: 0 });
   });
 
@@ -374,11 +463,15 @@ describe("createPosixSandbox — fs.write", () => {
     });
 
     await expect(
-      createPosixSandbox(transport).fsWrite(ctx, {
-        path: "taken.txt",
-        content: "new",
-        mode: "create",
-      }),
+      createPosixSandbox(transport).fsWrite(
+        ctx,
+        {
+          path: "taken.txt",
+          content: "new",
+          mode: "create",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow("fs.write: path already exists (mode=create): taken.txt");
   });
 
@@ -389,11 +482,15 @@ describe("createPosixSandbox — fs.write", () => {
     );
 
     await expect(
-      createPosixSandbox(transport).fsWrite(ctx, {
-        path: "x.txt",
-        content: "y",
-        mode: "overwrite",
-      }),
+      createPosixSandbox(transport).fsWrite(
+        ctx,
+        {
+          path: "x.txt",
+          content: "y",
+          mode: "overwrite",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow(/^Permission denied$/);
   });
 
@@ -402,11 +499,15 @@ describe("createPosixSandbox — fs.write", () => {
       files: new Map([[`${ROOT}/taken.txt`, Buffer.from("old")]]),
     });
 
-    await createPosixSandbox(transport).fsWrite(ctx, {
-      path: "taken.txt",
-      content: "new",
-      mode: "overwrite",
-    });
+    await createPosixSandbox(transport).fsWrite(
+      ctx,
+      {
+        path: "taken.txt",
+        content: "new",
+        mode: "overwrite",
+      },
+      callOptions,
+    );
 
     expect(files.get(`${ROOT}/taken.txt`)?.toString("utf8")).toBe("new");
   });
@@ -422,11 +523,15 @@ describe("createPosixSandbox — fs.edit", () => {
     const { transport, files } = withFile("const a = 1;\nconst b = 2;\n");
 
     await expect(
-      createPosixSandbox(transport).fsEdit(ctx, {
-        path: "code.ts",
-        oldString: "const b = 2;",
-        newString: "const b = 99;",
-      }),
+      createPosixSandbox(transport).fsEdit(
+        ctx,
+        {
+          path: "code.ts",
+          oldString: "const b = 2;",
+          newString: "const b = 99;",
+        },
+        callOptions,
+      ),
     ).resolves.toEqual({ replacements: 1 });
 
     expect(files.get(`${ROOT}/code.ts`)?.toString("utf8")).toBe(
@@ -437,11 +542,15 @@ describe("createPosixSandbox — fs.edit", () => {
   it("writes the edit back as an overwrite", async () => {
     const { transport, writes } = withFile("x");
 
-    await createPosixSandbox(transport).fsEdit(ctx, {
-      path: "code.ts",
-      oldString: "x",
-      newString: "y",
-    });
+    await createPosixSandbox(transport).fsEdit(
+      ctx,
+      {
+        path: "code.ts",
+        oldString: "x",
+        newString: "y",
+      },
+      callOptions,
+    );
 
     expect(writes[0]).toMatchObject({
       path: `${ROOT}/code.ts`,
@@ -453,11 +562,15 @@ describe("createPosixSandbox — fs.edit", () => {
     const { transport, writes } = withFile("hello");
 
     await expect(
-      createPosixSandbox(transport).fsEdit(ctx, {
-        path: "code.ts",
-        oldString: "nope",
-        newString: "y",
-      }),
+      createPosixSandbox(transport).fsEdit(
+        ctx,
+        {
+          path: "code.ts",
+          oldString: "nope",
+          newString: "y",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow("fs.edit: oldString not found in code.ts");
     expect(writes).toHaveLength(0);
   });
@@ -466,11 +579,15 @@ describe("createPosixSandbox — fs.edit", () => {
     const { transport, writes } = withFile("abc abc");
 
     await expect(
-      createPosixSandbox(transport).fsEdit(ctx, {
-        path: "code.ts",
-        oldString: "abc",
-        newString: "z",
-      }),
+      createPosixSandbox(transport).fsEdit(
+        ctx,
+        {
+          path: "code.ts",
+          oldString: "abc",
+          newString: "z",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow("fs.edit: oldString is not unique in code.ts");
     expect(writes).toHaveLength(0);
   });
@@ -478,11 +595,15 @@ describe("createPosixSandbox — fs.edit", () => {
   it("allows an empty newString (a deletion)", async () => {
     const { transport, files } = withFile("keep DROP keep");
 
-    await createPosixSandbox(transport).fsEdit(ctx, {
-      path: "code.ts",
-      oldString: " DROP",
-      newString: "",
-    });
+    await createPosixSandbox(transport).fsEdit(
+      ctx,
+      {
+        path: "code.ts",
+        oldString: " DROP",
+        newString: "",
+      },
+      callOptions,
+    );
 
     expect(files.get(`${ROOT}/code.ts`)?.toString("utf8")).toBe("keep keep");
   });
@@ -493,11 +614,15 @@ describe("createPosixSandbox — fs.edit", () => {
     });
 
     await expect(
-      createPosixSandbox(transport).fsEdit(ctx, {
-        path: "bin.dat",
-        oldString: "a",
-        newString: "b",
-      }),
+      createPosixSandbox(transport).fsEdit(
+        ctx,
+        {
+          path: "bin.dat",
+          oldString: "a",
+          newString: "b",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow(/fs\.edit: file is not valid UTF-8/);
   });
 
@@ -505,11 +630,15 @@ describe("createPosixSandbox — fs.edit", () => {
     const { transport } = makeTransport();
 
     await expect(
-      createPosixSandbox(transport).fsEdit(ctx, {
-        path: "missing.txt",
-        oldString: "a",
-        newString: "b",
-      }),
+      createPosixSandbox(transport).fsEdit(
+        ctx,
+        {
+          path: "missing.txt",
+          oldString: "a",
+          newString: "b",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow(/^fs\.edit: No such file/);
   });
 });
@@ -663,7 +792,7 @@ describe("createPosixSandbox — fs.list", () => {
 
   it("runs find under the workspace root with the list bounds", async () => {
     const { transport, execCalls } = listing([["f", 1, "a.txt"]]);
-    await createPosixSandbox(transport).fsList(ctx, {});
+    await createPosixSandbox(transport).fsList(ctx, {}, callOptions);
 
     expect(execCalls[0].argv[0]).toBe("find");
     expect(execCalls[0].argv[1]).toBe(ROOT);
@@ -677,7 +806,11 @@ describe("createPosixSandbox — fs.list", () => {
 
   it("lists a subpath resolved against the root", async () => {
     const { transport, execCalls } = listing([]);
-    await createPosixSandbox(transport).fsList(ctx, { path: "src" });
+    await createPosixSandbox(transport).fsList(
+      ctx,
+      { path: "src" },
+      callOptions,
+    );
 
     expect(execCalls[0].argv[1]).toBe(`${ROOT}/src`);
   });
@@ -689,7 +822,7 @@ describe("createPosixSandbox — fs.list", () => {
     ]);
 
     await expect(
-      createPosixSandbox(transport).fsList(ctx, {}),
+      createPosixSandbox(transport).fsList(ctx, {}, callOptions),
     ).resolves.toEqual({
       entries: [
         { path: "a.txt", type: "file", size: 12 },
@@ -703,7 +836,7 @@ describe("createPosixSandbox — fs.list", () => {
     const { transport } = makeTransport();
 
     await expect(
-      createPosixSandbox(transport).fsList(ctx, {}),
+      createPosixSandbox(transport).fsList(ctx, {}, callOptions),
     ).resolves.toEqual({ entries: [], truncated: false });
   });
 
@@ -717,7 +850,11 @@ describe("createPosixSandbox — fs.list", () => {
     );
 
     await expect(
-      createPosixSandbox(transport).fsList(ctx, { recursive: true }),
+      createPosixSandbox(transport).fsList(
+        ctx,
+        { recursive: true },
+        callOptions,
+      ),
     ).resolves.toMatchObject({
       entries: [{ path: "reachable.txt", type: "file", size: 1 }],
     });
@@ -734,16 +871,16 @@ describe("createPosixSandbox — fs.list", () => {
     });
 
     await expect(
-      createPosixSandbox(transport).fsList(ctx, { path: "nope" }),
+      createPosixSandbox(transport).fsList(ctx, { path: "nope" }, callOptions),
     ).rejects.toThrow(/fs\.list: find: .*No such file or directory/);
   });
 
   it("falls back to a generic message when find failed silently", async () => {
     const { transport } = makeTransport({ exec: () => ({ exitCode: 1 }) });
 
-    await expect(createPosixSandbox(transport).fsList(ctx, {})).rejects.toThrow(
-      "fs.list: fs.list failed",
-    );
+    await expect(
+      createPosixSandbox(transport).fsList(ctx, {}, callOptions),
+    ).rejects.toThrow("fs.list: fs.list failed");
   });
 });
 
@@ -761,15 +898,23 @@ describe("createPosixSandbox — lifecycle", () => {
     });
     const sandbox = createPosixSandbox(transport);
 
-    await sandbox.shellExec(ctx, { command: "x" });
-    await sandbox.fsRead(ctx, { path: "a.txt" });
-    await sandbox.fsWrite(ctx, { path: "b.txt", content: "y", mode: "create" });
-    await sandbox.fsEdit(ctx, {
-      path: "a.txt",
-      oldString: "x",
-      newString: "z",
-    });
-    await sandbox.fsList(ctx, {});
+    await sandbox.shellExec(ctx, { command: "x" }, callOptions);
+    await sandbox.fsRead(ctx, { path: "a.txt" }, callOptions);
+    await sandbox.fsWrite(
+      ctx,
+      { path: "b.txt", content: "y", mode: "create" },
+      callOptions,
+    );
+    await sandbox.fsEdit(
+      ctx,
+      {
+        path: "a.txt",
+        oldString: "x",
+        newString: "z",
+      },
+      callOptions,
+    );
+    await sandbox.fsList(ctx, {}, callOptions);
 
     expect(rootDirCalls).toHaveLength(5);
     expect(rootDirCalls.every((c) => c === ctx)).toBe(true);

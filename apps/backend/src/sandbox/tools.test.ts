@@ -212,8 +212,8 @@ describe("createSandboxTools", () => {
     );
   });
 
-  // The appended parameter is optional on the published contract, so an adapter
-  // written before it existed takes two arguments and must keep working.
+  // An adapter written before the appended parameter existed takes two
+  // arguments and must keep working.
   it("runs a two-argument backend written before the signal existed", async () => {
     const backend = {
       shellExec: (_ctx: SandboxContext, input: { command: string }) =>
@@ -238,9 +238,9 @@ describe("createSandboxTools", () => {
   });
 
   // The AI SDK declares `abortSignal` optional. Nothing in core drives a turn
-  // without one, but a call that arrives without it is handed to the adapter
-  // exactly as it always was.
-  it("calls the backend with no options when the SDK supplies no signal", async () => {
+  // without one, but the options are required from API v3, so a call that
+  // arrives without it still hands the adapter a signal — one that never fires.
+  it("hands the backend a never-firing signal when the SDK supplies none", async () => {
     const { backend, mocks } = makeBackend();
     const tools = createSandboxTools(backend, ctx);
 
@@ -249,8 +249,14 @@ describe("createSandboxTools", () => {
     expect(mocks.fsList).toHaveBeenCalledWith(
       ctx,
       { recursive: true },
-      undefined,
+      { signal: expect.any(AbortSignal) as unknown },
     );
+    const [, , options] = mocks.fsList.mock.calls[0] as [
+      unknown,
+      unknown,
+      { signal: AbortSignal },
+    ];
+    expect(options.signal.aborted).toBe(false);
   });
 
   // Issue #921. The turn not being pinned open cannot rest on the adapter's

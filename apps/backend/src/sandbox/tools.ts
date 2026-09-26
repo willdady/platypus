@@ -23,15 +23,15 @@ import {
  * timers already cleared, so nothing was left to recover it.
  *
  * A turn with no signal at all — nothing in core drives one, but the AI SDK
- * declares `abortSignal` optional — calls straight through, with the two
- * arguments an adapter has always been handed.
+ * declares `abortSignal` optional — hands the adapter a signal that never
+ * fires, since the options are required from plugin API v3.
  */
 const underSignal = <T>(
   options: { abortSignal?: AbortSignal },
-  call: (callOptions?: SandboxCallOptions) => Promise<T>,
+  call: (callOptions: SandboxCallOptions) => Promise<T>,
 ): Promise<T> => {
-  const signal = options.abortSignal;
-  return raceCancellation(signal, () => call(signal ? { signal } : undefined));
+  const signal = options.abortSignal ?? new AbortController().signal;
+  return raceCancellation(signal, () => call({ signal }));
 };
 
 // Builds the five AI SDK Tool objects from a SandboxBackend instance and the

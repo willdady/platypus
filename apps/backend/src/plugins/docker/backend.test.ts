@@ -304,6 +304,7 @@ const ctx: SandboxContext = {
   workspaceId: "ws-abc",
   userId: "user-1",
 };
+const callOptions = { signal: new AbortController().signal };
 
 function resetMockState() {
   mockState = {
@@ -394,7 +395,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     queueExec({ stdout: "hi", exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.shellExec(ctx, { command: "echo hi" });
+    await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(mockState.pullCalls).toEqual(["debian:stable-slim"]);
     expect(mockState.createVolumeCalls).toHaveLength(1);
@@ -412,7 +413,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     queueExec({ exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     const opts = mockState.createContainerCalls[0];
     expect(opts.name).toBe("platypus-sandbox-ws-abc");
@@ -444,7 +445,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     queueExec({ stdout: "ok", exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.createContainerCalls).toHaveLength(0);
     expect(mockState.createVolumeCalls).toHaveLength(0);
@@ -460,7 +461,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     queueExec({ exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.existingContainer.start).toHaveBeenCalledTimes(1);
     expect(mockState.createContainerCalls).toHaveLength(0);
@@ -473,9 +474,9 @@ describe("DockerSandboxTransport — provisioning", () => {
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
 
-    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
-      "daemon unavailable",
-    );
+    await expect(
+      backend.shellExec(ctx, { command: "true" }, callOptions),
+    ).rejects.toThrow("daemon unavailable");
     expect(mockState.createContainerCalls).toHaveLength(0);
   });
 
@@ -486,9 +487,9 @@ describe("DockerSandboxTransport — provisioning", () => {
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
 
-    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
-      "pull access denied",
-    );
+    await expect(
+      backend.shellExec(ctx, { command: "true" }, callOptions),
+    ).rejects.toThrow("pull access denied");
     expect(mockState.createContainerCalls).toHaveLength(0);
   });
 
@@ -500,8 +501,8 @@ describe("DockerSandboxTransport — provisioning", () => {
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await Promise.all([
-      backend.shellExec(ctx, { command: "a" }),
-      backend.shellExec(ctx, { command: "b" }),
+      backend.shellExec(ctx, { command: "a" }, callOptions),
+      backend.shellExec(ctx, { command: "b" }, callOptions),
     ]);
 
     expect(mockState.createContainerCalls).toHaveLength(1);
@@ -515,7 +516,7 @@ describe("DockerSandboxTransport — argv safety", () => {
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     const malicious = `foo";rm -rf /`;
-    await backend.fsRead(ctx, { path: malicious });
+    await backend.fsRead(ctx, { path: malicious }, callOptions);
 
     // Find the fsRead exec call — last call (after provisioning mkdir).
     const last = mockState.execCalls.at(-1) as { Cmd: string[] };
@@ -530,7 +531,7 @@ describe("DockerSandboxTransport — argv safety", () => {
     queueExec({ stdout: "a".repeat(MAX_READ_BYTES + 5_000), exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    const res = await backend.fsRead(ctx, { path: "big.txt" });
+    const res = await backend.fsRead(ctx, { path: "big.txt" }, callOptions);
 
     expect(res.content).toHaveLength(MAX_READ_BYTES);
   });
@@ -545,7 +546,7 @@ describe("DockerSandboxTransport — argv safety", () => {
     queueExec({ stdout: "", exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.fsList(ctx, { glob: "**/*.ts" });
+    await backend.fsList(ctx, { glob: "**/*.ts" }, callOptions);
 
     // What the glob rules *are* is core's business (posix.test.ts). What this
     // asserts is that the transport adds no shell and re-quotes nothing: the
@@ -569,9 +570,9 @@ describe("DockerSandboxTransport — argv safety", () => {
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
 
-    await expect(backend.fsRead(ctx, { path: "nope" })).rejects.toThrow(
-      expected,
-    );
+    await expect(
+      backend.fsRead(ctx, { path: "nope" }, callOptions),
+    ).rejects.toThrow(expected);
   });
 
   it("fsWrite creates a nested parent first and extracts into it", async () => {
@@ -579,11 +580,15 @@ describe("DockerSandboxTransport — argv safety", () => {
     queueExec({ exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.fsWrite(ctx, {
-      path: "a/b/c.txt",
-      content: "x",
-      mode: "overwrite",
-    });
+    await backend.fsWrite(
+      ctx,
+      {
+        path: "a/b/c.txt",
+        content: "x",
+        mode: "overwrite",
+      },
+      callOptions,
+    );
 
     expect(mockState.execCalls).toEqual([
       expect.objectContaining({ Cmd: ["mkdir", "-p", "/workspace/a/b"] }),
@@ -600,11 +605,15 @@ describe("DockerSandboxTransport — argv safety", () => {
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
 
     await expect(
-      backend.fsWrite(ctx, {
-        path: "a/b/c.txt",
-        content: "x",
-        mode: "overwrite",
-      }),
+      backend.fsWrite(
+        ctx,
+        {
+          path: "a/b/c.txt",
+          content: "x",
+          mode: "overwrite",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow("failed to create parent directory: /workspace/a/b");
     expect(mockState.putArchiveCalls).toHaveLength(0);
   });
@@ -616,11 +625,15 @@ describe("DockerSandboxTransport — argv safety", () => {
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await expect(
-      backend.fsWrite(ctx, {
-        path: "foo",
-        content: "bar",
-        mode: "create",
-      }),
+      backend.fsWrite(
+        ctx,
+        {
+          path: "foo",
+          content: "bar",
+          mode: "create",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow(/already exists/);
 
     const probeCall = mockState.execCalls.at(-1) as { Cmd: string[] };
@@ -636,11 +649,15 @@ describe("DockerSandboxTransport — argv safety", () => {
     );
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.fsWrite(ctx, {
-      path: "foo.txt",
-      content: "hello",
-      mode: "overwrite",
-    });
+    await backend.fsWrite(
+      ctx,
+      {
+        path: "foo.txt",
+        content: "hello",
+        mode: "overwrite",
+      },
+      callOptions,
+    );
     // No exec calls at all: no probe (overwrite skips), no mkdir (top-level path).
     expect(mockState.execCalls.length).toBe(0);
     expect(mockState.putArchiveCalls).toHaveLength(1);
@@ -756,10 +773,14 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     queueExec({ closeDelayMs: 200, exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    const res = await backend.shellExec(ctx, {
-      command: "sleep 5",
-      timeoutMs: 20,
-    });
+    const res = await backend.shellExec(
+      ctx,
+      {
+        command: "sleep 5",
+        timeoutMs: 20,
+      },
+      callOptions,
+    );
 
     expect(res.exitCode).toBe(124);
   });
@@ -832,7 +853,7 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     queueExec({ stdout: huge, exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    const res = await backend.shellExec(ctx, { command: "yes" });
+    const res = await backend.shellExec(ctx, { command: "yes" }, callOptions);
 
     expect(res.stdout.length).toBe(MAX_SHELL_OUTPUT_BYTES);
     expect(res.truncated).toBe(true);
@@ -849,7 +870,7 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
       {},
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.createContainerCalls[0].HostConfig?.ExtraHosts).toEqual([
       "host.docker.internal:host-gateway",
@@ -865,7 +886,7 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
       {},
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.createContainerCalls[0].HostConfig?.NetworkMode).toBe(
       "primary",
@@ -889,7 +910,7 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
       {},
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.createContainerCalls[0].HostConfig?.NetworkMode).toBe(
       "only",
@@ -980,7 +1001,7 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
     setupFreshProvision();
     queueExec({ stdout: "hi", exitCode: 0 });
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
-    await backend.shellExec(ctx, { command: "echo hi" });
+    await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(mockState.pullCalls).toEqual(["debian:stable-slim"]);
     // Same fields and message as before the routing change.
@@ -1019,7 +1040,7 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
     queueExec({ stdout: "hi", exitCode: 0 });
     const contribution = plugin.contributes.sandboxBackends![0];
     const backend = contribution.create({}, {}, withPluginLogger());
-    await backend.shellExec(ctx, { command: "echo hi" });
+    await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(pluginLogger.info).toHaveBeenCalledWith(
       { image: "debian:stable-slim" },
@@ -1068,7 +1089,7 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
     });
 
     const backend = captured[0].create({}, {});
-    await backend.shellExec(ctx, { command: "echo hi" });
+    await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(lines).toContainEqual({
       bindings: { plugin: "@platypus/docker", level: "info" },

@@ -142,15 +142,6 @@ per-call budget, and factories legitimately reach a database or a Sandbox on the
 way to building their tools. Teardown gets a ceiling because core knows what it
 is delaying; your factory's ceiling is a number only you know.
 
-<Callout type="warning">
-  The call above is unguarded, and that is only safe on **`apiVersion: 2`**.
-  Writing it on a manifest that still says 1 is the trap: a self-hoster on an
-  older core loads your Plugin, the field is genuinely absent there, and the call
-  throws out of your factory. The turn then serves **none of this set's tools**,
-  with a warning in the Operator's log as the only sign. Either raise the number
-  or keep `ctx.registerCloser?.(...)`.
-</Callout>
-
 <Callout type="info">
   A static map is handed nothing, so it has nowhere to register from — the same
   reason it has nowhere to log from. Use a factory if the set owns anything that

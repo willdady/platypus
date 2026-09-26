@@ -158,15 +158,6 @@ cancellation alike. A closer that throws is logged against your Plugin and the
 rest still run; one that never settles is abandoned after **5 seconds**, because
 teardown happens while the reader is still waiting on the reply.
 
-<Callout type="warning">
-  The call above is unguarded, and that is only safe on **`apiVersion: 2`**.
-  Writing it on a manifest that still says 1 is the trap: a self-hoster on an
-  older core loads your Plugin, the field is genuinely absent there, and the call
-  throws out of `createExecutors`. The turn then serves **no search tools at
-  all**, with a warning in the Operator's log as the only sign. Either raise the
-  number or keep `ctx.registerCloser?.(...)`.
-</Callout>
-
 <Callout type="info">
   Registering the same function twice **within one turn** registers it once —
   handy when both your executors share a client. Registration does not carry

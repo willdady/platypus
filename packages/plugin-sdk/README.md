@@ -78,18 +78,19 @@ after a core upgrade; a genuinely breaking change is a windowed major bump. Boot
 is fail-loud: a plugin outside the supported window is rejected with a
 plugin-named error.
 
-**v2 is the current major**, and a v1 plugin still loads on it. v2 made required
-everything core had always supplied on every turn — `ctx.registerCloser`,
-`plugin.logger`, and the `plugin` argument on all three contribution factories —
-so none of them needs a `?.` any more. It also re-signed one member: a Sandbox
-backend's `configSchema` **factory** now receives the whole deploy-time block
-rather than the `config` half alone, so read `plugin.config` where the argument
-used to be the config itself.
+**v3 is the current major**, and core supports 2 and 3 together; a v1 plugin is
+rejected at boot. v3 made the `{ signal }` argument on a Sandbox backend's five
+tool methods required, so read `options.signal` without a `?.`. Migrating a v2
+plugin: set `apiVersion` to 3 and drop any `options?.` guard. Dropping the guard
+while the manifest still says 2 is the trap — some cores that accept 2 never pass
+the argument, and the first unguarded read throws mid-turn.
 
-Raising `apiVersion` to 2 is what makes those unguarded reads safe. Dropping the
-guards while the manifest still says 1 is the trap — a core on the previous
-release will load the plugin, because 1 is inside its window, and the first
-unguarded read throws mid-turn.
+A v1 plugin must move to 2 or later. v2 made required everything core had always
+supplied on every turn — `ctx.registerCloser`, `plugin.logger`, and the `plugin`
+argument on all three contribution factories — so none of them needs a `?.`. It
+also re-signed a Sandbox backend's `configSchema` **factory**: it receives the
+whole deploy-time block rather than the `config` half alone, so read
+`plugin.config` where the argument used to be the config itself.
 
 ## What you can contribute
 
@@ -123,8 +124,7 @@ tools: (ctx, plugin) => {
 
 Prefer the object form — those fields stay queryable where an interpolated string
 does not. Don't put your plugin's name in them; core binds it for you. The block
-and its `logger` are both required from `apiVersion: 2` on, so neither needs a
-`?.`; on `apiVersion: 1` write `plugin?.logger?.` instead.
+and its `logger` are both required, so neither needs a `?.`.
 
 ## Closing what a factory opened
 
@@ -146,12 +146,6 @@ registration is per turn, so register what the turn opened and not a pool you me
 to keep between turns. A closer that throws is logged against your plugin and the
 rest still run; one that never settles is abandoned after 5 seconds, because
 teardown happens while the reader is still waiting on the reply.
-
-The unguarded call above needs `apiVersion: 2`. Writing it while your manifest
-still says 1 is the trap: an older core loads the plugin, the member is genuinely
-absent there, and the call is a `TypeError` thrown out of your factory — your
-contribution then serves **nothing** that turn. Either raise the number or write
-`ctx.registerCloser?.(…)`.
 
 ## Web-search backends
 
@@ -193,10 +187,7 @@ export const plugin: PlatypusPlugin = {
         createExecutors: (ctx, plugin) => {
           const pool = createPool(plugin.config.endpoint);
           // Anything with a lifetime gets a close core will run when the turn
-          // ends — on a normal finish and on a cancellation alike. Guarded,
-          // never `!`: the member is optional so this plugin still loads on a
-          // core that predates it, and an unguarded call would cost the turn
-          // its search tools entirely.
+          // ends — on a normal finish and on a cancellation alike.
           ctx.registerCloser(() => pool.close());
           return {
             // Mandatory. Return results; never truncate or paginate — core does.

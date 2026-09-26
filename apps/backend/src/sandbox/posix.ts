@@ -214,9 +214,9 @@ const readForTool = async (
 const resolveRoot = (
   transport: SandboxTransport,
   ctx: SandboxContext,
-  options: SandboxCallOptions | undefined,
+  options: SandboxCallOptions,
 ): Promise<string> =>
-  raceCancellation(options?.signal, () => transport.rootDir(ctx));
+  raceCancellation(options.signal, () => transport.rootDir(ctx));
 
 /**
  * Build a {@link SandboxBackend} — the five model-facing tools — from a {@link
@@ -232,7 +232,7 @@ export const createPosixSandbox = (
   async shellExec(
     ctx: SandboxContext,
     input: ShellExecInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<ShellExecOutput> {
     const rootDir = await resolveRoot(transport, ctx, options);
     // The clamp is core's, not the schema's: the schema bounds what a model may
@@ -248,7 +248,7 @@ export const createPosixSandbox = (
       timeoutMs,
       // Passed to the transport so a cancelled turn stops the command itself,
       // not just core's wait for it (issue #921).
-      signal: options?.signal,
+      signal: options.signal,
       stdoutCap: MAX_SHELL_OUTPUT_BYTES,
       stderrCap: MAX_SHELL_OUTPUT_BYTES,
     });
@@ -270,7 +270,7 @@ export const createPosixSandbox = (
   async fsRead(
     ctx: SandboxContext,
     input: FsReadInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<FsReadOutput> {
     const rootDir = await resolveRoot(transport, ctx, options);
     const bytes = await readForTool(
@@ -279,7 +279,7 @@ export const createPosixSandbox = (
       "fs.read",
       rootDir,
       input.path,
-      options?.signal,
+      options.signal,
     );
 
     const decoded = decodeUtf8Strict(bytes, "fs.read", input.path);
@@ -301,13 +301,13 @@ export const createPosixSandbox = (
   async fsWrite(
     ctx: SandboxContext,
     input: FsWriteInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<FsWriteOutput> {
     const rootDir = await resolveRoot(transport, ctx, options);
     const bytes = Buffer.from(input.content, "utf8");
 
     try {
-      await raceCancellation(options?.signal, () =>
+      await raceCancellation(options.signal, () =>
         transport.writeFile(
           ctx,
           absPath(rootDir, input.path),
@@ -333,7 +333,7 @@ export const createPosixSandbox = (
   async fsEdit(
     ctx: SandboxContext,
     input: FsEditInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<FsEditOutput> {
     const rootDir = await resolveRoot(transport, ctx, options);
     const bytes = await readForTool(
@@ -342,7 +342,7 @@ export const createPosixSandbox = (
       "fs.edit",
       rootDir,
       input.path,
-      options?.signal,
+      options.signal,
     );
 
     const updated = replaceUnique(
@@ -350,7 +350,7 @@ export const createPosixSandbox = (
       input,
     );
 
-    await raceCancellation(options?.signal, () =>
+    await raceCancellation(options.signal, () =>
       transport.writeFile(
         ctx,
         absPath(rootDir, input.path),
@@ -365,7 +365,7 @@ export const createPosixSandbox = (
   async fsList(
     ctx: SandboxContext,
     input: FsListInput,
-    options?: SandboxCallOptions,
+    options: SandboxCallOptions,
   ): Promise<FsListOutput> {
     const rootDir = await resolveRoot(transport, ctx, options);
     const target = input.path ? absPath(rootDir, input.path) : rootDir;
@@ -373,7 +373,7 @@ export const createPosixSandbox = (
     const res = await transport.exec(ctx, buildFindArgs(target, input), {
       cwd: rootDir,
       timeoutMs: DEFAULT_SHELL_TIMEOUT_MS,
-      signal: options?.signal,
+      signal: options.signal,
       stdoutCap: MAX_LIST_OUTPUT_BYTES,
       stderrCap: MAX_SHELL_OUTPUT_BYTES,
     });

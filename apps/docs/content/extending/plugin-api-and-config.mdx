@@ -24,10 +24,10 @@ a `contributes` block naming what it fills.
 
 ### Two names, two jobs
 
-| This                          | Is                                                                                 | Example                  |
-| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------ |
-| The **npm package specifier** | What you publish, what an Operator installs and lists                              | `@acme/platypus-widgets` |
-| The manifest **`name`**       | The config namespace, and the prefix on every contribution id **and tool name**    | `widgets`                |
+| This                          | Is                                                                              | Example                  |
+| ----------------------------- | ------------------------------------------------------------------------------- | ------------------------ |
+| The **npm package specifier** | What you publish, what an Operator installs and lists                           | `@acme/platypus-widgets` |
+| The manifest **`name`**       | The config namespace, and the prefix on every contribution id **and tool name** | `widgets`                |
 
 A third-party manifest `name` must be a url-safe slug — lowercase letters, digits
 and hyphens — of up to 24 characters. Both are validated at boot.
@@ -110,11 +110,32 @@ The practical consequence for you: a two-argument `create` keeps working after
 core started passing a third argument, and a single-argument factory keeps working
 after core started passing a second. Consume the new argument when you want it.
 
-## Moving to API v2
+## Moving to API v3
 
-v2 is the first major bump, and it does one thing: everything core has always
-supplied on every turn is now **required** rather than optional. Set your
-`apiVersion` to 2 and you can write these without a guard:
+v3 is the current major, and core supports **2 and 3** together. A v1 Plugin no
+longer loads: boot stops with an error naming your Plugin and the oldest version
+core supports.
+
+v3 does one thing: the `{ signal }` argument on a
+[Sandbox backend's](/extending/sandbox-backends#the-signal-your-tool-methods-get)
+five tool methods is now **required** rather than optional. Set your
+`apiVersion` to 3 and drop any `options?.` guard — read `options.signal`
+directly. An adapter that never reads the argument needs no change beyond the
+number.
+
+<Callout type="warning">
+  Dropping the guard while your manifest still says 2 is the trap. Platypus 3.0
+  to 3.7.3 accept 2 but never pass the argument, so a self-hoster on one of them
+  loads your Plugin and the first unguarded `options.signal` throws inside
+  somebody's Chat turn. Raising the number is what makes that core refuse the
+  Plugin at boot instead.
+</Callout>
+
+## Moving from API v1
+
+A v1 Plugin must move to 2 or later before it loads again. What v2 changed:
+everything core had always supplied on every turn became **required** rather
+than optional, so drop the guards on these:
 
 - `ctx.registerCloser(close)` — register something to close when the turn ends,
   on a [Tool set](/extending/tool-sets#releasing-what-a-factory-opened) or a
@@ -123,27 +144,10 @@ supplied on every turn is now **required** rather than optional. Set your
 - `plugin` itself, on all three contribution factories.
 
 One member changed shape rather than optionality. A Sandbox backend's
-`configSchema` **factory** now receives the whole deploy-time block, where before
+`configSchema` **factory** receives the whole deploy-time block, where under v1
 it received the `config` half on its own. Read `plugin.config` where the argument
 used to be the config itself — and you can now reach `plugin.credentials` and
 `plugin.logger` from there too.
-
-This is the one place the argument you get depends on the `apiVersion` you
-declare: core hands a v1 factory the `config` half it was written against, and a
-v2 factory the whole block. So the migration is the two edits together — raise
-the number, then read `plugin.config` — and doing neither is equally correct.
-
-<Callout type="warning">
-  Upgrading the SDK without raising `apiVersion` to 2 is the trap. Nothing stops
-  you dropping the guards while your manifest still says 1, and it will run
-  correctly on a current core — then a self-hoster on the previous release
-  installs it, core loads it because 1 is inside the window, and your first
-  unguarded call throws inside somebody's Chat turn. Raising the number is what
-  makes that core refuse the Plugin at boot instead.
-</Callout>
-
-Staying on `apiVersion: 1` is also fine: core supports 1 and 2 together, so an
-unmigrated Plugin keeps loading. Keep the guards while you do.
 
 ## Deploy-time config and credentials
 
@@ -163,8 +167,8 @@ injects the resolved block into **every one** of your contributions:
 - a **Web-search backend** `createExecutors` receives it as a second argument,
   alongside the request context.
 
-You can ignore the argument in all three. What you cannot do from `apiVersion: 2`
-on is receive nothing: core always passes it.
+You can ignore the argument in all three. What you cannot do is receive nothing:
+core always passes it.
 
 **One block is shared** across all of a plugin's contributions and all tenants.
 That is deliberate, and it is the mechanism that lets a plugin's Sandbox backend
@@ -172,9 +176,9 @@ and its management Tool set authenticate with the same credential — one vendor
 token driving both.
 
 <Callout type="warning">
-  Because it is one block for the whole deployment, this is **not** a per-user or
-  per-Workspace secret. Don't reach for it to hold a tenant's credential; every
-  Workspace on the deployment would be using the same one. Genuinely
+  Because it is one block for the whole deployment, this is **not** a per-user
+  or per-Workspace secret. Don't reach for it to hold a tenant's credential;
+  every Workspace on the deployment would be using the same one. Genuinely
   tenant-specific values belong on the per-Workspace Sandbox row, which is a
   separate layer above this one — the two layer, they do not merge.
 </Callout>
@@ -222,10 +226,8 @@ Three things core does for you, and one thing to get right yourself:
   lands in the Operator's pipeline as an unparseable line between two JSON ones.
 </Callout>
 
-On `apiVersion: 2` both the block and its logger are required, so write
-`plugin.logger.` — no chaining, no fallback. On `apiVersion: 1` keep
-`plugin?.logger?.`, which is what lets one build run on a core that predates the
-member.
+Both the block and its logger are required, so write `plugin.logger.` — no
+chaining, no fallback.
 
 Deploy-time scope is all a logger line carries. Workspace, Agent and run ids are
 not bound for you; include the ones you have from your own context, as the

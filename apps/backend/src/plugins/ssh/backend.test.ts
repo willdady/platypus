@@ -303,6 +303,7 @@ const ctx: SandboxContext = {
   workspaceId: "ws-abc",
   userId: "user-1",
 };
+const callOptions = { signal: new AbortController().signal };
 
 const CONFIG = {
   host: "ssh.example.com",
@@ -402,7 +403,7 @@ describe("SshSandboxTransport — connect", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "echo hi" });
+    await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(mockState.connectConfigs).toHaveLength(1);
     const cc = mockState.connectConfigs[0];
@@ -429,7 +430,7 @@ describe("SshSandboxTransport — connect", () => {
       },
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
     expect(mockState.connectConfigs[0].passphrase).toBe("secret");
   });
 
@@ -440,7 +441,7 @@ describe("SshSandboxTransport — connect", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
     expect(mockState.execCommands[0]).toContain("ROOT='/srv/agent'");
   });
 
@@ -451,9 +452,9 @@ describe("SshSandboxTransport — connect", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
-      /auth failed/,
-    );
+    await expect(
+      backend.shellExec(ctx, { command: "true" }, callOptions),
+    ).rejects.toThrow(/auth failed/);
   });
 
   it("throws when the workspace root cannot be created", async () => {
@@ -463,9 +464,9 @@ describe("SshSandboxTransport — connect", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
-      /failed to create workspace root/,
-    );
+    await expect(
+      backend.shellExec(ctx, { command: "true" }, callOptions),
+    ).rejects.toThrow(/failed to create workspace root/);
   });
 });
 
@@ -479,7 +480,7 @@ describe("SshSandboxTransport — host-key verification", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.connectConfigs).toHaveLength(1);
     expect(typeof mockState.connectConfigs[0].hostVerifier).toBe("function");
@@ -497,9 +498,9 @@ describe("SshSandboxTransport — host-key verification", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
-      /host-key verification failed/,
-    );
+    await expect(
+      backend.shellExec(ctx, { command: "true" }, callOptions),
+    ).rejects.toThrow(/host-key verification failed/);
     // No tools run — connect aborts before the root-resolution exec.
     expect(mockState.execCommands).toHaveLength(0);
   });
@@ -511,7 +512,7 @@ describe("SshSandboxTransport — host-key verification", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.connectConfigs[0].hostVerifier).toBeUndefined();
     expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
@@ -537,9 +538,9 @@ describe("SshSandboxTransport — host-key verification", () => {
         CREDENTIALS,
         withPluginLogger(),
       );
-      await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
-        expected,
-      );
+      await expect(
+        backend.shellExec(ctx, { command: "true" }, callOptions),
+      ).rejects.toThrow(expected);
       // Never even attempted to connect.
       expect(mockState.connectConfigs).toHaveLength(0);
     },
@@ -554,7 +555,7 @@ describe("SshSandboxTransport — shellExec", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    const res = await backend.shellExec(ctx, { command: "run" });
+    const res = await backend.shellExec(ctx, { command: "run" }, callOptions);
 
     // Core hands the transport an argv (`/bin/sh -c <command>`); a login shell
     // sits in between, so every element is single-quoted before being joined.
@@ -576,7 +577,11 @@ describe("SshSandboxTransport — shellExec", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "ls", cwd: "sub/dir" });
+    await backend.shellExec(
+      ctx,
+      { command: "ls", cwd: "sub/dir" },
+      callOptions,
+    );
     expect(mockState.execCommands[1]).toBe(
       "cd '/home/platypus/platypus-workspace/sub/dir' && '/bin/sh' '-c' 'ls'",
     );
@@ -589,10 +594,14 @@ describe("SshSandboxTransport — shellExec", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, {
-      command: "printenv",
-      env: { FOO: "bar", TOKEN: "a b'c" },
-    });
+    await backend.shellExec(
+      ctx,
+      {
+        command: "printenv",
+        env: { FOO: "bar", TOKEN: "a b'c" },
+      },
+      callOptions,
+    );
     const cmd = mockState.execCommands[1];
     expect(cmd).toContain("export FOO='bar'; ");
     // Single quotes in the value are escaped with the '\'' idiom.
@@ -608,12 +617,16 @@ describe("SshSandboxTransport — shellExec", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, {
-      command: "run",
-      // A malformed key (model-supplied env is not schema-key-validated) must
-      // never be interpolated raw into the shell string.
-      env: { GOOD: "1", "bad;rm -rf": "x" },
-    });
+    await backend.shellExec(
+      ctx,
+      {
+        command: "run",
+        // A malformed key (model-supplied env is not schema-key-validated) must
+        // never be interpolated raw into the shell string.
+        env: { GOOD: "1", "bad;rm -rf": "x" },
+      },
+      callOptions,
+    );
     const cmd = mockState.execCommands[1];
     expect(cmd).toContain("export GOOD='1'; ");
     expect(cmd).not.toContain("rm -rf");
@@ -629,7 +642,7 @@ describe("SshSandboxTransport — shellExec", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    const res = await backend.shellExec(ctx, { command: "yes" });
+    const res = await backend.shellExec(ctx, { command: "yes" }, callOptions);
     expect(res.stdout.length).toBe(MAX_SHELL_OUTPUT_BYTES);
     expect(res.truncated).toBe(true);
   });
@@ -642,10 +655,14 @@ describe("SshSandboxTransport — shellExec", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    const res = await backend.shellExec(ctx, {
-      command: "sleep 5",
-      timeoutMs: 20,
-    });
+    const res = await backend.shellExec(
+      ctx,
+      {
+        command: "sleep 5",
+        timeoutMs: 20,
+      },
+      callOptions,
+    );
     expect(res.exitCode).toBe(124);
   });
 
@@ -701,8 +718,8 @@ describe("SshSandboxTransport — connection lifecycle", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "a" });
-    await backend.shellExec(ctx, { command: "b" });
+    await backend.shellExec(ctx, { command: "a" }, callOptions);
+    await backend.shellExec(ctx, { command: "b" }, callOptions);
 
     // One connect, one root-resolution exec, then two command execs.
     expect(mockState.connectConfigs).toHaveLength(1);
@@ -718,8 +735,8 @@ describe("SshSandboxTransport — connection lifecycle", () => {
       withPluginLogger(),
     );
     await Promise.all([
-      backend.shellExec(ctx, { command: "a" }),
-      backend.shellExec(ctx, { command: "b" }),
+      backend.shellExec(ctx, { command: "a" }, callOptions),
+      backend.shellExec(ctx, { command: "b" }, callOptions),
     ]);
     expect(mockState.connectConfigs).toHaveLength(1);
   });
@@ -733,7 +750,7 @@ describe("SshSandboxTransport — connection lifecycle", () => {
         CREDENTIALS,
         withPluginLogger(),
       );
-      await backend.shellExec(ctx, { command: "true" });
+      await backend.shellExec(ctx, { command: "true" }, callOptions);
       expect(mockState.ended).toBe(0);
 
       // Advance past the idle timeout — the reaper disconnects.
@@ -742,7 +759,7 @@ describe("SshSandboxTransport — connection lifecycle", () => {
 
       // A subsequent call reconnects.
       queueExec({ exitCode: 0 });
-      await backend.shellExec(ctx, { command: "again" });
+      await backend.shellExec(ctx, { command: "again" }, callOptions);
       expect(mockState.connectConfigs).toHaveLength(2);
     } finally {
       vi.useRealTimers();
@@ -758,7 +775,7 @@ describe("SshSandboxTransport — destroy() is a no-op", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
     const execCountBefore = mockState.execCommands.length;
 
     await backend.destroy(ctx);
@@ -802,11 +819,15 @@ describe("SshSandboxTransport — fs.write (SFTP)", () => {
       withPluginLogger(),
     );
     await expect(
-      backend.fsWrite(ctx, {
-        path: "exists.txt",
-        content: "new",
-        mode: "create",
-      }),
+      backend.fsWrite(
+        ctx,
+        {
+          path: "exists.txt",
+          content: "new",
+          mode: "create",
+        },
+        callOptions,
+      ),
     ).rejects.toThrow(/already exists/);
     // Untouched — the atomic `wx` open never opened it for writing.
     expect(mockState.files.get(abs("exists.txt"))?.toString("utf8")).toBe(
@@ -820,11 +841,15 @@ describe("SshSandboxTransport — fs.write (SFTP)", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.fsWrite(ctx, {
-      path: "a/b/c/deep.txt",
-      content: "x",
-      mode: "create",
-    });
+    await backend.fsWrite(
+      ctx,
+      {
+        path: "a/b/c/deep.txt",
+        content: "x",
+        mode: "create",
+      },
+      callOptions,
+    );
     expect(mockState.dirs.has(abs("a"))).toBe(true);
     expect(mockState.dirs.has(abs("a/b"))).toBe(true);
     expect(mockState.dirs.has(abs("a/b/c"))).toBe(true);
@@ -839,11 +864,15 @@ describe("SshSandboxTransport — fs.write (SFTP)", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.fsWrite(ctx, {
-      path: "empty.txt",
-      content: "",
-      mode: "create",
-    });
+    await backend.fsWrite(
+      ctx,
+      {
+        path: "empty.txt",
+        content: "",
+        mode: "create",
+      },
+      callOptions,
+    );
     expect(mockState.files.get(abs("empty.txt"))).toEqual(Buffer.alloc(0));
   });
 
@@ -854,11 +883,15 @@ describe("SshSandboxTransport — fs.write (SFTP)", () => {
       withPluginLogger(),
     );
     const weird = `foo";rm -rf /.txt`;
-    await backend.fsWrite(ctx, {
-      path: weird,
-      content: "safe",
-      mode: "create",
-    });
+    await backend.fsWrite(
+      ctx,
+      {
+        path: weird,
+        content: "safe",
+        mode: "create",
+      },
+      callOptions,
+    );
     // The literal metachar path is a key in the store; no exec command ran it.
     expect(mockState.files.has(abs(weird))).toBe(true);
     expect(mockState.execCommands.every((c) => !c.includes("rm -rf"))).toBe(
@@ -878,7 +911,7 @@ describe("SshSandboxTransport — fs.read (SFTP)", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    const res = await backend.fsRead(ctx, { path: "big.txt" });
+    const res = await backend.fsRead(ctx, { path: "big.txt" }, callOptions);
     expect(res.content.length).toBe(MAX_READ_BYTES);
   });
 
@@ -891,7 +924,7 @@ describe("SshSandboxTransport — fs.read (SFTP)", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    const res = await backend.fsRead(ctx, { path: "small.txt" });
+    const res = await backend.fsRead(ctx, { path: "small.txt" }, callOptions);
     expect(res.content).toBe("abc");
   });
 });
@@ -903,13 +936,21 @@ describe("SshSandboxTransport — SFTP session lifecycle", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.fsWrite(ctx, { path: "a.txt", content: "1", mode: "create" });
-    await backend.fsRead(ctx, { path: "a.txt" });
-    await backend.fsEdit(ctx, {
-      path: "a.txt",
-      oldString: "1",
-      newString: "2",
-    });
+    await backend.fsWrite(
+      ctx,
+      { path: "a.txt", content: "1", mode: "create" },
+      callOptions,
+    );
+    await backend.fsRead(ctx, { path: "a.txt" }, callOptions);
+    await backend.fsEdit(
+      ctx,
+      {
+        path: "a.txt",
+        oldString: "1",
+        newString: "2",
+      },
+      callOptions,
+    );
     // One connect, one SFTP open, reused for all three fs calls.
     expect(mockState.connectConfigs).toHaveLength(1);
     expect(mockState.sftpOpens).toBe(1);
@@ -922,9 +963,9 @@ describe("SshSandboxTransport — SFTP session lifecycle", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await expect(backend.fsRead(ctx, { path: "a.txt" })).rejects.toThrow(
-      /sftp channel refused/,
-    );
+    await expect(
+      backend.fsRead(ctx, { path: "a.txt" }, callOptions),
+    ).rejects.toThrow(/sftp channel refused/);
   });
 });
 
@@ -945,7 +986,7 @@ describe("SshSandboxTransport — fs.list (exec find)", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.fsList(ctx, {});
+    await backend.fsList(ctx, {}, callOptions);
     // Core passes cwd=rootDir, so the `cd` prefix precedes find as well; the
     // argv itself (find, its target, its flags) is core's — this only asserts
     // that none of it reaches the login shell unquoted.
@@ -962,7 +1003,7 @@ describe("SshSandboxTransport — fs.list (exec find)", () => {
       withPluginLogger(),
     );
     // A metachar-laden path (schema rejects absolute/`..`, but quote defensively).
-    await backend.fsList(ctx, { path: `foo; rm -rf ~` });
+    await backend.fsList(ctx, { path: `foo; rm -rf ~` }, callOptions);
     // The whole path is inside one single-quoted argument.
     expect(lastFindCommand()).toBe(
       `cd '${ROOT}' && 'find' '${ROOT}/foo; rm -rf ~' '-maxdepth' '1' '-mindepth' '1' ${PRINTF_ARG}`,
@@ -976,7 +1017,7 @@ describe("SshSandboxTransport — fs.list (exec find)", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.fsList(ctx, { path: `it's` });
+    await backend.fsList(ctx, { path: `it's` }, callOptions);
     // classic '\'' escape idiom, matching shQuote.
     expect(lastFindCommand()).toContain(`'find' '${ROOT}/it'\\''s'`);
   });
@@ -994,7 +1035,7 @@ describe("SshSandboxTransport — plugin-injected logger", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
     expect(pluginLogger.warn).toHaveBeenCalledWith(
@@ -1016,7 +1057,7 @@ describe("SshSandboxTransport — plugin-injected logger", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(pluginLogger.warn).toHaveBeenCalledWith(
       { host: "ssh.example.com", port: 22 },
@@ -1061,7 +1102,7 @@ describe("SshSandboxTransport — plugin-injected logger", () => {
     });
 
     const backend = captured[0].create(CONFIG, CREDENTIALS);
-    await backend.shellExec(ctx, { command: "true" });
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(lines).toContainEqual({
       bindings: { plugin: "@platypus/ssh", level: "warn" },

@@ -93,7 +93,7 @@ export const sandboxBackendPoint = (
       );
     }
   },
-  prepare: (raw, { pluginName, id, plugin, apiVersion }) => {
+  prepare: (raw, { pluginName, id, plugin }) => {
     const contribution = raw as unknown as SandboxBackendContribution;
 
     // Resolve a factory-form configSchema against the boot-resolved plugin block
@@ -107,16 +107,6 @@ export const sandboxBackendPoint = (
     // factory on this surface that could reach neither the plugin's credentials
     // nor its logger — so the one with no way to say why it refused a value.
     //
-    // A v1 manifest is still inside core's window (ADR-0013's N and N−1), and
-    // this is the only member whose *shape* changed across that window rather
-    // than being appended to — every other v2 requirement is something core
-    // always supplied, which a v1 factory may simply ignore. So a v1 factory is
-    // handed what it was written against: the `config` half. Without this branch
-    // it silently narrows the wrong object and builds a per-Workspace schema that
-    // validates nothing it was meant to — the failure the window exists to
-    // prevent, and a silent one, since a factory taking `unknown` cannot notice.
-    // The branch retires itself when core reaches v3 and v1 leaves the window.
-    //
     // The factory is third-party code narrowing that block itself, so it can
     // throw — a plugin that assumes an Operator supplied `config.region` raises a
     // bare `Cannot read properties of undefined` naming nothing. Attributed here
@@ -127,13 +117,7 @@ export const sandboxBackendPoint = (
     try {
       configSchema =
         typeof contribution.configSchema === "function"
-          ? // Widened to `unknown`: the two window versions pass genuinely
-            // different shapes, which the v2-only SDK signature cannot express.
-            (
-              contribution.configSchema as (
-                arg: unknown,
-              ) => SandboxBackendRegistration["configSchema"]
-            )(apiVersion < 2 ? plugin.config : plugin)
+          ? contribution.configSchema(plugin)
           : contribution.configSchema;
     } catch (cause) {
       throw new Error(

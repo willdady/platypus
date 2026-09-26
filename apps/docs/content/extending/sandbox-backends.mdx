@@ -99,9 +99,10 @@ transcript as though it had.
   billed sandbox minute for an answer nobody will read.
 </Callout>
 
-The argument is optional. An adapter written before it existed declares two
-parameters, still satisfies `SandboxBackend`, and still works — Platypus passes
-the third argument regardless and your method ignores it.
+From `apiVersion: 3` the argument is required, so read `options.signal`
+without a `?.`. An adapter written before it existed declares two parameters,
+still satisfies `SandboxBackend`, and still works — Platypus passes the third
+argument regardless and your method ignores it.
 
 `AbortSignal` is a platform global rather than something the SDK declares, so a
 `tsconfig.json` with `"lib": ["esnext"]` and no `@types/node` reports `Cannot

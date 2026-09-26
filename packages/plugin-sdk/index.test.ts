@@ -9,6 +9,7 @@ import {
   type PluginLogger,
   type SandboxBackend,
   type SandboxBackendContribution,
+  type SandboxCallOptions,
   type ToolSetContribution,
   type WebBackendContribution,
 } from "./index.ts";
@@ -25,16 +26,13 @@ const silentLogger = (): PluginLogger => ({
 
 describe("@platypuschat/plugin-sdk", () => {
   it("pins the plugin API version", () => {
-    expect(PLUGIN_API_VERSION).toBe(2);
+    expect(PLUGIN_API_VERSION).toBe(3);
   });
 
-  it("supports one previous major (N and N−1), floored at 1 (no phantom v0)", () => {
-    // At v2 this opens a genuine N−1 slot: a plugin built against v1 is inside
-    // `[1, 2]` and keeps loading on this core. That is the whole of what the
-    // major bump promises an author who has not migrated yet.
-    expect(OLDEST_SUPPORTED_API_VERSION).toBe(
-      Math.max(1, PLUGIN_API_VERSION - 1),
-    );
+  it("supports one previous major (N and N−1)", () => {
+    // At v3 the window is `[2, 3]`: a v2 plugin keeps loading on this core, and
+    // a v1 plugin no longer does.
+    expect(OLDEST_SUPPORTED_API_VERSION).toBe(2);
   });
 
   it("accepts a well-formed manifest with a static-map tool set", () => {
@@ -134,13 +132,10 @@ describe("@platypuschat/plugin-sdk", () => {
     backend.create({}, {}, shared);
   });
 
-  // Issue #921 appended `SandboxCallOptions` to all five tool methods. Two
-  // different compile-time guarantees, protected by two different things, and
-  // it is worth being exact about which is which.
-  //
-  // An *implementer* is safe because TypeScript lets a function with fewer
-  // parameters satisfy a type with more — the `?` is not what saves it, and a
-  // required third parameter would accept this adapter just as happily.
+  // Issue #921 appended `SandboxCallOptions` to all five tool methods, and API
+  // v3 made it required. An *implementer* is unaffected: TypeScript lets a
+  // function with fewer parameters satisfy a type with more, so an adapter
+  // written before the signal existed still type-checks.
   it("still accepts an adapter written before the per-call signal existed", () => {
     const preSignal: SandboxBackend = {
       shellExec: (_ctx, input) =>
@@ -169,34 +164,14 @@ describe("@platypuschat/plugin-sdk", () => {
     ).resolves.toMatchObject({ stdout: "ls" });
   });
 
-  // …whereas a *caller* is safe only because the parameter is optional. This is
-  // the half the `?` actually buys: anything that wraps, decorates or exercises
-  // an adapter calls these methods itself, and `options: SandboxCallOptions`
-  // turns every such two-argument call into TS2554 "Expected 3 arguments, but
-  // got 2". Verified by making it required — the assertion below is the one
-  // that fails.
-  it("still lets a caller invoke a tool method without the appended options", () => {
-    const backend: SandboxBackend = {
-      shellExec: (_ctx, input, options) =>
-        Promise.resolve({
-          stdout: options ? "signalled" : input.command,
-          stderr: "",
-          exitCode: 0,
-          truncated: false,
-          durationMs: 1,
-        }),
-      fsRead: () =>
-        Promise.resolve({ content: "", lineCount: 0, truncated: false }),
-      fsWrite: () => Promise.resolve({ bytesWritten: 0 }),
-      fsEdit: () => Promise.resolve({ replacements: 1 }),
-      fsList: () => Promise.resolve({ entries: [], truncated: false }),
-      destroy: () => Promise.resolve(),
-    };
-
-    const ctx = { orgId: "o", workspaceId: "w", userId: "u" };
-    return expect(
-      backend.shellExec(ctx, { command: "ls" }),
-    ).resolves.toMatchObject({ stdout: "ls" });
+  // …and an adapter that does read it reads it unguarded, because from API v3
+  // every call carries it. Compile-time only: `pnpm typecheck` fails if the
+  // argument goes back to optional.
+  it("requires the per-call options on every tool method", () => {
+    type Methods = "shellExec" | "fsRead" | "fsWrite" | "fsEdit" | "fsList";
+    expectTypeOf<
+      Parameters<SandboxBackend[Methods]>[2]
+    >().toEqualTypeOf<SandboxCallOptions>();
   });
 
   it("carries a required logger on the shared block, callable both ways", () => {
