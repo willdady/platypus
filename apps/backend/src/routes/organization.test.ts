@@ -12,6 +12,12 @@ import {
 import { mockLogger } from "../test-setup.ts";
 import { getStorage } from "../storage/index.ts";
 import app from "../server.ts";
+import { z } from "zod";
+import {
+  clearSandboxBackends,
+  registerSandboxBackend,
+} from "../sandbox/index.ts";
+import type { SandboxBackend } from "../sandbox/types.ts";
 
 describe("Organization Routes", () => {
   beforeEach(() => {
@@ -254,6 +260,103 @@ describe("Organization Routes", () => {
       for (const key of outside) {
         expect(await isStored(key)).toBe(true);
       }
+    });
+
+    describe("Sandbox teardown", () => {
+      const BACKEND = "test-org-teardown";
+      const destroy = vi.fn<SandboxBackend["destroy"]>();
+
+      beforeEach(() => {
+        clearSandboxBackends();
+        registerSandboxBackend({
+          backend: BACKEND,
+          name: "Test",
+          configSchema: z.object({}),
+          credentialsSchema: z.object({}),
+          create: () => ({ destroy }) as unknown as SandboxBackend,
+        });
+      });
+
+      const sandbox = (id: string, workspaceId: string, backend = BACKEND) => ({
+        id,
+        workspaceId,
+        backend,
+        config: {},
+        credentials: {},
+      });
+
+      const seedWithSandboxes = (sandboxes: ReturnType<typeof sandbox>[]) => {
+        const fake = seed();
+        fake.tables.workspace[0].ownerId = "owner-1";
+        fake.tables.workspace[1].ownerId = "owner-2";
+        fake.tables.sandbox = sandboxes;
+        fake.tables.sandbox_teardown_failure = [];
+        return fake;
+      };
+
+      it("destroys every Workspace's Sandboxes, with that Workspace's context, before the Organization row is deleted", async () => {
+        mockSession({ id: "admin-1", role: "user" });
+        const fake = seedWithSandboxes([
+          sandbox("sb-1", "ws-1"),
+          sandbox("sb-2", "ws-2"),
+          sandbox("sb-3", "ws-3"),
+        ]);
+        const orgPresent: boolean[] = [];
+        destroy.mockImplementation(() => {
+          orgPresent.push(
+            fake.tables.organization.some((row) => row.id === "org-1"),
+          );
+          return Promise.resolve();
+        });
+
+        const res = await app.request("/organizations/org-1", {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(200);
+        expect(destroy.mock.calls.map(([ctx]) => ctx)).toEqual(
+          expect.arrayContaining([
+            { orgId: "org-1", workspaceId: "ws-1", userId: "owner-1" },
+            { orgId: "org-1", workspaceId: "ws-2", userId: "owner-2" },
+          ]),
+        );
+        expect(destroy).toHaveBeenCalledTimes(2);
+        expect(orgPresent).toEqual([true, true]);
+        expect(fake.tables.sandbox_teardown_failure).toEqual([]);
+      });
+
+      it("still deletes the Organization, and records a ledger row, when a teardown fails", async () => {
+        mockSession({ id: "admin-1", role: "user" });
+        const fake = seedWithSandboxes([
+          sandbox("sb-1", "ws-1"),
+          sandbox("sb-2", "ws-2", "unregistered"),
+        ]);
+        destroy.mockRejectedValue(new Error("container already gone"));
+
+        const res = await app.request("/organizations/org-1", {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ message: "Organization deleted" });
+        expect(fake.tables.organization.map((row) => row.id)).toEqual([
+          "org-10",
+        ]);
+        expect(fake.tables.sandbox_teardown_failure).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              workspaceId: "ws-1",
+              backend: BACKEND,
+              error: "container already gone",
+            }),
+            expect.objectContaining({
+              workspaceId: "ws-2",
+              backend: "unregistered",
+            }),
+          ]),
+        );
+        expect(fake.tables.sandbox_teardown_failure).toHaveLength(2);
+      });
     });
 
     it("leaves storage untouched when the DB delete fails", async () => {

@@ -16,6 +16,7 @@ import { eq, inArray, or } from "drizzle-orm";
 import { deleteStoredPrefix } from "../storage/utils.ts";
 import { organizationStorageKeyPrefix } from "../storage/keys.ts";
 import { deleteAvatar } from "../services/avatar.ts";
+import { destroyWorkspaceSandboxes } from "../sandbox/teardown.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   orgScopeOf,
@@ -136,6 +137,11 @@ organization.delete(
           ),
         ),
       );
+    // Best-effort sandbox teardown while the Workspace rows still exist, as
+    // Workspace delete does. Never throws (ADR-0001).
+    await Promise.all(
+      workspaces.map(({ id }) => destroyWorkspaceSandboxes(id)),
+    );
     await db.delete(organizationTable).where(eq(organizationTable.id, orgId));
     await deleteStoredPrefix(organizationStorageKeyPrefix({ orgId }));
     await Promise.all(agents.map(({ avatarKey }) => deleteAvatar(avatarKey)));

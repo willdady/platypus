@@ -21,3 +21,7 @@ A Sandbox is a configured, isolated execution environment registered on a Worksp
 - `destroy(ctx, config, credentials)` is required on every adapter and must be idempotent. On user-initiated row delete: synchronous, fail-loud, with a force-delete escape hatch. On user-initiated row update that changes `backend`: same fail-loud semantics — the previous adapter's `destroy()` fires inline against the old row before the new backend is written, with the same `?force=true` escape hatch. On Workspace cascade: best-effort with a `sandbox_teardown_failure` ledger; never blocks Workspace deletion.
 - Credentials are stored as plaintext, consistent with existing Provider/MCP patterns. Not encrypted at rest.
 - The Agent-side tool set id `"sandbox"` is registered unconditionally; if a Workspace has no Sandbox configured, the tools are absent that turn (same graceful-degradation pattern as Providers).
+
+## Note: Organization delete after issue #1072
+
+The best-effort Workspace-cascade teardown also covers Workspaces removed by Organization delete. Before the Organization row is deleted, each of its Workspaces gets the same teardown as a Workspace delete: failures go to the `sandbox_teardown_failure` ledger and never block the Organization delete.
