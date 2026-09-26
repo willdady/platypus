@@ -15,7 +15,7 @@ you run Platypus:
 | You run                           | Install the plugin by                                         | For                                |
 | --------------------------------- | ------------------------------------------------------------- | ---------------------------------- |
 | A checkout of the repository      | [Adding it to the backend](#from-a-repository-checkout)       | Working on Platypus or on a plugin |
-| The published images              | [Building a custom backend image](#in-a-custom-backend-image) | Every real deployment              |
+| The published images              | [Building a custom backend image](#in-a-custom-backend-image) | Production                         |
 | The published images, on one host | [Bind-mounting it](#bind-mounting-a-plugin-trying-out-only)   | Trying a plugin out                |
 
 Every route ends the same way: [list it and recreate the
@@ -31,7 +31,12 @@ pnpm add @acme/platypus-plugin
 ```
 
 The example plugin, `@platypus-examples/tool-set`, is already installed in a
-checkout. Skip straight to listing it.
+checkout.
+
+Then list it in the backend's `.env` as shown in
+[List it and recreate the backend](#list-it-and-recreate-the-backend), and
+restart `pnpm dev` instead of recreating a container. The Compose commands on
+this page are for the published images.
 
 ## In a custom backend image
 
@@ -90,37 +95,15 @@ RUN ln -s /opt/platypus-plugins/node_modules /app/apps/node_modules && \
 - **The entrypoint, command, health check and `/data` handling** all come from
   the base image unchanged.
 
-Each plugin carries its own copy of `@platypuschat/plugin-sdk`, separate from
-the backend's. That is expected.
-
 ### Build and boot it
 
 Build the image, then start it once with the plugin listed (see
 [List it and recreate the backend](#list-it-and-recreate-the-backend)) before
-you ship it anywhere. A plugin that fails to load stops the backend from
-booting, so a boot is the test.
+you ship it anywhere. Boot is
+[fail-loud](/extending/plugin-api-and-config#boot-is-fail-loud-and-all-or-nothing),
+so a boot is the test.
 
 </Steps>
-
-### Rebuild for every release
-
-Upgrading Platypus is now a rebuild: bump the `FROM` tag, rebuild, and bump the
-frontend tag to the same version. The backend and frontend images are released
-as a pair and only tested against each other.
-
-A stale base image fails in a specific way. Core accepts plugins written for its
-current plugin API version and the one before
-([which core versions a plugin runs on](/extending/plugin-api-and-config#which-core-versions-your-plugin-runs-on)).
-Upgrade a plugin without upgrading the base, and the new plugin version can need
-an API the old core doesn't have. The backend then refuses to boot, naming the
-plugin and both versions.
-
-<Callout type="warning">
-  The `/app/apps/node_modules` link points at a location inside the published
-  image. A release that reorganises the image can move it, and the backend then
-  refuses to boot with the plugin "failed to resolve", although nothing you
-  control changed. Boot every rebuilt image before it replaces the running one.
-</Callout>
 
 ## Running a custom image with Compose
 
@@ -160,29 +143,44 @@ Either way, **pin the frontend to the version your backend image is built on**.
 `docker compose pull` no longer moves the backend, so a frontend left on a
 floating tag drifts ahead of it.
 
-### Upgrading
+## Upgrading a custom image
+
+Rebuild the image for every Platypus release: bump the `FROM` tag, rebuild, and
+bump the frontend tag to the same version. The backend and frontend images are
+released as a pair and only tested against each other.
+
+A stale base image fails in a specific way. Core accepts plugins written for its
+current plugin API version and the one before
+([which core versions a plugin runs on](/extending/plugin-api-and-config#which-core-versions-your-plugin-runs-on)).
+Upgrade a plugin without upgrading the base, and the new plugin version can need
+an API the old core doesn't have. The backend then refuses to boot, naming the
+plugin and both versions.
 
 <Callout type="warning">
-  The usual `docker compose pull` fails when the backend is built on the host:
-  Compose tries to pull `platypus-backend-custom` from Docker Hub and stops with
-  an error suggesting `docker login`. Add `--ignore-buildable`.
+  The plugins reach the backend through `/app/apps/node_modules`, a location
+  inside the published image. A release that reorganises the image can move it,
+  and the backend then refuses to boot with the plugin "failed to resolve",
+  although nothing you control changed. Boot every rebuilt image before it
+  replaces the running one.
 </Callout>
 
-After bumping the `FROM` tag and the frontend tag together:
+With Compose and an image **built on the host**, run:
 
 ```bash
 docker compose pull --ignore-buildable
 docker compose up -d --build
 ```
 
-`--build` matters. Without it Compose reuses the image it built last time, and
-the new frontend runs against the old backend.
+The usual `docker compose pull` fails here: Compose tries to pull
+`platypus-backend-custom` from Docker Hub and stops with an error suggesting
+`docker login`. `--build` matters too. Without it Compose reuses the image it
+built last time, and the new frontend runs against the old backend.
 
-With a registry image, push the rebuilt image under a new tag, bump both tags in
-the override, and run the normal `docker compose pull` and `docker compose up -d`.
-Always use a new tag. `pull` fetches from the registry, so an image you rebuilt
-locally under an existing tag is replaced by the registry's copy on the next
-pull.
+With a **registry image**, push the rebuilt image under a new tag, bump both tags
+in the override, and run the normal `docker compose pull` and
+`docker compose up -d`. Always use a new tag. `pull` fetches from the registry, so
+an image you rebuilt locally under an existing tag is replaced by the registry's
+copy on the next pull.
 
 ## Bind-mounting a plugin (trying out only)
 
@@ -203,9 +201,9 @@ it into the published backend image.
 - **One host only.** Every replica needs an identical copy of the directory on
   its own host, kept in step by hand. On Kubernetes that means a `hostPath`
   volume, which ties the pod to one node. Build an image instead.
-- **The mount target is inside the image.** A release that reorganises the
-  image can move it, and the backend then refuses to boot with the plugin
-  "failed to resolve", although nothing on your host changed.
+- **The mount target is inside the image**, so a release can move it, as
+  [Upgrading a custom image](#upgrading-a-custom-image) describes. Upgrading
+  then breaks the plugin although nothing on your host changed.
 
 </Callout>
 
@@ -265,8 +263,17 @@ docker compose logs backend | grep "Loaded plugin"
 ```
 
 A third-party plugin's line is labelled with its manifest name and
-`(third-party)`. A plugin that fails to load stops the backend from booting, and
-the last log line names the plugin and the reason.
+`(third-party)`. If the backend didn't come back up, the last log line names the
+plugin that stopped it and the reason.
 
 In the app, **Organization settings → Plugins** lists what loaded — see
 [Inspecting installed plugins](/self-hosting/configuration#inspecting-installed-plugins).
+
+## Where to next
+
+- **[Plugin config & credentials](/self-hosting/configuration#plugin-config--credentials)**
+  — give the plugin its deploy-time settings and secrets.
+- **[Upgrading](/self-hosting/upgrading)** — what every Platypus upgrade does,
+  and the backup to take before one.
+- **[Your first plugin](/extending/your-first-plugin)** — grant the plugin's Tool
+  set to an Agent and check it runs.
