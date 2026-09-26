@@ -248,9 +248,10 @@ A third-party Plugin's manifest name is the name its line in the boot log and
 
 - **Validated at boot, fail-loud.** Each block is checked against the schemas
   the Plugin's manifest declares. A malformed or missing required value aborts
-  startup with a Plugin-named error, the same posture as the Plugin list. So
-  does a variable that is not valid JSON, and a `PLATYPUS_PLUGIN_CONFIG_<NAME>`
-  that matches no loaded Plugin — a typo never silently drops a credential. If
+  startup with a Plugin-named error, the same posture as the Plugin list. A
+  variable that is not a valid JSON object, or a `PLATYPUS_PLUGIN_CONFIG_<NAME>`
+  that matches no loaded Plugin, also aborts startup, with an error naming the
+  variable — a typo never silently drops a credential. If
   two loaded Plugins map to the same variable (a core Plugin and a third-party
   one whose names differ only by the `@platypus/` scope), boot aborts naming
   both, and so does a manifest name two loaded Plugins share.

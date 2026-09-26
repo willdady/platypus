@@ -124,7 +124,8 @@ All three are inert in 2.x. Delete them from your environment.
 
 Boot is **fail-loud**: a listed Plugin that can't be resolved, or a
 `PLATYPUS_PLUGIN_CONFIG` entry that is malformed or keyed to a Plugin that isn't
-loaded, aborts startup with a Plugin-named error rather than degrading quietly.
+loaded, aborts startup rather than degrading quietly. The error names the Plugin,
+or the variable or config key to fix.
 
 <Callout type="info">
   `PLATYPUS_PLUGIN_CONFIG` is a **single** JSON object keyed by Plugin name. If
