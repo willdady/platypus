@@ -80,10 +80,16 @@ jobs:
       # Trusted publishing needs npm CLI >= 11.5.1, which Node's bundled npm
       # meets. `--provenance` is what forces the OIDC exchange (see the
       # setup-node note above); no token env is needed.
+      #
+      # Pack with pnpm, publish the tarball with npm: only pnpm applies the
+      # package's `publishConfig` (the `dist/index.js` entry), and npm publishing
+      # the directory itself shipped `main: index.ts`, which Node refuses to
+      # strip types for under node_modules.
       - name: Publish to npm
         if: steps.check.outputs.publish == 'true'
         working-directory: packages/plugin-sdk
         run: |
           echo "Publishing with npm $(npm --version) on node $(node --version)"
           echo "OIDC token endpoint present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
-          npm publish --provenance
+          pnpm pack --out package.tgz
+          npm publish package.tgz --provenance
