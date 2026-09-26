@@ -68,8 +68,9 @@ that Workspace.
   Leave it **Disabled** and nothing new is extracted. Summaries already written
   stay in the prompt until they age out — see [Turning Memory
   on](/concepts/memory-and-context#turning-memory-on).
-- **Memory Embedding Provider** — needed for semantic memory search. Separate
-  from extraction; you can have one without the other.
+- **Memory Embedding Provider** — needed for semantic memory search. Without
+  one, an Agent with the **Memory** Tool set gets `memoryGet` but not
+  `memorySearch`. Separate from extraction; you can have one without the other.
 
 <Callout type="warning">
   The two memory dropdowns only list Providers that have the relevant model

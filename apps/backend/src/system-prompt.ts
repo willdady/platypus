@@ -55,6 +55,13 @@ export type SystemPromptStableContext = {
    * as given, which is what keeps the prefix byte-identical across turns.
    */
   memoriesBlock: string;
+  /**
+   * Whether this turn offers `memorySearch`. The Memory Tool set leaves it out
+   * when the Workspace has no embedding Provider, so the fragment names only
+   * the tools the model actually has. A Workspace setting, so it holds steady
+   * for the life of a Chat like the Agent's own configuration.
+   */
+  memorySearchAvailable?: boolean;
   skills: Array<Pick<Skill, "name" | "description">>;
   subAgents: Array<{ name: string; description?: string | null }>;
   /**
@@ -159,9 +166,12 @@ const memoryToolsFragment: Fragment = (ctx) => {
     ctx.agent?.toolSetIds?.includes(MEMORY_TOOLSET_ID) ?? false;
   if (!hasMemoryTools) return null;
 
+  const tools = ctx.memorySearchAvailable
+    ? "memorySearch and memoryGet tools"
+    : "the memoryGet tool";
   return ctx.memoriesBlock.trim()
-    ? "You also have access to memorySearch and memoryGet tools to look up older or more specific memories beyond what is shown above."
-    : "You have access to memorySearch and memoryGet tools to look up memories from past conversations.";
+    ? `You also have access to ${tools} to look up older or more specific memories beyond what is shown above.`
+    : `You have access to ${tools} to look up memories from past conversations.`;
 };
 
 const skillsFragment: Fragment = (ctx) => {

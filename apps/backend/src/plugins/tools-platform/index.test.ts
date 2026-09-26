@@ -5,8 +5,16 @@ import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 // The domain tool sets transitively import the db and a few services; mock them
 // so importing the manifest (and resolving its factories) needs no live
 // Postgres. Factories return AI SDK tool maps without touching the db until a
-// tool's `execute` runs, so these stubs are enough.
-vi.mock("../../index.ts", () => ({ db: {} }));
+// tool's `execute` runs — except memory, which looks up the Workspace's
+// embedding Provider; an empty lookup leaves it unconfigured (memoryGet only).
+vi.mock("../../index.ts", () => {
+  const query = {
+    from: () => query,
+    where: () => query,
+    limit: () => Promise.resolve([]),
+  };
+  return { db: { select: () => query } };
+});
 vi.mock("../../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
 vi.mock("../../services/sub-agent-validation.ts", () => ({
   validateSubAgentAssignment: vi.fn(),

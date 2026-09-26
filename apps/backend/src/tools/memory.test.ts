@@ -28,10 +28,10 @@ const EMBEDDING_PROVIDER = {
 };
 
 /**
- * Stubs the lookups `loadEmbeddingConfig` makes — the Workspace's configured
- * embedding provider id, then the Provider row itself (a Shared one is then
- * checked for an Attachment, queued by the test). Passing `null` leaves the
- * Workspace unconfigured, which short-circuits before the second query.
+ * Stubs the lookups the factory makes — the Workspace's configured embedding
+ * provider id, then the Provider row itself (a Shared one is then checked for
+ * an Attachment, queued by the test). Passing `null` leaves the Workspace
+ * unconfigured, which short-circuits before the second query.
  */
 const mockEmbeddingConfig = (
   provider: Record<string, unknown> | null = EMBEDDING_PROVIDER,
@@ -45,24 +45,65 @@ const mockEmbeddingConfig = (
   if (provider) mockDb.limit.mockResolvedValueOnce([provider]);
 };
 
-const NOT_CONFIGURED =
-  "Memory search is not available — no embedding provider configured for this workspace.";
+const createTools = () => createMemoryTools(workspaceId, userId);
 
 describe("createMemoryTools", () => {
-  let tools: ReturnType<typeof createMemoryTools>;
+  let tools: Awaited<ReturnType<typeof createMemoryTools>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockDb();
     mockGenerateEmbedding.mockResolvedValue([0.1, 0.2, 0.3]);
-    tools = createMemoryTools(workspaceId, userId);
   });
 
-  it("returns the expected tool names", () => {
-    expect(Object.keys(tools)).toEqual(["memorySearch", "memoryGet"]);
+  it("offers memorySearch and memoryGet when the workspace has an embedding provider", async () => {
+    mockEmbeddingConfig();
+
+    expect(Object.keys(await createTools())).toEqual([
+      "memorySearch",
+      "memoryGet",
+    ]);
+  });
+
+  // Issue #1059: without an embedding provider memorySearch could only return
+  // an error, so the model is not offered it.
+  describe("without a usable embedding provider, offers only memoryGet", () => {
+    it("when none is configured", async () => {
+      mockEmbeddingConfig(null);
+
+      expect(Object.keys(await createTools())).toEqual(["memoryGet"]);
+    });
+
+    it("when the workspace row is missing", async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      expect(Object.keys(await createTools())).toEqual(["memoryGet"]);
+    });
+
+    it("when the configured provider has no embedding model", async () => {
+      mockEmbeddingConfig({ ...EMBEDDING_PROVIDER, embeddingModelId: null });
+
+      expect(Object.keys(await createTools())).toEqual(["memoryGet"]);
+    });
+
+    it("when the Shared embedding provider is not attached", async () => {
+      mockEmbeddingConfig({
+        ...EMBEDDING_PROVIDER,
+        organizationId: "org-1",
+        workspaceId: null,
+      });
+      mockDb.limit.mockResolvedValueOnce([]); // no Attachment
+
+      expect(Object.keys(await createTools())).toEqual(["memoryGet"]);
+    });
   });
 
   describe("memorySearch input schema", () => {
+    beforeEach(async () => {
+      mockEmbeddingConfig();
+      tools = await createTools();
+    });
+
     const schema = () =>
       tools.memorySearch.inputSchema as unknown as z.ZodType<{
         query: string;
@@ -90,48 +131,12 @@ describe("createMemoryTools", () => {
   });
 
   describe("memorySearch", () => {
-    it("returns an error when the workspace has no embedding provider", async () => {
-      mockEmbeddingConfig(null);
-
-      expect(
-        await callTool(tools.memorySearch, { query: "x", limit: 5 }),
-      ).toEqual({ error: NOT_CONFIGURED });
-      expect(mockGenerateEmbedding).not.toHaveBeenCalled();
-    });
-
-    it("returns an error when the workspace row is missing", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      expect(
-        await callTool(tools.memorySearch, { query: "x", limit: 5 }),
-      ).toEqual({ error: NOT_CONFIGURED });
-    });
-
-    it("returns an error when the configured provider has no embedding model", async () => {
-      mockEmbeddingConfig({ ...EMBEDDING_PROVIDER, embeddingModelId: null });
-
-      expect(
-        await callTool(tools.memorySearch, { query: "x", limit: 5 }),
-      ).toEqual({ error: NOT_CONFIGURED });
-      expect(mockGenerateEmbedding).not.toHaveBeenCalled();
-    });
-
-    it("returns an error when the Shared embedding provider is not attached", async () => {
-      mockEmbeddingConfig({
-        ...EMBEDDING_PROVIDER,
-        organizationId: "org-1",
-        workspaceId: null,
-      });
-      mockDb.limit.mockResolvedValueOnce([]); // no Attachment
-
-      expect(
-        await callTool(tools.memorySearch, { query: "x", limit: 5 }),
-      ).toEqual({ error: NOT_CONFIGURED });
-      expect(mockGenerateEmbedding).not.toHaveBeenCalled();
+    beforeEach(async () => {
+      mockEmbeddingConfig();
+      tools = await createTools();
     });
 
     it("embeds the query with the workspace's provider and model", async () => {
-      mockEmbeddingConfig();
       mockDb.execute.mockResolvedValueOnce({ rows: [] });
 
       await callTool(tools.memorySearch, { query: "meeting notes", limit: 5 });
@@ -144,7 +149,6 @@ describe("createMemoryTools", () => {
     });
 
     it("searches only this user's memories in this workspace, up to the limit", async () => {
-      mockEmbeddingConfig();
       mockDb.execute.mockResolvedValueOnce({ rows: [] });
 
       await callTool(tools.memorySearch, { query: "x", limit: 7 });
@@ -163,7 +167,6 @@ describe("createMemoryTools", () => {
     });
 
     it("maps matched rows to date, summary and relevance", async () => {
-      mockEmbeddingConfig();
       mockDb.execute.mockResolvedValueOnce({
         rows: [
           {
@@ -200,7 +203,6 @@ describe("createMemoryTools", () => {
     // pgvector arithmetic comes back from node-postgres as a string; the tool
     // coerces before rounding, so a string relevance must not become NaN.
     it("coerces a string relevance from the driver", async () => {
-      mockEmbeddingConfig();
       mockDb.execute.mockResolvedValueOnce({
         rows: [
           {
@@ -219,7 +221,6 @@ describe("createMemoryTools", () => {
     });
 
     it("loads the embedding config once per tool set", async () => {
-      mockEmbeddingConfig();
       mockDb.execute.mockResolvedValue({ rows: [] });
 
       await callTool(tools.memorySearch, { query: "first", limit: 5 });
@@ -230,17 +231,7 @@ describe("createMemoryTools", () => {
       expect(mockGenerateEmbedding).toHaveBeenCalledTimes(2);
     });
 
-    it("caches a missing configuration too", async () => {
-      mockEmbeddingConfig(null);
-
-      await callTool(tools.memorySearch, { query: "first", limit: 5 });
-      await callTool(tools.memorySearch, { query: "second", limit: 5 });
-
-      expect(mockDb.select).toHaveBeenCalledTimes(1);
-    });
-
     it("returns an error and logs when the search query fails", async () => {
-      mockEmbeddingConfig();
       mockDb.execute.mockRejectedValueOnce(new Error("relation is missing"));
 
       expect(
@@ -253,7 +244,6 @@ describe("createMemoryTools", () => {
     });
 
     it("stringifies a non-Error rejection", async () => {
-      mockEmbeddingConfig();
       mockGenerateEmbedding.mockRejectedValueOnce("provider exploded");
 
       expect(
@@ -280,6 +270,7 @@ describe("createMemoryTools", () => {
           summary({ summary: "Shipped the plugin API" }),
         ],
       });
+      tools = await createTools();
 
       expect(await callTool(tools.memoryGet, { date: "2026-08-01" })).toEqual({
         date: "2026-08-01",
@@ -294,6 +285,7 @@ describe("createMemoryTools", () => {
           summary({ workspaceId: "ws-2", summary: "Another workspace's day" }),
         ],
       });
+      tools = await createTools();
 
       expect(await callTool(tools.memoryGet, { date: "2026-08-01" })).toEqual({
         error: "No memory summary found for date 2026-08-01",
@@ -301,6 +293,8 @@ describe("createMemoryTools", () => {
     });
 
     it("returns an error and logs when the lookup throws", async () => {
+      mockEmbeddingConfig(null);
+      tools = await createTools();
       mockDb.limit.mockRejectedValueOnce(new Error("connection reset"));
 
       expect(await callTool(tools.memoryGet, { date: "2026-08-01" })).toEqual({
@@ -313,6 +307,8 @@ describe("createMemoryTools", () => {
     });
 
     it("stringifies a non-Error rejection", async () => {
+      mockEmbeddingConfig(null);
+      tools = await createTools();
       mockDb.limit.mockRejectedValueOnce("boom");
 
       expect(await callTool(tools.memoryGet, { date: "2026-08-01" })).toEqual({

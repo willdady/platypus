@@ -1986,6 +1986,52 @@ describe("chat-execution", () => {
       // A registered id is never re-read as an MCP, however its factory ended.
       expect(getMcp).not.toHaveBeenCalled();
     });
+
+    // Issue #1059: the Memory Tool set leaves memorySearch out when the
+    // Workspace has no embedding Provider. The prompt reads the turn's tool
+    // map, so it names memorySearch only on a turn that offers it.
+    it("names memorySearch in the prompt only when the turn offers it", async () => {
+      let offerSearch = true;
+      const stub = { description: "x" } as never;
+      registerToolSet(
+        "memory",
+        composeToolSet({
+          id: "memory",
+          pluginName: "test-plugin",
+          isCore: true,
+          contribution: {
+            name: "Memory",
+            category: "Memory",
+            tools: (): Record<string, never> =>
+              offerSearch
+                ? { memorySearch: stub, memoryGet: stub }
+                : { memoryGet: stub },
+          },
+          plugin: makePluginContext(),
+        }),
+      );
+      const agent = { ...baseAgent, toolSetIds: ["memory"] };
+      const turn = () =>
+        prepareChatTurn(
+          { ...baseInput, request: { agentId: agent.id } },
+          createInMemoryChatTurnQueries({
+            workspaces: [baseWorkspace],
+            agents: [agent],
+            providers: [baseProvider],
+          }),
+        );
+
+      const withSearch = await turn();
+      expect(withSearch.stream.system).toContain(
+        "memorySearch and memoryGet tools",
+      );
+
+      offerSearch = false;
+      const withoutSearch = await turn();
+      expect(withoutSearch.stream.tools).not.toHaveProperty("memorySearch");
+      expect(withoutSearch.stream.system).toContain("the memoryGet tool");
+      expect(withoutSearch.stream.system).not.toContain("memorySearch");
+    });
   });
 
   // Issue #664. A turn assembles its tool map in four ordered stages, each

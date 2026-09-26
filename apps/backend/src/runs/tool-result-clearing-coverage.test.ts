@@ -10,8 +10,16 @@ import type { SandboxBackend, SandboxContext } from "../sandbox/types.ts";
 // Every core plugin the domain Tool sets transitively import the db and a few
 // services; mock them the same way `tools-platform/index.test.ts` does, so
 // loading the real plugins here needs no live Postgres. Factories return AI
-// SDK tool maps without touching the db until a tool's `execute` runs.
-vi.mock("../index.ts", () => ({ db: {} }));
+// SDK tool maps without touching the db until a tool's `execute` runs — except
+// memory, whose embedding-Provider lookup this empty stub leaves unconfigured.
+vi.mock("../index.ts", () => {
+  const query = {
+    from: () => query,
+    where: () => query,
+    limit: () => Promise.resolve([]),
+  };
+  return { db: { select: () => query } };
+});
 vi.mock("../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
 vi.mock("../services/sub-agent-validation.ts", () => ({
   validateSubAgentAssignment: vi.fn(),
@@ -116,6 +124,10 @@ beforeAll(async () => {
   // Web-search backend (see doc comment above: can't be materialized here).
   names.add("web_search");
   names.add("read_url");
+
+  // Memory offers `memorySearch` only where the Workspace has an embedding
+  // Provider, which the db stub above doesn't configure.
+  names.add("memorySearch");
 
   materializedNames = [...names];
 });

@@ -261,6 +261,7 @@ describe("renderSystemPrompt — memory tools prose", () => {
   it("emits the standalone prose when memory tools are enabled but no <memories> block exists", () => {
     const ctx = baseCtx();
     ctx.agent = agentRecord({ toolSetIds: ["memory"] });
+    ctx.memorySearchAvailable = true;
     const out = renderSystemPrompt(ctx);
     expect(out).toContain(
       "You have access to memorySearch and memoryGet tools to look up memories from past conversations.",
@@ -271,6 +272,7 @@ describe("renderSystemPrompt — memory tools prose", () => {
   it("emits the supplemental prose when memory tools are enabled AND a <memories> block exists", () => {
     const ctx = baseCtx();
     ctx.agent = agentRecord({ toolSetIds: ["memory"] });
+    ctx.memorySearchAvailable = true;
     ctx.memoriesBlock = formatSummariesForSystemPrompt([
       memorySummary("Asked about pricing."),
     ]);
@@ -281,6 +283,25 @@ describe("renderSystemPrompt — memory tools prose", () => {
     expect(out).toContain("beyond what is shown above");
     // Standalone prose must NOT be present when supplemental is.
     expect(out).not.toContain("look up memories from past conversations.");
+  });
+
+  // Issue #1059: with no embedding Provider the Memory Tool set offers only
+  // memoryGet, so the prose must not send the model to memorySearch.
+  it("names only memoryGet when memorySearch is not offered", () => {
+    const ctx = baseCtx();
+    ctx.agent = agentRecord({ toolSetIds: ["memory"] });
+    expect(renderSystemPrompt(ctx)).toContain(
+      "You have access to the memoryGet tool to look up memories from past conversations.",
+    );
+
+    ctx.memoriesBlock = formatSummariesForSystemPrompt([
+      memorySummary("Asked about pricing."),
+    ]);
+    const out = renderSystemPrompt(ctx);
+    expect(out).toContain(
+      "You also have access to the memoryGet tool to look up older or more specific memories beyond what is shown above.",
+    );
+    expect(out).not.toContain("memorySearch");
   });
 });
 
@@ -477,6 +498,7 @@ describe("renderSystemPrompt — ordering snapshots", () => {
       instructions: "You are a researcher.",
       toolSetIds: ["memory"],
     });
+    ctx.memorySearchAvailable = true;
     ctx.workspace.context = "Books domain.";
     ctx.user.globalContext = "Likes haiku.";
     ctx.user.workspaceContext = "PM on books.";
