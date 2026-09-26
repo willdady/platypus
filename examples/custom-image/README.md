@@ -9,7 +9,7 @@ and runs it with the stock `compose.yaml`.
 | File                    | What it does                                                                                                      |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `Dockerfile`            | Installs the Plugin on top of the pinned base image. Entrypoint, command, `/data` and health check are unchanged. |
-| `compose.override.yaml` | Swaps in the custom backend image, pins the frontend to the same version, and enables the Plugin.                 |
+| `compose.override.yaml` | Builds the custom backend image, pins the frontend to the same version, and enables the Plugin.                   |
 
 ## Build and run
 
@@ -40,23 +40,17 @@ You need Docker, Node.js 26 and pnpm. Run every command from the repository root
    `main` must be `dist/index.js`, and `@platypuschat/plugin-sdk` must be a
    version number.
 
-3. Build the image:
-
-   ```bash
-   docker build -t platypus-backend-custom:3.10.2 examples/custom-image
-   ```
-
-4. Configure the stack as in
+3. Configure the stack as in
    [Deploy with Docker Compose](https://docs.platypus.chat/self-hosting/docker-compose):
 
    ```bash
    cp .env.example .env
    ```
 
-5. Start it with the override:
+4. Build the image and start the stack with the override:
 
    ```bash
-   docker compose -f compose.yaml -f examples/custom-image/compose.override.yaml up -d
+   docker compose -f compose.yaml -f examples/custom-image/compose.override.yaml up -d --build
    ```
 
    Naming files with `-f` turns off the automatic pickup of a root
@@ -120,11 +114,12 @@ runs as.
 
 ## Upgrading Platypus
 
-Rebuild this image for every Platypus release. Change the version in all three
+Rebuild this image for every Platypus release. Change the version in both
 places together, because the backend and frontend images are released and
 tested as a pair:
 
 - the `FROM` tag in the `Dockerfile`
 - the frontend `image` tag in `compose.override.yaml`
-- the tag of the image you build (`docker build -t` and the backend `image` in
-  `compose.override.yaml`)
+
+Then start the stack with `--build` again. Without it, Compose reuses the image
+it built last time, and the new frontend runs against the old backend.

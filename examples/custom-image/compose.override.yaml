@@ -1,8 +1,12 @@
-# Layer over the root compose.yaml:
-#   docker compose -f compose.yaml -f examples/custom-image/compose.override.yaml up -d
+# Layer over the root compose.yaml, from the repository root:
+#   docker compose -f compose.yaml -f examples/custom-image/compose.override.yaml up -d --build
 services:
   backend:
-    image: platypus-backend-custom:3.10.2
+    # Paths here resolve from the root compose.yaml's directory.
+    build: examples/custom-image
+    # Names the built image, so it doesn't take the base file's
+    # willdady/platypus-backend tag.
+    image: platypus-backend-custom
     environment:
       # This replaces PLATYPUS_PLUGINS from .env; it does not add to it. List
       # every plugin you want, not just the new one.
