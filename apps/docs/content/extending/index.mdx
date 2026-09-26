@@ -10,8 +10,9 @@ import { Callout } from "nextra/components";
 You can add capabilities to Platypus without forking it. There are two routes
 in, and picking the wrong one costs you a rebuild.
 
-An **MCP server** adds tools at runtime, from outside Platypus, configured per
-Workspace in the app. A **Plugin** is an npm package the Operator installs at
+An **MCP server** adds tools at runtime, from outside Platypus, configured in the
+app per Workspace or shared across Workspaces by an Org Admin. A **Plugin** is
+an npm package the Operator installs at
 deploy time; it exports a manifest whose `contributes` block fills one or more
 **Extension points** that core owns.
 
@@ -19,7 +20,7 @@ deploy time; it exports a manifest whose `contributes` block fills one or more
 
 | You want to…                                                               | Reach for                                                             | Because                                                                       |
 | -------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Let an Agent call your internal service, or a third-party API              | **MCP server**                                                        | No code in Platypus, no restart, configured per Workspace by whoever needs it |
+| Let an Agent call your internal service, or a third-party API              | **MCP server**                                                        | No code in Platypus, no restart, configured per Workspace by whoever needs it, or shared by an Org Admin |
 | Ship tools that are part of the product for everyone on the deployment     | **[Tool set](/extending/tool-sets)** contribution                     | One install, one switch on the Agent form, available to every Workspace       |
 | Run an Agent's shell and filesystem tools somewhere new — Modal, E2B, a VM | **[Sandbox backend](/extending/sandbox-backends)** contribution       | Core owns the five tools; you supply the environment they run in              |
 | Serve the Chat **Search** toggle from your own search service              | **[Web-search backend](/extending/web-search-backends)** contribution | Core owns the tools and the toggle; you supply the calls to your upstream     |
@@ -62,22 +63,25 @@ drifts silently; the one in your `node_modules` cannot.
 Every Contribution is validated before it is registered. A Tool set with a
 blank `id`, `name`, or `category`, or with `tools` that is neither a map nor a
 factory, aborts startup with an error naming the Plugin and the entry that
-failed. The package types catch these mistakes in TypeScript; the same checks
-protect deployments that load JavaScript or a malformed package.
+failed. The package types catch a missing field or a wrong type in TypeScript,
+but not a blank string; the load-time checks catch all three, and protect
+deployments that load JavaScript or a malformed package.
 
 Strict at boot, forgiving at runtime: once loaded, a Contribution that fails
-during a Chat turn — a Tool set factory that throws, a Web-search backend that
-times out — costs that turn its own tools and is logged against your Plugin. It
-never fails the turn, so one broken Plugin cannot take a deployment's chats down
-with it.
+during a Chat turn — a Tool set factory that throws, a Web-search backend whose
+setup times out — costs that turn its own tools and is logged against your
+Plugin. A single search or read call that times out returns an error for that
+call only. None of these fails the turn, so one broken Plugin cannot take a
+deployment's chats down with it.
 
 Contribution ids are trimmed before they are namespaced, so surrounding
 whitespace never reaches a stored id.
 
 A third-party Plugin's tool **names** are namespaced too, under its manifest
 `name`, so core's own turn tools can never overwrite one of yours. That puts a
-length cap on both halves of the composed name, refused at boot — see [Tool
-names](/extending/tool-sets#tool-names).
+length cap on both halves of the composed name. A statically-declared tool over
+its cap is refused at boot; one a factory returns is left out of the turn with a
+warning — see [Tool names](/extending/tool-sets#tool-names).
 
 ## Logging
 
