@@ -27,14 +27,16 @@ An individual tool is a Vercel AI SDK tool — `tool()` from the `ai` package,
 with a Zod `inputSchema` and an `execute` function.
 
 Pick `id`, `name` and `category` deliberately: the `id` is what gets persisted on
-every Agent that is granted the set, and `name` and `category` are the only two
-strings a Workspace Owner ever sees.
+every Agent that is granted the set, and `name`, `category` and `description` are
+what a Workspace Owner sees on the Agent form. Your tool names show too, in Chat.
 
 <Callout type="warning">
   Changing an `id` after release orphans every Agent granted the old one. The
   grant is stored by id, and a turn that can't resolve the id degrades to no
   tools rather than erroring — so the symptom is an Agent that quietly stopped
-  being able to do its job. Treat a shipped `id` as permanent.
+  being able to do its job. Treat a shipped `id` as permanent. The same goes for
+  your manifest `name`: the stored id is prefixed with it, so renaming the plugin
+  orphans every grant of every set it contributes.
 </Callout>
 
 ## Static map or factory
@@ -183,9 +185,9 @@ Because the two halves compose into one name, each half is capped:
 - **The manifest `name`** — up to 24 characters.
 - **A tool name** — up to 32 characters.
 
-Both are checked at boot for a third-party plugin, and both are a floor rather
-than a quota: a plugin named `linear` leaves 56 characters for a tool name. The
-cap is what you may _declare_, not what you get. Together they keep the composed
+Both are checked at boot for a third-party plugin. The tool-name cap holds
+however short your manifest `name` is: a plugin named `linear` does not get the
+characters it left unused. Together they keep the composed
 name inside what a model provider allows, so you never have to do that arithmetic
 yourself.
 
@@ -198,15 +200,22 @@ yourself.
 </Callout>
 
 A **factory** resolves its names per turn, so boot cannot see them. A name over
-the cap there is left out of the turn with a warning naming the same things, and
-the rest of the set is served. It is the one case where a tool an Agent was
-granted goes missing, so keep a factory's names inside the cap too.
+the cap, or carrying a character the rule above forbids, is left out of the turn
+with a warning, and the rest of the set is served. Keep a factory's names inside
+both rules.
 
 ### What can still collide
 
 Two Tool sets from the **same** plugin that define one tool name still contest
 it: they share a namespace, so the later one wins and core logs a warning naming
 both sets. That is within your own control — give them distinct names.
+
+An MCP can share your namespace too. Core prefixes each MCP tool with the MCP's
+name — lowercased, spaces and punctuation turned to `_` — and the same `__`, so
+an MCP a Workspace Owner names `Linear` enters a turn under the same prefix as a
+plugin named `linear`. When an Agent is granted both, a tool name they share goes
+to whichever comes later in the Agent's list, and core logs a warning. Renaming
+the MCP clears it.
 
 ## Adding one to a core plugin
 
