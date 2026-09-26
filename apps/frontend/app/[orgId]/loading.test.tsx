@@ -7,7 +7,6 @@ const nav = vi.hoisted(() => ({ pathname: "/org2" }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ orgId: "org2" }),
   usePathname: () => nav.pathname,
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
 }));
 
 vi.mock("@/components/header", () => ({

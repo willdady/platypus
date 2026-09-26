@@ -58,18 +58,26 @@ const CreateWorkspaceSkeleton = () => (
           ))}
         </div>
         <div className="mb-6 flex flex-col gap-7">
-          {/* Name, Owner and Context, with their descriptions */}
-          {[
-            { input: "h-9" },
-            { input: "h-9", description: "h-5 w-3/4" },
-            { input: "h-16", description: "h-10 w-full" },
-          ].map(({ input, description }, i) => (
+          {/* Name, then Owner with its description */}
+          {[false, true].map((described, i) => (
             <div key={i} className="flex flex-col gap-3">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className={`${input} w-full`} />
-              {description && <Skeleton className={description} />}
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-9 w-full" />
+              {described && <Skeleton className="h-5 w-3/4" />}
             </div>
           ))}
+          {/* Context: label and expand button, textarea, counter, description */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col">
+              <div className="mb-2 flex items-center justify-between">
+                <Skeleton className="h-5 w-20" />
+                <Skeleton className="size-6" />
+              </div>
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="mt-1 h-4 w-12 self-end" />
+            </div>
+            <Skeleton className="h-10 w-full" />
+          </div>
         </div>
         <Skeleton className="h-9 w-16" />
       </div>
