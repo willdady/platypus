@@ -1,0 +1,12 @@
+# Layer over the root compose.yaml:
+#   docker compose -f compose.yaml -f examples/custom-image/compose.override.yaml up -d
+services:
+  backend:
+    image: platypus-backend-custom:3.10.2
+    environment:
+      # This replaces PLATYPUS_PLUGINS from .env; it does not add to it. List
+      # every plugin you want, not just the new one.
+      PLATYPUS_PLUGINS: "@platypus/web-fetch,@platypus-examples/tool-set"
+  frontend:
+    # Same version as the base image in the Dockerfile. Bump them together.
+    image: willdady/platypus-frontend:3.10.2
