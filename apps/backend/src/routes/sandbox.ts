@@ -24,12 +24,8 @@ import {
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
 import { createSandboxBackend, openSandboxRow } from "../sandbox/open-row.ts";
-import {
-  relativePathSchema,
-  type FsListEntry,
-  type SandboxBackend,
-  type SandboxContext,
-} from "../sandbox/types.ts";
+import { relativePathSchema } from "../sandbox/types.ts";
+import { findEntry, TRANSFER_BOUND } from "../sandbox/find-entry.ts";
 import { NotFoundError, UnsupportedError } from "../errors.ts";
 import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
@@ -86,39 +82,7 @@ const transferSupport = (record: SandboxRecord) => {
 
 const TRANSFER_UNSUPPORTED =
   "This Sandbox backend doesn't support file transfer";
-const TRANSFER_TOO_LARGE = `File is larger than the ${SANDBOX_TRANSFER_MAX_BYTES / (1024 * 1024)} MiB transfer limit`;
-
-// The entry for `path` in a listing of its parent directory, or undefined when
-// there is none. The glob narrows the listing past its entry cap whenever the
-// name is safe to use as a pattern.
-const findEntry = async (
-  backend: SandboxBackend,
-  ctx: SandboxContext,
-  path: string,
-  signal: AbortSignal,
-): Promise<FsListEntry | undefined> => {
-  const dir = posix.dirname(path);
-  const name = posix.basename(path);
-  try {
-    const { entries } = await backend.fsList(
-      ctx,
-      {
-        ...(dir === "." ? {} : { path: dir }),
-        ...(/[*?[\]\\]/.test(name) ? {} : { glob: name }),
-      },
-      { signal },
-    );
-    return entries.find((e) => e.path === name);
-  } catch (err) {
-    // fsList reports a missing parent only as a rejection. Confirm that is
-    // what this was, so any other failure fails the request instead of reading
-    // as "no such file" — which, for an upload, would overwrite unasked.
-    if (dir === ".") throw err;
-    const parent = await findEntry(backend, ctx, dir, signal);
-    if (parent?.type === "dir") throw err;
-    return undefined;
-  }
-};
+const TRANSFER_TOO_LARGE = `File is larger than the ${TRANSFER_BOUND} transfer limit`;
 
 // Filenames go out RFC 5987-encoded only, so no quote, backslash or non-ASCII
 // character in a Sandbox-authored name can break the header.

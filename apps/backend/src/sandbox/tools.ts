@@ -1,6 +1,10 @@
 import { tool, type Tool } from "ai";
+import { z } from "zod";
+import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 import { raceCancellation } from "./transport.ts";
+import { findEntry, TRANSFER_BOUND } from "./find-entry.ts";
 import {
+  relativePathSchema,
   fsEditInputSchema,
   fsListInputSchema,
   fsReadInputSchema,
@@ -34,8 +38,43 @@ const underSignal = <T>(
   return raceCancellation(signal, () => call({ signal }));
 };
 
+/**
+ * Offers a Sandbox file to the User as a download (ADR-0027). Core-built over
+ * `fsList`, not an adapter method: it only checks the file is there and within
+ * the transfer bound. The result deliberately carries no URL — the chat
+ * renders it as a button that builds the link itself, so the model never has
+ * a link to paste or pass on.
+ */
+export const createFsDownloadTool = (
+  backend: SandboxBackend,
+  ctx: SandboxContext,
+) =>
+  tool({
+    description: `Offer a file from the sandbox to the user as a download button in the chat. This does not return the file's contents — use it for binary or large files the user wants to keep, up to ${TRANSFER_BOUND}. Returns the path and its size in bytes.`,
+    inputSchema: z.object({
+      path: relativePathSchema.describe(
+        "Path of the file to offer, relative to the workspace root",
+      ),
+    }),
+    execute: ({ path }, options) =>
+      underSignal(options, async ({ signal }) => {
+        const entry = await findEntry(backend, ctx, path, signal);
+        if (!entry) throw new Error(`No such file: ${path}`);
+        if (entry.type !== "file") {
+          throw new Error(`${path} is a directory, not a file`);
+        }
+        if ((entry.size ?? 0) > SANDBOX_TRANSFER_MAX_BYTES) {
+          throw new Error(
+            `${path} is larger than the ${TRANSFER_BOUND} download limit`,
+          );
+        }
+        return { path, size: entry.size };
+      }),
+  });
+
 // Builds the five AI SDK Tool objects from a SandboxBackend instance and the
-// per-turn context. Descriptions are intentionally terse; the higher-level
+// per-turn context, plus `fsDownload` when the backend implements
+// `fsReadBytes`. Descriptions are intentionally terse; the higher-level
 // orientation (workspace root, persistence across turns, stateless shell) is
 // rendered into the system prompt by ./system-prompt-fragment.ts.
 //
@@ -105,4 +144,8 @@ export const createSandboxTools = (
         backend.fsList(ctx, input, callOptions),
       ),
   }),
+
+  ...(backend.fsReadBytes
+    ? { fsDownload: createFsDownloadTool(backend, ctx) }
+    : {}),
 });

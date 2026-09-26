@@ -62,6 +62,12 @@ export type SystemPromptStableContext = {
    * for the life of a Chat like the Agent's own configuration.
    */
   memorySearchAvailable: boolean;
+  /**
+   * Whether this turn offers `fsDownload`. The Sandbox Tool set leaves it out
+   * when the backend has no `fsReadBytes` (ADR-0027). A property of the
+   * Workspace's Sandbox, so it holds steady like `memorySearchAvailable`.
+   */
+  fsDownloadAvailable: boolean;
   skills: Array<Pick<Skill, "name" | "description">>;
   subAgents: Array<{ name: string; description?: string | null }>;
   /**
@@ -250,7 +256,13 @@ Available as \`$VAR\` in every \`shellExec\` (may be secrets — pass to program
       : ""
   }
 
-Tool output is bounded. When a response has \`truncated: true\`, narrow your view — \`grep\`, \`head\`, \`tail\`, or a specific \`lineRange\` on \`fsRead\` — rather than re-requesting the same output.
+Tool output is bounded. When a response has \`truncated: true\`, narrow your view — \`grep\`, \`head\`, \`tail\`, or a specific \`lineRange\` on \`fsRead\` — rather than re-requesting the same output.${
+    ctx.fsDownloadAvailable
+      ? `
+
+To give the user a file — especially a binary or large one — call \`fsDownload\` with its path. It shows the user a download button; it does not return the file's contents, and there is no link for you to share.`
+      : ""
+  }
 
 Shell commands time out (default 60s, hard cap 600s). For long jobs, run them in the background and poll for completion.`;
 };

@@ -449,7 +449,7 @@ export const MEMORY_TOOLSET_ID = "memory";
 // the Sandbox-backend extension point (ADR-0002) rather than a native Tool set,
 // so it stays a core-internal static registration here. It resolves at chat-turn
 // time: load the Workspace's sandbox row, look up the registered adapter,
-// validate config/credentials, then build the five AI SDK Tools. Missing-row,
+// validate config/credentials, then build the Sandbox Tools. Missing-row,
 // unregistered-backend, and
 // validation failures all degrade gracefully to "no tools this turn" (with a
 // warning log). See ADR-0001 / ADR-0002.

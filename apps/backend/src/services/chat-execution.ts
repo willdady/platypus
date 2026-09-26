@@ -660,6 +660,7 @@ export const prepareChatTurn = async (
           formatSummariesForSystemPrompt(turn.memories))
         : "",
       memorySearchAvailable: Object.hasOwn(tools, "memorySearch"),
+      fsDownloadAvailable: Object.hasOwn(tools, "fsDownload"),
       skills,
       subAgents,
       unavailableSubAgents,

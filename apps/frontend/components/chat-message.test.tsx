@@ -631,6 +631,23 @@ describe("ChatMessage generic tool renderer exclusion", () => {
     ).toBe(false);
   });
 
+  // A failed fsDownload has no file to offer, so it renders as a normal tool
+  // error rather than as a download card.
+  it.each([
+    ["output-available", false],
+    ["output-error", true],
+  ])("treats an fsDownload part in %s as generic: %s", (state, generic) => {
+    expect(
+      isGenericToolPart({
+        type: "tool-fsDownload",
+        toolCallId: "c1",
+        state,
+        input: { path: "a.bin" },
+        output: { path: "a.bin", size: 1 },
+      } as unknown as Parameters<typeof isGenericToolPart>[0]),
+    ).toBe(generic);
+  });
+
   it("matches an ordinary tool part with no specialised renderer", () => {
     expect(
       isGenericToolPart({

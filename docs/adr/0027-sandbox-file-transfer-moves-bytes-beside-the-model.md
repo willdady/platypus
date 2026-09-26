@@ -1,15 +1,8 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#1067, #1068, #1069"
+status: accepted
 ---
 
 # Sandbox file transfer moves bytes beside the model, not through it
-
-> State of the code today: `SandboxBackend` has the two optional members, and
-> `createPosixSandbox` implements them (#1067). There are no transfer routes or
-> Sandbox card yet, and the `sandbox` Tool set is still exactly five tools. This
-> ADR records the decision only. It moves to `accepted` in the pull request for
-> #1069, the last of the three to land.
 
 A User can upload a file into a Workspace's Sandbox, or download one out of it,
 without the model in the loop. The bytes move through two **optional**

@@ -292,3 +292,80 @@ describe("createSandboxTools", () => {
     expect(mocks.fsList).not.toHaveBeenCalled();
   });
 });
+
+describe("fsDownload", () => {
+  const withReadBytes = () => {
+    const { mocks } = makeBackend();
+    const fsReadBytes = vi.fn();
+    return {
+      backend: { ...mocks, fsReadBytes } as unknown as SandboxBackend,
+      mocks,
+      fsReadBytes,
+    };
+  };
+
+  it("is offered only when the backend implements fsReadBytes", () => {
+    expect(createSandboxTools(makeBackend().backend, ctx)).not.toHaveProperty(
+      "fsDownload",
+    );
+    expect(createSandboxTools(withReadBytes().backend, ctx)).toHaveProperty(
+      "fsDownload",
+    );
+  });
+
+  it("returns the path and size, and no URL, without reading the bytes", async () => {
+    const { backend, mocks, fsReadBytes } = withReadBytes();
+    mocks.fsList.mockResolvedValue({
+      entries: [{ path: "report.pdf", type: "file", size: 1234 }],
+      truncated: false,
+    });
+    const result = await callExecute(
+      createSandboxTools(backend, ctx),
+      "fsDownload",
+      { path: "out/report.pdf" },
+    );
+    expect(result).toEqual({ path: "out/report.pdf", size: 1234 });
+    expect(JSON.stringify(result)).not.toMatch(/https?:|\/sandbox\/file/);
+    expect(mocks.fsList).toHaveBeenCalledWith(
+      ctx,
+      { path: "out", glob: "report.pdf" },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
+    expect(fsReadBytes).not.toHaveBeenCalled();
+  });
+
+  it("errors on a missing path", async () => {
+    const { backend } = withReadBytes();
+    await expect(
+      callExecute(createSandboxTools(backend, ctx), "fsDownload", {
+        path: "nope.txt",
+      }),
+    ).rejects.toThrow(/no such file.*nope\.txt/i);
+  });
+
+  it("errors on a directory", async () => {
+    const { backend, mocks } = withReadBytes();
+    mocks.fsList.mockResolvedValue({
+      entries: [{ path: "out", type: "dir" }],
+      truncated: false,
+    });
+    await expect(
+      callExecute(createSandboxTools(backend, ctx), "fsDownload", {
+        path: "out",
+      }),
+    ).rejects.toThrow(/directory/i);
+  });
+
+  it("errors on a file over the transfer bound, naming the bound", async () => {
+    const { backend, mocks } = withReadBytes();
+    mocks.fsList.mockResolvedValue({
+      entries: [{ path: "big.bin", type: "file", size: 25 * 1024 * 1024 + 1 }],
+      truncated: false,
+    });
+    await expect(
+      callExecute(createSandboxTools(backend, ctx), "fsDownload", {
+        path: "big.bin",
+      }),
+    ).rejects.toThrow(/25 MiB/);
+  });
+});

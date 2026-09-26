@@ -54,6 +54,7 @@ import { ResponseMetricsPopover } from "./response-metrics-popover";
 import { TurnNotice } from "./turn-notice";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
+import { FsDownloadTool } from "./fs-download-tool";
 import {
   WebToolCard,
   isNormalizedWebToolPart,
@@ -100,6 +101,11 @@ const isSubAgentToolPart = (part: MessagePart) =>
   isToolUIPart(part) &&
   (part.type === "tool-delegate" || part.type.startsWith("tool-delegateTo"));
 
+// A failed download has nothing to offer, so it falls through to the generic
+// renderer as an ordinary tool error.
+const isFsDownloadPart = (part: MessagePart) =>
+  part.type === "tool-fsDownload" && part.state !== "output-error";
+
 const isWebToolPart = (part: MessagePart) =>
   isToolUIPart(part) && isNormalizedWebToolPart(part);
 
@@ -117,6 +123,7 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
   isLoadSkillPart,
   isWebToolPart,
   isSubAgentToolPart,
+  isFsDownloadPart,
 ];
 
 /**
@@ -375,6 +382,15 @@ export const ChatMessage = memo(function ChatMessage({
           key={`${message.id}-${i}`}
           toolPart={part as ToolUIPart}
           messageMetadata={message.metadata}
+        />
+      ),
+    },
+    {
+      matches: isFsDownloadPart,
+      render: (part, i) => (
+        <FsDownloadTool
+          key={`${message.id}-${i}`}
+          toolPart={part as Extract<MessagePart, { type: "tool-fsDownload" }>}
         />
       ),
     },

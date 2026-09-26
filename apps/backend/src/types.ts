@@ -2,6 +2,7 @@ import { type UIMessage, type InferUITool, type UIDataTypes } from "ai";
 import type { CachedInputTokens } from "@platypus/schemas";
 import { createLoadSkillTool } from "./tools/skill.ts";
 import type { DelegateTool } from "./tools/sub-agent.ts";
+import type { createFsDownloadTool } from "./sandbox/tools.ts";
 
 /**
  * Metadata the run pipeline attaches to a streamed assistant message.
@@ -166,10 +167,14 @@ export type ChatMessageMetadata = {
  * off the tool's input. Chats that predate the single dispatcher still hold
  * parts named `tool-delegateTo<Name>`, which no static key can cover — the
  * renderer keeps matching those by prefix, in addition to this one.
+ *
+ * `fsDownload` earns its place because its card builds the download link from
+ * the tool's output path.
  */
 export type CustomUITools = {
   loadSkill: InferUITool<ReturnType<typeof createLoadSkillTool>>;
   delegate: InferUITool<DelegateTool>;
+  fsDownload: InferUITool<ReturnType<typeof createFsDownloadTool>>;
 };
 
 export type PlatypusUIMessage = UIMessage<

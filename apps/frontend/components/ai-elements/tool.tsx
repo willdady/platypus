@@ -28,6 +28,7 @@ import {
   FilePenIcon,
   FilePlusIcon,
   FingerprintIcon,
+  FileDownIcon,
   FolderIcon,
   GlobeIcon,
   KanbanSquareIcon,
@@ -139,6 +140,7 @@ const toolToToolSet: Record<string, string> = {
   fsWrite: "sandbox",
   fsEdit: "sandbox",
   fsList: "sandbox",
+  fsDownload: "sandbox",
 };
 
 // Per-tool icon overrides, used when a single toolset has visually distinct
@@ -159,6 +161,7 @@ const toolIcons: Record<string, LucideIcon> = {
   fsWrite: FilePlusIcon,
   fsEdit: FilePenIcon,
   fsList: FolderIcon,
+  fsDownload: FileDownIcon,
 };
 
 /** One icon per toolset, matching the workspace home page. */

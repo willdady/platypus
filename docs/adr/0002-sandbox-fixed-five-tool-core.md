@@ -30,3 +30,12 @@ change signatures." Adapters still cannot — but **core** appended an optional
 `SandboxCallOptions` argument to all five tool methods, carrying the call's
 `AbortSignal`. The fixed five-tool core, the stateless shell semantics, and the
 model-facing tool surface are all unchanged. See ADR-0025 for the reasoning.
+
+## Amended by ADR-0027
+
+ADR-0027 withdraws "exactly five tools" for the `sandbox` Tool set, which gains a
+sixth, core-built tool: `fsDownload`, offered only when the backend implements
+`fsReadBytes`. `SandboxBackend` gains two optional members, `fsReadBytes` and
+`fsWriteBytes`, which are adapter capabilities and never Tools. The
+adapter-facing five-tool contract, the stateless shell semantics and the output
+bounds are unchanged. See ADR-0027 for the reasoning.

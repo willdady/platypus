@@ -17,6 +17,7 @@ const baseCtx = (): SystemPromptStableContext => ({
   user: { id: "user-1", name: "Alice" },
   memoriesBlock: "",
   memorySearchAvailable: false,
+  fsDownloadAvailable: false,
   skills: [],
   subAgents: [],
   runMode: "interactive",
@@ -618,5 +619,19 @@ describe("renderSystemPrompt — sandbox fragment", () => {
     expect(out).toMatch(/`OPENAI_API_KEY`/);
     expect(out).toMatch(/`GITHUB_TOKEN`/);
     expect(out).toMatch(/Workspace defaults override/);
+  });
+
+  it("names fsDownload only when the turn offers it", () => {
+    const agent = agentRecord({ toolSetIds: ["sandbox"] });
+    const without = renderSystemPrompt({ ...baseCtx(), agent });
+    expect(without).not.toMatch(/fsDownload/);
+
+    const withIt = renderSystemPrompt({
+      ...baseCtx(),
+      agent,
+      fsDownloadAvailable: true,
+    });
+    expect(withIt).toMatch(/`fsDownload`/);
+    expect(withIt).toMatch(/download button/);
   });
 });
