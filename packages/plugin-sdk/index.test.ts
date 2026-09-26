@@ -4,6 +4,7 @@ import { tool } from "ai";
 import {
   OLDEST_SUPPORTED_API_VERSION,
   PLUGIN_API_VERSION,
+  SANDBOX_TRANSFER_MAX_BYTES,
   type PlatypusPlugin,
   type PluginConfigContext,
   type PluginLogger,
@@ -172,6 +173,14 @@ describe("@platypuschat/plugin-sdk", () => {
     expectTypeOf<
       Parameters<SandboxBackend[Methods]>[2]
     >().toEqualTypeOf<SandboxCallOptions>();
+  });
+
+  // The byte-transfer members arrived append-only, as optional members: the
+  // five-tool adapter above still satisfies `SandboxBackend` without them.
+  it("keeps the byte-transfer members optional, under a fixed 25 MiB bound", () => {
+    expect(SANDBOX_TRANSFER_MAX_BYTES).toBe(25 * 1024 * 1024);
+    expectTypeOf<undefined>().toExtend<SandboxBackend["fsReadBytes"]>();
+    expectTypeOf<undefined>().toExtend<SandboxBackend["fsWriteBytes"]>();
   });
 
   it("carries a required logger on the shared block, callable both ways", () => {

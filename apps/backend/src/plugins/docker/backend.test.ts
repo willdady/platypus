@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { randomBytes } from "node:crypto";
 import { PassThrough } from "node:stream";
+import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 
 // ---------------------------------------------------------------------------
 // This suite covers the Docker *transport* only: container/volume lifecycle,
@@ -662,6 +664,40 @@ describe("DockerSandboxTransport — argv safety", () => {
     expect(mockState.execCalls.length).toBe(0);
     expect(mockState.putArchiveCalls).toHaveLength(1);
     expect(mockState.putArchiveCalls[0].opts).toEqual({ path: "/workspace" });
+  });
+});
+
+describe("DockerSandboxTransport — byte transfer", () => {
+  it("round-trips a binary payload byte-identical through putArchive and cat", async () => {
+    mockState.existingContainer = makeFakeContainer();
+    queueExec({ exitCode: 0 }); // mkdir -p for the nested parent
+    const payload = Buffer.concat([
+      Buffer.from([0x00, 0xff, 0xfe, 0xc3, 0x28]),
+      randomBytes(4096),
+    ]);
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.fsWriteBytes!(
+      ctx,
+      { path: "bin/blob", bytes: new Uint8Array(payload) },
+      callOptions,
+    );
+
+    // What the daemon would have extracted: the single tar entry's body.
+    const tar = mockState.putArchiveCalls[0].buffer;
+    const size = Number.parseInt(tar.subarray(124, 135).toString("utf8"), 8);
+    queueExec({ stdout: tar.subarray(512, 512 + size), exitCode: 0 });
+
+    const read = await backend.fsReadBytes!(
+      ctx,
+      { path: "bin/blob", maxBytes: SANDBOX_TRANSFER_MAX_BYTES },
+      callOptions,
+    );
+
+    expect(mockState.putArchiveCalls[0].opts).toEqual({
+      path: "/workspace/bin",
+    });
+    expect(Buffer.from(read).equals(payload)).toBe(true);
   });
 });
 

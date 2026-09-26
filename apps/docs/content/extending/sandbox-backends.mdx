@@ -19,9 +19,10 @@ a third is one of the better-scoped things you can build against Platypus.
 
 Your adapter implements `SandboxBackend` from
 [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk):
-five tools plus a teardown. You **cannot** add, rename or re-sign a tool. Read the
-exact signatures off the package you have installed — this page states the rules
-those types don't encode.
+five tools plus a teardown, and two optional members for
+[moving whole files](#moving-whole-files). You **cannot** add, rename or re-sign a
+tool. Read the exact signatures off the package you have installed — this page
+states the rules those types don't encode.
 
 | Method      | Does                                              |
 | ----------- | ------------------------------------------------- |
@@ -71,11 +72,43 @@ things exposes the extra through a
   concurrent use, or you will corrupt state under a model you didn't write.
 </Callout>
 
+## Moving whole files
+
+Two optional members sit beside the five tools. They move a whole file into or
+out of the Sandbox, byte for byte, and the bytes never reach the model. Neither
+is a Tool.
+
+| Member         | Does                                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `fsReadBytes`  | Returns a whole file. Rejects a file larger than the `maxBytes` it is handed, a missing path, and anything that is not a readable file |
+| `fsWriteBytes` | Writes a whole file. Always overwrites, and creates missing parent directories                                                         |
+
+- **Move bytes, not text.** Nothing is decoded: a file full of NUL bytes and
+  invalid UTF-8 comes back identical. The five tools' caps don't apply.
+- **Size a file before you pull it.** `fsReadBytes` may reject an oversized file
+  without transferring it.
+- **`fsWriteBytes` never refuses an existing path.** Platypus has already decided
+  that overwriting is what the person wants before it calls you.
+
+<Callout type="warning">
+  **Handle every file up to 25 MiB, or leave the member out.** 25 MiB is the
+  transfer bound on every backend, in both directions, exported as
+  `SANDBOX_TRANSFER_MAX_BYTES`. Neither you nor the Operator can change it. A
+  member that works for small files and fails at 10 MiB is the trap: the person
+  finds out partway through a transfer. If your service caps requests below the
+  bound, chunk the transfer inside your adapter.
+</Callout>
+
+Leave a member out and your backend doesn't offer that direction. There is no
+fallback through `fsRead` or `fsWrite`. The two members are independent, so a
+backend can implement `fsReadBytes` alone.
+
 ## The signal your tool methods get
 
-Every tool call gets a third argument carrying `{ signal }`. Pass it to whatever
-actually runs the work — the exec request, the HTTP call to your sandbox
-service — and the command stops when Platypus stops waiting.
+Every tool call gets a third argument carrying `{ signal }`, and so do the two
+file-transfer members. Pass it to whatever actually runs the work — the exec
+request, the HTTP call to your sandbox service — and the command stops when
+Platypus stops waiting.
 
 It fires for either of two reasons, and you do not need to tell them apart:
 
@@ -138,8 +171,8 @@ run.
   eligible set at deploy time, an Org Admin picks a subset per Sandbox, and a
   Workspace Owner cannot widen it. Skip this and a Workspace Owner can point an
   Agent at your internal network by editing a form. The Docker adapter's network
-  allowlist is the worked example — see
-  [Sandbox infrastructure](/self-hosting/sandbox).
+  allowlist is the worked example — see [Sandbox
+  infrastructure](/self-hosting/sandbox).
 </Callout>
 
 <Callout type="info">

@@ -13,6 +13,8 @@ import {
 } from "./transport.ts";
 import type {
   FsEditInput,
+  FsReadBytesInput,
+  FsWriteBytesInput,
   FsEditOutput,
   FsListEntry,
   FsListInput,
@@ -28,11 +30,12 @@ import type {
   ShellExecOutput,
 } from "./types.ts";
 
-// The fixed five-tool core (ADR-0002), implemented once over a {@link
-// SandboxTransport}. Every Platypus-defined bound lives here — the timeout
-// clamp, the output caps, the `truncated` convention, strict UTF-8, line
-// counting, the unique-`oldString` rule and the find(1) contract — so core
-// honours them *for* an adapter rather than trusting each adapter to.
+// The fixed five-tool core (ADR-0002), and the two byte-transfer members beside
+// it (ADR-0027), implemented once over a {@link SandboxTransport}. Every
+// Platypus-defined bound lives here — the timeout clamp, the output caps, the
+// `truncated` convention, strict UTF-8, line counting, the unique-`oldString`
+// rule, the find(1) contract and the transfer `maxBytes` rule — so core honours
+// them *for* an adapter rather than trusting each adapter to.
 
 // Resolve a workspace-relative path against the transport's root. The input
 // schema already rejects a leading slash; stripping again is belt-and-braces
@@ -188,10 +191,11 @@ const readForTool = async (
   rootDir: string,
   path: string,
   signal: AbortSignal | undefined,
+  cap = MAX_READ_BYTES,
 ): Promise<Buffer> => {
   try {
     return await raceCancellation(signal, () =>
-      transport.readFile(ctx, absPath(rootDir, path), MAX_READ_BYTES),
+      transport.readFile(ctx, absPath(rootDir, path), cap),
     );
   } catch (cause) {
     const detail =
@@ -219,8 +223,8 @@ const resolveRoot = (
   raceCancellation(options.signal, () => transport.rootDir(ctx));
 
 /**
- * Build a {@link SandboxBackend} — the five model-facing tools — from a {@link
- * SandboxTransport}.
+ * Build a {@link SandboxBackend} — the five model-facing tools and both
+ * byte-transfer members — from a {@link SandboxTransport}.
  *
  * The transport supplies exec, file read/write, the workspace root and
  * teardown; everything the model actually sees is assembled here, identically
@@ -228,7 +232,7 @@ const resolveRoot = (
  */
 export const createPosixSandbox = (
   transport: SandboxTransport,
-): SandboxBackend => ({
+): Required<SandboxBackend> => ({
   async shellExec(
     ctx: SandboxContext,
     input: ShellExecInput,
@@ -388,6 +392,49 @@ export const createPosixSandbox = (
     }
 
     return parseFindOutput(res.stdout.toString("utf8"));
+  },
+
+  async fsReadBytes(
+    ctx: SandboxContext,
+    input: FsReadBytesInput,
+    options: SandboxCallOptions,
+  ): Promise<Uint8Array> {
+    const rootDir = await resolveRoot(transport, ctx, options);
+    // One byte past the limit is enough to tell an oversized file from one
+    // sitting exactly on it, without pulling the rest of it across.
+    const bytes = await readForTool(
+      transport,
+      ctx,
+      "fs.readBytes",
+      rootDir,
+      input.path,
+      options.signal,
+      input.maxBytes + 1,
+    );
+    if (bytes.length > input.maxBytes) {
+      throw new Error(
+        `fs.readBytes: file is larger than ${input.maxBytes} bytes: ${input.path}`,
+      );
+    }
+    return bytes;
+  },
+
+  async fsWriteBytes(
+    ctx: SandboxContext,
+    input: FsWriteBytesInput,
+    options: SandboxCallOptions,
+  ): Promise<void> {
+    const rootDir = await resolveRoot(transport, ctx, options);
+    const { buffer, byteOffset, byteLength } = input.bytes;
+    await raceCancellation(options.signal, () =>
+      transport.writeFile(
+        ctx,
+        absPath(rootDir, input.path),
+        // A view over the caller's bytes, not a copy.
+        Buffer.from(buffer, byteOffset, byteLength),
+        "overwrite",
+      ),
+    );
   },
 
   destroy(ctx: SandboxContext): Promise<void> {

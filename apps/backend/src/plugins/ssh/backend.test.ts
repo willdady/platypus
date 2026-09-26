@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { randomBytes } from "node:crypto";
+import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 
 // ---------------------------------------------------------------------------
 // Mock ssh2. `new Client()` returns a fake EventEmitter-based client. connect()
@@ -926,6 +928,65 @@ describe("SshSandboxTransport — fs.read (SFTP)", () => {
     );
     const res = await backend.fsRead(ctx, { path: "small.txt" }, callOptions);
     expect(res.content).toBe("abc");
+  });
+});
+
+describe("SshSandboxTransport — byte transfer (SFTP)", () => {
+  const maxBytes = SANDBOX_TRANSFER_MAX_BYTES;
+
+  it("round-trips a binary payload byte-identical, creating missing parents", async () => {
+    const payload = Buffer.concat([
+      Buffer.from([0x00, 0xff, 0xfe, 0xc3, 0x28]),
+      randomBytes(4096),
+    ]);
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+
+    await backend.fsWriteBytes!(
+      ctx,
+      { path: "a/b/blob", bytes: new Uint8Array(payload) },
+      callOptions,
+    );
+    const read = await backend.fsReadBytes!(
+      ctx,
+      { path: "a/b/blob", maxBytes },
+      callOptions,
+    );
+
+    expect(mockState.dirs.has(abs("a/b"))).toBe(true);
+    expect(Buffer.from(read).equals(payload)).toBe(true);
+  });
+
+  it("replaces an existing file", async () => {
+    seedFile("taken", "old contents");
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+
+    await backend.fsWriteBytes!(
+      ctx,
+      { path: "taken", bytes: new Uint8Array([1, 2]) },
+      callOptions,
+    );
+
+    expect(mockState.files.get(abs("taken"))).toEqual(Buffer.from([1, 2]));
+  });
+
+  it("rejects a missing path", async () => {
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+
+    await expect(
+      backend.fsReadBytes!(ctx, { path: "nope", maxBytes }, callOptions),
+    ).rejects.toThrow(/^fs\.readBytes: /);
   });
 });
 

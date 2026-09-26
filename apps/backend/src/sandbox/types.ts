@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  SANDBOX_TRANSFER_MAX_BYTES,
+  type FsReadBytesInput as SdkFsReadBytesInput,
+  type FsWriteBytesInput as SdkFsWriteBytesInput,
+} from "@platypuschat/plugin-sdk";
 import type {
   FsEditInput as SdkFsEditInput,
   FsEditOutput,
@@ -90,6 +95,29 @@ export const fsListInputSchema = z.object({
 });
 export type FsListInput = z.infer<typeof fsListInputSchema>;
 
+// fs.readBytes / fs.writeBytes ------------------------------------------------
+//
+// Not Tools: the optional byte-transfer members (ADR-0027). Bounded by the
+// transfer limit an adapter promises to honour, never by the five tools' caps.
+
+export const fsReadBytesInputSchema = z.object({
+  path: relativePathSchema,
+  maxBytes: z.number().int().positive().max(SANDBOX_TRANSFER_MAX_BYTES),
+});
+export type FsReadBytesInput = z.infer<typeof fsReadBytesInputSchema>;
+
+export const fsWriteBytesInputSchema = z.object({
+  path: relativePathSchema,
+  // `custom` over `instanceof`: the latter infers `Uint8Array<ArrayBuffer>`,
+  // narrower than the SDK's `Uint8Array`, which may sit on any ArrayBufferLike.
+  bytes: z
+    .custom<Uint8Array>((v) => v instanceof Uint8Array)
+    .refine((b) => b.byteLength <= SANDBOX_TRANSFER_MAX_BYTES, {
+      message: `file is larger than ${SANDBOX_TRANSFER_MAX_BYTES} bytes`,
+    }),
+});
+export type FsWriteBytesInput = z.infer<typeof fsWriteBytesInputSchema>;
+
 // Input types stay inferred from the schemas above, because core owns the
 // validation an adapter is handed values through — but they must stay the shape
 // the published `SandboxBackend` declares, or a core adapter and a third-party
@@ -112,6 +140,10 @@ type _SandboxInputTypesMatchSdk = [
   MutuallyAssignable<SdkFsEditInput, FsEditInput>,
   MutuallyAssignable<FsListInput, SdkFsListInput>,
   MutuallyAssignable<SdkFsListInput, FsListInput>,
+  MutuallyAssignable<FsReadBytesInput, SdkFsReadBytesInput>,
+  MutuallyAssignable<SdkFsReadBytesInput, FsReadBytesInput>,
+  MutuallyAssignable<FsWriteBytesInput, SdkFsWriteBytesInput>,
+  MutuallyAssignable<SdkFsWriteBytesInput, FsWriteBytesInput>,
 ];
 
 // Registered once per backend type. The discriminator string lives in the

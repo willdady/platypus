@@ -1,4 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { describe, it, expect, vi } from "vitest";
+import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 import {
   DEFAULT_SHELL_TIMEOUT_MS,
   MAX_LIST_ENTRIES,
@@ -510,6 +512,127 @@ describe("createPosixSandbox — fs.write", () => {
     );
 
     expect(files.get(`${ROOT}/taken.txt`)?.toString("utf8")).toBe("new");
+  });
+});
+
+// NULs and bytes that are not valid UTF-8 up front, so a decode anywhere on the
+// path would mangle the payload rather than merely risk it.
+const binaryPayload = () =>
+  Buffer.concat([
+    Buffer.from([0x00, 0xff, 0xfe, 0xc3, 0x28]),
+    randomBytes(4096),
+  ]);
+
+describe("createPosixSandbox — fs.readBytes / fs.writeBytes", () => {
+  it("round-trips a binary payload byte-identical", async () => {
+    const { transport } = makeTransport();
+    const sandbox = createPosixSandbox(transport);
+    const payload = binaryPayload();
+
+    await sandbox.fsWriteBytes(
+      ctx,
+      { path: "bin/blob", bytes: new Uint8Array(payload) },
+      callOptions,
+    );
+    const read = await sandbox.fsReadBytes(
+      ctx,
+      { path: "bin/blob", maxBytes: SANDBOX_TRANSFER_MAX_BYTES },
+      callOptions,
+    );
+
+    expect(Buffer.from(read).equals(payload)).toBe(true);
+  });
+
+  it("reads a file sitting exactly on maxBytes", async () => {
+    const { transport } = makeTransport({
+      files: new Map([
+        [`${ROOT}/full`, Buffer.alloc(SANDBOX_TRANSFER_MAX_BYTES, 1)],
+      ]),
+    });
+
+    const read = await createPosixSandbox(transport).fsReadBytes(
+      ctx,
+      { path: "full", maxBytes: SANDBOX_TRANSFER_MAX_BYTES },
+      callOptions,
+    );
+
+    expect(read.byteLength).toBe(SANDBOX_TRANSFER_MAX_BYTES);
+  });
+
+  it("rejects a file one byte past maxBytes, naming the bound", async () => {
+    const { transport } = makeTransport({
+      files: new Map([
+        [`${ROOT}/over`, Buffer.alloc(SANDBOX_TRANSFER_MAX_BYTES + 1, 1)],
+      ]),
+    });
+
+    await expect(
+      createPosixSandbox(transport).fsReadBytes(
+        ctx,
+        { path: "over", maxBytes: SANDBOX_TRANSFER_MAX_BYTES },
+        callOptions,
+      ),
+    ).rejects.toThrow(
+      `fs.readBytes: file is larger than ${SANDBOX_TRANSFER_MAX_BYTES} bytes: over`,
+    );
+  });
+
+  it("asks the transport for one byte past maxBytes and no more", async () => {
+    const { transport } = makeTransport({
+      files: new Map([[`${ROOT}/a`, Buffer.from("abc")]]),
+    });
+    const readFile = vi.spyOn(transport, "readFile");
+
+    await createPosixSandbox(transport).fsReadBytes(
+      ctx,
+      { path: "a", maxBytes: 10 },
+      callOptions,
+    );
+
+    expect(readFile).toHaveBeenCalledWith(ctx, `${ROOT}/a`, 11);
+  });
+
+  it("attributes a missing path to fs.readBytes", async () => {
+    const { transport } = makeTransport();
+
+    await expect(
+      createPosixSandbox(transport).fsReadBytes(
+        ctx,
+        { path: "nope", maxBytes: 10 },
+        callOptions,
+      ),
+    ).rejects.toThrow(`fs.readBytes: No such file: ${ROOT}/nope`);
+  });
+
+  it("always overwrites, at the resolved path", async () => {
+    const { transport, files, writes } = makeTransport({
+      files: new Map([[`${ROOT}/taken`, Buffer.from("old")]]),
+    });
+
+    await createPosixSandbox(transport).fsWriteBytes(
+      ctx,
+      { path: "taken", bytes: new Uint8Array([1, 2, 3]) },
+      callOptions,
+    );
+
+    expect(writes[0]).toMatchObject({
+      path: `${ROOT}/taken`,
+      mode: "overwrite",
+    });
+    expect(files.get(`${ROOT}/taken`)).toEqual(Buffer.from([1, 2, 3]));
+  });
+
+  it("writes only the view it was handed, not the whole backing buffer", async () => {
+    const { transport, files } = makeTransport();
+    const backing = new Uint8Array([9, 1, 2, 9]);
+
+    await createPosixSandbox(transport).fsWriteBytes(
+      ctx,
+      { path: "view", bytes: backing.subarray(1, 3) },
+      callOptions,
+    );
+
+    expect(files.get(`${ROOT}/view`)).toEqual(Buffer.from([1, 2]));
   });
 });
 

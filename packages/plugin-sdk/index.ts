@@ -295,6 +295,24 @@ export interface FsListOutput {
 }
 
 /**
+ * The largest file Platypus moves through {@link SandboxBackend.fsReadBytes} or
+ * {@link SandboxBackend.fsWriteBytes}, in either direction, on every backend:
+ * 25 MiB. Fixed — neither an adapter nor an Operator can change it.
+ */
+export const SANDBOX_TRANSFER_MAX_BYTES = 25 * 1024 * 1024;
+
+export interface FsReadBytesInput {
+  path: string;
+  /** Reject rather than return a file larger than this. */
+  maxBytes: number;
+}
+
+export interface FsWriteBytesInput {
+  path: string;
+  bytes: Uint8Array;
+}
+
+/**
  * The per-call options a Sandbox backend's tool methods are handed as an
  * appended third argument, mirroring {@link WebExecutorOptions}.
  *
@@ -357,6 +375,37 @@ export interface SandboxBackend {
     input: FsListInput,
     options: SandboxCallOptions,
   ): Promise<FsListOutput>;
+  /**
+   * Read a whole file, byte-exact — no decoding. Not a Tool: the bytes go to
+   * the User, never into model context, so the five tools' caps do not apply.
+   *
+   * Reject when the file is larger than `maxBytes` (you need not pull it across
+   * to find out), and when `path` is missing or is not a readable file.
+   *
+   * Optional. Implement it only if you can read any file up to {@link
+   * SANDBOX_TRANSFER_MAX_BYTES}; a transport with a smaller limit chunks
+   * internally. A backend that leaves it out offers no downloads — Platypus has
+   * no fallback through the five tools.
+   */
+  fsReadBytes?(
+    ctx: SandboxContext,
+    input: FsReadBytesInput,
+    options: SandboxCallOptions,
+  ): Promise<Uint8Array>;
+  /**
+   * Write a whole file, byte-exact. **Always overwrites** whatever is at
+   * `path`, and creates missing parent directories — Platypus decides
+   * create-versus-overwrite before calling. Not a Tool.
+   *
+   * Optional, on the same terms as {@link SandboxBackend.fsReadBytes}: handle
+   * any file up to {@link SANDBOX_TRANSFER_MAX_BYTES} or leave it out, in which
+   * case the backend offers no uploads. The two are gated independently.
+   */
+  fsWriteBytes?(
+    ctx: SandboxContext,
+    input: FsWriteBytesInput,
+    options: SandboxCallOptions,
+  ): Promise<void>;
   destroy(ctx: SandboxContext): Promise<void>;
 }
 
