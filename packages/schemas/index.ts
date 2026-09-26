@@ -581,8 +581,8 @@ export const namespaceToolName = (prefix: string, toolName: string): string =>
  * with six characters of slack. Bounding the two halves is why no total-length
  * check is needed anywhere.
  *
- * Read it as a floor, not a quota: a plugin named `linear` leaves 56 characters
- * for a tool name. The cap is what a plugin may *declare*, not what it gets.
+ * The two caps are independent: a short manifest name lends none of its unused
+ * characters to a tool name, which is held to its own cap regardless.
  */
 export const MAX_PLUGIN_NAME_LENGTH = 24;
 
