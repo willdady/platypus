@@ -5,6 +5,7 @@
 const meta = {
   index: "Overview",
   "your-first-plugin": "Your first plugin",
+  "installing-plugins": "Installing plugins",
   "tool-sets": "Tool sets",
   "sandbox-backends": "Sandbox backends",
   "web-search-backends": "Web-search backends",

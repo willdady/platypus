@@ -135,7 +135,8 @@ repeat it.
 The two always-on plugins load unconditionally and must not be listed. The three
 gate-able ones load only when named in `PLATYPUS_PLUGINS`. All five are internal
 backend modules — their `@platypus/*` names are logical ids, not npm packages, so
-there is nothing to install.
+there is nothing to install. A third-party plugin is an npm package that does
+need installing — see [Installing plugins](/extending/installing-plugins).
 
 **The default:** `PLATYPUS_PLUGINS` has **no default in code**. Unset or empty
 means _no gate-able plugins_ — you get the always-on core Tool sets and nothing

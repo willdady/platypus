@@ -59,12 +59,7 @@ plugin.
 
 ### Install the package into the deployment
 
-The backend resolves a third-party plugin from `node_modules`, so the package has
-to be installed alongside it:
-
-```bash
-pnpm add @platypus-examples/tool-set
-```
+How depends on how you run Platypus — see [Installing plugins](/extending/installing-plugins).
 
 In a checkout of the Platypus repository this is already done — the example is a
 workspace package and the backend already depends on it. Skip to the next step.
@@ -79,11 +74,14 @@ already there:
 PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus-examples/tool-set
 ```
 
-### Restart the backend
+### Recreate the backend
 
 ```bash
-docker compose restart backend
+docker compose up -d
 ```
+
+`docker compose restart` keeps the old environment, so it never sees the edited
+list.
 
 Plugin loading happens once, before the HTTP server starts. There is no in-app
 install button — this is a deploy-time trust boundary.
@@ -110,7 +108,7 @@ plugin that couldn't be resolved: boot is fail-loud and all-or-nothing. Read
 ## Checkpoint 2: an Agent can use it
 
 Open any Agent in a Workspace and find the **Tools** card. Under an **Examples**
-heading there is a **Greeting** switch. Flip it, click **Save**, then start a
+heading there is a **Greeting** switch. Flip it, click **Update**, then start a
 Chat on that Agent and ask it to greet someone by name.
 
 The reply comes back through an **Example greet** tool call you can expand in the
@@ -119,12 +117,12 @@ transcript. That is the loop closed: your code ran inside a Chat turn.
 ## Checkpoint 3: it can log
 
 The factory writes one line every time it resolves, at `debug`. The default
-`LOG_LEVEL` is `info`, so you saw nothing during Checkpoint 2. Raise it, restart,
-and send another message:
+`LOG_LEVEL` is `info`, so you saw nothing during Checkpoint 2. Raise it in `.env`,
+recreate the backend, and send another message:
 
 ```bash
 LOG_LEVEL=debug
-docker compose restart backend
+docker compose up -d
 ```
 
 `docker compose logs backend` now carries a `Resolving` line tagged
