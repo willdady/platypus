@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
-import { loadedPluginsFixture, mockDb, resetMockDb } from "../test-utils.ts";
+import {
+  loadedPluginsFixture,
+  mockDb,
+  resetMockDb,
+  seedDb,
+} from "../test-utils.ts";
 
 import { destroySandboxRow, destroyWorkspaceSandboxes } from "./teardown.ts";
 import { clearSandboxBackends, registerSandboxBackend } from "./index.ts";
@@ -15,6 +20,8 @@ import {
 type SandboxRow = typeof sandboxTable.$inferSelect;
 
 const workspaceId = "ws-1";
+const orgId = "org-1";
+const userId = "owner-1";
 const BACKEND = "test-teardown";
 
 const destroy = vi.fn<SandboxBackend["destroy"]>(() => Promise.resolve());
@@ -80,6 +87,8 @@ beforeEach(() => {
   clearSandboxBackends();
   setLoadedPlugins(loadedPluginsFixture());
   destroy.mockResolvedValue(undefined);
+  // The Workspace lookup destroySandboxRow makes before destroy().
+  mockDb.limit.mockResolvedValue([{ orgId, userId }]);
 });
 
 describe("destroySandboxRow", () => {
@@ -109,8 +118,17 @@ describe("destroySandboxRow", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("builds the adapter from the parsed config and destroys the row's workspace", async () => {
+  // An adapter keys its external resource on (orgId, workspaceId), so destroy
+  // must get the same Organization and Workspace owner the tool calls did, or
+  // the idempotent no-op finds nothing and the resource leaks.
+  it("builds the adapter from the parsed config and destroys it with the Workspace's context", async () => {
     registerBackend();
+    seedDb({
+      workspace: [
+        { id: "ws-other", organizationId: "org-other", ownerId: "user-other" },
+        { id: workspaceId, organizationId: orgId, ownerId: userId },
+      ],
+    });
 
     await destroySandboxRow(makeRow());
 
@@ -118,12 +136,17 @@ describe("destroySandboxRow", () => {
       { image: "node:24" },
       { token: "secret" },
     );
-    // Teardown is not a user-initiated request, so only the workspace is known.
-    expect(destroy).toHaveBeenCalledWith({
-      orgId: "",
-      workspaceId,
-      userId: "",
-    });
+    expect(destroy).toHaveBeenCalledWith({ orgId, workspaceId, userId });
+  });
+
+  it("throws without destroying when the Workspace row is gone", async () => {
+    registerBackend();
+    seedDb({ workspace: [] });
+
+    await expect(destroySandboxRow(makeRow())).rejects.toThrow(
+      "Workspace 'ws-1' not found; cannot destroy its sandbox",
+    );
+    expect(destroy).not.toHaveBeenCalled();
   });
 
   it("validates a null config and credentials as empty objects", async () => {
