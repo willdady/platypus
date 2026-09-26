@@ -72,6 +72,15 @@ by an Org Admin.
   provided it.
 </Callout>
 
+### Deleting the Organization
+
+**General → Delete** asks you to type `Delete organization` to confirm. It
+deletes every Workspace in the Organization, along with everything scoped to
+them, and every Shared resource. Each Workspace's Sandbox is torn down too.
+With the Docker backend that removes the container and its volume, so any files
+an Agent left in `/workspace` are gone. With SSH the host is left alone. You
+can't recover any of this from inside the product, only from a database backup.
+
 ## Where to next
 
 - **[Shared resources](/administering/shared-resources)** — Promote, attach, and
