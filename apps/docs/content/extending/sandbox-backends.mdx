@@ -61,8 +61,8 @@ things exposes the extra through a
   entries than the cap. Truncate yourself if your environment can't honour a cap
   natively. `fsWrite` and `fsEdit` have no such flag; there is nothing to cut.
 - **`destroy` must be idempotent.** It fires on row delete, on a backend change,
-  and best-effort when a Workspace is deleted. A forced delete or backend change
-  skips it. It runs on a fresh adapter from `create`, not the one that ran the
+  and best-effort when a Workspace is deleted. Forcing the delete or the backend
+  change skips it. It runs on a fresh adapter from `create`, not the one that ran the
   tools — Platypus calls `create` again every Chat turn — so find the resource
   from `ctx`, never from state held in memory. It need not destroy anything: the
   SSH adapter's `destroy` only disconnects, because the host belongs to the
