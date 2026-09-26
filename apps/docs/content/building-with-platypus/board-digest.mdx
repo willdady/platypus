@@ -1,0 +1,204 @@
+---
+title: Build a daily board digest
+description: One worked example that threads a Board, a Tool set, a Skill and a cron Trigger together — with the actual instructions you'd type.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Build a daily board digest
+
+Every other page in this section covers one screen. This one builds something
+end to end, so you can see how the pieces fit before you design your own.
+
+**What you'll end up with:** at 9am each weekday, an Agent reads your Board,
+files a digest of what moved and what's in flight as a card in a **Digests**
+column, and flags anything that hasn't moved in three days.
+
+It needs four things: a Board, an Agent with the **Kanban** Tool set, a Skill
+that holds the digest format, and a cron Trigger. Roughly twenty minutes.
+
+<Callout type="info">
+  You need a Provider with at least one model before any of this works. If the
+  **Model** dropdown on the Agent form is empty, that is why — see
+  [Providers](/administering#providers-come-first).
+</Callout>
+
+## 1. The Board
+
+<Steps>
+
+### Create it
+
+**Boards → Create board**. Name it `My work`. Add two labels: `blocked` and
+`needs-review`.
+
+### Give it columns
+
+**Add column** four times: `Backlog`, `In progress`, `Review`, `Done`. Then one
+more, `Digests`, where the Agent will file its digests.
+
+</Steps>
+
+Put a few real cards in `In progress` and `Review`, and assign one or two to an
+Agent — the digest has nothing to report on an empty board, and you want
+something to check its output against.
+
+## 2. The Skill
+
+The digest format is know-how, not personality, so it belongs in a Skill rather
+than in the Agent's Instructions. That keeps the Agent's prompt short and lets you
+change the format without touching the Agent.
+
+**Skills → Create skill**:
+
+- **Name**: `write-board-digest`
+- **Description**: `Format a daily digest of a Kanban board from its state and each card's history, including a stalled-work section. Use when asked to write or file a board digest.`
+- **Body**:
+
+```text
+Write the digest as Markdown with exactly these three sections, in this order.
+Omit a section's bullets and write "Nothing." if it would be empty — never omit
+the heading itself.
+
+## Moved since the last digest
+One bullet per card whose history shows a column change after the previous
+digest was filed, or in the last 24 hours if there is no previous digest.
+Format each as: **card title** — from `Old column` to `New column`, by <who
+made the change>.
+
+## In flight
+One bullet per card currently in `In progress` or `Review`. Format each as:
+**card title** — <assignee>, in `Column` since <date of the change that moved it
+into that column>. Write the assignee as "you" for a person, "Agent" for an
+Agent, or "unassigned".
+
+## Stalled
+One bullet per In flight card that has been in its column for more than three
+days, oldest first. Format each as: **card title** — no movement since <date>.
+Say plainly that it is stalled; do not soften it with "may need attention".
+
+Rules:
+- Take every date and every move from the card history. Never invent a card,
+  an assignee or a date. If the history doesn't say, write "unknown".
+- Keep every bullet to one line.
+- Do not add a preamble, a sign-off, or a summary of the summary.
+```
+
+## 3. The Agent
+
+**Agents → Create agent**:
+
+- **Name**: `Board digest`
+- **Description**: `Reads the My work board and files a daily digest on it.`
+- **Model**: any capable model on your Provider.
+- **Instructions**:
+
+```text
+You write the daily digest for the "My work" board and file it on that board.
+
+Every run:
+1. Read the current state of the "My work" board. The newest card in the
+   "Digests" column is the previous digest; fetch it to see when it was filed.
+2. Fetch every card outside the "Digests" column with its history included.
+   The board state carries no history — column moves and their dates come
+   from each card's history.
+3. Load the write-board-digest skill and follow its format exactly.
+4. Create one card in the "Digests" column. Title it "Digest <today's date>"
+   using ISO format, e.g. "Digest 2026-07-30". Put the digest in the card
+   description.
+5. If the Stalled section has any entries, apply the "blocked" label to each
+   stalled card you named. Do not remove labels you did not add.
+
+Report what you did in one sentence, naming the card you created.
+
+Never move a card between columns, never delete a card, and never edit a card
+description other than the digest card you created in this run. If the board has
+no cards at all, create no card and say so instead.
+```
+
+Then, before saving:
+
+- In the **Tools** card, under _Productivity_, switch on **Kanban**.
+- In the **Skills** card, switch on **write-board-digest**.
+
+Click **Save**.
+
+<Callout type="warning">
+  The last paragraph of those Instructions is the load-bearing one. An Agent
+  with the **Kanban** Tool set can move, relabel and delete cards, and a model
+  asked for "a digest" will sometimes decide tidying the board is helpful. Bound
+  what it may change, in writing, or you will find out which cards it thought
+  were done.
+</Callout>
+
+## 4. Try it in a Chat first
+
+Open a Chat, select **Board digest**, and type `Write today's digest.`
+
+You should see it call a Kanban tool to read the board, fetch each card with its
+history, call `loadSkill` to fetch the format, then create a card. Expand the
+tool calls in the transcript to check each step. Then open the Board and read the
+card it filed.
+
+Getting this right before you schedule it matters — a Trigger run has nobody
+watching it, so a formatting mistake quietly accumulates one card a day.
+
+If the digest is wrong, fix the **Skill body**. If it did the wrong _thing_ —
+moved a card, skipped the label step, guessed dates instead of reading the
+history — fix the Agent's **Instructions**.
+
+## 5. The Trigger
+
+**Triggers → Create trigger**:
+
+- **Trigger Type**: **Cron**
+- **Name**: `Daily digest`
+- **Agent**: `Board digest`
+- **Instruction**: `Write today's digest and file it on the My work board.`
+- **Schedule Mode**: **Advanced**
+- **Cron Expression**: `0 9 * * 1-5`
+- **Timezone**: your own zone
+
+Leave **Enabled** on and save. The **Next Run Preview** tells you whether you got
+the expression right before you wait a day to find out.
+
+<Callout type="warning">
+  Set the **Timezone** on the Trigger. The deployment-wide timezone setting does
+  **not** affect Trigger schedules — it only changes what the time tools report.
+  Leave the field on a zone you didn't mean and your 9am digest lands at 9am
+  somewhere else.
+</Callout>
+
+## 6. Confirm it fired
+
+The morning after, from the **Triggers** list, open the Trigger's three-dot menu
+and choose **View runs**. A green run and a new card in `Digests` is the whole
+acceptance test.
+
+A run that failed shows its error there. The most common ones:
+
+| What the run says                     | Usually means                                                        |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| Failed, naming a repeated tool call    | The Agent looped — it couldn't find the board, or the column name in the Instructions doesn't match the Board exactly |
+| Succeeded, but no card appeared        | The Agent decided not to; check its one-sentence report in the run    |
+| Failed with a Provider error           | Credentials or a model id — the same failure a Chat would show        |
+
+## What to take from this
+
+- **Instructions say what to do and what not to touch.** A Skill says how to
+  format. Splitting them means you can change the format without re-testing the
+  behaviour.
+- **A Board is a two-way surface.** The Agent writes to the same Board you work
+  on, and reads back the moves you and your Agents made on it.
+- **Try it in a Chat, then schedule it.** The Chat is where you can see the tool
+  calls.
+- **A granted Tool set is real write access.** Bound it in the prompt.
+
+## Where to next
+
+- **[Notifications](/building-with-platypus/notifications)** — have it tell you
+  when something is stalled, instead of you checking the board.
+- **[Dashboards](/building-with-platypus/dashboards)** — put the stalled count on
+  a widget.
+- **[Triggers](/building-with-platypus/triggers)** — event Triggers, so a card
+  moving fires an Agent rather than a clock.

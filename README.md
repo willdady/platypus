@@ -49,7 +49,7 @@ Platypus is an open-source, full-stack application for building AI Agents that r
 
 ![The Agents page of a Workspace, listing Agents with their tool sets, skills, and sub-agents](assets/01_screenshot.png)
 
-See it all come together in the [standup bot worked example](https://docs.platypus.chat/building-with-platypus/standup-bot).
+See it all come together in the [daily board digest worked example](https://docs.platypus.chat/building-with-platypus/board-digest).
 
 ## 🚀 Quick Start (Docker)
 

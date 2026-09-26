@@ -16,7 +16,7 @@ const meta = {
   dashboards: "Dashboards",
   notifications: "Notifications",
   webhooks: "Webhooks",
-  "standup-bot": "Worked example: a standup bot",
+  "board-digest": "Worked example: a daily board digest",
 };
 
 export default meta;
