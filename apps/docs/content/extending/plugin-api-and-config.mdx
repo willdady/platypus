@@ -151,9 +151,10 @@ Some plugins need settings that belong to the **Operator**, not to an end user: 
 region, an API token. Declare them as `configSchema` (non-secret) and
 `credentialsSchema` (secret) on the manifest itself.
 
-The Operator supplies the values through
-[`PLATYPUS_PLUGIN_CONFIG`](/self-hosting/configuration#plugin-config--credentials),
-a single JSON object keyed by manifest `name`. Core validates them at boot and
+The Operator supplies the values through your Plugin's own
+[`PLATYPUS_PLUGIN_CONFIG_<NAME>`](/self-hosting/configuration#plugin-config--credentials)
+variable, named from your manifest `name`: `acme-search` reads
+`PLATYPUS_PLUGIN_CONFIG_ACME_SEARCH`. Core validates them at boot and
 injects the resolved block into **every one** of your contributions:
 
 - a **Tool set** factory receives it as an appended second argument;

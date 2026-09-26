@@ -34,7 +34,7 @@ const NANO_CPUS = 2 * 1_000_000_000; // 2 CPUs
 const SECURITY_OPT = ["no-new-privileges:true"];
 
 // Plugin-level, Operator-owned config for @platypus/docker (ADR-0013), supplied
-// via PLATYPUS_PLUGIN_CONFIG and validated at boot. `allowedNetworks` is the
+// via PLATYPUS_PLUGIN_CONFIG_DOCKER and validated at boot. `allowedNetworks` is the
 // Operator-declared allowlist of Docker networks a Sandbox may attach to
 // (ADR-0005), defaulting to `[]` — an empty allowlist keeps the default-deny
 // posture when the Operator lists the plugin but supplies no config block. Pure

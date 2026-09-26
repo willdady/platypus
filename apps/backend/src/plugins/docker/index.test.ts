@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   PLUGIN_API_VERSION,
   type SandboxBackendContribution,
@@ -10,6 +10,10 @@ import { getPluginConfig, setLoadedPlugins } from "../registry.ts";
 import { getSandboxBackend } from "../../sandbox/index.ts";
 
 describe("@platypus/docker plugin manifest", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("declares its identity and API version", () => {
     expect(plugin.name).toBe("@platypus/docker");
     expect(plugin.version).toBe("0.1.0");
@@ -96,5 +100,21 @@ describe("@platypus/docker plugin manifest", () => {
     expect(
       readAllowedDockerNetworks(getPluginConfig("@platypus/docker")),
     ).toEqual(["shared"]);
+  });
+
+  it("reads its allowlist from PLATYPUS_PLUGIN_CONFIG_DOCKER", async () => {
+    // A core name drops its `@platypus/` scope in the per-plugin var name.
+    vi.stubEnv(
+      "PLATYPUS_PLUGIN_CONFIG_DOCKER",
+      '{"config":{"allowedNetworks":["shared"]}}',
+    );
+    const loaded = await loadPlugins({
+      pluginNames: ["@platypus/docker"],
+      registerSandbox: () => {},
+    });
+    setLoadedPlugins(loaded);
+    expect(getPluginConfig("@platypus/docker")).toEqual({
+      allowedNetworks: ["shared"],
+    });
   });
 });

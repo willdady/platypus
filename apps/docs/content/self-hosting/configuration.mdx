@@ -191,16 +191,12 @@ empty list unless it says otherwise, and silently runs without web-fetch.
   sides: what the plugin reported, and what Platypus reported about it.
 
 <Callout type="warning">
-  **`compose.sandbox.yaml` replaces `PLATYPUS_PLUGINS` — it does not merge.**
-  The overlay sets the variable under `services.backend.environment`, which
-  Compose resolves at higher precedence than the base `env_file: .env`. Whatever
-  you wrote in `.env` is discarded, not appended to. The overlay ships
-  `@platypus/web-fetch,@platypus/docker`, so an operator who adds
-  `@platypus/ssh` to `.env` and then composes the overlay silently loses it —
-  no error, the SSH backend simply isn't registered. When you run the overlay,
-  the list **inside `compose.sandbox.yaml`** must be your deployment's complete
-  gate-able set. Confirm what actually loaded in **Organization settings →
-  Plugins**.
+  **`compose.sandbox.yaml` adds `@platypus/docker` to your `PLATYPUS_PLUGINS`.**
+  The overlay appends it to the list in `.env`, so every plugin you already list
+  keeps loading. Don't also list `@platypus/docker` in `.env`: composing the
+  overlay then names it twice, and boot aborts with `Plugin "@platypus/docker"
+  is listed more than once in PLATYPUS_PLUGINS`. Remove it from `.env` and keep
+  the overlay.
 </Callout>
 
 See [Extending → the plugin model](/extending/plugin-api-and-config#the-plugin-model)
@@ -224,30 +220,36 @@ restart.
 ### Plugin config & credentials
 
 Some plugins need deploy-time settings — a region, an API token — that are the
-**Operator's** to set, not an end user's. `PLATYPUS_PLUGIN_CONFIG` carries them:
-a single JSON object keyed by plugin name, each value an optional `config`
-(non-secret) and `credentials` (secret) block.
+**Operator's** to set, not an end user's. Each plugin takes them from its own
+variable, `PLATYPUS_PLUGIN_CONFIG_<NAME>`, holding one JSON object with an
+optional `config` (non-secret) and `credentials` (secret) block:
 
-```jsonc
-// PLATYPUS_PLUGIN_CONFIG (as a single-line env value)
-{
-  "cloud-sandbox": {
-    "config": { "region": "eu" },
-    "credentials": { "apiToken": "dtn_live_…" },
-  },
-}
+```bash
+PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX={"config":{"region":"eu"},"credentials":{"apiToken":"dtn_live_…"}}
+PLATYPUS_PLUGIN_CONFIG_DOCKER={"config":{"allowedNetworks":["shared-services"]}}
 ```
 
-- **One namespace, one block per plugin.** A plugin's config/credentials are
-  keyed by its **plugin name** (the manifest `name` — for a third-party plugin a
-  short slug like `cloud-sandbox`, _not_ the npm package specifier you list in
-  `PLATYPUS_PLUGINS`) and validated **at boot** against the schemas its manifest
-  declares. A malformed or missing required value is **fail-loud** — startup
-  aborts with a plugin-named error, the same posture as the plugin list. A config
-  entry whose key matches no loaded plugin is itself fail-loud (a typo never
-  silently drops a credential), and so is a manifest `name` two loaded plugins
-  share — otherwise the two would resolve one block between them, and one would
-  be handed the other's credentials.
+`<NAME>` comes from the plugin's **manifest name**, not the package specifier
+you list in `PLATYPUS_PLUGINS`: drop a leading `@platypus/`, uppercase it, and
+turn each `-` into `_`.
+
+| Manifest name                          | Variable                               |
+| -------------------------------------- | -------------------------------------- |
+| `@platypus/docker`                     | `PLATYPUS_PLUGIN_CONFIG_DOCKER`        |
+| `@platypus/web-fetch`                  | `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`     |
+| `cloud-sandbox` (a third-party plugin) | `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX` |
+
+A third-party plugin's manifest name is the name its line in the boot log and
+**Organization settings → Plugins** show.
+
+- **Validated at boot, fail-loud.** Each block is checked against the schemas
+  the plugin's manifest declares. A malformed or missing required value aborts
+  startup with a plugin-named error, the same posture as the plugin list. So
+  does a variable that is not valid JSON, and a `PLATYPUS_PLUGIN_CONFIG_<NAME>`
+  that matches no loaded plugin — a typo never silently drops a credential. If
+  two loaded plugins map to the same variable (a core plugin and a third-party
+  one whose names differ only by the `@platypus/` scope), boot aborts naming
+  both, and so does a manifest name two loaded plugins share.
 - **The credential block is shared, deployment-wide.** The one block is injected
   into _every_ one of that plugin's contributions and serves _all_ tenants — a
   plugin's Sandbox backend and its management Tool set read the same token. This
@@ -260,13 +262,34 @@ a single JSON object keyed by plugin name, each value an optional `config`
   merge.
 - **Only plugins that declare schemas consume it.** A plugin with no
   plugin-level `configSchema` / `credentialsSchema` (e.g. `@platypus/tools-basic`)
-  ignores any entry. `@platypus/docker` **does** take an entry — its Operator
-  network allowlist lives here as `config.allowedNetworks` (see the Docker bullet
-  under [Sandbox](#sandbox) below); its genuinely per-Workspace settings still
-  live on the Sandbox row.
+  ignores its block. `@platypus/docker` **does** take one — its Operator network
+  allowlist lives here as `config.allowedNetworks` (see the Docker bullet under
+  [Sandbox](#sandbox) below); its genuinely per-Workspace settings still live on
+  the Sandbox row.
 
-Treat `PLATYPUS_PLUGIN_CONFIG` like any secret-bearing env var: inject it from
-your secret manager, never commit it.
+Treat every `PLATYPUS_PLUGIN_CONFIG_<NAME>` like any secret-bearing env var:
+inject it from your secret manager, never commit it.
+
+<Callout type="warning">
+  **`PLATYPUS_PLUGIN_CONFIG` is deprecated** and will be removed in the next
+  major release. It still works, and boot logs a `warn` while it is set. It is
+  one JSON object keyed by manifest name; migrate by moving each key's value
+  into that plugin's own variable:
+
+```bash
+# Before
+PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services"]}},"cloud-sandbox":{"credentials":{"apiToken":"dtn_live_…"}}}
+
+# After
+PLATYPUS_PLUGIN_CONFIG_DOCKER={"config":{"allowedNetworks":["shared-services"]}}
+PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX={"credentials":{"apiToken":"dtn_live_…"}}
+```
+
+The two are never merged. A plugin configured in both its own variable and
+`PLATYPUS_PLUGIN_CONFIG` aborts boot, so move a plugin's block in one step
+rather than copying it.
+
+</Callout>
 
 ## Sandbox
 
@@ -279,13 +302,13 @@ registered and its sandbox configuration is inert:
   daemon; development / single-node only. It needs the opt-in
   `compose.sandbox.yaml` overlay, which mounts the Docker socket and so grants the
   backend container effective root on the host. Its Operator allowlist —
-  `config.allowedNetworks` in the plugin's `PLATYPUS_PLUGIN_CONFIG` entry — bounds
+  `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG_DOCKER` — bounds
   which Docker networks an Org Admin may attach a sandbox to. Unset or empty means
   **none are attachable**, and an Org Admin then picks a per-Sandbox subset of
   whatever you listed:
 
   ```
-  PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services","public-tools"]}}}
+  PLATYPUS_PLUGIN_CONFIG_DOCKER={"config":{"allowedNetworks":["shared-services","public-tools"]}}
   ```
 
 - **SSH** — `@platypus/ssh`. Attaches to a pre-existing, operator-owned host over

@@ -41,7 +41,7 @@ const turndown = new TurndownService({ headingStyle: "atx" });
 
 // The Web Fetch Tool set, parameterised by the plugin's deploy-time config. The
 // `@platypus/web-fetch` manifest resolves `ignoreRobotsTxt` from
-// PLATYPUS_PLUGIN_CONFIG (ADR-0013) and passes it in here, so the flag is a
+// PLATYPUS_PLUGIN_CONFIG_WEB_FETCH (ADR-0013) and passes it in here, so the flag is a
 // plugin-config value rather than a bare process.env read.
 //
 // Egress is guarded by core, not by this plugin: `checkEgress` is shared with the
@@ -95,7 +95,7 @@ export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
       if (!allowed) {
         return {
           error:
-            "Fetching this URL is disallowed by robots.txt. Set the @platypus/web-fetch plugin's config.ignoreRobotsTxt to true (via PLATYPUS_PLUGIN_CONFIG) to override.",
+            "Fetching this URL is disallowed by robots.txt. Set the @platypus/web-fetch plugin's config.ignoreRobotsTxt to true (via PLATYPUS_PLUGIN_CONFIG_WEB_FETCH) to override.",
         };
       }
 

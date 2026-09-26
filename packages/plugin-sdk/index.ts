@@ -537,7 +537,7 @@ export interface WebBackendExecutors {
  * `credentialsSchema`: those exist on a Sandbox backend to validate real
  * per-Workspace jsonb columns, and a web backend has no such row — the schema
  * lives where the row lives. A backend's API key and endpoint ride the
- * **plugin-level** schemas via `PLATYPUS_PLUGIN_CONFIG`, boot-validated and
+ * **plugin-level** schemas via `PLATYPUS_PLUGIN_CONFIG_<NAME>`, boot-validated and
  * injected here as `plugin.credentials`.
  */
 export interface WebBackendContribution {

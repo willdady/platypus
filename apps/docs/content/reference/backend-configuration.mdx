@@ -41,12 +41,13 @@ For a guided walkthrough of configuring a deployment, see
 
 ## Plugins
 
-| Variable                 | Purpose                                                                                                                                                              | Default                                                                          | Required |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------- |
-| `PLATYPUS_PLUGINS`       | Comma-separated list of the **gate-able** plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, plus any third-party ones. | _(unset ⇒ no gate-able plugins;_ `.env.example` _ships_ `@platypus/web-fetch`_)_ | No       |
-| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time plugin config and credentials as one JSON object keyed by plugin name, each `{ "config": {…}, "credentials": {…} }`.                                     | _(unset)_                                                                        | No       |
+| Variable                        | Purpose                                                                                                                                                                                                                                                                       | Default                                                                          | Required |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------- |
+| `PLATYPUS_PLUGINS`              | Comma-separated list of the **gate-able** plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, plus any third-party ones.                                                                                                          | _(unset ⇒ no gate-able plugins;_ `.env.example` _ships_ `@platypus/web-fetch`_)_ | No       |
+| `PLATYPUS_PLUGIN_CONFIG_<NAME>` | One plugin's deploy-time config and credentials as a JSON object, `{ "config": {…}, "credentials": {…} }`. `<NAME>` is the plugin's manifest name without `@platypus/`, uppercased, with `-` as `_`: `PLATYPUS_PLUGIN_CONFIG_DOCKER`, `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX`. | _(unset)_                                                                        | No       |
+| `PLATYPUS_PLUGIN_CONFIG`        | **Deprecated; removed in the next major release.** Every plugin's config in one JSON object keyed by manifest name. Migrate by moving each key's value into that plugin's `PLATYPUS_PLUGIN_CONFIG_<NAME>`.                                                                    | _(unset)_                                                                        | No       |
 
-Both are **fail-loud at boot**, and the always-on core plugins must not be listed
+All three are **fail-loud at boot**, and the always-on core plugins must not be listed
 in `PLATYPUS_PLUGINS`. The tier model, what list membership means, and how plugin
 config is namespaced and shared across a plugin's contributions are in
 [Configuration → Plugins](/self-hosting/configuration#plugins) and
@@ -209,7 +210,7 @@ default is permissive, are in
 [the egress guard](/self-hosting/configuration#the-egress-guard).
 
 `robots.txt` handling for the fetch tool is plugin config, not a variable: set
-`config.ignoreRobotsTxt` on `@platypus/web-fetch` via `PLATYPUS_PLUGIN_CONFIG`
+`config.ignoreRobotsTxt` in `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`
 (see [Plugins](#plugins)).
 
 ## Storage
@@ -267,7 +268,7 @@ table in this section because there is nothing to enumerate.
 
 Both are enabled by listing the plugin — `@platypus/docker` or `@platypus/ssh` —
 in [`PLATYPUS_PLUGINS`](#plugins). Everything else is configured elsewhere: the
-Docker network allowlist as `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG`,
+Docker network allowlist as `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG_DOCKER`,
 and the whole SSH connection surface as per-Workspace Sandbox settings an Org
 Admin enters in the app.
 

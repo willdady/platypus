@@ -89,7 +89,9 @@ interface RawPluginConfig {
 }
 
 // The full Operator-supplied config map, keyed by plugin name (`manifest.name`).
-// Parsed from `PLATYPUS_PLUGIN_CONFIG` (see {@link parsePluginConfig}).
+// Parsed from the deprecated combined `PLATYPUS_PLUGIN_CONFIG` (see {@link
+// parsePluginConfig}); per-plugin `PLATYPUS_PLUGIN_CONFIG_<NAME>` vars are read
+// alongside it at load time.
 export type PluginConfigMap = Record<string, RawPluginConfig>;
 
 /**
@@ -141,8 +143,9 @@ export interface LoadPluginsOptions {
    */
   registerWeb?: (registration: WebBackendRegistration) => void;
   /**
-   * Deploy-time plugin config/credentials keyed by plugin name. Defaults to
-   * parsing `PLATYPUS_PLUGIN_CONFIG` (see {@link parsePluginConfig}).
+   * Deploy-time plugin config/credentials keyed by plugin name, standing in for
+   * the combined `PLATYPUS_PLUGIN_CONFIG` (see {@link parsePluginConfig}).
+   * Per-plugin `PLATYPUS_PLUGIN_CONFIG_<NAME>` vars are still read from the env.
    */
   pluginConfig?: PluginConfigMap;
   /**
@@ -162,35 +165,44 @@ export const parsePluginList = (raw: string | undefined): string[] =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-/**
- * Parse the `PLATYPUS_PLUGIN_CONFIG` value — a JSON object keyed by plugin name,
- * each value an optional `{ config?, credentials? }` — into a {@link
- * PluginConfigMap}. Plugin names carry `@scope/name` slashes, so a single JSON
- * blob keyed by name is the one config namespace (ADR-0013), not per-plugin env
- * vars. An unset/empty value yields `{}`. Fail-loud: malformed JSON, a non-object
- * root, or a non-object entry aborts boot.
- */
-export const parsePluginConfig = (raw: string | undefined): PluginConfigMap => {
-  const trimmed = (raw ?? "").trim();
-  if (trimmed.length === 0) return {};
-
+// Parse an env var's JSON value into an object, fail-loud and naming the var.
+const parseJsonObject = (
+  varName: string,
+  raw: string,
+  expected: string,
+): object => {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(trimmed);
+    parsed = JSON.parse(raw);
   } catch (cause) {
     throw new Error(
-      `PLATYPUS_PLUGIN_CONFIG is not valid JSON (${
+      `${varName} is not valid JSON (${
         cause instanceof Error ? cause.message : String(cause)
       }).`,
       { cause },
     );
   }
-
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(
-      `PLATYPUS_PLUGIN_CONFIG must be a JSON object keyed by plugin name.`,
-    );
+    throw new Error(`${varName} must be a JSON object ${expected}.`);
   }
+  return parsed;
+};
+
+/**
+ * Parse the deprecated combined `PLATYPUS_PLUGIN_CONFIG` value — a JSON object
+ * keyed by plugin name, each value an optional `{ config?, credentials? }` —
+ * into a {@link PluginConfigMap}. An unset/empty value yields `{}`. Fail-loud:
+ * malformed JSON, a non-object root, or a non-object entry aborts boot.
+ */
+export const parsePluginConfig = (raw: string | undefined): PluginConfigMap => {
+  const trimmed = (raw ?? "").trim();
+  if (trimmed.length === 0) return {};
+
+  const parsed = parseJsonObject(
+    "PLATYPUS_PLUGIN_CONFIG",
+    trimmed,
+    "keyed by plugin name",
+  );
 
   const map: PluginConfigMap = {};
   for (const [pluginName, entry] of Object.entries(parsed)) {
@@ -201,6 +213,44 @@ export const parsePluginConfig = (raw: string | undefined): PluginConfigMap => {
     }
     const { config, credentials } = entry as RawPluginConfig;
     map[pluginName] = { config, credentials };
+  }
+  return map;
+};
+
+const PER_PLUGIN_CONFIG_PREFIX = "PLATYPUS_PLUGIN_CONFIG_";
+
+/**
+ * The env var carrying one plugin's deploy-time config: a core name drops its
+ * `@platypus/` scope, then uppercase with `-` → `_`. `@platypus/web-fetch` →
+ * `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`, `cloud-sandbox` →
+ * `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX`.
+ */
+const pluginConfigVar = (manifestName: string): string =>
+  PER_PLUGIN_CONFIG_PREFIX +
+  manifestName
+    .replace(/^@platypus\//, "")
+    .toUpperCase()
+    .replaceAll("-", "_");
+
+/**
+ * Read every `PLATYPUS_PLUGIN_CONFIG_<NAME>` var into a map keyed by var name,
+ * each value one plugin's `{ config?, credentials? }`. Empty values are treated
+ * as unset. Fail-loud on malformed JSON or a non-object value.
+ */
+const parsePerPluginConfig = (
+  env: Record<string, string | undefined>,
+): Map<string, RawPluginConfig> => {
+  const map = new Map<string, RawPluginConfig>();
+  for (const [varName, raw] of Object.entries(env)) {
+    if (!varName.startsWith(PER_PLUGIN_CONFIG_PREFIX)) continue;
+    const trimmed = (raw ?? "").trim();
+    if (trimmed.length === 0) continue;
+    const { config, credentials } = parseJsonObject(
+      varName,
+      trimmed,
+      'with optional "config" / "credentials"',
+    ) as RawPluginConfig;
+    map.set(varName, { config, credentials });
   }
   return map;
 };
@@ -389,8 +439,14 @@ export async function loadPlugins(
   const register = opts.register ?? registerToolSet;
   const registerSandbox = opts.registerSandbox ?? registerSandboxBackend;
   const registerWeb = opts.registerWeb ?? registerWebBackend;
-  const pluginConfig =
-    opts.pluginConfig ?? parsePluginConfig(process.env.PLATYPUS_PLUGIN_CONFIG);
+  const combinedRaw = process.env.PLATYPUS_PLUGIN_CONFIG;
+  if (combinedRaw?.trim()) {
+    logger.warn(
+      "PLATYPUS_PLUGIN_CONFIG is deprecated and will be removed in the next major release. Replace it with one PLATYPUS_PLUGIN_CONFIG_<NAME> variable per plugin, each holding that plugin's { config, credentials } block.",
+    );
+  }
+  const pluginConfig = opts.pluginConfig ?? parsePluginConfig(combinedRaw);
+  const perPluginConfig = parsePerPluginConfig(process.env);
   const baseLogger = opts.baseLogger ?? logger;
 
   // Tracks contribution id -> owning plugin name for owner-attributed
@@ -404,6 +460,11 @@ export async function loadPlugins(
   // if the error names the two PLATYPUS_PLUGINS entries to look at, and the
   // manifest carries only the name they share.
   const manifestNameOwners = new Map<string, string>();
+
+  // Per-plugin config var -> the manifest name that maps to it. The mapping
+  // drops the core scope, so core `@platypus/x` and a third-party slug `x`
+  // would both read PLATYPUS_PLUGIN_CONFIG_X.
+  const configVarOwners = new Map<string, string>();
 
   // The Extension-point table. Every point runs the same registration sequence
   // (`contribution-pipeline.ts`) over its slice of a manifest and differs only
@@ -502,6 +563,25 @@ export async function loadPlugins(
     }
     manifestNameOwners.set(manifest.name, name);
 
+    const configVar = pluginConfigVar(manifest.name);
+    const configVarOwner = configVarOwners.get(configVar);
+    if (configVarOwner !== undefined) {
+      throw new Error(
+        `Plugins "${configVarOwner}" and "${manifest.name}" both read their deploy-time config from ${configVar}, so neither could be configured on its own. One is core and one is third-party; remove the third-party one from PLATYPUS_PLUGINS.`,
+      );
+    }
+    configVarOwners.set(configVar, manifest.name);
+
+    // A plugin's own var and a combined-var entry are never merged: which one
+    // wins would be a guess, so having both aborts boot.
+    const ownConfig = perPluginConfig.get(configVar);
+    const combinedConfig = pluginConfig[manifest.name];
+    if (ownConfig && combinedConfig) {
+      throw new Error(
+        `Plugin "${manifest.name}" is configured in both ${configVar} and PLATYPUS_PLUGIN_CONFIG. Keep ${configVar} and remove the "${manifest.name}" key from PLATYPUS_PLUGIN_CONFIG.`,
+      );
+    }
+
     // Resolve the plugin's deploy-time config/credentials once (fail-loud) and
     // share the single block across every contribution factory below — this
     // object identity IS the "one credential block per plugin" of ADR-0013. The
@@ -509,7 +589,7 @@ export async function loadPlugins(
     // addition reaches all three Extension points with no per-point plumbing.
     const pluginCtx = resolvePluginConfig(
       manifest,
-      pluginConfig[manifest.name] ?? {},
+      ownConfig ?? combinedConfig ?? {},
       baseLogger,
     );
 
@@ -562,6 +642,13 @@ export async function loadPlugins(
     if (!loadedNames.has(key)) {
       throw new Error(
         `PLATYPUS_PLUGIN_CONFIG has an entry for "${key}", but no loaded plugin has that name. Config is keyed by the plugin's manifest name — check for a typo, or a plugin missing from PLATYPUS_PLUGINS.`,
+      );
+    }
+  }
+  for (const varName of perPluginConfig.keys()) {
+    if (!configVarOwners.has(varName)) {
+      throw new Error(
+        `${varName} is set, but no loaded plugin maps to it. The name is the plugin's manifest name uppercased with "-" as "_" (and "@platypus/" dropped) — check for a typo, or a plugin missing from PLATYPUS_PLUGINS.`,
       );
     }
   }

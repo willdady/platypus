@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import pino from "pino";
 import { z } from "zod";
 import {
@@ -21,8 +21,10 @@ import {
   loadPlugins,
   parsePluginConfig,
   parsePluginList,
+  type PluginConfigMap,
   type PluginLoggerParent,
 } from "./loader.ts";
+import { mockLogger } from "../test-setup.ts";
 import { plugin as examplePlugin } from "./example-cloud-sandbox.test-fixtures.ts";
 import {
   registerToolSet,
@@ -1704,6 +1706,148 @@ describe("loadPlugins — deploy-time config targeting (ADR-0013)", () => {
         pluginConfig: { widgets: { config: { region: "eu" } } },
       }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const cloudSandbox: PlatypusPlugin = {
+    ...examplePlugin,
+    name: "cloud-sandbox",
+  };
+
+  const loadCloudSandbox = (pluginConfig?: PluginConfigMap) => {
+    const sandboxCalls: SandboxBackendRegistration[] = [];
+    const result = loadPlugins({
+      pluginNames: ["@acme/cloud-sandbox"],
+      builtinPlugins: {},
+      importPlugin: () => Promise.resolve({ plugin: cloudSandbox }),
+      register: () => {},
+      registerSandbox: (c) => sandboxCalls.push(c),
+      pluginConfig,
+    });
+    return { result, sandboxCalls };
+  };
+
+  it("configures a plugin through its own var, keyed by the uppercased slug", async () => {
+    vi.stubEnv(
+      "PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX",
+      '{"credentials":{"apiToken":"x"}}',
+    );
+    const { result, sandboxCalls } = loadCloudSandbox();
+    await result;
+
+    // The manifest's schemas ran: `region` took its schema default.
+    const backend = sandboxCalls[0].create({}, {}) as unknown as {
+      apiToken: string;
+      region: string;
+    };
+    expect(backend.apiToken).toBe("x");
+    expect(backend.region).toBe("us");
+  });
+
+  it("enforces the plugin's schemas exactly as the combined var does", async () => {
+    vi.stubEnv("PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX", '{"credentials":{}}');
+    await expect(loadCloudSandbox().result).rejects.toThrow(
+      /cloud-sandbox.*credentials failed validation/s,
+    );
+  });
+
+  it("aborts (fail-loud) when a var matches no loaded plugin", async () => {
+    vi.stubEnv(
+      "PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOXX",
+      '{"credentials":{"apiToken":"x"}}',
+    );
+    vi.stubEnv(
+      "PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX",
+      '{"credentials":{"apiToken":"x"}}',
+    );
+    await expect(loadCloudSandbox().result).rejects.toThrow(
+      /PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOXX.*no loaded plugin/s,
+    );
+  });
+
+  it("aborts (fail-loud) on a value that is not valid JSON", async () => {
+    vi.stubEnv("PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX", "{not json");
+    await expect(loadCloudSandbox().result).rejects.toThrow(
+      /PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX is not valid JSON/,
+    );
+  });
+
+  it("aborts (fail-loud) on a value that is not an object", async () => {
+    vi.stubEnv("PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX", '["x"]');
+    await expect(loadCloudSandbox().result).rejects.toThrow(
+      /PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX must be a JSON object/,
+    );
+  });
+
+  it("aborts (fail-loud) when one plugin is configured in both its own var and the combined var", async () => {
+    vi.stubEnv(
+      "PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX",
+      '{"credentials":{"apiToken":"x"}}',
+    );
+    await expect(
+      loadCloudSandbox({
+        "cloud-sandbox": { credentials: { apiToken: "y" } },
+      }).result,
+    ).rejects.toThrow(
+      /"cloud-sandbox".*PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX.*PLATYPUS_PLUGIN_CONFIG/s,
+    );
+  });
+
+  it("aborts (fail-loud) when two loaded plugins map to the same var", async () => {
+    // A core name drops its `@platypus/` scope, so core `@platypus/widgets` and a
+    // third-party `widgets` both land on PLATYPUS_PLUGIN_CONFIG_WIDGETS.
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/widgets", "@acme/widgets"],
+        builtinPlugins: {
+          "@platypus/widgets": () =>
+            Promise.resolve({
+              plugin: manifest("@platypus/widgets", [toolSet("a")]),
+            }),
+        },
+        importPlugin: () =>
+          Promise.resolve({ plugin: manifest("widgets", [toolSet("b")]) }),
+        register: () => {},
+        pluginConfig: {},
+      }),
+    ).rejects.toThrow(
+      /"@platypus\/widgets".*"widgets".*PLATYPUS_PLUGIN_CONFIG_WIDGETS/s,
+    );
+  });
+
+  it("warns once that the combined var is deprecated whenever it is set", async () => {
+    vi.stubEnv(
+      "PLATYPUS_PLUGIN_CONFIG",
+      '{"cloud-sandbox":{"credentials":{"apiToken":"x"}}}',
+    );
+    const { result, sandboxCalls } = loadCloudSandbox();
+    await result;
+
+    // Behaviour is otherwise unchanged: the combined entry still configures it.
+    const backend = sandboxCalls[0].create({}, {}) as unknown as {
+      apiToken: string;
+    };
+    expect(backend.apiToken).toBe("x");
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /PLATYPUS_PLUGIN_CONFIG is deprecated.*next major release.*PLATYPUS_PLUGIN_CONFIG_<NAME>/s,
+      ),
+    );
+  });
+
+  it("does not warn when the combined var is unset", async () => {
+    vi.stubEnv(
+      "PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX",
+      '{"credentials":{"apiToken":"x"}}',
+    );
+    await loadCloudSandbox().result;
+    expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });
 

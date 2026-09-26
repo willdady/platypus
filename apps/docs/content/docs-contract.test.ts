@@ -267,12 +267,15 @@ const REMOVED_VARS = new Set<string>([]);
 
 /**
  * Real variables that no `.env.example` ships, so the reference page is their
- * only home. Both are read by the frontend (`next.config.ts` and the About
- * page) and neither is something a deployment normally sets.
+ * only home. The first two are read by the frontend (`next.config.ts` and the
+ * About page) and neither is something a deployment normally sets.
+ * `PLATYPUS_PLUGIN_CONFIG` is deprecated, so the example files show the
+ * per-plugin `PLATYPUS_PLUGIN_CONFIG_<NAME>` form instead.
  */
 const VARS_WITHOUT_ENV_EXAMPLE_ENTRY = new Set([
   "ALLOWED_DEV_ORIGINS",
   "NEXT_PUBLIC_APP_VERSION",
+  "PLATYPUS_PLUGIN_CONFIG",
 ]);
 
 /**
@@ -306,6 +309,20 @@ const variableRows = (content: string): Map<string, number> => {
     });
   }
   return rows;
+};
+
+/**
+ * Whether a table row documents `name`. A row spelled `PREFIX_<NAME>` stands for
+ * a family of variables, one per `<NAME>` — `PLATYPUS_PLUGIN_CONFIG_<NAME>` is
+ * one variable per plugin — so it covers every assignment of `PREFIX_` followed
+ * by a name, and a `.env.example` shows the family through one example member.
+ */
+const rowCovers = (row: string, name: string): boolean => {
+  const family = row.match(/^([A-Z][A-Z0-9_]*_)<[A-Z]+>$/);
+  return family
+    ? name.startsWith(family[1]) &&
+        /^[A-Z0-9_]+$/.test(name.slice(family[1].length))
+    : row === name;
 };
 
 describe("environment variables", () => {
@@ -363,7 +380,12 @@ describe("environment variables", () => {
   it("gives every variable the .env.example files ship a row on its own page", () => {
     const violations: string[] = [];
     for (const [name, { origin, pages }] of declared) {
-      if (pages.some((page) => rowsByPage.get(page)?.has(name))) continue;
+      const onOwedPage = pages.some((page) =>
+        [...(rowsByPage.get(page)?.keys() ?? [])].some((row) =>
+          rowCovers(row, name),
+        ),
+      );
+      if (onOwedPage) continue;
 
       const elsewhere = documentedRows.get(name);
       const owed = pages
@@ -384,7 +406,13 @@ describe("environment variables", () => {
     const violations: string[] = [];
     for (const [page, rows] of rowsByPage) {
       for (const [name, line] of rows) {
-        if (declared.has(name)) continue;
+        if (
+          [...declared.keys()].some((declaredName) =>
+            rowCovers(name, declaredName),
+          )
+        ) {
+          continue;
+        }
         if (REMOVED_VARS.has(name)) continue;
         if (VARS_WITHOUT_ENV_EXAMPLE_ENTRY.has(name)) continue;
         violations.push(

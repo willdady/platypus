@@ -102,7 +102,8 @@ unguarded read throws mid-turn.
 - **Web-search backends** (`contributes.webBackends`) — see below.
 
 Plugins may also declare deploy-time, Operator-owned `configSchema` /
-`credentialsSchema`, supplied via `PLATYPUS_PLUGIN_CONFIG` and validated at boot.
+`credentialsSchema`, supplied via the plugin's own `PLATYPUS_PLUGIN_CONFIG_<NAME>`
+variable and validated at boot.
 
 ## Logging
 

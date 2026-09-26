@@ -251,14 +251,12 @@ different upstreams. Key your own config by `orgId` or `workspaceId` and choose
 inside the factory:
 
 ```jsonc
-// PLATYPUS_PLUGIN_CONFIG
+// PLATYPUS_PLUGIN_CONFIG_ACME_SEARCH
 {
-  "acme-search": {
-    "config": {
-      "endpoints": {
-        "org-dmz-team": "https://searx.dmz.internal",
-        "default": "https://searx.internal",
-      },
+  "config": {
+    "endpoints": {
+      "org-dmz-team": "https://searx.dmz.internal",
+      "default": "https://searx.internal",
     },
   },
 }

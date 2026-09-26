@@ -42,7 +42,7 @@ export const plugin: PlatypusPlugin = {
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,
   // Plugin-level, Operator-owned config (ADR-0013): the network allowlist is
-  // declared here as `allowedNetworks` and consumed via PLATYPUS_PLUGIN_CONFIG.
+  // declared here as `allowedNetworks` and consumed via PLATYPUS_PLUGIN_CONFIG_DOCKER.
   // No credentialsSchema — Docker has no plugin-level secrets.
   configSchema: dockerPluginConfigSchema,
   contributes: {

@@ -49,12 +49,11 @@ into the backend container.
 
 Because of that, the adapter is **off by default** and gated two ways:
 
-1. Plugin enablement. The adapter ships as the core plugin `@platypus/docker`;
-   enable it by listing `@platypus/docker` in `PLATYPUS_PLUGINS`. Omit it and the
-   `"docker"` backend type isn't registered at all (so you can't create
-   un-runnable Sandbox rows).
+1. Plugin enablement. The adapter ships as the core plugin `@platypus/docker`,
+   which has to be in `PLATYPUS_PLUGINS`. Without it the `"docker"` backend type
+   isn't registered at all (so you can't create un-runnable Sandbox rows).
 2. An opt-in compose overlay, `compose.sandbox.yaml`, which adds the socket mount
-   and lists the plugin.
+   and adds `@platypus/docker` to the `PLATYPUS_PLUGINS` list from your `.env`.
 
 Enable it by composing the overlay alongside the default stack:
 
@@ -63,9 +62,10 @@ docker compose -f compose.yaml -f compose.sandbox.yaml up
 ```
 
 <Callout type="warning">
-  **The overlay replaces `PLATYPUS_PLUGINS`; it does not merge.** Whatever list
-  you put in `.env` is discarded, silently. Edit the list **inside
-  `compose.sandbox.yaml`** to your deployment's complete gate-able set — see
+  **Don't also list `@platypus/docker` in `.env`.** The overlay adds it for you,
+  so listing it yourself names it twice and boot aborts with `Plugin
+  "@platypus/docker" is listed more than once in PLATYPUS_PLUGINS`. The rest of
+  your `.env` list keeps loading — see
   [Configuration → Plugins](/self-hosting/configuration#plugins).
 </Callout>
 
@@ -113,7 +113,7 @@ per-Sandbox fields on the Docker adapter, both defaulting to empty:
 The authority chain is honest and runs top-down:
 
 - The **Operator** declares the eligible set at deployment time via
-  `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG` — a
+  `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG_DOCKER` — a
   JSON array set at the deployment layer, *not* an in-app screen.
 - An **Org Admin** selects a per-Sandbox subset of that allowlist. Submissions
   are validated server-side against the allowlist; out-of-allowlist entries are

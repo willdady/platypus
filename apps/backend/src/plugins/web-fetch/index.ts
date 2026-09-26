@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createWebFetchTools } from "../../tools/fetch.ts";
 
 // Deploy-time plugin config (ADR-0013): the Operator sets this under
-// PLATYPUS_PLUGIN_CONFIG["@platypus/web-fetch"].config. `ignoreRobotsTxt`
+// PLATYPUS_PLUGIN_CONFIG_WEB_FETCH, under `config`. `ignoreRobotsTxt`
 // replaces the former FETCH_TOOL_IGNORE_ROBOTS_TXT env var — a plugin's
 // deploy-time knobs belong in its one config namespace, not a bespoke env var.
 const webFetchConfigSchema = z
