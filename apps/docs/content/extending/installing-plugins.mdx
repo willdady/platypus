@@ -251,10 +251,9 @@ Keep the list in **one** place: `.env`, the `environment` of your
 Compose file's `environment` wins over `.env`, and `.env` wins over the image's
 `ENV`. So a list baked into the image is ignored while `.env` still sets one;
 remove it from `.env` if you bake it in. The Sandbox overlay
-`compose.sandbox.yaml` is the one exception: it adds `@platypus/docker` to the
-list from `.env` rather than replacing it, so keep your plugins in `.env` and
-don't list `@platypus/docker` there too (see
-[Plugins](/self-hosting/configuration#plugins)).
+`compose.sandbox.yaml` sets its own list, so composing it discards whatever `.env`
+says (see [Plugins](/self-hosting/configuration#plugins)). When you run that
+overlay, its list has to be your complete set.
 
 Then recreate the backend:
 

@@ -191,12 +191,16 @@ empty list unless it says otherwise, and silently runs without web-fetch.
   sides: what the plugin reported, and what Platypus reported about it.
 
 <Callout type="warning">
-  **`compose.sandbox.yaml` adds `@platypus/docker` to your `PLATYPUS_PLUGINS`.**
-  The overlay appends it to the list in `.env`, so every plugin you already list
-  keeps loading. Don't also list `@platypus/docker` in `.env`: composing the
-  overlay then names it twice, and boot aborts with `Plugin "@platypus/docker"
-  is listed more than once in PLATYPUS_PLUGINS`. Remove it from `.env` and keep
-  the overlay.
+  **`compose.sandbox.yaml` replaces `PLATYPUS_PLUGINS` — it does not merge.**
+  The overlay sets the variable under `services.backend.environment`, which
+  Compose resolves at higher precedence than the base `env_file: .env`. Whatever
+  you wrote in `.env` is discarded, not appended to. The overlay ships
+  `@platypus/web-fetch,@platypus/docker`, so an operator who adds
+  `@platypus/ssh` to `.env` and then composes the overlay silently loses it —
+  no error, the SSH backend simply isn't registered. When you run the overlay,
+  the list **inside `compose.sandbox.yaml`** must be your deployment's complete
+  gate-able set. Confirm what actually loaded in **Organization settings →
+  Plugins**.
 </Callout>
 
 See [Extending → the plugin model](/extending/plugin-api-and-config#the-plugin-model)

@@ -79,7 +79,7 @@ distributable bundle (one package, one version, one config namespace, one enable
 switch) contributing to typed **extension points** that core owns. There are two:
 **Sandbox backends** and **Tool sets**. Plugins are installed by the Operator at deploy
 time, run in-process, and are enabled through `PLATYPUS_PLUGINS` and configured through
-`PLATYPUS_PLUGIN_CONFIG`. The compile-time contract is published as
+one `PLATYPUS_PLUGIN_CONFIG_<NAME>` variable per plugin. The compile-time contract is published as
 [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk);
 third-party plugins load from installed npm packages with their contribution ids
 namespaced by plugin name. See the
