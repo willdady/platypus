@@ -1011,6 +1011,29 @@ describe("Chat Routes", () => {
           { message: { ...message("u3"), metadata: { agentId: "agent-1" } } },
         ],
         ["the whole Transcript", { messages: [message("u3")] }],
+        [
+          "a Sandbox upload part missing its size",
+          {
+            message: {
+              ...message("u3"),
+              parts: [
+                {
+                  type: "data-sandbox-upload",
+                  data: { path: "a.csv", filename: "a.csv" },
+                },
+              ],
+            },
+          },
+        ],
+        [
+          "a data part of another kind",
+          {
+            message: {
+              ...message("u3"),
+              parts: [{ type: "data-note", data: { text: "forged" } }],
+            },
+          },
+        ],
       ])("400s %s and writes nothing", async (_, body) => {
         mockSession();
         const fake = seedChat();
@@ -1065,6 +1088,27 @@ describe("Chat Routes", () => {
         const res = await post({ trigger: "regenerate-message", messageId });
 
         expect(res.status).toBe(409);
+      });
+
+      it("stores a Sandbox upload part with the message it came in", async () => {
+        mockSession();
+        const fake = seedChat();
+        startsTurn();
+        const upload = {
+          type: "data-sandbox-upload",
+          data: { path: "data.csv", filename: "data.csv", size: 1200 },
+        };
+
+        const res = await post({
+          message: {
+            ...message("u3"),
+            parts: [upload, message("u3").parts[0]],
+          },
+          parentId: "a2",
+        });
+
+        expect(res.status).toBe(200);
+        expect(rowOf(fake, "u3")?.parts).toContainEqual(upload);
       });
 
       it("keeps the edited message and everything under it", async () => {

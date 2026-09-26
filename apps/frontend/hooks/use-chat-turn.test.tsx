@@ -154,6 +154,25 @@ describe("useChatTurn starting a turn", () => {
     ]);
   });
 
+  // Files first, as the SDK orders a text-and-files message, then the text.
+  it("sends a message's Sandbox uploads as parts of it", () => {
+    const h = harness();
+    const upload = { path: "data.csv", filename: "data.csv", size: 3 };
+
+    h.turn.send({ text: "", files: [reportPdf], sandboxUploads: [upload] });
+
+    expect(h.sendMessage.mock.calls[0]).toEqual([
+      {
+        parts: [
+          reportPdf,
+          { type: "data-sandbox-upload", data: upload },
+          { type: "text", text: "Sent with attachments" },
+        ],
+      },
+      { body },
+    ]);
+  });
+
   // Named explicitly: the SDK's default names no message, and the server
   // needs the reply's id to know what to run from.
   it("regenerates the named reply with the turn's body, then refreshes the row", () => {

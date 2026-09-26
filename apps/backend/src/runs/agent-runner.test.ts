@@ -97,6 +97,7 @@ vi.mock("ai", async () => {
 });
 
 import { convertToModelMessages } from "ai";
+import { convertDataPart } from "../sandbox/upload-note.ts";
 import { AgentRunner } from "./agent-runner.ts";
 import { ConflictError } from "../errors.ts";
 import { logger } from "../logger.ts";
@@ -1991,7 +1992,7 @@ describe("dangling tool calls in the Transcript", () => {
     },
   ];
 
-  it("converts the Transcript with incomplete tool calls ignored", async () => {
+  it("converts the Transcript with incomplete tool calls ignored and Sandbox uploads as notes", async () => {
     mockPrepareChatTurn.mockReset();
     mockStreamText.mockReset();
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
@@ -2005,7 +2006,7 @@ describe("dangling tool calls in the Transcript", () => {
 
     expect(vi.mocked(convertToModelMessages)).toHaveBeenCalledWith(
       expect.anything(),
-      { ignoreIncompleteToolCalls: true },
+      { ignoreIncompleteToolCalls: true, convertDataPart },
     );
   });
 

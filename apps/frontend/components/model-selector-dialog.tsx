@@ -78,6 +78,11 @@ interface ModelSelectorDialogProps {
    * event and focus their own target, so the close is a single focus move.
    */
   onCloseAutoFocus?: (event: Event) => void;
+  /**
+   * Why the selection cannot change right now. Set, the trigger is disabled
+   * and says why on hover.
+   */
+  lockedReason?: string;
 }
 
 export const ModelSelectorDialog = ({
@@ -92,6 +97,7 @@ export const ModelSelectorDialog = ({
   onModelChange,
   maxOutputTokens,
   onCloseAutoFocus,
+  lockedReason,
 }: ModelSelectorDialogProps) => {
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
@@ -127,6 +133,7 @@ export const ModelSelectorDialog = ({
       className="max-w-40 overflow-hidden sm:max-w-none"
       onMouseDown={keepFocus}
       aria-busy={!isResolved || undefined}
+      disabled={Boolean(lockedReason)}
     >
       {isResolved ? (
         <>
@@ -151,6 +158,19 @@ export const ModelSelectorDialog = ({
       )}
     </Button>
   );
+
+  // A disabled button takes no pointer events, so the tooltip hangs off a
+  // wrapper that does.
+  if (lockedReason) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span tabIndex={0}>{trigger}</span>
+        </TooltipTrigger>
+        <TooltipContent>{lockedReason}</TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <ModelSelector open={isOpen} onOpenChange={onOpenChange}>

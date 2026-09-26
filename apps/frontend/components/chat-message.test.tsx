@@ -121,6 +121,28 @@ describe("ChatMessage image parts", () => {
   });
 });
 
+describe("ChatMessage Sandbox upload parts", () => {
+  // No link: it would serve what the path holds now, not what was uploaded.
+  it("shows the upload's name, path and size, with no download link", () => {
+    const { container } = renderMessage({
+      id: "m1",
+      role: "user",
+      parts: [
+        {
+          type: "data-sandbox-upload",
+          data: { path: "data.csv", filename: "data.csv", size: 1_200_000 },
+        },
+        { type: "text", text: "Summarise it" },
+      ],
+    });
+
+    const chip = screen.getByText("Sandbox").parentElement!;
+    expect(chip).toHaveTextContent("data.csv");
+    expect(chip).toHaveTextContent("1.2 MB");
+    expect(container.querySelector("a")).toBeNull();
+  });
+});
+
 // A Web-search backend's `web_search` result is normalized server-side into
 // `{ kind: "search", results, ... }` and stamped onto `toolMetadata` (issue
 // #525, `apps/backend/src/runs/web-tool-normalize.ts`) before the frontend

@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
-import type { UIMessage } from "ai";
+import type { FileUIPart, UIMessage } from "ai";
+import type { SandboxUpload } from "@platypus/schemas";
 import { toast } from "sonner";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
@@ -11,11 +12,41 @@ import { joinUrl } from "@/lib/utils";
 
 type TurnOptions = { body: Record<string, unknown> };
 
-/** An attachment-only message is a real turn: the question was the file. */
-const outgoing = (message: PromptInputMessage): PromptInputMessage => ({
-  text: message.text || ATTACHMENTS_ONLY_TEXT,
-  files: message.files,
-});
+/** A message to send: its Sandbox uploads have already landed. */
+export type TurnMessage = PromptInputMessage & {
+  sandboxUploads?: SandboxUpload[];
+};
+
+/** What the chat hook's `sendMessage` takes. */
+type Outgoing =
+  | { text: string; files: FileUIPart[] }
+  | {
+      parts: (
+        | FileUIPart
+        | { type: "data-sandbox-upload"; data: SandboxUpload }
+        | { type: "text"; text: string }
+      )[];
+    };
+
+/**
+ * An attachment-only message is a real turn: the question was the file. A
+ * message with Sandbox uploads goes as parts, in the order the SDK gives a
+ * text-and-files one: files, then the text.
+ */
+const outgoing = ({ text, files, sandboxUploads }: TurnMessage): Outgoing => {
+  const words = text || ATTACHMENTS_ONLY_TEXT;
+  if (!sandboxUploads?.length) return { text: words, files };
+  return {
+    parts: [
+      ...files,
+      ...sandboxUploads.map((data) => ({
+        type: "data-sandbox-upload" as const,
+        data,
+      })),
+      { type: "text", text: words },
+    ],
+  };
+};
 
 export interface UseChatTurnInput<T extends UIMessage> {
   selection: ModelSelection;
@@ -25,7 +56,7 @@ export interface UseChatTurnInput<T extends UIMessage> {
   runHeldElsewhere: boolean;
   /** The chat hook's own calls. */
   chat: {
-    sendMessage: (message: PromptInputMessage, options: TurnOptions) => unknown;
+    sendMessage: (message: Outgoing, options: TurnOptions) => unknown;
     regenerate: (options: TurnOptions & { messageId: string }) => unknown;
     stop: () => unknown;
     setMessages: (update: (held: T[]) => T[]) => void;
@@ -85,7 +116,7 @@ export const useChatTurn = <T extends UIMessage>({
   );
 
   const send = useCallback(
-    (message: PromptInputMessage) =>
+    (message: TurnMessage) =>
       start((options) => sendMessage(outgoing(message), options)),
     [sendMessage, start],
   );
@@ -109,11 +140,7 @@ export const useChatTurn = <T extends UIMessage>({
    * already holds.
    */
   const resendEdited = useCallback(
-    (
-      truncateAt: number,
-      message: PromptInputMessage,
-      parentId?: string | null,
-    ) =>
+    (truncateAt: number, message: TurnMessage, parentId?: string | null) =>
       start((options) => {
         setMessages((held) => held.slice(0, truncateAt));
         sendMessage(

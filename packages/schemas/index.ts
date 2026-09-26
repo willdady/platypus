@@ -205,6 +205,39 @@ const chatTurnSchema = chatSchema
   });
 
 /**
+ * The most bytes a Sandbox file transfer moves, either way. Mirrors the plugin
+ * SDK's `SANDBOX_TRANSFER_MAX_BYTES`, which the frontend cannot import; a
+ * backend test pins the two together.
+ */
+export const SANDBOX_TRANSFER_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * A Sandbox upload: a file a User placed in the Workspace's Sandbox from the
+ * chat composer, recorded on the message as a `data-sandbox-upload` part. The
+ * model is told its path and size, never its bytes.
+ */
+export const sandboxUploadSchema = z.object({
+  path: z.string().min(1),
+  filename: z.string().min(1),
+  size: z.number().int().nonnegative(),
+});
+
+export type SandboxUpload = z.infer<typeof sandboxUploadSchema>;
+
+/** A byte count for a person to read: `1.2 MB`, `340 KB`, `12 B`. */
+export const formatFileSize = (bytes: number): string => {
+  if (bytes < 1000) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1000;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit++;
+  }
+  return `${value.toFixed(1).replace(/\.0$/, "")} ${units[unit]}`;
+};
+
+/**
  * A Chat turn: a new user message and the id it follows, or the id of a reply
  * to regenerate.
  *
@@ -218,7 +251,11 @@ export const chatSubmitSchema = z
       message: z.strictObject({
         id: z.string().min(1),
         role: z.literal("user"),
-        parts: z.array(z.looseObject({ type: z.enum(["text", "file"]) })),
+        parts: z.array(
+          z.looseObject({
+            type: z.enum(["text", "file", "data-sandbox-upload"]),
+          }),
+        ),
       }),
       // Always stated, null for a Chat's first message: the server never
       // guesses what a message follows.

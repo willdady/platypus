@@ -63,27 +63,21 @@ prints one — `echo $API_KEY`, a debug dump — hands the value to the model.
 
 ## Moving files in and out
 
-You can upload a file into the Sandbox, or download one out of it, yourself,
-without asking an Agent. The bytes move unaltered, so images, archives and other
-binary files work, up to **25 MiB** each way. When a Workspace has a Sandbox, the
-Workspace home page shows a **Sandbox** card with both controls.
+Files move in and out of the Sandbox unaltered, so images, archives and other
+binary files work, up to **25 MiB** each way. Their contents never pass through
+the model.
 
-- **Upload**: pick a file under **File**, and optionally type a **Destination
-  directory**. Leave it empty and the file lands in the workspace root. The file
-  keeps its name, and missing directories are created. If a file already exists
-  at that path, you're asked whether to overwrite it; cancel and the existing
-  file is left alone.
-- **Download**: type the file's **Path**, relative to the workspace root, and
-  press **Download**. The file always downloads, and never opens in the browser.
+- **Upload**: choose **+ → Upload to Sandbox** in the chat input. The file
+  lands in the workspace root when you send the message — see [Uploading to the
+  Sandbox](/building-with-platypus/chat#uploading-to-the-sandbox).
+- **Download**: ask the Agent for a file as a download. Its `fsDownload` tool
+  puts a **Download** button in the Chat. The file always downloads, and never
+  opens in the browser.
 
-Not every backend supports file transfer. When the Sandbox's backend doesn't,
-the card says **This Sandbox backend doesn't support file transfer** in place of
-that control. Local Docker and SSH support both directions.
-
-An Agent can hand you a file too. Ask for one as a download, and the Agent's
-`fsDownload` tool puts a **Download** button in the Chat. The file's contents
-never reach the model, so this works for binary and large files, up to the same
-**25 MiB**. The Agent only has the tool when the backend supports downloads.
+Not every backend supports file transfer. When the Sandbox's backend can't take
+uploads, the composer doesn't offer **Upload to Sandbox**; when it can't serve
+downloads, the Agent doesn't get `fsDownload`. Local Docker and SSH support both
+directions.
 
 <Callout type="info">
   Setting up a Sandbox is an infrastructure task. See [Sandbox

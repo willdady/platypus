@@ -11,6 +11,7 @@ import {
 } from "../services/chat-execution.ts";
 import type { ToolActivityEvent } from "../services/tool-activity.ts";
 import { logger } from "../logger.ts";
+import { convertDataPart } from "../sandbox/upload-note.ts";
 import { actorUserId, type WorkspaceScope } from "../scope.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { runRegistry, type RunTimeouts } from "./run-registry.ts";
@@ -312,6 +313,7 @@ export class AgentRunner {
     // one seam every drive converts through rather than on the abort path.
     const modelMessages = await convertToModelMessages(turn.stream.messages, {
       ignoreIncompleteToolCalls: true,
+      convertDataPart,
     });
 
     return {

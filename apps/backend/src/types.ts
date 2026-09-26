@@ -1,5 +1,5 @@
-import { type UIMessage, type InferUITool, type UIDataTypes } from "ai";
-import type { CachedInputTokens } from "@platypus/schemas";
+import { type UIMessage, type InferUITool } from "ai";
+import type { CachedInputTokens, SandboxUpload } from "@platypus/schemas";
 import { createLoadSkillTool } from "./tools/skill.ts";
 import type { DelegateTool } from "./tools/sub-agent.ts";
 import type { createFsDownloadTool } from "./sandbox/tools.ts";
@@ -177,8 +177,11 @@ export type CustomUITools = {
   fsDownload: InferUITool<ReturnType<typeof createFsDownloadTool>>;
 };
 
+/** The data parts a message may carry: a User's Sandbox uploads. */
+export type PlatypusDataTypes = { "sandbox-upload": SandboxUpload };
+
 export type PlatypusUIMessage = UIMessage<
   ChatMessageMetadata,
-  UIDataTypes,
+  PlatypusDataTypes,
   CustomUITools
 >;

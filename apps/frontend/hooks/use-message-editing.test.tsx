@@ -66,6 +66,31 @@ describe("useMessageEditing opening an edit", () => {
 });
 
 describe("useMessageEditing submitting an edit", () => {
+  // The part records a past upload: the edit carries it, and nothing is
+  // uploaded again.
+  it("keeps the message's Sandbox uploads on the resent edit", () => {
+    const upload = { path: "data.csv", filename: "data.csv", size: 3 };
+    const { result, resend } = harness([
+      {
+        id: "u1",
+        role: "user",
+        parts: [
+          { type: "data-sandbox-upload", data: upload },
+          { type: "text", text: "Summarise it" },
+        ],
+      },
+    ]);
+
+    act(() => result.current.handleMessageEditStart("u1"));
+    act(() => result.current.handleMessageEditSubmit({ text: "", files: [] }));
+
+    expect(resend).toHaveBeenCalledWith(0, {
+      text: "",
+      files: [],
+      sandboxUploads: [upload],
+    });
+  });
+
   it("resends from the edited message and closes once it started", () => {
     const { result, resend } = harness();
 

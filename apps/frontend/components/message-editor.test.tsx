@@ -95,6 +95,7 @@ describe("MessageEditor", () => {
     expect(onSubmit.mock.calls[0][0]).toEqual({
       text: "What does this actually say?",
       files: [reportPdf],
+      sandboxFiles: [],
     });
   });
 

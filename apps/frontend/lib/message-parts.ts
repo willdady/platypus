@@ -1,4 +1,5 @@
 import type { FileUIPart, TextUIPart } from "ai";
+import type { SandboxUpload } from "@platypus/schemas";
 
 /**
  * The loosest shape these readers need: a part is anything with a `type`, and
@@ -50,3 +51,11 @@ export const messageAttachments = (
   parts: readonly UnknownPart[] | undefined,
 ): FileUIPart[] =>
   (parts ?? []).filter((part): part is FileUIPart => part.type === "file");
+
+/** The Sandbox uploads the message records, in order. */
+export const messageSandboxUploads = (
+  parts: readonly UnknownPart[] | undefined,
+): SandboxUpload[] =>
+  (parts ?? [])
+    .filter((part) => part.type === "data-sandbox-upload")
+    .map((part) => part.data as SandboxUpload);

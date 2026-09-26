@@ -8,7 +8,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { Composer } from "./composer";
-import { PromptInputSpeechButton } from "./ai-elements/prompt-input";
+import {
+  PromptInputSpeechButton,
+  type PromptInputMessage,
+} from "./ai-elements/prompt-input";
 import { toast } from "sonner";
 import {
   composerProvider,
@@ -50,7 +53,13 @@ vi.mock("sonner", () => ({
 /** The session the composer most recently constructed. */
 let recognition: ReturnType<typeof installSpeechRecognition>;
 
-const renderComposer = () => {
+const renderComposer = ({
+  canUploadToSandbox = false,
+  onSubmit = vi.fn(),
+}: {
+  canUploadToSandbox?: boolean;
+  onSubmit?: (message: PromptInputMessage) => void;
+} = {}) => {
   const onModelChange = vi.fn();
 
   const Harness = () => {
@@ -60,7 +69,8 @@ const renderComposer = () => {
 
     return (
       <Composer
-        onSubmit={vi.fn()}
+        onSubmit={onSubmit}
+        canUploadToSandbox={canUploadToSandbox}
         passthroughFileTypes={[]}
         modelSelection={{
           agents: [],
@@ -339,5 +349,115 @@ describe("Composer model picker — unsettled selection", () => {
 
     expect(screen.getByText("Select model")).toBeInTheDocument();
     expect(screen.queryByLabelText("Loading selection")).toBeNull();
+  });
+});
+
+describe("Composer Sandbox uploads", () => {
+  const openMenu = () => {
+    const plus = screen
+      .getAllByRole("button")
+      .find((b) => b.getAttribute("aria-haspopup") === "menu")!;
+    fireEvent.keyDown(plus, { key: "Enter" });
+  };
+
+  const pickForSandbox = (file: File) =>
+    fireEvent.change(screen.getByLabelText("Upload files to Sandbox"), {
+      target: { files: [file] },
+    });
+
+  const csv = () => new File(["a,b"], "data.csv", { type: "text/csv" });
+
+  it("offers Upload to Sandbox when the Chat can upload", () => {
+    renderComposer({ canUploadToSandbox: true });
+    openMenu();
+
+    expect(
+      screen.getByRole("menuitem", { name: /Upload to Sandbox/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides Upload to Sandbox when it cannot", () => {
+    renderComposer();
+    openMenu();
+
+    expect(screen.getByRole("menuitem", { name: /Add photos or files/ }));
+    expect(
+      screen.queryByRole("menuitem", { name: /Upload to Sandbox/ }),
+    ).toBeNull();
+  });
+
+  it("shows a picked file as a Sandbox chip with no preview", () => {
+    renderComposer({ canUploadToSandbox: true });
+
+    pickForSandbox(new File(["x"], "photo.png", { type: "image/png" }));
+
+    expect(screen.getByText("photo.png")).toBeInTheDocument();
+    expect(screen.getByText("Sandbox")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("refuses a file over the transfer bound when it is picked", () => {
+    renderComposer({ canUploadToSandbox: true });
+    const big = csv();
+    Object.defineProperty(big, "size", { value: 25 * 1024 * 1024 + 1 });
+
+    pickForSandbox(big);
+
+    expect(toast.error).toHaveBeenCalled();
+    expect(screen.queryByText("data.csv")).toBeNull();
+  });
+
+  it("locks the Agent picker while a Sandbox chip is held", () => {
+    renderComposer({ canUploadToSandbox: true });
+
+    pickForSandbox(csv());
+
+    const picker = () => screen.getByText("Select model").closest("button");
+    expect(picker()).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove Sandbox upload" }),
+    );
+    expect(picker()).not.toBeDisabled();
+  });
+
+  it("does not lock the picker for a File part alone", () => {
+    const { trigger } = renderComposer({ canUploadToSandbox: true });
+
+    fireEvent.change(screen.getByLabelText("Upload files"), {
+      target: { files: [csv()] },
+    });
+
+    expect(screen.getByText("data.csv")).toBeInTheDocument();
+    expect(trigger).not.toBeDisabled();
+  });
+
+  // The owner clears the text once a Send succeeds; a failed one must leave
+  // it where it was.
+  it("keeps the typed text when the Send fails", async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error("upload failed"));
+    const { textarea } = renderComposer({ canUploadToSandbox: true, onSubmit });
+
+    fireEvent.change(textarea, { target: { value: "Summarise it" } });
+    pickForSandbox(csv());
+    fireEvent.submit(textarea.closest("form")!);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(textarea).toHaveValue("Summarise it");
+    expect(screen.getByText("data.csv")).toBeInTheDocument();
+  });
+
+  it("submits the Sandbox files beside the File parts", async () => {
+    const onSubmit = vi.fn();
+    const { textarea } = renderComposer({ canUploadToSandbox: true, onSubmit });
+    const file = csv();
+
+    pickForSandbox(file);
+    fireEvent.submit(textarea.closest("form")!);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      files: [],
+      sandboxFiles: [file],
+    });
   });
 });

@@ -164,10 +164,18 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   ),
   PromptInputAttachments: () => null,
   PromptInputAttachment: () => null,
-  PromptInputActionMenu: () => null,
+  PromptInputActionMenu: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   PromptInputActionMenuTrigger: () => null,
-  PromptInputActionMenuContent: () => null,
+  PromptInputActionMenuContent: ({
+    children,
+  }: {
+    children?: React.ReactNode;
+  }) => <div>{children}</div>,
   PromptInputActionAddAttachments: () => null,
+  PromptInputActionAddSandboxUploads: () => <div>Upload to Sandbox</div>,
+  usePromptInputAttachments: () => ({ files: [], sandboxFiles: [] }),
   PromptInputButton: ({
     children,
     onClick,
@@ -443,6 +451,60 @@ const renderWithAgent = (agentId: string) => {
   );
 };
 
+describe("Upload to Sandbox", () => {
+  const renderOn = ({
+    toolSetIds = ["sandbox"],
+    upload = true,
+    agentId = "as",
+  }: { toolSetIds?: string[]; upload?: boolean; agentId?: string } = {}) => {
+    harness.data.set("/providers", { results: [searchProvider] });
+    harness.data.set("/agents", {
+      results: [{ ...agentOn("as", "ps", "ms"), toolSetIds }],
+    });
+    harness.data.set("/sandbox", {
+      transfer: { upload, download: true },
+    });
+    return render(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId={agentId}
+      />,
+    );
+  };
+
+  it("is offered for an Agent with the sandbox Tool set on a Sandbox that accepts uploads", () => {
+    renderOn();
+    expect(screen.getByText("Upload to Sandbox")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["an Agent without the sandbox Tool set", { toolSetIds: [] }],
+    ["a backend that cannot upload", { upload: false }],
+  ])("is hidden for %s", (_, shape) => {
+    renderOn(shape);
+    expect(screen.queryByText("Upload to Sandbox")).toBeNull();
+  });
+
+  it("is hidden when the Workspace has no Sandbox", () => {
+    harness.data.set("/sandbox", null);
+    harness.data.set("/providers", { results: [searchProvider] });
+    harness.data.set("/agents", {
+      results: [{ ...agentOn("as", "ps", "ms"), toolSetIds: ["sandbox"] }],
+    });
+    render(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as"
+      />,
+    );
+    expect(screen.queryByText("Upload to Sandbox")).toBeNull();
+  });
+});
+
 /** The search toggle's Globe control, present only when the model can search. */
 const searchToggle = () =>
   document.querySelector("svg.lucide-globe")?.closest("button") ?? null;
@@ -508,10 +570,13 @@ describe("Chat detail read", () => {
   });
 
   // Every other read keeps the throwing contract; the concession is per-key.
+  // The Sandbox read has it too: a Workspace may have no Sandbox.
   it("leaves the other reads on the shared fetcher", () => {
     renderChat();
 
-    const others = harness.swrCalls.filter((c) => c.key !== CHAT_KEY);
+    const others = harness.swrCalls.filter(
+      (c) => c.key !== CHAT_KEY && !String(c.key).endsWith("/sandbox"),
+    );
     expect(others.length).toBeGreaterThan(0);
     for (const call of others) {
       expect(call.fetcher).not.toBe(optionalFetcher);
@@ -1254,12 +1319,13 @@ describe("starting a turn", () => {
   });
 
   // The #648 refresh: the row has to learn the new turn's status at submit.
-  it("refreshes the row after a composer send", () => {
+  it("refreshes the row after a composer send", async () => {
     harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
     renderChat();
 
     fireEvent.click(screen.getByTestId("submit"));
 
+    await waitFor(() => expect(harness.sendMessage).toHaveBeenCalled());
     expect(harness.sendMessage).toHaveBeenCalledWith(
       { text: "Hello", files: [] },
       { body: expect.objectContaining({ providerId: "p1" }) },

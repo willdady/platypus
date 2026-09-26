@@ -9,8 +9,13 @@ import { useSlashCommands } from "@/hooks/use-slash-commands";
 import type { SlashCommand } from "@/lib/slash-commands";
 
 interface ChatComposerProps {
-  /** Runs on submit; the composer clears its own text afterwards. */
-  onSubmit: (message: PromptInputMessage) => void;
+  /**
+   * Runs on submit; the composer clears its own text afterwards, or keeps it
+   * if the returned promise rejects.
+   */
+  onSubmit: (message: PromptInputMessage) => void | Promise<void>;
+  /** Whether the action menu offers Upload to Sandbox. */
+  canUploadToSandbox: boolean;
   /** The Agent's assigned Skills, unfiltered. Empty disables slash handling. */
   commands: SlashCommand[];
   /** Whether an Agent is selected — the gate on slash handling. */
@@ -39,6 +44,7 @@ interface ChatComposerProps {
  */
 export const ChatComposer = ({
   onSubmit,
+  canUploadToSandbox,
   commands,
   slashEnabled,
   placeholder,
@@ -65,10 +71,11 @@ export const ChatComposer = ({
     <>
       <SlashCommandPicker {...slash.picker} />
       <Composer
-        onSubmit={(message) => {
-          onSubmit(message);
+        onSubmit={async (message) => {
+          await onSubmit(message);
           setInputValue("");
         }}
+        canUploadToSandbox={canUploadToSandbox}
         globalDrop
         passthroughFileTypes={passthroughFileTypes}
         modelSelection={modelSelection}

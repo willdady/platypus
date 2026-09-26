@@ -90,3 +90,13 @@ contract: an adapter implements nothing for it beyond `fsReadBytes`.
 - Uploading through the chat composer is not covered. It would overlap the File
   part, which is stored and routed to the model rather than placed in the
   Sandbox, and is left to a decision of its own (#1070).
+
+## Amended by ADR-0028
+
+Superseded in part by ADR-0028: uploading from the chat composer is now
+decided. A User uploads from the composer's **Upload to Sandbox** item, and the
+upload is recorded on the message as a Sandbox upload part, separate from the
+File part. The Workspace home page's transfer card is removed; where a backend
+lacks `fsWriteBytes` the composer hides the item rather than saying the backend
+doesn't support file transfer. The routes, the bound and `fsDownload` are
+unchanged.

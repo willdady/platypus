@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { FileUIPart, UIMessage } from "ai";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import { messageAttachments, messageText } from "@/lib/message-parts";
+import type { TurnMessage } from "@/hooks/use-chat-turn";
+import {
+  messageAttachments,
+  messageSandboxUploads,
+  messageText,
+} from "@/lib/message-parts";
 
 /**
  * The message an edit surface should open with. `null` when nothing is being
@@ -31,7 +36,7 @@ export type MessageBeingEdited = {
  */
 export const useMessageEditing = <T extends UIMessage = UIMessage>(
   messages: T[],
-  resend: (truncateAt: number, message: PromptInputMessage) => boolean,
+  resend: (truncateAt: number, message: TurnMessage) => boolean,
 ) => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
@@ -60,12 +65,22 @@ export const useMessageEditing = <T extends UIMessage = UIMessage>(
       const messageIndex = messages.findIndex((m) => m.id === editingMessageId);
       if (messageIndex === -1) return;
 
-      // An edit emptied of both its words and its files would truncate the
-      // transcript and send nothing in its place — the one edit with no way
-      // back. Left open instead, so the user can see what they are about to do.
-      if (!edited.text && edited.files.length === 0) return;
+      // A Sandbox upload records a past upload, so the edit keeps it as it
+      // was: the surface never shows it, and nothing is uploaded again.
+      const sandboxUploads = messageSandboxUploads(
+        messages[messageIndex].parts,
+      );
 
-      if (resend(messageIndex, edited)) setEditingMessageId(null);
+      // An edit emptied of its words, its files and its uploads would truncate
+      // the transcript and send nothing in its place — the one edit with no way
+      // back. Left open instead, so the user can see what they are about to do.
+      if (!edited.text && edited.files.length === 0 && !sandboxUploads.length)
+        return;
+
+      const message = sandboxUploads.length
+        ? { ...edited, sandboxUploads }
+        : edited;
+      if (resend(messageIndex, message)) setEditingMessageId(null);
     },
     [editingMessageId, messages, resend],
   );

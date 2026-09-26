@@ -4,6 +4,7 @@ import { useState } from "react";
 import type {
   AriaAttributes,
   ChangeEvent,
+  ComponentProps,
   KeyboardEvent,
   ReactNode,
   RefObject,
@@ -13,6 +14,7 @@ import type { Agent, Provider } from "@platypus/schemas";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
+  PromptInputActionAddSandboxUploads,
   PromptInputActionMenu,
   PromptInputActionMenuContent,
   PromptInputActionMenuTrigger,
@@ -23,6 +25,7 @@ import {
   PromptInputSpeechButton,
   PromptInputTextarea,
   PromptInputTools,
+  usePromptInputAttachments,
   type PromptInputMessage,
 } from "./ai-elements/prompt-input";
 import {
@@ -73,7 +76,13 @@ export interface ComposerTextareaProps extends AriaAttributes {
 }
 
 interface ComposerProps {
-  onSubmit: (message: PromptInputMessage) => void;
+  /** A rejected promise keeps the attachments, so the user can retry. */
+  onSubmit: (message: PromptInputMessage) => void | Promise<void>;
+  /**
+   * Whether the action menu offers Upload to Sandbox: the Workspace has a
+   * Sandbox that accepts uploads and the Agent has the `sandbox` Tool set.
+   */
+  canUploadToSandbox?: boolean;
   passthroughFileTypes: string[];
   modelSelection: ModelSelection;
   textarea: ComposerTextareaProps;
@@ -99,6 +108,7 @@ interface ComposerProps {
  */
 export const Composer = ({
   onSubmit,
+  canUploadToSandbox,
   passthroughFileTypes,
   modelSelection,
   textarea,
@@ -135,6 +145,9 @@ export const Composer = ({
             <PromptInputActionMenuTrigger className="cursor-pointer" />
             <PromptInputActionMenuContent>
               <PromptInputActionAddAttachments className="cursor-pointer" />
+              {canUploadToSandbox && (
+                <PromptInputActionAddSandboxUploads className="cursor-pointer" />
+              )}
             </PromptInputActionMenuContent>
           </PromptInputActionMenu>
           <Tooltip delayDuration={1000}>
@@ -148,7 +161,7 @@ export const Composer = ({
             </TooltipTrigger>
             <TooltipContent>Microphone</TooltipContent>
           </Tooltip>
-          <ModelSelectorDialog
+          <ComposerModelSelector
             agents={modelSelection.agents}
             providers={modelSelection.providers}
             agentId={modelSelection.agentId}
@@ -176,5 +189,26 @@ export const Composer = ({
         {submit}
       </PromptInputFooter>
     </PromptInput>
+  );
+};
+
+/**
+ * The model picker, locked while the composer holds a Sandbox upload: the
+ * upload was offered because this Agent has the `sandbox` Tool set, and
+ * another selection may not.
+ */
+const ComposerModelSelector = (
+  props: Omit<ComponentProps<typeof ModelSelectorDialog>, "lockedReason">,
+) => {
+  const { sandboxFiles } = usePromptInputAttachments();
+  return (
+    <ModelSelectorDialog
+      {...props}
+      lockedReason={
+        sandboxFiles.length > 0
+          ? "Remove Sandbox uploads to switch Agent"
+          : undefined
+      }
+    />
   );
 };

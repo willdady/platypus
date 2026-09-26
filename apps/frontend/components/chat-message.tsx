@@ -36,10 +36,15 @@ import {
   isToolUIPart,
   type ChatStatus,
 } from "ai";
-import { Agent, isPresentableUrl } from "@platypus/schemas";
-import { isImageAttachment, messageText } from "@/lib/message-parts";
+import { Agent, formatFileSize, isPresentableUrl } from "@platypus/schemas";
+import {
+  isImageAttachment,
+  messageSandboxUploads,
+  messageText,
+} from "@/lib/message-parts";
 import {
   BotIcon,
+  FileIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   PencilIcon,
@@ -279,6 +284,7 @@ export const ChatMessage = memo(function ChatMessage({
     (nativeSourceParts?.length ?? 0) + pluginSearchSources.length;
 
   const textContent = messageText(message.parts);
+  const sandboxUploads = messageSandboxUploads(message.parts);
 
   // Each entry's `matches` is mutually exclusive with every other entry's by
   // construction (see `isGenericToolPart`), so this list can be extended or
@@ -466,6 +472,30 @@ export const ChatMessage = memo(function ChatMessage({
         <MessageAttachments key={`${message.id}-attachments`}>
           {fileParts.map((part, i) => (
             <MessageAttachment key={`${message.id}-${i}`} data={part} />
+          ))}
+        </MessageAttachments>
+      )}
+      {sandboxUploads.length > 0 && (
+        // No download link: it would serve whatever the path holds now, not
+        // what was uploaded (ADR-0028).
+        <MessageAttachments key={`${message.id}-sandbox-uploads`}>
+          {sandboxUploads.map((upload, i) => (
+            <div
+              key={`${message.id}-sandbox-${i}`}
+              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+            >
+              <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="font-medium">{upload.filename}</span>
+              <span className="font-mono text-muted-foreground text-xs">
+                {upload.path}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                {formatFileSize(upload.size)}
+              </span>
+              <span className="rounded bg-muted px-1 text-muted-foreground text-xs">
+                Sandbox
+              </span>
+            </div>
           ))}
         </MessageAttachments>
       )}

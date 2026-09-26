@@ -5,7 +5,6 @@ import { SkillsList } from "@/components/skills-list";
 import { TriggerCardsSkeleton, TriggerList } from "@/components/trigger-list";
 import { BoardsList } from "@/components/boards-list";
 import { DashboardsList } from "@/components/dashboards-list";
-import { SandboxCard } from "@/components/sandbox-card";
 import {
   CollapsibleSection,
   useSectionOpen,
@@ -501,8 +500,6 @@ const Workspace = () => {
           </CollapsibleSection>
         </>
       )}
-
-      <SandboxCard orgId={orgId} workspaceId={workspaceId} />
     </div>
   );
 };

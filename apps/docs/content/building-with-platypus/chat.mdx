@@ -102,6 +102,38 @@ The full routing table, and how an Org Admin declares what each model accepts,
 is in
 [File handling](/self-hosting/providers-and-auth#file-handling-what-each-model-accepts).
 
+## Uploading to the Sandbox
+
+To put a file in the Workspace's [Sandbox](/concepts/sandboxes) rather than in
+front of the model, choose **+ → Upload to Sandbox** beside the input. The
+item is there only when the Workspace has a Sandbox whose backend accepts
+uploads and the selected Agent has the Sandbox Tool set. A Provider and model
+picked directly never offers it.
+
+Each file becomes a chip marked **Sandbox**, beside any attached files. Nothing
+is uploaded until you send, and removing a chip uploads nothing. A file over
+**25 MiB** is refused when you pick it. Drop and paste still attach files the
+usual way; only the menu item uploads to the Sandbox.
+
+When you send, each file lands in the Sandbox's workspace root under its own
+name, and then your message goes. If a file already exists at that path, you're
+asked whether to overwrite it. Cancel, or hit any other upload error, and
+nothing is sent: your text and chips stay so you can try again, and a file that
+already landed isn't uploaded twice.
+
+The model is told each file's name, path and size, never its contents. The
+Agent reads the file with its Sandbox tools. In the conversation the upload
+shows as a **Sandbox** chip with the file's name, path and size. It has no
+download link. To get a file back out, ask the Agent for it as a download.
+
+While a Sandbox chip is in the input, the model selector is locked, with the
+reason **Remove Sandbox uploads to switch Agent**. Another Agent might not have
+the Sandbox Tool set. Remove the chips to switch.
+
+Editing or regenerating a message never uploads again. The chip records what
+was uploaded when the message was sent; if the file has changed since, the
+Agent finds that out when it reads it.
+
 ## Web search
 
 A globe button — its tooltip reads **Search** — turns on web search for the

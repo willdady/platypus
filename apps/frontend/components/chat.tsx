@@ -22,6 +22,7 @@ import {
   ToolSet,
   Skill,
   nextTurnOccupancy,
+  type Sandbox,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import { joinUrl, optionalFetcher } from "@/lib/utils";
@@ -34,7 +35,8 @@ import {
   snapshotMayLand,
   snapshotMessages,
 } from "@/lib/chat-recovery";
-import { scopedPath, writeAt } from "@/lib/api-write";
+import { scopedPath, scopedUrl, writeAt } from "@/lib/api-write";
+import { useSandboxUploads } from "@/hooks/use-sandbox-uploads";
 import { alternativePositions } from "@/lib/chat-alternatives";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -129,6 +131,14 @@ export const Chat = ({
   const toolSets = useMemo(
     () => toolSetsData?.results || [],
     [toolSetsData?.results],
+  );
+
+  // The Workspace's Sandbox, for whether the composer offers Upload to Sandbox.
+  const { data: sandbox } = useScopedSWR<Sandbox | null>("sandbox", scope, {
+    fetcher: optionalFetcher,
+  });
+  const sandboxUploads = useSandboxUploads(
+    scopedUrl(backendUrl || "", "sandbox/file", scope),
   );
 
   // Fetch skills
@@ -678,12 +688,25 @@ export const Chat = ({
   // answer keeps arriving from the poll. The modal is for a turn that failed.
   const isRecoveringRun = errorTreatment === "recovering";
 
-  const handleSubmit = (message: PromptInputMessage) => {
+  // Hidden rather than disabled when any condition fails (ADR-0028).
+  const canUploadToSandbox = Boolean(
+    sandbox?.transfer.upload && selectedAgent?.toolSetIds?.includes("sandbox"),
+  );
+
+  // Sandbox uploads land first; the message goes only once every one has. A
+  // rejection keeps the composer's text and chips for a retry.
+  const handleSubmit = async (message: PromptInputMessage) => {
     if (isTurnInFlight(effectiveStatus)) {
       return turn.cancel();
     }
-    if (!message.text && !message.files?.length) return;
-    turn.send(message);
+    const sandboxFiles = message.sandboxFiles ?? [];
+    if (!message.text && !message.files?.length && !sandboxFiles.length) {
+      return;
+    }
+    const uploads = await sandboxUploads.upload(sandboxFiles);
+    if (!turn.send({ ...message, sandboxUploads: uploads })) {
+      throw new Error("The turn did not start");
+    }
   };
 
   return (
@@ -750,6 +773,7 @@ export const Chat = ({
             {canSendMessages ? (
               <ChatComposer
                 onSubmit={handleSubmit}
+                canUploadToSandbox={canUploadToSandbox}
                 commands={agentSkills}
                 slashEnabled={Boolean(selectedAgent)}
                 className={messages.length === 0 ? "min-h-24" : undefined}
@@ -877,6 +901,8 @@ export const Chat = ({
           </div>
         </div>
       </div>
+
+      {sandboxUploads.dialog}
 
       {/* Error Dialog */}
       <ChatErrorDialog

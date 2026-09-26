@@ -25,9 +25,12 @@ import {
 } from "@/hooks/use-speech-to-text";
 import { isImageAttachment } from "@/lib/message-parts";
 import { cn } from "@/lib/utils";
+import { SANDBOX_TRANSFER_MAX_BYTES, formatFileSize } from "@platypus/schemas";
 import type { ChatStatus, FileUIPart } from "ai";
 import {
+  BoxIcon,
   CornerDownLeftIcon,
+  FileIcon,
   ImageIcon,
   Loader2Icon,
   MicIcon,
@@ -59,12 +62,22 @@ import {
   useState,
 } from "react";
 
+/**
+ * A file bound for the Workspace's Sandbox rather than the model. Its bytes
+ * stay in the browser until Send, and it never gets a preview.
+ */
+export type SandboxFile = { id: string; file: File };
+
 type AttachmentsContext = {
   files: (FileUIPart & { id: string })[];
+  sandboxFiles: SandboxFile[];
   add: (files: File[] | FileList) => void;
+  addSandbox: (files: File[] | FileList) => void;
+  /** Removes a File part or a Sandbox file, whichever holds the id. */
   remove: (id: string) => void;
   clear: () => void;
   openFileDialog: () => void;
+  openSandboxFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
 };
 
@@ -203,6 +216,39 @@ export function PromptInputAttachment({
   );
 }
 
+export function PromptInputSandboxUpload({ data }: { data: SandboxFile }) {
+  const attachments = usePromptInputAttachments();
+
+  return (
+    <div
+      className="group relative flex h-8 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm"
+      title={`${data.file.name} (${formatFileSize(data.file.size)})`}
+    >
+      <div className="relative size-5 shrink-0">
+        <div className="absolute inset-0 flex size-5 items-center justify-center text-muted-foreground transition-opacity group-hover:opacity-0">
+          <FileIcon className="size-3" />
+        </div>
+        <Button
+          aria-label="Remove Sandbox upload"
+          className="absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:opacity-100 [&>svg]:size-2.5"
+          onClick={(e) => {
+            e.stopPropagation();
+            attachments.remove(data.id);
+          }}
+          type="button"
+          variant="ghost"
+        >
+          <XIcon />
+        </Button>
+      </div>
+      <span className="truncate">{data.file.name}</span>
+      <span className="rounded bg-muted px-1 text-muted-foreground text-xs">
+        Sandbox
+      </span>
+    </div>
+  );
+}
+
 export type PromptInputAttachmentsProps = Omit<
   HTMLAttributes<HTMLDivElement>,
   "children"
@@ -217,7 +263,7 @@ export function PromptInputAttachments({
 }: PromptInputAttachmentsProps) {
   const attachments = usePromptInputAttachments();
 
-  if (!attachments.files.length) {
+  if (!attachments.files.length && !attachments.sandboxFiles.length) {
     return null;
   }
 
@@ -228,6 +274,9 @@ export function PromptInputAttachments({
     >
       {attachments.files.map((file) => (
         <Fragment key={file.id}>{children(file)}</Fragment>
+      ))}
+      {attachments.sandboxFiles.map((file) => (
+        <PromptInputSandboxUpload data={file} key={file.id} />
       ))}
     </div>
   );
@@ -258,9 +307,29 @@ export const PromptInputActionAddAttachments = ({
   );
 };
 
+export const PromptInputActionAddSandboxUploads = (
+  props: ComponentProps<typeof DropdownMenuItem>,
+) => {
+  const attachments = usePromptInputAttachments();
+
+  return (
+    <DropdownMenuItem
+      {...props}
+      onSelect={(e) => {
+        e.preventDefault();
+        attachments.openSandboxFileDialog();
+      }}
+    >
+      <BoxIcon className="mr-2 size-4" /> Upload to Sandbox
+    </DropdownMenuItem>
+  );
+};
+
 export type PromptInputMessage = {
   text: string;
   files: FileUIPart[];
+  /** Files to place in the Sandbox before the message is sent. */
+  sandboxFiles?: File[];
 };
 
 export type PromptInputProps = Omit<
@@ -297,6 +366,7 @@ export const PromptInput = ({
 }: PromptInputProps) => {
   // Refs
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const sandboxInputRef = useRef<HTMLInputElement | null>(null);
   // Held on the form element itself. It used to be resolved by walking up from
   // a hidden anchor span with `closest("form")` — but that span renders as a
   // SIBLING of the form, so the walk found nothing and the form-scoped drop
@@ -309,8 +379,30 @@ export const PromptInput = ({
     (initialAttachments ?? []).map((part) => ({ ...part, id: nanoid() })),
   );
 
+  const [sandboxFiles, setSandboxFiles] = useState<SandboxFile[]>([]);
+
   const openFileDialog = useCallback(() => {
     inputRef.current?.click();
+  }, []);
+
+  const openSandboxFileDialog = useCallback(() => {
+    sandboxInputRef.current?.click();
+  }, []);
+
+  // Refused on pick rather than on Send: the transfer bound is fixed, so a
+  // file over it can never be sent.
+  const addSandbox = useCallback((fileList: File[] | FileList) => {
+    const incoming = Array.from(fileList);
+    const tooBig = incoming.filter((f) => f.size > SANDBOX_TRANSFER_MAX_BYTES);
+    for (const file of tooBig) {
+      toast.error(
+        `${file.name} is larger than ${SANDBOX_TRANSFER_MAX_BYTES / 1024 / 1024} MiB, the Sandbox upload limit.`,
+      );
+    }
+    const accepted = incoming.filter((f) => !tooBig.includes(f));
+    setSandboxFiles((prev) =>
+      prev.concat(accepted.map((file) => ({ id: nanoid(), file }))),
+    );
   }, []);
 
   const matchesAccept = useCallback(
@@ -353,6 +445,7 @@ export const PromptInput = ({
   );
 
   const remove = useCallback((id: string) => {
+    setSandboxFiles((prev) => prev.filter((file) => file.id !== id));
     setItems((prev) => {
       const found = prev.find((file) => file.id === id);
       if (found?.url) {
@@ -363,6 +456,7 @@ export const PromptInput = ({
   }, []);
 
   const clear = useCallback(() => {
+    setSandboxFiles([]);
     setItems((prev) => {
       for (const file of prev) {
         if (file.url) {
@@ -483,25 +577,37 @@ export const PromptInput = ({
   const ctx = useMemo<AttachmentsContext>(
     () => ({
       files: files.map((item) => ({ ...item, id: item.id })),
+      sandboxFiles,
       add,
+      addSandbox,
       remove,
       clear,
       openFileDialog,
+      openSandboxFileDialog,
       fileInputRef: inputRef,
     }),
-    [files, add, remove, clear, openFileDialog],
+    [
+      files,
+      sandboxFiles,
+      add,
+      addSandbox,
+      remove,
+      clear,
+      openFileDialog,
+      openSandboxFileDialog,
+    ],
   );
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
 
-    const form = event.currentTarget;
-    const formData = new FormData(form);
+    const formData = new FormData(event.currentTarget);
     const text = (formData.get("message") as string) || "";
 
-    // Reset form immediately after capturing text to avoid race condition
-    // where user input during async blob conversion would be lost
-    form.reset();
+    // No `form.reset()`: every textarea here is controlled, and its owner
+    // clears it once the submit succeeds. A reset blanked the box behind the
+    // owner's back, so a Send that failed (a Sandbox upload, say) lost the
+    // text it was about to keep.
 
     // Convert blob URLs to data URLs asynchronously
     Promise.all(
@@ -517,7 +623,14 @@ export const PromptInput = ({
     )
       .then((convertedFiles: FileUIPart[]) => {
         try {
-          const result = onSubmit({ text, files: convertedFiles }, event);
+          const result = onSubmit(
+            {
+              text,
+              files: convertedFiles,
+              sandboxFiles: sandboxFiles.map(({ file }) => file),
+            },
+            event,
+          );
 
           // Handle both sync and async onSubmit
           if (result instanceof Promise) {
@@ -545,6 +658,20 @@ export const PromptInput = ({
         onChange={handleChange}
         ref={inputRef}
         title="Upload files"
+        type="file"
+      />
+      <input
+        aria-label="Upload files to Sandbox"
+        className="hidden"
+        multiple
+        onChange={(event) => {
+          if (event.currentTarget.files) {
+            addSandbox(event.currentTarget.files);
+          }
+          // Picking the same file again after removing its chip must fire.
+          event.currentTarget.value = "";
+        }}
+        ref={sandboxInputRef}
         type="file"
       />
       <form

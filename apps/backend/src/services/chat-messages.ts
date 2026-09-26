@@ -1,4 +1,5 @@
 import { validateUIMessages } from "ai";
+import { sandboxUploadSchema } from "@platypus/schemas";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../index.ts";
 import { chat, chatMessage } from "../db/schema.ts";
@@ -178,6 +179,7 @@ export const resolveTurn = async ({
   try {
     [message] = await validateUIMessages<PlatypusUIMessage>({
       messages: [request.message],
+      dataSchemas: { "sandbox-upload": sandboxUploadSchema },
     });
   } catch (error) {
     throw new ValidationError(

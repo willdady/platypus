@@ -1560,7 +1560,7 @@ const BACKEND_CONSTANTS = [
     source: "packages/plugin-sdk/index.ts",
     name: "SANDBOX_TRANSFER_MAX_BYTES",
     phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
-    files: ["concepts/sandboxes.mdx"],
+    files: ["concepts/sandboxes.mdx", "building-with-platypus/chat.mdx"],
     cost: "A User uploading a large file is refused at a size the page never warned of.",
   },
   {

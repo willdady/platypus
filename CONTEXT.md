@@ -19,7 +19,11 @@ _Avoid_: chat request, chat invocation, chat run.
 
 **File part**:
 A file a User attached to a message in a Chat, carried alongside the message's text and persisted as a storage reference. On every Chat turn each File part is resolved to bytes and routed by the target model's declared capability.
-_Avoid_: attachment (an **Attachment** is the Shared-resource reference), upload.
+_Avoid_: attachment (an **Attachment** is the Shared-resource reference), upload (a file placed in the Sandbox is a **Sandbox upload**).
+
+**Sandbox upload**:
+A file a User placed in the Workspace's Sandbox from the chat composer, recorded as a part of the message. The model sees its path and size, never its bytes. Distinct from a **File part**, which is routed to the model.
+_Avoid_: attachment, File part.
 
 **Passthrough file type**:
 A media type the target `(Provider, model)` pair ingests **natively**, declared per model. A capability router, not a security allow-list: a File part outside the set is converted to text where possible, never blocked for safety.
@@ -127,7 +131,7 @@ A User naming a **Skill** from the chat input: a message whose first text part o
 _Avoid_: slash skill, command part (there is no part), trigger (that names the scheduled/event kind).
 
 **Sandbox**:
-A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is an Extension point: different backends (local container, remote VM, hosted sandbox-as-a-service, …) are contributed by Plugins. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model. A User can upload a file into a Sandbox, or download one out of it, directly and without the model; bytes move unaltered, up to a fixed size.
+A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is an Extension point: different backends (local container, remote VM, hosted sandbox-as-a-service, …) are contributed by Plugins. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model. A User can upload a file into a Sandbox from the chat composer (a **Sandbox upload**), or download one out of it through the Agent, without the bytes passing through the model; bytes move unaltered, up to a fixed size.
 
 **Board**:
 A Kanban board scoped to a Workspace: ordered **Columns**, **Cards**, and Board-level colour-coded Labels. A shared working surface — Users and Agents read and update the same Board, Agents through the Kanban Tool set. Board activity is the source of the `card.*` **Webhook events**. Deleting a Label removes it from every Card using it; everything else on the Card survives.
