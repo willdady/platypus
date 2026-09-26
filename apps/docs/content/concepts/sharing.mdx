@@ -34,11 +34,10 @@ at once. No drift, no copy-paste.
 
 ### Nothing is shared on your behalf
 
-That rule bites when you Promote. Promoting an Agent is **refused** while its
-Provider, any of its Skills or Sub-Agents, or any MCP it's granted is still
-Workspace-scoped. Promote the Skills and Sub-Agents first; a Provider or MCP
-can't be promoted, so recreate it at Organization scope and point the Agent at
-that. Platypus does not resolve the prerequisite for you by quietly pulling it up
+That rule bites when you [Promote](#promote) an Agent: it's **refused** while
+its Provider, any of its Skills or Sub-Agents, or any MCP it's granted is still
+Workspace-scoped. Promote the Skills and Sub-Agents first; a Provider or MCP has
+no Promote (see [Promote](#promote)). Platypus does not resolve the prerequisite for you by quietly pulling it up
 alongside, because that would make something Organization-readable that no Org
 Admin ever named.
 
@@ -71,9 +70,8 @@ lists and nothing in the Workspace can use it — Chats, Triggers, titling and
 memory extraction included.
 
 This keeps sharing deliberate: an Org Admin attaches exactly the Shared resources
-each Workspace should see — from inside the Workspace, or, for Agents and Skills,
-from **Manage attachments** on the Organization surface. See [Making it appear in
-a Workspace](/administering/shared-resources#making-it-appear-in-a-workspace).
+each Workspace should see. See [Making it appear in a
+Workspace](/administering/shared-resources#making-it-appear-in-a-workspace).
 
 ## Promote
 

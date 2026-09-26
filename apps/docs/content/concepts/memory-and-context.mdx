@@ -13,7 +13,7 @@ activity, beyond the messages in the current Chat: **Memory** and **Context**.
 ## Memory
 
 **Memory** is a running summary of your prior activity that an Agent can recall.
-It's kept per person, per **Workspace**, and it is folded into the
+It's kept per **Workspace**, and it is folded into the
 [system prompt](/concepts/system-prompt) automatically — you don't put it in the
 Agent's Instructions yourself.
 
@@ -27,10 +27,10 @@ Memory is a **Workspace-level** setting, not a per-Agent one. It is switched on
 by choosing a **Memory Extraction Provider** in the Workspace form, which the
 Workspace Owner or an Org Admin can do. Leave it **Disabled** and nothing new is
 extracted — but summaries already written stay in the prompt until they age out
-of the window below, and stay reachable through the **Memory** Tool set. Only
-Providers with a memory-extraction model configured appear in that dropdown, so
-if it looks empty, set one on the Provider first. A **Memory Embedding
-Provider** is a separate choice, needed for semantic memory search.
+of the window below, and stay reachable through the **Memory** Tool set. A
+**Memory Embedding Provider** is a separate choice, needed for semantic memory
+search. If either dropdown is empty, see [The three Provider
+dropdowns](/administering/workspaces#the-three-provider-dropdowns).
 
 <Callout type="warning">
   Granting an Agent the **Memory** Tool set does not enable Memory. Without a
@@ -89,7 +89,10 @@ you switched away from it stays remembered.
 <Callout type="warning">
   There is no screen for viewing, editing, or deleting Memories, and deleting a
   Chat does not remove what was already extracted from it. Asking the assistant
-  to forget something only changes today's summary. Treat anything you say in a
+  to forget something only changes today's summary. The only thing that deletes
+  summaries is the Workspace's [Memory Summary
+  Retention](/administering/workspaces#memory-summary-retention), which keeps
+  the newest **90** daily summaries by default. Treat anything you say in a
   Workspace with Memory on as something it may keep.
 </Callout>
 
@@ -125,8 +128,7 @@ Agent's Instructions.
 </Callout>
 
 The third is the model's own **Context window**: how many tokens a model can be
-sent at once, which is declared on the Provider's model entry because no vendor
-publishes it in a form Platypus can read. It has nothing to do with either of the
+sent at once, declared on the Provider's model entry. It has nothing to do with either of the
 two above — it is a capacity, not something you write. Where one is declared, a
 Chat shows how much of it your next message will start from; see [How full the
 conversation is](/building-with-platypus/chat#how-full-the-conversation-is) and

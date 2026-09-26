@@ -80,9 +80,7 @@ conversation to the model it started on.
   Model ID**, **Memory Extraction Model ID** and **Embedding Model ID** must
   each name a real model id, and they don't resolve aliases: typing `flagship`
   there saves, is sent to the vendor as if it were a model id, and the job
-  fails. Those three point at one model from one Provider, so an alias would
-  save you no edits — and on the embedding model it would hide a change that has
-  to invalidate every stored memory embedding.
+  fails.
 </Callout>
 
 Once a model has an alias, the picker offers the alias and not the underlying
@@ -155,16 +153,19 @@ endpoint, or Bedrock.
   pages as part of searching, but nothing is fetched from your deployment. There
   is no separate setting for it: the reader comes with the backend, so the
   decision is which backend you select. What a fetch may reach is bounded by
-  [the egress guard](/self-hosting/configuration#the-egress-guard), and a
-  backend's reader ignores `robots.txt` — whereas the **Web Fetch** Tool set
-  honours it unless an Operator has turned that off.
+  [the egress guard](/self-hosting/configuration#the-egress-guard). Platypus
+  does not check `robots.txt` for a backend's reader, though the backend itself
+  may; the **Web Fetch** Tool set honours it unless an Operator has turned that
+  off.
 </Callout>
 
 Three things the field tells you about a selection:
 
 - **A selection whose plugin is gone** stays in the list, marked **(not
   installed)**, rather than quietly reading as None — so you can see what the
-  Provider points at and change it. Such a selection runs no search.
+  Provider points at and change it. Such a selection runs no search: the Chat
+  still offers **Search**, and each reply says _Search was unavailable — this
+  reply was written without it._
 - **Platypus couldn't load the installed backends** — the field says so and
   leaves your stored selection alone; the list may be missing entries.
 - **The provider's built-in search, on a Provider that has none** — Bedrock, or

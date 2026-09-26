@@ -1,6 +1,6 @@
 ---
 title: Sandboxes
-description: A Sandbox is an isolated execution environment that gives an agent shell and filesystem tools, safely separated from everything else.
+description: A Sandbox is an execution environment that gives an agent shell and filesystem tools, outside the machine running Platypus.
 ---
 
 import { Callout } from "nextra/components";
@@ -9,15 +9,16 @@ import { Callout } from "nextra/components";
 
 ## Sandbox
 
-A **Sandbox** is an isolated, self-contained environment where an **Agent** can
+A **Sandbox** is an environment where an **Agent** can
 run shell commands and work with files. It's registered in a **Workspace**, and
 when it's available, the Agent gains shell and filesystem tools that operate
 _inside_ that environment — not on the machine running Platypus.
 
 **Why you'd use one:** lots of useful work involves actually executing
 something — running a script, building a project, inspecting files. A Sandbox
-lets an Agent do that safely, because the work happens in an isolated environment
-rather than touching anything outside it.
+runs that work in its own environment — a container, or a remote host you point
+it at. How isolated that environment is depends on the backend; see [Sandbox
+infrastructure](/self-hosting/sandbox).
 
 Like an MCP, a Sandbox resolves to a **[Tool set](/concepts/tools)** at Chat-turn
 time — the shell and filesystem tools it provides.
@@ -56,8 +57,9 @@ backends](/extending/sandbox-backends).
 A Sandbox can also carry **environment variables** that are merged into every
 shell command it runs — API keys, or configuration a command needs. The values
 are applied directly to the execution **without being sent through the model**,
-so secrets stay out of the conversation. The Agent is told the variable
-_names_, so it knows they exist.
+so a value never appears in the conversation unless a command prints it. The
+Agent is told the variable _names_ and asked not to echo them, but a command that
+prints one — `echo $API_KEY`, a debug dump — hands the value to the model.
 
 <Callout type="info">
   Setting up a Sandbox is an infrastructure task. See [Sandbox
