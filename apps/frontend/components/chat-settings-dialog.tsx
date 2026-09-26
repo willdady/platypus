@@ -95,8 +95,7 @@ export const ChatSettingsDialog = ({
           <FieldDescription>
             How the assistant should behave in this chat. Platypus builds the
             full system prompt around it, adding workspace and user context,
-            memories, Skills, Sub-Agents, and your Provider&apos;s security
-            guardrails.
+            memories, and your Provider&apos;s security guardrails.
           </FieldDescription>
         </div>
         <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>

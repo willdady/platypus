@@ -46,6 +46,15 @@ const renderDialog = (
 };
 
 describe("ChatSettingsDialog", () => {
+  // Issue #1058: Skills and Sub-Agents come from an Agent, so an agentless
+  // Chat never receives them. The helper text must not promise them.
+  it("does not promise Skills or Sub-Agents in the Instructions helper", () => {
+    renderDialog();
+
+    const helper = screen.getByText(/builds the\s+full system prompt/);
+    expect(helper).not.toHaveTextContent(/Skills|Sub-Agents/);
+  });
+
   // Issue #539: the per-chat step ceiling lives beside the sampling settings,
   // labelled like the Agent form's field.
   it("renders a Max steps input", () => {
