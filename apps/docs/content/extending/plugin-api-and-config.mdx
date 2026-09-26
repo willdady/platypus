@@ -56,6 +56,14 @@ package specifiers.
   The backend refuses to start instead — rename one of them in its manifest.
 </Callout>
 
+<Callout type="warning">
+  Don't reuse a core plugin's name without its `@platypus/` scope. `web-fetch`
+  and `@platypus/web-fetch` both read `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`, so the
+  backend refuses to start with both loaded. A plugin named `ssh`, `docker` or
+  `web-fetch` can't run beside that core plugin, and one named `tools-basic` or
+  `tools-platform` fails on every deployment, because those two always load.
+</Callout>
+
 ## Boot is fail-loud and all-or-nothing
 
 Before the HTTP server starts, core loads the always-on core plugins, then reads
@@ -67,6 +75,7 @@ Any of these aborts startup with an error naming your plugin:
 - it can't be resolved,
 - its manifest is invalid,
 - its deploy-time config or credentials fail their own schema,
+- a Sandbox backend's `configSchema` factory throws while resolving,
 - its manifest `name` is already declared by another loaded plugin,
 - its manifest `name` is longer than the cap above,
 - a Tool set statically declares a tool name over
@@ -79,9 +88,9 @@ rather than failing later inside somebody's Chat. TypeScript already requires th
 fields; this check is what catches a plugin shipped as plain JavaScript, and what
 turns a missing field into an error with your plugin's name on it.
 
-Runtime is the opposite posture. A Workspace pointing at a Tool set that has
-since been removed degrades to no tools for that turn. **Strict at boot,
-forgiving at runtime.**
+Runtime is the opposite posture. An Agent granted a Tool set that has since been
+removed loses that set's tools for the turn; its other Tool sets still serve.
+**Strict at boot, forgiving at runtime.**
 
 ## Which core versions your plugin runs on
 
@@ -182,10 +191,6 @@ token driving both.
   tenant-specific values belong on the per-Workspace Sandbox row, which is a
   separate layer above this one — the two layer, they do not merge.
 </Callout>
-
-The repository ships a two-contribution plugin under the backend's `plugins`
-directory that demonstrates one credential block reaching both a Sandbox backend
-and a Tool set.
 
 ## Logging
 
