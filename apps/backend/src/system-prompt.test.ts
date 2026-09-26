@@ -549,10 +549,21 @@ describe("renderSystemPrompt — sandbox fragment", () => {
       agent: agentRecord({ toolSetIds: ["sandbox"] }),
     });
     expect(out).toMatch(/## Sandbox/);
-    expect(out).toMatch(/\/workspace/);
     expect(out).toMatch(/persist across chat turns/);
     expect(out).toMatch(/fresh shell/);
     expect(out).toMatch(/truncated/);
+  });
+
+  // Issue #1060: only the Docker backend is rooted at /workspace. SSH and
+  // plugin backends resolve their own root, so the prompt names none.
+  it("names no fixed root path and steers the model to relative paths", () => {
+    const out = renderSystemPrompt({
+      ...baseCtx(),
+      agent: agentRecord({ toolSetIds: ["sandbox"] }),
+    });
+    expect(out).not.toMatch(/\/workspace/);
+    expect(out).toMatch(/every `shellExec` call starts in that root/);
+    expect(out).toMatch(/Use relative paths; don't hardcode absolute paths/);
   });
 
   it("omits the sandbox block when the agent has no tool sets", () => {

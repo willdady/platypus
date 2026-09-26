@@ -228,7 +228,7 @@ const sandboxFragment: Fragment = (ctx) => {
 
   return `## Sandbox
 
-You have access to a persistent Linux sandbox rooted at \`/workspace\`. All paths you pass to the sandbox tools (\`shellExec\`, \`fsRead\`, \`fsWrite\`, \`fsEdit\`, \`fsList\`) are resolved relative to this root.
+You have access to a persistent Linux sandbox. All paths you pass to the sandbox tools (\`shellExec\`, \`fsRead\`, \`fsWrite\`, \`fsEdit\`, \`fsList\`) are resolved relative to its workspace root, and every \`shellExec\` call starts in that root unless you pass \`cwd\`. Use relative paths; don't hardcode absolute paths in shell commands, because where the root lives depends on the sandbox.
 
 Files you write persist across chat turns — the filesystem is the same one your earlier turns saw and the same one your next turns will see. Use this: stash work, leave notes, build incrementally.
 
