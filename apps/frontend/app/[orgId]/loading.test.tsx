@@ -1,10 +1,13 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { installMatchMediaStub } from "@/lib/test-utils";
 
+const nav = vi.hoisted(() => ({ pathname: "/org2" }));
+
 vi.mock("next/navigation", () => ({
   useParams: () => ({ orgId: "org2" }),
-  usePathname: () => "/org2",
+  usePathname: () => nav.pathname,
+  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
 }));
 
 vi.mock("@/components/header", () => ({
@@ -39,8 +42,12 @@ vi.mock("@/hooks/use-scoped-swr", () => ({
 }));
 
 import OrganizationLoading from "./loading";
+import { resourcePageLayout } from "@/components/resource-page";
 
 beforeAll(installMatchMediaStub);
+afterEach(() => {
+  nav.pathname = "/org2";
+});
 
 describe("OrganizationLoading", () => {
   it("draws the Organization home from the cache, not placeholders", () => {
@@ -50,5 +57,19 @@ describe("OrganizationLoading", () => {
     expect(screen.getByRole("link", { name: "Globex" })).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
     expect(container.querySelector('[data-slot="skeleton"]')).toBeNull();
+  });
+
+  it("takes the wide wizard shape while Create Workspace loads", () => {
+    nav.pathname = "/org2/create";
+    const { container } = render(<OrganizationLoading />);
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-busy", "true");
+    expect(status).toHaveClass(resourcePageLayout.wide.outer!);
+    expect(status.firstElementChild).toHaveClass(resourcePageLayout.wide.inner);
+    expect(container.firstElementChild).toHaveClass(
+      "h-dvh overflow-y-auto pb-4",
+    );
+    expect(screen.getAllByTestId("step-placeholder")).toHaveLength(3);
   });
 });
