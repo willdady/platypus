@@ -1542,6 +1542,28 @@ const BACKEND_CONSTANTS = [
     files: ["concepts/providers.mdx"],
     cost: "A reader attaching a large PDF is refused at a size the page never warned of.",
   },
+  {
+    source: "apps/backend/src/sandbox/index.ts",
+    name: "MAX_SHELL_OUTPUT_BYTES",
+    phrase: (bytes: number) => `**${bytes.toLocaleString("en-US")} bytes**`,
+    files: ["extending/sandbox-backends.mdx"],
+    cost: "A backend author truncating at the stated cap disagrees with every other adapter about `truncated`.",
+  },
+  {
+    source: "apps/backend/src/sandbox/index.ts",
+    name: "MAX_READ_BYTES",
+    phrase: (bytes: number) => `**${bytes.toLocaleString("en-US")} bytes**`,
+    files: ["extending/sandbox-backends.mdx"],
+    cost: "A backend author truncating at the stated cap disagrees with every other adapter about `truncated`.",
+  },
+  {
+    source: "apps/backend/src/sandbox/index.ts",
+    name: "MAX_LIST_ENTRIES",
+    phrase: (entries: number) =>
+      `**${entries.toLocaleString("en-US")} entries**`,
+    files: ["extending/sandbox-backends.mdx"],
+    cost: "A backend author truncating at the stated cap disagrees with every other adapter about `truncated`.",
+  },
 ] as const;
 
 describe("backend constants the concept pages quote", () => {

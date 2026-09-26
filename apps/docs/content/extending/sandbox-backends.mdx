@@ -41,21 +41,30 @@ things exposes the extra through a
 
 ## Rules your adapter must honour
 
-- **Paths are relative to the workspace root.** The root is conventionally
-  `/workspace`. Reject absolute paths.
+- **Paths are relative to the workspace root**, and your adapter chooses where
+  that root is. Platypus rejects absolute paths before your adapter sees them.
 - **`shellExec` is stateless.** A fresh shell per call with an explicit working
   directory — no session state carried between calls. The default timeout is 60
   seconds and the hard cap is 600.
 - **`fsWrite` takes an explicit mode**, `create` or `overwrite`. Never silently
-  create-or-overwrite.
+  create-or-overwrite: `create` fails if the file exists. Either mode creates
+  missing parent directories.
 - **`fsEdit` replaces an exact old string with a new one.** It is not a patch or
-  diff format.
+  diff format. Fail if `oldString` is absent or appears more than once.
+- **`fsRead` decodes strict UTF-8.** Fail on a file that isn't valid UTF-8
+  rather than decode it lossily. `lineRange` is 1-indexed and inclusive.
 - **Three of the five tool responses carry a `truncated` flag** —
-  `shellExec`, `fsRead` and `fsList`. Set it when you apply Platypus's byte and
-  entry caps, and truncate yourself if your environment can't honour a cap
+  `shellExec`, `fsRead` and `fsList`. The caps are **100,000 bytes** per
+  `shellExec` stream (stdout and stderr each), **1,000,000 bytes** per `fsRead`
+  file and **1,000 entries** per `fsList`. Set the flag when output reaches a
+  byte cap — output exactly at the cap counts — or when a listing had more
+  entries than the cap. Truncate yourself if your environment can't honour a cap
   natively. `fsWrite` and `fsEdit` have no such flag; there is nothing to cut.
 - **`destroy` must be idempotent.** It fires on row delete, on a backend change,
-  and best-effort when a Workspace is deleted. It need not destroy anything: the
+  and best-effort when a Workspace is deleted. A forced delete or backend change
+  skips it. It runs on a fresh adapter from `create`, not the one that ran the
+  tools — Platypus calls `create` again every Chat turn — so find the resource
+  from `ctx`, never from state held in memory. It need not destroy anything: the
   SSH adapter's `destroy` only disconnects, because the host belongs to the
   Operator, not to Platypus.
 - **State persists across Chat turns**, keyed on the Organization and Workspace.
@@ -146,7 +155,9 @@ find name 'AbortSignal'`. Add `@types/node` — you are running on Node — or
 Add an entry to `contributes.sandboxBackends`. A
 `SandboxBackendContribution` declares:
 
-- **`backend`** — the discriminator string persisted on the Sandbox row.
+- **`backend`** — the discriminator string persisted on the Sandbox row. Write
+  it bare: a third-party Plugin's is stored as `<manifest name>.<backend>`,
+  [prefixed like every contribution id](/extending/plugin-api-and-config#two-names-two-jobs).
 - **`name`** — the label an Org Admin picks from.
 - **`configSchema`** — a Zod schema for the non-secret per-Workspace settings
   (region, image, host). It may also be a **factory** taking the plugin's
@@ -159,10 +170,27 @@ Add an entry to `contributes.sandboxBackends`. A
 - **`create`** — returns your adapter, given the validated per-Workspace config
   and credentials, plus the plugin's shared deploy-time block.
 
+<Callout type="warning">
+  **Both schemas must accept `{}`.** The **Workspace settings → Sandbox** form
+  has fields only for the Docker and SSH backends; for yours it saves an empty
+  `config` and `credentials`. A schema with a required field makes every save
+  fail with a 400. Put what your backend needs — region, endpoint, API token —
+  in your Plugin's
+  [deploy-time config and credentials](/extending/plugin-api-and-config#deploy-time-config-and-credentials)
+  and read them in `create`. That block is shared by every Workspace on the
+  deployment.
+</Callout>
+
 Then list your plugin in `PLATYPUS_PLUGINS`. List membership **is** the enable
-switch — there is no separate per-backend flag. Leave the plugin out and the
-backend type is never registered, so nobody can create a Sandbox row that can't
-run.
+switch — there is no separate per-backend flag. Leave the Plugin out and its
+backend isn't offered in the **Backend** picker.
+
+<Callout type="warning">
+  **Removing the Plugin later strands every Sandbox already using its backend.**
+  Their Agents lose the Sandbox tools, and deleting one fails until you list the
+  Plugin again — or force the delete with **Delete anyway** and leak whatever
+  the adapter created.
+</Callout>
 
 <Callout type="warning">
   If your backend gives a Sandbox reach into host networks or internal services,
