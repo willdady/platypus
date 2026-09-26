@@ -793,6 +793,7 @@ export const Chat = ({
                       <Tooltip delayDuration={1000}>
                         <TooltipTrigger asChild>
                           <PromptInputButton
+                            aria-label="Search"
                             className="cursor-pointer"
                             onClick={() => setSearch(!search)}
                             variant={search ? "default" : "ghost"}
@@ -808,11 +809,16 @@ export const Chat = ({
                         open={isAgentInfoDialogOpen}
                         onOpenChange={setIsAgentInfoDialogOpen}
                       >
-                        <DialogTrigger asChild>
-                          <PromptInputButton>
-                            <Info />
-                          </PromptInputButton>
-                        </DialogTrigger>
+                        <Tooltip delayDuration={1000}>
+                          <DialogTrigger asChild>
+                            <TooltipTrigger asChild>
+                              <PromptInputButton aria-label="Agent info">
+                                <Info />
+                              </PromptInputButton>
+                            </TooltipTrigger>
+                          </DialogTrigger>
+                          <TooltipContent>Agent info</TooltipContent>
+                        </Tooltip>
                         <AgentInfoDialog
                           agent={selectedAgent}
                           agents={agents}
@@ -831,7 +837,7 @@ export const Chat = ({
                         <Tooltip delayDuration={1000}>
                           <DialogTrigger asChild>
                             <TooltipTrigger asChild>
-                              <PromptInputButton>
+                              <PromptInputButton aria-label="Settings">
                                 <Settings2 />
                               </PromptInputButton>
                             </TooltipTrigger>

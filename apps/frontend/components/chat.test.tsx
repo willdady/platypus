@@ -178,14 +178,10 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   usePromptInputAttachments: () => ({ files: [], sandboxFiles: [] }),
   PromptInputButton: ({
     children,
-    onClick,
     variant,
-  }: {
-    children?: React.ReactNode;
-    onClick?: () => void;
-    variant?: string;
-  }) => (
-    <button type="button" data-variant={variant} onClick={onClick}>
+    ...props
+  }: React.ComponentProps<"button"> & { variant?: string }) => (
+    <button type="button" data-variant={variant} {...props}>
       {children}
     </button>
   ),
@@ -451,6 +447,18 @@ const renderWithAgent = (agentId: string) => {
   );
 };
 
+describe("composer tool row", () => {
+  it("names the chat settings button in a Chat with no Agent", () => {
+    harness.data.set("/providers", { results: [searchProvider] });
+    harness.data.set("/agents", { results: [] });
+    render(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(
+      screen.getByRole("button", { name: "Settings" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Upload to Sandbox", () => {
   const renderOn = ({
     toolSetIds = ["sandbox"],
@@ -506,8 +514,7 @@ describe("Upload to Sandbox", () => {
 });
 
 /** The search toggle's Globe control, present only when the model can search. */
-const searchToggle = () =>
-  document.querySelector("svg.lucide-globe")?.closest("button") ?? null;
+const searchToggle = () => screen.queryByRole("button", { name: "Search" });
 const searchIsOn = () =>
   searchToggle()?.getAttribute("data-variant") === "default";
 
@@ -1653,9 +1660,7 @@ describe("transcript stability", () => {
 // on (issue #920).
 describe("the Agent behind the info dialog", () => {
   const openInfoDialog = () =>
-    fireEvent.click(
-      document.querySelector("svg.lucide-info")!.closest("button")!,
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Agent info" }));
   const closeInfoDialog = () =>
     fireEvent.click(screen.getByRole("button", { name: "Close info" }));
 

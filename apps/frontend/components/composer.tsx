@@ -142,7 +142,15 @@ export const Composer = ({
       <PromptInputFooter className="flex-wrap">
         <PromptInputTools>
           <PromptInputActionMenu>
-            <PromptInputActionMenuTrigger className="cursor-pointer" />
+            <Tooltip delayDuration={1000}>
+              <TooltipTrigger asChild>
+                <PromptInputActionMenuTrigger
+                  aria-label="Add attachments"
+                  className="cursor-pointer"
+                />
+              </TooltipTrigger>
+              <TooltipContent>Add attachments</TooltipContent>
+            </Tooltip>
             <PromptInputActionMenuContent>
               <PromptInputActionAddAttachments className="cursor-pointer" />
               {canUploadToSandbox && (

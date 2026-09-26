@@ -354,9 +354,7 @@ describe("Composer model picker — unsettled selection", () => {
 
 describe("Composer Sandbox uploads", () => {
   const openMenu = () => {
-    const plus = screen
-      .getAllByRole("button")
-      .find((b) => b.getAttribute("aria-haspopup") === "menu")!;
+    const plus = screen.getByRole("button", { name: "Add attachments" });
     fireEvent.keyDown(plus, { key: "Enter" });
   };
 
