@@ -61,7 +61,7 @@ export type SystemPromptStableContext = {
    * the tools the model actually has. A Workspace setting, so it holds steady
    * for the life of a Chat like the Agent's own configuration.
    */
-  memorySearchAvailable?: boolean;
+  memorySearchAvailable: boolean;
   skills: Array<Pick<Skill, "name" | "description">>;
   subAgents: Array<{ name: string; description?: string | null }>;
   /**

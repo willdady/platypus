@@ -88,7 +88,7 @@ export const plugin: PlatypusPlugin = {
         id: "memory",
         name: "Memory",
         category: "Memory",
-        description: "Search and retrieve memories from past conversations",
+        description: "Look up memories from past conversations",
         tools: ({ workspaceId, userId }) =>
           createMemoryTools(workspaceId, userId),
       },

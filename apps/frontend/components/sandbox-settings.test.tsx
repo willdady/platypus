@@ -290,7 +290,7 @@ describe("SandboxSettings save", () => {
       expect(savedBody(fetchMock)).not.toHaveProperty("credentials");
     });
 
-    it("enables the passphrase only while a new key is entered", () => {
+    it("enables the passphrase only while a new key is entered, clearing it with the key", () => {
       renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
 
       expect(passphrase()).toBeDisabled();
@@ -298,10 +298,12 @@ describe("SandboxSettings save", () => {
         target: { value: "-----KEY-----" },
       });
       expect(passphrase()).toBeEnabled();
+      fireEvent.change(passphrase(), { target: { value: "pw" } });
       fireEvent.change(screen.getByLabelText("Private key"), {
         target: { value: "  " },
       });
       expect(passphrase()).toBeDisabled();
+      expect(passphrase()).toHaveValue("");
     });
 
     it("sends a replacement key with its passphrase and optional pins", async () => {

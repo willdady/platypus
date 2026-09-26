@@ -16,6 +16,7 @@ const baseCtx = (): SystemPromptStableContext => ({
   agent: null,
   user: { id: "user-1", name: "Alice" },
   memoriesBlock: "",
+  memorySearchAvailable: false,
   skills: [],
   subAgents: [],
   runMode: "interactive",

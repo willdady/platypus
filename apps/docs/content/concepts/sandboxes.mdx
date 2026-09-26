@@ -1,6 +1,6 @@
 ---
 title: Sandboxes
-description: A Sandbox is an execution environment that gives an agent shell and filesystem tools, outside the machine running Platypus.
+description: A Sandbox is an execution environment that gives an Agent shell and filesystem tools, separate from the Platypus backend.
 ---
 
 import { Callout } from "nextra/components";
@@ -12,7 +12,7 @@ import { Callout } from "nextra/components";
 A **Sandbox** is an environment where an **Agent** can
 run shell commands and work with files. It's registered in a **Workspace**, and
 when it's available, the Agent gains shell and filesystem tools that operate
-_inside_ that environment — not on the machine running Platypus.
+_inside_ that environment — not inside the Platypus backend itself.
 
 **Why you'd use one:** lots of useful work involves actually executing
 something — running a script, building a project, inspecting files. A Sandbox

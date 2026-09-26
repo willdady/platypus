@@ -901,7 +901,9 @@ const SandboxSettings = ({
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="ssh-private-key">Private key</FieldLabel>
+                <FieldLabel htmlFor={keyStored ? undefined : "ssh-private-key"}>
+                  Private key
+                </FieldLabel>
                 {keyStored ? (
                   <div className="flex items-center justify-between gap-2 rounded-md border border-input px-3 py-2 text-sm">
                     <span className="flex items-center gap-2">
@@ -927,6 +929,11 @@ const SandboxSettings = ({
                       setFormData((prev) => ({
                         ...prev,
                         sshPrivateKey: e.target.value,
+                        // The passphrase only travels with a key, so clearing
+                        // the key clears it rather than dropping it on save.
+                        sshPassphrase: e.target.value.trim()
+                          ? prev.sshPassphrase
+                          : "",
                       }))
                     }
                     disabled={isSubmitting}

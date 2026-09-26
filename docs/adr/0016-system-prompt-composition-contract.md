@@ -85,3 +85,13 @@ to pin against — a Trigger's prompt would otherwise vary with interactive-chat
 activity unrelated to it. An **Agent**-level memories flag, or any control over
 the User, Workspace or Organization Context fragments, remains the option
 rejected above and would need its own amendment.
+
+## Note: the memory-tool fragment after issue #1059
+
+Fragment 8's emission condition as recorded above — "when the Agent has the
+`memory` tool set" — is unchanged, and it still keys on the core tool set id. What
+varies is its wording: the `memory` tool set now leaves `memorySearch` out when
+the Workspace has no embedding Provider, and the fragment names only the tools
+the turn actually offers. The flag it reads is a Workspace setting, so it holds
+steady for the life of a Chat like the Agent's own configuration and does not
+disturb ADR-0020's stable prefix.
