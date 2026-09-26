@@ -36,20 +36,26 @@ const requireSandboxAdmin = requireWorkspaceConfigAccess();
 
 const sandbox = new Hono<{ Variables: Variables }>();
 
-// Credentials are server-side only. Stripping here is a quiet improvement over
-// the Provider/MCP routes which still return their secret fields; revisit when
-// those routes adopt a similar redaction pattern.
+// Credentials are server-side only, to admins too. Stripping here is a quiet
+// improvement over the Provider/MCP routes which still return their secret
+// fields; revisit when those routes adopt a similar redaction pattern. In their
+// place `hasCredentials` says whether any are stored, so the settings form can
+// show a stored key instead of a blank field that looks lost.
 //
 // adminEnv holds admin-managed secrets. A non-admin owner may see the *keys*
 // (so the UI can show "managed by admin" and the orientation block stays
 // coherent) but never the values (ADR-0006). Admins get the values so the
 // settings form can edit them.
 const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
-  const { credentials: _credentials, adminEnv, ...rest } = record;
+  const { credentials, adminEnv, ...rest } = record;
   const safeAdminEnv = isAdmin
     ? adminEnv
     : Object.fromEntries(Object.keys(adminEnv ?? {}).map((k) => [k, ""]));
-  return { ...rest, adminEnv: safeAdminEnv };
+  return {
+    ...rest,
+    adminEnv: safeAdminEnv,
+    hasCredentials: Object.keys(credentials ?? {}).length > 0,
+  };
 };
 
 /** Get the workspace's sandbox (404 if none configured) */

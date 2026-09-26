@@ -33,6 +33,7 @@ const DOCKER_SANDBOX = {
   config: {},
   adminEnv: {},
   userEnv: {},
+  hasCredentials: false,
 };
 
 /**
@@ -231,30 +232,31 @@ describe("SandboxSettings save", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  // ADR-0012: GET strips the SSH credentials, so a blank key on an edit must
-  // leave the stored one alone rather than clear it.
+  // ADR-0012: GET strips the SSH credentials and reports only whether some are
+  // stored, so a stored key shows as "Key stored" and an edit that leaves it
+  // alone must keep it rather than clear it (#1056).
   describe("SSH", () => {
     const SSH_SANDBOX = {
       ...DOCKER_SANDBOX,
       backend: "ssh",
       config: { host: "ssh.example.com", port: 2222, user: "platypus" },
+      hasCredentials: true,
     };
-    const renderSsh = () => {
+    const renderSsh = (sandbox: object = SSH_SANDBOX) => {
       mockReads({
-        sandbox: { data: SSH_SANDBOX },
+        sandbox: { data: sandbox },
         backends: [{ backend: "ssh", name: "SSH" }],
       });
       renderSettings();
     };
+    const passphrase = () => screen.getByLabelText("Key passphrase (optional)");
 
-    it("omits credentials when the private key is left blank", async () => {
+    it("shows a stored key as stored, and keeps it on a save that leaves it alone", async () => {
       const fetchMock = stubAcceptedSave({});
       renderSsh();
 
-      expect(screen.getByLabelText("Private key")).toHaveAttribute(
-        "placeholder",
-        "Leave blank to keep the stored key",
-      );
+      expect(screen.getByText("Key stored")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Private key")).toBeNull();
       save();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -267,16 +269,50 @@ describe("SandboxSettings save", () => {
       });
     });
 
-    it("sends a newly entered key with its passphrase and optional pins", async () => {
+    it("shows a plain key field, with no stored state, when no key is stored", () => {
+      renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
+
+      expect(screen.getByLabelText("Private key")).toHaveValue("");
+      expect(screen.queryByText("Key stored")).toBeNull();
+      expect(screen.queryByText(/Leave blank to keep/)).toBeNull();
+    });
+
+    it("reveals the key field on Replace key, still keeping the stored key if left blank", async () => {
       const fetchMock = stubAcceptedSave({});
       renderSsh();
 
+      fireEvent.click(screen.getByRole("button", { name: "Replace key" }));
+      expect(screen.queryByText("Key stored")).toBeNull();
+      expect(screen.getByLabelText("Private key")).toHaveValue("");
+      save();
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(savedBody(fetchMock)).not.toHaveProperty("credentials");
+    });
+
+    it("enables the passphrase only while a new key is entered", () => {
+      renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
+
+      expect(passphrase()).toBeDisabled();
       fireEvent.change(screen.getByLabelText("Private key"), {
         target: { value: "-----KEY-----" },
       });
-      fireEvent.change(screen.getByLabelText("Key passphrase (optional)"), {
-        target: { value: "pw" },
+      expect(passphrase()).toBeEnabled();
+      fireEvent.change(screen.getByLabelText("Private key"), {
+        target: { value: "  " },
       });
+      expect(passphrase()).toBeDisabled();
+    });
+
+    it("sends a replacement key with its passphrase and optional pins", async () => {
+      const fetchMock = stubAcceptedSave({});
+      renderSsh();
+
+      fireEvent.click(screen.getByRole("button", { name: "Replace key" }));
+      fireEvent.change(screen.getByLabelText("Private key"), {
+        target: { value: "-----KEY-----" },
+      });
+      fireEvent.change(passphrase(), { target: { value: "pw" } });
       fireEvent.change(screen.getByLabelText("Host key (optional)"), {
         target: { value: " ssh-ed25519 AAAA " },
       });

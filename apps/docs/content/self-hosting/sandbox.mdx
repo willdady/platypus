@@ -196,8 +196,8 @@ Owner). It is _not_ deployment env or plugin config.
 | **User**           | Yes      | SSH login user. Public-key auth only.                                                                                                   |
 | **Workspace root** | No       | Directory the sandbox works in. Absolute, or resolved against the login `$HOME`. Defaults to `$HOME/platypus-workspace`, `mkdir -p`'d on first connect. |
 | **Host key**       | No       | Optional host-key pin (see [below](#host-key-verification)). Blank ⇒ connect unverified with a logged warning.                          |
-| **Private key**    | Yes      | PEM or OpenSSH private key for the login user. Kept server-side, never sent to the model. On edit, leave blank to keep the stored key.  |
-| **Key passphrase** | No       | Passphrase decrypting the private key, when it is encrypted.                                                                            |
+| **Private key**    | Yes      | PEM or OpenSSH private key for the login user. Kept server-side, never sent to the model. Once saved, the field shows **Key stored**; click **Replace key** to enter a new one. Saving without replacing it keeps the stored key. |
+| **Key passphrase** | No       | Passphrase decrypting the private key, when it is encrypted. Enabled only while you're entering a key. A new key replaces the stored passphrase, so re-enter it with an encrypted key. |
 
 ### Public-key setup
 
@@ -215,9 +215,9 @@ ssh-copy-id -i platypus_sandbox.pub platypus@ssh.example.com
 
 Paste the **private** key (`platypus_sandbox`) into the Sandbox's **Private key**
 field; if you protected it with a passphrase, put that in **Key passphrase**. The
-private key is stored server-side and is never returned to non-admins or exposed
-to the model. Use a key scoped to this host so it can be rotated or revoked
-independently.
+private key is stored server-side and is never shown again, not even to Org
+Admins, or exposed to the model. Use a key scoped to this host so it can be
+rotated or revoked independently.
 
 ### Host-key verification
 

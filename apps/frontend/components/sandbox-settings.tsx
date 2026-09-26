@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { toast } from "sonner";
-import { Box, Plus, Trash2, X } from "lucide-react";
+import { Box, KeyRound, Plus, Trash2, X } from "lucide-react";
 import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -69,8 +69,8 @@ type SandboxFormData = {
   networks: string[];
   extraHosts: Row[]; // key = hostname, value = ip / host-gateway
   // SSH connection (ADR-0012), admin-only. Port is kept as a string for the
-  // input and parsed on save. privateKey/passphrase are credentials (never
-  // returned by GET, so blank on edit means "keep the stored value").
+  // input and parsed on save. privateKey/passphrase are credentials: GET never
+  // returns them (only `hasCredentials`), so blank means "keep the stored key".
   sshHost: string;
   sshPort: string;
   sshUser: string;
@@ -308,6 +308,9 @@ const SandboxSettings = ({
 
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [formData, setFormData] = useState<SandboxFormData>(DEFAULT_FORM);
+  // Whether the admin chose to replace a stored SSH key, revealing the textarea
+  // in place of the "Key stored" state.
+  const [isReplacingKey, setIsReplacingKey] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
@@ -324,6 +327,7 @@ const SandboxSettings = ({
   const [isForcing, setIsForcing] = useState(false);
 
   useResetOnChange(data, () => {
+    setIsReplacingKey(false);
     if (data) {
       const config = (data.config ?? {}) as {
         networks?: string[];
@@ -342,8 +346,8 @@ const SandboxSettings = ({
         userEnv: recordToRows(data.userEnv),
         networks: config.networks ?? [],
         extraHosts: extraHostsToRows(config.extraHosts),
-        // SSH config (credentials are stripped by GET, so left blank — an edit
-        // that doesn't re-enter the key preserves the stored one server-side).
+        // SSH config. The key and passphrase stay blank: GET strips them, and an
+        // edit that doesn't enter a new key preserves the stored one.
         sshHost: config.host ?? "",
         sshPort: config.port ? String(config.port) : DEFAULT_SSH_PORT,
         sshUser: config.user ?? "",
@@ -411,10 +415,10 @@ const SandboxSettings = ({
         : {};
 
     // The `credentials` slice of the payload (spread below). For SSH (ADR-0012)
-    // we only send credentials when a private key was entered: on edit the key
-    // comes back blank (GET strips it), so omitting `credentials` preserves the
-    // stored value server-side rather than clearing it. Other backends send an
-    // empty credentials object, as before.
+    // we only send credentials when a private key was entered: omitting
+    // `credentials` preserves the stored value server-side rather than clearing
+    // it. The passphrase travels only with a key, so it is never dropped
+    // silently. Other backends send an empty credentials object, as before.
     const credentialsPayload =
       isSsh && formData.sshPrivateKey.trim()
         ? {
@@ -601,6 +605,8 @@ const SandboxSettings = ({
   }
 
   const hasSandbox = !!data;
+  const keyStored =
+    data?.backend === SSH_BACKEND && data.hasCredentials && !isReplacingKey;
   const showForm = hasSandbox || isConfiguring || !!draft;
   const noBackends = backends.length === 0;
 
@@ -896,31 +902,44 @@ const SandboxSettings = ({
 
               <Field>
                 <FieldLabel htmlFor="ssh-private-key">Private key</FieldLabel>
-                <textarea
-                  id="ssh-private-key"
-                  placeholder={
-                    hasSandbox
-                      ? "Leave blank to keep the stored key"
-                      : "-----BEGIN OPENSSH PRIVATE KEY-----"
-                  }
-                  value={formData.sshPrivateKey}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      sshPrivateKey: e.target.value,
-                    }))
-                  }
-                  disabled={isSubmitting}
-                  rows={5}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                />
+                {keyStored ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-input px-3 py-2 text-sm">
+                    <span className="flex items-center gap-2">
+                      <KeyRound className="size-4 text-muted-foreground" />
+                      Key stored
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsReplacingKey(true)}
+                      disabled={isSubmitting}
+                    >
+                      Replace key
+                    </Button>
+                  </div>
+                ) : (
+                  <textarea
+                    id="ssh-private-key"
+                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                    value={formData.sshPrivateKey}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        sshPrivateKey: e.target.value,
+                      }))
+                    }
+                    disabled={isSubmitting}
+                    rows={5}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                )}
                 <FieldDescription>
                   PEM or OpenSSH private key. Kept server-side, never sent to
                   the model.
-                  {hasSandbox &&
-                    " Leave blank to keep the currently stored key."}
+                  {isReplacingKey && " Leave blank to keep the stored key."}
                 </FieldDescription>
               </Field>
 
@@ -939,10 +958,14 @@ const SandboxSettings = ({
                       sshPassphrase: e.target.value,
                     }))
                   }
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !formData.sshPrivateKey.trim()}
                   autoComplete="off"
                   className="font-mono"
                 />
+                <FieldDescription>
+                  Enter a private key first. A new key replaces the stored
+                  passphrase too, so re-enter it here if the key is encrypted.
+                </FieldDescription>
               </Field>
             </>
           )}

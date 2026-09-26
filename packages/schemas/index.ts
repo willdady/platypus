@@ -1778,7 +1778,11 @@ const sandboxBaseSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const sandboxSchema = sandboxBaseSchema;
+// The read model. A response never carries `credentials`; `hasCredentials`
+// says whether any are stored.
+export const sandboxSchema = sandboxBaseSchema.extend({
+  hasCredentials: z.boolean(),
+});
 
 export type Sandbox = z.infer<typeof sandboxSchema>;
 

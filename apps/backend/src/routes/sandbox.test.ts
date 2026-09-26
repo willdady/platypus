@@ -86,6 +86,7 @@ describe("Sandbox Routes", () => {
       expect(res.status).toBe(201);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
+      expect(body.hasCredentials).toBe(true);
       expect(body.id).toBe("sbx-1");
       expect(body.backend).toBe("docker");
     });
@@ -157,6 +158,45 @@ describe("Sandbox Routes", () => {
       expect(body.id).toBe("sbx-1");
     });
 
+    // Issue #1056: the settings form needs to know a key is stored, and no
+    // caller ever gets the key back, admins included.
+    it.each([
+      ["admin", { privateKey: "PRIVATE-KEY", passphrase: "PASSPHRASE" }, true],
+      ["member", { privateKey: "PRIVATE-KEY", passphrase: "PASSPHRASE" }, true],
+      ["admin", {}, false],
+      ["member", {}, false],
+      ["member", null, false],
+    ])(
+      "tells a %s whether credentials are stored (%j → %s), never what they are",
+      async (role, credentials, hasCredentials) => {
+        mockSession();
+        mockDb.limit.mockResolvedValueOnce([{ role }]);
+        mockDb.limit.mockResolvedValueOnce([
+          { ownerId: "user-1", organizationId: "org-1" },
+        ]);
+        mockDb.limit.mockResolvedValueOnce([
+          {
+            id: "sbx-1",
+            workspaceId,
+            name: "SSH host",
+            backend: "ssh",
+            config: { host: "ssh.example.com", user: "platypus" },
+            credentials,
+            adminEnv: {},
+            userEnv: {},
+          },
+        ]);
+
+        const res = await app.request(baseUrl);
+        expect(res.status).toBe(200);
+        const text = await res.text();
+        expect(JSON.parse(text)).toMatchObject({ hasCredentials });
+        expect(text).not.toMatch(
+          /"credentials"|privateKey|passphrase|PRIVATE-KEY|PASSPHRASE/,
+        );
+      },
+    );
+
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
@@ -213,6 +253,7 @@ describe("Sandbox Routes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
+      expect(body.hasCredentials).toBe(true);
       expect(body.name).toBe("Renamed");
     });
 
