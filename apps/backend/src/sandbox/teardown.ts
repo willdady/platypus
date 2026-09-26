@@ -15,9 +15,8 @@ type SandboxRow = typeof sandboxTable.$inferSelect;
 // Resolves the adapter for a sandbox row and invokes its destroy() with the
 // row's workspace context. Throws on any failure — adapter not registered,
 // config/credentials invalid, Workspace row missing, or the adapter's destroy()
-// rejecting. The user-
-// initiated DELETE path uses this; the row should remain in place on failure
-// so the user can retry (or force-delete).
+// rejecting. The user-initiated DELETE path uses this; the row should remain in
+// place on failure so the user can retry (or force-delete).
 export const destroySandboxRow = async (row: SandboxRow): Promise<void> => {
   const registration = getSandboxBackend(row.backend);
   if (!registration) {
