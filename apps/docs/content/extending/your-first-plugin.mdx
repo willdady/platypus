@@ -104,8 +104,9 @@ see a row reading **example**, version `0.1.0`, badged **Third-party**, with
 </Callout>
 
 If the backend didn't come back up at all, that is the intended behaviour for a
-plugin that couldn't be resolved: boot is fail-loud and all-or-nothing. Read
-`docker compose logs backend` — the last line names your plugin and the reason.
+plugin that couldn't be resolved: boot is fail-loud and all-or-nothing. Read the
+backend's log — the `pnpm dev` terminal in a checkout, `docker compose logs
+backend` on a custom image. The startup error names your plugin and the reason.
 
 ## Checkpoint 2: an Agent can use it
 
