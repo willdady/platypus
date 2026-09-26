@@ -11,8 +11,9 @@ A **Web-search backend** fills the Chat **Search** toggle from a service you
 choose — SearXNG, a commercial search API, a headless browser. It exists for the
 Providers that have no web search of their own: a self-hosted OpenAI-compatible
 endpoint such as vLLM, Ollama or LiteLLM, or Bedrock. An Org Admin points a
-Provider at your backend, and the **Search** toggle appears in Chat on a Provider
-that never had one.
+Provider at your backend — as can a Workspace Owner, on a Workspace-scoped
+Provider where **Owner-managed providers** is on — and the **Search** toggle
+appears in Chat on a Provider that never had one.
 
 No search backend ships in the box: core owns this Extension point and every
 backend that fills it is a Plugin.
@@ -38,8 +39,10 @@ it existed keeps working. What it carries is worth taking, though — see
 [the signal](#the-signal-your-executors-get).
 
 Supplying `read_url` is a bigger decision than it looks: it means the **Search**
-toggle grants page fetching on every Provider pointed at your backend, which the
-vendors' built-in search never does. `read_url` also does **not** check
+toggle grants page fetching **from your deployment** on every Provider pointed
+at your backend. A vendor's built-in search runs on the vendor's side — OpenAI's
+opens pages as part of searching — but fetches nothing from your deployment.
+`read_url` also does **not** check
 `robots.txt`, whereas the `fetchUrl` tool in `@platypus/web-fetch` honours it
 unless an Operator turns that off — if your upstream should honour it, that is
 your executor's job, and your Plugin's config is where the switch for it belongs.
@@ -49,8 +52,7 @@ their input schemas, their descriptions, the caps below, pagination, the per-cal
 timeout, the error contract, and a guard on every URL the model supplies. That
 closure is the point — an Agent's Instructions must not depend on which backend
 an Operator configured, so the model-facing signature is identical across every
-backend and identical to what a Provider's built-in search fills the same slot
-with.
+backend.
 
 The tools are ephemeral. They exist for a turn the toggle was on for, and no
 other: your executors are built per turn and dropped when it ends, so a
@@ -81,10 +83,11 @@ an error — it comes back as one 100 000-character page with a continuation
 index, so a 1M-character page is one `fetchUrl` call and ten `read_url` calls.
 
 <Callout type="warning">
-  **Do not truncate, paginate, or format anything yourself.** Core cannot tell a
-  short page from a page you already cut, so it slices what you hand back and
-  reports `next_start_index` into content that does not exist — the model asks
-  for the next page and gets the wrong text, or nothing. The same goes for
+  **Do not truncate, paginate, or format anything yourself.** Your executor gets
+  only the `url`, and core decides whether more remains from the length of what
+  you return — so a page you cut arrives marked complete, `truncated: false`
+  with no `next_start_index`, and the model never learns the rest existed. The
+  same goes for
   dropping results you think are poor: core's 10 are taken from the top of your
   list, so pre-filtering only narrows what it can choose from.
 </Callout>
@@ -124,6 +127,9 @@ It fires for either of two reasons, and you do not need to tell them apart:
 
 - the person in the Chat pressed stop, or their run was cancelled;
 - your own `timeoutMs` deadline passed.
+
+`createExecutors` gets no signal: past its `timeoutMs` core stops waiting, but
+the factory runs on.
 
 <Callout type="warning">
   **Ignoring the signal is allowed, and it costs you a request you are no longer
@@ -181,8 +187,9 @@ The two windows are **additive**, not shared: a turn can spend up to
 upstream, not to their sum.
 
 <Callout type="warning">
-  A contribution declaring more than 120 000 **fails startup** with an error
-  naming your Plugin. It is not clamped down to the ceiling, because the value
+  A contribution declaring a `timeoutMs` that is not a positive, finite number
+  of at most 120 000 **fails startup** with an error naming your Plugin. An
+  over-ceiling value is not clamped down to the ceiling, because the value
   is fixed in your manifest and therefore knowable before anything runs — a
   deployment that would silently run at a quarter of the timeout you asked for
   is worse than one that will not start.
@@ -220,12 +227,12 @@ with `EGRESS_ALLOW_PRIVATE_NETWORKS`.
 
 Add an entry to `contributes.webBackends`. A `WebBackendContribution` declares:
 
-- **`backend`** — the discriminator string persisted on the Provider row, and
-  the value of `searchSource` on the Provider API. Namespaced with your Plugin's
-  name automatically. The stored value is capped at 200 characters, which no
-  realistic namespaced id approaches.
-- **`name`** — the display name an Org Admin picks from under **Advanced
-  settings → Web search** on the Provider form.
+- **`backend`** — the id core stores, as `<manifest name>.<backend>`, on each
+  Provider that selects it. Renaming either your manifest `name` or this id
+  orphans those Providers: they show the old id marked **(not installed)** and
+  get no search.
+- **`name`** — the display name shown under **Advanced settings → Web search**
+  on the Provider form.
 - **`timeoutMs`** — optional, as above.
 - **`createExecutors`** — returns `{ web_search, read_url? }`, given the request
   context (`orgId`, `workspaceId`, `userId`) and your Plugin's deploy-time
@@ -241,17 +248,13 @@ request context on every turn, so you can serve different Organizations
 different upstreams. Key your own config by `orgId` or `workspaceId` and choose
 inside the factory:
 
-```jsonc
-// PLATYPUS_PLUGIN_CONFIG_ACME_SEARCH
-{
-  "config": {
-    "endpoints": {
-      "org-dmz-team": "https://searx.dmz.internal",
-      "default": "https://searx.internal",
-    },
-  },
-}
+```bash
+PLATYPUS_PLUGIN_CONFIG_ACME_SEARCH={"config":{"endpoints":{"<org-id>":"https://searx.dmz.internal","default":"https://searx.internal"}}}
 ```
+
+Key by the Organization's id, not its name — the id is the first segment of the
+URL on any of its pages. A key spelled as the name never matches, and every turn
+falls through to `default`.
 
 ```ts
 createExecutors(ctx, plugin) {
@@ -294,7 +297,7 @@ not just by the model.
 
 - **[Plugin API & config](/extending/plugin-api-and-config)** — the deploy-time
   config and credential block your `createExecutors` is handed.
-- **[Providers](/concepts/providers)** — the **Web search** field an Org Admin
-  picks your backend from.
+- **[Providers](/concepts/providers)** — the **Web search** field your backend
+  is picked from.
 - **[Backend configuration](/reference/backend-configuration)** — `PLATYPUS_PLUGINS`
   and the egress setting.
