@@ -87,21 +87,20 @@ is a Tool.
   invalid UTF-8 comes back identical. The five tools' caps don't apply.
 - **Size a file before you pull it.** You may reject an oversized file before
   transferring it.
-- **`fsWriteBytes` never refuses an existing path.** Platypus has already decided
-  that overwriting is what the person wants before it calls you.
+- **`fsWriteBytes` never refuses an existing path.** There is no create-only
+  mode to honour.
 
 <Callout type="warning">
   **Handle every file up to 25 MiB, or leave the member out.** 25 MiB is the
   transfer bound on every backend, in both directions, exported as
-  `SANDBOX_TRANSFER_MAX_BYTES`. Neither you nor the Operator can change it. A
-  member that works for small files and fails at 10 MiB is the trap: the person
-  finds out partway through a transfer. If your service caps requests below the
-  bound, chunk the transfer inside your adapter.
+  `SANDBOX_TRANSFER_MAX_BYTES`. Neither you nor the Operator can change it. If
+  your service caps requests below the bound, chunk the transfer inside your
+  adapter.
 </Callout>
 
-Leave a member out and your backend doesn't offer that direction. There is no
-fallback through `fsRead` or `fsWrite`. The two members are independent, so a
-backend can implement `fsReadBytes` alone.
+Leave a member out and Platypus moves no files in that direction on your
+backend. There is no fallback through `fsRead` or `fsWrite`. The two members are
+independent, so a backend can implement `fsReadBytes` alone.
 
 ## The signal your tool methods get
 
