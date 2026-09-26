@@ -11,7 +11,7 @@ import {
 } from "./src/db/seed.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduler } from "./src/jobs/scheduler.ts";
-import { loadPlugins } from "./src/plugins/loader.ts";
+import { loadPlugins, type LoadPluginsResult } from "./src/plugins/loader.ts";
 import { setLoadedPlugins } from "./src/plugins/registry.ts";
 import { installProviderWarningLogger } from "./src/provider-warnings.ts";
 import { validateTriggerBreakerConfig } from "./src/services/trigger-breaker.ts";
@@ -42,6 +42,7 @@ const main = async () => {
   // A seed that cannot complete must not reach `serve()`: an HTTP server nobody
   // can authenticate against reports healthy while being unusable (#369). Retry
   // the transient failures, then exit non-zero so the orchestrator says so.
+  let loadedPlugins: LoadPluginsResult;
   try {
     // Fail loud before the database is touched: the run-rate breaker is the only
     // ceiling on an Event Trigger's run rate against one entity, and a
@@ -54,6 +55,13 @@ const main = async () => {
 
       await seedFirstBoot(db, { createUser: createAdminUser });
     });
+
+    // Load plugins before the HTTP server accepts traffic so their Tool set
+    // contributions are registered by the time Chat turns resolve tools. Fail-loud
+    // and all-or-nothing: a bad plugin aborts startup (ADR-0013). Outside the
+    // retry, since a bad plugin fails the same way every time, but inside this
+    // try so the fatal line names the plugin and the reason.
+    loadedPlugins = await loadPlugins();
   } catch (error) {
     // The message goes in the log line, not just the serialised error: it is
     // the one thing the Operator has to work from (#369).
@@ -65,11 +73,6 @@ const main = async () => {
     );
     process.exit(1);
   }
-
-  // Load plugins before the HTTP server accepts traffic so their Tool set
-  // contributions are registered by the time Chat turns resolve tools. Fail-loud
-  // and all-or-nothing: a bad plugin aborts startup (ADR-0013).
-  const loadedPlugins = await loadPlugins();
 
   // Enumerate each loaded plugin — version, origin, and the contributions it
   // fills — so the boot log is a complete, auditable statement of what runs
