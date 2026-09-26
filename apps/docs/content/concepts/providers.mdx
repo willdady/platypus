@@ -55,8 +55,8 @@ set or unset.
 
 **Why this matters to you:** the models you can pick on a Chat or an Agent come
 from the Providers available in your Workspace. If a model you expect isn't
-there, it's because no available Provider has it enabled — an Org Admin controls
-that list.
+there, it's because no available Provider has it enabled — whoever manages that
+Provider controls the list.
 
 ## Model aliases
 
@@ -65,7 +65,7 @@ or `flagship` — that an Agent or a Chat selects instead of the vendor's model
 id. Point the alias at a newer model and every Agent and Chat using it moves
 with it, on their next turn, with no edits to any of them.
 
-An Org Admin sets one in the **Alias** field beside a model on the Provider.
+Whoever manages the Provider sets one in the **Alias** field beside a model.
 From then on, that model appears in the Agent and Chat model pickers under its
 alias rather than its model id.
 
@@ -173,7 +173,9 @@ Three things the field tells you about a selection:
   **(unavailable here)**. It runs no search, but the selection is kept rather
   than rewritten: switch that Provider to a type or API mode that does have
   built-in search and it applies again. To retire it instead, pick something
-  else yourself.
+  else yourself. A new Provider starts on built-in search, so a new Provider
+  of either kind shows this from the start, and runs no search until you pick
+  **None** or a backend.
 
 Results are cited the same way whichever search ran: the pages used appear in a
 collapsible **Used N sources** row above the reply. Adding a backend to a

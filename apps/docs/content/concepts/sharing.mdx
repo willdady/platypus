@@ -1,11 +1,11 @@
 ---
-title: Sharing across workspaces
+title: Sharing across Workspaces
 description: How an Organization reuses one resource across many Workspaces — Shared resources, Attachments, and Blueprints.
 ---
 
 import { Callout } from "nextra/components";
 
-# Sharing across workspaces
+# Sharing across Workspaces
 
 Most of the things you build — **Agents**, **Skills**, **MCP** servers, and
 **Providers** — live inside a single **Workspace**. But an Organization often
@@ -36,8 +36,9 @@ at once. No drift, no copy-paste.
 
 That rule bites when you Promote an Agent: it's **refused** while
 its Provider, any of its Skills or Sub-Agents, or any MCP it's granted is still
-Workspace-scoped. Promote the Skills and Sub-Agents first; a Provider or MCP has
-no Promote; [Promote](#promote) says how to share one. Platypus does not resolve the prerequisite for you by quietly pulling it up
+Workspace-scoped. Promote the Skills and Sub-Agents first. A Provider or MCP
+can't be promoted; recreate it at Organization scope (see [Promote](#promote)).
+Platypus does not resolve the prerequisite for you by quietly pulling it up
 alongside, because that would make something Organization-readable that no Org
 Admin ever named.
 
@@ -91,7 +92,8 @@ it from scratch.
   **Organization settings → Providers → Add provider**. A Workspace-scoped MCP
   or Provider can't be moved up; to share one, recreate it at Organization
   scope. A Skill can also be created there directly, under **Organization
-  settings → Skills → Create skill**.
+  settings → Skills → Create skill**. An Agent can't be created at Organization
+  scope; Promote is the only way to share one.
 </Callout>
 
 ## Blueprint

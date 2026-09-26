@@ -11,7 +11,8 @@ import { Callout } from "nextra/components";
 
 A **Sandbox** is an environment where an **Agent** can
 run shell commands and work with files. It's registered in a **Workspace**, and
-when it's available, the Agent gains shell and filesystem tools that operate
+when it's configured and the Agent is granted its Tool set, the Agent gains
+shell and filesystem tools that operate
 _inside_ that environment — not inside the Platypus backend itself.
 
 **Why you'd use one:** lots of useful work involves actually executing
@@ -68,15 +69,16 @@ binary files work, up to **25 MiB** each way. Their contents never pass through
 the model.
 
 - **Upload**: choose **+ → Upload to Sandbox** in the chat input. The file
-  lands in the workspace root when you send the message — see [Uploading to the
+  lands in the Sandbox's root directory when you send the message — see [Uploading to the
   Sandbox](/building-with-platypus/chat#uploading-to-the-sandbox).
 - **Download**: ask the Agent for a file as a download. Its `fsDownload` tool
   puts a **Download** button in the Chat. The file always downloads, and never
   opens in the browser.
 
-Not every backend supports file transfer. When the Sandbox's backend can't take
-uploads, the composer doesn't offer **Upload to Sandbox**; when it can't serve
-downloads, the Agent doesn't get `fsDownload`. Local Docker and SSH support both
+Not every backend supports file transfer. **Upload to Sandbox** appears only
+when the backend accepts uploads and the selected Agent has the Sandbox Tool
+set; when the backend can't serve downloads, the Agent doesn't get
+`fsDownload`. Local Docker and SSH support both
 directions.
 
 <Callout type="info">

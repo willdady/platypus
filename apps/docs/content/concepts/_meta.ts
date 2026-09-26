@@ -10,7 +10,7 @@ const meta = {
   skills: "Skills",
   "memory-and-context": "Memory & context",
   "system-prompt": "The system prompt",
-  sharing: "Sharing across workspaces",
+  sharing: "Sharing across Workspaces",
 };
 
 export default meta;
