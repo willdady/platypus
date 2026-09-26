@@ -683,7 +683,8 @@ describe("DockerSandboxTransport — byte transfer", () => {
       callOptions,
     );
 
-    // What the daemon would have extracted: the single tar entry's body.
+    // What the daemon would have extracted: the single tar entry's body, sized
+    // by the octal field at 124 and starting after the 512-byte header.
     const tar = mockState.putArchiveCalls[0].buffer;
     const size = Number.parseInt(tar.subarray(124, 135).toString("utf8"), 8);
     queueExec({ stdout: tar.subarray(512, 512 + size), exitCode: 0 });
@@ -694,6 +695,9 @@ describe("DockerSandboxTransport — byte transfer", () => {
       callOptions,
     );
 
+    expect(mockState.execCalls[0]).toMatchObject({
+      Cmd: ["mkdir", "-p", "/workspace/bin"],
+    });
     expect(mockState.putArchiveCalls[0].opts).toEqual({
       path: "/workspace/bin",
     });

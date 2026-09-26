@@ -13,14 +13,14 @@ import {
 } from "./transport.ts";
 import type {
   FsEditInput,
-  FsReadBytesInput,
-  FsWriteBytesInput,
   FsEditOutput,
   FsListEntry,
   FsListInput,
   FsListOutput,
+  FsReadBytesInput,
   FsReadInput,
   FsReadOutput,
+  FsWriteBytesInput,
   FsWriteInput,
   FsWriteOutput,
   SandboxBackend,
@@ -181,9 +181,10 @@ export const parseFindOutput = (stdout: string): FsListOutput => {
   };
 };
 
-// Read a file through the transport, attributing a failure to the tool that
-// asked. A transport reports why it could not read; naming the tool is core's
-// job, so the same underlying error reads correctly from fs.read and fs.edit.
+// Read a file through the transport, attributing a failure to the operation
+// that asked. A transport reports why it could not read; naming the operation
+// is core's job, so the same underlying error reads correctly from fs.read,
+// fs.edit and fs.readBytes.
 const readForTool = async (
   transport: SandboxTransport,
   ctx: SandboxContext,

@@ -85,8 +85,8 @@ is a Tool.
 
 - **Move bytes, not text.** Nothing is decoded: a file full of NUL bytes and
   invalid UTF-8 comes back identical. The five tools' caps don't apply.
-- **Size a file before you pull it.** `fsReadBytes` may reject an oversized file
-  without transferring it.
+- **Size a file before you pull it.** You may reject an oversized file before
+  transferring it.
 - **`fsWriteBytes` never refuses an existing path.** Platypus has already decided
   that overwriting is what the person wants before it calls you.
 
@@ -171,8 +171,8 @@ run.
   eligible set at deploy time, an Org Admin picks a subset per Sandbox, and a
   Workspace Owner cannot widen it. Skip this and a Workspace Owner can point an
   Agent at your internal network by editing a form. The Docker adapter's network
-  allowlist is the worked example — see [Sandbox
-  infrastructure](/self-hosting/sandbox).
+  allowlist is the worked example — see
+  [Sandbox infrastructure](/self-hosting/sandbox).
 </Callout>
 
 <Callout type="info">

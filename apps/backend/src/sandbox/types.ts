@@ -1,24 +1,22 @@
 import { z } from "zod";
 import {
   SANDBOX_TRANSFER_MAX_BYTES,
+  type FsEditInput as SdkFsEditInput,
+  type FsEditOutput,
+  type FsListInput as SdkFsListInput,
+  type FsListEntry,
+  type FsListOutput,
   type FsReadBytesInput as SdkFsReadBytesInput,
+  type FsReadInput as SdkFsReadInput,
+  type FsReadOutput,
   type FsWriteBytesInput as SdkFsWriteBytesInput,
-} from "@platypuschat/plugin-sdk";
-import type {
-  FsEditInput as SdkFsEditInput,
-  FsEditOutput,
-  FsListInput as SdkFsListInput,
-  FsListEntry,
-  FsListOutput,
-  FsReadInput as SdkFsReadInput,
-  FsReadOutput,
-  FsWriteInput as SdkFsWriteInput,
-  FsWriteOutput,
-  SandboxBackend,
-  SandboxCallOptions,
-  SandboxContext,
-  ShellExecInput as SdkShellExecInput,
-  ShellExecOutput,
+  type FsWriteInput as SdkFsWriteInput,
+  type FsWriteOutput,
+  type SandboxBackend,
+  type SandboxCallOptions,
+  type SandboxContext,
+  type ShellExecInput as SdkShellExecInput,
+  type ShellExecOutput,
 } from "@platypuschat/plugin-sdk";
 
 // The adapter contract itself is published in `@platypuschat/plugin-sdk` — a
