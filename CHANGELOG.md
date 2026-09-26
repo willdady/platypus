@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.11.0](https://github.com/willdady/platypus/compare/v3.10.2...v3.11.0) (2026-09-26)
+
+
+### Features
+
+* add a custom backend image example that installs a third-party plugin ([#1050](https://github.com/willdady/platypus/issues/1050)) ([7431f37](https://github.com/willdady/platypus/commit/7431f37014162db25b954784920b6f980a39fa1a))
+* **backend:** configure each plugin through its own PLATYPUS_PLUGIN_CONFIG_&lt;NAME&gt; var ([#1052](https://github.com/willdady/platypus/issues/1052)) ([e48405f](https://github.com/willdady/platypus/commit/e48405fa2ab88c194060591ace094cc349b4634c))
+* **backend:** plugin API v3 requires SandboxCallOptions and drops v1 ([#1054](https://github.com/willdady/platypus/issues/1054)) ([bbca774](https://github.com/willdady/platypus/commit/bbca774a29ed1d8cf3990ae6227db44318adaeb2))
+* **docs:** add an installing-plugins page ([#1051](https://github.com/willdady/platypus/issues/1051)) ([0fe8a86](https://github.com/willdady/platypus/commit/0fe8a8617a450e11a6fed26d5da17f41596727db))
+* walk a new workspace through a setup wizard ([#1036](https://github.com/willdady/platypus/issues/1036)) ([869858b](https://github.com/willdady/platypus/commit/869858ba7bc5828d3b4ec0e4436571a7e1b2d34b))
+
+
+### Bug Fixes
+
+* **docs:** recast the standup bot worked example as a daily board digest ([#1042](https://github.com/willdady/platypus/issues/1042)) ([ca89447](https://github.com/willdady/platypus/commit/ca894475b114b7b9d9df57b14a3df50267050a98))
+* **sdk:** publish the built entry instead of index.ts ([#1049](https://github.com/willdady/platypus/issues/1049)) ([3d62f5e](https://github.com/willdady/platypus/commit/3d62f5e6cc7023ed50324d35edb907dd1d535a7d))
+
 ## [3.10.2](https://github.com/willdady/platypus/compare/v3.10.1...v3.10.2) (2026-09-25)
 
 
