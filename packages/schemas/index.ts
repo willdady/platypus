@@ -1779,10 +1779,14 @@ const sandboxBaseSchema = z.object({
 });
 
 // The read model. A response never carries `credentials`; `hasCredentials`
-// says whether any are stored.
+// says whether any are stored, and `transfer` which file-transfer directions
+// the backend offers.
 export const sandboxSchema = sandboxBaseSchema
   .omit({ credentials: true })
-  .extend({ hasCredentials: z.boolean() });
+  .extend({
+    hasCredentials: z.boolean(),
+    transfer: z.object({ upload: z.boolean(), download: z.boolean() }),
+  });
 
 export type Sandbox = z.infer<typeof sandboxSchema>;
 

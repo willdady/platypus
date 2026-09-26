@@ -54,6 +54,14 @@ export class ConflictError extends Error {
   }
 }
 
+/** The configured backend does not implement what was asked of it. → 501 */
+export class UnsupportedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsupportedError";
+  }
+}
+
 /**
  * Detects a Postgres unique-constraint violation (SQLSTATE `23505`) across the
  * driver shapes we see — the code can surface on the error itself or on its
@@ -98,6 +106,8 @@ export const mapError = (
     return { status: 409, message: error.message };
   if (error instanceof ValidationError)
     return { status: 400, message: error.message };
+  if (error instanceof UnsupportedError)
+    return { status: 501, message: error.message };
   if (error instanceof FileValidationError)
     return { status: 400, message: error.message, files: error.files };
   if (isUniqueViolation(error))

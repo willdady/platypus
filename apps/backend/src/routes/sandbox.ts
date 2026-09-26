@@ -1,5 +1,9 @@
+import { posix } from "node:path";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { sValidator } from "@hono/standard-validator";
+import { z } from "zod";
+import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { sandbox as sandboxTable } from "../db/schema.ts";
@@ -19,6 +23,14 @@ import {
 } from "../services/workspace-resource.ts";
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
+import { createSandboxBackend, openSandboxRow } from "../sandbox/open-row.ts";
+import {
+  relativePathSchema,
+  type FsListEntry,
+  type SandboxBackend,
+  type SandboxContext,
+} from "../sandbox/types.ts";
+import { NotFoundError, UnsupportedError } from "../errors.ts";
 import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
 import {
@@ -40,7 +52,9 @@ const sandbox = new Hono<{ Variables: Variables }>();
 // improvement over the Provider/MCP routes which still return their secret
 // fields; revisit when those routes adopt a similar redaction pattern. In their
 // place `hasCredentials` says whether any are stored, so the settings form can
-// show a stored key instead of a blank field that looks lost.
+// show a stored key instead of a blank field that looks lost. `transfer` says
+// which file-transfer directions the backend offers (ADR-0027), so the UI
+// needn't attempt one to find out.
 //
 // adminEnv holds admin-managed secrets. A non-admin owner may see the *keys*
 // (so the UI can show "managed by admin" and the orientation block stays
@@ -55,8 +69,61 @@ const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
     ...rest,
     adminEnv: safeAdminEnv,
     hasCredentials: Object.keys(credentials ?? {}).length > 0,
+    transfer: transferSupport(record),
   };
 };
+
+// A backend that can't be built — unregistered, or its stored config no longer
+// validates — can't transfer anything either.
+const transferSupport = (record: SandboxRecord) => {
+  try {
+    const backend = createSandboxBackend(record, "transfer files");
+    return { upload: !!backend.fsWriteBytes, download: !!backend.fsReadBytes };
+  } catch {
+    return { upload: false, download: false };
+  }
+};
+
+const TRANSFER_UNSUPPORTED =
+  "This Sandbox backend doesn't support file transfer";
+const TRANSFER_TOO_LARGE = `File is larger than the ${SANDBOX_TRANSFER_MAX_BYTES / (1024 * 1024)} MiB transfer limit`;
+
+// The entry for `path` in a listing of its parent directory, or undefined when
+// there is none. The glob narrows the listing past its entry cap whenever the
+// name is safe to use as a pattern.
+const findEntry = async (
+  backend: SandboxBackend,
+  ctx: SandboxContext,
+  path: string,
+  signal: AbortSignal,
+): Promise<FsListEntry | undefined> => {
+  const dir = posix.dirname(path);
+  const name = posix.basename(path);
+  try {
+    const { entries } = await backend.fsList(
+      ctx,
+      {
+        ...(dir === "." ? {} : { path: dir }),
+        ...(/[*?[\]\\]/.test(name) ? {} : { glob: name }),
+      },
+      { signal },
+    );
+    return entries.find((e) => e.path === name);
+  } catch (err) {
+    // fsList reports a missing parent only as a rejection. Confirm that is
+    // what this was, so any other failure fails the request instead of reading
+    // as "no such file" — which, for an upload, would overwrite unasked.
+    if (dir === ".") throw err;
+    const parent = await findEntry(backend, ctx, dir, signal);
+    if (parent?.type === "dir") throw err;
+    return undefined;
+  }
+};
+
+// Filenames go out RFC 5987-encoded only, so no quote, backslash or non-ASCII
+// character in a Sandbox-authored name can break the header.
+const attachmentDisposition = (path: string) =>
+  `attachment; filename*=UTF-8''${encodeURIComponent(posix.basename(path)).replace(/['()*]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 
 /** Get the workspace's sandbox (404 if none configured) */
 sandbox.get(
@@ -308,6 +375,91 @@ sandbox.delete(
 
     await deleteOwned(db, "sandbox", { workspaceId });
     return c.json({ message: "Sandbox deleted" });
+  },
+);
+
+// File transfer (ADR-0027): bytes move between the User and the Sandbox without
+// the model, up to SANDBOX_TRANSFER_MAX_BYTES, held in memory only. Paths use
+// the tool path schema and `..` is deliberately not rejected — anyone past
+// requireWorkspaceAccess can already run arbitrary shell in the Sandbox.
+const openTransfer = async (workspaceId: string) => {
+  const record = await requireOwned(db, "sandbox", { workspaceId });
+  return openSandboxRow(record, "transfer files");
+};
+
+/** Download a file from the workspace's sandbox. Always an attachment. */
+sandbox.get(
+  "/file",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  sValidator("query", z.object({ path: relativePathSchema })),
+  async (c) => {
+    const { workspaceId } = workspaceScopeOf(c);
+    const { path } = c.req.valid("query");
+    const signal = c.req.raw.signal;
+    const { backend, ctx } = await openTransfer(workspaceId);
+    if (!backend.fsReadBytes) throw new UnsupportedError(TRANSFER_UNSUPPORTED);
+
+    // fsReadBytes' rejections are untyped, so the probe is what tells a missing
+    // file from an oversized one from a failure.
+    const entry = await findEntry(backend, ctx, path, signal);
+    if (entry?.type !== "file") throw new NotFoundError("File not found");
+    if ((entry.size ?? 0) > SANDBOX_TRANSFER_MAX_BYTES) {
+      return c.json({ error: TRANSFER_TOO_LARGE }, 413);
+    }
+
+    const bytes = await backend.fsReadBytes(
+      ctx,
+      { path, maxBytes: SANDBOX_TRANSFER_MAX_BYTES },
+      { signal },
+    );
+    return c.body(new Uint8Array(bytes), 200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": attachmentDisposition(path),
+      "X-Content-Type-Options": "nosniff",
+    });
+  },
+);
+
+/**
+ * Upload a raw request body to `path` in the workspace's sandbox. 409 if the
+ * path is taken, unless `overwrite=true`.
+ */
+sandbox.put(
+  "/file",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  sValidator(
+    "query",
+    z.object({
+      path: relativePathSchema,
+      overwrite: z.enum(["true", "false"]).optional(),
+    }),
+  ),
+  // Rejects early on Content-Length and enforces the bound while reading.
+  bodyLimit({
+    maxSize: SANDBOX_TRANSFER_MAX_BYTES,
+    onError: (c) => c.json({ error: TRANSFER_TOO_LARGE }, 413),
+  }),
+  async (c) => {
+    const { workspaceId } = workspaceScopeOf(c);
+    const { path, overwrite } = c.req.valid("query");
+    const signal = c.req.raw.signal;
+    const { backend, ctx } = await openTransfer(workspaceId);
+    if (!backend.fsWriteBytes) throw new UnsupportedError(TRANSFER_UNSUPPORTED);
+
+    // ponytail: check-then-write race — a file created between the probe and
+    // the write is overwritten. Fine for a single-user Workspace; a
+    // create-only adapter member if it ever isn't.
+    if (overwrite !== "true" && (await findEntry(backend, ctx, path, signal))) {
+      return c.json({ error: `Path already exists: ${path}` }, 409);
+    }
+
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    await backend.fsWriteBytes(ctx, { path, bytes }, { signal });
+    return c.json({ message: "File uploaded" });
   },
 );
 

@@ -1557,6 +1557,13 @@ const BACKEND_CONSTANTS = [
     cost: "A backend author truncating at the stated cap disagrees with every other adapter about `truncated`.",
   },
   {
+    source: "packages/plugin-sdk/index.ts",
+    name: "SANDBOX_TRANSFER_MAX_BYTES",
+    phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
+    files: ["concepts/sandboxes.mdx"],
+    cost: "A User uploading a large file is refused at a size the page never warned of.",
+  },
+  {
     source: "apps/backend/src/sandbox/index.ts",
     name: "MAX_LIST_ENTRIES",
     phrase: (entries: number) =>

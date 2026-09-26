@@ -20,16 +20,17 @@ make.
 
 ## The error seam
 
-Four cross-cutting failures are **thrown**, not returned. A single `onError`
+Five cross-cutting failures are **thrown**, not returned. A single `onError`
 seam maps each to its status and emits the same `{ error }` body, so a domain
 rule states its message once instead of once per caller:
 
-| Throw             | Becomes |
-| ----------------- | ------- |
-| `NotFoundError`   | 404     |
-| `ValidationError` | 400     |
-| `LockedError`     | 403     |
-| `ConflictError`   | 409     |
+| Throw              | Becomes |
+| ------------------ | ------- |
+| `NotFoundError`    | 404     |
+| `ValidationError`  | 400     |
+| `LockedError`      | 403     |
+| `ConflictError`    | 409     |
+| `UnsupportedError` | 501     |
 
 A Postgres unique violation also maps to 409 — detect it through the shared
 helper rather than re-reading the driver's error shape.

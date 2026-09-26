@@ -61,6 +61,25 @@ so a value never appears in the conversation unless a command prints it. The
 Agent is told the variable _names_ and asked not to echo them, but a command that
 prints one — `echo $API_KEY`, a debug dump — hands the value to the model.
 
+## Moving files in and out
+
+You can upload a file into the Sandbox, or download one out of it, yourself,
+without asking an Agent. The bytes move unaltered, so images, archives and other
+binary files work, up to **25 MiB** each way. When a Workspace has a Sandbox, the
+Workspace home page shows a **Sandbox** card with both controls.
+
+- **Upload**: pick a file under **File**, and optionally type a **Destination
+  directory**. Leave it empty and the file lands in the workspace root. The file
+  keeps its name, and missing directories are created. If a file already exists
+  at that path, you're asked whether to overwrite it; cancel and the existing
+  file is left alone.
+- **Download**: type the file's **Path**, relative to the workspace root, and
+  press **Download**. The file always downloads, and never opens in the browser.
+
+Not every backend supports file transfer. When the Sandbox's backend doesn't,
+the card says **This Sandbox backend doesn't support file transfer** in place of
+that control. Local Docker and SSH support both directions.
+
 <Callout type="info">
   Setting up a Sandbox is an infrastructure task. See [Sandbox
   infrastructure](/self-hosting/sandbox) for how an Operator and Org Admin

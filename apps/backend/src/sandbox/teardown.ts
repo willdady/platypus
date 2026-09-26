@@ -4,64 +4,21 @@ import { db } from "../index.ts";
 import {
   sandbox as sandboxTable,
   sandboxTeardownFailure as sandboxTeardownFailureTable,
-  workspace as workspaceTable,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { getSandboxBackendPlugin } from "../plugins/registry.ts";
-import { getSandboxBackend } from "./index.ts";
+import { openSandboxRow } from "./open-row.ts";
 
 type SandboxRow = typeof sandboxTable.$inferSelect;
 
 // Resolves the adapter for a sandbox row and invokes its destroy() with the
-// row's workspace context. Throws on any failure — adapter not registered,
-// config/credentials invalid, Workspace row missing, or the adapter's destroy()
-// rejecting. The user-initiated DELETE path uses this; the row should remain in
-// place on failure so the user can retry (or force-delete).
+// row's workspace context. Throws on any failure (see openSandboxRow), or when
+// the adapter's destroy() rejects. The user-initiated DELETE path uses this;
+// the row should remain in place on failure so the user can retry (or
+// force-delete).
 export const destroySandboxRow = async (row: SandboxRow): Promise<void> => {
-  const registration = getSandboxBackend(row.backend);
-  if (!registration) {
-    throw new Error(
-      `Sandbox backend '${row.backend}' is not registered; cannot destroy`,
-    );
-  }
-
-  const configResult = registration.configSchema.safeParse(row.config ?? {});
-  if (!configResult.success) {
-    throw new Error(
-      `Sandbox config failed adapter validation: ${configResult.error.message}`,
-    );
-  }
-
-  const credentialsResult = registration.credentialsSchema.safeParse(
-    row.credentials ?? {},
-  );
-  if (!credentialsResult.success) {
-    throw new Error(
-      `Sandbox credentials failed adapter validation: ${credentialsResult.error.message}`,
-    );
-  }
-
-  // The same (orgId, workspaceId, owner) context the tool calls got, so an
-  // adapter keyed on it finds the resource it provisioned.
-  const [owner] = await db
-    .select({
-      orgId: workspaceTable.organizationId,
-      userId: workspaceTable.ownerId,
-    })
-    .from(workspaceTable)
-    .where(eq(workspaceTable.id, row.workspaceId))
-    .limit(1);
-  if (!owner) {
-    throw new Error(
-      `Workspace '${row.workspaceId}' not found; cannot destroy its sandbox`,
-    );
-  }
-
-  const backend = registration.create(
-    configResult.data,
-    credentialsResult.data,
-  );
-  await backend.destroy({ ...owner, workspaceId: row.workspaceId });
+  const { backend, ctx } = await openSandboxRow(row, "destroy");
+  await backend.destroy(ctx);
 };
 
 // Best-effort teardown for every sandbox row in the given workspace. Used by

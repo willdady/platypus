@@ -181,16 +181,19 @@ async function performWrite<TResult, TData>(
   revalidateKeys: readonly string[],
   extraHeaders?: Record<string, string>,
 ): Promise<WriteOutcome<TResult>> {
+  // A Blob (a picked File) is sent as the raw body, typed by the browser.
+  const json = method !== "DELETE" && !(data instanceof Blob);
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       credentials: "include",
-      headers:
-        method !== "DELETE"
-          ? { "Content-Type": "application/json", ...extraHeaders }
-          : extraHeaders,
-      ...(method !== "DELETE" ? { body: JSON.stringify(data) } : {}),
+      headers: json
+        ? { "Content-Type": "application/json", ...extraHeaders }
+        : extraHeaders,
+      ...(method === "DELETE"
+        ? {}
+        : { body: data instanceof Blob ? data : JSON.stringify(data) }),
     });
   } catch {
     return { outcome: "error", message: "Network request failed" };
@@ -272,7 +275,7 @@ export async function writeEntity<TResult = unknown, TData = unknown>(
 
 export interface WriteAtOptions<TData> {
   readonly method: "POST" | "PUT" | "PATCH" | "DELETE";
-  /** Omit only when the write is a DELETE. */
+  /** Omit only when the write is a DELETE. A `Blob` is sent as the raw body. */
   readonly data?: TData;
   /** SWR keys this write should invalidate. Defaults to none. */
   readonly revalidateKeys?: readonly string[];

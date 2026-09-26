@@ -127,7 +127,7 @@ A User naming a **Skill** from the chat input: a message whose first text part o
 _Avoid_: slash skill, command part (there is no part), trigger (that names the scheduled/event kind).
 
 **Sandbox**:
-A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is an Extension point: different backends (local container, remote VM, hosted sandbox-as-a-service, …) are contributed by Plugins. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model.
+A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is an Extension point: different backends (local container, remote VM, hosted sandbox-as-a-service, …) are contributed by Plugins. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model. A User can upload a file into a Sandbox, or download one out of it, directly and without the model; bytes move unaltered, up to a fixed size.
 
 **Board**:
 A Kanban board scoped to a Workspace: ordered **Columns**, **Cards**, and Board-level colour-coded Labels. A shared working surface — Users and Agents read and update the same Board, Agents through the Kanban Tool set. Board activity is the source of the `card.*` **Webhook events**. Deleting a Label removes it from every Card using it; everything else on the Card survives.

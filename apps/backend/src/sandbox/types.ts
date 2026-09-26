@@ -39,7 +39,7 @@ export type {
 
 // All paths are workspace-root-relative. The workspace root is conventionally
 // "/workspace" inside the sandbox; adapters resolve relative paths against it.
-const relativePathSchema = z
+export const relativePathSchema = z
   .string()
   .min(1)
   .refine((p) => !p.startsWith("/"), {

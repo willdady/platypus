@@ -420,6 +420,17 @@ describe("writeAt", () => {
     },
   );
 
+  it("sends a Blob as the raw body, without a JSON content type", async () => {
+    const fetchMock = respond(200);
+    const file = new File([new Uint8Array([0, 255])], "a.bin");
+
+    await writeAt(`${BACKEND_URL}/upload`, { method: "PUT", data: file });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.body).toBe(file);
+    expect(init.headers).toBeUndefined();
+  });
+
   it("sends no body for a DELETE", async () => {
     const fetchMock = respond(200);
 
