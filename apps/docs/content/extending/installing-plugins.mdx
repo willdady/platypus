@@ -51,20 +51,25 @@ it builds the example plugin into an image and runs it with a Compose override.
 
 <Steps>
 
-### Pin the plugin in a lockfile
+### Pin your plugins in a lockfile
 
-Make a directory for the image and record the plugins you want, with their exact
-dependency tree, in a `package.json` and `package-lock.json`:
+Make a directory for the image. It holds one `package.json` and
+`package-lock.json` listing **every** plugin the image installs, with their
+exact dependency tree:
 
 ```bash
 mkdir platypus-plugins && cd platypus-plugins
 echo '{"private":true}' > package.json
-npm install --package-lock-only @acme/platypus-plugin@1.2.0
+npm install --package-lock-only @acme/platypus-plugin@1.2.0 @acme/other-plugin@0.4.1
 ```
 
-List every plugin you want on that one `npm install` line. Commit both files:
-the image installs exactly what the lockfile says, so two builds of the same
-commit get the same code.
+To add a plugin later, run `npm install --package-lock-only` again in this
+directory with just the new one. To drop one, run
+`npm uninstall --package-lock-only` with its name. Both update the two files and
+leave the Dockerfile alone.
+
+Commit both files. The image installs exactly what the lockfile says, so two
+builds of the same commit get the same code.
 
 ### Write the Dockerfile
 
@@ -86,6 +91,8 @@ RUN ln -s /opt/platypus-plugins/node_modules /app/apps/node_modules && \
 - **Pin the base image** to an exact version, or to a digest
   (`willdady/platypus-backend:3.10.2@sha256:…`). Never `latest`: you rebuild
   this image for every release, and you need to know which one it is built on.
+- **The Dockerfile names no plugin.** It installs whatever the lockfile lists,
+  so it doesn't change when your plugins do.
 - **The plugins go in their own directory**, outside the application's own
   packages, and the link puts them where the backend looks when it imports a
   plugin. Don't run `npm install` in the application directory instead: npm
