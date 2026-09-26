@@ -1,24 +1,24 @@
 ---
 title: Plugin API & config
-description: How a plugin is loaded, which core versions it keeps working on, and how an Operator supplies its deploy-time config and credentials.
+description: How a Plugin is loaded, which core versions it keeps working on, and how an Operator supplies its deploy-time config and credentials.
 ---
 
 import { Callout } from "nextra/components";
 
 # Plugin API & config
 
-Read this once. It covers what a plugin is, how core decides whether to load
+Read this once. It covers what a Plugin is, how core decides whether to load
 yours, and where its deploy-time settings come from.
 
-## The plugin model
+## The Plugin model
 
-A **plugin** is a distributable bundle — one package, one version, one config
+A **Plugin** is a distributable bundle — one package, one version, one config
 namespace, one enable/disable switch. An Operator installs it at deploy time and
 core loads it **in-process, with no isolation**. The trust boundary is the
 deployment, not an install step: there is no marketplace, no hot reload, and no
 in-app install button.
 
-A plugin exports a `plugin` manifest from its package entry point. The manifest
+A Plugin exports a `plugin` manifest from its package entry point. The manifest
 declares its identity, the API major it needs, optional deploy-time schemas, and
 a `contributes` block naming what it fills.
 
@@ -33,7 +33,7 @@ A third-party manifest `name` must be a url-safe slug — lowercase letters, dig
 and hyphens — of up to 24 characters. Both are validated at boot.
 
 The cap is there because the name is also the namespace on every tool name the
-plugin contributes (see
+Plugin contributes (see
 [Tool names](/extending/tool-sets#tool-names)), and the composed
 `<name>__<toolName>` has to stay inside what a model provider allows.
 
@@ -41,73 +41,73 @@ plugin contributes (see
   A scoped, npm-style manifest `name` such as `@acme/platypus-widgets` is
   **rejected and aborts startup**, because it becomes the prefix on every
   contribution id. The Operator's backend won't come up until you ship a slug.
-  Core plugins are exempt: their `@platypus/*` names are logical ids resolved
+  Core Plugins are exempt: their `@platypus/*` names are logical ids resolved
   from a built-in map, not published packages.
 </Callout>
 
-A manifest `name` must also be unique across the plugins a deployment loads.
-Two plugins declaring the same one abort startup, with an error naming both
+A manifest `name` must also be unique across the Plugins a deployment loads.
+Two Plugins declaring the same one abort startup, with an error naming both
 package specifiers.
 
 <Callout type="warning">
-  Installing a fork or a vendored variant alongside the plugin it came from is
+  Installing a fork or a vendored variant alongside the Plugin it came from is
   the trap: both ship the same manifest `name`, and the name is the key for
   deploy-time config and credentials. One would be handed the other's API token.
   The backend refuses to start instead — rename one of them in its manifest.
 </Callout>
 
 <Callout type="warning">
-  Don't reuse a core plugin's name without its `@platypus/` scope. `web-fetch`
+  Don't reuse a core Plugin's name without its `@platypus/` scope. `web-fetch`
   and `@platypus/web-fetch` both read `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`, so the
-  backend refuses to start with both loaded. A plugin named `ssh`, `docker` or
-  `web-fetch` can't run beside that core plugin, and one named `tools-basic` or
+  backend refuses to start with both loaded. A Plugin named `ssh`, `docker` or
+  `web-fetch` can't run beside that core Plugin, and one named `tools-basic` or
   `tools-platform` fails on every deployment, because those two always load.
 </Callout>
 
 ## Boot is fail-loud and all-or-nothing
 
-Before the HTTP server starts, core loads the always-on core plugins, then reads
+Before the HTTP server starts, core loads the always-on core Plugins, then reads
 `PLATYPUS_PLUGINS`, resolves each name, validates its manifest, and registers its
 contributions.
 
-Any of these aborts startup with an error naming your plugin:
+Any of these aborts startup with an error naming your Plugin:
 
 - it can't be resolved,
 - its manifest is invalid,
 - its deploy-time config or credentials fail their own schema,
 - a Sandbox backend's `configSchema` factory throws while resolving,
-- its manifest `name` is already declared by another loaded plugin,
+- its manifest `name` is already declared by another loaded Plugin,
 - its manifest `name` is longer than the cap above,
 - a Tool set statically declares a tool name over
   [its own cap](/extending/tool-sets#two-length-caps),
 - a contribution is missing a required field,
-- its contribution ids collide with another plugin's.
+- its contribution ids collide with another Plugin's.
 
 A contribution is shape-checked too, so an incomplete one is refused up front
 rather than failing later inside somebody's Chat. TypeScript already requires the
-fields; this check is what catches a plugin shipped as plain JavaScript, and what
-turns a missing field into an error with your plugin's name on it.
+fields; this check is what catches a Plugin shipped as plain JavaScript, and what
+turns a missing field into an error with your Plugin's name on it.
 
 Runtime is the opposite posture. An Agent granted a Tool set that has since been
 removed loses that set's tools for the turn; its other Tool sets still serve.
 **Strict at boot, forgiving at runtime.**
 
-## Which core versions your plugin runs on
+## Which core versions your Plugin runs on
 
 Set `apiVersion` from the SDK's `PLUGIN_API_VERSION` constant. It declares the
 **minimum** core API major you need — not an exact match.
 
 Core supports the current major and one previous, **N and N−1**, at the same
-time. Anything inside that window loads. Core rejects your plugin only when its
+time. Anything inside that window loads. Core rejects your Plugin only when its
 `apiVersion` is newer than core supports — the Operator fixes that by upgrading
 core, which they control — or below core's oldest supported major, meaning you're
-targeting a dropped one. The boot error names your plugin and both versions.
+targeting a dropped one. The boot error names your Plugin and both versions.
 
 ### Contracts grow by optional members only
 
 Within a major, every Extension-point contract grows only by **optional**
 members. A new capability arrives as an optional method or field, never a new
-required one. That is what lets a plugin built against an older minor keep
+required one. That is what lets a Plugin built against an older minor keep
 working after a core upgrade: it never uses what it doesn't know about.
 Adding a whole Extension point is likewise additive.
 
@@ -160,7 +160,7 @@ used to be the config itself — and you can now reach `plugin.credentials` and
 
 ## Deploy-time config and credentials
 
-Some plugins need settings that belong to the **Operator**, not to an end user: a
+Some Plugins need settings that belong to the **Operator**, not to an end user: a
 region, an API token. Declare them as `configSchema` (non-secret) and
 `credentialsSchema` (secret) on the manifest itself.
 
@@ -179,8 +179,8 @@ injects the resolved block into **every one** of your contributions:
 You can ignore the argument in all three. What you cannot do is receive nothing:
 core always passes it.
 
-**One block is shared** across all of a plugin's contributions and all tenants.
-That is deliberate, and it is the mechanism that lets a plugin's Sandbox backend
+**One block is shared** across all of a Plugin's contributions and all tenants.
+That is deliberate, and it is the mechanism that lets a Plugin's Sandbox backend
 and its management Tool set authenticate with the same credential — one vendor
 token driving both.
 
@@ -194,7 +194,7 @@ token driving both.
 
 ## Logging
 
-The same block carries a `logger`, so your plugin writes into the Operator's own
+The same block carries a `logger`, so your Plugin writes into the Operator's own
 log stream rather than shouting into `stdout` on its own terms. Four levels —
 `debug`, `info`, `warn`, `error` — each taking a fields object with an optional
 message, or a message on its own:
@@ -210,9 +210,9 @@ tools: (ctx, plugin) => {
 
 Three things core does for you, and one thing to get right yourself:
 
-- **Your plugin's name is already on every line.** Core binds the manifest
+- **Your Plugin's name is already on every line.** Core binds the manifest
   `name` to the logger before handing it over, so an Operator can filter their
-  log pipeline down to your plugin. Don't put the name in your own fields.
+  log pipeline down to your Plugin. Don't put the name in your own fields.
 - **[`LOG_LEVEL`](/reference/backend-configuration#core) governs your lines like
   core's.** A `debug` line writes nothing on a deployment left at the default
   `info`, and appears the moment the Operator raises the level. Put the detail
@@ -227,7 +227,7 @@ Three things core does for you, and one thing to get right yourself:
 <Callout type="warning">
   Reaching for `console.log` instead is the trap. Its output bypasses
   `LOG_LEVEL`, so it cannot be turned down on a busy deployment; it carries no
-  plugin name, so nobody can tell it is yours; and it is unstructured, so it
+  Plugin name, so nobody can tell it is yours; and it is unstructured, so it
   lands in the Operator's pipeline as an unparseable line between two JSON ones.
 </Callout>
 
@@ -240,6 +240,6 @@ example above does with `workspaceId`.
 
 ## Where to next
 
-- **[Your first plugin](/extending/your-first-plugin)** — the runnable path.
+- **[Your first Plugin](/extending/your-first-plugin)** — the runnable path.
 - **[Configuration → Plugins](/self-hosting/configuration#plugins)** — what your
   Operator has to do at their end.

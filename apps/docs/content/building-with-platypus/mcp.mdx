@@ -64,8 +64,8 @@ Under **Custom Headers**, add any extra HTTP headers to send with every request
 
 An Agent's granted tools are stored as a list of **tool set IDs**. When you grant
 an MCP, its ID goes into that same list. At **Chat-turn time**, Platypus walks the
-list: an ID that matches a **registered tool set** — one contributed by a plugin,
-whether a core built-in like `web-fetch` or a third-party plugin like
+list: an ID that matches a **registered tool set** — one contributed by a Plugin,
+whether a core built-in like `web-fetch` or a third-party Plugin like
 `example.greeting` — resolves from that registry, and any other ID is looked up
 as an MCP. For an MCP, Platypus — using the auth and headers you configured —
 connects to the server and fetches its tools live. Either way, the resolved tools
@@ -117,7 +117,7 @@ is guessed on its behalf.
 
 Open the [Agent form](/building-with-platypus/agents) and find the **Tools** card.
 Registered MCP servers appear there grouped under the **MCP** category, alongside
-the plugin-contributed tool sets (core built-ins and any third-party plugins).
+the Plugin-contributed tool sets (core built-ins and any third-party Plugins).
 Flip a switch to grant the server's tool set to that Agent.
 
 ## Workspace vs Shared scope

@@ -160,7 +160,7 @@ Add an entry to `contributes.sandboxBackends`. A
   [prefixed like every contribution id](/extending/plugin-api-and-config#two-names-two-jobs).
 - **`name`** — the label an Org Admin picks from.
 - **`configSchema`** — a Zod schema for the non-secret per-Workspace settings
-  (region, image, host). It may also be a **factory** taking the plugin's
+  (region, image, host). It may also be a **factory** taking the Plugin's
   deploy-time block, when the allowed shape depends on what the Operator
   configured. Read the allowed shape off `plugin.config`; `plugin.credentials`
   and `plugin.logger` are there too, so the factory can say why it refused a
@@ -168,7 +168,7 @@ Add an entry to `contributes.sandboxBackends`. A
 - **`credentialsSchema`** — a Zod schema for the secret per-Workspace material
   (API tokens, private keys).
 - **`create`** — returns your adapter, given the validated per-Workspace config
-  and credentials, plus the plugin's shared deploy-time block.
+  and credentials, plus the Plugin's shared deploy-time block.
 
 <Callout type="warning">
   **Both schemas must accept `{}`.** The **Workspace settings → Sandbox** form
@@ -181,7 +181,7 @@ Add an entry to `contributes.sandboxBackends`. A
   deployment.
 </Callout>
 
-Then list your plugin in `PLATYPUS_PLUGINS`. List membership **is** the enable
+Then list your Plugin in `PLATYPUS_PLUGINS`. List membership **is** the enable
 switch — there is no separate per-backend flag. Leave the Plugin out and its
 backend isn't offered in the **Backend** picker.
 

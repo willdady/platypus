@@ -4,8 +4,8 @@
 // once and then stop thinking about.
 const meta = {
   index: "Overview",
-  "your-first-plugin": "Your first plugin",
-  "installing-plugins": "Installing plugins",
+  "your-first-plugin": "Your first Plugin",
+  "installing-plugins": "Installing Plugins",
   "tool-sets": "Tool sets",
   "sandbox-backends": "Sandbox backends",
   "web-search-backends": "Web-search backends",

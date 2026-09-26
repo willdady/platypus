@@ -1,22 +1,22 @@
 ---
-title: Installing plugins
-description: Get a third-party plugin into a deployment — a repository checkout, a custom backend image, or a bind mount — then list it and confirm it loaded.
+title: Installing Plugins
+description: Get a third-party Plugin into a deployment — a repository checkout, a custom backend image, or a bind mount — then list it and confirm it loaded.
 ---
 
 import { Callout, Steps } from "nextra/components";
 
-# Installing plugins
+# Installing Plugins
 
-The backend loads a third-party plugin by importing its npm package at boot, so
-the package has to be installed where the backend can find it. Core plugins are
+The backend loads a third-party Plugin by importing its npm package at boot, so
+the package has to be installed where the backend can find it. Core Plugins are
 built in and need no install. How you install a third-party one depends on how
 you run Platypus:
 
-| You run                           | Install the plugin by                                         | For                                |
+| You run                           | Install the Plugin by                                         | For                                |
 | --------------------------------- | ------------------------------------------------------------- | ---------------------------------- |
-| A checkout of the repository      | [Adding it to the backend](#from-a-repository-checkout)       | Working on Platypus or on a plugin |
+| A checkout of the repository      | [Adding it to the backend](#from-a-repository-checkout)       | Working on Platypus or on a Plugin |
 | The published images              | [Building a custom backend image](#in-a-custom-backend-image) | Production                         |
-| The published images, on one host | [Bind-mounting it](#bind-mounting-a-plugin-trying-out-only)   | Trying a plugin out                |
+| The published images, on one host | [Bind-mounting it](#bind-mounting-a-plugin-trying-out-only)   | Trying a Plugin out                |
 
 Every route ends the same way: [list it and recreate the
 backend](#list-it-and-recreate-the-backend), then [confirm it
@@ -30,7 +30,7 @@ Add the package to the backend, from the backend's package directory:
 pnpm add @acme/platypus-plugin
 ```
 
-The example plugin, `@platypus-examples/tool-set`, is already installed in a
+The example Plugin, `@platypus-examples/tool-set`, is already installed in a
 checkout.
 
 Then list it in the backend's `.env` as shown in
@@ -40,22 +40,22 @@ this page are for the published images.
 
 ## In a custom backend image
 
-The published backend image loads only the plugins it ships with. To add one,
-build your own image `FROM` it and install the plugin at build time. The result
+The published backend image loads only the Plugins it ships with. To add one,
+build your own image `FROM` it and install the Plugin at build time. The result
 works under Compose and Kubernetes alike, survives every container recreate, and
-its image digest records exactly which plugin code a deployment runs.
+its image digest records exactly which Plugin code a deployment runs.
 
 The repository has a working version of this in
 [`examples/custom-image`](https://github.com/willdady/platypus/tree/main/examples/custom-image).
-It installs the example plugin from a tarball rather than a lockfile, and runs
+It installs the example Plugin from a tarball rather than a lockfile, and runs
 it with a Compose override.
 
 <Steps>
 
-### Pin your plugins in a lockfile
+### Pin your Plugins in a lockfile
 
 Make a directory for the image. It holds one `package.json` and
-`package-lock.json` listing **every** plugin the image installs, with their
+`package-lock.json` listing **every** Plugin the image installs, with their
 exact dependency tree:
 
 ```bash
@@ -64,7 +64,7 @@ echo '{"private":true}' > package.json
 npm install --package-lock-only @acme/platypus-plugin@1.2.0 @acme/other-plugin@0.4.1
 ```
 
-To add a plugin later, run `npm install --package-lock-only` again in this
+To add a Plugin later, run `npm install --package-lock-only` again in this
 directory with just the new one. To drop one, run
 `npm uninstall --package-lock-only` with its name. Both update the two files and
 leave the Dockerfile alone.
@@ -93,11 +93,11 @@ RUN test ! -e /app/apps/node_modules && \
 - **Pin the base image** to an exact version, or to a digest
   (`willdady/platypus-backend:3.10.2@sha256:…`). Never `latest`: you rebuild
   this image for every release, and you need to know which one it is built on.
-- **The Dockerfile names no plugin.** It installs whatever the lockfile lists,
-  so it doesn't change when your plugins do.
-- **The plugins go in their own directory**, outside the application's own
+- **The Dockerfile names no Plugin.** It installs whatever the lockfile lists,
+  so it doesn't change when your Plugins do.
+- **The Plugins go in their own directory**, outside the application's own
   packages, and the link puts them where the backend looks when it imports a
-  plugin. `/app/apps/node_modules` doesn't exist in the published image, and the
+  Plugin. `/app/apps/node_modules` doesn't exist in the published image, and the
   `test` makes the build fail if a future base image ever creates it. Don't run
   `npm install` in the application directory instead: npm tries to reinstall the
   whole application and fails.
@@ -108,7 +108,7 @@ RUN test ! -e /app/apps/node_modules && \
 
 ### Build and boot it
 
-Build the image, then start it once with the plugin listed (see
+Build the image, then start it once with the Plugin listed (see
 [List it and recreate the backend](#list-it-and-recreate-the-backend)) before
 you ship it anywhere. Boot is
 [fail-loud](/extending/plugin-api-and-config#boot-is-fail-loud-and-all-or-nothing),
@@ -161,17 +161,17 @@ Rebuild the image for every Platypus release: bump the `FROM` tag, rebuild, and
 bump the frontend tag to the same version. The backend and frontend images are
 released as a pair and only tested against each other.
 
-A stale base image fails in a specific way. Core accepts plugins written for its
-current plugin API version and the one before
-([which core versions a plugin runs on](/extending/plugin-api-and-config#which-core-versions-your-plugin-runs-on)).
-Upgrade a plugin without upgrading the base, and the new plugin version can need
+A stale base image fails in a specific way. Core accepts Plugins written for its
+current Plugin API version and the one before
+([which core versions a Plugin runs on](/extending/plugin-api-and-config#which-core-versions-your-plugin-runs-on)).
+Upgrade a Plugin without upgrading the base, and the new Plugin version can need
 an API the old core doesn't have. The backend then refuses to boot, naming the
-plugin and both versions.
+Plugin and both versions.
 
 <Callout type="warning">
-  The plugins reach the backend through `/app/apps/node_modules`, a location
+  The Plugins reach the backend through `/app/apps/node_modules`, a location
   inside the published image. A release that reorganises the image can move it,
-  and the backend then refuses to boot with the plugin "failed to resolve",
+  and the backend then refuses to boot with the Plugin "failed to resolve",
   although nothing you control changed. Boot every rebuilt image before it
   replaces the running one.
 </Callout>
@@ -197,32 +197,32 @@ copy on the next pull.
 With the Sandbox overlay, give each of these commands the three `-f` flags from
 [List it and recreate the backend](#list-it-and-recreate-the-backend).
 
-## Bind-mounting a plugin (trying out only)
+## Bind-mounting a Plugin (trying out only)
 
-You can skip building an image by installing the plugin on the host and mounting
+You can skip building an image by installing the Plugin on the host and mounting
 it into the published backend image.
 
 <Callout type="error">
   **Not for production or for more than one replica.** This is for trying a
-  plugin out on one host.
+  Plugin out on one host.
 
-- **Pure-JavaScript plugins only.** The image runs Alpine Linux, which uses
-  musl. A plugin with a native dependency built on a typical glibc host fails
+- **Pure-JavaScript Plugins only.** The image runs Alpine Linux, which uses
+  musl. A Plugin with a native dependency built on a typical glibc host fails
   to load.
-- **Mount the whole `node_modules`, not just the plugin's folder.** The
-  plugin's dependencies, `@platypuschat/plugin-sdk` among them, have to come
-  with it: the image doesn't provide them. Mounted on its own, the plugin fails
+- **Mount the whole `node_modules`, not just the Plugin's folder.** The
+  Plugin's dependencies, `@platypuschat/plugin-sdk` among them, have to come
+  with it: the image doesn't provide them. Mounted on its own, the Plugin fails
   to resolve the SDK.
 - **One host only.** Every replica needs an identical copy of the directory on
   its own host, kept in step by hand. On Kubernetes that means a `hostPath`
   volume, which ties the pod to one node. Build an image instead.
 - **The mount target is inside the image**, so a release can move it, as
   [Upgrading a custom image](#upgrading-a-custom-image) describes. Upgrading
-  then breaks the plugin although nothing on your host changed.
+  then breaks the Plugin although nothing on your host changed.
 
 </Callout>
 
-Next to `compose.yaml`, install the plugin into a directory of its own:
+Next to `compose.yaml`, install the Plugin into a directory of its own:
 
 ```bash
 mkdir plugins && cd plugins
@@ -248,7 +248,7 @@ PLATYPUS_PLUGINS=@platypus/web-fetch,@acme/platypus-plugin
 ```
 
 The variable is one comma-separated list, and setting it **replaces** the
-previous value rather than adding to it. Keep every plugin you already run.
+previous value rather than adding to it. Keep every Plugin you already run.
 
 Keep the list in **one** place: `.env`, the `environment` of your
 `compose.override.yaml`, or an `ENV` line in your Dockerfile. A value under a
@@ -270,7 +270,7 @@ docker compose up -d
 <Callout type="warning">
   Naming files with `-f` stops Compose reading `compose.override.yaml` on its
   own. Run `docker compose -f compose.yaml -f compose.sandbox.yaml up -d` and
-  the backend starts without your override: on the published image your plugin
+  the backend starts without your override: on the published image your Plugin
   is missing, or boot fails with it "failed to resolve" if `PLATYPUS_PLUGINS`
   lists it. With the Sandbox overlay, name all three files, the override last,
   on this and every other `docker compose` command on this page:
@@ -287,24 +287,24 @@ it.
 
 ## Confirm it loaded
 
-The backend logs one line per plugin at boot:
+The backend logs one line per Plugin at boot:
 
 ```bash
 docker compose logs backend | grep "Loaded plugin"
 ```
 
-A third-party plugin's line is labelled with its manifest name and
+A third-party Plugin's line is labelled with its manifest name and
 `(third-party)`. If the backend didn't come back up, the last log line names the
-plugin that stopped it and the reason.
+Plugin that stopped it and the reason.
 
 In the app, **Organization settings → Plugins** lists what loaded — see
-[Inspecting installed plugins](/self-hosting/configuration#inspecting-installed-plugins).
+[Inspecting installed Plugins](/self-hosting/configuration#inspecting-installed-plugins).
 
 ## Where to next
 
 - **[Plugin config & credentials](/self-hosting/configuration#plugin-config--credentials)**
-  — give the plugin its deploy-time settings and secrets.
+  — give the Plugin its deploy-time settings and secrets.
 - **[Upgrading](/self-hosting/upgrading)** — what every Platypus upgrade does,
   and the backup to take before one.
-- **[Your first plugin](/extending/your-first-plugin)** — grant the plugin's Tool
+- **[Your first Plugin](/extending/your-first-plugin)** — grant the Plugin's Tool
   set to an Agent and check it runs.

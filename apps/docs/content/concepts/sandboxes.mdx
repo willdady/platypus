@@ -30,7 +30,7 @@ neither one alone does anything:
 
 1. **The Workspace has a Sandbox** — one per Workspace, set up by an Org Admin
    under **Workspace settings → Sandbox**, whose backend is registered on this
-   deployment (the Operator has to have listed its plugin).
+   deployment (the Operator has to have listed its Plugin).
 2. **The Agent is granted the Sandbox Tool set** — the **Sandbox** switch in the
    Agent form's **Tools** card.
 
@@ -39,7 +39,7 @@ neither one alone does anything:
   a Workspace with no Sandbox, and the turn gets zero shell tools, with no error
   in the UI and nothing in the backend log — yet the Agent is still told it has
   a Sandbox, so it may try to run a command and fail, or improvise around it.
-  The same happens when the Sandbox names a backend whose plugin isn't loaded,
+  The same happens when the Sandbox names a backend whose Plugin isn't loaded,
   or when its config or credentials no longer validate; those two cases do log a
   warning. If an Agent won't run commands, open **Workspace settings → Sandbox**
   first: it reads **No sandbox configured** when there is none.
@@ -48,7 +48,7 @@ neither one alone does anything:
 ## Pluggable backends
 
 The same Agent-facing tools can be powered by different backends. Platypus
-ships **Local Docker** and **SSH (Remote Host)**; others come from plugins. Which
+ships **Local Docker** and **SSH (Remote Host)**; others come from Plugins. Which
 backends a deployment offers is an Operator decision — see [Extending → Sandbox
 backends](/extending/sandbox-backends).
 

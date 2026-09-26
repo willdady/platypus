@@ -106,7 +106,7 @@ The deeper model — Providers, the role ladder, and the default admin — lives
 
 ## Plugins
 
-Platypus loads its extensions — starting with Tool sets — as **plugins**.
+Platypus loads its extensions — starting with Tool sets — as **Plugins**.
 Plugins come in two tiers:
 
 - **Always-on core** — `@platypus/tools-basic` (math, time, identifiers) and
@@ -117,26 +117,26 @@ Plugins come in two tiers:
   in isolation — so gating them behind a list would only risk silently
   tool-stripping every Agent.
 - **Gate-able** — everything the Operator turns on and off via `PLATYPUS_PLUGINS`:
-  the deny-worthy core plugins plus any third-party packages. `PLATYPUS_PLUGINS`
-  is the single, auditable statement of what _optional_ plugins run — a
-  comma-separated list of plugin names.
+  the deny-worthy core Plugins plus any third-party packages. `PLATYPUS_PLUGINS`
+  is the single, auditable statement of what _optional_ Plugins run — a
+  comma-separated list of Plugin names.
 
-**The core plugins.** This page owns the list; other pages link here rather than
+**The core Plugins.** This page owns the list; other pages link here rather than
 repeat it.
 
 | Plugin                     | Tier      | Contributes                                                                                          |
 | -------------------------- | --------- | ---------------------------------------------------------------------------------------------------- |
 | `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time, identifiers.                                         |
 | `@platypus/tools-platform` | Always-on | The Platypus-domain Tool sets — kanban, dashboards, triggers, memory, notifications, agent discovery/management, skill management. |
-| `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own plugin so **network egress** can be denied in isolation.             |
+| `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.             |
 | `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.sandbox.yaml` overlay.             |
 | `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. The one backend viable in horizontally-scaled deployments. |
 
-The two always-on plugins load unconditionally and must not be listed. The three
+The two always-on Plugins load unconditionally and must not be listed. The three
 gate-able ones load only when named in `PLATYPUS_PLUGINS`. All five are internal
 backend modules — their `@platypus/*` names are logical ids, not npm packages, so
-there is nothing to install. A third-party plugin is an npm package that does
-need installing — see [Installing plugins](/extending/installing-plugins).
+there is nothing to install. A third-party Plugin is an npm package that does
+need installing — see [Installing Plugins](/extending/installing-plugins).
 
 **The default:** `PLATYPUS_PLUGINS` has **no default in code**. Unset or empty
 means _no gate-able plugins_ — you get the always-on core Tool sets and nothing
@@ -153,42 +153,42 @@ from `.env.example` gets that list. A deployment that builds its environment
 some other way — Kubernetes, a secret manager, a hand-written `.env` — gets an
 empty list unless it says otherwise, and silently runs without web-fetch.
 
-- **For a gate-able plugin, list membership both loads and enables it.** There is
-  no separate enable switch — adding a name turns a plugin on, removing it turns
+- **For a gate-able Plugin, list membership both loads and enables it.** There is
+  no separate enable switch — adding a name turns a Plugin on, removing it turns
   it off. Both take effect on the next backend restart (this is a deploy-time
   trust boundary — there is no in-app install button).
-- **Listing an always-on plugin is a fail-loud misconfiguration.** It is not an
+- **Listing an always-on Plugin is a fail-loud misconfiguration.** It is not an
   enable switch; put `@platypus/tools-basic` or `@platypus/tools-platform` in
-  `PLATYPUS_PLUGINS` and boot aborts with a plugin-named error telling you to
+  `PLATYPUS_PLUGINS` and boot aborts with a Plugin-named error telling you to
   remove it.
 - **An empty list yields the always-on core tool sets only** — never zero tools.
-  The gate-able plugins (web-fetch, docker, third-party) are simply absent.
-- **Boot is fail-loud.** A listed plugin that can't be resolved, exports an
+  The gate-able Plugins (web-fetch, docker, third-party) are simply absent.
+- **Boot is fail-loud.** A listed Plugin that can't be resolved, exports an
   invalid manifest, or declares a malformed Contribution aborts startup with a
-  plugin-named error. This includes a Tool set with no usable `id`, `name`,
-  `category`, or `tools`; a misconfigured plugin never silently drops or invents
-  tools. Two plugins whose Tool set ids collide also abort startup, as do two
-  plugins declaring the same manifest `name` — the error names both package
+  Plugin-named error. This includes a Tool set with no usable `id`, `name`,
+  `category`, or `tools`; a misconfigured Plugin never silently drops or invents
+  tools. Two Plugins whose Tool set ids collide also abort startup, as do two
+  Plugins declaring the same manifest `name` — the error names both package
   specifiers, and the fix is to rename one of them in its manifest. So does a
   third-party manifest `name`, or a Tool set's tool name, over its length cap;
-  the error names the plugin, what was too long, the cap and the actual length,
-  and the fix belongs to whoever wrote the plugin.
-- **New gate-able core plugins in a later release are not auto-enabled** — add
+  the error names the Plugin, what was too long, the cap and the actual length,
+  and the fix belongs to whoever wrote the Plugin.
+- **New gate-able core Plugins in a later release are not auto-enabled** — add
   them to your pinned list to opt in.
-- **After boot, a failing plugin is a warning, not an outage.** A Tool set whose
+- **After boot, a failing Plugin is a warning, not an outage.** A Tool set whose
   factory throws during a Chat turn, or an MCP server that is unreachable,
-  contributes no tools to that turn and logs a `warn` naming the plugin and the
+  contributes no tools to that turn and logs a `warn` naming the Plugin and the
   tool set. The chat still runs — with fewer tools, which reads to a user as an
   Agent that suddenly can't do something. That warning is the only signal, so it
   is worth alerting on.
-- **A plugin logs into your stream, under your `LOG_LEVEL`.** Lines a plugin
+- **A Plugin logs into your stream, under your `LOG_LEVEL`.** Lines a Plugin
   writes carry `"plugin":"<name>"` and are formatted and filtered exactly like
-  core's own, so raising `LOG_LEVEL` to `debug` while diagnosing one plugin
+  core's own, so raising `LOG_LEVEL` to `debug` while diagnosing one Plugin
   raises everything else with it. The bundled Docker and SSH backends are tagged
-  the same way as any third-party plugin, and Platypus's own lines about a
+  the same way as any third-party Plugin, and Platypus's own lines about a
   Sandbox backend — an adapter that failed to tear down, a backend that is no
-  longer registered — carry the same tag. Filtering on one plugin gets you both
-  sides: what the plugin reported, and what Platypus reported about it.
+  longer registered — carry the same tag. Filtering on one Plugin gets you both
+  sides: what the Plugin reported, and what Platypus reported about it.
 
 <Callout type="warning">
   **`compose.sandbox.yaml` replaces `PLATYPUS_PLUGINS` — it does not merge.**
@@ -203,28 +203,28 @@ empty list unless it says otherwise, and silently runs without web-fetch.
   Plugins**.
 </Callout>
 
-See [Extending → the plugin model](/extending/plugin-api-and-config#the-plugin-model)
+See [Extending → the Plugin model](/extending/plugin-api-and-config#the-plugin-model)
 for how a manifest's `contributes` block fills Extension points.
 
-### Inspecting installed plugins
+### Inspecting installed Plugins
 
 An **Org Admin** can confirm what's actually loaded from the app:
-**Organization settings → Plugins** lists every plugin loaded at boot, its
+**Organization settings → Plugins** lists every Plugin loaded at boot, its
 version, its origin (**Core** or **Third-party**), and the contributions it
 registered — the Tool sets, Sandbox backends and Web-search backends it
-provides. That last part ties a contribution back to the plugin it came from.
+provides. That last part ties a contribution back to the Plugin it came from.
 
 The view is **strictly read-only**: there is no enable / disable / install
 control, because enablement is the deploy-time `PLATYPUS_PLUGINS` list above — a
 trust boundary owned by the operator, not an in-app action. It simply reflects
 the current `GET /plugins` response, so it changes only when you edit the list
-and restart the backend. To add or remove a plugin, edit `PLATYPUS_PLUGINS` and
+and restart the backend. To add or remove a Plugin, edit `PLATYPUS_PLUGINS` and
 restart.
 
 ### Plugin config & credentials
 
-Some plugins need deploy-time settings — a region, an API token — that are the
-**Operator's** to set, not an end user's. Each plugin takes them from its own
+Some Plugins need deploy-time settings — a region, an API token — that are the
+**Operator's** to set, not an end user's. Each Plugin takes them from its own
 variable, `PLATYPUS_PLUGIN_CONFIG_<NAME>`, holding one JSON object with an
 optional `config` (non-secret) and `credentials` (secret) block:
 
@@ -233,7 +233,7 @@ PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX={"config":{"region":"eu"},"credentials":{"a
 PLATYPUS_PLUGIN_CONFIG_DOCKER={"config":{"allowedNetworks":["shared-services"]}}
 ```
 
-`<NAME>` comes from the plugin's **manifest name**, not the package specifier
+`<NAME>` comes from the Plugin's **manifest name**, not the package specifier
 you list in `PLATYPUS_PLUGINS`: drop a leading `@platypus/`, uppercase it, and
 turn each `-` into `_`.
 
@@ -241,22 +241,22 @@ turn each `-` into `_`.
 | -------------------------------------- | -------------------------------------- |
 | `@platypus/docker`                     | `PLATYPUS_PLUGIN_CONFIG_DOCKER`        |
 | `@platypus/web-fetch`                  | `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`     |
-| `cloud-sandbox` (a third-party plugin) | `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX` |
+| `cloud-sandbox` (a third-party Plugin) | `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX` |
 
-A third-party plugin's manifest name is the name its line in the boot log and
+A third-party Plugin's manifest name is the name its line in the boot log and
 **Organization settings → Plugins** show.
 
 - **Validated at boot, fail-loud.** Each block is checked against the schemas
-  the plugin's manifest declares. A malformed or missing required value aborts
-  startup with a plugin-named error, the same posture as the plugin list. So
+  the Plugin's manifest declares. A malformed or missing required value aborts
+  startup with a Plugin-named error, the same posture as the Plugin list. So
   does a variable that is not valid JSON, and a `PLATYPUS_PLUGIN_CONFIG_<NAME>`
-  that matches no loaded plugin — a typo never silently drops a credential. If
-  two loaded plugins map to the same variable (a core plugin and a third-party
+  that matches no loaded Plugin — a typo never silently drops a credential. If
+  two loaded Plugins map to the same variable (a core Plugin and a third-party
   one whose names differ only by the `@platypus/` scope), boot aborts naming
-  both, and so does a manifest name two loaded plugins share.
+  both, and so does a manifest name two loaded Plugins share.
 - **The credential block is shared, deployment-wide.** The one block is injected
-  into _every_ one of that plugin's contributions and serves _all_ tenants — a
-  plugin's Sandbox backend and its management Tool set read the same token. This
+  into _every_ one of that Plugin's contributions and serves _all_ tenants — a
+  Plugin's Sandbox backend and its management Tool set read the same token. This
   is not a per-user or per-Workspace secret.
 - **Distinct from per-Workspace Sandbox config.** The genuinely tenant-specific
   settings — which Docker networks _this_ Workspace's sandbox may attach to, its
@@ -264,8 +264,8 @@ A third-party plugin's manifest name is the name its line in the boot log and
   [Sandbox](#sandbox) below) and are unchanged. Plugin config is a _deployment_
   layer **above** per-Workspace _resource_ config; the two layer, they do not
   merge.
-- **Only plugins that declare schemas consume it.** A plugin with no
-  plugin-level `configSchema` / `credentialsSchema` (e.g. `@platypus/tools-basic`)
+- **Only Plugins that declare schemas consume it.** A Plugin with no
+  Plugin-level `configSchema` / `credentialsSchema` (e.g. `@platypus/tools-basic`)
   ignores its block. `@platypus/docker` **does** take one — its Operator network
   allowlist lives here as `config.allowedNetworks` (see the Docker bullet under
   [Sandbox](#sandbox) below); its genuinely per-Workspace settings still live on
@@ -278,7 +278,7 @@ inject it from your secret manager, never commit it.
   **`PLATYPUS_PLUGIN_CONFIG` is deprecated** and will be removed in the next
   major release. It still works, and boot logs a `warn` while it is set. It is
   one JSON object keyed by manifest name; migrate by moving each key's value
-  into that plugin's own variable:
+  into that Plugin's own variable:
 
 ```bash
 # Before
@@ -289,8 +289,8 @@ PLATYPUS_PLUGIN_CONFIG_DOCKER={"config":{"allowedNetworks":["shared-services"]}}
 PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX={"credentials":{"apiToken":"dtn_live_…"}}
 ```
 
-The two are never merged. A plugin configured in both its own variable and
-`PLATYPUS_PLUGIN_CONFIG` aborts boot, so move a plugin's block in one step
+The two are never merged. A Plugin configured in both its own variable and
+`PLATYPUS_PLUGIN_CONFIG` aborts boot, so move a Plugin's block in one step
 rather than copying it.
 
 </Callout>
@@ -299,7 +299,7 @@ rather than copying it.
 
 The [Sandbox](/concepts/sandboxes) (agent shell/filesystem access) is **off by
 default**. Platypus ships two reference backends, each enabled by listing its
-plugin in `PLATYPUS_PLUGINS`. Without the plugin listed, that backend type isn't
+Plugin in `PLATYPUS_PLUGINS`. Without the Plugin listed, that backend type isn't
 registered and its sandbox configuration is inert:
 
 - **Docker** — `@platypus/docker`. One container per Workspace on the local

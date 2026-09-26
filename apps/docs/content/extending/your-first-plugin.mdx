@@ -1,13 +1,13 @@
 ---
-title: Your first plugin
-description: Load the example plugin into a deployment, confirm it registered, and grant its tool to an Agent.
+title: Your first Plugin
+description: Load the example Plugin into a deployment, confirm it registered, and grant its tool to an Agent.
 ---
 
 import { Callout, Steps } from "nextra/components";
 
-# Your first plugin
+# Your first Plugin
 
-The repository ships a runnable third-party plugin:
+The repository ships a runnable third-party Plugin:
 [`packages/example-plugin`](https://github.com/willdady/platypus/tree/main/packages/example-plugin),
 package name `@platypus-examples/tool-set`, not published to npm. It contributes
 one Tool set with one
@@ -52,7 +52,7 @@ package specifier** — what you install and what the Operator lists. `example` 
 the manifest **`name`** — the config namespace, and the prefix core puts on every
 contribution id and every tool name, so the `greet` tool above reaches the model
 as `example__greet`. Get them the wrong way round and boot fails naming your
-plugin.
+Plugin.
 
 ## Load it
 
@@ -60,7 +60,7 @@ plugin.
 
 ### Install the package into the deployment
 
-How depends on how you run Platypus — see [Installing plugins](/extending/installing-plugins).
+How depends on how you run Platypus — see [Installing Plugins](/extending/installing-plugins).
 
 In a checkout of the Platypus repository this is already done — the example is a
 workspace package and the backend already depends on it. Skip to the next step.
@@ -68,7 +68,7 @@ workspace package and the backend already depends on it. Skip to the next step.
 The published images don't contain the example, and it isn't on npm to install.
 Build it into a custom backend image instead: the repository's
 [`examples/custom-image`](https://github.com/willdady/platypus/tree/main/examples/custom-image)
-does exactly that, and its README lists the plugin and starts the stack in the
+does exactly that, and its README lists the Plugin and starts the stack in the
 same commands. Follow it, then go to Checkpoint 1.
 
 ### List it
@@ -99,14 +99,14 @@ see a row reading **example**, version `0.1.0`, badged **Third-party**, with
 <Callout type="warning">
   The row is labelled with the manifest **`name`** — `example` — not the package
   specifier you installed. Scanning the list for
-  `@platypus-examples/tool-set` and concluding the plugin didn't load is the
+  `@platypus-examples/tool-set` and concluding the Plugin didn't load is the
   usual first confusion.
 </Callout>
 
 If the backend didn't come back up at all, that is the intended behaviour for a
-plugin that couldn't be resolved: boot is fail-loud and all-or-nothing. Read the
+Plugin that couldn't be resolved: boot is fail-loud and all-or-nothing. Read the
 backend's log — the `pnpm dev` terminal in a checkout, `docker compose logs
-backend` on a custom image. The startup error names your plugin and the reason.
+backend` on a custom image. The startup error names your Plugin and the reason.
 
 ## Checkpoint 2: an Agent can use it
 
@@ -142,13 +142,13 @@ loud on a busy deployment.
 
 | What you see                                                          | What it means                                                                            | Fix                                                                                                                    |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Backend exits at boot, log names your plugin and "failed to resolve"   | The package isn't installed where the backend can `import()` it                          | Install it into the deployment, not only the repository, and check the specifier for typos                              |
+| Backend exits at boot, log names your Plugin and "failed to resolve"   | The package isn't installed where the backend can `import()` it                          | Install it into the deployment, not only the repository, and check the specifier for typos                              |
 | Backend exits, log complains about the manifest `name`                 | A third-party `name` must be a url-safe slug — lowercase letters, digits, hyphens         | Use `widgets`, not `@acme/platypus-widgets`. The package specifier stays scoped; the manifest name doesn't              |
-| Backend exits, log says your manifest `name` is over its cap           | A third-party `name` is capped — it is the namespace on every tool name this plugin adds  | The error states the cap and your length. Shorten it in the manifest; the package specifier can stay as long as you like |
+| Backend exits, log says your manifest `name` is over its cap           | A third-party `name` is capped — it is the namespace on every tool name this Plugin adds  | The error states the cap and your length. Shorten it in the manifest; the package specifier can stay as long as you like |
 | Backend exits, log names a tool over its cap                           | A tool name in a statically-declared tool map is capped for the same reason               | Rename the tool. See [Tool names](/extending/tool-sets#two-length-caps)                                                 |
 | Backend starts, but a tool from your factory never reaches the model; the log warns "Tool set's tool cannot enter a turn: its name is N characters, over the 32-character cap" | A factory's tool names are only known per turn, so an over-cap one is dropped from each turn rather than failing boot | Rename the tool. See [Tool names](/extending/tool-sets#two-length-caps)                                                 |
-| Backend exits, log says your plugin "needs API v…, but core supports up to v…" | The plugin was built against a newer plugin API than this core supports          | Upgrade core. If the log instead says the plugin targets an API "below the oldest core supports", rebuild it against a current SDK. See [Which core versions your plugin runs on](/extending/plugin-api-and-config#which-core-versions-your-plugin-runs-on) |
-| Backend exits, log says your manifest `name` is declared by two plugins | Another loaded plugin ships the same manifest `name` — often a fork installed alongside the original | Rename one of them in its manifest. The two would otherwise share one deploy-time config and credential block |
+| Backend exits, log says your Plugin "needs API v…, but core supports up to v…" | The Plugin was built against a newer Plugin API than this core supports          | Upgrade core. If the log instead says the Plugin targets an API "below the oldest core supports", rebuild it against a current SDK. See [Which core versions your Plugin runs on](/extending/plugin-api-and-config#which-core-versions-your-plugin-runs-on) |
+| Backend exits, log says your manifest `name` is declared by two Plugins | Another loaded Plugin ships the same manifest `name` — often a fork installed alongside the original | Rename one of them in its manifest. The two would otherwise share one deploy-time config and credential block |
 | Backend starts, but **Plugins** doesn't list it and nothing is logged   | It isn't in `PLATYPUS_PLUGINS` — most often a `compose.sandbox.yaml` overlay replaced the list | The overlay sets `PLATYPUS_PLUGINS` under `services.backend.environment`, which wins over `.env`. Put your full list in the overlay |
 
 <Callout type="info">
@@ -167,5 +167,5 @@ loud on a busy deployment.
 - **[Web-search backends](/extending/web-search-backends)** — serve the Chat
   **Search** toggle from your own search service.
 - **[Plugin API & config](/extending/plugin-api-and-config)** — deploy-time
-  config and credentials, and which core versions your plugin will keep working
+  config and credentials, and which core versions your Plugin will keep working
   on.

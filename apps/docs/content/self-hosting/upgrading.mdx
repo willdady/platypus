@@ -68,7 +68,7 @@ Nothing beyond the section above. Configuration is stable across 2.x, and the
 migrations that run at container start need no action from you.
 
 <Callout type="info">
-  New **gate-able** core plugins introduced in a later release are **not**
+  New **gate-able** core Plugins introduced in a later release are **not**
   auto-enabled. If a release adds one you want, add its name to
   `PLATYPUS_PLUGINS` yourself — a pinned list never grows on its own. Check
   **Organization settings → Plugins** after the restart to see what actually
@@ -78,20 +78,20 @@ migrations that run at container start need no action from you.
 ## Coming from 1.x
 
 Platypus 2.0 introduced the
-[plugin system](/extending/plugin-api-and-config#the-plugin-model). The web-fetch
+[Plugin system](/extending/plugin-api-and-config#the-plugin-model). The web-fetch
 tool set and the Docker Sandbox backend stopped having their own environment
-variables and became **plugins**, enabled through `PLATYPUS_PLUGINS` and
+variables and became **Plugins**, enabled through `PLATYPUS_PLUGINS` and
 configured through `PLATYPUS_PLUGIN_CONFIG`.
 
 For that hop specifically the changes are **deployment configuration only** —
-three variables removed, their behaviour moved onto the plugin surface, no
+three variables removed, their behaviour moved onto the Plugin surface, no
 application-data change. It is an edit to your `.env` and a restart. Later 2.x
 releases do bring migrations, which is why the section above still applies.
 
 <Callout type="warning">
   **The most common upgrade mistake: losing the web-fetch tool.** An unset or
   empty `PLATYPUS_PLUGINS` loads **only** the always-on core tool sets — there is
-  no built-in default. A 1.x `.env` predates the plugin system and has no
+  no built-in default. A 1.x `.env` predates the Plugin system and has no
   `PLATYPUS_PLUGINS` line at all, so upgrading silently strips web-fetch from
   every Agent. Nothing errors; the tool is gone. To keep it you **must**
   add `@platypus/web-fetch` to `PLATYPUS_PLUGINS`.
@@ -122,12 +122,12 @@ All three are inert in 2.x. Delete them from your environment.
 6. **Restart the backend**, then confirm the result in **Organization settings →
    Plugins**, which lists everything loaded at boot.
 
-Boot is **fail-loud**: a listed plugin that can't be resolved, or a
-`PLATYPUS_PLUGIN_CONFIG` entry that is malformed or keyed to a plugin that isn't
-loaded, aborts startup with a plugin-named error rather than degrading quietly.
+Boot is **fail-loud**: a listed Plugin that can't be resolved, or a
+`PLATYPUS_PLUGIN_CONFIG` entry that is malformed or keyed to a Plugin that isn't
+loaded, aborts startup with a Plugin-named error rather than degrading quietly.
 
 <Callout type="info">
-  `PLATYPUS_PLUGIN_CONFIG` is a **single** JSON object keyed by plugin name. If
+  `PLATYPUS_PLUGIN_CONFIG` is a **single** JSON object keyed by Plugin name. If
   you're migrating more than one setting, merge them into one object — don't set
   the variable twice.
 </Callout>
@@ -153,7 +153,7 @@ PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared
 ```
 
 Treat `PLATYPUS_PLUGIN_CONFIG` like any secret-bearing variable — it can carry a
-plugin's `credentials` block. Inject it from your secret manager; never commit it.
+Plugin's `credentials` block. Inject it from your secret manager; never commit it.
 
 ### Also new in 2.0
 
@@ -165,7 +165,7 @@ horizontally-scaled deployments, where Docker cannot run. See
 
 - **[Running in production](/self-hosting/production)** — the backup command, and
   everything else that should be true before an upgrade matters.
-- **[Configuration → Plugins](/self-hosting/configuration#plugins)** — the plugin
+- **[Configuration → Plugins](/self-hosting/configuration#plugins)** — the Plugin
   list and config semantics in full.
 - **[Backend configuration](/reference/backend-configuration#plugins)** — the flat
   variable reference.

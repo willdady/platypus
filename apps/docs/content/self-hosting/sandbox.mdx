@@ -13,7 +13,7 @@ it. The Sandbox interface is pluggable so different backends — local container
 remote VM, hosted sandbox-as-a-service — can be contributed. Platypus ships two
 reference backends: **Docker** (one container per Workspace on the local daemon)
 and **SSH** (attach to a pre-existing, operator-owned host). Neither is enabled by
-default — each is turned on by listing its plugin in `PLATYPUS_PLUGINS`.
+default — each is turned on by listing its Plugin in `PLATYPUS_PLUGINS`.
 
 This page is for the **Operator** and **Org Admin** who stand up and curate that
 infrastructure.
@@ -49,11 +49,11 @@ into the backend container.
 
 Because of that, the adapter is **off by default** and gated two ways:
 
-1. Plugin enablement. The adapter ships as the core plugin `@platypus/docker`,
+1. Plugin enablement. The adapter ships as the core Plugin `@platypus/docker`,
    which has to be in `PLATYPUS_PLUGINS`. Without it the `"docker"` backend type
    isn't registered at all (so you can't create un-runnable Sandbox rows).
 2. An opt-in compose overlay, `compose.sandbox.yaml`, which adds the socket mount
-   and lists the plugin.
+   and lists the Plugin.
 
 Enable it by composing the overlay alongside the default stack:
 
@@ -175,7 +175,7 @@ Add `@platypus/ssh` to `PLATYPUS_PLUGINS` and restart the backend:
 PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/ssh
 ```
 
-It ships as a core plugin, so no package install is needed; plugin-list membership
+It ships as a core Plugin, so no package install is needed; Plugin-list membership
 is the enable switch (see
 [Configuration → Plugins](/self-hosting/configuration#plugins)). Omit the name and
 the `"ssh"` backend type isn't registered, so it can't be selected when
@@ -187,7 +187,7 @@ no daemon socket.
 Everything the adapter needs to reach a host lives on the per-Workspace Sandbox
 row, set in the app under **Workspace settings → Sandbox** by an Org Admin (like
 every credential-bearing Sandbox field, it is **not** delegatable to a Workspace
-Owner). It is _not_ deployment env or plugin config.
+Owner). It is _not_ deployment env or Plugin config.
 
 | Field              | Required | Meaning                                                                                                                                 |
 | ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |

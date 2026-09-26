@@ -35,7 +35,7 @@ what a Workspace Owner sees on the Agent form. Your tool names show too, in Chat
   grant is stored by id, and a turn that can't resolve the id degrades to no
   tools rather than erroring — so the symptom is an Agent that quietly stopped
   being able to do its job. Treat a shipped `id` as permanent. The same goes for
-  your manifest `name`: the stored id is prefixed with it, so renaming the plugin
+  your manifest `name`: the stored id is prefixed with it, so renaming the Plugin
   orphans every grant of every set it contributes.
 </Callout>
 
@@ -75,19 +75,19 @@ may read the database. Use `frontendUrl` to put a clickable link to a resource i
 a tool's output — it is `undefined` when the deployment hasn't set one, so treat
 the link as optional.
 
-A factory also receives the plugin's deploy-time config as an appended second
+A factory also receives the Plugin's deploy-time config as an appended second
 argument — see
 [Plugin API & config](/extending/plugin-api-and-config#deploy-time-config-and-credentials).
 That same argument carries the [logger](/extending/plugin-api-and-config#logging)
-core binds to your plugin's name, which is a reason to reach for a factory even
+core binds to your Plugin's name, which is a reason to reach for a factory even
 where a static map would otherwise do: a static map is handed nothing, so it has
 nowhere to log from.
 
 ## Ids and namespacing
 
-Write **bare** ids. Core prefixes a third-party plugin's ids with its manifest
-`name` at load, so `greeting` in a plugin named `example` registers as
-`example.greeting`. Core plugins keep their ids flat (`kanban`, `time`,
+Write **bare** ids. Core prefixes a third-party Plugin's ids with its manifest
+`name` at load, so `greeting` in a Plugin named `example` registers as
+`example.greeting`. Core Plugins keep their ids flat (`kanban`, `time`,
 `web-fetch`).
 
 That split is what stops a third-party id colliding with a core one a later
@@ -169,9 +169,9 @@ stops core taking one of your names: a turn assigns `web_search`, `read_url`,
 contributing a bare `web_search` used to lose it on every turn where search was
 on, with nothing anywhere saying so.
 
-Do not hand-prefix. `acmeCreateIssue` in a plugin named `acme` reaches the model
+Do not hand-prefix. `acmeCreateIssue` in a Plugin named `acme` reaches the model
 as `acme__acmeCreateIssue`, which reads worse and spends the budget below twice.
-Core plugins are the exception and keep bare tool names, the same way they keep
+Core Plugins are the exception and keep bare tool names, the same way they keep
 bare ids.
 
 Keep to letters, digits, underscores and hyphens. That is the character set a
@@ -185,16 +185,16 @@ Because the two halves compose into one name, each half is capped:
 - **The manifest `name`** — up to 24 characters.
 - **A tool name** — up to 32 characters.
 
-Both are checked at boot for a third-party plugin. The tool-name cap holds
-however short your manifest `name` is: a plugin named `linear` does not get the
+Both are checked at boot for a third-party Plugin. The tool-name cap holds
+however short your manifest `name` is: a Plugin named `linear` does not get the
 characters it left unused. Together they keep the composed
 name inside what a model provider allows, so you never have to do that arithmetic
 yourself.
 
 <Callout type="warning">
   Either cap, exceeded, **aborts startup**. A statically-declared tool name over
-  its cap is reported with your plugin, the Tool set, the tool, the cap and the
-  actual length; a manifest `name` over its cap with your plugin, the field, the
+  its cap is reported with your Plugin, the Tool set, the tool, the cap and the
+  actual length; a manifest `name` over its cap with your Plugin, the field, the
   cap and the actual length. Nothing is truncated to fit — two long names from
   one set could truncate onto each other and quietly become one tool.
 </Callout>
@@ -206,30 +206,30 @@ both rules.
 
 ### What can still collide
 
-Two Tool sets from the **same** plugin that define one tool name still contest
+Two Tool sets from the **same** Plugin that define one tool name still contest
 it: they share a namespace, so the later one wins and core logs a warning naming
 both sets. That is within your own control — give them distinct names.
 
 An MCP can share your namespace too. Core prefixes each MCP tool with the MCP's
 name — lowercased, spaces and punctuation turned to `_` — and the same `__`, so
 an MCP a Workspace Owner names `Linear` enters a turn under the same prefix as a
-plugin named `linear`. When an Agent is granted both, a tool name they share goes
+Plugin named `linear`. When an Agent is granted both, a tool name they share goes
 to whichever comes later in the Agent's list, and core logs a warning. Renaming
 the MCP clears it.
 
-## Adding one to a core plugin
+## Adding one to a core Plugin
 
 If you are working in the repository rather than shipping your own package, a
-new core Tool set is a `ToolSetContribution` added to an existing core plugin's
+new core Tool set is a `ToolSetContribution` added to an existing core Plugin's
 manifest:
 
 - a Platypus-domain set belongs in `@platypus/tools-platform`;
 - a pure utility belongs in `@platypus/tools-basic`;
 - a capability an Operator would plausibly want to **deny on its own** — network
-  egress, infrastructure reach — gets its own plugin, so it can be left out of
+  egress, infrastructure reach — gets its own Plugin, so it can be left out of
   `PLATYPUS_PLUGINS`. `@platypus/web-fetch` is the pattern.
 
-The first two are always-on and need nothing further. A new plugin has to be
+The first two are always-on and need nothing further. A new Plugin has to be
 named in the deployment's `PLATYPUS_PLUGINS` before it loads at all.
 
 <Callout type="info">
@@ -240,7 +240,7 @@ named in the deployment's `PLATYPUS_PLUGINS` before it loads at all.
 
 ## Where to next
 
-- **[Your first plugin](/extending/your-first-plugin)** — load one end to end.
+- **[Your first Plugin](/extending/your-first-plugin)** — load one end to end.
 - **[Plugin API & config](/extending/plugin-api-and-config)** — the deploy-time
   config a factory can read.
 - **[Tool sets](/building-with-platypus/tool-sets)** — what the built-in sets do,
