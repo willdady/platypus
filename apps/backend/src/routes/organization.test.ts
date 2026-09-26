@@ -233,8 +233,8 @@ describe("Organization Routes", () => {
           },
         ],
         workspace: [
-          { id: "ws-1", organizationId: "org-1" },
-          { id: "ws-2", organizationId: "org-1" },
+          { id: "ws-1", organizationId: "org-1", ownerId: "owner-1" },
+          { id: "ws-2", organizationId: "org-1", ownerId: "owner-2" },
           { id: "ws-3", organizationId: "org-10" },
         ],
         agent: [
@@ -287,8 +287,6 @@ describe("Organization Routes", () => {
 
       const seedWithSandboxes = (sandboxes: ReturnType<typeof sandbox>[]) => {
         const fake = seed();
-        fake.tables.workspace[0].ownerId = "owner-1";
-        fake.tables.workspace[1].ownerId = "owner-2";
         fake.tables.sandbox = sandboxes;
         fake.tables.sandbox_teardown_failure = [];
         return fake;
@@ -299,6 +297,7 @@ describe("Organization Routes", () => {
         const fake = seedWithSandboxes([
           sandbox("sb-1", "ws-1"),
           sandbox("sb-2", "ws-2"),
+          // Another Organization's Sandbox: must be left alone.
           sandbox("sb-3", "ws-3"),
         ]);
         const orgPresent: boolean[] = [];
@@ -356,6 +355,22 @@ describe("Organization Routes", () => {
           ]),
         );
         expect(fake.tables.sandbox_teardown_failure).toHaveLength(2);
+      });
+
+      it("deletes an Organization with no Workspaces without touching any Sandbox", async () => {
+        mockSession({ id: "admin-1", role: "user" });
+        const fake = seedWithSandboxes([sandbox("sb-3", "ws-3")]);
+        fake.tables.workspace = fake.tables.workspace.filter(
+          (row) => row.organizationId !== "org-1",
+        );
+
+        const res = await app.request("/organizations/org-1", {
+          method: "DELETE",
+        });
+
+        expect(res.status).toBe(200);
+        expect(destroy).not.toHaveBeenCalled();
+        expect(fake.tables.sandbox_teardown_failure).toEqual([]);
       });
     });
 

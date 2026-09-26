@@ -138,7 +138,8 @@ organization.delete(
         ),
       );
     // Best-effort sandbox teardown while the Workspace rows still exist, as
-    // Workspace delete does. Never throws (ADR-0001).
+    // Workspace delete does. Never throws; failures are recorded in
+    // sandbox_teardown_failure (ADR-0001).
     await Promise.all(
       workspaces.map(({ id }) => destroyWorkspaceSandboxes(id)),
     );
