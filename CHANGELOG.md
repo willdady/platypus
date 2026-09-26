@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.11.1](https://github.com/willdady/platypus/compare/v3.11.0...v3.11.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **backend:** offer memorySearch only when the Workspace has an embedding Provider ([e264686](https://github.com/willdady/platypus/commit/e264686111b6ef6c5133df9b4081dd363a5c14de))
+* **backend:** stop naming /workspace as the sandbox root in the system prompt ([8eaf8df](https://github.com/willdady/platypus/commit/8eaf8df669ffc53cb7b5c92ddc44df4d00eb6c94))
+* **docs:** correct concepts claims that drifted from the code ([#1057](https://github.com/willdady/platypus/issues/1057)) ([95b0878](https://github.com/willdady/platypus/commit/95b08785803f2378650b563461b3e32c5222809c))
+* **frontend:** stop promising Skills and Sub-Agents to agentless Chats ([7efe0e4](https://github.com/willdady/platypus/commit/7efe0e4cf6ca60c5aebf057928abd1723273cb4b))
+* show when an SSH Sandbox has a stored private key ([bf76587](https://github.com/willdady/platypus/commit/bf765873512e0d2d0ccb466352891ff20138e2b6))
+* stop the SSH Sandbox form silently dropping a passphrase ([#1066](https://github.com/willdady/platypus/issues/1066)) ([c76035a](https://github.com/willdady/platypus/commit/c76035a3d1d81deb9f18634f16f567ad9df73b0a))
+
 ## [3.11.0](https://github.com/willdady/platypus/compare/v3.10.2...v3.11.0) (2026-09-26)
 
 
