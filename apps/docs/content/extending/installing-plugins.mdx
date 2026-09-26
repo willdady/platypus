@@ -45,9 +45,10 @@ build your own image `FROM` it and install the plugin at build time. The result
 works under Compose and Kubernetes alike, survives every container recreate, and
 its image digest records exactly which plugin code a deployment runs.
 
-The repository has a complete, working version of this in
-[`examples/custom-image`](https://github.com/willdady/platypus/tree/main/examples/custom-image):
-it builds the example plugin into an image and runs it with a Compose override.
+The repository has a working version of this in
+[`examples/custom-image`](https://github.com/willdady/platypus/tree/main/examples/custom-image).
+It installs the example plugin from a tarball rather than a lockfile, and runs
+it with a Compose override.
 
 <Steps>
 
@@ -96,15 +97,14 @@ RUN test ! -e /app/apps/node_modules && \
   so it doesn't change when your plugins do.
 - **The plugins go in their own directory**, outside the application's own
   packages, and the link puts them where the backend looks when it imports a
-  plugin. `/app/apps/node_modules` is empty in the published image — the
-  backend's own dependencies are in `/app/apps/backend/node_modules`, which Node
-  searches first, so a plugin can't replace one of them. The `test` makes the
-  build fail if a future base image ever uses that path. Don't run `npm install` in the application directory instead: npm
-  tries to reinstall the whole application and fails.
-- **The `chown` lines are required.** The backend runs as the unprivileged
-  `platypus` account, uid 1001, and the files have to belong to it.
-- **The entrypoint, command, health check and `/data` handling** all come from
-  the base image unchanged.
+  plugin. `/app/apps/node_modules` doesn't exist in the published image, and the
+  `test` makes the build fail if a future base image ever creates it. Don't run
+  `npm install` in the application directory instead: npm tries to reinstall the
+  whole application and fails.
+- **The entrypoint, command and `/data` handling** all come from the base image
+  unchanged. The image has no health check: Compose defines one in
+  `compose.yaml`, so on Kubernetes write your own probe against the backend's
+  `GET /health`.
 
 ### Build and boot it
 
@@ -119,8 +119,9 @@ so a boot is the test.
 ## Running a custom image with Compose
 
 Put the image in a `compose.override.yaml` next to `compose.yaml`. Compose merges
-it automatically. The frontend, health check, `./data` mount and entrypoint all
-carry on unchanged.
+it automatically unless you name files with `-f`, as the Sandbox overlay does
+(see [List it and recreate the backend](#list-it-and-recreate-the-backend)). The
+frontend, health check, `./data` mount and entrypoint all carry on unchanged.
 
 **Built on the host running Compose**, with the Dockerfile directory beside
 `compose.yaml`:
@@ -193,6 +194,9 @@ in the override, and run the normal `docker compose pull` and
 an image you rebuilt locally under an existing tag is replaced by the registry's
 copy on the next pull.
 
+With the Sandbox overlay, give each of these commands the three `-f` flags from
+[List it and recreate the backend](#list-it-and-recreate-the-backend).
+
 ## Bind-mounting a plugin (trying out only)
 
 You can skip building an image by installing the plugin on the host and mounting
@@ -253,13 +257,29 @@ Compose file's `environment` wins over `.env`, and `.env` wins over the image's
 remove it from `.env` if you bake it in. The Sandbox overlay
 `compose.sandbox.yaml` sets its own list, so composing it discards whatever `.env`
 says (see [Plugins](/self-hosting/configuration#plugins)). When you run that
-overlay, its list has to be your complete set.
+overlay, its list has to be your complete set, unless your
+`compose.override.yaml` sets one: named last, the override's list wins, and has
+to include `@platypus/docker`.
 
 Then recreate the backend:
 
 ```bash
 docker compose up -d
 ```
+
+<Callout type="warning">
+  Naming files with `-f` stops Compose reading `compose.override.yaml` on its
+  own. Run `docker compose -f compose.yaml -f compose.sandbox.yaml up -d` and
+  the backend starts without your override: on the published image your plugin
+  is missing, or boot fails with it "failed to resolve" if `PLATYPUS_PLUGINS`
+  lists it. With the Sandbox overlay, name all three files, the override last,
+  on this and every other `docker compose` command on this page:
+
+```bash
+docker compose -f compose.yaml -f compose.sandbox.yaml -f compose.override.yaml up -d
+```
+
+</Callout>
 
 `docker compose restart` is not enough: it restarts the container with the
 environment it was created with, so an edited `PLATYPUS_PLUGINS` never reaches
