@@ -70,7 +70,8 @@ The backend logs one line per Plugin at boot:
 docker compose -f compose.yaml -f examples/custom-image/compose.override.yaml logs backend | grep "Loaded plugin example"
 ```
 
-You should see `Loaded plugin example@0.1.0 (third-party): 1 tool set(s)`. A
+You should see
+`Loaded plugin example@0.1.0 (third-party): 1 tool set(s), 0 sandbox backend(s), 0 web backend(s)`. A
 Plugin that fails to load stops the backend from booting, and the log names the
 Plugin and the reason.
 
@@ -86,8 +87,8 @@ other Plugin you listed in `.env`. List them all in the override.
 
 ## Install a Plugin from npm instead
 
-For a published Plugin, delete the `COPY` line in the `Dockerfile` and replace
-the tarball path on the `npm install` line with the package and version:
+For a published Plugin, replace the tarball path on the `npm install` line of
+the `Dockerfile` with the package and version:
 
 ```dockerfile
     npm install --omit=dev --no-audit --no-fund --cache /tmp/npm-cache \
