@@ -84,7 +84,8 @@ RUN cd /opt/platypus-plugins && \
     rm -rf /tmp/npm-cache && \
     chown -R platypus:platypus /opt/platypus-plugins
 
-RUN ln -s /opt/platypus-plugins/node_modules /app/apps/node_modules && \
+RUN test ! -e /app/apps/node_modules && \
+    ln -s /opt/platypus-plugins/node_modules /app/apps/node_modules && \
     chown -h platypus:platypus /app/apps/node_modules
 ```
 
@@ -95,7 +96,10 @@ RUN ln -s /opt/platypus-plugins/node_modules /app/apps/node_modules && \
   so it doesn't change when your plugins do.
 - **The plugins go in their own directory**, outside the application's own
   packages, and the link puts them where the backend looks when it imports a
-  plugin. Don't run `npm install` in the application directory instead: npm
+  plugin. `/app/apps/node_modules` is empty in the published image — the
+  backend's own dependencies are in `/app/apps/backend/node_modules`, which Node
+  searches first, so a plugin can't replace one of them. The `test` makes the
+  build fail if a future base image ever uses that path. Don't run `npm install` in the application directory instead: npm
   tries to reinstall the whole application and fails.
 - **The `chown` lines are required.** The backend runs as the unprivileged
   `platypus` account, uid 1001, and the files have to belong to it.

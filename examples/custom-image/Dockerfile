@@ -18,7 +18,9 @@ RUN mkdir /opt/platypus-plugins && cd /opt/platypus-plugins && \
 
 # The backend imports each PLATYPUS_PLUGINS entry by name from its own source
 # under /app/apps/backend, so Node searches the node_modules of every parent
-# directory. pnpm leaves /app/apps/node_modules unused; point it at the
-# plugins project.
-RUN ln -s /opt/platypus-plugins/node_modules /app/apps/node_modules && \
+# directory. pnpm leaves /app/apps/node_modules unused (the backend's own
+# dependencies are in /app/apps/backend/node_modules, searched first); point it
+# at the plugins project. The test fails the build if a base image uses it.
+RUN test ! -e /app/apps/node_modules && \
+    ln -s /opt/platypus-plugins/node_modules /app/apps/node_modules && \
     chown -h platypus:platypus /app/apps/node_modules
