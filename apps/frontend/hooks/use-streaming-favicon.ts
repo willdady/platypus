@@ -15,9 +15,9 @@ const drawDotFrame = (href: string): Promise<string | null> =>
       ctx.drawImage(img, 0, 0, size, size);
       // Punch a transparent gap through the icon, then sit the dot inside it,
       // so the dot stays distinct from the icon's own teal background.
-      const gap = size * 0.16;
+      const gap = size * 0.14;
       const r = size * 0.18;
-      const c = size - r - gap + size / 16; // nudged 1px at a 16px tab size
+      const c = size * 0.72; // dot centre, independent of the gap
       ctx.globalCompositeOperation = "destination-out";
       ctx.beginPath();
       ctx.arc(c, c, r + gap, 0, 2 * Math.PI);
