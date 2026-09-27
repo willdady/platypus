@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-const BLINK_MS = 600;
+const BLINK_MS = 1000;
 
 /** The favicon with a solid dot in its bottom-right corner, or null if it can't be drawn. */
 const drawDotFrame = (href: string): Promise<string | null> =>
@@ -13,16 +13,20 @@ const drawDotFrame = (href: string): Promise<string | null> =>
       const ctx = canvas.getContext("2d");
       if (!ctx) return resolve(null);
       ctx.drawImage(img, 0, 0, size, size);
-      // White with a dark ring: the icon's own background is the theme teal.
-      const ring = size * 0.06;
+      // Punch a transparent gap through the icon, then sit the dot inside it,
+      // so the dot stays distinct from the icon's own teal background.
+      const gap = size * 0.07;
       const r = size * 0.18;
+      const c = size - r - gap;
+      ctx.globalCompositeOperation = "destination-out";
       ctx.beginPath();
-      ctx.arc(size - r - ring / 2, size - r - ring / 2, r, 0, 2 * Math.PI);
-      ctx.fillStyle = "#ffffff";
+      ctx.arc(c, c, r + gap, 0, 2 * Math.PI);
       ctx.fill();
-      ctx.lineWidth = ring;
-      ctx.strokeStyle = "#134e4a";
-      ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.beginPath();
+      ctx.arc(c, c, r, 0, 2 * Math.PI);
+      ctx.fillStyle = "#4ade80";
+      ctx.fill();
       try {
         resolve(canvas.toDataURL("image/png"));
       } catch {
