@@ -17,6 +17,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json .npmrc ./
 COPY apps/frontend/package.json ./apps/frontend/
 COPY apps/backend/package.json ./apps/backend/
 COPY packages/schemas/package.json ./packages/schemas/
+COPY packages/plugin-sdk/package.json ./packages/plugin-sdk/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -35,6 +36,7 @@ COPY --from=deps app/ ./
 COPY apps/frontend ./apps/frontend
 COPY apps/backend ./apps/backend
 COPY packages/schemas ./packages/schemas
+COPY packages/plugin-sdk ./packages/plugin-sdk
 
 # Next.js collects completely anonymous telemetry data about general usage.
 # Learn more here: https://nextjs.org/telemetry
