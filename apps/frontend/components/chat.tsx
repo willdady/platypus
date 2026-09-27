@@ -32,6 +32,7 @@ import {
   composerTurnStatus,
   isRunHeldElsewhere,
   isTurnInFlight,
+  runMayBeLive,
   snapshotMayLand,
   snapshotMessages,
 } from "@/lib/chat-recovery";
@@ -46,6 +47,7 @@ import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
 import { clearedToolCallIds } from "@/lib/tool-result-clearing";
 import { useStableSet } from "@/hooks/use-stable-set";
+import { useStreamingFavicon } from "@/hooks/use-streaming-favicon";
 import { ContextMeter, ContextMeterEntrance } from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { useChatTurn } from "@/hooks/use-chat-turn";
@@ -278,6 +280,7 @@ export const Chat = ({
     turnEstablished,
   };
   const errorTreatment = classifyChatError({ error, ...runBelief });
+  useStreamingFavicon(runMayBeLive(runBelief));
 
   // Custom hooks for state management (must be called before any conditional returns)
   const { selection, isResolved, handleModelChange } = useModelSelection({
