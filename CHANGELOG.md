@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.13.0](https://github.com/willdady/platypus/compare/v3.12.1...v3.13.0) (2026-09-27)
+
+
+### Features
+
+* **frontend:** blink a dot on the tab favicon while the open Chat's run may be live ([#1102](https://github.com/willdady/platypus/issues/1102)) ([ecc0806](https://github.com/willdady/platypus/commit/ecc0806f98b2bdd59dbb08e50545f99afd3d1f6c))
+
+
+### Bug Fixes
+
+* **frontend:** show a new Agent avatar without a hard refresh ([#1104](https://github.com/willdady/platypus/issues/1104)) ([aeb0f6d](https://github.com/willdady/platypus/commit/aeb0f6d3bc9df9aa67de55a47aeaf36f8bd55873))
+
 ## [3.12.1](https://github.com/willdady/platypus/compare/v3.12.0...v3.12.1) (2026-09-27)
 
 
