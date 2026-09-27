@@ -437,7 +437,7 @@ const SandboxSettings = ({
     // else is admin-controlled and ignored server-side, so we don't send it.
     const payload = canConfigure
       ? {
-          ...(isCreate && !draft ? { workspaceId } : {}),
+          ...(isCreate ? { workspaceId } : {}),
           name: formData.name,
           backend: formData.backend,
           config,

@@ -83,9 +83,6 @@ export const createInMemoryChatTurnQueries = (
       !row.workspaceId &&
       isAttached(resourceType, row.id, workspaceId));
 
-  const isAgentVisible = (a: AgentRow, orgId: string, workspaceId: string) =>
-    isVisible("agent", a, orgId, workspaceId);
-
   return {
     getWorkspace(id) {
       return Promise.resolve(fx.workspaces?.find((w) => w.id === id) ?? null);
@@ -100,7 +97,9 @@ export const createInMemoryChatTurnQueries = (
     getAgent(id, orgId, workspaceId) {
       const a = fx.agents?.find((a) => a.id === id) ?? null;
       if (!a) return Promise.resolve(null);
-      return Promise.resolve(isAgentVisible(a, orgId, workspaceId) ? a : null);
+      return Promise.resolve(
+        isVisible("agent", a, orgId, workspaceId) ? a : null,
+      );
     },
 
     getProvider(id, orgId, workspaceId) {
@@ -146,7 +145,7 @@ export const createInMemoryChatTurnQueries = (
       // or at org scope where attached (ADR-0007). Enforced here rather than
       // filtering by id alone, so tests exercise the boundary, not a hole in it.
       const visible = (fx.agents ?? []).filter((a) =>
-        isAgentVisible(a, orgId, workspaceId),
+        isVisible("agent", a, orgId, workspaceId),
       );
       return Promise.resolve(
         ids

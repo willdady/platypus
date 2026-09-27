@@ -72,7 +72,6 @@ type AttachmentsContext = {
   files: (FileUIPart & { id: string })[];
   sandboxFiles: SandboxFile[];
   add: (files: File[] | FileList) => void;
-  addSandbox: (files: File[] | FileList) => void;
   /** Removes a File part or a Sandbox file, whichever holds the id. */
   remove: (id: string) => void;
   clear: () => void;
@@ -392,14 +391,13 @@ export const PromptInput = ({
   // Refused on pick rather than on Send: the transfer bound is fixed, so a
   // file over it can never be sent.
   const addSandbox = useCallback((fileList: File[] | FileList) => {
-    const incoming = Array.from(fileList);
-    const tooBig = incoming.filter((f) => f.size > SANDBOX_TRANSFER_MAX_BYTES);
-    for (const file of tooBig) {
+    const accepted = Array.from(fileList).filter((f) => {
+      if (f.size <= SANDBOX_TRANSFER_MAX_BYTES) return true;
       toast.error(
-        `${file.name} is larger than ${SANDBOX_TRANSFER_MAX_BYTES / 1024 / 1024} MiB, the Sandbox upload limit.`,
+        `${f.name} is larger than ${SANDBOX_TRANSFER_MAX_BYTES / 1024 / 1024} MiB, the Sandbox upload limit.`,
       );
-    }
-    const accepted = incoming.filter((f) => !tooBig.includes(f));
+      return false;
+    });
     setSandboxFiles((prev) =>
       prev.concat(accepted.map((file) => ({ id: nanoid(), file }))),
     );
@@ -579,7 +577,6 @@ export const PromptInput = ({
       files: files.map((item) => ({ ...item, id: item.id })),
       sandboxFiles,
       add,
-      addSandbox,
       remove,
       clear,
       openFileDialog,
@@ -590,7 +587,6 @@ export const PromptInput = ({
       files,
       sandboxFiles,
       add,
-      addSandbox,
       remove,
       clear,
       openFileDialog,

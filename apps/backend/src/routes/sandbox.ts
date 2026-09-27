@@ -30,10 +30,9 @@ import { NotFoundError, UnsupportedError } from "../errors.ts";
 import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
 import {
-  envCollisions,
+  envCollisionError,
   sandboxCreateError,
-  validateSandboxConfig,
-  validateSandboxCredentials,
+  sandboxSchemaError,
 } from "../sandbox/validate.ts";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;
@@ -175,15 +174,8 @@ sandbox.put(
 
     // Non-admin owner: restrict to name + userEnv, no backend/config changes.
     if (!isAdmin) {
-      const collisions = envCollisions(current.adminEnv, data.userEnv);
-      if (collisions.length > 0) {
-        return c.json(
-          {
-            error: `userEnv may not override admin-managed keys: ${collisions.join(", ")}`,
-          },
-          400,
-        );
-      }
+      const envError = envCollisionError(current.adminEnv, data.userEnv);
+      if (envError) return c.json({ error: envError }, 400);
       const record = await updateOwned(
         db,
         "sandbox",
@@ -199,37 +191,24 @@ sandbox.put(
     }
 
     // Admin: full update.
-    const configError = validateSandboxConfig(data.backend, data.config);
-    if (configError) {
-      return c.json({ error: `Invalid sandbox config: ${configError}` }, 400);
-    }
+    const configError = sandboxSchemaError(data.backend, "config", data.config);
+    if (configError) return c.json({ error: configError }, 400);
     // Validate credentials only when present — GET strips them, so an edit that
     // leaves the field untouched preserves the stored value (Drizzle skips
     // undefined columns) and must not be rejected for being absent.
     if (data.credentials !== undefined) {
-      const credentialsError = validateSandboxCredentials(
+      const credentialsError = sandboxSchemaError(
         data.backend,
+        "credentials",
         data.credentials,
       );
-      if (credentialsError) {
-        return c.json(
-          { error: `Invalid sandbox credentials: ${credentialsError}` },
-          400,
-        );
-      }
+      if (credentialsError) return c.json({ error: credentialsError }, 400);
     }
-    const collisions = envCollisions(
+    const envError = envCollisionError(
       data.adminEnv ?? current.adminEnv,
       data.userEnv ?? current.userEnv,
     );
-    if (collisions.length > 0) {
-      return c.json(
-        {
-          error: `userEnv may not override admin-managed keys: ${collisions.join(", ")}`,
-        },
-        400,
-      );
-    }
+    if (envError) return c.json({ error: envError }, 400);
 
     const backendChanging = current.backend !== data.backend;
     if (backendChanging && !force) {

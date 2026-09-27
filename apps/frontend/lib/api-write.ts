@@ -191,9 +191,12 @@ async function performWrite<TResult, TData>(
       headers: json
         ? { "Content-Type": "application/json", ...extraHeaders }
         : extraHeaders,
-      ...(method === "DELETE"
-        ? {}
-        : { body: data instanceof Blob ? data : JSON.stringify(data) }),
+      body:
+        method === "DELETE"
+          ? undefined
+          : json
+            ? JSON.stringify(data)
+            : (data as Blob),
     });
   } catch {
     return { outcome: "error", message: "Network request failed" };

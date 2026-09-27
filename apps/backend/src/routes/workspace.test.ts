@@ -183,9 +183,8 @@ describe("Workspace Routes", () => {
     it("creates the Workspace, its Provider, Attachments and Sandbox in one transaction", async () => {
       mockSession({ id: "admin-1", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "shared-1", organizationId: "org-1" },
-      ]); // the Shared Provider resolves in this org
+      mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
+      mockDb.where.mockResolvedValueOnce([{ id: "shared-1" }]); // the Shared Provider resolves in this org
       mockDb.returning.mockResolvedValueOnce([{ id: "ws-1", name: "Ready" }]);
       mockDb.returning.mockResolvedValueOnce([{ id: "p-1" }]);
 
@@ -224,7 +223,8 @@ describe("Workspace Routes", () => {
     it("returns 404 and writes nothing when a Shared Provider is not in this org", async () => {
       mockSession({ id: "admin-1", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([]); // not an org-scoped Provider here
+      mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
+      mockDb.where.mockResolvedValueOnce([]); // not an org-scoped Provider here
 
       const res = await post({
         name: "Ready",

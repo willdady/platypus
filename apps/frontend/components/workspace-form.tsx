@@ -46,7 +46,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 interface WorkspaceFormProps {
-  classNames?: string;
   orgId: string;
   workspaceId: string;
 }
@@ -84,14 +83,8 @@ const DelegationRowSkeleton = () => (
   </div>
 );
 
-const WorkspaceFormSkeleton = ({
-  className,
-  delegation,
-}: {
-  className?: string;
-  delegation: boolean;
-}) => (
-  <div className={className}>
+const WorkspaceFormSkeleton = ({ delegation }: { delegation: boolean }) => (
+  <div>
     <FormSkeletonSet>
       <FormSkeletonGroup>
         <FieldSkeleton />
@@ -112,11 +105,7 @@ const WorkspaceFormSkeleton = ({
   </div>
 );
 
-const WorkspaceForm = ({
-  classNames,
-  orgId,
-  workspaceId,
-}: WorkspaceFormProps) => {
+const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
   const { actor } = useAuth();
   const canManageDelegation = canManageWorkspaceDelegation(actor);
   const router = useRouter();
@@ -212,16 +201,11 @@ const WorkspaceForm = ({
       // they'd render blank or partial without it.
       isLoading={providersLoading || loadState.isLoading}
       subject="workspace"
-      skeleton={
-        <WorkspaceFormSkeleton
-          className={classNames}
-          delegation={canManageDelegation}
-        />
-      }
+      skeleton={<WorkspaceFormSkeleton delegation={canManageDelegation} />}
       backHref={workspaceRoutes(orgId, workspaceId).root}
       backLabel="Back to workspace"
     >
-      <div className={classNames}>
+      <div>
         <FieldSet className="mb-6">
           <FieldGroup>
             <FormTextField
@@ -471,7 +455,7 @@ const WorkspaceForm = ({
           onSubmit={() => void submit()}
           submitDisabled={isSubmitting || !canSubmit}
           submitClassName=""
-          deleteVisible={!!workspaceId}
+          deleteVisible
           deleteDisabled={isSubmitting}
           deleteClassName=""
           onDelete={openDeleteDialog}

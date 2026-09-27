@@ -26,7 +26,7 @@ import {
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import {
-  resolveOrgScoped,
+  listOrgScopedIds,
   resolveScoped,
 } from "../services/scoped-resource.ts";
 import { createProvider } from "../services/provider-write.ts";
@@ -82,12 +82,16 @@ workspace.post(
 
     // Everything that can fail on its own is checked before anything is
     // written, so the transaction below only fails on the database.
-    for (const providerId of sharedProviderIds) {
-      if (!(await resolveOrgScoped(db, "provider", providerId, orgId))) {
-        throw new NotFoundError(
-          "Org-scoped resource not found in this organization",
-        );
-      }
+    const found = await listOrgScopedIds(
+      db,
+      "provider",
+      sharedProviderIds,
+      orgId,
+    );
+    if (sharedProviderIds.some((id) => !found.has(id))) {
+      throw new NotFoundError(
+        "Org-scoped resource not found in this organization",
+      );
     }
     if (sandbox) {
       const sandboxError = sandboxCreateError(sandbox);
