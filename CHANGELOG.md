@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.1](https://github.com/willdady/platypus/compare/v3.12.0...v3.12.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **frontend:** copy plugin-sdk into the frontend image build ([#1100](https://github.com/willdady/platypus/issues/1100)) ([72f92f0](https://github.com/willdady/platypus/commit/72f92f0054741cd28d139d6867e4ec4940d6978c))
+
 ## [3.12.0](https://github.com/willdady/platypus/compare/v3.11.1...v3.12.0) (2026-09-27)
 
 
