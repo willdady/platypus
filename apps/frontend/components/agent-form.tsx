@@ -453,7 +453,7 @@ const AgentForm = ({
               className="relative group cursor-pointer flex"
               disabled={isSubmitting || readOnly}
             >
-              <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
+              <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
                 {avatarPreviewUrl ? (
                   // Local blob:/object-URL preview of the chosen file; the Next
                   // image optimizer cannot process object URLs.
@@ -468,7 +468,7 @@ const AgentForm = ({
                 )}
               </div>
               {avatarPreviewUrl && (
-                <div className="absolute inset-0 bg-black/50 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
+                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
                   <Camera className="w-6 h-6 text-white" />
                 </div>
               )}

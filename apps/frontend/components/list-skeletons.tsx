@@ -146,7 +146,7 @@ export const ItemRowsSkeleton = ({
 );
 
 export interface CardSkeletonProps {
-  /** The `size-12` avatar tile the agent cards lead with. */
+  /** The `size-12` round avatar the agent cards lead with. */
   media?: boolean;
   /** Pills beside the title, one per width class. */
   titleBadges?: string[];
@@ -181,7 +181,7 @@ export const CardGridSkeleton = ({
     {Array.from({ length: cards }, (_, i) => (
       <li key={i}>
         <Item variant="outline" className={cn("h-full", className)}>
-          {media && <Skeleton className="size-12 shrink-0 rounded-lg" />}
+          {media && <Skeleton className="size-12 shrink-0 rounded-full" />}
           <ItemContent>
             <div className="flex items-center gap-2">
               <SkeletonLine className={at(TITLE_WIDTHS, i)} />

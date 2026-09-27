@@ -113,7 +113,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
           <li key={agent.id}>
             <Item variant="outline" className="h-full">
               {agent.avatarUrl ? (
-                <ItemMedia variant="image" className="size-12 rounded-lg">
+                <ItemMedia variant="image" className="size-12 rounded-full">
                   {/* Agent avatar URL is user-supplied (arbitrary host); not
                   routable through the Next image optimizer. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -126,7 +126,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
               ) : (
                 <ItemMedia
                   variant="icon"
-                  className="size-12 rounded-lg [&_svg]:!size-7"
+                  className="size-12 rounded-full [&_svg]:!size-7"
                 >
                   <Bot className="h-7 w-7 text-muted-foreground" />
                 </ItemMedia>
