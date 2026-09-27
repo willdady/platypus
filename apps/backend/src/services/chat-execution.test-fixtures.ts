@@ -139,6 +139,10 @@ export const createInMemoryChatTurnQueries = (
       );
     },
 
+    saveMcpToolListing() {
+      return Promise.resolve();
+    },
+
     getSubAgentsByIds(ids, orgId, workspaceId) {
       if (ids.length === 0) return Promise.resolve([]);
       // Same rule as getAgent — a sub-agent resolves in the invoking workspace,

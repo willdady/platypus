@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { z } from "zod";
 import type { SQL } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -84,6 +85,17 @@ export async function createMcp(
   return row;
 }
 
+/** The fields that decide what an MCP connects to, and as whom. */
+const CONNECTION_FIELDS = [
+  "url",
+  "headers",
+  "authType",
+  "bearerToken",
+  "oauthClientId",
+  "oauthClientSecret",
+  "oauthRequestedScope",
+] as const satisfies ReadonlyArray<keyof McpUpdateFields & keyof McpRow>;
+
 /**
  * Updates an MCP at the given scope. Throws `NotFoundError` when the MCP is
  * not visible at this scope, and (Workspace scope only) `LockedError` when it
@@ -100,7 +112,7 @@ export async function updateMcp(
   fields: McpUpdateFields,
 ): Promise<McpRow> {
   let where: SQL;
-  let existingUrl: string | null;
+  let existing: McpRow;
   let orgId: string;
 
   if (scope.kind === "workspace") {
@@ -110,18 +122,27 @@ export async function updateMcp(
     // when it is org-scoped.
     const { row } = await requireWorkspaceMutable(db, "mcp", mcpId, scope.ctx);
     where = workspaceScopedWhere("mcp", mcpId, scope.ctx.workspaceId);
-    existingUrl = row.url;
+    existing = row;
     orgId = scope.ctx.orgId;
   } else {
     // requireOrgScoped throws NotFound (→404) before the write ever runs,
     // rather than deferring to an empty UPDATE result.
     const row = await requireOrgScoped(db, "mcp", mcpId, scope.orgId);
     where = orgScopedWhere("mcp", mcpId, scope.orgId);
-    existingUrl = row.url;
+    existing = row;
     orgId = scope.orgId;
   }
 
-  const urlChanged = existingUrl !== fields.url;
+  const urlChanged = existing.url !== fields.url;
+  // A different endpoint or credential can mean a different tool list, so the
+  // Last-known tool listing is only good for the connection it was fetched
+  // over (ADR-0029). An omitted field is left as it is by the write, so it is
+  // not a change; headers compare by value, since `jsonb` re-sorts their keys.
+  const connectionChanged = CONNECTION_FIELDS.some(
+    (field) =>
+      fields[field] !== undefined &&
+      !isDeepStrictEqual(fields[field] ?? null, existing[field] ?? null),
+  );
 
   const slug = deriveMcpSlug(fields.name);
   await assertMcpSlugAvailable(slug, { orgId }, mcpId);
@@ -137,6 +158,10 @@ export async function updateMcp(
         ...OAUTH_TOKEN_CLEAR_FIELDS,
         oauthClientId: null,
         oauthClientSecret: null,
+      }),
+      ...(connectionChanged && {
+        lastKnownToolListing: null,
+        lastKnownToolListingFetchedAt: null,
       }),
       updatedAt: new Date(),
     })

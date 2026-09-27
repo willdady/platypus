@@ -1,14 +1,8 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#635"
+status: accepted
 ---
 
 # An MCP's last-known tool listing is served when a turn fails to fetch it
-
-> State of the code today: not implemented. Every Chat turn connects to each
-> assigned MCP and lists its tools afresh, and an MCP that fails to connect or
-> list contributes no tools that turn. This ADR moves to `accepted` in the pull
-> request that closes #635.
 
 Tool definitions render at position 0 of every request (`tools` → `system` →
 `messages`), so a tool leaving or joining the list discards the cached System
@@ -36,7 +30,7 @@ from [#635](https://github.com/willdady/platypus/issues/635).
 ## Consequences
 
 - **Byte fidelity is the whole point, so the column is `json`, not `jsonb`.** Postgres `jsonb` re-sorts object keys, and tool schemas serialise in insertion order, so a listing read back from `jsonb` would render different bytes from the live one and discard the cache it exists to protect. Stale tools are built through the same definitions-to-tools conversion as live ones, swapping only `execute`, and a test asserts the two serialise identically. The raw listing is what is stored, so the `readOnlyHint` resolution of ADR-0021 reads the same from either.
-- **The listing is written only when it changes.** A successful fetch compares the serialised listing with what is stored, so an unchanged turn costs no write.
+- **The listing is written only when it changes, or when its fetched-at is over an hour old.** A successful fetch compares the serialised listing with what is stored, so an unchanged turn usually costs no write. Were the timestamp never refreshed, a server whose tools stay the same would lose its day of grace a day after its first fetch, however recently it last answered; refreshing it hourly keeps the window counted from the last successful fetch for at most one write per MCP an hour.
 - **Editing an MCP's URL, auth or headers clears its listing.** A different endpoint or credential can mean a different tool list, and the listing belongs to exactly one authorization context — credentials sit on the MCP record, not the User — so sharing it across Users is safe and the specification's `cacheScope: private` concern does not arise.
 - **A first turn has nothing to fall back to.** An MCP that has never been fetched successfully, or whose listing is over a day old, still drops its tools as before.
 - **Scope is MCP only.** A Web-search backend that yields no tools is a plugin fault already reported on the turn (#522), and a Sub-Agent whose Provider or model fails to resolve is a configuration error that does not recover on its own. Neither is a blip.

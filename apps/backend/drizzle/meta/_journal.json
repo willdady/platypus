@@ -526,6 +526,13 @@
       "when": 1790255811454,
       "tag": "0074_chat_memory_cursor",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1790493969866,
+      "tag": "0075_mcp_last_known_tool_listing",
+      "breakpoints": true
     }
   ]
 }

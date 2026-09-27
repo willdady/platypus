@@ -140,6 +140,7 @@ const queriesFor = (rows: McpRow[]) => ({
   getMcp: vi.fn((id: string) =>
     Promise.resolve(rows.find((r) => r.id === id) ?? null),
   ),
+  saveMcpToolListing: vi.fn(() => Promise.resolve()),
 });
 
 const noMcps = () => queriesFor([]);
@@ -475,6 +476,7 @@ describe("openToolSession", () => {
             ? Promise.resolve(mcpRow())
             : Promise.reject(new Error("database is down")),
         ),
+        saveMcpToolListing: vi.fn(() => Promise.resolve()),
       };
 
       await expect(

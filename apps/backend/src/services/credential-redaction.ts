@@ -103,7 +103,8 @@ export const redactMcpSecrets = <T extends McpSecretFields>(
  * Strips the OAuth secrets Platypus mints for an MCP and reports only whether
  * the server is authorized. Unconditional — unlike {@link redactMcpSecrets},
  * these are never Operator-entered and belong in no response, so every route
- * returning an MCP row runs it, writes included.
+ * returning an MCP row runs it, writes included. The Last-known tool listing
+ * goes too: it is a Chat turn's internal cache (ADR-0029), not configuration.
  */
 export const sanitizeMcpResponse = (record: McpRecord) => {
   const {
@@ -112,6 +113,8 @@ export const sanitizeMcpResponse = (record: McpRecord) => {
     oauthClientSecret,
     oauthTokenExpiresAt,
     oauthScope,
+    lastKnownToolListing,
+    lastKnownToolListingFetchedAt,
     ...rest
   } = record;
   return {

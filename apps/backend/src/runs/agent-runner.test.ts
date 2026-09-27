@@ -1296,7 +1296,10 @@ describe("a turn that resolves after its run has already terminated", () => {
         frontendUrl: undefined,
       },
       undefined,
-      { getMcp: () => Promise.resolve(null) },
+      {
+        getMcp: () => Promise.resolve(null),
+        saveMcpToolListing: () => Promise.resolve(),
+      },
     );
     const close = vi.fn().mockResolvedValue(undefined);
     session.registerCloser(close);

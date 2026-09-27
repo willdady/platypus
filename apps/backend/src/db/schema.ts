@@ -13,6 +13,7 @@ import {
 export * from "./auth-schema.ts";
 import { user } from "./auth-schema.ts";
 import type { KanbanCardHistoryChange } from "@platypus/schemas";
+import type { ListToolsResult } from "@ai-sdk/mcp";
 
 // Custom vector type without fixed dimensions — allows variable-dimension vectors per workspace
 const unboundVector = customType<{
@@ -367,6 +368,16 @@ export const mcp = pgTable(
     oauthRequestedScope: t.text("oauth_requested_scope"),
     oauthClientId: t.text("oauth_client_id"),
     oauthClientSecret: t.text("oauth_client_secret"),
+    // The Last-known tool listing (ADR-0029, issue #635): the raw `tools/list`
+    // result of the most recent successful fetch, served when a turn's fetch
+    // fails. `json`, not `jsonb` — `jsonb` re-sorts object keys, and the served
+    // tools must serialise byte-identical to the live ones.
+    lastKnownToolListing: t
+      .json("last_known_tool_listing")
+      .$type<ListToolsResult>(),
+    lastKnownToolListingFetchedAt: t.timestamp(
+      "last_known_tool_listing_fetched_at",
+    ),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

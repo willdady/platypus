@@ -36,6 +36,8 @@ const baseMcp: McpRecord = {
   oauthClientId: null,
   oauthClientSecret: null,
   oauthRequestedScope: null,
+  lastKnownToolListing: null,
+  lastKnownToolListingFetchedAt: null,
   oauthAccessToken: null,
   oauthRefreshToken: null,
   oauthTokenExpiresAt: null,

@@ -73,9 +73,15 @@ are merged into what the model can call for that turn.
 
 <Callout type="info">
   Resolution is **fail-soft**: if an MCP server is unreachable when a turn runs,
-  it simply contributes no tools and the turn continues, rather than failing the
-  whole Chat.
+  the turn continues rather than failing the whole Chat.
 </Callout>
+
+If a server that answered recently goes down, Platypus keeps offering its tools
+for up to a day after it last listed them. A call the model makes to one of
+them runs if the server is back, and fails as unreachable if it is not. After a
+day, or for a server that has never answered, the MCP contributes no tools until
+it is reachable again. Editing the MCP's URL, authentication or headers forgets
+the remembered tools, so the next turn lists them fresh.
 
 ### Tool names are namespaced by MCP
 

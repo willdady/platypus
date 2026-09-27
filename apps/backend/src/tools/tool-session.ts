@@ -1,8 +1,10 @@
 import {
   experimental_createMCPClient as createMCPClient,
+  type ListToolsResult,
   type MCPClient,
+  type MCPTransport,
 } from "@ai-sdk/mcp";
-import type { Tool } from "ai";
+import type { Tool, ToolExecutionOptions } from "ai";
 import { TOOL_NAME_PATTERN, namespaceMcpToolName } from "@platypus/schemas";
 import type { mcp as mcpTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
@@ -19,6 +21,42 @@ import {
 } from "./index.ts";
 
 type McpRow = typeof mcpTable.$inferSelect;
+
+/**
+ * How long after its last successful fetch an MCP's Last-known tool listing is
+ * still served when a turn's fetch fails (ADR-0029). Not configurable: a day
+ * covers restarts, deploys and overnight outages.
+ */
+export const LAST_KNOWN_LISTING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How stale an unchanged listing's fetched-at may get before a live fetch
+ * rewrites it anyway — so a server whose tools never change keeps its day of
+ * grace, for at most one write per MCP an hour.
+ */
+const LISTING_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * A client that never touches the network — a no-op transport and a canned
+ * handshake — so a stored listing is turned into Tools by the library's own
+ * `toolsFromDefinitions`, the conversion a live listing goes through. That is
+ * what makes the two serialise byte-identical; its `execute` is never called.
+ */
+const offlineMcpClient = (): Promise<MCPClient> => {
+  const transport: MCPTransport = {
+    start: () => Promise.resolve(),
+    send: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+  };
+  return createMCPClient({
+    transport,
+    initialInitializeResult: {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      serverInfo: { name: "", version: "" },
+    },
+  });
+};
 
 /**
  * Where the turn is running: the Workspace, the Organization, and the human it
@@ -70,6 +108,53 @@ export const deferCloserRegistrar =
     );
   };
 
+/** An MCP's stored listing, if it was fetched less than a day ago. */
+const usableLastKnownListing = (mcp: McpRow): ListToolsResult | null => {
+  const fetchedAt = mcp.lastKnownToolListingFetchedAt;
+  if (!mcp.lastKnownToolListing || !fetchedAt) return null;
+  return Date.now() - fetchedAt.getTime() < LAST_KNOWN_LISTING_MAX_AGE_MS
+    ? mcp.lastKnownToolListing
+    : null;
+};
+
+/**
+ * Tools built from a stored listing whose `execute` connects when the model
+ * calls one: the call runs if the server is back, and fails as unreachable if
+ * not. One connection, opened by the first call that finds the server up;
+ * `connect` registers it to close with the session like every other.
+ */
+const lazyMcpTools = async (
+  listing: ListToolsResult,
+  connect: () => Promise<MCPClient>,
+  mcpName: string,
+): Promise<Record<string, Tool>> => {
+  let live: Promise<Record<string, Tool>> | undefined;
+  const built = (await offlineMcpClient()).toolsFromDefinitions(listing);
+  return Object.fromEntries(
+    Object.entries(built).map(([name, tool]) => [
+      name,
+      {
+        ...tool,
+        execute: async (
+          args: unknown,
+          options: ToolExecutionOptions<unknown>,
+        ) => {
+          live ??= connect()
+            .then((client) => client.toolsFromDefinitions(listing))
+            .catch((error: unknown) => {
+              live = undefined;
+              throw new Error(`MCP server '${mcpName}' is unreachable`, {
+                cause: error,
+              });
+            });
+          const liveTool = (await live)[name];
+          return liveTool.execute!(args, options) as unknown;
+        },
+      },
+    ]),
+  );
+};
+
 /** The Agent a session resolves Tool sets for — the parent, or one delegate. */
 export type ToolSessionAgent = {
   id: string;
@@ -87,6 +172,12 @@ export type ToolSessionQueries = {
     orgId: string,
     workspaceId: string,
   ): Promise<McpRow | null>;
+  /** Store an MCP's Last-known tool listing (ADR-0029). */
+  saveMcpToolListing(
+    id: string,
+    listing: ListToolsResult,
+    fetchedAt: Date,
+  ): Promise<void>;
 };
 
 /**
@@ -275,46 +366,74 @@ export const openToolSession = async (
       return { kind: "none" };
     }
 
-    const warnUnreachable = (error: unknown) => {
-      logger.warn(
-        { error, mcpId: mcp.id, scope: mcp.organizationId ? "org" : "ws" },
-        `MCP '${toolSetId}' is unreachable; skipping its tools`,
-      );
-    };
-
-    let client: MCPClient;
-    try {
-      client = await createMCPClient({
-        transport: buildMcpTransportConfig(mcp),
-      });
-    } catch (error) {
-      warnUnreachable(error);
-      return { kind: "none" };
-    }
-
-    // Registered the moment the connection exists, and before anything else can
-    // fail on it — a server that connects and then fails to list its tools used
-    // to leave the socket open for the life of the process. It is also why the
-    // slug check now belongs to the merge and not here: a connection this
-    // session can close is worth more than one never opened.
-    registerCloser(() => client.close(), {
+    const attribution = {
       mcpId: mcp.id,
       scope: mcp.organizationId ? "org" : "ws",
-    });
+    } as const;
+    const connect = async (): Promise<MCPClient> => {
+      const client = await createMCPClient({
+        transport: buildMcpTransportConfig(mcp),
+      });
+      // Registered the moment the connection exists, and before anything else
+      // can fail on it — a server that connects and then fails to list its
+      // tools used to leave the socket open for the life of the process. It is
+      // also why the slug check now belongs to the merge and not here: a
+      // connection this session can close is worth more than one never opened.
+      registerCloser(() => client.close(), attribution);
+      return client;
+    };
 
     // Split into the listing and the definitions-to-Tools conversion — still
     // one round trip, not two — so the raw `readOnlyHint` annotation (#626)
     // is in hand before it is discarded: `client.tools()` collapses both
     // steps and keeps only what it needs to resolve a display title, and the
     // hint is gone by the time it would return.
-    let definitions: Awaited<ReturnType<MCPClient["listTools"]>>;
+    let definitions: ListToolsResult;
+    let mcpTools: Record<string, Tool>;
+    let fetched = false;
     try {
+      const client = await connect();
       definitions = await client.listTools();
+      mcpTools = client.toolsFromDefinitions(definitions);
+      fetched = true;
     } catch (error) {
-      warnUnreachable(error);
-      return { kind: "none" };
+      const listing = usableLastKnownListing(mcp);
+      if (!listing) {
+        logger.warn(
+          { error, ...attribution },
+          `MCP '${toolSetId}' is unreachable; skipping its tools`,
+        );
+        return { kind: "none" };
+      }
+      logger.warn(
+        { error, ...attribution },
+        `MCP '${toolSetId}' is unreachable; serving its last-known tool listing`,
+      );
+      definitions = listing;
+      mcpTools = await lazyMcpTools(listing, connect, mcp.name);
     }
-    const mcpTools = client.toolsFromDefinitions(definitions);
+
+    // Written by a live fetch when the listing changed or its fetched-at is due
+    // a refresh, so most unchanged turns cost no write — and never at the
+    // turn's expense: a listing that fails to save is a miss on some later
+    // outage, not a reason to drop tools that just worked.
+    const fetchedAt = mcp.lastKnownToolListingFetchedAt;
+    if (
+      fetched &&
+      (JSON.stringify(definitions) !==
+        JSON.stringify(mcp.lastKnownToolListing) ||
+        !fetchedAt ||
+        Date.now() - fetchedAt.getTime() >= LISTING_REFRESH_INTERVAL_MS)
+    ) {
+      try {
+        await queries.saveMcpToolListing(mcp.id, definitions, new Date());
+      } catch (error) {
+        logger.warn(
+          { error, ...attribution },
+          "Failed to store an MCP's last-known tool listing",
+        );
+      }
+    }
 
     // `true` only — the specification's own default for a missing hint, and
     // the tri-state this reduces to a boolean at: a string `"false"`, a `1`,

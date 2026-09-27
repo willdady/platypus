@@ -78,7 +78,12 @@ describe("mcp write model", () => {
     it("updates a workspace-scoped MCP after proving it mutable", async () => {
       mockDb.limit
         .mockResolvedValueOnce([
-          { id: "mcp-1", workspaceId: "ws-1", url: "http://mcp.example.com" },
+          {
+            id: "mcp-1",
+            workspaceId: "ws-1",
+            url: "http://mcp.example.com",
+            authType: "None",
+          },
         ]) // requireWorkspaceMutable
         .mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
       const updated = { id: "mcp-1", workspaceId: "ws-1", name: "Renamed" };
@@ -150,6 +155,56 @@ describe("mcp write model", () => {
       const set = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(set).not.toHaveProperty("oauthAccessToken");
       expect(set).not.toHaveProperty("oauthClientId");
+    });
+
+    describe("the Last-known tool listing (ADR-0029)", () => {
+      const existing = {
+        id: "mcp-1",
+        workspaceId: "ws-1",
+        url: "http://mcp.example.com",
+        authType: "Bearer",
+        bearerToken: "secret",
+        headers: { "x-b": "2", "x-a": "1" },
+      };
+      const bearerFields = (): McpUpdateFields => ({
+        name: "My MCP",
+        url: existing.url,
+        authType: "Bearer",
+        bearerToken: "secret",
+        headers: { "x-a": "1", "x-b": "2" },
+      });
+      const setAfter = async (fields: McpUpdateFields) => {
+        mockDb.limit
+          .mockResolvedValueOnce([existing])
+          .mockResolvedValueOnce([]);
+        mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
+        await updateMcp(
+          { kind: "workspace", ctx: workspaceCtx },
+          "mcp-1",
+          fields,
+        );
+        return mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      };
+      const CLEARED = {
+        lastKnownToolListing: null,
+        lastKnownToolListingFetchedAt: null,
+      };
+
+      it.each<[string, Partial<McpUpdateFields>]>([
+        ["URL", { url: "http://new.example.com" }],
+        ["auth type", { authType: "None", bearerToken: undefined }],
+        ["bearer token", { bearerToken: "rotated" }],
+        ["headers", { headers: { "x-a": "changed" } }],
+      ])("is cleared on a change to its %s", async (_, change) => {
+        expect(await setAfter({ ...bearerFields(), ...change })).toMatchObject(
+          CLEARED,
+        );
+      });
+
+      it("is kept when only the name changes, whatever order headers come in", async () => {
+        const set = await setAfter({ ...bearerFields(), name: "Renamed" });
+        expect(set).not.toHaveProperty("lastKnownToolListing");
+      });
     });
 
     it("throws NotFoundError for a workspace MCP not visible here, before the write", async () => {

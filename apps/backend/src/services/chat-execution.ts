@@ -1,5 +1,6 @@
 import { openProvider, type OpenedProvider } from "./provider.ts";
 import { eq } from "drizzle-orm";
+import type { ListToolsResult } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
 import {
   agent as agentTable,
@@ -225,6 +226,12 @@ export type ChatTurnQueries = {
     orgId: string,
     workspaceId: string,
   ): Promise<McpRow | null>;
+  /** Store an MCP's Last-known tool listing (ADR-0029). */
+  saveMcpToolListing(
+    id: string,
+    listing: ListToolsResult,
+    fetchedAt: Date,
+  ): Promise<void>;
   /**
    * The sub-Agents among `ids` that are visible in the invoking Workspace, in
    * the order they were assigned. Ids that do not resolve are simply absent —
@@ -334,6 +341,16 @@ const drizzleChatTurnQueries: ChatTurnQueries = {
       workspaceId,
     });
     return found?.row ?? null;
+  },
+
+  async saveMcpToolListing(id, listing, fetchedAt) {
+    await db
+      .update(mcpTable)
+      .set({
+        lastKnownToolListing: listing,
+        lastKnownToolListingFetchedAt: fetchedAt,
+      })
+      .where(eq(mcpTable.id, id));
   },
 
   async getSubAgentsByIds(ids, orgId, workspaceId) {

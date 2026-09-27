@@ -109,7 +109,7 @@ _Avoid_: degraded capability, disabled capability, failed tool.
 A named bundle of Tools an Agent can be granted. Either contributed by a Plugin (registered in code) or backed by an MCP server.
 
 **Tool session**:
-One Agent's Tool sets, resolved for one Chat turn, together with the connections opened to serve them. Sessions nest: a Sub-Agent's session is opened on its first delegation and closes with the parent's, so a turn has exactly one thing to dispose however many tool sources it reached. A Tool set or Web-search backend that opens something with a lifetime registers its own close into that same one thing. A Tool set that cannot serve the turn — a factory that throws, an unreachable MCP — costs its own Tools and no more.
+One Agent's Tool sets, resolved for one Chat turn, together with the connections opened to serve them. Sessions nest: a Sub-Agent's session is opened on its first delegation and closes with the parent's, so a turn has exactly one thing to dispose however many tool sources it reached. A Tool set or Web-search backend that opens something with a lifetime registers its own close into that same one thing. A Tool set that cannot serve the turn — a factory that throws, an unreachable MCP with no **Last-known tool listing** to fall back on — costs its own Tools and no more.
 _Avoid_: tool context (that is the scope handed to a Tool set factory), tool loader.
 
 **Web tool block**:
@@ -118,6 +118,10 @@ _Avoid_: web search card, search result block (both name only the search case; t
 
 **MCP**:
 A Model Context Protocol server registered at Workspace scope, or — as a Shared resource — at Organization scope. Resolves to a Tool set at Chat-turn time.
+
+**Last-known tool listing**:
+An **MCP**'s tool definitions as its server last listed them, kept on the MCP itself and served when a **Chat turn** fails to reach the server — for up to a day after that last successful fetch. Keeps the tool list the model is sent unchanged across a blip, so the cached prompt survives it; a Tool served this way connects when called, and fails as unreachable if the server is still down. Cleared when the MCP's URL, auth or headers are edited.
+_Avoid_: tool cache (it is not consulted when the server is up), stale tools.
 
 **Read-only hint**:
 An **MCP** server's own declaration that one of its tools does not change anything — it only reads. Self-reported and unverified, which is what "hint" is doing in the name: the protocol states plainly that it may not describe a tool faithfully. Trusted in proportion to what acting on it costs, and decided per consumer rather than once for all of them (ADR-0021): enough to let **Tool-result clearing** drop a result, never enough to skip something a User would want to have been asked about. A tool that declares nothing is treated as one that writes.

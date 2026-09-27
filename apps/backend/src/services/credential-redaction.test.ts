@@ -115,6 +115,8 @@ describe("read models", () => {
     oauthClientSecret: "oauth-client",
     oauthScope: "read",
     oauthTokenExpiresAt: new Date(0),
+    lastKnownToolListing: { tools: [] },
+    lastKnownToolListingFetchedAt: new Date(0),
   } as unknown as McpRecord;
 
   it("strips minted OAuth secrets even when credentials are revealed", () => {
@@ -126,6 +128,9 @@ describe("read models", () => {
     // Operator-entered config still reads back for a caller who may manage it.
     expect(json).toContain("tok-secret");
     expect(out).toMatchObject({ oauthAuthorized: true });
+    // Internal to a Chat turn (ADR-0029), and no part of the MCP a reader edits.
+    expect(out).not.toHaveProperty("lastKnownToolListing");
+    expect(out).not.toHaveProperty("lastKnownToolListingFetchedAt");
   });
 
   it("strips both secret classes when credentials are not revealed", () => {
