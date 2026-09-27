@@ -147,8 +147,7 @@ const lazyMcpTools = async (
                 cause: error,
               });
             });
-          const liveTool = (await live)[name];
-          return liveTool.execute!(args, options) as unknown;
+          return (await live)[name].execute!(args, options) as unknown;
         },
       },
     ]),
@@ -162,9 +161,9 @@ export type ToolSessionAgent = {
 };
 
 /**
- * The MCP lookup a session needs. Deliberately the one method rather than the
- * Chat turn's whole query surface: a session resolves tool sets, not a turn.
- * `ChatTurnQueries` satisfies it structurally.
+ * The MCP queries a session needs. Deliberately these rather than the Chat
+ * turn's whole query surface: a session resolves tool sets, not a turn.
+ * `ChatTurnQueries` extends it.
  */
 export type ToolSessionQueries = {
   getMcp(
@@ -383,6 +382,30 @@ export const openToolSession = async (
       return client;
     };
 
+    // Written by a live fetch when the listing changed or its fetched-at is due
+    // a refresh, so most unchanged turns cost no write — and never at the
+    // turn's expense: its own catch keeps a failed save from reaching the
+    // fallback, since a listing that fails to save is a miss on some later
+    // outage, not a reason to drop tools that just worked.
+    const rememberListing = async (listing: ListToolsResult): Promise<void> => {
+      const fetchedAt = mcp.lastKnownToolListingFetchedAt;
+      if (
+        JSON.stringify(listing) === JSON.stringify(mcp.lastKnownToolListing) &&
+        fetchedAt &&
+        Date.now() - fetchedAt.getTime() < LISTING_REFRESH_INTERVAL_MS
+      ) {
+        return;
+      }
+      try {
+        await queries.saveMcpToolListing(mcp.id, listing, new Date());
+      } catch (error) {
+        logger.warn(
+          { error, ...attribution },
+          "Failed to store an MCP's last-known tool listing",
+        );
+      }
+    };
+
     // Split into the listing and the definitions-to-Tools conversion — still
     // one round trip, not two — so the raw `readOnlyHint` annotation (#626)
     // is in hand before it is discarded: `client.tools()` collapses both
@@ -390,12 +413,11 @@ export const openToolSession = async (
     // hint is gone by the time it would return.
     let definitions: ListToolsResult;
     let mcpTools: Record<string, Tool>;
-    let fetched = false;
     try {
       const client = await connect();
       definitions = await client.listTools();
       mcpTools = client.toolsFromDefinitions(definitions);
-      fetched = true;
+      await rememberListing(definitions);
     } catch (error) {
       const listing = usableLastKnownListing(mcp);
       if (!listing) {
@@ -411,28 +433,6 @@ export const openToolSession = async (
       );
       definitions = listing;
       mcpTools = await lazyMcpTools(listing, connect, mcp.name);
-    }
-
-    // Written by a live fetch when the listing changed or its fetched-at is due
-    // a refresh, so most unchanged turns cost no write — and never at the
-    // turn's expense: a listing that fails to save is a miss on some later
-    // outage, not a reason to drop tools that just worked.
-    const fetchedAt = mcp.lastKnownToolListingFetchedAt;
-    if (
-      fetched &&
-      (JSON.stringify(definitions) !==
-        JSON.stringify(mcp.lastKnownToolListing) ||
-        !fetchedAt ||
-        Date.now() - fetchedAt.getTime() >= LISTING_REFRESH_INTERVAL_MS)
-    ) {
-      try {
-        await queries.saveMcpToolListing(mcp.id, definitions, new Date());
-      } catch (error) {
-        logger.warn(
-          { error, ...attribution },
-          "Failed to store an MCP's last-known tool listing",
-        );
-      }
     }
 
     // `true` only — the specification's own default for a missing hint, and

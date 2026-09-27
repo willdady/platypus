@@ -1,6 +1,5 @@
 import { openProvider, type OpenedProvider } from "./provider.ts";
 import { eq } from "drizzle-orm";
-import type { ListToolsResult } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
 import {
   agent as agentTable,
@@ -14,6 +13,7 @@ import {
   deferCloserRegistrar,
   openToolSession,
   type ToolSession,
+  type ToolSessionQueries,
   type ToolSessionScope,
 } from "../tools/tool-session.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
@@ -82,7 +82,6 @@ import { NotFoundError, ValidationError } from "../errors.ts";
 type AgentRow = typeof agentTable.$inferSelect;
 type WorkspaceRow = typeof workspaceTable.$inferSelect;
 type OrganizationRow = typeof organizationTable.$inferSelect;
-type McpRow = typeof mcpTable.$inferSelect;
 
 type ChatContext = {
   provider: Provider;
@@ -200,7 +199,7 @@ export type PrepareChatTurnInput = TurnRequest & {
  * from `chat-execution.test-fixtures.ts`. Methods are named after domain
  * lookups, not query shapes — callers don't compose `where`/`limit` chains.
  */
-export type ChatTurnQueries = {
+export type ChatTurnQueries = ToolSessionQueries & {
   getWorkspace(id: string): Promise<WorkspaceRow | null>;
   getOrganization(id: string): Promise<OrganizationRow | null>;
   getAgent(
@@ -221,17 +220,6 @@ export type ChatTurnQueries = {
     skills: Array<Pick<Skill, "name" | "description">>;
     permittedSkillIds: string[];
   }>;
-  getMcp(
-    id: string,
-    orgId: string,
-    workspaceId: string,
-  ): Promise<McpRow | null>;
-  /** Store an MCP's Last-known tool listing (ADR-0029). */
-  saveMcpToolListing(
-    id: string,
-    listing: ListToolsResult,
-    fetchedAt: Date,
-  ): Promise<void>;
   /**
    * The sub-Agents among `ids` that are visible in the invoking Workspace, in
    * the order they were assigned. Ids that do not resolve are simply absent —
