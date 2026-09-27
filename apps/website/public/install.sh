@@ -52,7 +52,7 @@ main() {
 
   local dir="${PLATYPUS_DIR:-./platypus}"
   [[ ! -e "$dir/.env" ]] ||
-    fail "$dir/.env already exists, so Platypus is already installed there. Nothing was changed. To upgrade, see $DOCS/self-hosting/upgrading"
+    fail "$dir/.env already exists, so Platypus is already installed there. Nothing was changed. To upgrade, see $DOCS/self-hosting/docker-compose#upgrading"
 
   # --- Resolve the version, from the redirect rather than the rate-limited API. ---
   local version="${PLATYPUS_VERSION:-}"
@@ -63,7 +63,7 @@ main() {
     version="${latest##*/}"
   fi
   version="${version#v}"
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || fail "'$version' is not a release version (expected e.g. 3.13.0)."
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || fail "'$version' is not a release version (expected e.g. 3.13.0)."
 
   echo "Installing Platypus $version into $dir"
 
@@ -112,7 +112,8 @@ EOF
 
   # --- Start the stack. ---
   (cd "$dir" && docker compose up -d --wait) ||
-    fail "the stack did not start. See why with: cd $dir && docker compose logs backend"
+    fail "the stack did not start. See why with: cd $dir && docker compose logs backend
+Once fixed, start it with 'docker compose up -d' in $dir; re-running this installer will refuse, because .env now exists."
 
   cat <<EOF
 
@@ -136,4 +137,4 @@ EOF
   fi
 }
 
-main "$@"
+main
