@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.12.0](https://github.com/willdady/platypus/compare/v3.11.1...v3.12.0) (2026-09-27)
+
+
+### Features
+
+* **backend:** add optional fsReadBytes / fsWriteBytes to SandboxBackend ([#1075](https://github.com/willdady/platypus/issues/1075)) ([593daed](https://github.com/willdady/platypus/commit/593daed8504ba2c8fe79544e2c8b6899fc577e96))
+* fsDownload tool offers a Sandbox file as a download button ([#1087](https://github.com/willdady/platypus/issues/1087)) ([590fcae](https://github.com/willdady/platypus/commit/590fcaef0b8e4d8979783c0b0e1382b6a71275f1))
+* upload files to the Sandbox from the chat composer ([#1090](https://github.com/willdady/platypus/issues/1090)) ([558a49a](https://github.com/willdady/platypus/commit/558a49a7c6985645975b489b196df094415e9845))
+
+
+### Bug Fixes
+
+* **backend:** hand a Sandbox's destroy the same context its tool calls get ([#1077](https://github.com/willdady/platypus/issues/1077)) ([9ccf7d8](https://github.com/willdady/platypus/commit/9ccf7d8cd2f2fa523a292326d316eadea97fc572))
+* **backend:** log a plugin load failure as a fatal startup line ([#1076](https://github.com/willdady/platypus/issues/1076)) ([497b5e8](https://github.com/willdady/platypus/commit/497b5e8792892ab02a474dbd0f6685f55a67d2c6))
+* **backend:** tear down Sandboxes before Organization delete cascade ([#1094](https://github.com/willdady/platypus/issues/1094)) ([eee7803](https://github.com/willdady/platypus/commit/eee78030951fb2a0d038f17968f3d319f9e4c6a0))
+* **docs:** correct concepts claims that drifted from the code ([#1092](https://github.com/willdady/platypus/issues/1092)) ([150a6ad](https://github.com/willdady/platypus/commit/150a6ad1c565b91ae69b77caf9e34c2eb7f7e33b))
+* **docs:** correct the Extending overview and first-plugin walkthrough against the code ([#1079](https://github.com/willdady/platypus/issues/1079)) ([d1edae0](https://github.com/willdady/platypus/commit/d1edae04f50415c76107c0a47af42be00b151604))
+* **docs:** correct the installing-plugins page against the code ([#1078](https://github.com/willdady/platypus/issues/1078)) ([3aab527](https://github.com/willdady/platypus/commit/3aab52774835cdd881c5e76f41d5bc41c35a28ca))
+* **docs:** correct the Plugin API and config page against the code ([#1083](https://github.com/willdady/platypus/issues/1083)) ([5e6d3c5](https://github.com/willdady/platypus/commit/5e6d3c5bf9b5e84ef9e7ac244b0f60e2d13f1a06))
+* **docs:** correct the Sandbox backends page against the code ([#1082](https://github.com/willdady/platypus/issues/1082)) ([59ec590](https://github.com/willdady/platypus/commit/59ec590c64ca05da4f7e0accb771db16eb788eb4))
+* **docs:** correct the Tool sets page against the code ([#1080](https://github.com/willdady/platypus/issues/1080)) ([99f06f1](https://github.com/willdady/platypus/commit/99f06f10966926c6fab3212a2be390a991a22f06))
+* **docs:** correct the Web-search backends page against the code ([#1081](https://github.com/willdady/platypus/issues/1081)) ([978227d](https://github.com/willdady/platypus/commit/978227d0be1a38a3d51b0d02e0f9c1738f4d6c2e))
+* **docs:** stop claiming every plugin-config boot error names the Plugin ([#1093](https://github.com/willdady/platypus/issues/1093)) ([4db944c](https://github.com/willdady/platypus/commit/4db944c496996bb67b0ab65a5d198f25a68725f9))
+* **frontend:** match Create Workspace loading fallback to the wizard layout ([#1095](https://github.com/willdady/platypus/issues/1095)) ([471946a](https://github.com/willdady/platypus/commit/471946a07f906710bd5e49cc6e674f18e3aece6e))
+* **frontend:** name and tooltip every icon-only composer tool button ([#1096](https://github.com/willdady/platypus/issues/1096)) ([c88c740](https://github.com/willdady/platypus/commit/c88c740667223c5cc39d4617d5204d1f90f7bff9))
+
 ## [3.11.1](https://github.com/willdady/platypus/compare/v3.11.0...v3.11.1) (2026-09-26)
 
 
