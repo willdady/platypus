@@ -62,6 +62,7 @@ import {
 } from "@/lib/selection-reference";
 import { ModelCapabilityNotice } from "@/components/model-capability-notice";
 import { toast } from "sonner";
+import { useSWRConfig } from "swr";
 import { useBackendUrl } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { ToolSetsUnavailableNotice } from "@/components/tool-sets-unavailable-notice";
@@ -133,6 +134,7 @@ const AgentForm = ({
   const [isOpen, setIsOpen] = useState(false);
 
   const backendUrl = useBackendUrl();
+  const { mutate } = useSWRConfig();
 
   // The Organization surface lists/writes org-scoped references, the
   // Workspace surface its own.
@@ -311,6 +313,14 @@ const AgentForm = ({
           const body: unknown = await avatarResponse.json().catch(() => null);
           toast.error(errorMessage(body) ?? "Failed to upload the avatar");
         }
+      }
+
+      // The save already revalidated the Agent keys, but before the avatar
+      // write landed — refetch so the list shows the new avatar.
+      if (avatarDeleted || avatarFile) {
+        const agentsUrl = scopedUrl(backendUrl, "agents", scope);
+        mutate(agentsUrl);
+        mutate(`${agentsUrl}/${savedAgentId}`);
       }
 
       router.push(doneHref);
