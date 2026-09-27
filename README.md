@@ -54,14 +54,15 @@ See it all come together in the [daily board digest worked example](https://docs
 ## 🚀 Quick Start (Docker)
 
 ```bash
-git clone https://github.com/willdady/platypus.git
-cd platypus
-cp .env.example .env   # set BETTER_AUTH_SECRET and your admin credentials
-docker compose up -d   # then open http://localhost:3000
+curl -fsSL https://platypus.chat/install.sh | bash
 ```
 
+Needs Linux or macOS (Windows via WSL) and Docker with Compose v2. The installer pins the latest release, generates a secret and admin password, starts the stack, and prints where to sign in.
+
 > [!CAUTION]
-> Change the default password after your first login!
+> The printed credentials are temporary. Change the password after your first login!
+
+Installer settings and the manual, clone-based install are in [Deploy with Docker Compose](https://docs.platypus.chat/self-hosting/docker-compose).
 
 Sign-in is email and password; there is no SSO/OIDC/SAML.
 

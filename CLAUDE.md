@@ -32,6 +32,7 @@ Default admin on first startup: `admin@example.com` / `admin123` (override via `
 - **`apps/backend`** — Hono.js REST API, Drizzle ORM (Postgres 17), better-auth at `/auth/*`. Schema in `src/db/`, routes in `src/routes/`, run lifecycle in `src/runs/`. Entry: `apps/backend/index.ts`.
 - **`apps/frontend`** — Next.js 16 App Router. Multi-tenant routes under `app/[orgId]/workspace/[workspaceId]/...`. Tailwind v4 + Radix.
 - **`packages/schemas`** — Shared Zod schemas (`@platypus/schemas`). Each domain model has full / create / update variants.
+- **`apps/website/public/install.sh`** — the one-line installer served at `https://platypus.chat/install.sh` (a permanent public URL); the only copy.
 
 Domain hierarchy: **Organization → Workspace → Chat / Agent / MCP / Provider**.
 

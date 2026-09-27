@@ -16,61 +16,48 @@ send a message**.
 
 ## Before you start
 
-- **Docker Engine with the Compose v2 plugin.** Every command here is
+- **Linux or macOS.** On Windows, run everything inside WSL.
+- **Docker Engine with the Compose v2 plugin, running.** Every command here is
   `docker compose` (a space, not a hyphen). If `docker compose version` fails,
   install the Compose v2 plugin before going further.
+- **`curl` and `openssl`**, which the installer uses to download the release and
+  generate secrets.
 - **Ports `3000` and `4000` free on the host.** The frontend publishes `3000`
   and the backend `4000`. Postgres stays on the private network and publishes
   nothing.
-- **`git`**, to clone the repository the compose file lives in.
 
 ## Quick start (Docker)
 
-The quickest way to a running instance is Docker Compose.
-
-<Steps>
-
-### Clone and configure
+Run the installer:
 
 ```bash
-git clone https://github.com/willdady/platypus.git
-cd platypus
-cp .env.example .env
+curl -fsSL https://platypus.chat/install.sh | bash
 ```
 
-Open `.env` and set, at minimum:
+It installs the latest release into a `platypus` directory, generates a secret
+and an admin password, and brings up the backend, frontend, and a Postgres 17
+database with pgvector. When the stack is healthy it prints where to sign in:
 
-- **`BETTER_AUTH_SECRET`** — a secure random string (32+ characters). The app
-  signs session tokens with this; treat it like a password.
-- **`ADMIN_EMAIL`** / **`ADMIN_PASSWORD`** — the first admin account. The
-  password needs **8+ characters**. **Required on first boot**: the backend
-  exits rather than starting without them, or with a shorter password (see
-  [First run](#first-run--the-default-admin) below).
-
-The shipped `.env.example` fills in everything else for `localhost`, so a
-laptop run needs no other edits. See the [Reference](/reference) for the full
-list.
-
-### Start the application
-
-```bash
-docker compose up -d
+```text
+  Sign in at:  http://localhost:3000
+  Email:       admin@example.com
+  Password:    <generated>
 ```
 
-This brings up the backend, frontend, and a Postgres 17 database with pgvector.
-
-### Sign in
-
-Open [http://localhost:3000](http://localhost:3000) and sign in with the
-`ADMIN_EMAIL` / `ADMIN_PASSWORD` you set in `.env`.
-
-</Steps>
+Open [http://localhost:3000](http://localhost:3000) and sign in with those
+credentials.
 
 <Callout type="warning">
-  If you left `.env.example`'s values in place, they are `admin@example.com` /
-  `admin123`. **Change the password immediately after your first login**,
-  especially on any network-reachable deployment.
+  **The printed credentials are temporary.** Change the password from the in-app
+  account settings after your first sign-in, especially on any network-reachable
+  deployment.
 </Callout>
+
+Installing on a server rather than your laptop, choosing the version, or setting
+your own admin email? See
+[Installer settings](/self-hosting/docker-compose#installer-settings). To edit
+`.env` by hand before first boot, use the
+[manual install](/self-hosting/docker-compose#manual-install) instead.
 
 Sign-in is **email and password**. There is no SSO, no OIDC and no SAML, and no
 configuration that adds them — see
@@ -84,7 +71,7 @@ and configuration hardening — see
 ## When the stack doesn't come up
 
 The three failures that account for almost all of them, and what each looks
-like:
+like. Run the commands from the `platypus` directory the installer created.
 
 | Symptom                                                                   | Cause                                                                                                                               | Fix                                                                                                                                                                                               |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

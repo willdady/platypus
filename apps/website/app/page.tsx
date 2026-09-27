@@ -306,8 +306,8 @@ export default function HomePage() {
                   Up and running in minutes
                 </h2>
                 <p className="mt-4 text-lg text-muted-foreground">
-                  Clone the repo and bring it up with Docker Compose, then
-                  follow the four-step loop to your first streamed reply.
+                  One command installs Platypus with Docker Compose, then follow
+                  the four-step loop to your first streamed reply.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <a
@@ -332,22 +332,11 @@ export default function HomePage() {
                 <pre className="overflow-x-auto whitespace-pre text-muted-foreground">
                   <code>
                     <span className="text-muted-foreground/60">
-                      # clone and configure
+                      # install and start
                     </span>
                     {"\n"}
-                    <span className="text-primary-bright">git</span> clone
-                    https://github.com/willdady/platypus.git{"\n"}
-                    <span className="text-primary-bright">cd</span> platypus
-                    {"\n"}
-                    <span className="text-primary-bright">cp</span> .env.example
-                    .env
-                    {"\n\n"}
-                    <span className="text-muted-foreground/60">
-                      # bring it up
-                    </span>
-                    {"\n"}
-                    <span className="text-primary-bright">docker</span> compose
-                    up
+                    <span className="text-primary-bright">curl</span> -fsSL
+                    https://platypus.chat/install.sh | bash
                   </code>
                 </pre>
               </div>

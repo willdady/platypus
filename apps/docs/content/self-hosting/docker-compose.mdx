@@ -7,21 +7,27 @@ import { Callout, Steps } from "nextra/components";
 
 # Deploy with Docker Compose
 
-The fastest way to run Platypus is the `compose.yaml` that ships in the
-repository. It pulls the published images, wires the services together on a
-private network, and seeds an initial organization, workspace, and admin user on
-first boot.
+The fastest way to run Platypus is the one-line installer. It downloads the
+release's `compose.yaml`, pins the images to that release, writes a `.env` with a
+fresh secret and admin password, and starts the stack:
+
+```bash
+curl -fsSL https://platypus.chat/install.sh | bash
+```
+
+The stack pulls the published images, wires the services together on a private
+network, and seeds an initial organization and admin user on first boot.
 
 ## The stack
 
 `compose.yaml` defines three services on a private bridge network
 (`platypus-network`):
 
-| Service    | Image                              | Port (host:container) | Purpose                                          |
-| ---------- | ---------------------------------- | --------------------- | ------------------------------------------------ |
-| `database` | `pgvector/pgvector:pg17`           | _internal only_       | PostgreSQL 17 with the `pgvector` extension      |
-| `backend`  | `willdady/platypus-backend:latest` | `4000:4000`           | Hono REST API, auth, run lifecycle, schedulers   |
-| `frontend` | `willdady/platypus-frontend:latest`| `3000:3000`           | Next.js web app                                  |
+| Service    | Image                               | Port (host:container) | Purpose                                        |
+| ---------- | ----------------------------------- | --------------------- | ---------------------------------------------- |
+| `database` | `pgvector/pgvector:pg17`            | _internal only_       | PostgreSQL 17 with the `pgvector` extension    |
+| `backend`  | `willdady/platypus-backend:latest`  | `4000:4000`           | Hono REST API, auth, run lifecycle, schedulers |
+| `frontend` | `willdady/platypus-frontend:latest` | `3000:3000`           | Next.js web app                                |
 
 The services start in dependency order: the backend waits for the database to
 become healthy, and the frontend waits for the backend. Both the backend and the
@@ -35,8 +41,8 @@ report status.
 
 ### Image tags
 
-The compose file ships pointing at `:latest` for both application images. Every
-release publishes three tags per image, and which one you pin decides how much
+The compose file ships pointing at `:latest` for both application images; the
+installer pins both to the exact release it installed. Every release publishes three tags per image, and which one you pin decides how much
 moves under you on the next `docker compose pull`:
 
 | Tag           | Example                            | What a pull fetches                     |
@@ -131,7 +137,63 @@ Two cases do need you:
 Uploads failing with a permission error, on a stack that is otherwise healthy,
 is the symptom of both.
 
-## First boot
+## Install
+
+Run the installer on the host that will serve Platypus. It needs Linux or macOS
+(on Windows, run it inside WSL), `curl`, `openssl`, and Docker with the Compose
+v2 plugin and a running daemon. It does not install Docker for you, and it exits
+before writing anything if one of these is missing.
+
+```bash
+curl -fsSL https://platypus.chat/install.sh | bash
+```
+
+The installer asks no questions. It creates a `platypus` directory in the
+current directory holding `compose.yaml`, a `compose.override.yaml` that pins
+both images to one exact version, and a `.env` readable only by you. Then it runs
+`docker compose up -d --wait` and prints the sign-in URL, the admin email and the
+admin password.
+
+<Callout type="warning">
+  **The printed credentials are temporary.** The password is generated fresh for
+  each install, but it has been printed to your terminal and is saved in `.env`.
+  Change it from the in-app account settings after you first sign in.
+</Callout>
+
+### Installer settings
+
+Set these as environment variables on the `bash` side of the pipe:
+
+| Variable           | Default                     | What it does                                                                                                 |
+| ------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PLATYPUS_VERSION` | the latest release          | The release to install, e.g. `3.13.0`.                                                                       |
+| `PLATYPUS_DIR`     | `./platypus`                | The directory to install into.                                                                               |
+| `PLATYPUS_HOST`    | `localhost`                 | The host the browser reaches Platypus on. Sets `FRONTEND_URL`, `BACKEND_URL` and `ALLOWED_ORIGINS` together. |
+| `ADMIN_EMAIL`      | `admin@example.com`         | The initial admin's email.                                                                                   |
+| `ADMIN_PASSWORD`   | a random 24-character value | The initial admin's password. At least 8 characters.                                                         |
+
+For example, on a server you reach as `platypus.internal`:
+
+```bash
+curl -fsSL https://platypus.chat/install.sh | PLATYPUS_HOST=platypus.internal bash
+```
+
+<Callout type="error">
+  With `PLATYPUS_HOST` set to anything other than `localhost`, ports `3000` and
+  `4000` serve plain HTTP, with no TLS, on every network interface of the host.
+  That suits a trusted network, not the internet. See [Running in
+  production](/self-hosting/production) before exposing it further.
+</Callout>
+
+The installer refuses to run against a directory that already has a `.env`, and
+changes nothing there: that file holds the secret your sessions are signed with
+and can't be regenerated. To move an existing install to a new release, see
+[Upgrading](#upgrading).
+
+## Manual install
+
+Install by hand when you want to edit `.env` before first boot, or run from a
+clone of the repository.
 
 <Steps>
 
@@ -175,10 +237,11 @@ unauthenticated. See
   the cookie was issued against an origin the browser isn't on. Change all
   three in one edit.
 
-  That is separate from the hostname topology above: all four can be right and
-  the app still cannot authenticate server-side requests if the two origins are
-  on unrelated hosts, which is why the backend checks and logs an error at
-  startup.
+That is separate from the hostname topology above: all four can be right and
+the app still cannot authenticate server-side requests if the two origins are
+on unrelated hosts, which is why the backend checks and logs an error at
+startup.
+
 </Callout>
 
 Both services read the same root `.env` via `env_file`. The full set of
@@ -186,6 +249,9 @@ variables is documented in [Configuration & environment](/self-hosting/configura
 and the [Reference](/reference).
 
 ### Start the stack
+
+The clone's `compose.yaml` points at `:latest`, so pin a version first, as
+[Image tags](#image-tags) describes. Then:
 
 ```bash
 docker compose up -d
@@ -201,6 +267,8 @@ Open `http://localhost:3000` and sign in with the `ADMIN_EMAIL` /
 to create its first Workspace.
 
 </Steps>
+
+## First boot
 
 ### What first boot creates
 
@@ -225,12 +293,12 @@ nothing. Manage users from the app after first boot.
 
 <Callout type="warning">
   `ADMIN_EMAIL` and `ADMIN_PASSWORD` are **required on first boot and have no
-  default in code**. With either unset the backend logs
-  `... environment variable is required to seed the initial admin user` and
-  exits non-zero without starting the HTTP server — it does not retry, because
-  a missing variable fails the same way every time. The shipped `.env.example`
-  supplies `admin@example.com` / `admin123`, but a deployment that doesn't
-  start from that file (Kubernetes, a hand-rolled env) gets nothing.
+  default in code**. With either unset the backend logs `... environment
+  variable is required to seed the initial admin user` and exits non-zero
+  without starting the HTTP server — it does not retry, because a missing
+  variable fails the same way every time. The shipped `.env.example` supplies
+  `admin@example.com` / `admin123`, but a deployment that doesn't start from
+  that file (Kubernetes, a hand-rolled env) gets nothing.
 </Callout>
 
 Nothing partial survives a failed seed. Configuration is checked before
@@ -269,8 +337,10 @@ docker compose up -d
 
 ### The default admin
 
-The shipped `.env.example` supplies `admin@example.com` / `admin123`.
-**Override these** by editing `.env` before first boot — the values in place at
+The installer generates a random password for `admin@example.com` unless you
+set `ADMIN_EMAIL` / `ADMIN_PASSWORD`. A manual install starts from the shipped
+`.env.example`, which supplies `admin@example.com` / `admin123`: **override
+these** by editing `.env` before first boot. Either way, the values in place at
 seed time are the ones that stick. Change the password from the in-app account
 settings after you first sign in.
 
@@ -297,6 +367,8 @@ docker compose pull      # fetch the images your tags point at
 docker compose up -d     # recreate containers with the new images
 ```
 
+An installer-made deployment pins exact versions, so `pull` fetches nothing new
+until you change both tags in `compose.override.yaml` to the release you want.
 The backend applies any pending schema changes on startup. Your data persists in
 the `postgres_data` volume across upgrades.
 

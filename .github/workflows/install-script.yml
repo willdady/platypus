@@ -1,0 +1,59 @@
+name: Install Script
+
+# Checks the one-line installer served at https://platypus.chat/install.sh.
+# Runs only when the script (or this workflow) changes: the end-to-end job pulls
+# the real published images and brings up the whole stack.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/website/public/install.sh"
+      - ".github/workflows/install-script.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/website/public/install.sh"
+      - ".github/workflows/install-script.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-script-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: shellcheck apps/website/public/install.sh
+
+  end-to-end:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Piped into bash, as the one-liner runs it: no stdin, no prompts.
+      - name: Run the installer
+        run: bash < apps/website/public/install.sh
+        env:
+          PLATYPUS_DIR: ${{ runner.temp }}/platypus
+
+      - name: Assert both services are healthy
+        run: |
+          curl -fsS http://localhost:4000/health
+          curl -fsS -o /dev/null http://localhost:3000/
+          test "$(stat -c %a "$RUNNER_TEMP/platypus/.env")" = 600
+
+      - name: Assert the generated admin credentials sign in
+        run: |
+          password="$(grep '^ADMIN_PASSWORD=' "$RUNNER_TEMP/platypus/.env" | cut -d"'" -f2)"
+          curl -fsS -o /dev/null http://localhost:4000/auth/sign-in/email \
+            -H 'Origin: http://localhost:3000' -H 'Content-Type: application/json' \
+            -d "{\"email\":\"admin@example.com\",\"password\":\"$password\"}"
+
+      - name: Backend logs
+        if: failure()
+        working-directory: ${{ runner.temp }}/platypus
+        run: docker compose logs backend
