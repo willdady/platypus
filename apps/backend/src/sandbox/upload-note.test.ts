@@ -14,7 +14,7 @@ describe("a Sandbox upload part reaching the model", () => {
         parts: [
           {
             type: "data-sandbox-upload",
-            data: { path: "data.csv", filename: "data.csv", size: 1_200_000 },
+            data: { path: "data.csv", size: 1_200_000 },
           },
           { type: "text", text: "Summarise it" },
         ],
@@ -31,7 +31,7 @@ describe("a Sandbox upload part reaching the model", () => {
         content: [
           {
             type: "text",
-            text: "User uploaded `data.csv` (1.2 MB) to the Sandbox at `data.csv`",
+            text: "User uploaded `data.csv` (1.2 MB) to the Sandbox",
           },
           { type: "text", text: "Summarise it" },
         ],

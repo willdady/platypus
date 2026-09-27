@@ -123,14 +123,14 @@ describe("ChatMessage image parts", () => {
 
 describe("ChatMessage Sandbox upload parts", () => {
   // No link: it would serve what the path holds now, not what was uploaded.
-  it("shows the upload's name, path and size, with no download link", () => {
+  it("shows the upload's path and size, with no download link", () => {
     const { container } = renderMessage({
       id: "m1",
       role: "user",
       parts: [
         {
           type: "data-sandbox-upload",
-          data: { path: "data.csv", filename: "data.csv", size: 1_200_000 },
+          data: { path: "data.csv", size: 1_200_000 },
         },
         { type: "text", text: "Summarise it" },
       ],

@@ -13,9 +13,9 @@ export const convertDataPart = (
   if (part.type !== "data-sandbox-upload") return undefined;
   // Validated on the way in (`resolveTurn`), so a failure here is a stored row
   // gone wrong, and says so.
-  const { filename, path, size } = sandboxUploadSchema.parse(part.data);
+  const { path, size } = sandboxUploadSchema.parse(part.data);
   return {
     type: "text",
-    text: `User uploaded \`${filename}\` (${formatFileSize(size)}) to the Sandbox at \`${path}\``,
+    text: `User uploaded \`${path}\` (${formatFileSize(size)}) to the Sandbox`,
   };
 };

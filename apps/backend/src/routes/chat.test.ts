@@ -1019,7 +1019,7 @@ describe("Chat Routes", () => {
               parts: [
                 {
                   type: "data-sandbox-upload",
-                  data: { path: "a.csv", filename: "a.csv" },
+                  data: { path: "a.csv" },
                 },
               ],
             },
@@ -1096,7 +1096,7 @@ describe("Chat Routes", () => {
         startsTurn();
         const upload = {
           type: "data-sandbox-upload",
-          data: { path: "data.csv", filename: "data.csv", size: 1200 },
+          data: { path: "data.csv", size: 1200 },
         };
 
         const res = await post({

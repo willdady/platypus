@@ -69,7 +69,7 @@ describe("useMessageEditing submitting an edit", () => {
   // The part records a past upload: the edit carries it, and nothing is
   // uploaded again.
   it("keeps the message's Sandbox uploads on the resent edit", () => {
-    const upload = { path: "data.csv", filename: "data.csv", size: 3 };
+    const upload = { path: "data.csv", size: 3 };
     const { result, resend } = harness([
       {
         id: "u1",

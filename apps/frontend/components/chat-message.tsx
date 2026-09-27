@@ -485,10 +485,7 @@ export const ChatMessage = memo(function ChatMessage({
               className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
             >
               <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="font-medium">{upload.filename}</span>
-              <span className="font-mono text-muted-foreground text-xs">
-                {upload.path}
-              </span>
+              <span className="font-mono font-medium">{upload.path}</span>
               <span className="text-muted-foreground text-xs">
                 {formatFileSize(upload.size)}
               </span>

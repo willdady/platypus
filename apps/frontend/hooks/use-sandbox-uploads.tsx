@@ -70,7 +70,7 @@ export const useSandboxUploads = (fileUrl: string) => {
           toast.error(result.message);
           throw new Error(result.message);
         }
-        record = { path, filename: file.name, size: file.size };
+        record = { path, size: file.size };
         landed.current.set(file, record);
       }
       uploads.push(record);

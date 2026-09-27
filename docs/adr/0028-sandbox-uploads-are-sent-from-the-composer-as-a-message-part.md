@@ -65,3 +65,5 @@ downloads by asking the Agent.
 - The Sandbox upload part persists with the message like any other part, and
   nothing deletes the Sandbox file when the message or Chat is deleted.
 - Files arriving through a messaging Gateway stay File parts.
+
+> **Note (2026-09-27):** the part's `filename` field was dropped; it always equalled `path`. The part is now `path, size`.
