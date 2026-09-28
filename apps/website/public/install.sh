@@ -54,6 +54,15 @@ main() {
   [[ ! -e "$dir/.env" ]] ||
     fail "$dir/.env already exists, so Platypus is already installed there. Nothing was changed. To upgrade, see $DOCS/self-hosting/docker-compose#upgrading"
 
+  # A database left by an earlier install into a same-named directory would be
+  # reused, and first boot would skip seeding the admin printed below.
+  # ponytail: mirrors Compose's project-name rule (lowercase, drop other chars); exotic dir names may differ.
+  local project volume
+  project="${COMPOSE_PROJECT_NAME:-$(basename "$dir" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')}"
+  volume="${project}_postgres_data"
+  ! docker volume inspect "$volume" >/dev/null 2>&1 ||
+    fail "a database from a previous Platypus install ($volume) is still on this host, and the admin password this installer generates wouldn't sign in to it. Delete it with 'docker volume rm $volume', or install into a different PLATYPUS_DIR."
+
   # --- Resolve the version, from the redirect rather than the rate-limited API. ---
   local version="${PLATYPUS_VERSION:-}"
   if [[ -z "$version" ]]; then

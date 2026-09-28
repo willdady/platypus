@@ -191,6 +191,13 @@ changes nothing there: that file holds the secret your sessions are signed with
 and can't be regenerated. To move an existing install to a new release, see
 [Upgrading](#upgrading).
 
+It also refuses when a database from an earlier install into a directory of the
+same name is still on the host, such as `platypus_postgres_data` after you
+deleted `./platypus`. The new admin password would never sign in to that
+database, because first boot doesn't run twice. Remove the volume with
+`docker volume rm platypus_postgres_data` if you mean to start over, or install
+into a different `PLATYPUS_DIR`.
+
 ## Manual install
 
 Install by hand when you want to edit `.env` before first boot, or run from a
