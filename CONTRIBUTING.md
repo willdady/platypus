@@ -157,11 +157,15 @@ chore(tests): add missing test coverage
 
 Platypus is a monorepo managed by [Turborepo](https://turbo.build/) with the following packages:
 
-| Package            | Description                                   |
-| ------------------ | --------------------------------------------- |
-| `apps/frontend`    | Next.js web application                       |
-| `apps/backend`     | Hono.js REST API server                       |
-| `packages/schemas` | Shared Zod schemas for end-to-end type safety |
+| Package                  | Description                                                        |
+| ------------------------ | ------------------------------------------------------------------ |
+| `apps/frontend`          | Next.js web application                                            |
+| `apps/backend`           | Hono.js REST API server                                            |
+| `apps/docs`              | Documentation site (docs.platypus.chat)                            |
+| `apps/website`           | Marketing site (platypus.chat)                                     |
+| `packages/schemas`       | Shared Zod schemas for end-to-end type safety                      |
+| `packages/plugin-sdk`    | Published plugin contract                                          |
+| `packages/example-plugin` | Reference implementation for the plugin contract                  |
 
 ## Reporting Issues
 
