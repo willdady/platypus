@@ -26,7 +26,7 @@ export function WorkspaceScrollContainer({
   }
 
   async function handleRefresh() {
-    await mutate(() => true, undefined, { revalidate: true });
+    await mutate(() => true);
   }
 
   return (
