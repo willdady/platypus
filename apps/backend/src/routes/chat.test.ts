@@ -28,6 +28,7 @@ vi.mock("../services/chat-execution.ts", () => ({
 import { createUIMessageStreamResponse, streamText } from "ai";
 import app from "../server.ts";
 import { runRegistry } from "../runs/run-registry.ts";
+import { escapeLike } from "./chat.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { FileValidationError } from "../services/file-gate.ts";
 import {
@@ -247,6 +248,78 @@ describe("Chat Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ results: mockChats, totalCount: 3 });
+    });
+
+    it("should clamp negative limit and offset to non-negative values", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+
+      const mockChats = [{ id: "chat-1", title: "Chat 1" }];
+      mockDb.offset.mockResolvedValueOnce(mockChats);
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ totalCount: 1 }]);
+
+      const res = await app.request(`${baseUrl}?limit=-1&offset=-1`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: mockChats, totalCount: 1 });
+      expect(mockDb.offset).toHaveBeenCalledWith(0);
+      expect(mockDb.limit).toHaveBeenLastCalledWith(1);
+    });
+
+    it("should clamp limit to max 100", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+
+      const mockChats = [{ id: "chat-1", title: "Chat 1" }];
+      mockDb.offset.mockResolvedValueOnce(mockChats);
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ totalCount: 1 }]);
+
+      const res = await app.request(`${baseUrl}?limit=500`);
+      expect(res.status).toBe(200);
+      expect(mockDb.limit).toHaveBeenLastCalledWith(100);
+    });
+
+    it("should escape LIKE wildcards in search parameter", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+
+      const mockChats = [{ id: "chat-1", title: "100%_complete\\test" }];
+      mockDb.offset.mockResolvedValueOnce(mockChats);
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ totalCount: 1 }]);
+
+      const res = await app.request(`${baseUrl}?search=100%25_test%5Cpath`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: mockChats, totalCount: 1 });
+    });
+  });
+
+  describe("escapeLike", () => {
+    it("escapes %, _, and \\ in search terms", () => {
+      expect(escapeLike("100%")).toBe("100\\%");
+      expect(escapeLike("snake_case")).toBe("snake\\_case");
+      expect(escapeLike("back\\slash")).toBe("back\\\\slash");
+      expect(escapeLike("100%_done\\now")).toBe("100\\%\\_done\\\\now");
+      expect(escapeLike("plain text")).toBe("plain text");
     });
   });
 

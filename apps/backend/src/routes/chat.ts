@@ -83,6 +83,11 @@ const refuseWhileRunning = (chatId: string) => {
   }
 };
 
+/**
+ * Escapes PostgreSQL LIKE/ILIKE wildcards (%, _) and the default escape character (\).
+ */
+export const escapeLike = (str: string) => str.replace(/[\\%_]/g, "\\$&");
+
 // --- Routes ---
 
 const chat = new Hono<{ Variables: Variables }>();
@@ -104,15 +109,18 @@ chat.get(
     const { workspaceId } = workspaceScopeOf(c);
     const { limit: limitStr, offset: offsetStr, search } = c.req.valid("query");
 
-    const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
-    const offset = parseInt(offsetStr ?? "0") || 0;
+    const limit = Math.min(
+      Math.max(parseInt(limitStr ?? "100", 10) || 100, 1),
+      100,
+    );
+    const offset = Math.max(parseInt(offsetStr ?? "0", 10) || 0, 0);
 
     // Build search filter using ILIKE on title and tags
     const searchFilter =
       search && search.trim() !== ""
         ? or(
-            sql`${chatTable.title} ILIKE ${"%" + search.trim() + "%"}`,
-            sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${chatTable.tags}) AS t WHERE t ILIKE ${"%" + search.trim() + "%"})`,
+            sql`${chatTable.title} ILIKE ${"%" + escapeLike(search.trim()) + "%"}`,
+            sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${chatTable.tags}) AS t WHERE t ILIKE ${"%" + escapeLike(search.trim()) + "%"})`,
           )
         : undefined;
 
