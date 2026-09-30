@@ -687,9 +687,11 @@ describe("SshSandboxTransport — shellExec", () => {
       callOptions,
     );
     // Swap the fake remote root for one that exists locally, then run it.
+    const remoteCd = `cd '${mockState.resolvedRoot}' && `;
+    expect(mockState.execCommands[1]).toContain(remoteCd);
     const cmd = mockState.execCommands[1].replace(
-      "cd '/home/platypus/platypus-workspace'",
-      `cd '${tmpdir()}'`,
+      remoteCd,
+      `cd '${tmpdir()}' && `,
     );
     const res = spawnSync("/bin/sh", ["-c", cmd], { encoding: "utf8" });
     expect(res.stdout).toBe("12\n");
