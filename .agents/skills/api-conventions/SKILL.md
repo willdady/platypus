@@ -33,7 +33,9 @@ rule states its message once instead of once per caller:
 | `UnsupportedError` | 501     |
 
 A Postgres unique violation also maps to 409 — detect it through the shared
-helper rather than re-reading the driver's error shape.
+helper rather than re-reading the driver's error shape. So does a foreign-key
+violation, as a backstop only: a delete guarded by a `restrict` reference
+should throw a `ConflictError` naming what still uses the row first.
 
 ```typescript
 if (!row) throw new NotFoundError("Card not found");

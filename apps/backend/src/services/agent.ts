@@ -1,8 +1,9 @@
 import { nanoid } from "nanoid";
 import type { z } from "zod";
 import type { agentBaseSchema } from "@platypus/schemas";
+import { eq, type SQL } from "drizzle-orm";
 import { db } from "../index.ts";
-import { agent as agentTable } from "../db/schema.ts";
+import { agent as agentTable, trigger as triggerTable } from "../db/schema.ts";
 import type { ScopeContext } from "../scope.ts";
 import {
   validateSubAgentAssignment,
@@ -15,6 +16,7 @@ import {
 import { scrubDeletedAgentReference } from "./agent-references.ts";
 import { NotFoundError } from "../errors.ts";
 import {
+  inUseConflict,
   orgScopedWhere,
   requireOrgScoped,
   requireSharedDeletable,
@@ -208,52 +210,65 @@ export async function updateAgent(
 }
 
 /**
- * Deletes an Agent at the given scope, cleaning up its avatar. At Workspace
- * scope, throws `NotFoundError`/`LockedError` (via `requireWorkspaceMutable`)
- * under the same rule as {@link updateAgent}. At Organization scope, throws
- * `ConflictError` (via `requireSharedDeletable`) while an Attachment or
- * Blueprint still references the Agent (ADR-0007/0008), and — because
- * deleting a Shared Agent can orphan another Agent's `subAgentIds` reference
- * to it — scrubs that reference in the same transaction as the delete.
+ * Throws `ConflictError` naming every Trigger that still runs this Agent —
+ * `trigger.agent_id` is an `ON DELETE RESTRICT` foreign key, so the delete
+ * would otherwise fail in Postgres with nothing the user could act on.
+ */
+async function requireNoTriggers(agentId: string): Promise<void> {
+  const triggers = await db
+    .select({ name: triggerTable.name })
+    .from(triggerTable)
+    .where(eq(triggerTable.agentId, agentId));
+  if (triggers.length > 0) {
+    throw inUseConflict(
+      "agent",
+      { singular: "trigger", plural: "triggers" },
+      triggers.map((t) => t.name),
+      (them) => `Delete ${them} or switch ${them} to another agent first.`,
+    );
+  }
+}
+
+/**
+ * Deletes an Agent at the given scope, cleaning up its avatar and scrubbing
+ * its id from other Agents' `subAgentIds` in the same transaction as the
+ * delete (the reference is a jsonb id with no foreign key to cascade). At
+ * Workspace scope, throws `NotFoundError`/`LockedError` (via
+ * `requireWorkspaceMutable`) under the same rule as {@link updateAgent}, then
+ * `ConflictError` while a Trigger still runs the Agent. At Organization scope,
+ * throws `ConflictError` (via `requireSharedDeletable`) while an Attachment or
+ * Blueprint still references the Agent (ADR-0007/0008).
  */
 export async function deleteAgent(
   scope: AgentScope,
   agentId: string,
 ): Promise<void> {
+  let where: SQL;
   if (scope.kind === "workspace") {
-    const found = await requireWorkspaceMutable(
-      db,
-      "agent",
-      agentId,
-      scope.ctx,
-    );
-
-    await deleteAvatar(found.row.avatarKey);
-
-    await db
-      .delete(agentTable)
-      .where(workspaceScopedWhere("agent", agentId, scope.ctx.workspaceId));
-    return;
+    await requireWorkspaceMutable(db, "agent", agentId, scope.ctx);
+    await requireNoTriggers(agentId);
+    where = workspaceScopedWhere("agent", agentId, scope.ctx.workspaceId);
+  } else {
+    await requireSharedDeletable(db, "agent", agentId);
+    where = orgScopedWhere("agent", agentId, scope.orgId);
   }
 
-  await requireSharedDeletable(db, "agent", agentId);
-
-  // requireSharedDeletable only checks referencing Attachments/Blueprints, not
-  // existence, so the delete itself is where a missing Agent 404s.
   const result = await db.transaction(async (tx) => {
-    const rows = await tx
-      .delete(agentTable)
-      .where(orgScopedWhere("agent", agentId, scope.orgId))
-      .returning();
+    const rows = await tx.delete(agentTable).where(where).returning();
     if (rows.length > 0) {
       await scrubDeletedAgentReference(tx, "subAgentIds", agentId);
     }
     return rows;
   });
+  // Workspace scope: requireWorkspaceMutable already established the row
+  // exists. Organization scope: requireSharedDeletable only checks
+  // referencing Attachments/Blueprints, not existence, so the delete itself is
+  // where a missing Agent 404s.
   if (result.length === 0) {
     throw new NotFoundError("Agent not found");
   }
 
-  // Best-effort: a storage miss must not fail the delete that already committed.
+  // Best-effort, and only once the delete has committed: a storage miss must
+  // not fail it, and a refused delete must not lose the avatar.
   await deleteAvatar(result[0].avatarKey);
 }

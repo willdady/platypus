@@ -7,7 +7,7 @@ import {
   deleteAgent as deleteAgentRow,
   type AgentWriteError,
 } from "../services/agent.ts";
-import { LockedError, NotFoundError } from "../errors.ts";
+import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 
@@ -39,11 +39,12 @@ export function createAgentManagementTools(
 
   /**
    * Turns `updateAgent`/`deleteAgent`'s thrown `NotFoundError`/`LockedError`
+   * — and `deleteAgent`'s `ConflictError` for an Agent a Trigger still runs —
    * into the `{ error }` payload a Tool result carries — a Tool reports a
    * problem back to the model rather than throwing it into the run. The same
-   * rule `requireWorkspaceMutable` enforces on the routes, in the same words
-   * (an attached Shared Agent is a single source of truth edited only on the
-   * Organization surface — ADR-0007).
+   * rules the routes enforce, in the same words (an attached Shared Agent is a
+   * single source of truth edited only on the Organization surface —
+   * ADR-0007).
    */
   async function asToolResult<T>(
     run: () => Promise<T>,
@@ -51,7 +52,11 @@ export function createAgentManagementTools(
     try {
       return await run();
     } catch (error) {
-      if (error instanceof NotFoundError || error instanceof LockedError) {
+      if (
+        error instanceof NotFoundError ||
+        error instanceof LockedError ||
+        error instanceof ConflictError
+      ) {
         return { error: error.message };
       }
       throw error;

@@ -51,6 +51,16 @@ describe("central error mapping (app.onError)", () => {
     expect(mapError({ cause: { code: "23505" } })?.status).toBe(409);
   });
 
+  it("maps a Postgres foreign-key violation (23503) → 409", () => {
+    const message =
+      "This change conflicts with a related resource that is still in use or no longer exists";
+    expect(mapError({ code: "23503" })).toEqual({ status: 409, message });
+    expect(mapError({ cause: { code: "23503" } })).toEqual({
+      status: 409,
+      message,
+    });
+  });
+
   it("returns null for an unmapped error (falls back to 500)", () => {
     expect(mapError(new Error("boom"))).toBeNull();
   });

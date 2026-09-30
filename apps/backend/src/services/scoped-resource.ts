@@ -559,3 +559,26 @@ export const requireSharedDeletable = async (
     );
   }
 };
+
+/**
+ * The `ConflictError` a Workspace-surface delete throws while other rows still
+ * hold a `restrict` foreign key to the resource — naming each of them, so the
+ * user knows exactly what to change first. The in-use counterpart to
+ * {@link requireSharedDeletable}'s Attachment/Blueprint conflicts, mapped to
+ * 409 by `app.onError` (ADR-0010). `remedy` receives the pronoun for the
+ * dependents ("it" or "them") so the sentence agrees with their count.
+ */
+export const inUseConflict = (
+  type: ScopedResourceType,
+  dependent: { singular: string; plural: string },
+  names: string[],
+  remedy: (pronoun: "it" | "them") => string,
+): ConflictError => {
+  const one = names.length === 1;
+  const quoted = names.map((name) => `"${name}"`).join(", ");
+  return new ConflictError(
+    `Cannot delete: this ${REGISTRY[type].noun} is used by ${names.length} ${
+      one ? dependent.singular : dependent.plural
+    } (${quoted}). ${remedy(one ? "it" : "them")}`,
+  );
+};

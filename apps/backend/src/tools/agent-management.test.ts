@@ -13,7 +13,7 @@ import {
   updateAgent as updateAgentRow,
   deleteAgent as deleteAgentRow,
 } from "../services/agent.ts";
-import { LockedError, NotFoundError } from "../errors.ts";
+import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 
 // The write rules (dedupe, sub-agent validation, visibility, avatar cleanup)
 // are unit-tested in services/agent.test.ts; this file covers the adapter:
@@ -160,6 +160,17 @@ describe("createAgentManagementTools", () => {
         await callTool(tools.deleteAgent, { agentId: "a1", label: "Agent" }),
       ).toEqual({ success: true });
       expect(deleteAgentRow).toHaveBeenCalledWith(scope, "a1");
+    });
+
+    it("reports an agent still used by a Trigger to the model as an error result", async () => {
+      const error = new ConflictError(
+        'Cannot delete: this agent is used by 1 trigger ("Nightly"). Delete it or switch it to another agent first.',
+      );
+      vi.mocked(deleteAgentRow).mockRejectedValueOnce(error);
+
+      expect(
+        await callTool(tools.deleteAgent, { agentId: "a1", label: "Agent" }),
+      ).toEqual({ error: error.message });
     });
   });
 });

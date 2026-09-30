@@ -6,7 +6,7 @@ import { FileValidationError } from "./services/file-gate.ts";
  * cross-cutting failure modes, mapped to HTTP status in a single Hono
  * `app.onError` (ADR-0010): a resource that does not exist, an
  * Organization-scoped (Shared) resource locked against Workspace-surface
- * mutation, and a unique-constraint violation. Route-specific 4xx responses
+ * mutation, and a unique- or foreign-key-constraint violation. Route-specific 4xx responses
  * (validation, sub-agent rules, `findNonSharedReferences`) stay inline.
  */
 
@@ -87,6 +87,21 @@ export const isUniqueViolation = (error: unknown): boolean => {
 };
 
 /**
+ * Detects a Postgres foreign-key violation (SQLSTATE `23503`) — a delete
+ * refused by an `ON DELETE RESTRICT` reference, or a write naming a row that
+ * does not exist. The code can surface on the error itself or on its `cause`.
+ * The in-use delete guards name what still holds a row before the database is
+ * asked; this is the backstop for a reference they do not check, or one that
+ * lands between the check and the delete.
+ */
+export const isForeignKeyViolation = (error: unknown): boolean => {
+  const e = error as
+    { code?: string; cause?: { code?: string } } | null | undefined;
+  if (!e) return false;
+  return e.code === "23503" || e.cause?.code === "23503";
+};
+
+/**
  * Maps a thrown error to its HTTP response, or returns `null` when the error is
  * not one of the cross-cutting modes (the caller then falls back to a 500). The
  * mapping lives in a pure function so it can be unit-tested without a request.
@@ -112,5 +127,11 @@ export const mapError = (
     return { status: 400, message: error.message, files: error.files };
   if (isUniqueViolation(error))
     return { status: 409, message: "A resource with that name already exists" };
+  if (isForeignKeyViolation(error))
+    return {
+      status: 409,
+      message:
+        "This change conflicts with a related resource that is still in use or no longer exists",
+    };
   return null;
 };

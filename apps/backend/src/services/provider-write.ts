@@ -1,8 +1,11 @@
 import type { z } from "zod";
-import type { SQL } from "drizzle-orm";
+import { eq, type SQL } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { provider as providerTable } from "../db/schema.ts";
+import {
+  agent as agentTable,
+  provider as providerTable,
+} from "../db/schema.ts";
 import type {
   providerCreateSchema,
   ProviderUpdateData,
@@ -20,6 +23,7 @@ import {
   deMigrateOrphanedAliases,
 } from "./model-alias-migration.ts";
 import {
+  inUseConflict,
   orgScopedWhere,
   requireOrgScoped,
   requireSharedDeletable,
@@ -172,10 +176,31 @@ export async function updateProvider(
 }
 
 /**
+ * Throws `ConflictError` naming every Agent that still runs on this Provider —
+ * `agent.provider_id` is an `ON DELETE RESTRICT` foreign key, so the delete
+ * would otherwise fail in Postgres with nothing the user could act on.
+ */
+async function requireNoAgents(providerId: string): Promise<void> {
+  const agents = await db
+    .select({ name: agentTable.name })
+    .from(agentTable)
+    .where(eq(agentTable.providerId, providerId));
+  if (agents.length > 0) {
+    throw inUseConflict(
+      "provider",
+      { singular: "agent", plural: "agents" },
+      agents.map((a) => a.name),
+      (them) => `Delete ${them} or switch ${them} to another provider first.`,
+    );
+  }
+}
+
+/**
  * Deletes a Provider at the given scope. Throws `NotFoundError` (Workspace
  * scope, via `requireWorkspaceMutable`; Organization scope, when the delete
  * matches no row) and, Workspace scope only, `LockedError` for a Shared
- * Provider (ADR-0007). Organization scope also throws `ConflictError` while
+ * Provider (ADR-0007) and `ConflictError` while an Agent still uses the
+ * Provider. Organization scope also throws `ConflictError` while
  * an Attachment or Blueprint still references the Provider (ADR-0007/0008).
  */
 export async function deleteProvider(
@@ -185,6 +210,7 @@ export async function deleteProvider(
   let where: SQL;
   if (scope.kind === "workspace") {
     await requireWorkspaceMutable(db, "provider", providerId, scope.ctx);
+    await requireNoAgents(providerId);
     where = workspaceScopedWhere("provider", providerId, scope.ctx.workspaceId);
   } else {
     // A Shared resource cannot be deleted while anything still points at it —

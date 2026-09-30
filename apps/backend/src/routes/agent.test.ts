@@ -508,6 +508,10 @@ describe("Agent Routes", () => {
       ]);
       // Avatar lookup (agent has no avatar) — also confirms workspace row exists
       mockDb.limit.mockResolvedValueOnce([{ avatarKey: null, workspaceId }]);
+      // The delete matches the row
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "agent-1", avatarKey: null },
+      ]);
 
       const res = await app.request(`${baseUrl}/agent-1`, {
         method: "DELETE",
