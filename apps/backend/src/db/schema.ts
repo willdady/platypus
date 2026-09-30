@@ -597,6 +597,7 @@ export const organizationMember = pgTable(
   (t) => [
     index("idx_org_member_org_id").on(t.organizationId),
     index("idx_org_member_user_id").on(t.userId),
+    unique("unique_org_member_org_user").on(t.organizationId, t.userId),
   ],
 );
 
@@ -722,7 +723,11 @@ export const context = pgTable(
   (t) => [
     index("idx_context_user_id").on(t.userId),
     index("idx_context_workspace_id").on(t.workspaceId),
-    unique("unique_context_user_workspace").on(t.userId, t.workspaceId),
+    // A global Context has a null workspace_id; nulls must collide so a
+    // user holds at most one global Context.
+    unique("unique_context_user_workspace")
+      .on(t.userId, t.workspaceId)
+      .nullsNotDistinct(),
   ],
 );
 

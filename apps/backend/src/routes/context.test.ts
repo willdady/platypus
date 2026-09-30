@@ -228,6 +228,24 @@ describe("Context Routes", () => {
       });
     });
 
+    // The database refuses a second global Context (null workspace) the same
+    // way; see unique-context-and-org-member.test.ts.
+    it("should return 409 for a second global context", async () => {
+      mockSession({ id: userId, email: "test@example.com" });
+      mockDb.returning.mockRejectedValueOnce({ code: "23505" });
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({ content: "Another global context" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: "You already have a context for this scope",
+      });
+    });
+
     it("should validate content is required", async () => {
       mockSession({ id: userId, email: "test@example.com" });
 

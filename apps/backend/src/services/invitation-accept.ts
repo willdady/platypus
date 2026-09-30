@@ -85,26 +85,20 @@ export async function acceptInvitationForUser(
 
     const invite = invitation[0];
 
-    // Ensure org membership exists
-    const orgMember = await tx
-      .select()
-      .from(organizationMember)
-      .where(
-        and(
-          eq(organizationMember.organizationId, invite.organizationId),
-          eq(organizationMember.userId, user.id),
-        ),
-      )
-      .limit(1);
-
-    if (orgMember.length === 0) {
-      await tx.insert(organizationMember).values({
+    // Ensure org membership exists. The invitation lock does not serialize two
+    // accepts of different invitations for one user, so a check-then-insert
+    // could race; the unique key settles it instead.
+    await tx
+      .insert(organizationMember)
+      .values({
         id: nanoid(),
         organizationId: invite.organizationId,
         userId: user.id,
         role: "member",
+      })
+      .onConflictDoNothing({
+        target: [organizationMember.organizationId, organizationMember.userId],
       });
-    }
 
     // Accepting an invitation always provisions a Workspace owned by the
     // accepting member (ADR-0008). With no Blueprint it is empty; the invite's

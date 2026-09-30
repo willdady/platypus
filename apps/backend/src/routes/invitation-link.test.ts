@@ -165,7 +165,6 @@ describe("Invitation Link Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ...validInvitationRow, workspaceName: null },
       ]); // acceptInvitationForUser: fetch invitation
-      mockDb.limit.mockResolvedValueOnce([]); // acceptInvitationForUser: org membership (none)
       mockDb.orderBy.mockResolvedValueOnce([]); // acceptInvitationForUser: no blueprints
 
       const res = await app.request(`${baseUrl}/tok_valid/register`, {
@@ -330,7 +329,6 @@ describe("Invitation Link Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ...validInvitationRow, workspaceName: null },
       ]); // acceptInvitationForUser: fetch invitation
-      mockDb.limit.mockResolvedValueOnce([]); // org membership (none)
       mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints
 
       const res = await app.request(`${baseUrl}/tok_valid/accept`, {
