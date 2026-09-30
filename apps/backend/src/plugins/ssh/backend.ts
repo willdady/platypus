@@ -118,7 +118,8 @@ function shQuote(value: string): string {
 // so dropping it is both safe and correct.
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-// Build the `export KEY=val;` prefix for the merged env (ADR-0004). Applied via
+// Build the `export KEY=val;` prefix for the merged env (ADR-0004). It goes
+// ahead of any `cd` (see `exec`), never after it. Applied via
 // export statements rather than the ssh2 `env` option, since sshd's `AcceptEnv`
 // rejects arbitrary variables by default (ADR-0012). Keys are guarded to POSIX
 // identifiers (above) so they can't inject shell syntax; values are single-quoted.
@@ -636,8 +637,11 @@ class SshSandboxTransport implements SandboxTransport {
     argv: string[],
     opts: SandboxExecOptions,
   ): Promise<SandboxExecResult> {
+    // Exports go first and the `cd` is chained straight onto the command, so a
+    // failed `cd` skips the command (non-zero exit) instead of the `;` after an
+    // export letting it run in `$HOME`.
     const cdPrefix = opts.cwd ? `cd ${shQuote(opts.cwd)} && ` : "";
-    const command = `${cdPrefix}${buildEnvPrefix(opts.env)}${argv
+    const command = `${buildEnvPrefix(opts.env)}${cdPrefix}${argv
       .map(shQuote)
       .join(" ")}`;
 

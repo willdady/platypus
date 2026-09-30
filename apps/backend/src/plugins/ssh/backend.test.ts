@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { randomBytes } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 
 // ---------------------------------------------------------------------------
@@ -644,6 +646,54 @@ describe("SshSandboxTransport — shellExec", () => {
     expect(cmd).toContain("export TOKEN='a b'\\''c'; ");
     // env is applied inside the command string, never via a connect/env option.
     expect(mockState.connectConfigs[0].env).toBeUndefined();
+  });
+
+  it("does not run the command when cd into cwd fails, even with env set", async () => {
+    queueExec({ exitCode: 0 });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(
+      ctx,
+      {
+        command: "echo RAN",
+        cwd: "does-not-exist",
+        env: { A: "1", B: "2" },
+      },
+      callOptions,
+    );
+    // Run the built string through a real local shell: the cwd is missing, so
+    // the command must be skipped rather than run in whatever directory the
+    // shell started in.
+    const res = spawnSync("/bin/sh", ["-c", mockState.execCommands[1]], {
+      encoding: "utf8",
+    });
+    expect(res.stdout).not.toContain("RAN");
+    expect(res.status).not.toBe(0);
+  });
+
+  it("applies env and runs the command when cd into cwd succeeds", async () => {
+    queueExec({ exitCode: 0 });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(
+      ctx,
+      { command: 'echo "$A$B"', env: { A: "1", B: "2" } },
+      callOptions,
+    );
+    // Swap the fake remote root for one that exists locally, then run it.
+    const cmd = mockState.execCommands[1].replace(
+      "cd '/home/platypus/platypus-workspace'",
+      `cd '${tmpdir()}'`,
+    );
+    const res = spawnSync("/bin/sh", ["-c", cmd], { encoding: "utf8" });
+    expect(res.stdout).toBe("12\n");
+    expect(res.status).toBe(0);
   });
 
   it("drops env keys that are not valid POSIX identifiers", async () => {
