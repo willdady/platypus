@@ -35,7 +35,7 @@ beforeAll(async () => {
              ('admin', 'Admin', 'admin@example.com', true, now(), now());
     INSERT INTO "organization" ("id", "name") VALUES ('org-1', 'Acme');
   `);
-}, 120_000);
+}, 60_000);
 afterAll(() => pg.close());
 
 const invite = (id: string, email: string) =>
@@ -48,8 +48,11 @@ const invite = (id: string, email: string) =>
 describe("acceptInvitationForUser", () => {
   // An Organization invites an address once, so two invitations reach one
   // account only under two addresses — e.g. one sent before the account
-  // changed its email. Each accept locks only its own invitation row.
-  it("leaves one membership when two invitations to the same Organization are accepted concurrently", async () => {
+  // changed its email. Each accept locks only its own invitation row, so the
+  // unique key on the membership is what keeps a race to one row. PGlite runs
+  // the two transactions one after the other; this pins that the accept path
+  // leans on that key (it fails without it), not the interleaving itself.
+  it("leaves one membership when two invitations to the same Organization are accepted", async () => {
     await invite("inv-a", "jane@example.com");
     await invite("inv-b", "jane@work.example.com");
 

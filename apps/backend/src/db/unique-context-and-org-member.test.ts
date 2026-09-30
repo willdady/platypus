@@ -28,7 +28,7 @@ beforeAll(async () => {
              ('m-oldest', 'org-1', 'u1', 'admin', '2026-01-01');
   `);
   await applyMigration(pg, MIGRATION);
-}, 120_000);
+}, 60_000);
 afterAll(() => pg.close());
 
 const ids = async (table: string) =>
@@ -36,13 +36,13 @@ const ids = async (table: string) =>
     await pg.query<{ id: string }>(`SELECT "id" FROM "${table}" ORDER BY "id"`)
   ).rows.map((r) => r.id);
 
-const violation = (sql: string) =>
+const sqlstateOf = (sql: string) =>
   pg.query(sql).then(
     () => undefined,
     (e: { code?: string }) => e.code,
   );
 
-describe(`${MIGRATION}`, () => {
+describe(MIGRATION, () => {
   it("keeps only each user's oldest global Context", async () => {
     expect(await ids("context")).toEqual(["ctx-oldest"]);
   });
@@ -53,7 +53,7 @@ describe(`${MIGRATION}`, () => {
 
   it("refuses a second global Context for the same user", async () => {
     expect(
-      await violation(
+      await sqlstateOf(
         `INSERT INTO "context" ("id", "user_id", "workspace_id", "content")
            VALUES ('ctx-again', 'u1', NULL, 'again')`,
       ),
@@ -62,7 +62,7 @@ describe(`${MIGRATION}`, () => {
 
   it("refuses a second membership of the same Organization", async () => {
     expect(
-      await violation(
+      await sqlstateOf(
         `INSERT INTO "organization_member" ("id", "organization_id", "user_id")
            VALUES ('m-again', 'org-1', 'u1')`,
       ),
