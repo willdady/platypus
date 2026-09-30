@@ -616,11 +616,13 @@ export const driveOnce = async (
   const scope: RunEventScope | undefined = opts.events
     ? { recorder: opts.events, parentEventId: null }
     : undefined;
-  const plan = planRecording(opts.plan, scope);
   // The first error the stream reported, in a caller-facing sentence.
   let streamFailure: string | undefined;
 
+  // The plan's tool wrapping is inside the `try` too: nothing above this drive
+  // finishes the run if it throws (issue #1122).
   try {
+    const plan = planRecording(opts.plan, scope);
     const result = await withAgentCausation(opts.agentId, async () => {
       const streamed = streamText({
         ...modelArgs({ ...opts, plan }, noProgress),

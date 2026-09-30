@@ -15,7 +15,7 @@ import { convertDataPart } from "../sandbox/upload-note.ts";
 import { actorUserId, type WorkspaceScope } from "../scope.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { runRegistry, type RunTimeouts } from "./run-registry.ts";
-import { startRun } from "./run-lifecycle.ts";
+import { startRun, type RunLifecycle } from "./run-lifecycle.ts";
 import { driveChat, driveOnce } from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import { withStreamKeepalive } from "./stream-keepalive.ts";
@@ -97,6 +97,33 @@ const foldSnapshot = (
   original.at(-1)?.id === message.id
     ? [...original.slice(0, -1), message]
     : [...original, message];
+
+/**
+ * Runs `work` on behalf of a registered run that nothing else will finish if
+ * `work` throws: the run is finished `failed` with the thrown error, then the
+ * error is rethrown to the caller.
+ *
+ * Every step between claiming the run and a drive taking ownership of it goes
+ * through here. A throw that escaped one of them left the Chat `running`, held
+ * its claim so every retry was answered 409, and was eventually recorded as the
+ * step timer's misleading timeout rather than what actually failed (issue
+ * #1122). `finish` is once-only, so a step that has already finished the run
+ * itself (a drive that caught its own failure) is unaffected.
+ */
+const finishFailedOnThrow = async <T>(
+  run: RunLifecycle,
+  message: string,
+  work: () => T | Promise<T>,
+): Promise<T> => {
+  try {
+    return await work();
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error({ error, runId: run.handle.runId }, message);
+    await run.finish("failed", err);
+    throw err;
+  }
+};
 
 /**
  * Orchestrates an end-to-end agent run.
@@ -240,42 +267,31 @@ export class AgentRunner {
     // Registered now, so a start hook that throws releases the claim rather
     // than leaving the runId held by a run that never began — which, with the
     // claim taken first, would lock the Chat out of every later turn.
-    try {
-      await sink.onStart({
+    await finishFailedOnThrow(run, "Run sink onStart failed", () =>
+      sink.onStart({
         runId: input.runId,
         messages: input.messages,
         memorySnapshot: input.memorySnapshot,
         events: params.events,
-      });
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error({ error, runId: input.runId }, "Run sink onStart failed");
-      await run.finish("failed", err);
-      throw err;
-    }
+      }),
+    );
 
-    let turn: ChatTurn;
-    try {
-      turn = await this.prepare(
-        scope,
-        input,
-        params.origin,
-        params.frontendUrl,
-        params.timeouts,
-        run.onActivity,
-      );
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error(
-        { error, runId: input.runId },
-        "Run prepare failed before model invocation",
-      );
-      // Nothing to dispose here: a resolution that throws closes its own Tool
-      // session on the way out (`prepareChatTurn`), so there is no session
-      // object at this frame to leak.
-      await run.finish("failed", err);
-      throw err;
-    }
+    // Nothing to dispose if this throws: a resolution that throws closes its
+    // own Tool session on the way out (`prepareChatTurn`), so there is no
+    // session object at this frame to leak.
+    const turn = await finishFailedOnThrow(
+      run,
+      "Run prepare failed before model invocation",
+      () =>
+        this.prepare(
+          scope,
+          input,
+          params.origin,
+          params.frontendUrl,
+          params.timeouts,
+          run.onActivity,
+        ),
+    );
 
     // The run's timers were armed at registration, above — a resolution slower
     // than the per-step bound has already terminated it, and its teardown has
@@ -296,25 +312,35 @@ export class AgentRunner {
       throw err;
     }
 
-    const plan: ResolvedRunPlan = { resolved: turn.resolved };
-    await sink.onResolved({ runId: input.runId, plan });
+    // From here the run holds the turn, so a throw finishes the run — which
+    // disposes the turn — rather than escaping with the Chat still `running`.
+    const modelMessages = await finishFailedOnThrow(
+      run,
+      "Run setup failed after adopting its turn",
+      async () => {
+        const plan: ResolvedRunPlan = { resolved: turn.resolved };
+        await sink.onResolved({ runId: input.runId, plan });
 
-    // The conversation is converted once, here, and handed to whichever drive
-    // the caller picks — `stream` for an HTTP client, `generate` for a headless
-    // run. The drives own the model call and the terminal decision from there.
-    //
-    // `ignoreIncompleteToolCalls` drops a tool call the Transcript holds with
-    // no result beside it. A turn cancelled while a tool was still running
-    // persists exactly that, and a provider handed a tool call it never sees
-    // answered rejects the whole request ("Tool result is missing for tool
-    // call ..."), so every later turn in that Chat fails until the Chat is
-    // deleted. Cancellation is only the common way in — a crash or a timeout
-    // mid-tool strands a call the same way, which is why the guard sits at the
-    // one seam every drive converts through rather than on the abort path.
-    const modelMessages = await convertToModelMessages(turn.stream.messages, {
-      ignoreIncompleteToolCalls: true,
-      convertDataPart,
-    });
+        // The conversation is converted once, here, and handed to whichever
+        // drive the caller picks — `stream` for an HTTP client, `generate` for
+        // a headless run. The drives own the model call and the terminal
+        // decision from there.
+        //
+        // `ignoreIncompleteToolCalls` drops a tool call the Transcript holds
+        // with no result beside it. A turn cancelled while a tool was still
+        // running persists exactly that, and a provider handed a tool call it
+        // never sees answered rejects the whole request ("Tool result is
+        // missing for tool call ..."), so every later turn in that Chat fails
+        // until the Chat is deleted. Cancellation is only the common way in —
+        // a crash or a timeout mid-tool strands a call the same way, which is
+        // why the guard sits at the one seam every drive converts through
+        // rather than on the abort path.
+        return convertToModelMessages(turn.stream.messages, {
+          ignoreIncompleteToolCalls: true,
+          convertDataPart,
+        });
+      },
+    );
 
     return {
       state,
@@ -360,24 +386,31 @@ export class AgentRunner {
     // branch; this runner keeps only the server-side drain (which keeps
     // `state.messages` fresh for the sink's mid-run flush) and the response.
     // Terminal status, the output-ceiling cutoff and the stop conditions are
-    // all decided inside `runs/drive.ts`.
-    const drive = driveChat({
-      plan: turn.stream,
-      modelMessages,
+    // all decided inside `runs/drive.ts` — once it is built. Building it starts
+    // the model call synchronously, and a throw there reaches no drive that
+    // could finish the run, so it is finished here instead.
+    const drive = await finishFailedOnThrow(
       run,
-      originalMessages: input.messages,
-      facts,
-      generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
-      toolDurations,
-      onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
-        toolDurations.set(toolCall.toolCallId, toolExecutionMs);
-      },
-      // The terminal finish (with tool durations applied) is what the sink's
-      // final write must observe.
-      onFinal: (messages) => {
-        state.messages = messages;
-      },
-    });
+      "Run failed before its drive took over",
+      () =>
+        driveChat({
+          plan: turn.stream,
+          modelMessages,
+          run,
+          originalMessages: input.messages,
+          facts,
+          generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
+          toolDurations,
+          onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
+            toolDurations.set(toolCall.toolCallId, toolExecutionMs);
+          },
+          // The terminal finish (with tool durations applied) is what the
+          // sink's final write must observe.
+          onFinal: (messages) => {
+            state.messages = messages;
+          },
+        }),
+    );
 
     // Consume the snapshot branch server-side. The response body drives one
     // branch; we drain the other so a disconnected client (cancelling the

@@ -1059,6 +1059,117 @@ describe("AgentRunner — duplicate submission for a live run", () => {
   });
 });
 
+// Issue #1122. Once the run has adopted its turn, a throw before the drive
+// takes over — the sink's resolved hook, or converting a stored message part —
+// used to escape without finishing the run: the Chat stayed `running`, the
+// claim stayed held (every retry answered 409), and the step timer later wrote
+// a misleading timeout in place of the real error.
+describe("a throw after the run adopts its turn", () => {
+  let runner: AgentRunner;
+  beforeEach(() => {
+    runner = new AgentRunner();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    runRegistry.unregister("chat-post-adoption");
+    mockPrepareChatTurn.mockReset();
+    mockStreamText.mockReset();
+    vi.mocked(convertToModelMessages).mockReset().mockResolvedValue([]);
+  });
+
+  const input = { ...baseInput, runId: "chat-post-adoption" };
+
+  const finishesOf = (sink: RecordingSink) =>
+    sink.events.filter(
+      (e): e is Extract<LifecycleEvent, { name: "onFinish" }> =>
+        e.name === "onFinish",
+    );
+
+  it("finishes the run failed with the conversion error and releases the claim", async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn({ dispose }));
+    vi.mocked(convertToModelMessages).mockRejectedValueOnce(
+      new Error("malformed stored part"),
+    );
+
+    const sink = new RecordingSink();
+    await expect(
+      runner.stream({ scope, input, sink, options: { origin: "http://test" } }),
+    ).rejects.toThrow("malformed stored part");
+
+    const finishes = finishesOf(sink);
+    expect(finishes).toHaveLength(1);
+    expect(finishes[0]).toMatchObject({
+      status: "failed",
+      error: "malformed stored part",
+    });
+    expect(runRegistry.has("chat-post-adoption")).toBe(false);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(mockStreamText).not.toHaveBeenCalled();
+  });
+
+  it("finishes the run failed with the resolved hook's error", async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn({ dispose }));
+    const sink = new RecordingSink();
+    sink.onResolved = () => Promise.reject(new Error("plan write failed"));
+
+    await expect(runner.generate({ scope, input, sink })).rejects.toThrow(
+      "plan write failed",
+    );
+
+    const finishes = finishesOf(sink);
+    expect(finishes).toHaveLength(1);
+    expect(finishes[0]).toMatchObject({
+      status: "failed",
+      error: "plan write failed",
+    });
+    expect(runRegistry.has("chat-post-adoption")).toBe(false);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("finishes the run failed when the model call throws before the drive takes over", async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn({ dispose }));
+    mockStreamText.mockImplementationOnce(() => {
+      throw new Error("bad model args");
+    });
+
+    const sink = new RecordingSink();
+    await expect(
+      runner.stream({ scope, input, sink, options: { origin: "http://test" } }),
+    ).rejects.toThrow("bad model args");
+
+    const finishes = finishesOf(sink);
+    expect(finishes).toHaveLength(1);
+    expect(finishes[0]).toMatchObject({
+      status: "failed",
+      error: "bad model args",
+    });
+    expect(runRegistry.has("chat-post-adoption")).toBe(false);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets an immediate retry into the same Chat run rather than answering 409", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    vi.mocked(convertToModelMessages).mockRejectedValueOnce(
+      new Error("malformed stored part"),
+    );
+    await expect(
+      runner.generate({ scope, input, sink: new RecordingSink() }),
+    ).rejects.toThrow("malformed stored part");
+
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
+    const retry = new RecordingSink();
+    const result = await runner.generate({ scope, input, sink: retry });
+
+    expect(result.text).toBe("ok");
+    expect(finishesOf(retry)[0]?.status).toBe("succeeded");
+  });
+});
+
 describe("AgentRunner.cancel", () => {
   let runner: AgentRunner;
   beforeEach(() => {
