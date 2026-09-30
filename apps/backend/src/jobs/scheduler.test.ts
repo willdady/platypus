@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import type { SQL } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 
 /**
  * Unlike most backend tests, this file does NOT import `../test-utils.ts`:
@@ -15,6 +15,7 @@ const { mockDb, mockFireTrigger } = vi.hoisted(() => ({
     update: vi.fn<(table: unknown) => unknown>(),
     select: vi.fn(),
     execute: vi.fn<(query: SQL) => Promise<unknown>>(),
+    $client: { connect: vi.fn<() => Promise<unknown>>() },
   },
   mockFireTrigger: vi.fn(),
 }));
@@ -92,6 +93,66 @@ const captureUpdates = (
 const render = (predicate: SQL | undefined) => {
   if (!predicate) throw new Error("No where clause was captured");
   return dialect.sqlToQuery(predicate);
+};
+
+type FakeClient = {
+  query: (text: string, values?: unknown[]) => Promise<{ rows: unknown[] }>;
+  release: ReturnType<typeof vi.fn>;
+};
+
+/**
+ * A stand-in for the node-postgres Pool behind `db`, modelling the one fact
+ * the scheduler lock depends on: an advisory lock belongs to the connection
+ * that took it, and only that connection can release it. `connect()` checks
+ * out a dedicated connection; `db.execute` lands on whichever idle pooled
+ * connection comes next, as a real pool's does.
+ *
+ * `held` maps a lock ID to the connection holding it. A lock still in it after
+ * `runWithLock` returns is one no peer can take until pg-pool closes that
+ * connection.
+ */
+const fakePg = ({ roundTripMs = 0 }: { roundTripMs?: number } = {}) => {
+  const held = new Map<number, number>();
+  const checkedOut: FakeClient[] = [];
+  // Connections 0 and 1 sit idle in the pool; `connect()` opens 2 onwards.
+  const idle = [0, 1];
+  let nextId = 2;
+  let nextIdle = 0;
+
+  const run = async (connection: number, text: string, values: unknown[]) => {
+    if (roundTripMs) await new Promise((r) => setTimeout(r, roundTripMs));
+    const lockId = Number(values[0]);
+    if (text.includes("pg_try_advisory_lock")) {
+      const owner = held.get(lockId);
+      if (owner === undefined) held.set(lockId, connection);
+      return {
+        rows: [{ acquired: owner === undefined || owner === connection }],
+      };
+    }
+    if (text.includes("pg_advisory_unlock")) {
+      const released = held.get(lockId) === connection;
+      if (released) held.delete(lockId);
+      return { rows: [{ released }] };
+    }
+    return { rows: [] };
+  };
+
+  mockDb.$client.connect.mockImplementation(() => {
+    const connection = nextId++;
+    const client: FakeClient = {
+      query: (text, values = []) => run(connection, text, values),
+      release: vi.fn(),
+    };
+    checkedOut.push(client);
+    return Promise.resolve(client);
+  });
+  mockDb.execute.mockImplementation((query: SQL) => {
+    const { sql: text, params } = dialect.sqlToQuery(query);
+    const connection = idle[nextIdle++ % idle.length];
+    return run(connection, text, params);
+  });
+
+  return { held, checkedOut };
 };
 
 describe("stuckChatCutoff", () => {
@@ -348,34 +409,95 @@ describe("runWithLock", () => {
     vi.clearAllMocks();
   });
 
-  const lockAcquired = (acquired: boolean) =>
-    mockDb.execute.mockResolvedValue({ rows: [{ acquired }] });
-
-  it("skips the work, and releases nothing, when a peer holds the lock", async () => {
-    lockAcquired(false);
+  it("skips the work when a peer holds the lock, and hands the connection back", async () => {
+    const pg = fakePg();
+    pg.held.set(42, 999);
     const work = vi.fn();
 
     await runWithLock(42, work);
 
     expect(work).not.toHaveBeenCalled();
-    expect(mockDb.execute).toHaveBeenCalledTimes(1);
-    expect(render(mockDb.execute.mock.calls[0][0])).toMatchObject({
-      sql: "SELECT pg_try_advisory_lock($1) as acquired",
-      params: [42],
+    expect(pg.held.get(42)).toBe(999);
+    expect(pg.checkedOut).toHaveLength(1);
+    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the lock even when the work issues its own queries", async () => {
+    const pg = fakePg();
+    const work = vi.fn(async () => {
+      // Each of these lands on some pooled connection, as the sweeps' do.
+      // An even count matters: with the pool's two idle connections taken in
+      // turn, a lock and unlock sent through the pool end up on different
+      // ones, which is the bug this pins.
+      await mockDb.execute(sql`SELECT 1`);
+      await mockDb.execute(sql`SELECT 2`);
     });
+
+    await runWithLock(42, work);
+
+    expect(work).toHaveBeenCalledTimes(1);
+    expect(pg.held.has(42)).toBe(false);
+    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it("lets the next tick take the lock again", async () => {
+    const pg = fakePg();
+    const work = vi.fn(async () => {
+      await mockDb.execute(sql`SELECT 1`);
+    });
+
+    await runWithLock(42, work);
+    await runWithLock(42, work);
+
+    expect(work).toHaveBeenCalledTimes(2);
+    expect(pg.held.has(42)).toBe(false);
   });
 
   it("releases the lock even when the work throws", async () => {
-    lockAcquired(true);
+    const pg = fakePg();
 
     await expect(
       runWithLock(42, () => Promise.reject(new Error("boom"))),
     ).rejects.toThrow("boom");
 
-    expect(render(mockDb.execute.mock.calls[1][0])).toMatchObject({
-      sql: "SELECT pg_advisory_unlock($1)",
-      params: [42],
+    expect(pg.held.has(42)).toBe(false);
+    // The unlock worked, so the connection is fit to go back to the pool.
+    expect(pg.checkedOut[0].release).toHaveBeenCalledWith(undefined);
+  });
+
+  it("discards the connection, and with it the lock, when the unlock fails", async () => {
+    const pg = fakePg();
+
+    await runWithLock(42, () => {
+      // The lock is already taken by now; only the unlock hits this.
+      const client = pg.checkedOut[0];
+      client.query = () => Promise.reject(new Error("connection reset"));
+      return Promise.resolve();
     });
+
+    // Destroying the connection ends its session, which is what frees the
+    // lock when the unlock itself could not.
+    expect(pg.checkedOut[0].release).toHaveBeenCalledWith(expect.any(Error));
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ lockId: 42 }),
+      expect.any(String),
+    );
+  });
+
+  it("warns when the unlock reports the lock was not held", async () => {
+    const pg = fakePg();
+
+    await runWithLock(42, () => {
+      pg.held.delete(42);
+      return Promise.resolve();
+    });
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ lockId: 42 }),
+      expect.any(String),
+    );
+    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -447,18 +569,14 @@ describe("startScheduler", () => {
     { id: "t1", name: "A", agentId: "a1" },
     { id: "t2", name: "B", agentId: "a1" },
   ];
+  let pg: ReturnType<typeof fakePg>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-30T12:00:59.000Z"));
     // Each round trip takes a few ms, as a real one does.
-    mockDb.execute.mockImplementation(
-      () =>
-        new Promise((r) =>
-          setTimeout(() => r({ rows: [{ acquired: true }] }), 5),
-        ),
-    );
+    pg = fakePg({ roundTripMs: 5 });
     mockFireTrigger.mockResolvedValue("succeeded");
   });
 
@@ -470,7 +588,8 @@ describe("startScheduler", () => {
   const tick = async () => {
     startScheduler();
     await vi.advanceTimersByTimeAsync(1_000 + 10);
-    expect(mockDb.execute).toHaveBeenCalledTimes(2);
+    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
+    expect(pg.held.size).toBe(0);
   };
 
   it("claims every due Trigger before firing any of them", async () => {

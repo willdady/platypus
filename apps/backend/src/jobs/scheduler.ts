@@ -1,4 +1,4 @@
-import { sql, and, eq, isNull, lt, lte, or, inArray } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, or, inArray } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   chat as chatTable,
@@ -55,32 +55,76 @@ async function withConcurrencyLimit<T>(
  *
  * `lockId` is load bearing across deploys — see `SCHEDULER_LOCK_ID`. Each
  * background job passes its own, so jobs contend only with their own peers.
+ *
+ * An advisory lock belongs to the connection that took it, and `db` is a pool,
+ * so the lock and its unlock go through one connection checked out for the
+ * whole tick. Sent through `db` they could land on different connections: the
+ * unlock would then release nothing, and the lock would stay held by an idle
+ * pooled connection, skipping every peer's ticks until pg-pool closed it.
+ * `fn`'s own queries still go through the pool; only the lock needs the
+ * dedicated connection.
  */
 export async function runWithLock(
   lockId: number,
   fn: () => Promise<void>,
 ): Promise<void> {
-  // Try to acquire advisory lock (non-blocking)
-  const lockResult = await db.execute(
-    sql`SELECT pg_try_advisory_lock(${lockId}) as acquired`,
-  );
-
-  const acquired = lockResult.rows[0]?.acquired;
-
-  if (!acquired) {
-    logger.debug(
-      { lockId },
-      "Another backend instance holds this job's lock, skipping this tick",
-    );
-    return;
-  }
+  const client = await db.$client.connect();
+  // Handed to `release`: an error destroys the connection instead of returning
+  // it to the pool, ending its session and with it any lock it still holds.
+  // Set only when a lock query itself fails, leaving the session in a state we
+  // cannot vouch for; `fn` failing says nothing about the connection.
+  let broken: Error | undefined;
 
   try {
-    await fn();
+    let acquired: boolean | undefined;
+    try {
+      const lockResult = await client.query<{ acquired: boolean }>(
+        "SELECT pg_try_advisory_lock($1) as acquired",
+        [lockId],
+      );
+      acquired = lockResult.rows[0]?.acquired;
+    } catch (error) {
+      broken = toError(error);
+      throw error;
+    }
+
+    if (!acquired) {
+      logger.debug(
+        { lockId },
+        "Another backend instance holds this job's lock, skipping this tick",
+      );
+      return;
+    }
+
+    try {
+      await fn();
+    } finally {
+      try {
+        const unlockResult = await client.query<{ released: boolean }>(
+          "SELECT pg_advisory_unlock($1) as released",
+          [lockId],
+        );
+        if (!unlockResult.rows[0]?.released) {
+          logger.warn(
+            { lockId },
+            "Unlock found no job lock held by this connection",
+          );
+        }
+      } catch (error) {
+        broken = toError(error);
+        logger.error(
+          { error, lockId },
+          "Failed to release a job lock, discarding its connection",
+        );
+      }
+    }
   } finally {
-    // Always release lock, even if processing fails
-    await db.execute(sql`SELECT pg_advisory_unlock(${lockId})`);
+    client.release(broken);
   }
+}
+
+function toError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
 }
 
 /**
