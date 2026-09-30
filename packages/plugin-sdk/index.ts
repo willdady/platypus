@@ -407,6 +407,16 @@ export interface SandboxBackend {
     options: SandboxCallOptions,
   ): Promise<void>;
   destroy(ctx: SandboxContext): Promise<void>;
+  /**
+   * Release what this instance holds open between calls — a connection, a
+   * session — without touching the Sandbox itself. Core builds a backend per
+   * Chat turn and calls this once when the turn ends, so a turn never leaves a
+   * connection behind for the next one to pay for.
+   *
+   * Optional: a backend that holds nothing open leaves it out. MUST be
+   * idempotent, and safe to call when nothing was ever opened.
+   */
+  close?(): Promise<void>;
 }
 
 /**

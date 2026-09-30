@@ -22,6 +22,13 @@ type ExecConfig = {
    * armed (issue #921).
    */
   hangOpen?: boolean;
+  /**
+   * Close the channel without ever emitting `exit` — what a channel does when
+   * the connection under it drops mid-command.
+   */
+  noExit?: boolean;
+  /** Report the command as killed by this signal (ssh2's `SIG`-prefixed form). */
+  exitSignal?: string;
 };
 
 type MockState = {
@@ -51,6 +58,13 @@ type MockState = {
   // hostVerifier. When a verifier is present and rejects it, connect() emits an
   // "error" instead of "ready" (mirroring ssh2's handshake failure).
   presentedHostKey: Buffer | null;
+  // Delay (ms) before connect() emits "ready" — a slow handshake.
+  connectDelayMs: number;
+  // Delay (ms) before each SFTP read() calls back — a slow transfer.
+  sftpReadDelayMs: number;
+  // Every client the adapter constructed, oldest first, so a test can make the
+  // live connection emit what a real socket would (a late `error`, a `close`).
+  clients: import("node:events").EventEmitter[];
 };
 
 // The factory closure reads `mockState` lazily (at call time), by which point
@@ -175,6 +189,13 @@ vi.mock("ssh2", () => {
       const content = mockState.files.get(h.path) ?? Buffer.alloc(0);
       const slice = content.subarray(position, position + len);
       slice.copy(buf, off);
+      if (mockState.sftpReadDelayMs > 0) {
+        setTimeout(
+          () => cb(undefined, slice.length, buf),
+          mockState.sftpReadDelayMs,
+        );
+        return;
+      }
       cb(undefined, slice.length, buf);
     }
 
@@ -201,6 +222,11 @@ vi.mock("ssh2", () => {
   }
 
   class FakeClient extends EventEmitter {
+    constructor() {
+      super();
+      mockState.clients.push(this);
+    }
+
     connect(config: Record<string, unknown>): this {
       mockState.connectConfigs.push(config);
       // Listeners are registered by the adapter before connect() is called, so
@@ -220,6 +246,10 @@ vi.mock("ssh2", () => {
           this.emit("error", new Error("Handshake failed: host key rejected"));
           return this;
         }
+      }
+      if (mockState.connectDelayMs > 0) {
+        setTimeout(() => this.emit("ready"), mockState.connectDelayMs);
+        return this;
       }
       this.emit("ready");
       return this;
@@ -248,7 +278,8 @@ vi.mock("ssh2", () => {
         if (channel.closed) return;
         if (cfg.stdout) channel.emit("data", toBuf(cfg.stdout));
         if (cfg.stderr) channel.stderr.emit("data", toBuf(cfg.stderr));
-        channel.emit("exit", cfg.exitCode ?? 0);
+        if (cfg.exitSignal) channel.emit("exit", null, cfg.exitSignal);
+        else if (!cfg.noExit) channel.emit("exit", cfg.exitCode ?? 0);
         channel.closed = true;
         channel.emit("close");
       };
@@ -339,6 +370,9 @@ function resetMockState() {
     sftpOpens: 0,
     sftpShouldFail: null,
     presentedHostKey: null,
+    connectDelayMs: 0,
+    sftpReadDelayMs: 0,
+    clients: [],
   };
 }
 
@@ -766,6 +800,176 @@ describe("SshSandboxTransport — connection lifecycle", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("SshSandboxTransport — a connection that drops", () => {
+  // Issue #1126. Nothing listened for `error` once the connection was ready, so
+  // a reset socket or failed keepalive was an uncaught exception that took the
+  // backend process down — and the dead client stayed cached.
+  it("logs an error on the live connection instead of throwing, then reconnects", async () => {
+    queueExec({ exitCode: 0 });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
+
+    expect(() =>
+      mockState.clients[0].emit("error", new Error("read ECONNRESET")),
+    ).not.toThrow();
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ host: "ssh.example.com" }),
+      expect.stringContaining("connection error"),
+    );
+
+    queueExec({ exitCode: 0 });
+    await backend.shellExec(ctx, { command: "again" }, callOptions);
+    expect(mockState.connectConfigs).toHaveLength(2);
+  });
+
+  it("reconnects on the next call after the host closes the connection", async () => {
+    queueExec({ exitCode: 0 });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
+
+    mockState.clients[0].emit("close");
+
+    queueExec({ exitCode: 0 });
+    await backend.shellExec(ctx, { command: "again" }, callOptions);
+    expect(mockState.connectConfigs).toHaveLength(2);
+  });
+
+  it("reports a command whose channel closes without an exit status as failed", async () => {
+    queueExec({ stdout: "partial", noExit: true });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    const res = await backend.shellExec(ctx, { command: "make" }, callOptions);
+    expect(res.stdout).toBe("partial");
+    expect(res.exitCode).toBe(255);
+  });
+
+  it("reports a signal-killed command as the shell would (128 + signal)", async () => {
+    queueExec({ exitSignal: "SIGKILL" });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    const res = await backend.shellExec(ctx, { command: "hog" }, callOptions);
+    expect(res.exitCode).toBe(137);
+  });
+});
+
+describe("SshSandboxTransport — the idle reaper waits for work in flight", () => {
+  it("does not close the connection under a command that outlasts the idle timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      queueExec({ closeDelayMs: 90_000, stdout: "built", exitCode: 0 });
+      const backend = createSshSandboxBackend(
+        CONFIG,
+        CREDENTIALS,
+        withPluginLogger(),
+      );
+      const running = backend.shellExec(
+        ctx,
+        { command: "make", timeoutMs: 120_000 },
+        callOptions,
+      );
+
+      await vi.advanceTimersByTimeAsync(89_000);
+      expect(mockState.ended).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      const res = await running;
+      expect(res.stdout).toBe("built");
+      expect(res.exitCode).toBe(0);
+
+      // Idle again once it finishes, so the reaper resumes.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(mockState.ended).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not close the connection under an SFTP transfer that outlasts the idle timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      mockState.files.set(
+        "/home/platypus/platypus-workspace/big.txt",
+        Buffer.from("contents"),
+      );
+      mockState.sftpReadDelayMs = 90_000;
+      const backend = createSshSandboxBackend(
+        CONFIG,
+        CREDENTIALS,
+        withPluginLogger(),
+      );
+      const reading = backend.fsRead(ctx, { path: "big.txt" }, callOptions);
+
+      await vi.advanceTimersByTimeAsync(89_000);
+      expect(mockState.ended).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(reading).resolves.toMatchObject({ content: "contents" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("SshSandboxTransport — close() at turn end", () => {
+  it("disconnects the turn's connection", async () => {
+    queueExec({ exitCode: 0 });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
+
+    await backend.close?.();
+
+    expect(mockState.ended).toBe(1);
+  });
+
+  // A turn cancelled mid-handshake ends before the connect does. The late
+  // connection must not be cached and kept up after the turn that opened it.
+  it("disconnects a connection that finishes opening after the turn ended", async () => {
+    mockState.connectDelayMs = 20;
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    const pending = backend
+      .shellExec(ctx, { command: "true" }, callOptions)
+      .catch((err: unknown) => err);
+    await vi.waitFor(() => expect(mockState.connectConfigs).toHaveLength(1));
+
+    await backend.close?.();
+
+    expect(await pending).toBeInstanceOf(Error);
+    expect(mockState.ended).toBe(1);
+  });
+
+  it("is safe to call when never connected", async () => {
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await expect(backend.close?.()).resolves.toBeUndefined();
+    expect(mockState.ended).toBe(0);
   });
 });
 

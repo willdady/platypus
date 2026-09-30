@@ -5,6 +5,7 @@ import {
   type OpenMode,
   type SFTPWrapper,
 } from "ssh2";
+import { constants as osConstants } from "node:os";
 import { z } from "zod";
 import type {
   PluginConfigContext,
@@ -46,9 +47,17 @@ const DEFAULT_SSH_PORT = 22;
 const DEFAULT_ROOT_DIR_NAME = "platypus-workspace";
 
 // Self-managed connection lifecycle (ADR-0012): a single connection is reused
-// across all tool calls within a Chat turn and closed by this idle reaper after
-// inactivity. The timer is `unref()`'d so it never keeps the process alive.
+// across all tool calls within a Chat turn, closed by core at turn end through
+// `close()`, and by this idle reaper after inactivity as a backstop. Inactivity
+// means nothing in flight — the reaper never fires under a running command or
+// SFTP transfer. The timer is `unref()`'d so it never keeps the process alive.
 const IDLE_TIMEOUT_MS = 60_000;
+
+// Reported for a command whose channel closed without an exit status — the
+// connection under it dropped, so the command's outcome is unknown. 255 is what
+// OpenSSH's own client exits with when the connection fails, and anything but 0
+// keeps a cut-off build from reading as a success.
+const LOST_EXIT_CODE = 255;
 
 // Per-Workspace Sandbox config/credentials (ADR-0001/0006). These remain
 // per-Workspace settings — ADR-0013's deploy-time *plugin* config does not apply
@@ -206,6 +215,25 @@ async function sftpReadCapped(
   return buf.subarray(0, total);
 }
 
+// Disconnect best-effort — the connection may already be gone.
+function endQuietly(client: Client): void {
+  try {
+    client.end();
+  } catch {
+    // ignore
+  }
+}
+
+// The exit code a shell reports for a command killed by `signalName` (ssh2
+// passes it `SIG`-prefixed, e.g. `SIGKILL`): 128 + the signal number, or
+// LOST_EXIT_CODE for a signal this platform does not know.
+function signalExitCode(signalName: string | undefined): number {
+  const num = signalName
+    ? (osConstants.signals as Record<string, number | undefined>)[signalName]
+    : undefined;
+  return num === undefined ? LOST_EXIT_CODE : 128 + num;
+}
+
 // Parse an operator-supplied host-key pin to the raw public-key blob bytes that
 // ssh2's `hostVerifier` presents (with no `hostHash` set, it receives the raw
 // key Buffer). Accepts three shapes: a full `ssh-keyscan` / known_hosts line
@@ -254,6 +282,12 @@ class SshSandboxTransport implements SandboxTransport {
   private connection: Connection | null;
   private inflight: Promise<Connection> | null;
   private idleTimer: NodeJS.Timeout | null;
+  // Count of exec channels and SFTP operations currently running on the
+  // connection. The idle reaper stays disarmed while this is above zero.
+  private activeOps: number;
+  // Bumped by every close, so a connect that was already under way when the
+  // turn ended knows not to cache what it opened.
+  private generation: number;
   /**
    * The logger core bound to `@platypus/ssh` and injected on the plugin's
    * deploy-time block (ADR-0013) — see the Docker transport for why an in-tree
@@ -273,24 +307,32 @@ class SshSandboxTransport implements SandboxTransport {
     this.connection = null;
     this.inflight = null;
     this.idleTimer = null;
+    this.activeOps = 0;
+    this.generation = 0;
     this.logger = logger;
   }
 
   // Lazy-connect on first use; reuse the single connection across all tool calls
   // in the turn. Concurrent callers before the connection is ready share the one
-  // in-flight promise. Every call refreshes the idle reaper.
+  // in-flight promise. Only reached through withConnection, which owns the idle
+  // reaper.
   private ensureConnection(): Promise<Connection> {
-    if (this.connection) {
-      this.touchIdleTimer();
-      return Promise.resolve(this.connection);
-    }
+    if (this.connection) return Promise.resolve(this.connection);
     if (this.inflight) return this.inflight;
 
+    const generation = this.generation;
     const p = this.connect()
       .then((conn) => {
-        this.connection = conn;
         this.inflight = null;
-        this.touchIdleTimer();
+        // Closed while the handshake was under way: the turn that wanted this
+        // connection is over, so it goes rather than outliving the turn.
+        if (generation !== this.generation) {
+          endQuietly(conn.client);
+          throw new Error(
+            "SSH sandbox: the connection was closed while it was being opened",
+          );
+        }
+        this.connection = conn;
         return conn;
       })
       .catch((err) => {
@@ -360,6 +402,18 @@ class SshSandboxTransport implements SandboxTransport {
       };
       const onReady = () => {
         client.removeListener("error", onError);
+        // From here on nothing awaits the client, so these listeners are all
+        // that stands between a reset socket and an uncaught `error` that exits
+        // the process. A dead client is dropped so the next call reconnects.
+        client.on("error", (err: Error) => {
+          this.logger.warn(
+            { host, port: port ?? DEFAULT_SSH_PORT, err },
+            "SSH sandbox connection error; dropping the connection",
+          );
+          this.dropConnection(client);
+        });
+        client.on("close", () => this.dropConnection(client));
+        client.on("end", () => this.dropConnection(client));
         resolve();
       };
       client.once("ready", onReady);
@@ -385,11 +439,7 @@ class SshSandboxTransport implements SandboxTransport {
     );
     if (res.exitCode !== 0) {
       const detail = res.stderr.toString("utf8").trim() || "unknown error";
-      try {
-        client.end();
-      } catch {
-        // ignore
-      }
+      endQuietly(client);
       throw new Error(
         `SSH sandbox: failed to create workspace root on ${host}: ${detail}`,
       );
@@ -400,30 +450,61 @@ class SshSandboxTransport implements SandboxTransport {
   }
 
   // (Re)arm the idle reaper. Closes the connection after IDLE_TIMEOUT_MS of
-  // inactivity. `unref()` so a pending timer never keeps the process alive.
+  // inactivity; left disarmed while anything is in flight, and re-armed when the
+  // last of it finishes. `unref()` so a pending timer never keeps the process
+  // alive.
   private touchIdleTimer(): void {
-    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.clearIdleTimer();
+    if (this.activeOps > 0 || !this.connection) return;
     this.idleTimer = setTimeout(() => {
       this.closeConnection();
     }, IDLE_TIMEOUT_MS);
     this.idleTimer.unref?.();
   }
 
-  // Close the connection (if any) and cancel the idle reaper. Idempotent.
-  private closeConnection(): void {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer);
-      this.idleTimer = null;
+  // Run `fn` on the connection as one unit of in-flight work: the idle reaper
+  // cannot fire until it settles. The count is taken before connecting, so a
+  // slow connect is covered too. `signal` only stops *this* call waiting on the
+  // connect — the connection is shared, so it is not torn down under whoever
+  // else is using it.
+  private async withConnection<T>(
+    fn: (conn: Connection) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    this.activeOps += 1;
+    this.clearIdleTimer();
+    try {
+      const conn = signal
+        ? await raceCancellation(signal, () => this.ensureConnection())
+        : await this.ensureConnection();
+      return await fn(conn);
+    } finally {
+      this.activeOps -= 1;
+      this.touchIdleTimer();
     }
+  }
+
+  // Forget `client` if it is still the cached connection — it closed, ended or
+  // errored under us. A later call reconnects. Leaves a newer connection alone.
+  private dropConnection(client: Client): void {
+    if (this.connection?.client !== client) return;
+    this.connection = null;
+    this.clearIdleTimer();
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  // Close the connection (if any) and cancel the idle reaper. Idempotent.
+  // A connect still under way is ended when it lands (see ensureConnection).
+  private closeConnection(): void {
+    this.generation += 1;
+    this.clearIdleTimer();
     const conn = this.connection;
     this.connection = null;
-    if (conn) {
-      try {
-        conn.client.end();
-      } catch {
-        // best-effort — the connection may already be gone
-      }
-    }
+    if (conn) endQuietly(conn.client);
   }
 
   // Run a single command over `exec`, capping each stream independently and
@@ -493,7 +574,9 @@ class SshSandboxTransport implements SandboxTransport {
 
         const stdoutSink = createCappedSink(stdoutCap);
         const stderrSink = createCappedSink(stderrCap);
-        let exitCode = 0;
+        // Null until the channel reports how the command ended. A channel that
+        // closes with it still null lost its connection mid-command.
+        let exitCode: number | null = null;
         let timedOut = false;
 
         const timer = setTimeout(() => {
@@ -509,9 +592,11 @@ class SshSandboxTransport implements SandboxTransport {
         channel.on("data", (chunk: Buffer) => stdoutSink.push(chunk));
         channel.stderr.on("data", (chunk: Buffer) => stderrSink.push(chunk));
         // The exit code arrives on `exit`; `close` fires afterwards and is when
-        // we settle. A signal-killed process reports a null code.
-        channel.on("exit", (code: number | null) => {
-          if (typeof code === "number") exitCode = code;
+        // we settle. A signal-killed process reports a null code and the signal
+        // name, reported as the shell would (128 + signal number).
+        channel.on("exit", (code: number | null, signalName?: string) => {
+          exitCode =
+            typeof code === "number" ? code : signalExitCode(signalName);
         });
         channel.on("close", () => {
           clearTimeout(timer);
@@ -521,7 +606,7 @@ class SshSandboxTransport implements SandboxTransport {
               : resolve({
                   stdout: stdoutSink.collect(),
                   stderr: stderrSink.collect(),
-                  exitCode: timedOut ? 124 : exitCode,
+                  exitCode: timedOut ? 124 : (exitCode ?? LOST_EXIT_CODE),
                   durationMs: Date.now() - started,
                 }),
           );
@@ -537,9 +622,8 @@ class SshSandboxTransport implements SandboxTransport {
   // The workspace root, resolved once per connection against the host's `$HOME`
   // and created if missing. Also the lazy-connect hook: core calls this first in
   // every tool, so the connection opens on first use and is reused for the turn.
-  async rootDir(_ctx: SandboxContext): Promise<string> {
-    const conn = await this.ensureConnection();
-    return conn.rootDir;
+  rootDir(_ctx: SandboxContext): Promise<string> {
+    return this.withConnection((conn) => Promise.resolve(conn.rootDir));
   }
 
   // A login shell always sits between us and the process, so every argv element
@@ -552,28 +636,26 @@ class SshSandboxTransport implements SandboxTransport {
     argv: string[],
     opts: SandboxExecOptions,
   ): Promise<SandboxExecResult> {
-    // Connecting is unbounded — a TCP dial, a handshake, the root-resolving
-    // exec — and it runs before any per-command timer exists. An abort stops
-    // *this* call waiting on it; the connection is shared, so it is not torn
-    // down under whoever else is using it.
-    const conn = await raceCancellation(opts.signal, () =>
-      this.ensureConnection(),
-    );
     const cdPrefix = opts.cwd ? `cd ${shQuote(opts.cwd)} && ` : "";
     const command = `${cdPrefix}${buildEnvPrefix(opts.env)}${argv
       .map(shQuote)
       .join(" ")}`;
 
-    const res = await this.runExec(
-      conn.client,
-      command,
-      opts.timeoutMs,
-      opts.stdoutCap,
-      opts.stderrCap,
+    // Connecting is unbounded — a TCP dial, a handshake, the root-resolving
+    // exec — and it runs before any per-command timer exists, so the abort
+    // signal is raced against it as well as honoured by the channel.
+    return this.withConnection(
+      (conn) =>
+        this.runExec(
+          conn.client,
+          command,
+          opts.timeoutMs,
+          opts.stdoutCap,
+          opts.stderrCap,
+          opts.signal,
+        ),
       opts.signal,
     );
-    this.touchIdleTimer();
-    return res;
   }
 
   // Read over SFTP: literal paths, no shell, no injection surface. The file is
@@ -585,17 +667,17 @@ class SshSandboxTransport implements SandboxTransport {
     absPath: string,
     cap: number,
   ): Promise<Buffer> {
-    const conn = await this.ensureConnection();
-    const sftp = await this.getSftp(conn);
+    return this.withConnection(async (conn) => {
+      const sftp = await this.getSftp(conn);
 
-    const handle = await sftpOpen(sftp, absPath, "r");
-    try {
-      const size = await sftpFstatSize(sftp, handle);
-      return await sftpReadCapped(sftp, handle, Math.min(size, cap));
-    } finally {
-      await sftpClose(sftp, handle);
-      this.touchIdleTimer();
-    }
+      const handle = await sftpOpen(sftp, absPath, "r");
+      try {
+        const size = await sftpFstatSize(sftp, handle);
+        return await sftpReadCapped(sftp, handle, Math.min(size, cap));
+      } finally {
+        await sftpClose(sftp, handle);
+      }
+    });
   }
 
   // Write over SFTP. `wx` fails atomically when the path is taken — a native
@@ -606,29 +688,29 @@ class SshSandboxTransport implements SandboxTransport {
     bytes: Buffer,
     mode: "create" | "overwrite",
   ): Promise<void> {
-    const conn = await this.ensureConnection();
-    const sftp = await this.getSftp(conn);
+    return this.withConnection(async (conn) => {
+      const sftp = await this.getSftp(conn);
 
-    await this.ensureParentDirs(sftp, conn.rootDir, absPath);
+      await this.ensureParentDirs(sftp, conn.rootDir, absPath);
 
-    let handle: Buffer;
-    try {
-      handle = await sftpOpen(sftp, absPath, mode === "create" ? "wx" : "w");
-    } catch (cause) {
-      // `wx` fails for more than just a collision (permissions, a missing
-      // parent), so confirm which it was rather than reporting them alike.
-      if (mode === "create" && (await sftpStatExists(sftp, absPath))) {
-        throw new SandboxPathExistsError(absPath, { cause });
+      let handle: Buffer;
+      try {
+        handle = await sftpOpen(sftp, absPath, mode === "create" ? "wx" : "w");
+      } catch (cause) {
+        // `wx` fails for more than just a collision (permissions, a missing
+        // parent), so confirm which it was rather than reporting them alike.
+        if (mode === "create" && (await sftpStatExists(sftp, absPath))) {
+          throw new SandboxPathExistsError(absPath, { cause });
+        }
+        throw cause;
       }
-      throw cause;
-    }
 
-    try {
-      await sftpWriteAll(sftp, handle, bytes);
-    } finally {
-      await sftpClose(sftp, handle);
-      this.touchIdleTimer();
-    }
+      try {
+        await sftpWriteAll(sftp, handle, bytes);
+      } finally {
+        await sftpClose(sftp, handle);
+      }
+    });
   }
 
   // Open the SFTP subsystem lazily and reuse it for the rest of the turn. It
@@ -680,6 +762,13 @@ class SshSandboxTransport implements SandboxTransport {
   // Platypus-owned, so we never mutate its filesystem. Just tear down our
   // connection so no socket or idle timer leaks.
   destroy(_ctx: SandboxContext): Promise<void> {
+    return this.close();
+  }
+
+  // Core calls this when the Chat turn ends, so a turn's connection closes with
+  // the turn instead of lingering until the idle reaper (and a busy host's
+  // MaxSessions/MaxStartups) catches up with it.
+  close(): Promise<void> {
     this.closeConnection();
     return Promise.resolve();
   }

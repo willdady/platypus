@@ -470,7 +470,7 @@ registerToolSet(
       category: "Sandbox",
       description:
         "Shell and filesystem access inside the workspace's configured sandbox",
-      tools: async ({ workspaceId, orgId, userId }) => {
+      tools: async ({ workspaceId, orgId, userId, registerCloser }) => {
         const rows = await db
           .select()
           .from(sandboxTable)
@@ -531,6 +531,10 @@ registerToolSet(
           configResult.data,
           credentialsResult.data,
         );
+        // Built per turn, so it closes with the turn: an adapter holding a
+        // connection open (SSH) must not leave one behind on the host for every
+        // turn that touched the Sandbox.
+        if (backend.close) registerCloser(() => backend.close?.());
         // Two-tier env (ADR-0004 amendment, ADR-0006): adminEnv wins over userEnv.
         // The combined map is then merged over the model-provided input.env inside
         // createSandboxTools (workspace wins), giving the full precedence order

@@ -217,4 +217,11 @@ export interface SandboxTransport {
    * nothing else.
    */
   destroy(ctx: SandboxContext): Promise<void>;
+
+  /**
+   * Drop whatever this transport holds open between calls — the backend's
+   * `close()`, which core calls when the Chat turn ends. Optional: a transport
+   * that holds nothing open leaves it out.
+   */
+  close?(): Promise<void>;
 }

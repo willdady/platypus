@@ -241,6 +241,22 @@ mismatch aborts the connection with a clear error.
   network.**
 </Callout>
 
+### Connections to the host
+
+Each Chat turn that uses the Sandbox opens **one** SSH connection, runs every
+tool call in that turn over it, and closes it when the turn ends. Concurrent
+Chats and Sub-Agents each hold their own connection while their turn runs. If
+many turns start at once, raise sshd's `MaxStartups` so their handshakes are not
+refused.
+
+A command runs until it finishes or hits its own timeout, up to 600 seconds. An
+idle connection is closed after 60 seconds, but never while a command or file
+transfer is still running on it.
+
+If the connection drops mid-command — sshd restarts, the network resets — the
+command's outcome is unknown, and the tool reports **exit code 255** with
+whatever output arrived before the drop. The next tool call reconnects.
+
 ### Security posture
 
 The SSH adapter, like Docker, is scoped to hosts and network paths you trust; it

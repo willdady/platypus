@@ -19,8 +19,9 @@ a third is one of the better-scoped things you can build against Platypus.
 
 Your adapter implements `SandboxBackend` from
 [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk):
-five tools plus a teardown, and two optional members for
-[moving whole files](#moving-whole-files). You **cannot** add, rename or re-sign a
+five tools plus a teardown, two optional members for
+[moving whole files](#moving-whole-files), and an optional `close` for what
+your adapter holds open during a turn. You **cannot** add, rename or re-sign a
 tool. Read the exact signatures off the package you have installed — this page
 states the rules those types don't encode.
 
@@ -71,6 +72,13 @@ things exposes the extra through a
 - **State persists across Chat turns**, keyed on the Organization and Workspace.
   That persistence is the whole value — long-running build-and-test workflows
   depend on it.
+- **Implement the optional `close` if your adapter holds anything open.**
+  Platypus calls it once when the Chat turn that built the adapter ends, on a
+  normal finish and on cancel alike. Drop your connection or session there and
+  leave the environment alone — that is `destroy`'s job. It must be idempotent
+  and safe to call when nothing was ever opened. Leave it out and whatever you
+  cached lives until your own cleanup reaps it; one per turn adds up fast on a
+  host with connection limits.
 
 <Callout type="warning">
   **Tool calls are not serialised.** Platypus forwards them concurrently — there

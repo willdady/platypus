@@ -599,6 +599,27 @@ describe("the sandbox tool set", () => {
     );
   });
 
+  // Issue #1126. The adapter is built per turn, so whatever it holds open — an
+  // SSH connection — goes with the turn rather than piling up on the host.
+  it("closes the turn's adapter when the turn ends", async () => {
+    seedDb({ sandbox: [sandboxRow()] });
+    const close = vi.fn(() => Promise.resolve());
+    create.mockReturnValueOnce({
+      shellExec,
+      close,
+    } as unknown as SandboxBackend);
+    const closers: (() => Promise<void> | void)[] = [];
+
+    await getToolSet(SANDBOX_TOOLSET_ID)!.buildTurnTools({
+      ...turn,
+      registerCloser: (fn) => closers.push(fn),
+    });
+    expect(close).not.toHaveBeenCalled();
+
+    for (const fn of closers) await fn();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it("serves nothing when this workspace has no sandbox, even if another does", async () => {
     seedDb({ sandbox: [sandboxRow({ workspaceId: "ws-2" })] });
 

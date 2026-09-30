@@ -441,4 +441,8 @@ export const createPosixSandbox = (
   destroy(ctx: SandboxContext): Promise<void> {
     return transport.destroy(ctx);
   },
+
+  close(): Promise<void> {
+    return transport.close?.() ?? Promise.resolve();
+  },
 });
