@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../../test-utils.ts";
 import { TriggerSink } from "./trigger-sink.ts";
 import { RunEventRecorder } from "../run-events.ts";
+import { mockLogger } from "../../test-setup.ts";
 import {
   triggerRun as triggerRunTable,
   triggerRunEvent as triggerRunEventTable,
@@ -594,6 +595,44 @@ describe("TriggerSink run events", () => {
 
     const row = updates().find((u) => u.table === triggerRunTable);
     expect(row?.set).toEqual({ eventsTruncated: true });
+  });
+
+  // #1124: the batch was drained before the write, so a transient DB error on a
+  // periodic flush dropped those events for good.
+  it("keeps a batch whose insert failed and writes every event exactly once by the final flush", async () => {
+    const failure = new Error("connection reset");
+    const written: string[] = [];
+    let failNextEventInsert = true;
+    mockDb.values.mockImplementation((rows: unknown) => {
+      if (Array.isArray(rows)) {
+        if (failNextEventInsert) {
+          failNextEventInsert = false;
+          throw failure;
+        }
+        for (const row of rows as Array<{ id: string }>) written.push(row.id);
+      }
+      return mockDb;
+    });
+    const { sink, events } = await startWithEvents();
+
+    const a = events.open(null, { type: "tool-call", toolName: "search" });
+    const b = events.open(null, { type: "text" });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(written).toEqual([]);
+
+    const c = events.open(null, { type: "text" });
+    await sink.onFinish({
+      runId: "run-1",
+      status: "succeeded",
+      messages: [],
+      stats: {},
+    });
+
+    expect([...written].sort()).toEqual([a, b, c].sort());
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: failure }),
+      expect.any(String),
+    );
   });
 
   it("marks the run when its timeline hit the event ceiling", async () => {

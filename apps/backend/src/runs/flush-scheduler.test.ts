@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { FlushScheduler } from "./flush-scheduler.ts";
+import { mockLogger } from "../test-setup.ts";
 
 describe("FlushScheduler", () => {
   beforeEach(() => {
@@ -132,5 +133,21 @@ describe("FlushScheduler", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  // #1124: callers don't await a scheduled flush, so a failure nobody logs
+  // leaves no trace at all.
+  it("logs the error a scheduled flush throws", async () => {
+    const error = new Error("db down");
+    const fn = vi.fn().mockRejectedValue(error);
+    const sched = new FlushScheduler(fn, 100);
+
+    sched.bump();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error }),
+      expect.any(String),
+    );
   });
 });

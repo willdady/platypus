@@ -1,3 +1,5 @@
+import { logger } from "../logger.ts";
+
 /** How often a Run's partial state is persisted when nobody overrides it. */
 export const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
 
@@ -67,9 +69,11 @@ export class FlushScheduler {
     this.inFlight = this.inFlight.then(async () => {
       try {
         await this.flushFn();
-      } catch {
-        // Swallowed: callers don't await scheduled bumps. Errors should be
-        // logged inside flushFn itself.
+      } catch (error) {
+        // Not rethrown: callers don't await scheduled bumps, so a rejection
+        // here would be unhandled. Logged instead, so a failed periodic flush
+        // still leaves a trace (#1124).
+        logger.error({ error }, "Scheduled run flush failed");
       }
     });
   }

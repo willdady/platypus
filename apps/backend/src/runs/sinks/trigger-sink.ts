@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../../index.ts";
 import {
   triggerRun as triggerRunTable,
@@ -220,37 +220,67 @@ export class TriggerSink implements RunSink {
    * are appends or single-row updates — never a rewrite of the timeline — which
    * is what lets parallel Sub-Agents record into one run without losing each
    * other's rows.
+   *
+   * A write that throws hands what it did not write back to the recorder, so
+   * the next flush retries it rather than the batch being lost (#1124). An
+   * insert whose first attempt committed before the error surfaced is retried
+   * as an upsert of the event's current state, so the row is neither
+   * duplicated nor left stale.
    */
   private async flushEvents(): Promise<void> {
-    if (!this.events) return;
-    const { inserts, updates } = this.events.drain();
-    if (inserts.length > 0) {
-      await db.insert(triggerRunEventTable).values(
-        inserts.map((event) => ({
-          id: event.id,
-          runId: event.runId,
-          parentEventId: event.parentEventId,
-          seq: event.seq,
-          type: event.type,
-          toolName: event.toolName ?? null,
-          startedAt: event.startedAt,
-          durationMs: event.durationMs ?? null,
-          status: event.status,
-          error: event.error ?? null,
-          childrenTruncated: event.childrenTruncated ?? false,
-        })),
-      );
-    }
-    for (const patch of updates) {
-      await db
-        .update(triggerRunEventTable)
-        .set({
-          status: patch.status,
-          durationMs: patch.durationMs ?? null,
-          error: patch.error ?? null,
-          childrenTruncated: patch.childrenTruncated ?? false,
-        })
-        .where(eq(triggerRunEventTable.id, patch.id));
+    const events = this.events;
+    if (!events) return;
+    const { inserts, updates } = events.drain();
+    let insertsDone = inserts.length === 0;
+    let patched = 0;
+    try {
+      if (!insertsDone) {
+        await db
+          .insert(triggerRunEventTable)
+          .values(
+            inserts.map((event) => ({
+              id: event.id,
+              runId: event.runId,
+              parentEventId: event.parentEventId,
+              seq: event.seq,
+              type: event.type,
+              toolName: event.toolName ?? null,
+              startedAt: event.startedAt,
+              durationMs: event.durationMs ?? null,
+              status: event.status,
+              error: event.error ?? null,
+              childrenTruncated: event.childrenTruncated ?? false,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: triggerRunEventTable.id,
+            set: {
+              status: sql`excluded.status`,
+              durationMs: sql`excluded.duration_ms`,
+              error: sql`excluded.error`,
+              childrenTruncated: sql`excluded.children_truncated`,
+            },
+          });
+        insertsDone = true;
+      }
+      for (const patch of updates) {
+        await db
+          .update(triggerRunEventTable)
+          .set({
+            status: patch.status,
+            durationMs: patch.durationMs ?? null,
+            error: patch.error ?? null,
+            childrenTruncated: patch.childrenTruncated ?? false,
+          })
+          .where(eq(triggerRunEventTable.id, patch.id));
+        patched++;
+      }
+    } catch (error) {
+      events.requeue({
+        inserts: insertsDone ? [] : inserts,
+        updates: updates.slice(patched),
+      });
+      throw error;
     }
   }
 }

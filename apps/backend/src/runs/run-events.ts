@@ -57,6 +57,9 @@ export type RunEventPatch = Pick<
   "id" | "status" | "durationMs" | "error" | "childrenTruncated"
 >;
 
+/** What one flush writes: events never written, and patches for those that were. */
+export type RunEventBatch = { inserts: RunEvent[]; updates: RunEventPatch[] };
+
 type OpenSpec = { type: RunEventType; toolName?: string };
 type CloseSpec = { status: Exclude<RunEventStatus, "running">; error?: string };
 
@@ -235,7 +238,7 @@ export class RunEventRecorder {
    * flush window is never inserted running and then patched) and the patches
    * for events that were.
    */
-  drain(): { inserts: RunEvent[]; updates: RunEventPatch[] } {
+  drain(): RunEventBatch {
     const inserts: RunEvent[] = [];
     for (const id of this.pendingInsert) {
       const recorded = this.byId.get(id);
@@ -254,6 +257,21 @@ export class RunEventRecorder {
     this.pendingInsert = new Set();
     this.pendingUpdate = new Set();
     return { inserts, updates };
+  }
+
+  /**
+   * Hands back the part of a {@link drain} a flush failed to write, so the
+   * next drain carries it again (#1124). Ids are what is requeued, not the
+   * drained copies: the next drain reads each event's state as it is then, so
+   * a change recorded since the failed flush is not lost to a stale snapshot.
+   */
+  requeue(batch: RunEventBatch): void {
+    for (const { id } of batch.inserts) {
+      this.pendingInsert.add(id);
+      // The insert carries the event's current state, so a patch is moot.
+      this.pendingUpdate.delete(id);
+    }
+    for (const { id } of batch.updates) this.markChanged(id);
   }
 
   private settle(recorded: Recorded, spec: CloseSpec): void {
