@@ -1987,6 +1987,44 @@ describe("chat-execution", () => {
       expect(getMcp).not.toHaveBeenCalled();
     });
 
+    // Issue #1135: a factory that never settles is abandoned when the run is
+    // cancelled, rather than holding the turn's preparation open.
+    it("stops waiting on a Tool set factory that never settles once the run is aborted", async () => {
+      const toolSetId = "test.never-settling-factory";
+      registerToolSet(
+        toolSetId,
+        composeToolSet({
+          id: toolSetId,
+          pluginName: "test-plugin",
+          isCore: true,
+          contribution: {
+            name: "Hung test Tool set",
+            category: "Test",
+            tools: () => new Promise<never>(() => {}),
+          },
+          plugin: makePluginContext(),
+        }),
+      );
+      const agent = { ...baseAgent, toolSetIds: [toolSetId] };
+      const run = new AbortController();
+      run.abort(new Error("cancelled"));
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: agent.id },
+          signal: run.signal,
+        },
+        createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          agents: [agent],
+          providers: [baseProvider],
+        }),
+      );
+
+      expect(Object.keys(turn.stream.tools ?? {})).not.toContain(toolSetId);
+    });
+
     // Issue #1059: the Memory Tool set leaves memorySearch out when the
     // Workspace has no embedding Provider. The prompt reads the turn's tool
     // map, so it names memorySearch only on a turn that offers it.

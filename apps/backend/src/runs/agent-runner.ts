@@ -149,6 +149,7 @@ export class AgentRunner {
     frontendUrl: string | undefined,
     timeouts: RunTimeouts | undefined,
     onActivity: (event: ToolActivityEvent) => void,
+    signal: AbortSignal,
   ): Promise<ChatTurn> {
     // The turn rides down whole; the runner adds only what it is the one to
     // know. `runId` is the run's own identity, not the turn's, so it is the
@@ -167,6 +168,9 @@ export class AgentRunner {
       // as children of this one, so they need to know whose child they are and
       // what bounds this run was started under.
       run: { runId, scope, timeouts },
+      // A cancelled run, or one its step timer has already killed, stops
+      // waiting on a Tool set or MCP server that has not answered (#1135).
+      signal,
     });
   }
 
@@ -290,6 +294,7 @@ export class AgentRunner {
           params.frontendUrl,
           params.timeouts,
           run.onActivity,
+          run.handle.signal,
         ),
     );
 

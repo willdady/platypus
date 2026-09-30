@@ -35,8 +35,8 @@ what a Workspace Owner sees on the Agent form. Your tool names show too, in Chat
   grant is stored by id, and a turn that can't resolve the id degrades to no
   tools rather than erroring — so the symptom is an Agent that quietly stopped
   being able to do its job. Treat a shipped `id` as permanent. The same goes for
-  your manifest `name`: the stored id is prefixed with it, so renaming the Plugin
-  orphans every grant of every set it contributes.
+  your manifest `name`: the stored id is prefixed with it, so renaming the
+  Plugin orphans every grant of every set it contributes.
 </Callout>
 
 ## Static map or factory
@@ -113,6 +113,14 @@ never the chat. Returning an empty map is still the better habit — the outcome
 is the same, and you get to say _why_ through the
 [logger](/extending/plugin-api-and-config#logging).
 
+A factory that hasn't returned after **20 seconds** is treated the same way: the
+turn stops waiting, serves none of that set's tools, and logs a warning that it
+timed out. It also stops waiting at once if the Chat is cancelled. Your factory
+is not told either happened and keeps running to the end, so a factory that
+waits on something unbounded — a network call with no timeout of its own —
+costs your set its tools on every slow turn. Give that call its own, shorter
+timeout and return an empty map when it fires.
+
 ## Releasing what a factory opened
 
 A factory runs once per turn. If it opens something with a lifetime — a
@@ -165,7 +173,7 @@ a User sees: Widgets create issue
 That happens on every turn, whether or not anything collides, so a tool's name
 never depends on the order an Agent's Tool sets happen to sit in. It is also what
 stops core taking one of your names: a turn assigns `web_search`, `read_url`,
-`delegate` and `loadSkill` onto its tool map *after* your Tool set, so a set
+`delegate` and `loadSkill` onto its tool map _after_ your Tool set, so a set
 contributing a bare `web_search` used to lose it on every turn where search was
 on, with nothing anywhere saying so.
 

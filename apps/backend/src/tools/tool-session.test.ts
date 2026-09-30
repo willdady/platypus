@@ -36,7 +36,11 @@ import {
   type ToolSessionScope,
 } from "./tool-session.ts";
 import { CLOSER_TIMEOUT_MS } from "./closers.ts";
-import { composeToolSet, registerToolSet } from "./index.ts";
+import {
+  composeToolSet,
+  registerToolSet,
+  TOOL_SET_RESOLVE_TIMEOUT_MS,
+} from "./index.ts";
 import { CORE_BUILTIN_OWNER } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
 import type { mcp as mcpTable } from "../db/schema.ts";
@@ -484,6 +488,119 @@ describe("openToolSession", () => {
       ).rejects.toThrow("database is down");
 
       expect(close).toHaveBeenCalled();
+    });
+  });
+
+  // A factory that never settles, or a server that takes the connection and
+  // never answers, used to hold the turn until the run's step timer killed it
+  // with a timeout that named neither (issue #1135).
+  describe("bounded resolution (issue #1135)", () => {
+    const never = <T>() => new Promise<T>(() => {});
+
+    it("skips a Tool set whose factory never settles, naming it, and serves the rest", async () => {
+      vi.useFakeTimers();
+      try {
+        register("set.hung-factory", () => never(), { pluginName: "acme" });
+        register("set.beside-hung", { fine: toolNamed("fine") });
+
+        const opening = openToolSession(
+          scope,
+          grantedAgent("set.hung-factory", "set.beside-hung"),
+          noMcps(),
+        );
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+        const session = await opening;
+
+        expect(Object.keys(session.tools)).toEqual(["fine"]);
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({
+            plugin: "acme",
+            toolSet: "set.hung-factory",
+          }),
+          expect.stringContaining("timed out"),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("skips an MCP that connects and never lists its tools, and closes it without waiting for dispose", async () => {
+      vi.useFakeTimers();
+      try {
+        const close = vi.fn().mockResolvedValue(undefined);
+        mockCreateMCPClient.mockResolvedValueOnce({
+          listTools: vi.fn(() => never()),
+          toolsFromDefinitions: vi.fn(),
+          close,
+        });
+
+        const opening = openToolSession(
+          scope,
+          grantedAgent("mcp-1"),
+          queriesFor([mcpRow()]),
+        );
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+        const session = await opening;
+
+        expect(session.tools).toEqual({});
+        expect(close).toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpId: "mcp-1" }),
+          expect.stringContaining("unreachable"),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("closes an MCP whose connection lands after its deadline has passed", async () => {
+      vi.useFakeTimers();
+      try {
+        const close = vi.fn().mockResolvedValue(undefined);
+        let land: () => void = () => {};
+        mockCreateMCPClient.mockReturnValueOnce(
+          new Promise((resolve) => {
+            land = () =>
+              resolve({
+                listTools: vi.fn(() => never()),
+                toolsFromDefinitions: vi.fn(),
+                close,
+              });
+          }),
+        );
+
+        const opening = openToolSession(
+          scope,
+          grantedAgent("mcp-1"),
+          queriesFor([mcpRow()]),
+        );
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+        await opening;
+        land();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(close).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("stops waiting the moment the run is aborted, well inside the deadline", async () => {
+      register("set.hung-until-abort", () => never());
+      register("set.beside-abort", { fine: toolNamed("fine") });
+      mockCreateMCPClient.mockReturnValueOnce(never());
+      const run = new AbortController();
+
+      const opening = openToolSession(
+        scope,
+        grantedAgent("set.hung-until-abort", "mcp-1", "set.beside-abort"),
+        queriesFor([mcpRow()]),
+        { signal: run.signal },
+      );
+      run.abort(new Error("cancelled"));
+      const session = await opening;
+
+      expect(Object.keys(session.tools)).toEqual(["fine"]);
     });
   });
 

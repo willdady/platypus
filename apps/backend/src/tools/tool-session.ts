@@ -11,10 +11,12 @@ import { logger } from "../logger.ts";
 import { CORE_BUILTIN_OWNER, getToolSetPlugin } from "../plugins/registry.ts";
 import { buildMcpTransportConfig } from "../services/mcp-oauth-provider.ts";
 import { normalizeToolResults } from "../services/tool-result.ts";
+import { withDeadline } from "../utils/abort-race.ts";
 import { runCloser, type Closer, type CoreCloserRegistrar } from "./closers.ts";
 import {
   getToolSet,
   reportToolNameCollisions,
+  TOOL_SET_RESOLVE_TIMEOUT_MS,
   type CoreToolSetContext,
   type ToolOwner,
   type ToolSetContext,
@@ -227,6 +229,17 @@ export type ToolSession = {
   dispose: () => Promise<void>;
 };
 
+/** What a session is opened under besides its scope. */
+export type ToolSessionOptions = {
+  /**
+   * The run's abort. Resolving an id stops waiting the moment it fires, on top
+   * of the {@link TOOL_SET_RESOLVE_TIMEOUT_MS} each id already resolves under
+   * (issue #1135). A nested session inherits it: a delegate resolves while the
+   * run that holds the parent session is still live.
+   */
+  signal?: AbortSignal;
+};
+
 /**
  * Resolve an Agent's assigned Tool sets into a turn's tools, opening whatever
  * connections that takes. A turn with no Agent (`undefined`) opens an empty
@@ -234,8 +247,9 @@ export type ToolSession = {
  *
  * Each assigned id is a registered Tool set or, failing that, an MCP server — the
  * two kinds an Agent's `toolSetIds` can name. Both fail soft: an id that resolves
- * to neither, a Tool set whose factory throws, an MCP server that is unreachable
- * — each costs its own tools and nothing else. A Chat turn is not the place to
+ * to neither, a Tool set whose factory throws or outruns
+ * {@link TOOL_SET_RESOLVE_TIMEOUT_MS}, an MCP server that is unreachable or
+ * never answers — each costs its own tools and nothing else. A Chat turn is not the place to
  * discover that a plugin is broken (ADR-0013: strict at boot, forgiving at
  * runtime), and a Shared org-scoped MCP has org-wide blast radius (ADR-0007).
  */
@@ -243,7 +257,9 @@ export const openToolSession = async (
   scope: ToolSessionScope,
   agent: ToolSessionAgent | undefined,
   queries: ToolSessionQueries,
+  options: ToolSessionOptions = {},
 ): Promise<ToolSession> => {
+  const { signal } = options;
   const tools: Record<string, Tool> = {};
   // Tool name -> where it came from. Read by the merge below to report the
   // names an arriving Tool set is about to take, and the reason this is a Map
@@ -341,7 +357,7 @@ export const openToolSession = async (
     if (registration) {
       return {
         kind: "tools",
-        tools: await registration.buildTurnTools(context),
+        tools: await registration.buildTurnTools(context, signal),
         owner: {
           toolSetId,
           // A Tool set belonging to no loaded plugin is a core registration, and
@@ -369,18 +385,26 @@ export const openToolSession = async (
       mcpId: mcp.id,
       scope: mcp.organizationId ? "org" : "ws",
     } as const;
-    const connect = async (): Promise<MCPClient> => {
+    const open = async (): Promise<{
+      client: MCPClient;
+      close: () => Promise<void>;
+    }> => {
       const client = await createMCPClient({
         transport: buildMcpTransportConfig(mcp),
       });
+      // Once only, so a connection closed early — abandoned by a fetch that
+      // failed on it — is not closed a second time by dispose.
+      let closing: Promise<void> | undefined;
+      const close = () => (closing ??= client.close());
       // Registered the moment the connection exists, and before anything else
       // can fail on it — a server that connects and then fails to list its
       // tools used to leave the socket open for the life of the process. It is
       // also why the slug check now belongs to the merge and not here: a
       // connection this session can close is worth more than one never opened.
-      registerCloser(() => client.close(), attribution);
-      return client;
+      registerCloser(close, attribution);
+      return { client, close };
     };
+    const connect = async (): Promise<MCPClient> => (await open()).client;
 
     // Written by a live fetch when the listing changed or its fetched-at is due
     // a refresh, so most unchanged turns cost no write — and never at the
@@ -411,14 +435,35 @@ export const openToolSession = async (
     // is in hand before it is discarded: `client.tools()` collapses both
     // steps and keeps only what it needs to resolve a display title, and the
     // hint is gone by the time it would return.
+    //
+    // Connect and list run under one deadline and the run's abort (issue
+    // #1135): a server that takes the connection and never answers is a failed
+    // fetch like any other, and falls back to the stored listing below rather
+    // than holding the turn until the step timer kills it.
     let definitions: ListToolsResult;
     let mcpTools: Record<string, Tool>;
+    let opening: ReturnType<typeof open> | undefined;
     try {
-      const client = await connect();
-      definitions = await client.listTools();
-      mcpTools = client.toolsFromDefinitions(definitions);
+      const live = await withDeadline(
+        async () => {
+          opening = open();
+          const { client } = await opening;
+          const listed = await client.listTools();
+          return { listed, tools: client.toolsFromDefinitions(listed) };
+        },
+        TOOL_SET_RESOLVE_TIMEOUT_MS,
+        signal,
+      );
+      definitions = live.listed;
+      mcpTools = live.tools;
       await rememberListing(definitions);
     } catch (error) {
+      // An abandoned connection is closed as soon as it exists — now, or when
+      // a connect that outran the deadline finally lands — rather than held
+      // open to the end of the turn: it served nothing, and a stale tool opens
+      // its own if the model calls one. A close that fails is dispose's to
+      // report: it gets the same promise, through `runCloser`.
+      void opening?.then(({ close }) => close()).catch(() => {});
       const listing = usableLastKnownListing(mcp);
       if (!listing) {
         logger.warn(
@@ -598,7 +643,7 @@ export const openToolSession = async (
   }
 
   const nest: ToolSession["nest"] = async (nestedAgent) => {
-    const child = await openToolSession(scope, nestedAgent, queries);
+    const child = await openToolSession(scope, nestedAgent, queries, options);
     // A delegate can be invoked while the turn is being torn down (an abort
     // cancels the parent run, and the delegate's generator is resumed to unwind
     // it), so a session opened after `dispose` has nothing left to attach to.

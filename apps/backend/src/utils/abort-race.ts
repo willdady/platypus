@@ -8,9 +8,9 @@
  * Contribution's cooperation, which is why core races rather than merely
  * signalling. The signal is the courtesy; the race is the guarantee.
  *
- * Shared between the Web-search backend's deadline wrapper and the Sandbox
- * tools because they want the identical thing and a second copy of it is a
- * second chance to get the listener release wrong (issue #921).
+ * Shared between the deadline wrapper below and the Sandbox tools because they
+ * want the identical thing and a second copy of it is a second chance to get
+ * the listener release wrong (issue #921).
  */
 
 /**
@@ -68,5 +68,62 @@ export const raceAbort = async <T>(
     return await Promise.race([Promise.resolve(work(signal)), abort.promise]);
   } finally {
     abort.release();
+  }
+};
+
+/** Raised by {@link withDeadline} when the work outruns its `timeoutMs`. */
+export class DeadlineExceededError extends Error {}
+
+/** Raised by {@link withDeadline} when the caller's own signal aborted first. */
+export class CallerAbortedError extends Error {}
+
+/**
+ * Run `work` under a deadline, and hand it the signal for that deadline.
+ *
+ * Two things at once, because they are one signal to whoever is called: the
+ * per-call `timeoutMs`, and the caller's own — a User cancelling the turn. Work
+ * that honours it stops for either reason; work that ignores it is still
+ * abandoned, because this is {@link raceAbort} underneath.
+ *
+ * Which signal aborted decides what the caller sees. The deadline is inspected
+ * first so that a call which had already outrun its budget is reported as a
+ * timeout even if the run was cancelled in the same instant — the deadline is
+ * the older of the two facts, and the one an Operator can act on.
+ *
+ * Shared by the Web-search backend's executors and factory and by a Tool
+ * session's Tool-set factories and MCP connections (issue #1135).
+ */
+export const withDeadline = async <T>(
+  work: (signal: AbortSignal) => Promise<T> | T,
+  timeoutMs: number,
+  caller?: AbortSignal,
+): Promise<T> => {
+  // A cleared timer rather than `AbortSignal.timeout`: the signal that helper
+  // returns cannot be released, so every *successful* call would leave a timer
+  // alive for the rest of its budget to abort a signal nobody is listening to.
+  // Tool calls are the hottest path a backend has.
+  const deadline = new AbortController();
+  const timer = setTimeout(
+    () =>
+      deadline.abort(
+        new DeadlineExceededError(`timed out after ${timeoutMs}ms`),
+      ),
+    timeoutMs,
+  );
+  const signal = caller
+    ? AbortSignal.any([deadline.signal, caller])
+    : deadline.signal;
+  try {
+    return await raceAbort(signal, work);
+  } catch (cause) {
+    if (deadline.signal.aborted) {
+      throw new DeadlineExceededError(`timed out after ${timeoutMs}ms`);
+    }
+    if (caller?.aborted) {
+      throw new CallerAbortedError("turn cancelled");
+    }
+    throw cause;
+  } finally {
+    clearTimeout(timer);
   }
 };

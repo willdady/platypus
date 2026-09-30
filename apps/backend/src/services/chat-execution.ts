@@ -189,6 +189,12 @@ export type PrepareChatTurnInput = TurnRequest & {
    * prepare a turn outside the run lifecycle (tests, the pre-persist file gate).
    */
   run?: ParentRunContext;
+  /**
+   * The run's abort. Resolving the Agent's Tool sets and MCP servers stops
+   * waiting the moment it fires (issue #1135). Absent for the same callers
+   * `run` is absent for.
+   */
+  signal?: AbortSignal;
 };
 
 // --- Queries seam ---
@@ -531,6 +537,7 @@ export const prepareChatTurn = async (
     runMode = "interactive",
     onActivity,
     run,
+    signal,
   } = input;
 
   const workspace = await queries.getWorkspace(workspaceId);
@@ -565,7 +572,7 @@ export const prepareChatTurn = async (
   // Started before the `Promise.all` rather than inside it because the delegates
   // built alongside it nest their own sessions into this one — they take the
   // promise, not the session, and await it only if they are ever invoked.
-  const sessionPromise = openToolSession(scope, agent, queries);
+  const sessionPromise = openToolSession(scope, agent, queries, { signal });
   // From here down this function OWNS the session: `dispose` is the only
   // handle on it and it reaches the caller only on the successful return
   // below, so a throw in between leaves the session — its MCP clients, and

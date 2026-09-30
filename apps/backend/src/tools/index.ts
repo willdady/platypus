@@ -27,6 +27,26 @@ import type {
   ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
 import { withAttributedRegistrar, type WithCoreRegistrar } from "./closers.ts";
+import {
+  CallerAbortedError,
+  DeadlineExceededError,
+  withDeadline,
+} from "../utils/abort-race.ts";
+
+/**
+ * How long one Tool set's factory, or one MCP server's connect-and-list, may
+ * take before a turn stops waiting for it and goes on without its tools (issue
+ * #1135).
+ *
+ * 20s: long enough for a cold remote MCP server to accept a connection, refresh
+ * an OAuth token and answer `tools/list`, and for a factory that reads the
+ * database or builds a Sandbox adapter on the way; short enough that a turn
+ * whose server has hung still reaches the model well inside the run's 2-minute
+ * step timer, rather than being killed by it with a timeout that names neither.
+ * Every id resolves concurrently, so this bounds the whole resolve phase, not
+ * each id in turn. Not configurable: nothing has asked for it.
+ */
+export const TOOL_SET_RESOLVE_TIMEOUT_MS = 20_000;
 
 /**
  * The context core builds for a Tool set factory: the published shape, but
@@ -82,6 +102,8 @@ export type ToolSetRegistration = {
    */
   buildTurnTools: (
     context: CoreToolSetContext,
+    /** The run's own abort, so a cancelled turn stops waiting on the factory. */
+    signal?: AbortSignal,
   ) => Promise<Record<string, Tool>>;
   /**
    * The contribution's tools when it declared them as a static map, for the
@@ -202,18 +224,14 @@ export interface ComposeToolSetOptions {
  * posture the Web-search point already takes, and the one the MCP branch of a
  * Tool session has always taken for an unreachable server.
  *
- * No timeout, unlike a Web-search backend's executors: `ToolSetContribution`
- * declares no per-call budget, and the factories in the field legitimately reach
- * the database and a Sandbox backend on the way to building their tools. A
- * hanging factory still pins the turn open; a ceiling for that belongs on the
- * contribution, where an author can state it.
- *
- * A Tool set now has a *lifetime* hook without having a *budget* — the factory
- * may register a closer through `ctx.registerCloser`, and that closer is bounded
- * even though the factory that registered it is not. The asymmetry is deliberate,
- * not an oversight to tidy up: teardown runs while a reader waits on the run's
- * terminal write, so it needs a ceiling core can pick; the factory's ceiling is a
- * number only the author knows, and `ToolSetContribution` has nowhere to say it.
+ * The factory runs under {@link TOOL_SET_RESOLVE_TIMEOUT_MS} and the run's
+ * abort, and one that outruns either is skipped exactly like one that throws
+ * (issue #1135). `ToolSetContribution` declares no budget of its own, so the
+ * ceiling is core's — a generous one, since the factories in the field
+ * legitimately reach the database and a Sandbox backend on the way. It is a
+ * race, not a signal: the factory is not handed one and may never settle, so a
+ * factory that finishes late still runs to completion, and a closer it
+ * registers then is still closed with the session like every other.
  */
 export const composeToolSet = (
   options: ComposeToolSetOptions,
@@ -346,6 +364,7 @@ export const composeToolSet = (
 
   const buildTurnTools = async (
     context: CoreToolSetContext,
+    signal?: AbortSignal,
   ): Promise<Record<string, Tool>> => {
     let resolved: unknown = tools;
     if (typeof tools === "function") {
@@ -357,7 +376,11 @@ export const composeToolSet = (
         toolSet: id,
       });
       try {
-        resolved = await tools(ctx, plugin);
+        resolved = await withDeadline(
+          () => tools(ctx, plugin),
+          TOOL_SET_RESOLVE_TIMEOUT_MS,
+          signal,
+        );
       } catch (cause) {
         logger.warn(
           {
@@ -368,7 +391,11 @@ export const composeToolSet = (
             agentId: context.agentId,
             cause,
           },
-          "Tool set factory threw; serving none of its tools this turn",
+          cause instanceof DeadlineExceededError
+            ? `Tool set factory timed out after ${TOOL_SET_RESOLVE_TIMEOUT_MS}ms; serving none of its tools this turn`
+            : cause instanceof CallerAbortedError
+              ? "Tool set factory abandoned because the turn was cancelled"
+              : "Tool set factory threw; serving none of its tools this turn",
         );
         return {};
       }

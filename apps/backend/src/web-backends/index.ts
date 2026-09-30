@@ -4,7 +4,11 @@ import { isPresentableUrl, WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
-import { raceAbort } from "../utils/abort-race.ts";
+import {
+  CallerAbortedError,
+  DeadlineExceededError,
+  withDeadline,
+} from "../utils/abort-race.ts";
 // Cuts a backend-supplied string to a core-owned bound, marking the cut so the
 // model can tell a truncated snippet from a naturally short one. Shared with
 // the Zod issue formatter: one definition of what a capped string looks like.
@@ -156,71 +160,6 @@ const presentableReadUrl = (resolved: unknown, requested: string): string => {
   }
 };
 
-/** Raised when an executor outruns its per-call timeout. */
-class WebBackendTimeoutError extends Error {}
-
-/** Raised when the turn the executor was called for was cancelled under it. */
-class WebBackendCancelledError extends Error {}
-
-/**
- * Run an executor under a deadline, and hand it the signal for that deadline.
- *
- * Two things at once, because they are one signal to whoever is called: the
- * per-call `timeoutMs`, and the caller's own — a User cancelling the turn. A
- * backend that honours it stops its upstream request for either reason.
- *
- * Still a **race**, not a bare signal: honouring the signal is optional (it is an
- * appended parameter on a v1 contract), so an executor that ignores it must
- * remain bounded. That the *turn* is not pinned open is the property the ceiling
- * exists to protect, and it cannot rest on a Contribution's cooperation.
- *
- * Which signal aborted decides what the caller sees. The deadline is inspected
- * first so that a call which had already outrun its budget is reported as a
- * timeout even if the run was cancelled in the same instant — the deadline is the
- * older of the two facts, and the one an Operator can act on.
- */
-const withDeadline = async <T>(
-  run: (signal: AbortSignal) => Promise<T> | T,
-  timeoutMs: number,
-  caller?: AbortSignal,
-): Promise<T> => {
-  // A cleared timer rather than `AbortSignal.timeout`: the signal that helper
-  // returns cannot be released, so every *successful* call would leave a timer
-  // alive for the rest of its budget — 120s at the ceiling — to abort a signal
-  // nobody is listening to. Tool calls are the hottest path a backend has.
-  const deadline = new AbortController();
-  const timer = setTimeout(
-    () =>
-      deadline.abort(
-        new WebBackendTimeoutError(`executor timed out after ${timeoutMs}ms`),
-      ),
-    timeoutMs,
-  );
-  const signal = caller
-    ? AbortSignal.any([deadline.signal, caller])
-    : deadline.signal;
-  try {
-    // The race, not a bare signal — and an already-aborted call never reaches
-    // the executor at all. Both are {@link raceAbort}'s, shared with the Sandbox
-    // tools; what survives here is the classification below, which is this
-    // module's alone. `read_url`'s own guard still stands ahead of this one,
-    // because the egress guard's DNS lookup happens before control reaches here.
-    return await raceAbort(signal, run);
-  } catch (cause) {
-    if (deadline.signal.aborted) {
-      throw new WebBackendTimeoutError(
-        `executor timed out after ${timeoutMs}ms`,
-      );
-    }
-    if (caller?.aborted) {
-      throw new WebBackendCancelledError("turn cancelled");
-    }
-    throw cause;
-  } finally {
-    clearTimeout(timer);
-  }
-};
-
 // The model-facing failure text. Deliberately fixed rather than the upstream
 // cause: a backend's error message routinely embeds the URL it called, which for
 // a hosted search API carries the Operator's API key as a query parameter. The
@@ -353,11 +292,11 @@ export const composeWebBackend = (
     cause: unknown,
     startedAt: number,
   ): WebToolError => {
-    if (cause instanceof WebBackendCancelledError) {
+    if (cause instanceof CallerAbortedError) {
       logCall(toolName, "cancelled", startedAt, { cause });
       return { error: failureMessage(toolName) };
     }
-    const timedOut = cause instanceof WebBackendTimeoutError;
+    const timedOut = cause instanceof DeadlineExceededError;
     logCall(toolName, timedOut ? "timeout" : "error", startedAt, { cause });
     return {
       error: timedOut
@@ -518,7 +457,7 @@ export const composeWebBackend = (
         if (abortSignal?.aborted) {
           return failed(
             "read_url",
-            new WebBackendCancelledError("turn cancelled"),
+            new CallerAbortedError("turn cancelled"),
             startedAt,
           );
         }
@@ -662,9 +601,10 @@ export const composeWebBackend = (
 
       let executors: WebBackendExecutors | undefined;
       try {
-        // No caller signal here, deliberately: the prepare phase has no abort of
-        // its own to hand over yet, so this call behaves exactly as it did before
-        // executors gained a signal. Wiring one in is its own change.
+        // No caller signal here, deliberately: the run's abort reaches the Tool
+        // session's factories (#1135) but not this one yet, so this call behaves
+        // exactly as it did before executors gained a signal. Wiring one in is
+        // its own change.
         executors = await withDeadline(
           () => contribution.createExecutors(factoryCtx, plugin),
           timeoutMs,
@@ -675,7 +615,7 @@ export const composeWebBackend = (
         // the User (issue #522), not only a line in the log: an Operator asked
         // about that notice needs the Workspace that saw it and the Provider
         // row they have to edit, not just the plugin that failed.
-        const timedOut = cause instanceof WebBackendTimeoutError;
+        const timedOut = cause instanceof DeadlineExceededError;
         logger.warn(
           { ...faultCtx, cause },
           timedOut

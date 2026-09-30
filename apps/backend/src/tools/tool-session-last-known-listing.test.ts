@@ -21,6 +21,8 @@ vi.mock("../storage/index.ts", () => ({ getStorage: vi.fn() }));
 const { server } = vi.hoisted(() => ({
   server: {
     up: true,
+    /** Accepts the connection, then never answers `tools/list` (#1135). */
+    listHangs: false,
     tools: [] as Array<Record<string, unknown>>,
     opened: 0,
     closed: 0,
@@ -38,6 +40,9 @@ const fakeTransport = (): MCPTransport => {
       if (!("method" in message) || !("id" in message))
         return Promise.resolve();
       const params = (message.params ?? {}) as Record<string, unknown>;
+      if (message.method === "tools/list" && server.listHangs) {
+        return Promise.resolve();
+      }
       const result =
         message.method === "initialize"
           ? {
@@ -70,6 +75,7 @@ vi.mock("../services/mcp-oauth-provider.ts", () => ({
   buildMcpTransportConfig: () => fakeTransport(),
 }));
 
+import { TOOL_SET_RESOLVE_TIMEOUT_MS } from "./index.ts";
 import {
   LAST_KNOWN_LISTING_MAX_AGE_MS,
   openToolSession,
@@ -180,6 +186,7 @@ const wireTools = async (tools: Record<string, Tool>): Promise<string> => {
 describe("openToolSession — Last-known tool listing (#635)", () => {
   beforeEach(() => {
     server.up = true;
+    server.listHangs = false;
     server.tools = structuredClone(TOOLS);
     server.opened = 0;
     server.closed = 0;
@@ -199,6 +206,31 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     expect(stale.readOnlyToolNames).toEqual(live.readOnlyToolNames);
     expect([...stale.readOnlyToolNames]).toEqual(["flaky__search"]);
     await stale.dispose();
+  });
+
+  // A server that takes the connection and never answers is a failed fetch
+  // like any other, not one that holds the turn open (#1135).
+  it("serves the stored listing when the server connects but never answers, and closes that connection", async () => {
+    const { queries } = store();
+    await (await openToolSession(scope, agent, queries)).dispose();
+    const closedBefore = server.closed;
+
+    server.listHangs = true;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const opening = openToolSession(scope, agent, queries);
+      await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+      const session = await opening;
+
+      expect(Object.keys(session.tools)).toEqual([
+        "flaky__search",
+        "flaky__write",
+      ]);
+      expect(server.closed).toBe(closedBefore + 1);
+      await session.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("drops the MCP's tools when the stored listing is a day old", async () => {
