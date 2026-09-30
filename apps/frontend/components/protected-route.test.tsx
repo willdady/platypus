@@ -152,7 +152,7 @@ describe("ProtectedRoute when an access read fails", () => {
       expect(screen.queryByText(denial)).toBeNull();
       expect(screen.queryByText("Secret page")).toBeNull();
 
-      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       expect(auth.retryAccessReads).toHaveBeenCalled();
     },
   );

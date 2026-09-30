@@ -37,19 +37,22 @@ describe("CommandMenu", () => {
     expect(screen.getByText("Researcher")).toBeInTheDocument();
   });
 
-  it("offers to retry a failed agents read rather than dropping the group", () => {
-    mockScopedSWR({
-      "/agents": { error: { status: 500, message: "Server error" } },
-    });
-    openMenu();
+  it.each(["agents", "boards", "triggers"])(
+    "offers to retry a failed %s read rather than dropping the group",
+    (subject) => {
+      mockScopedSWR({
+        [`/${subject}`]: { error: { status: 500, message: "Server error" } },
+      });
+      openMenu();
 
-    const retry = screen.getByRole("option", {
-      name: "Couldn't load agents. Retry",
-    });
-    fireEvent.click(retry);
+      const retry = screen.getByRole("option", {
+        name: `Couldn't load ${subject}. Retry`,
+      });
+      fireEvent.click(retry);
 
-    expect(mutate).toHaveBeenCalled();
-    // Retrying keeps the menu open, so the reloaded agents land in view.
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-  });
+      expect(mutate).toHaveBeenCalled();
+      // Retrying keeps the menu open, so the reloaded rows land in view.
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    },
+  );
 });

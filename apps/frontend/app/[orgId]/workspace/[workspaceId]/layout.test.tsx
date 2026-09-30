@@ -51,12 +51,15 @@ describe("WorkspaceLayout", () => {
 
   // Thrown to the error boundary, which offers to try again, rather than
   // rendering the Workspace's pages over a read that failed.
-  it("fails a Workspace read that errored server-side instead of rendering", async () => {
-    stubWorkspaceRead(500);
+  it.each([500, 503, 429])(
+    "fails a Workspace read that answered %i instead of rendering",
+    async (status) => {
+      stubWorkspaceRead(status);
 
-    await expect(renderLayout()).rejects.toThrow();
-    expect(notFound).not.toHaveBeenCalled();
-  });
+      await expect(renderLayout()).rejects.toThrow();
+      expect(notFound).not.toHaveBeenCalled();
+    },
+  );
 
   // Access is the client gate's call, which can say why.
   it("leaves a forbidden Workspace to the access gate", async () => {

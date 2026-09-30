@@ -18,7 +18,7 @@ import {
   resolveActor,
 } from "@/lib/authorization";
 import { scopedUrl, membershipEntity, workspaceEntity } from "@/lib/api-write";
-import { fetcher, isAccessDenial } from "@/lib/utils";
+import { fetcher, isNotFoundOrForbidden } from "@/lib/utils";
 
 interface OrgMembership {
   id: string;
@@ -88,7 +88,7 @@ interface AuthContextType {
  * a failed revalidation still has the row it had.
  */
 const transientReadError = (error: unknown, data: unknown): unknown =>
-  error && !data && !isAccessDenial(error) ? error : null;
+  error && !data && !isNotFoundOrForbidden(error) ? error : null;
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -140,9 +140,12 @@ export function AuthProvider({
     fetcher,
   );
 
-  const accessReadError =
-    transientReadError(orgMembershipError, orgMembership) ??
-    transientReadError(workspaceError, workspace);
+  // A refused membership is the answer — not a member — whatever else
+  // failed to load, so it leaves the gate to turn the caller away.
+  const accessReadError = isNotFoundOrForbidden(orgMembershipError)
+    ? null
+    : (transientReadError(orgMembershipError, orgMembership) ??
+      transientReadError(workspaceError, workspace));
   const retryAccessReads = useCallback(() => {
     void mutateOrgMembership();
     void mutateWorkspace();
@@ -169,11 +172,14 @@ export function AuthProvider({
     [hasWorkspace, providerSelfManagement, mcpSelfManagement],
   );
 
+  // A read SWR is retrying after a failure is not loading as far as the gate
+  // is concerned: it keeps showing the failure until a retry lands, instead
+  // of flickering back to the page on every attempt.
   const isAuthLoading =
     isPending ||
     (!!data?.user &&
-      ((!!orgId && isOrgMembershipLoading) ||
-        (!!workspaceId && isWorkspaceLoading)));
+      ((!!orgId && isOrgMembershipLoading && !orgMembershipError) ||
+        (!!workspaceId && isWorkspaceLoading && !workspaceError)));
 
   const value = useMemo<AuthContextType>(
     () => ({

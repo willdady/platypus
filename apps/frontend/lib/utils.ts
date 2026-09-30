@@ -34,7 +34,7 @@ export const errorStatus = (error: unknown): number | undefined => {
  * Whether a failed read was the server's answer — gone (404) or forbidden
  * (403) — rather than a failure that reading again might clear.
  */
-export const isAccessDenial = (error: unknown): boolean => {
+export const isNotFoundOrForbidden = (error: unknown): boolean => {
   const status = errorStatus(error);
   return status === 403 || status === 404;
 };

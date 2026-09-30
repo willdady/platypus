@@ -33,7 +33,7 @@ import {
 import Link from "next/link";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { ListError } from "@/components/list-state";
-import { FetchErrorNotice } from "@/components/detail-form-state";
+import { FetchErrorNotice } from "@/components/fetch-error-notice";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {

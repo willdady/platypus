@@ -19,22 +19,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
-// The sections below the stats read and render their own lists, each covered
-// by its own suite; this one is about the page's reads.
-vi.mock("@/components/agents-list", () => ({
-  AgentsList: () => null,
-  AgentCardsSkeleton: () => null,
-}));
-vi.mock("@/components/skills-list", () => ({ SkillsList: () => null }));
-vi.mock("@/components/trigger-list", () => ({
-  TriggerList: () => null,
-  TriggerCardsSkeleton: () => null,
-}));
-vi.mock("@/components/boards-list", () => ({ BoardsList: () => null }));
-vi.mock("@/components/dashboards-list", () => ({
-  DashboardsList: () => null,
-}));
-
 import Workspace from "./page";
 
 const WORKSPACE = { id: "ws1", organizationId: "org1", name: "Research" };
@@ -78,7 +62,7 @@ describe("Workspace home", () => {
     expect(screen.getByText("Couldn't load")).toBeInTheDocument();
     expect(screen.queryByText("Workspace not found")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();
   });
 });

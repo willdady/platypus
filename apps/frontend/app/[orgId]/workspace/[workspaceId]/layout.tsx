@@ -64,10 +64,11 @@ export default async function WorkspaceLayout({
   if (response.status === 404) {
     notFound();
   }
-  // A server-side failure goes to the error boundary, which offers to try
-  // again, rather than rendering the Workspace over a read that failed. A 403
-  // is left to `ProtectedRoute`, which can say why the caller is turned away.
-  if (response.status >= 500) {
+  // Any other failure goes to the error boundary, which offers to try again,
+  // rather than rendering the Workspace over a read that failed. A 401 or 403
+  // is left to `ProtectedRoute`, which signs the caller in or says why they
+  // are turned away.
+  if (!response.ok && response.status !== 401 && response.status !== 403) {
     throw new Error(`Workspace read failed with status ${response.status}`);
   }
 

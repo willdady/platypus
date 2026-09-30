@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { OctagonX, Home, Building } from "lucide-react";
 import Link from "next/link";
 import { orgRoutes } from "@/lib/routes";
-import { FetchErrorNotice } from "@/components/detail-form-state";
+import { FetchErrorNotice } from "@/components/fetch-error-notice";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
