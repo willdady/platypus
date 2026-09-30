@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { ListError } from "@/components/list-state";
 import {
   Collapsible,
   CollapsibleContent,
@@ -125,7 +126,7 @@ export function KanbanCardHistory({
   const [open, setOpen] = useState(false);
 
   // A closed section names no scope, so nothing is read until it opens.
-  const { data } = useScopedSWR<{ results: HistoryEntry[] }>(
+  const { data, error, mutate } = useScopedSWR<{ results: HistoryEntry[] }>(
     `boards/${boardId}/cards/${cardId}/history`,
     open ? { orgId, workspaceId } : null,
   );
@@ -139,7 +140,13 @@ export function KanbanCardHistory({
       </CollapsibleTrigger>
       <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
         <div className="pt-3">
-          {!data ? (
+          {error && !data ? (
+            <ListError
+              error={error}
+              subject="history"
+              onRetry={() => mutate()}
+            />
+          ) : !data ? (
             <p className="text-xs text-muted-foreground">Loading…</p>
           ) : entries.length === 0 ? (
             <p className="text-xs text-muted-foreground">

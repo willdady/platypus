@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { type OrgMemberListItem, type Organization } from "@platypus/schemas";
 import { MembersList } from "@/components/members-list";
+import { ListError } from "@/components/list-state";
 import { Users } from "lucide-react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { organizationEntity } from "@/lib/api-write";
@@ -21,7 +22,7 @@ const OrgMembersPage = () => {
     organizationEntity(orgId),
     {},
   );
-  const { data, mutate, isLoading } = useScopedSWR<{
+  const { data, error, mutate, isLoading } = useScopedSWR<{
     results: OrgMemberListItem[];
   }>("members", { orgId });
 
@@ -61,6 +62,8 @@ const OrgMembersPage = () => {
             ]}
           />
         </LoadingRegion>
+      ) : error && !data ? (
+        <ListError error={error} subject="members" onRetry={() => mutate()} />
       ) : data?.results.length === 0 ? (
         <div className="text-center py-12 border border-dashed rounded-lg">
           <Users className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />

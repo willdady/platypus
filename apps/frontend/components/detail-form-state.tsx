@@ -13,6 +13,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { DefaultFormSkeleton } from "@/components/form-skeleton";
+import { errorStatus, isAccessDenial } from "@/lib/utils";
 
 export type DetailFormStateProps = {
   /** True while the record is still being read. */
@@ -46,16 +47,8 @@ export type DetailFormStateProps = {
   children: ReactNode;
 };
 
-const statusOf = (error: unknown): number | undefined => {
-  if (error && typeof error === "object" && "status" in error) {
-    const { status } = error as { status?: unknown };
-    if (typeof status === "number") return status;
-  }
-  return undefined;
-};
-
 const noticeFor = (subject: string, error: unknown) => {
-  switch (statusOf(error)) {
+  switch (errorStatus(error)) {
     case 404:
       return {
         icon: <FileQuestion />,
@@ -75,6 +68,47 @@ const noticeFor = (subject: string, error: unknown) => {
         description: `This ${subject} couldn't be loaded. Try again in a moment.`,
       };
   }
+};
+
+/**
+ * The notice a failed record read shows in place of the record: what went
+ * wrong — gone, forbidden, or anything else — and the way back. Given
+ * `onRetry` (the read's `mutate`), anything else also offers to read again;
+ * a 403 or 404 doesn't, since reading again won't change the answer.
+ */
+export const FetchErrorNotice = ({
+  error,
+  subject,
+  backHref,
+  backLabel,
+  onRetry,
+}: {
+  error: unknown;
+  /** What the record is, for the messages: "provider", "workspace". */
+  subject: string;
+  backHref: string;
+  backLabel: string;
+  onRetry?: () => void;
+}) => {
+  const notice = noticeFor(subject, error);
+  const retryable = onRetry && !isAccessDenial(error);
+  return (
+    <Empty className="border-2 border-dashed">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">{notice.icon}</EmptyMedia>
+        <EmptyTitle>{notice.title}</EmptyTitle>
+        <EmptyDescription>{notice.description}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <div className="flex gap-2">
+          {retryable && <Button onClick={() => onRetry()}>Try again</Button>}
+          <Button asChild variant="outline">
+            <Link href={backHref}>{backLabel}</Link>
+          </Button>
+        </div>
+      </EmptyContent>
+    </Empty>
+  );
 };
 
 /**
@@ -110,20 +144,13 @@ export const DetailFormState = ({
   }
 
   if (error && !data) {
-    const notice = noticeFor(subject, error);
     return (
-      <Empty className="border-2 border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">{notice.icon}</EmptyMedia>
-          <EmptyTitle>{notice.title}</EmptyTitle>
-          <EmptyDescription>{notice.description}</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button asChild variant="outline">
-            <Link href={backHref}>{backLabel}</Link>
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <FetchErrorNotice
+        error={error}
+        subject={subject}
+        backHref={backHref}
+        backLabel={backLabel}
+      />
     );
   }
 

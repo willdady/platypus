@@ -5,10 +5,15 @@ import { Button } from "@/components/ui/button";
 
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  /**
+   * Re-fetches and re-renders the segment. `reset` would only re-render it,
+   * so an error a Server Component threw on a failed read would come
+   * straight back.
+   */
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error("Unhandled error:", error);
@@ -20,7 +25,7 @@ export default function GlobalError({
       <p className="text-muted-foreground text-sm">
         An unexpected error occurred. Please try again.
       </p>
-      <Button onClick={reset} variant="outline">
+      <Button onClick={() => retry()} variant="outline">
         Try again
       </Button>
     </div>

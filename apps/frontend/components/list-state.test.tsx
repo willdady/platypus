@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ListError, ListState } from "./list-state";
 
 describe("ListState", () => {
@@ -57,5 +57,24 @@ describe("ListError", () => {
     expect(
       screen.getByText("Failed to load users. Network down"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ListError retry", () => {
+  it("offers a retry that re-reads the list", () => {
+    const retry = vi.fn();
+    render(
+      <ListError error={{ status: 500 }} subject="members" onRetry={retry} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("offers no retry when the list gives it none", () => {
+    render(<ListError error={{ status: 500 }} subject="members" />);
+
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 });

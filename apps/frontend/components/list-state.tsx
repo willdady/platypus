@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 type ListStateVariant = "empty" | "error";
 
@@ -19,13 +20,17 @@ const TONE: Record<ListStateVariant, string> = {
 export function ListState({
   variant,
   children,
+  action,
 }: {
   variant: ListStateVariant;
   children: ReactNode;
+  /** A control under the message, e.g. a failed read's Retry. */
+  action?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-center py-8">
+    <div className="flex flex-col items-center justify-center gap-3 py-8">
       <p className={cn("text-sm", TONE[variant])}>{children}</p>
+      {action}
     </div>
   );
 }
@@ -43,19 +48,32 @@ interface ReadError {
  * The fetch-failure state shared by every list: "Failed to load <subject>." plus
  * the reader's reason — the body's `error` when it is a string (a validation
  * failure's is an object, which can't render), else the error's own message.
+ * Given `onRetry` (the read's `mutate`), it offers to read again, so a
+ * transient failure needn't mean a page reload.
  */
 export function ListError({
   error,
   subject,
+  onRetry,
 }: {
   error: unknown;
   /** The plural noun named in the failure: "agents", "MCP servers". */
   subject: string;
+  onRetry?: () => void;
 }) {
   const { message, info } = (error ?? {}) as ReadError;
   const reason = typeof info?.error === "string" ? info.error : message;
   return (
-    <ListState variant="error">
+    <ListState
+      variant="error"
+      action={
+        onRetry && (
+          <Button variant="outline" size="sm" onClick={() => onRetry()}>
+            Retry
+          </Button>
+        )
+      }
+    >
       Failed to load {subject}. {reason}
     </ListState>
   );

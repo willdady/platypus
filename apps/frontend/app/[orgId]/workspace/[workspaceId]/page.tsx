@@ -32,6 +32,8 @@ import {
 } from "@/components/list-skeletons";
 import Link from "next/link";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
+import { ListError } from "@/components/list-state";
+import { FetchErrorNotice } from "@/components/detail-form-state";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
@@ -44,7 +46,7 @@ import {
   type Organization,
 } from "@platypus/schemas";
 import { useParams } from "next/navigation";
-import { workspaceRoutes } from "@/lib/routes";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /** Where each collapsible section persists its open state. */
@@ -201,8 +203,12 @@ const Workspace = () => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
-  const { data: workspaceData, isLoading: isLoadingWorkspace } =
-    useScopedSWR<WorkspaceType>(workspaceEntity(workspaceId), { orgId });
+  const {
+    data: workspaceData,
+    error: workspaceError,
+    isLoading: isLoadingWorkspace,
+    mutate: mutateWorkspace,
+  } = useScopedSWR<WorkspaceType>(workspaceEntity(workspaceId), { orgId });
 
   const scope = { orgId, workspaceId };
 
@@ -215,7 +221,12 @@ const Workspace = () => {
     totalCount: number;
   }>(chatListEntity(), scope);
 
-  const { data: providersData, isLoading: isLoadingProviders } = useScopedSWR<{
+  const {
+    data: providersData,
+    error: providersError,
+    isLoading: isLoadingProviders,
+    mutate: mutateProviders,
+  } = useScopedSWR<{
     results: [];
   }>("providers", scope);
 
@@ -257,6 +268,20 @@ const Workspace = () => {
     return <WorkspaceSkeleton />;
   }
 
+  if (workspaceError && !workspaceData) {
+    return (
+      <div className="px-4 md:px-8 py-8 max-w-6xl mx-auto">
+        <FetchErrorNotice
+          error={workspaceError}
+          subject="workspace"
+          backHref={orgRoutes(orgId).root}
+          backLabel="Back to Organization"
+          onRetry={() => mutateWorkspace()}
+        />
+      </div>
+    );
+  }
+
   if (!workspaceData) {
     return <div>Workspace not found</div>;
   }
@@ -294,7 +319,16 @@ const Workspace = () => {
         </div>
       </div>
 
-      {providerCount === 0 ? (
+      {providersError && !providersData ? (
+        // Without the count there is no telling a workspace with no
+        // providers from one whose providers didn't load, so neither the
+        // "add a provider" prompt nor the page behind it is shown.
+        <ListError
+          error={providersError}
+          subject="providers"
+          onRetry={() => mutateProviders()}
+        />
+      ) : providerCount === 0 ? (
         <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
       ) : (
         <>

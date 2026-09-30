@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   BookOpen,
   History,
+  RotateCw,
 } from "lucide-react";
 
 import {
@@ -33,6 +34,28 @@ import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { userRoutes, workspaceRoutes } from "@/lib/routes";
 
+/**
+ * What a group shows when its read failed: a Retry item in place of the rows,
+ * so a failure doesn't read as a workspace with none. An item rather than the
+ * lists' `ListError`, so it stays reachable from the keyboard like the rest
+ * of the menu; selecting it re-reads without closing the menu.
+ */
+function RetryReadItem({
+  subject,
+  onRetry,
+}: {
+  /** The plural noun named in the failure: "agents". */
+  subject: string;
+  onRetry: () => void;
+}) {
+  return (
+    <CommandItem className="cursor-pointer" onSelect={() => onRetry()}>
+      <RotateCw />
+      <span>Couldn&apos;t load {subject}. Retry</span>
+    </CommandItem>
+  );
+}
+
 interface CommandMenuProps {
   orgId: string;
   workspaceId: string;
@@ -45,26 +68,29 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
   const scope = { orgId, workspaceId };
 
   // Fetch agents for the workspace
-  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
-    "agents",
-    scope,
-  );
+  const {
+    data: agentsData,
+    error: agentsError,
+    mutate: mutateAgents,
+  } = useScopedSWR<{ results: Agent[] }>("agents", scope);
 
   const agents = agentsData?.results || [];
 
   // Fetch boards for the workspace
-  const { data: boardsData } = useScopedSWR<{ results: KanbanBoard[] }>(
-    "boards",
-    scope,
-  );
+  const {
+    data: boardsData,
+    error: boardsError,
+    mutate: mutateBoards,
+  } = useScopedSWR<{ results: KanbanBoard[] }>("boards", scope);
 
   const boards = boardsData?.results || [];
 
   // Fetch triggers for the workspace
-  const { data: triggersData } = useScopedSWR<{ results: Trigger[] }>(
-    "triggers",
-    scope,
-  );
+  const {
+    data: triggersData,
+    error: triggersError,
+    mutate: mutateTriggers,
+  } = useScopedSWR<{ results: Trigger[] }>("triggers", scope);
 
   const triggers = triggersData?.results || [];
 
@@ -242,6 +268,11 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>About</span>
           </CommandItem>
         </CommandGroup>
+        {agentsError && !agentsData && (
+          <CommandGroup heading="Agents">
+            <RetryReadItem subject="agents" onRetry={() => mutateAgents()} />
+          </CommandGroup>
+        )}
         {agents.length > 0 && (
           <CommandGroup heading="Agents">
             {agents.map((agent) => (
@@ -260,6 +291,11 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             ))}
           </CommandGroup>
         )}
+        {boardsError && !boardsData && (
+          <CommandGroup heading="Boards">
+            <RetryReadItem subject="boards" onRetry={() => mutateBoards()} />
+          </CommandGroup>
+        )}
         {boards.length > 0 && (
           <CommandGroup heading="Boards">
             {boards.map((board) => (
@@ -274,6 +310,14 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
                 <span>{board.name}</span>
               </CommandItem>
             ))}
+          </CommandGroup>
+        )}
+        {triggersError && !triggersData && (
+          <CommandGroup heading="Triggers">
+            <RetryReadItem
+              subject="triggers"
+              onRetry={() => mutateTriggers()}
+            />
           </CommandGroup>
         )}
         {triggers.length > 0 && (

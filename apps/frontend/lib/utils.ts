@@ -18,6 +18,27 @@ export function joinUrl(base: string, path: string): string {
   return `${normalizedBase}${normalizedPath}`;
 }
 
+/**
+ * The HTTP status a failed read's error carries (see `fetchError`), if any —
+ * what tells a deleted or forbidden record from a read that merely failed.
+ */
+export const errorStatus = (error: unknown): number | undefined => {
+  if (error && typeof error === "object" && "status" in error) {
+    const { status } = error as { status?: unknown };
+    if (typeof status === "number") return status;
+  }
+  return undefined;
+};
+
+/**
+ * Whether a failed read was the server's answer — gone (404) or forbidden
+ * (403) — rather than a failure that reading again might clear.
+ */
+export const isAccessDenial = (error: unknown): boolean => {
+  const status = errorStatus(error);
+  return status === 403 || status === 404;
+};
+
 /** The error a failed read throws, carrying the status and the response body. */
 const fetchError = async (res: Response) => {
   const error: Error & { info?: unknown; status?: number } = new Error(
