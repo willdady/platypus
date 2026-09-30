@@ -61,6 +61,7 @@ import {
   triggerRunStatusSchema,
   TRIGGER_RUN_STATUS_LABELS,
   triggerUpdateSchema,
+  triggerCreateSchema,
   kanbanCardUpdateSchema,
 } from "./index";
 
@@ -1463,6 +1464,35 @@ describe("Model reference helpers", () => {
     expect(resolveModelReference(models, "alias:flagship")).toBe("gpt-4");
     expect(resolveModelReference(models, "gpt-4o-mini")).toBe("gpt-4o-mini");
     expect(resolveModelReference(models, "alias:ghost")).toBeUndefined();
+  });
+});
+
+describe("triggerCreateSchema", () => {
+  const base = {
+    workspaceId: "ws-1",
+    agentId: "agent-1",
+    type: "cron" as const,
+    name: "My Trigger",
+    instruction: "Do the thing.",
+    config: { cronExpression: "0 * * * *" },
+  };
+
+  it("defaults an omitted maxRunsToKeep to 10, matching the trigger table column and the Trigger form (issue #1119)", () => {
+    // The trigger table column and the Trigger form both default to 10; this
+    // schema is what an HTTP create falls back to when the field is omitted,
+    // so it must agree rather than silently persisting a different default.
+    const result = triggerCreateSchema.safeParse(base);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.maxRunsToKeep).toBe(10);
+  });
+
+  it("keeps an explicit maxRunsToKeep as given", () => {
+    const result = triggerCreateSchema.safeParse({
+      ...base,
+      maxRunsToKeep: 3,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.maxRunsToKeep).toBe(3);
   });
 });
 

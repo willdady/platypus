@@ -2130,7 +2130,7 @@ export const triggerSchema = z.object({
     .int()
     .min(TRIGGER_MAX_RUNS_TO_KEEP_MIN)
     .max(TRIGGER_MAX_RUNS_TO_KEEP_MAX)
-    .default(50),
+    .default(10),
   search: z.boolean().default(false),
   // Whether a firing composes the `<memories>` block. Off by default: a
   // headless run should not have a system prompt that drifts with the

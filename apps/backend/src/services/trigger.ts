@@ -82,8 +82,6 @@ export type TriggerCreateFields = TriggerBaseFields;
  */
 const CREATE_DEFAULTS = {
   enabled: true,
-  // `triggerCreateSchema` defaults this to 50, so an HTTP caller omitting it
-  // gets 50, not 10.
   maxRunsToKeep: 10,
   search: false,
   includeMemories: false,
