@@ -281,6 +281,24 @@ describe("provider-write module", () => {
       expect(nullifyEmbeddingsForProvider).not.toHaveBeenCalled();
     });
 
+    it("throws ConflictError naming the Agents that still use an organization-scoped provider", async () => {
+      const fake = seedDb({
+        provider: [{ id: "p2", workspaceId: null, organizationId: "org-1" }],
+        agent: [
+          { id: "a1", workspaceId: null, providerId: "p2", name: "Shared" },
+          { id: "a2", workspaceId: "ws-1", providerId: "p2", name: "Local" },
+        ],
+      });
+
+      await expect(
+        deleteProvider({ kind: "organization", orgId: "org-1" }, "p2"),
+      ).rejects.toThrow(
+        'Cannot delete: this provider is used by 2 agents ("Shared", "Local"). Delete them or switch them to another provider first.',
+      );
+      expect(fake.tables.provider).toHaveLength(1);
+      expect(nullifyEmbeddingsForProvider).not.toHaveBeenCalled();
+    });
+
     it("deletes an organization-scoped provider once it is confirmed deletable", async () => {
       mockDb.limit
         .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment

@@ -497,6 +497,28 @@ describe("Provider Routes", () => {
       expect(fake.execute).toHaveBeenCalledTimes(1);
     });
 
+    it("should 409 naming the agents that still use the provider", async () => {
+      mockSession();
+      fake = world({
+        rows: {
+          provider: [workspaceProvider()],
+          agent: [
+            { id: "a1", workspaceId, providerId: "p1", name: "Helper" },
+            { id: "a2", workspaceId, providerId: "p1", name: "Writer" },
+          ],
+        },
+      });
+
+      const res = await app.request(`${baseUrl}/p1`, { method: "DELETE" });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error:
+          'Cannot delete: this provider is used by 2 agents ("Helper", "Writer"). Delete them or switch them to another provider first.',
+      });
+      expect(fake.tables.provider).toHaveLength(1);
+      expect(fake.execute).not.toHaveBeenCalled();
+    });
+
     it("should 404 when deleting an org-scoped provider not attached here", async () => {
       mockSession();
       fake = world({

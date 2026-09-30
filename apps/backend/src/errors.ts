@@ -6,8 +6,9 @@ import { FileValidationError } from "./services/file-gate.ts";
  * cross-cutting failure modes, mapped to HTTP status in a single Hono
  * `app.onError` (ADR-0010): a resource that does not exist, an
  * Organization-scoped (Shared) resource locked against Workspace-surface
- * mutation, and a unique- or foreign-key-constraint violation. Route-specific 4xx responses
- * (validation, sub-agent rules, `findNonSharedReferences`) stay inline.
+ * mutation, and a unique- or foreign-key-constraint violation.
+ * Route-specific 4xx responses (validation, sub-agent rules,
+ * `findNonSharedReferences`) stay inline.
  */
 
 /** The requested resource does not exist (or is not visible here). → 404 */

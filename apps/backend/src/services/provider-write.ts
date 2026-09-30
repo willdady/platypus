@@ -188,9 +188,8 @@ async function requireNoAgents(providerId: string): Promise<void> {
   if (agents.length > 0) {
     throw inUseConflict(
       "provider",
-      { singular: "agent", plural: "agents" },
+      "agent",
       agents.map((a) => a.name),
-      (them) => `Delete ${them} or switch ${them} to another provider first.`,
     );
   }
 }
@@ -199,9 +198,9 @@ async function requireNoAgents(providerId: string): Promise<void> {
  * Deletes a Provider at the given scope. Throws `NotFoundError` (Workspace
  * scope, via `requireWorkspaceMutable`; Organization scope, when the delete
  * matches no row) and, Workspace scope only, `LockedError` for a Shared
- * Provider (ADR-0007) and `ConflictError` while an Agent still uses the
- * Provider. Organization scope also throws `ConflictError` while
+ * Provider (ADR-0007). Organization scope also throws `ConflictError` while
  * an Attachment or Blueprint still references the Provider (ADR-0007/0008).
+ * Either scope then throws `ConflictError` while an Agent still uses it.
  */
 export async function deleteProvider(
   scope: ProviderScope,
@@ -210,7 +209,6 @@ export async function deleteProvider(
   let where: SQL;
   if (scope.kind === "workspace") {
     await requireWorkspaceMutable(db, "provider", providerId, scope.ctx);
-    await requireNoAgents(providerId);
     where = workspaceScopedWhere("provider", providerId, scope.ctx.workspaceId);
   } else {
     // A Shared resource cannot be deleted while anything still points at it —
@@ -219,6 +217,7 @@ export async function deleteProvider(
     await requireSharedDeletable(db, "provider", providerId);
     where = orgScopedWhere("provider", providerId, scope.orgId);
   }
+  await requireNoAgents(providerId);
 
   // Deleting removes every model this Provider defined, so any Workspace
   // whose memory embeddings were computed against it now points at a config

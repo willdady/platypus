@@ -222,9 +222,8 @@ async function requireNoTriggers(agentId: string): Promise<void> {
   if (triggers.length > 0) {
     throw inUseConflict(
       "agent",
-      { singular: "trigger", plural: "triggers" },
+      "trigger",
       triggers.map((t) => t.name),
-      (them) => `Delete ${them} or switch ${them} to another agent first.`,
     );
   }
 }
@@ -234,10 +233,11 @@ async function requireNoTriggers(agentId: string): Promise<void> {
  * its id from other Agents' `subAgentIds` in the same transaction as the
  * delete (the reference is a jsonb id with no foreign key to cascade). At
  * Workspace scope, throws `NotFoundError`/`LockedError` (via
- * `requireWorkspaceMutable`) under the same rule as {@link updateAgent}, then
- * `ConflictError` while a Trigger still runs the Agent. At Organization scope,
- * throws `ConflictError` (via `requireSharedDeletable`) while an Attachment or
- * Blueprint still references the Agent (ADR-0007/0008).
+ * `requireWorkspaceMutable`) under the same rule as {@link updateAgent}. At
+ * Organization scope, throws `ConflictError` (via `requireSharedDeletable`)
+ * while an Attachment or Blueprint still references the Agent
+ * (ADR-0007/0008). At either scope, then throws `ConflictError` while a
+ * Trigger still runs the Agent.
  */
 export async function deleteAgent(
   scope: AgentScope,
@@ -246,12 +246,12 @@ export async function deleteAgent(
   let where: SQL;
   if (scope.kind === "workspace") {
     await requireWorkspaceMutable(db, "agent", agentId, scope.ctx);
-    await requireNoTriggers(agentId);
     where = workspaceScopedWhere("agent", agentId, scope.ctx.workspaceId);
   } else {
     await requireSharedDeletable(db, "agent", agentId);
     where = orgScopedWhere("agent", agentId, scope.orgId);
   }
+  await requireNoTriggers(agentId);
 
   const result = await db.transaction(async (tx) => {
     const rows = await tx.delete(agentTable).where(where).returning();
