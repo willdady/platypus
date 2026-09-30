@@ -1,0 +1,2 @@
+ALTER TABLE "invitation" DROP CONSTRAINT "unique_invitation_org_email";--> statement-breakpoint
+CREATE UNIQUE INDEX "unique_invitation_org_email" ON "invitation" USING btree ("organization_id","email") WHERE "invitation"."status" = 'pending';

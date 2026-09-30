@@ -8,6 +8,7 @@ import {
   primaryKey,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
@@ -635,7 +636,13 @@ export const invitation = pgTable(
   (t) => [
     index("idx_invitation_email").on(t.email),
     index("idx_invitation_org_id").on(t.organizationId),
-    unique("unique_invitation_org_email").on(t.organizationId, t.email),
+    // One *pending* invitation per address per Organization (#1131). Declined,
+    // accepted and expired rows stay as history and must not block a re-invite.
+    // Lapsed-but-still-`pending` rows (expiry is lazy) are flipped to `expired`
+    // by the create handler before it inserts.
+    uniqueIndex("unique_invitation_org_email")
+      .on(t.organizationId, t.email)
+      .where(sql`${t.status} = 'pending'`),
     unique("unique_invitation_token").on(t.token),
   ],
 );

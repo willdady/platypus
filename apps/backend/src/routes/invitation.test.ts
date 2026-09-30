@@ -18,10 +18,7 @@ describe("Invitation Routes", () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      // Verify workspace belongs to org
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "ws-1", organizationId: orgId },
-      ]);
+      mockDb.limit.mockResolvedValueOnce([]); // not already a member
 
       const mockInvitation = {
         id: "inv-1",
@@ -48,6 +45,7 @@ describe("Invitation Routes", () => {
     it("normalizes a mixed-case invitation email before persistence", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([]); // not already a member
       mockDb.returning.mockResolvedValueOnce([
         { id: "inv-1", email: "user@example.com" },
       ]);
@@ -76,9 +74,11 @@ describe("Invitation Routes", () => {
     it("persists an ordered set of blueprints", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // not already a member
       // Blueprint validation: both ids resolve to org-scoped blueprints.
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockReturnValueOnce(mockDb) // not already a member
         .mockResolvedValueOnce([{ id: "bp-1" }, { id: "bp-2" }]); // validation
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
@@ -114,9 +114,11 @@ describe("Invitation Routes", () => {
     it("422s when a blueprint is not in this organization", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // not already a member
       // Only bp-1 resolves; bp-2 is foreign / missing.
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockReturnValueOnce(mockDb) // not already a member
         .mockResolvedValueOnce([{ id: "bp-1" }]); // validation
 
       const res = await app.request(baseUrl, {
@@ -140,6 +142,7 @@ describe("Invitation Routes", () => {
     it("should persist an optional workspaceName", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // not already a member
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
       const res = await app.request(baseUrl, {
@@ -162,6 +165,7 @@ describe("Invitation Routes", () => {
     it("409s with the central error envelope on a duplicate org+email invitation", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // not already a member
       mockDb.returning.mockRejectedValueOnce({
         code: "23505",
         constraint: "unique_invitation_org_email",
@@ -185,6 +189,7 @@ describe("Invitation Routes", () => {
     it("mints a token when creating an invitation", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // not already a member
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
       const res = await app.request(baseUrl, {

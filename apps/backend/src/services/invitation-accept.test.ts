@@ -46,9 +46,9 @@ const invite = (id: string, email: string) =>
   );
 
 describe("acceptInvitationForUser", () => {
-  // An Organization invites an address once, so two invitations reach one
-  // account only under two addresses — e.g. one sent before the account
-  // changed its email. Each accept locks only its own invitation row, so the
+  // An address holds at most one pending invitation per Organization, so two
+  // live invitations reach one account only under two addresses — e.g. one
+  // sent before the account changed its email. Each accept locks only its own invitation row, so the
   // unique key on the membership is what keeps a race to one row. PGlite runs
   // the two transactions one after the other; this pins that the accept path
   // leans on that key (it fails without it), not the interleaving itself.

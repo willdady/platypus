@@ -465,6 +465,7 @@ describe("User Invitation Routes", () => {
     const createInvitationAs = async (typedEmail: string): Promise<string> => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // not already a member
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
       const res = await app.request("/organizations/org-1/invitations", {

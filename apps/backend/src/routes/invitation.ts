@@ -6,9 +6,11 @@ import {
   invitation as invitationTable,
   invitationBlueprint as invitationBlueprintTable,
   blueprint as blueprintTable,
+  organizationMember as organizationMemberTable,
+  user as userTable,
 } from "../db/schema.ts";
 import { invitationCreateSchema } from "@platypus/schemas";
-import { eq, and, inArray, asc } from "drizzle-orm";
+import { eq, and, inArray, asc, lte } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
@@ -40,6 +42,26 @@ invitation.post(
 
     if (normalizedEmail === user.email.toLowerCase()) {
       return c.json({ error: "You cannot invite yourself" }, 400);
+    }
+
+    // An accepted invitation no longer holds the (org, email) slot (#1131), so
+    // refuse a current member here — accepting would provision a second
+    // Workspace for someone already in the Organization.
+    const [existingMember] = await db
+      .select({ id: organizationMemberTable.id })
+      .from(organizationMemberTable)
+      .innerJoin(userTable, eq(organizationMemberTable.userId, userTable.id))
+      .where(
+        and(
+          eq(organizationMemberTable.organizationId, orgId),
+          eq(userTable.email, normalizedEmail),
+        ),
+      )
+      .limit(1);
+    if (existingMember) {
+      throw new ConflictError(
+        "This user is already a member of the organization",
+      );
     }
 
     // The invitation carries an ordered set of Blueprints (ADR-0009). Dedupe
@@ -79,6 +101,22 @@ invitation.post(
     const token = nanoid();
     try {
       const record = await db.transaction(async (tx) => {
+        // Only a pending invitation blocks a new one (#1131), but expiry is
+        // lazy: a lapsed invite keeps `pending` until someone tries to accept
+        // it. Settle any such row as `expired` first, so it neither holds the
+        // unique slot nor lingers as a second live-looking invite.
+        await tx
+          .update(invitationTable)
+          .set({ status: "expired" })
+          .where(
+            and(
+              eq(invitationTable.organizationId, orgId),
+              eq(invitationTable.email, normalizedEmail),
+              eq(invitationTable.status, "pending"),
+              lte(invitationTable.expiresAt, new Date()),
+            ),
+          );
+
         const [row] = await tx
           .insert(invitationTable)
           .values({
