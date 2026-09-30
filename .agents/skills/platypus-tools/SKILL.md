@@ -143,8 +143,9 @@ the double-render trap.
 ## When a tool doesn't appear
 
 Tool resolution is **strict at boot, forgiving at runtime**: a duplicate set id
-throws on startup, but at turn time an unresolvable id, a factory that throws,
-or an unreachable MCP server each costs only its own tools, logging a warning.
+throws on startup, but at turn time an unresolvable id, a factory that throws
+or outruns the resolve deadline, or an unreachable or unanswering MCP server
+each costs only its own tools, logging a warning.
 A chat turn is not where you discover a plugin is broken — so a silently
 toolless Agent is a log question, not a UI question.
 

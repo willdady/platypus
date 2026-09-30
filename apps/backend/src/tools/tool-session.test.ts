@@ -546,7 +546,7 @@ describe("openToolSession", () => {
         expect(close).toHaveBeenCalled();
         expect(logger.warn).toHaveBeenCalledWith(
           expect.objectContaining({ mcpId: "mcp-1" }),
-          expect.stringContaining("unreachable"),
+          expect.stringContaining("did not answer"),
         );
       } finally {
         vi.useRealTimers();

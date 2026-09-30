@@ -73,8 +73,8 @@ are merged into what the model can call for that turn.
 
 <Callout type="info">
   Resolution is **fail-soft**: if an MCP server is unreachable when a turn runs,
-  or doesn't list its tools within **20 seconds**, the turn continues rather
-  than failing the whole Chat.
+  or too slow to list its tools, the turn continues rather than failing the
+  whole Chat.
 </Callout>
 
 If a server that answered recently goes down, Platypus keeps offering its tools

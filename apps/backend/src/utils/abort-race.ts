@@ -116,8 +116,9 @@ export const withDeadline = async <T>(
   try {
     return await raceAbort(signal, work);
   } catch (cause) {
+    // The timer's own error, so there is one place that phrases it.
     if (deadline.signal.aborted) {
-      throw new DeadlineExceededError(`timed out after ${timeoutMs}ms`);
+      throw deadline.signal.reason as DeadlineExceededError;
     }
     if (caller?.aborted) {
       throw new CallerAbortedError("turn cancelled");

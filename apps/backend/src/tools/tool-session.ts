@@ -11,7 +11,11 @@ import { logger } from "../logger.ts";
 import { CORE_BUILTIN_OWNER, getToolSetPlugin } from "../plugins/registry.ts";
 import { buildMcpTransportConfig } from "../services/mcp-oauth-provider.ts";
 import { normalizeToolResults } from "../services/tool-result.ts";
-import { withDeadline } from "../utils/abort-race.ts";
+import {
+  CallerAbortedError,
+  DeadlineExceededError,
+  withDeadline,
+} from "../utils/abort-race.ts";
 import { runCloser, type Closer, type CoreCloserRegistrar } from "./closers.ts";
 import {
   getToolSet,
@@ -385,7 +389,7 @@ export const openToolSession = async (
       mcpId: mcp.id,
       scope: mcp.organizationId ? "org" : "ws",
     } as const;
-    const open = async (): Promise<{
+    const openClient = async (): Promise<{
       client: MCPClient;
       close: () => Promise<void>;
     }> => {
@@ -404,7 +408,7 @@ export const openToolSession = async (
       registerCloser(close, attribution);
       return { client, close };
     };
-    const connect = async (): Promise<MCPClient> => (await open()).client;
+    const connect = async (): Promise<MCPClient> => (await openClient()).client;
 
     // Written by a live fetch when the listing changed or its fetched-at is due
     // a refresh, so most unchanged turns cost no write — and never at the
@@ -442,13 +446,15 @@ export const openToolSession = async (
     // than holding the turn until the step timer kills it.
     let definitions: ListToolsResult;
     let mcpTools: Record<string, Tool>;
-    let opening: ReturnType<typeof open> | undefined;
+    let opening: ReturnType<typeof openClient> | undefined;
     try {
       const live = await withDeadline(
-        async () => {
-          opening = open();
+        async (deadline) => {
+          opening = openClient();
           const { client } = await opening;
-          const listed = await client.listTools();
+          const listed = await client.listTools({
+            options: { signal: deadline },
+          });
           return { listed, tools: client.toolsFromDefinitions(listed) };
         },
         TOOL_SET_RESOLVE_TIMEOUT_MS,
@@ -464,17 +470,24 @@ export const openToolSession = async (
       // its own if the model calls one. A close that fails is dispose's to
       // report: it gets the same promise, through `runCloser`.
       void opening?.then(({ close }) => close()).catch(() => {});
+      // A cancelled turn will never read these tools, so it neither falls back
+      // nor reports a server that may be perfectly healthy.
+      if (error instanceof CallerAbortedError) return { kind: "none" };
+      const fault =
+        error instanceof DeadlineExceededError
+          ? `did not answer within ${TOOL_SET_RESOLVE_TIMEOUT_MS}ms`
+          : "is unreachable";
       const listing = usableLastKnownListing(mcp);
       if (!listing) {
         logger.warn(
           { error, ...attribution },
-          `MCP '${toolSetId}' is unreachable; skipping its tools`,
+          `MCP '${toolSetId}' ${fault}; skipping its tools`,
         );
         return { kind: "none" };
       }
       logger.warn(
         { error, ...attribution },
-        `MCP '${toolSetId}' is unreachable; serving its last-known tool listing`,
+        `MCP '${toolSetId}' ${fault}; serving its last-known tool listing`,
       );
       definitions = listing;
       mcpTools = await lazyMcpTools(listing, connect, mcp.name);

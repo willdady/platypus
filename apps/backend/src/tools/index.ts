@@ -43,8 +43,10 @@ import {
  * database or builds a Sandbox adapter on the way; short enough that a turn
  * whose server has hung still reaches the model well inside the run's 2-minute
  * step timer, rather than being killed by it with a timeout that names neither.
- * Every id resolves concurrently, so this bounds the whole resolve phase, not
- * each id in turn. Not configurable: nothing has asked for it.
+ * A session's ids resolve concurrently, so this bounds its whole resolve phase
+ * rather than adding up per id; a Sub-Agent's session, opened on its first
+ * delegation, gets a window of its own. Not configurable: nothing has asked
+ * for it.
  */
 export const TOOL_SET_RESOLVE_TIMEOUT_MS = 20_000;
 
