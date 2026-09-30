@@ -2159,20 +2159,26 @@ export const triggerCreateSchema = triggerSchema.pick({
   config: true,
 });
 
+// The defaulted fields are re-added as plain `.optional()` rather than left to
+// `.partial()`: a `.default()` still fills an absent key after `.partial()`, so a body carrying only
+// `{ enabled }` would come back with `maxRunsToKeep`, `search` and
+// `includeMemories` reset to their defaults — and be written as such.
 export const triggerUpdateSchema = triggerSchema
   .pick({
     name: true,
     description: true,
     instruction: true,
-    enabled: true,
-    maxRunsToKeep: true,
     agentId: true,
-    search: true,
-    includeMemories: true,
     type: true,
     config: true,
   })
-  .partial();
+  .partial()
+  .extend({
+    enabled: triggerSchema.shape.enabled.unwrap().optional(),
+    maxRunsToKeep: triggerSchema.shape.maxRunsToKeep.unwrap().optional(),
+    search: triggerSchema.shape.search.unwrap().optional(),
+    includeMemories: triggerSchema.shape.includeMemories.unwrap().optional(),
+  });
 
 // Trigger Run
 
@@ -2605,16 +2611,21 @@ export const kanbanCardCreateSchema = kanbanCardSchema.pick({
   priority: true,
 });
 
+// The defaulted fields are re-added as plain `.optional()` rather than left to
+// `.partial()`, so an update that only touches the title leaves the card's labels,
+// assignees and priority alone (see `triggerUpdateSchema`).
 export const kanbanCardUpdateSchema = kanbanCardSchema
   .pick({
     title: true,
     body: true,
-    labelIds: true,
-    assignees: true,
     dueDate: true,
-    priority: true,
   })
-  .partial();
+  .partial()
+  .extend({
+    labelIds: kanbanCardSchema.shape.labelIds.unwrap().optional(),
+    assignees: kanbanCardSchema.shape.assignees.unwrap().optional(),
+    priority: kanbanCardSchema.shape.priority.unwrap().optional(),
+  });
 
 export const kanbanCardMoveSchema = z.object({
   columnId: z.string(),

@@ -645,6 +645,41 @@ describe("Kanban Routes", () => {
   });
 
   describe("PUT /:boardId/cards/:cardId", () => {
+    it("keeps the labels, assignees and priority an update does not mention", async () => {
+      const fake = boardWorld({
+        cards: [
+          {
+            id: "card-1",
+            columnId: "col-1",
+            title: "Card",
+            body: null,
+            labelIds: ["label-1"],
+            assignees: [{ type: "user", id: "user-1" }],
+            dueDate: null,
+            priority: "high",
+            position: 1,
+            commentCount: 0,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        ],
+      });
+      mockSession();
+
+      const res = await app.request(
+        `${baseUrl}/${boardId}/cards/card-1`,
+        json("PUT", { title: "Renamed" }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(fake.tables.kanban_card[0]).toMatchObject({
+        title: "Renamed",
+        labelIds: ["label-1"],
+        assignees: [{ type: "user", id: "user-1" }],
+        priority: "high",
+      });
+    });
+
     it("should update card", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess

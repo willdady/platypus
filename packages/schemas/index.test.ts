@@ -60,6 +60,8 @@ import {
   triggerRunStatsSchema,
   triggerRunStatusSchema,
   TRIGGER_RUN_STATUS_LABELS,
+  triggerUpdateSchema,
+  kanbanCardUpdateSchema,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -1709,5 +1711,22 @@ describe("webhook event payloads", () => {
       somethingNew: "x",
     });
     expect(parsed).toMatchObject({ id: "c1", somethingNew: "x" });
+  });
+});
+
+describe("partial update schemas", () => {
+  // An update carries only the fields the caller is changing. A default filled
+  // in for an absent key would be written over the stored value.
+  it("returns only the Trigger fields that were supplied", () => {
+    expect(triggerUpdateSchema.parse({ name: "x" })).toEqual({ name: "x" });
+    expect(triggerUpdateSchema.parse({ enabled: false })).toEqual({
+      enabled: false,
+    });
+  });
+
+  it("returns only the Kanban Card fields that were supplied", () => {
+    expect(kanbanCardUpdateSchema.parse({ title: "x" })).toEqual({
+      title: "x",
+    });
   });
 });

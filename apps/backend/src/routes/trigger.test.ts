@@ -374,6 +374,33 @@ describe("Trigger Routes", () => {
       expect(setArg.nextRunAt).toBeNull();
     });
 
+    it("leaves the settings a toggle does not mention unchanged", async () => {
+      stubAuthLookups();
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          ...cronTrigger,
+          maxRunsToKeep: 10,
+          search: true,
+          includeMemories: true,
+        },
+      ]); // existing
+      mockDb.returning.mockResolvedValueOnce([
+        { ...cronTrigger, enabled: false },
+      ]);
+
+      const res = await app.request(`${baseUrl}/trig-1`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: false }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.enabled).toBe(false);
+      expect(setArg).not.toHaveProperty("maxRunsToKeep");
+      expect(setArg).not.toHaveProperty("search");
+      expect(setArg).not.toHaveProperty("includeMemories");
+    });
+
     it("round-trips includeMemories through an update", async () => {
       stubAuthLookups();
       mockDb.limit.mockResolvedValueOnce([cronTrigger]); // existing
