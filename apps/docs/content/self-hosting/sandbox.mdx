@@ -94,6 +94,21 @@ cap (`PidsLimit`), a memory ceiling, and `no-new-privileges` — to contain
 runaway or hostile workloads. These are hardcoded in the adapter, not
 configurable per Sandbox.
 
+A command that hits its timeout, or whose Chat is stopped, is killed in the
+container along with the processes it started, including ones it sent to the
+background. The tool reports exit code `124` for a timeout. A file read gives
+up after **30 seconds**. A process that clears its own environment (for
+example with `env -i`) is not tracked and keeps running.
+
+<Callout type="warning">
+  A container created by an earlier release has no init process to clean up
+  after a killed command, so its process cap still fills over time and commands
+  start failing. Delete the Sandbox and create it again to get a container with
+  one, the same way as
+  [applying changed reachability](#applying-changed-reachability). Deleting the
+  Sandbox also removes its files.
+</Callout>
+
 Horizontally-scaled deployments **cannot** use this adapter: sandbox state lives
 on a single host's Docker daemon, so each backend replica would have its own.
 Pick a remote backend instead.

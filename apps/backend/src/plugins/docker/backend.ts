@@ -1,5 +1,6 @@
 import Docker from "dockerode";
 import type { Container, Exec } from "dockerode";
+import { randomUUID } from "node:crypto";
 import { PassThrough } from "node:stream";
 import { z } from "zod";
 import type {
@@ -196,6 +197,139 @@ function splitParent(absPath: string): { parent: string; name: string } {
   };
 }
 
+// Every exec carries a unique marker in its environment, and everything it
+// starts inherits it. Ending a command that did not finish means killing
+// whatever carries its marker — which reaches a child that left the command's
+// process group (`setsid`, a daemonising `&`) or was reparented to the
+// container's init, where a process-group kill would miss it (issue #1128). A
+// process that scrubs its own environment (`env -i`) escapes; that is the price
+// of reaching the rest.
+// @internal — exported for tests
+export const EXEC_MARKER_VAR = "PLATYPUS_EXEC_ID";
+
+// Run as `sh -c KILL_SCRIPT sh <marker>`. SIGKILLs every process whose
+// environment holds the marker, and repeats while it still finds one, so a
+// child forked mid-sweep is caught on the next pass. A killed process is a
+// zombie with an empty environ until reaped, so it does not match again. Bounded
+// to ten passes, exiting non-zero if the tenth still found one so the survivor
+// is logged; a fork bomb outrunning that is what `PidsLimit` is for. Only POSIX
+// sh, GNU grep and /proc — all present in the Debian base image.
+const KILL_SCRIPT = `
+n=0
+while [ "$n" -lt 10 ]; do
+  found=
+  for d in /proc/[0-9]*; do
+    if grep -qxzF -- "${EXEC_MARKER_VAR}=$1" "$d/environ" 2>/dev/null; then
+      kill -9 "\${d#/proc/}" 2>/dev/null && found=1
+    fi
+  done
+  [ -z "$found" ] && exit 0
+  n=$((n + 1))
+done
+echo "processes still running after $n passes" >&2
+exit 1
+`;
+
+// How long the kill itself may take. It is a daemon call like any other, and a
+// daemon that hangs on it must not turn a timed-out command into a hung one.
+const KILL_TIMEOUT_MS = 5_000;
+
+// How long a file read may take. A read of a regular file under the cap is
+// quick; what this bounds is a FIFO with no writer, which blocks on open.
+const READ_TIMEOUT_MS = 30_000;
+
+// The attached stream can close a beat before the daemon records the exit
+// code, so a missing one is polled for briefly before it counts as a failure.
+const EXIT_CODE_ATTEMPTS = 10;
+const EXIT_CODE_RETRY_MS = 50;
+
+/** Where a failure to kill an unfinished command is reported. */
+type ExecLog = { logger: PluginLogger; workspaceId: string };
+
+type RunExecResult = SandboxExecResult & { timedOut: boolean };
+
+const delay = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// `promise`'s value if it resolves within `ms`, else `undefined`. Never rejects.
+async function settleWithin<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<T | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  const expiry = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), ms);
+  });
+  try {
+    return await Promise.race([promise.catch(() => undefined), expiry]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Kill every process started by the exec tagged `marker`. Best-effort and
+// bounded: a failure is logged, never thrown, because the caller is already
+// reporting the command's own outcome (a timeout or a cancellation).
+async function killExec(
+  container: Container,
+  marker: string,
+  log: ExecLog,
+): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), KILL_TIMEOUT_MS);
+  try {
+    const res = await runExec(
+      container,
+      ["/bin/sh", "-c", KILL_SCRIPT, "sh", marker],
+      {
+        timeoutMs: KILL_TIMEOUT_MS,
+        signal: controller.signal,
+        log,
+        // Killing the kill would only recurse; it is bounded by its own timer.
+        killUnfinished: false,
+      },
+    );
+    if (res.exitCode !== 0) {
+      throw new Error(
+        res.timedOut
+          ? "kill timed out"
+          : res.stderr.toString("utf8").trim() || `exit ${res.exitCode}`,
+      );
+    }
+  } catch (err) {
+    log.logger.warn(
+      { workspaceId: log.workspaceId, err },
+      "sandbox exec: could not kill an unfinished command (it may still be running)",
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// The exec's exit code, once the daemon has recorded it. Rejects rather than
+// guessing: a failed inspect, or one that never reports a code, says nothing
+// about whether the command succeeded.
+async function readExitCode(exec: Exec): Promise<number> {
+  for (let attempt = 1; ; attempt++) {
+    let info: Awaited<ReturnType<Exec["inspect"]>>;
+    try {
+      info = await exec.inspect();
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(`could not read the command's exit status: ${detail}`, {
+        cause,
+      });
+    }
+    if (!info.Running && typeof info.ExitCode === "number") {
+      return info.ExitCode;
+    }
+    if (attempt >= EXIT_CODE_ATTEMPTS) {
+      throw new Error("the daemon never recorded the command's exit code");
+    }
+    await delay(EXIT_CODE_RETRY_MS);
+  }
+}
+
 // Run a single command inside the container, demuxing stdout/stderr into
 // byte-capped sinks that keep draining once full (see createCappedSink).
 //
@@ -203,6 +337,11 @@ function splitParent(absPath: string): { parent: string; name: string } {
 // streaming: creating and starting the exec are unbounded calls to the daemon
 // and they run *before* the timeout timer is armed, so an unresponsive daemon
 // is precisely where nothing else would recover the call (issue #921).
+//
+// A command that times out or is cancelled is killed in the container, along
+// with everything it started (see EXEC_MARKER_VAR). Destroying the attached
+// stream only stops *us* listening; the process would otherwise run on and
+// count against `PidsLimit` (issue #1128).
 async function runExec(
   container: Container,
   cmd: string[],
@@ -213,10 +352,18 @@ async function runExec(
     stdoutCap?: number;
     stderrCap?: number;
     signal?: AbortSignal;
-  } = {},
-): Promise<SandboxExecResult> {
+    log: ExecLog;
+    /** Kill the command in the container if it does not finish. Default true. */
+    killUnfinished?: boolean;
+  },
+): Promise<RunExecResult> {
   const started = Date.now();
   const signal = opts.signal;
+  const marker = randomUUID();
+  const killIfUnfinished = () =>
+    opts.killUnfinished === false
+      ? Promise.resolve()
+      : killExec(container, marker, opts.log);
 
   const exec: Exec = await raceCancellation(signal, () =>
     container.exec({
@@ -224,15 +371,33 @@ async function runExec(
       AttachStdout: true,
       AttachStderr: true,
       WorkingDir: opts.workingDir,
-      Env: opts.env
-        ? Object.entries(opts.env).map(([k, v]) => `${k}=${v}`)
-        : undefined,
+      // The marker goes last so a caller's env cannot shadow it.
+      Env: [
+        ...Object.entries(opts.env ?? {}).map(([k, v]) => `${k}=${v}`),
+        `${EXEC_MARKER_VAR}=${marker}`,
+      ],
     }),
   );
 
-  const stream = await raceCancellation(signal, () =>
-    exec.start({ hijack: true, stdin: false }),
-  );
+  type ExecStream = Awaited<ReturnType<Exec["start"]>>;
+  let starting: Promise<ExecStream> | undefined;
+  let stream: ExecStream;
+  try {
+    stream = await raceCancellation(
+      signal,
+      () => (starting = exec.start({ hijack: true, stdin: false })),
+    );
+  } catch (err) {
+    // A start we stopped waiting for may still land and run the command. Give
+    // it a bounded chance to, so the sweep runs after the process exists
+    // rather than before it; a start that was never sent has nothing to kill.
+    if (err instanceof SandboxCancelledError && starting) {
+      const late = await settleWithin(starting, KILL_TIMEOUT_MS);
+      late?.destroy();
+      await killIfUnfinished();
+    }
+    throw err;
+  }
 
   const stdoutSink = createCappedSink(
     opts.stdoutCap ?? Number.POSITIVE_INFINITY,
@@ -262,8 +427,8 @@ async function runExec(
     stream.on("error", () => resolve());
   });
 
-  // Best-effort destroy of the exec stream; on timeout we also issue a
-  // KILL to the container's exec process group via a sidecar exec.
+  // Best-effort destroy of the exec stream. This stops us listening; the
+  // command itself is killed afterwards by `killIfUnfinished`.
   const destroyStream = () => {
     try {
       (stream as unknown as { destroy: () => void }).destroy();
@@ -282,8 +447,9 @@ async function runExec(
   }
 
   // A cancelled turn ends the command the same way its timeout would: the
-  // stream is destroyed, `streamEnd` settles, and the call rejects rather than
-  // reporting an exit code for a command that did not finish.
+  // stream is destroyed, `streamEnd` settles, the command is killed, and the
+  // call rejects rather than reporting an exit code for a command that did not
+  // finish.
   let cancelled = false;
   const onAbort = () => {
     cancelled = true;
@@ -302,21 +468,23 @@ async function runExec(
     signal?.removeEventListener("abort", onAbort);
   }
   if (timer) clearTimeout(timer);
+
+  if (cancelled || timedOut) await killIfUnfinished();
   if (cancelled) throw new SandboxCancelledError();
 
   // Drain the pass-throughs.
   stdoutPass.end();
   stderrPass.end();
 
-  let exitCode: number;
-  if (timedOut) {
-    exitCode = 124;
-  } else {
+  let exitCode = 124;
+  if (!timedOut) {
     try {
-      const info = await exec.inspect();
-      exitCode = info.ExitCode ?? 0;
-    } catch {
-      exitCode = 0;
+      exitCode = await readExitCode(exec);
+    } catch (err) {
+      // The stream ended without a recorded exit — a dropped connection to the
+      // daemon, say — so the command may still be running. End it too.
+      await killIfUnfinished();
+      throw err;
     }
   }
 
@@ -325,6 +493,7 @@ async function runExec(
     stderr: stderrSink.collect(),
     exitCode,
     durationMs: Date.now() - started,
+    timedOut,
   };
 }
 
@@ -359,6 +528,10 @@ class DockerSandboxTransport implements SandboxTransport {
     this.networks = config?.networks ?? [];
     this.extraHosts = config?.extraHosts ?? [];
     this.logger = logger;
+  }
+
+  private execLog(ctx: SandboxContext): ExecLog {
+    return { logger: this.logger, workspaceId: ctx.workspaceId };
   }
 
   // Idempotent, concurrency-safe provisioning. Concurrent callers for the
@@ -414,6 +587,10 @@ class DockerSandboxTransport implements SandboxTransport {
         Binds: [`${vol}:${SANDBOX_WORKSPACE_ROOT}`],
         AutoRemove: false,
         PidsLimit: PIDS_LIMIT,
+        // A minimal init as PID 1, so the orphans of a killed command are
+        // reaped. `sleep infinity` would leave their zombies holding PIDs
+        // against PidsLimit (issue #1128).
+        Init: true,
         Memory: MEMORY_BYTES,
         MemorySwap: MEMORY_BYTES,
         NanoCpus: NANO_CPUS,
@@ -434,11 +611,11 @@ class DockerSandboxTransport implements SandboxTransport {
 
     // Make sure the workspace root exists with sane perms (volume-mount
     // creates it as the root of the mount, but `mkdir -p` is idempotent).
-    await runExec(container, [
-      "/bin/sh",
-      "-c",
-      `mkdir -p ${SANDBOX_WORKSPACE_ROOT}`,
-    ]);
+    await runExec(
+      container,
+      ["/bin/sh", "-c", `mkdir -p ${SANDBOX_WORKSPACE_ROOT}`],
+      { log: this.execLog(ctx) },
+    );
 
     return container;
   }
@@ -488,24 +665,37 @@ class DockerSandboxTransport implements SandboxTransport {
       stdoutCap: opts.stdoutCap,
       stderrCap: opts.stderrCap,
       signal: opts.signal,
+      log: this.execLog(ctx),
     });
   }
 
-  // `cat` in argv form. Docker has no file-read API, and the alternative —
-  // `getArchive` — would mean unpacking a tar to read one file. The cap is
-  // applied to the stream as it arrives, so a huge file costs no more than it.
+  // `head -c` in argv form. Docker has no file-read API, and the alternative —
+  // `getArchive` — would mean unpacking a tar to read one file. `head` stops
+  // reading at the cap in the container, so a huge file — or an endless one
+  // like /dev/zero — costs no more than the cap; core's truncation rule is
+  // `>= cap`, so no byte past it is needed. The timeout bounds what `head`
+  // cannot: a FIFO with no writer blocks on open forever.
   async readFile(
     ctx: SandboxContext,
     absPath: string,
     cap: number,
   ): Promise<Buffer> {
     const container = await this.ensureContainer(ctx);
-    const res = await runExec(container, ["cat", "--", absPath], {
-      workingDir: SANDBOX_WORKSPACE_ROOT,
-      stdoutCap: cap,
-      stderrCap: MAX_SHELL_OUTPUT_BYTES,
-    });
+    const res = await runExec(
+      container,
+      ["head", "-c", String(cap), "--", absPath],
+      {
+        workingDir: SANDBOX_WORKSPACE_ROOT,
+        timeoutMs: READ_TIMEOUT_MS,
+        stdoutCap: cap,
+        stderrCap: MAX_SHELL_OUTPUT_BYTES,
+        log: this.execLog(ctx),
+      },
+    );
 
+    if (res.timedOut) {
+      throw new Error(`read timed out after ${READ_TIMEOUT_MS / 1000}s`);
+    }
     if (res.exitCode !== 0) {
       // The reason only: core names the tool that asked.
       throw new Error(res.stderr.toString("utf8").trim() || "read failed");
@@ -531,6 +721,7 @@ class DockerSandboxTransport implements SandboxTransport {
     if (mode === "create") {
       const probe = await runExec(container, ["test", "-e", absPath], {
         workingDir: SANDBOX_WORKSPACE_ROOT,
+        log: this.execLog(ctx),
       });
       if (probe.exitCode === 0) {
         throw new SandboxPathExistsError(absPath);
@@ -540,7 +731,9 @@ class DockerSandboxTransport implements SandboxTransport {
     const { parent, name } = splitParent(absPath);
     // The root is the volume mount and always exists; anything deeper may not.
     if (parent !== SANDBOX_WORKSPACE_ROOT) {
-      const mk = await runExec(container, ["mkdir", "-p", parent]);
+      const mk = await runExec(container, ["mkdir", "-p", parent], {
+        log: this.execLog(ctx),
+      });
       if (mk.exitCode !== 0) {
         throw new Error(`failed to create parent directory: ${parent}`);
       }

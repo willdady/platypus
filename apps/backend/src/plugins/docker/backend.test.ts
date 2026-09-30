@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import { PassThrough } from "node:stream";
 import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
@@ -55,6 +55,18 @@ type ExecConfig = {
    * resolving and the abort listener being attached (issue #921).
    */
   onStart?: () => void;
+  /** Delay (ms) before the daemon's exec-start call resolves. */
+  startDelayMs?: number;
+  /** Fires as the exec-start call resolves. */
+  onStarted?: () => void;
+  /** Reject `exec.inspect()` with this error instead of reporting an exit code. */
+  inspectError?: Error;
+  /**
+   * What successive `exec.inspect()` calls report as `ExitCode`, popped
+   * left-to-right; the last one repeats. `null` is the daemon still marking
+   * the exec as running. Overrides `exitCode` when set.
+   */
+  inspectExitCodes?: Array<number | null>;
 };
 
 /** A PassThrough stream extended with optional exec configuration attached by the mock. */
@@ -69,6 +81,7 @@ type ContainerCreateOpts = {
   HostConfig?: {
     Binds?: string[];
     PidsLimit?: number;
+    Init?: boolean;
     Memory?: number;
     MemorySwap?: number;
     NanoCpus?: number;
@@ -174,9 +187,25 @@ function makeFakeContainer(): FakeContainer {
       return Promise.resolve({
         start: vi.fn(() => {
           cfg.onStart?.();
-          return Promise.resolve(stream);
+          const started = () => {
+            cfg.onStarted?.();
+            return stream;
+          };
+          const startDelay = cfg.startDelayMs ?? 0;
+          if (startDelay <= 0) return Promise.resolve(started());
+          return new Promise((resolve) =>
+            setTimeout(() => resolve(started()), startDelay),
+          );
         }),
-        inspect: vi.fn(() => Promise.resolve({ ExitCode: cfg.exitCode ?? 0 })),
+        inspect: vi.fn(() => {
+          if (cfg.inspectError) return Promise.reject(cfg.inspectError);
+          const codes = cfg.inspectExitCodes;
+          if (codes) {
+            const code = codes.length > 1 ? codes.shift() : codes[0];
+            return Promise.resolve({ ExitCode: code, Running: code === null });
+          }
+          return Promise.resolve({ ExitCode: cfg.exitCode ?? 0 });
+        }),
       });
     }),
     putArchive: vi.fn((buffer: Buffer, opts: { path: string }) => {
@@ -281,6 +310,7 @@ import {
   createDockerSandboxBackend,
   buildSingleFileTar,
   dockerSandboxConfigSchema,
+  EXEC_MARKER_VAR,
 } from "./backend.ts";
 import { logger } from "../../logger.ts";
 import { plugin } from "./index.ts";
@@ -428,6 +458,9 @@ describe("DockerSandboxTransport — provisioning", () => {
       "platypus-sandbox-vol-ws-abc:/workspace",
     ]);
     expect(opts.HostConfig?.PidsLimit).toBe(256);
+    // A killed command's orphans are reparented to PID 1; `sleep infinity`
+    // never reaps them, and their zombies would count against PidsLimit.
+    expect(opts.HostConfig?.Init).toBe(true);
     expect(opts.HostConfig?.Memory).toBe(2 * 1024 * 1024 * 1024);
     expect(opts.HostConfig?.MemorySwap).toBe(opts.HostConfig?.Memory);
     expect(opts.HostConfig?.NanoCpus).toBe(2_000_000_000);
@@ -522,13 +555,19 @@ describe("DockerSandboxTransport — argv safety", () => {
 
     // Find the fsRead exec call — last call (after provisioning mkdir).
     const last = mockState.execCalls.at(-1) as { Cmd: string[] };
-    expect(last.Cmd).toEqual(["cat", "--", `/workspace/${malicious}`]);
+    expect(last.Cmd).toEqual([
+      "head",
+      "-c",
+      String(MAX_READ_BYTES),
+      "--",
+      `/workspace/${malicious}`,
+    ]);
   });
 
-  it("fsRead bounds the cat output at the cap core asked for", async () => {
-    // `cat` will happily emit a gigabyte; the stdout cap is what keeps a huge
-    // file from being buffered whole. Whether a filled buffer counts as
-    // truncated is core's rule, tested in sandbox/posix.test.ts.
+  it("fsRead bounds the read output at the cap core asked for", async () => {
+    // `head -c` stops reading at the cap in the container; the stdout cap is
+    // the backstop on this side. Whether a filled buffer counts as truncated
+    // is core's rule, tested in sandbox/posix.test.ts.
     setupFreshProvision();
     queueExec({ stdout: "a".repeat(MAX_READ_BYTES + 5_000), exitCode: 0 });
 
@@ -562,20 +601,23 @@ describe("DockerSandboxTransport — argv safety", () => {
   it.each([
     [
       "the command's stderr",
-      "cat: nope: No such file or directory\n",
+      "head: cannot open 'nope' for reading: No such file or directory\n",
       /No such file/,
     ],
     ["a generic reason when stderr is empty", "", /read failed/],
-  ])("fsRead reports %s when cat fails", async (_label, stderr, expected) => {
-    setupFreshProvision();
-    queueExec({ stderr, exitCode: 1 });
+  ])(
+    "fsRead reports %s when the read fails",
+    async (_label, stderr, expected) => {
+      setupFreshProvision();
+      queueExec({ stderr, exitCode: 1 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+      const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
 
-    await expect(
-      backend.fsRead(ctx, { path: "nope" }, callOptions),
-    ).rejects.toThrow(expected);
-  });
+      await expect(
+        backend.fsRead(ctx, { path: "nope" }, callOptions),
+      ).rejects.toThrow(expected);
+    },
+  );
 
   it("fsWrite creates a nested parent first and extracts into it", async () => {
     mockState.existingContainer = makeFakeContainer();
@@ -668,7 +710,7 @@ describe("DockerSandboxTransport — argv safety", () => {
 });
 
 describe("DockerSandboxTransport — byte transfer", () => {
-  it("round-trips a binary payload byte-identical through putArchive and cat", async () => {
+  it("round-trips a binary payload byte-identical through putArchive and a read", async () => {
     mockState.existingContainer = makeFakeContainer();
     queueExec({ exitCode: 0 }); // mkdir -p for the nested parent
     const payload = Buffer.concat([
@@ -806,6 +848,23 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
   });
 });
 
+// Every exec is tagged with a marker in its environment, which its children
+// inherit; ending a command means killing whatever carries its marker.
+/** The marker the transport tagged an exec with, read back off its Env. */
+function execMarker(call: Record<string, unknown>): string {
+  const env = (call.Env as string[] | undefined) ?? [];
+  const entry = env.find((e) => e.startsWith(`${EXEC_MARKER_VAR}=`));
+  if (!entry) throw new Error("exec carries no marker");
+  return entry.slice(EXEC_MARKER_VAR.length + 1);
+}
+
+/** The execs sent to kill whatever carries `marker`. */
+function killCallsFor(marker: string): Record<string, unknown>[] {
+  return mockState.execCalls.filter((c) =>
+    (c.Cmd as string[]).includes(marker),
+  );
+}
+
 describe("DockerSandboxTransport — shellExec output handling", () => {
   it("times out: returns exitCode 124 and destroys the stream", async () => {
     setupFreshProvision();
@@ -897,6 +956,192 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
 
     expect(res.stdout.length).toBe(MAX_SHELL_OUTPUT_BYTES);
     expect(res.truncated).toBe(true);
+  });
+});
+
+// Issue #1128. Destroying the attached stream only stops *us* listening; the
+// process in the container runs on, and enough of them exhaust PidsLimit.
+describe("DockerSandboxTransport — ending a command that did not finish", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("kills everything the command started when it times out", async () => {
+    setupFreshProvision();
+    queueExec({ closeDelayMs: 5_000, exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const res = await backend.shellExec(
+      ctx,
+      { command: "sleep infinity", timeoutMs: 20 },
+      callOptions,
+    );
+
+    expect(res.exitCode).toBe(124);
+    const command = mockState.execCalls[1];
+    expect(killCallsFor(execMarker(command))).toHaveLength(1);
+  });
+
+  it("kills everything the command started when the turn is cancelled", async () => {
+    setupFreshProvision();
+    queueExec({ closeDelayMs: 5_000, exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const controller = new AbortController();
+    const inflight = backend.shellExec(
+      ctx,
+      { command: "sleep infinity" },
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(mockState.execCalls).toHaveLength(2));
+    controller.abort();
+
+    await expect(inflight).rejects.toThrow(/cancelled/i);
+    const command = mockState.execCalls[1];
+    await vi.waitFor(() =>
+      expect(killCallsFor(execMarker(command))).toHaveLength(1),
+    );
+  });
+
+  // A kill swept before the daemon spawned the command would find nothing,
+  // and the command would then run on untracked.
+  it("kills a command whose start lands after the turn is cancelled", async () => {
+    setupFreshProvision();
+    let commandStarted = false;
+    let startedBeforeKill = false;
+    queueExec({
+      closeDelayMs: 5_000,
+      startDelayMs: 50,
+      onStarted: () => (commandStarted = true),
+    });
+    queueExec({ onStart: () => (startedBeforeKill = commandStarted) }); // the kill
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const controller = new AbortController();
+    const inflight = backend.shellExec(
+      ctx,
+      { command: "sleep infinity" },
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(mockState.execCalls).toHaveLength(2));
+    controller.abort();
+
+    await expect(inflight).rejects.toThrow(/cancelled/i);
+    const command = mockState.execCalls[1];
+    expect(killCallsFor(execMarker(command))).toHaveLength(1);
+    expect(startedBeforeKill).toBe(true);
+  });
+
+  it("leaves a command that finished alone", async () => {
+    setupFreshProvision();
+    queueExec({ stdout: "hi", exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
+
+    // Provisioning's mkdir and the command — nothing sent to kill either.
+    expect(mockState.execCalls).toHaveLength(2);
+  });
+
+  it("gives every exec its own marker, alongside the command's env", async () => {
+    setupFreshProvision();
+    queueExec({ exitCode: 0 });
+    queueExec({ exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.shellExec(
+      ctx,
+      { command: "true", env: { FOO: "bar" } },
+      callOptions,
+    );
+    await backend.shellExec(ctx, { command: "true" }, callOptions);
+
+    const [, first, second] = mockState.execCalls;
+    expect(first.Env).toContain("FOO=bar");
+    expect(execMarker(first)).not.toBe(execMarker(second));
+  });
+
+  // The kill is itself a daemon call; a daemon that hangs on it must not turn
+  // a timed-out command into a hung one.
+  it("still reports the timeout when the kill cannot be delivered", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    setupFreshProvision();
+    queueExec({ closeDelayMs: 600_000, exitCode: 0 });
+    queueExec({ hangCreate: true }); // the kill
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const inflight = backend.shellExec(
+      ctx,
+      { command: "sleep infinity", timeoutMs: 20 },
+      callOptions,
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await expect(inflight).resolves.toMatchObject({ exitCode: 124 });
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: ctx.workspaceId }),
+      expect.stringMatching(/could not kill/),
+    );
+  });
+
+  // `head` on a FIFO with no writer blocks on open forever; nothing above the
+  // transport would ever end it.
+  it("gives up on a read that never finishes, and kills it", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    setupFreshProvision();
+    queueExec({ closeDelayMs: 3_600_000, exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const inflight = backend.fsRead(ctx, { path: "fifo" }, callOptions);
+    const settled = expect(inflight).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(120_000);
+    await settled;
+
+    const read = mockState.execCalls[1];
+    expect(killCallsFor(execMarker(read))).toHaveLength(1);
+  });
+});
+
+describe("DockerSandboxTransport — exit status", () => {
+  it("reports a failed exec inspect as an error, not a success", async () => {
+    setupFreshProvision();
+    queueExec({ stdout: "hi", inspectError: new Error("daemon gone") });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+
+    await expect(
+      backend.shellExec(ctx, { command: "false" }, callOptions),
+    ).rejects.toThrow(/daemon gone/);
+  });
+
+  // The stream can close a beat before the daemon records the exit code.
+  it("waits for the daemon to record the exit code", async () => {
+    setupFreshProvision();
+    queueExec({ inspectExitCodes: [null, null, 3] });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const res = await backend.shellExec(
+      ctx,
+      { command: "exit 3" },
+      callOptions,
+    );
+
+    expect(res.exitCode).toBe(3);
+  });
+
+  // The stream ended but the daemon still has the exec running — a dropped
+  // connection, say — so the command is ended rather than left behind.
+  it("reports an exit code the daemon never records as an error, and kills the command", async () => {
+    setupFreshProvision();
+    queueExec({ inspectExitCodes: [null] });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+
+    await expect(
+      backend.shellExec(ctx, { command: "true" }, callOptions),
+    ).rejects.toThrow(/exit code/i);
+    const command = mockState.execCalls[1];
+    expect(killCallsFor(execMarker(command))).toHaveLength(1);
   });
 });
 
