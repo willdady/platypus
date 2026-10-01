@@ -646,6 +646,7 @@ const McpForm = ({
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label="Remove header"
                   className="shrink-0 cursor-pointer"
                   onClick={() => {
                     const newRows = formData.headerRows.filter(

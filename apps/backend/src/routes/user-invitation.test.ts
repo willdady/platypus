@@ -63,6 +63,32 @@ describe("User Invitation Routes", () => {
         }),
       ]);
     });
+
+    it("still lists an invitation whose inviter's account was deleted", async () => {
+      mockSession({ id: "u1", email: "user@example.com", role: "user" });
+      seedDb({
+        organization: [{ id: "org-1", name: "Org 1" }],
+        invitation: [
+          {
+            id: "inv-orphan",
+            organizationId: "org-1",
+            invitedBy: null,
+            email: "user@example.com",
+            status: "pending",
+            expiresAt: new Date(Date.now() + 7 * DAY),
+          },
+        ],
+      });
+
+      const res = await app.request(baseUrl);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { results: Row[] };
+      expect(body.results).toEqual([
+        expect.objectContaining({ id: "inv-orphan", invitedBy: null }),
+      ]);
+      expect(body.results[0].invitedByName ?? null).toBeNull();
+    });
   });
 
   describe("POST /:invitationId/accept", () => {

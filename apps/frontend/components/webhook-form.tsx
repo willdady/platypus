@@ -394,6 +394,8 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                   type="button"
                   variant="outline"
                   size="icon"
+                  aria-label="Show signing secret"
+                  aria-pressed={showSecret}
                   className="shrink-0 cursor-pointer"
                   onClick={() => setShowSecret(!showSecret)}
                 >
@@ -407,6 +409,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                   type="button"
                   variant="outline"
                   size="icon"
+                  aria-label="Copy signing secret"
                   className="shrink-0 cursor-pointer"
                   onClick={handleCopySecret}
                 >
@@ -464,6 +467,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                         type="button"
                         variant="outline"
                         size="icon"
+                        aria-label="Remove header"
                         className="shrink-0 cursor-pointer"
                         onClick={() => removeHeader(index)}
                         disabled={isSubmitting}

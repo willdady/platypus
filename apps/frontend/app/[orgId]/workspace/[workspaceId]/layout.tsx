@@ -85,6 +85,7 @@ export default async function WorkspaceLayout({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Workspace home"
                 asChild
                 className="size-7 cursor-pointer"
               >

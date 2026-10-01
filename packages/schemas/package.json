@@ -1,7 +1,7 @@
 {
   "name": "@platypus/schemas",
   "version": "0.1.0",
-  "description": "REST backend for Platypus",
+  "description": "Shared Zod schemas for Platypus",
   "license": "MIT",
   "author": "Will Dady",
   "type": "module",

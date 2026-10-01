@@ -9,13 +9,9 @@ import {
 import { fireTrigger } from "../services/trigger-firing.ts";
 import { narrowTriggerConfig, nextCronRunAt } from "../services/trigger.ts";
 import { logger } from "../logger.ts";
+import { ADVISORY_LOCK_IDS } from "../db/advisory-lock.ts";
 import { chatPerRunTimeoutMs } from "../runs/chat-timeouts.ts";
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
-
-// Advisory lock ID for the background scheduler. The numeric value is load
-// bearing across deploys: an old and a new instance must contend for the same
-// lock during a rolling restart, so never change it when renaming things here.
-const SCHEDULER_LOCK_ID = 987654321;
 
 // Check interval: 60 seconds (1 minute)
 const SCHEDULER_INTERVAL_MS = parseInt(
@@ -53,7 +49,7 @@ async function withConcurrencyLimit<T>(
  * Attempts to acquire an advisory lock and runs the given function if successful.
  * This ensures only one backend instance runs the scheduled work at a time.
  *
- * `lockId` is load bearing across deploys — see `SCHEDULER_LOCK_ID`. Each
+ * `lockId` is load bearing across deploys — see `ADVISORY_LOCK_IDS`. Each
  * background job passes its own, so jobs contend only with their own peers.
  *
  * An advisory lock belongs to the connection that took it, and `db` is a pool,
@@ -484,7 +480,7 @@ export function startScheduler(): void {
   // grab the lock does it. Each sweep is wrapped independently so one failing
   // doesn't skip the others.
   scheduleAligned("trigger-scheduler", SCHEDULER_INTERVAL_MS, async () => {
-    await runWithLock(SCHEDULER_LOCK_ID, async () => {
+    await runWithLock(ADVISORY_LOCK_IDS.scheduler, async () => {
       try {
         await recoverStuckTriggers();
       } catch (error) {

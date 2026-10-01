@@ -154,6 +154,7 @@ const WidgetTile = memo(function WidgetTile({
         <div className="flex items-center gap-1 shrink-0">
           {widget.type === "text" && !editMode && (
             <button
+              aria-label="Expand widget"
               className="hidden md:flex items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => onExpand(widget.id)}
@@ -164,6 +165,7 @@ const WidgetTile = memo(function WidgetTile({
           <Tooltip delayDuration={500}>
             <TooltipTrigger asChild onMouseDown={(e) => e.stopPropagation()}>
               <button
+                aria-label="Widget details"
                 className={cn(
                   "hidden items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors",
                   !editMode && "md:flex",
@@ -182,6 +184,8 @@ const WidgetTile = memo(function WidgetTile({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Edit widget"
+                aria-pressed={isEditing}
                 className="h-6 w-6"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onEditToggle(widget.id)}
@@ -191,6 +195,7 @@ const WidgetTile = memo(function WidgetTile({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Delete widget"
                 className="h-6 w-6 text-destructive hover:text-destructive"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onDelete(widget.id)}

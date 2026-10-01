@@ -1,6 +1,6 @@
 {
-  "id": "899b2e32-4719-4eaa-a3bf-5b8b54b5f8f4",
-  "prevId": "dda8ef93-043d-4947-957c-ec52610ae8a0",
+  "id": "e92fb49f-5911-42c5-b1a2-b2a41e89c712",
+  "prevId": "899b2e32-4719-4eaa-a3bf-5b8b54b5f8f4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1395,6 +1395,28 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "unique_invitation_org_email": {
+          "name": "unique_invitation_org_email",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"invitation\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1427,14 +1449,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "unique_invitation_org_email": {
-          "name": "unique_invitation_org_email",
-          "nullsNotDistinct": false,
-          "columns": [
-            "organization_id",
-            "email"
-          ]
-        },
         "unique_invitation_token": {
           "name": "unique_invitation_token",
           "nullsNotDistinct": false,

@@ -36,7 +36,8 @@ userInvitation.get("/", requireAuth, async (c) => {
       organizationTable,
       eq(invitationTable.organizationId, organizationTable.id),
     )
-    .innerJoin(userTable, eq(invitationTable.invitedBy, userTable.id))
+    // Left: the inviter's account may since have been deleted.
+    .leftJoin(userTable, eq(invitationTable.invitedBy, userTable.id))
     .where(
       and(
         eq(invitationTable.email, user.email),

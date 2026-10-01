@@ -544,8 +544,15 @@
     {
       "idx": 77,
       "version": "7",
-      "when": 1790838180203,
-      "tag": "0077_partial_unique_pending_invitation",
+      "when": 1790838147041,
+      "tag": "0077_foreign_key_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1790842116390,
+      "tag": "0078_partial_unique_pending_invitation",
       "breakpoints": true
     }
   ]

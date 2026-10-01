@@ -157,6 +157,13 @@ export const workspace = pgTable(
   (t) => [
     index("idx_workspace_organization_id").on(t.organizationId),
     index("idx_workspace_owner_id").on(t.ownerId),
+    index("idx_workspace_task_model_provider_id").on(t.taskModelProviderId),
+    index("idx_workspace_memory_extraction_provider_id").on(
+      t.memoryExtractionProviderId,
+    ),
+    index("idx_workspace_memory_embedding_provider_id").on(
+      t.memoryEmbeddingProviderId,
+    ),
   ],
 );
 
@@ -275,6 +282,9 @@ export const chatMessage = pgTable(
   }),
   (t) => [
     primaryKey({ columns: [t.chatId, t.id] }),
+    // The parent check on a message delete; the primary key leads with
+    // `chat_id` alone, which matches every message of the Chat.
+    index("idx_chat_message_chat_id_parent_id").on(t.chatId, t.parentId),
     foreignKey({
       columns: [t.chatId, t.parentId],
       foreignColumns: [t.chatId, t.id],
@@ -482,6 +492,13 @@ export const blueprint = pgTable(
   }),
   (t) => [
     index("idx_blueprint_organization_id").on(t.organizationId),
+    index("idx_blueprint_task_model_provider_id").on(t.taskModelProviderId),
+    index("idx_blueprint_memory_extraction_provider_id").on(
+      t.memoryExtractionProviderId,
+    ),
+    index("idx_blueprint_memory_embedding_provider_id").on(
+      t.memoryEmbeddingProviderId,
+    ),
     unique("unique_blueprint_name_org").on(t.organizationId, t.name),
   ],
 );
@@ -612,10 +629,11 @@ export const invitation = pgTable(
       .text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    // Null once the inviter's account is deleted: the invitation stays
+    // redeemable, it just no longer names who sent it.
     invitedBy: t
       .text("invited_by")
-      .notNull()
-      .references(() => user.id),
+      .references(() => user.id, { onDelete: "set null" }),
     status: t.text("status").notNull().default("pending"), // pending | accepted | declined | expired
     // Optional name for the Workspace provisioned on accept (ADR-0008). Null
     // defaults to "<member name>'s Workspace" at accept time.
@@ -636,6 +654,7 @@ export const invitation = pgTable(
   (t) => [
     index("idx_invitation_email").on(t.email),
     index("idx_invitation_org_id").on(t.organizationId),
+    index("idx_invitation_invited_by").on(t.invitedBy),
     // Partial: only a pending invitation claims the address (#1131), so an
     // accepted, declined or expired one never blocks re-inviting it.
     uniqueIndex("unique_invitation_org_email")
@@ -762,6 +781,7 @@ export const memoryDailySummary = pgTable(
     ),
     index("idx_daily_summary_user_workspace").on(t.userId, t.workspaceId),
     index("idx_daily_summary_date").on(t.summaryDate),
+    index("idx_daily_summary_workspace_id").on(t.workspaceId),
     // No HNSW index — dimensions vary per workspace. Exact nearest-neighbor
     // search via <=> is fast enough for the scale of daily summaries (hundreds
     // to low thousands of rows per workspace). Queries are already scoped by
@@ -803,6 +823,7 @@ export const trigger = pgTable(
     index("idx_trigger_workspace_id").on(t.workspaceId),
     index("idx_trigger_next_run_at").on(t.nextRunAt),
     index("idx_trigger_type").on(t.type),
+    index("idx_trigger_agent_id").on(t.agentId),
   ],
 );
 
@@ -939,6 +960,10 @@ export const kanbanCard = pgTable(
     index("idx_kanban_card_due_date").on(t.dueDate),
     index("idx_kanban_card_priority").on(t.priority),
     index("idx_kanban_card_column_position").on(t.columnId, t.position),
+    index("idx_kanban_card_created_by_user_id").on(t.createdByUserId),
+    index("idx_kanban_card_created_by_agent_id").on(t.createdByAgentId),
+    index("idx_kanban_card_last_edited_by_user_id").on(t.lastEditedByUserId),
+    index("idx_kanban_card_last_edited_by_agent_id").on(t.lastEditedByAgentId),
   ],
 );
 
@@ -996,6 +1021,8 @@ export const triggerRunEvent = pgTable(
   (t) => [
     // The detail read: one run's events, incrementally past a sequence number.
     index("idx_trigger_run_event_run_id_seq").on(t.runId, t.seq),
+    // Retention's cascade looks up each deleted event's children.
+    index("idx_trigger_run_event_parent_event_id").on(t.parentEventId),
   ],
 );
 
@@ -1086,7 +1113,11 @@ export const kanbanCardComment = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
-  (t) => [index("idx_kanban_card_comment_card_id").on(t.cardId)],
+  (t) => [
+    index("idx_kanban_card_comment_card_id").on(t.cardId),
+    index("idx_kanban_card_comment_created_by_user_id").on(t.createdByUserId),
+    index("idx_kanban_card_comment_created_by_agent_id").on(t.createdByAgentId),
+  ],
 );
 
 /**
@@ -1128,6 +1159,8 @@ export const kanbanCardHistory = pgTable(
       t.cardId,
       t.createdAt,
     ),
+    index("idx_kanban_card_history_actor_user_id").on(t.actorUserId),
+    index("idx_kanban_card_history_actor_agent_id").on(t.actorAgentId),
   ],
 );
 

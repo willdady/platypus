@@ -140,6 +140,7 @@ export function PieChartWidget({
               />
               {segments.length > 1 && (
                 <button
+                  aria-label="Remove segment"
                   onClick={() => handleRemoveSegment(s.id)}
                   className="text-muted-foreground hover:text-destructive shrink-0"
                 >

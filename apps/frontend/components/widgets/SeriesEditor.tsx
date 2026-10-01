@@ -105,6 +105,7 @@ export function SeriesEditor({
               />
               {series.length > 1 && (
                 <button
+                  aria-label="Remove series"
                   onClick={() => handleRemoveSeries(s.id)}
                   className="text-muted-foreground hover:text-destructive"
                 >

@@ -1879,7 +1879,8 @@ export const invitationSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   organizationId: z.string(),
-  invitedBy: z.string(),
+  // Null once the inviter's account has been deleted.
+  invitedBy: z.string().nullable(),
   status: invitationStatusSchema,
   // Optional name for the Workspace provisioned when this invitation is
   // accepted (ADR-0008). When null/omitted the accept handler defaults it to
@@ -1912,7 +1913,7 @@ export const invitationCreateSchema = invitationSchema.pick({
 
 export const invitationListItemSchema = invitationSchema.extend({
   organizationName: z.string().optional(),
-  invitedByName: z.string().optional(),
+  invitedByName: z.string().nullable().optional(),
 });
 
 export type InvitationListItem = z.infer<typeof invitationListItemSchema>;
@@ -2827,7 +2828,7 @@ export * from "./widget-registry.ts";
 export const dashboardSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  name: z.string(),
+  name: z.string().min(1).max(200),
   description: z.string().max(500).nullable().optional(),
   desktopLayout: z.array(rglLayoutItemSchema),
   mobileLayout: z.array(rglLayoutItemSchema),
@@ -2837,17 +2838,19 @@ export const dashboardSchema = z.object({
 
 export type Dashboard = z.infer<typeof dashboardSchema>;
 
-export const dashboardCreateSchema = z.object({
-  name: z.string().min(1).max(200),
-  description: z.string().max(500).nullable().optional(),
+export const dashboardCreateSchema = dashboardSchema.pick({
+  name: true,
+  description: true,
 });
 
-export const dashboardUpdateSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  description: z.string().max(500).nullable().optional(),
-  desktopLayout: z.array(rglLayoutItemSchema).optional(),
-  mobileLayout: z.array(rglLayoutItemSchema).optional(),
-});
+export const dashboardUpdateSchema = dashboardSchema
+  .pick({
+    name: true,
+    description: true,
+    desktopLayout: true,
+    mobileLayout: true,
+  })
+  .partial();
 
 // --- Webhook event payloads --------------------------------------------------
 

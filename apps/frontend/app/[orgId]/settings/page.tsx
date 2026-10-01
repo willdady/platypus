@@ -23,6 +23,7 @@ const OrgSettingsPage = () => {
               className="text-muted-foreground"
               variant="ghost"
               size="icon"
+              aria-label="Copy Organization ID"
               onClick={() => {
                 navigator.clipboard.writeText(orgId);
                 toast.info("Copied to clipboard");

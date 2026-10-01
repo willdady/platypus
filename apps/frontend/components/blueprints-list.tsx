@@ -109,6 +109,7 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
                             className="cursor-pointer text-muted-foreground"
                             variant="ghost"
                             size="icon"
+                            aria-label={`Actions for ${blueprint.name}`}
                             onClick={(e) => e.preventDefault()}
                           >
                             <EllipsisVertical className="h-4 w-4" />

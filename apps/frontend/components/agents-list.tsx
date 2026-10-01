@@ -491,6 +491,7 @@ export const AgentsList = ({
                             className="cursor-pointer text-muted-foreground"
                             variant="ghost"
                             size="icon"
+                            aria-label={`Actions for ${agent.name}`}
                           >
                             <EllipsisVertical className="h-4 w-4" />
                           </Button>
@@ -514,6 +515,7 @@ export const AgentsList = ({
                             className="cursor-pointer text-muted-foreground"
                             variant="ghost"
                             size="icon"
+                            aria-label={`Actions for ${agent.name}`}
                           >
                             <EllipsisVertical className="h-4 w-4" />
                           </Button>
