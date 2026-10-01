@@ -195,6 +195,31 @@ describe("Agent Routes", () => {
       expect(body.error[0].code).toBe("too_big");
       expect(body.error[0].path).toContain("description");
     });
+    it.each([
+      [1, 201],
+      [1.5, 400],
+    ])("creating with topP %s returns %s", async (topP, status) => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "agent-1" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "New Agent",
+          description: "A test agent",
+          providerId: "p1",
+          modelId: "m1",
+          topP,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(status);
+    });
   });
 
   describe("GET /", () => {
@@ -332,6 +357,34 @@ describe("Agent Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockAgent);
+    });
+
+    it.each([
+      [1, 200],
+      [1.5, 400],
+    ])("updating with topP %s returns %s", async (topP, status) => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      // findVisibleAgent → workspace-scoped agent
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "agent-1" }]);
+
+      const res = await app.request(`${baseUrl}/agent-1`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Updated Agent",
+          description: "An updated agent",
+          providerId: "p1",
+          modelId: "m1",
+          topP,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(status);
     });
 
     it("persists a cleared temperature as null instead of keeping the old value (#263)", async () => {

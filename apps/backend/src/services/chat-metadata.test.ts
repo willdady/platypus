@@ -206,6 +206,23 @@ describe("generateChatMetadata", () => {
     expect(setArg.title).toBe("This is an absurdly long chat…");
   });
 
+  it.each(["", "Hi", "🐍"])(
+    "leaves the chat Untitled when the generated title %j is too short",
+    async (title) => {
+      stubReads({
+        chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+        workspace: { id: "ws-1", taskModelProviderId: null },
+        provider,
+      });
+      mockGenerateText.mockResolvedValueOnce({
+        output: { title, tags: ["misc"] },
+      });
+
+      expect(await generateChatMetadata(params)).toBeNull();
+      expect(mockDb.set).not.toHaveBeenCalled();
+    },
+  );
+
   it("prefers the workspace task-model provider override", async () => {
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },

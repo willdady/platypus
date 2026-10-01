@@ -297,12 +297,7 @@ export function AppSidebar() {
     try {
       const outcome = await writeEntity(backendUrl, "chat", scope, {
         id: chatId,
-        data: {
-          workspaceId,
-          title: currentChat.title,
-          isPinned: !currentChat.isPinned,
-          tags: currentChat.tags ?? [],
-        },
+        data: { isPinned: !currentChat.isPinned },
       });
 
       if (outcome.outcome !== "success") {

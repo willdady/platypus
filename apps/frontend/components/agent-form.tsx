@@ -43,6 +43,12 @@ import {
   AGENT_INPUT_PLACEHOLDER_MAX_LENGTH,
   AGENT_MAX_STEPS_MIN,
   DEFAULT_AGENT_MAX_STEPS,
+  PENALTY_MAX,
+  PENALTY_MIN,
+  TEMPERATURE_MIN,
+  TOP_K_MIN,
+  TOP_P_MAX,
+  TOP_P_MIN,
   type ToolSet,
   type Agent,
   type Provider,
@@ -830,7 +836,7 @@ const AgentForm = ({
                 label="Temperature"
                 name="temperature"
                 type="number"
-                min="0"
+                min={TEMPERATURE_MIN}
                 step="0.1"
                 value={String(formData.temperature ?? "")}
                 onChange={(value) => setFloatField("temperature", value)}
@@ -850,8 +856,8 @@ const AgentForm = ({
                 label="Top-p"
                 name="topP"
                 type="number"
-                min="0"
-                max="1"
+                min={TOP_P_MIN}
+                max={TOP_P_MAX}
                 step="0.1"
                 value={String(formData.topP ?? "")}
                 onChange={(value) => setFloatField("topP", value)}
@@ -862,7 +868,7 @@ const AgentForm = ({
                 label="Top-k"
                 name="topK"
                 type="number"
-                min="1"
+                min={TOP_K_MIN}
                 value={String(formData.topK ?? "")}
                 onChange={(value) => setNumberField("topK", value)}
                 disabled={isSubmitting || readOnly}
@@ -872,8 +878,8 @@ const AgentForm = ({
                 label="Presence Penalty"
                 name="presencePenalty"
                 type="number"
-                min="-2"
-                max="2"
+                min={PENALTY_MIN}
+                max={PENALTY_MAX}
                 step="0.1"
                 value={String(formData.presencePenalty ?? "")}
                 onChange={(value) => setFloatField("presencePenalty", value)}
@@ -884,8 +890,8 @@ const AgentForm = ({
                 label="Frequency Penalty"
                 name="frequencyPenalty"
                 type="number"
-                min="-2"
-                max="2"
+                min={PENALTY_MIN}
+                max={PENALTY_MAX}
                 step="0.1"
                 value={String(formData.frequencyPenalty ?? "")}
                 onChange={(value) => setFloatField("frequencyPenalty", value)}

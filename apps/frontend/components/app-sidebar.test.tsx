@@ -226,9 +226,9 @@ describe("AppSidebar chat actions", () => {
     return screen.getByRole("menu");
   };
 
-  // The update is a full PUT, so pinning must carry the title and tags over
-  // rather than blank them.
-  it("pins a chat, keeping its title and tags", async () => {
+  // A field left out of the update is left unchanged, so pinning sends only
+  // the pin: resending the title would 400 on one shorter than the minimum.
+  it("pins a chat, sending only the pin", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
     seedHeader();
@@ -247,11 +247,6 @@ describe("AppSidebar chat actions", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://test/organizations/org1/workspaces/ws1/chat/c1");
     expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body)).toEqual({
-      workspaceId: "ws1",
-      title: "First chat",
-      isPinned: true,
-      tags: ["ops"],
-    });
+    expect(JSON.parse(init.body)).toEqual({ isPinned: true });
   });
 });

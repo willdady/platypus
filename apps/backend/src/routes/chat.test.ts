@@ -907,6 +907,29 @@ describe("Chat Routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockChat);
     });
+
+    it("pins without touching the title or tags", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1", title: "Hi" }]);
+
+      const res = await app.request(`${baseUrl}/chat-1`, {
+        method: "PUT",
+        body: JSON.stringify({ isPinned: true }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const setArg = mockDb.set.mock.calls.at(-1)![0] as Record<
+        string,
+        unknown
+      >;
+      expect(setArg.isPinned).toBe(true);
+      expect(setArg.title).toBeUndefined();
+      expect(setArg.tags).toBeUndefined();
+    });
   });
 
   describe("the server-owned Transcript (ADR-0026)", () => {

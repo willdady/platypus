@@ -20,6 +20,12 @@ import { useState } from "react";
 import {
   CHAT_MAX_STEPS_MAX,
   CHAT_MAX_STEPS_MIN,
+  PENALTY_MAX,
+  PENALTY_MIN,
+  TEMPERATURE_MIN,
+  TOP_K_MIN,
+  TOP_P_MAX,
+  TOP_P_MIN,
   isValidChatMaxSteps,
 } from "@platypus/schemas";
 import { CHAT_MAX_STEPS_ERROR } from "@/lib/chat-turn";
@@ -120,7 +126,7 @@ export const ChatSettingsDialog = ({
                 <Input
                   id="temperature"
                   type="number"
-                  min="0"
+                  min={TEMPERATURE_MIN}
                   step="0.1"
                   value={temperature ?? ""}
                   onChange={(e) =>
@@ -152,8 +158,8 @@ export const ChatSettingsDialog = ({
                 <Input
                   id="topP"
                   type="number"
-                  min="0"
-                  max="1"
+                  min={TOP_P_MIN}
+                  max={TOP_P_MAX}
                   step="0.1"
                   value={topP ?? ""}
                   onChange={(e) =>
@@ -170,7 +176,7 @@ export const ChatSettingsDialog = ({
                 <Input
                   id="topK"
                   type="number"
-                  min="1"
+                  min={TOP_K_MIN}
                   value={topK ?? ""}
                   onChange={(e) =>
                     onTopKChange(
@@ -186,8 +192,8 @@ export const ChatSettingsDialog = ({
                 <Input
                   id="presencePenalty"
                   type="number"
-                  min="-2"
-                  max="2"
+                  min={PENALTY_MIN}
+                  max={PENALTY_MAX}
                   step="0.1"
                   value={presencePenalty ?? ""}
                   onChange={(e) =>
@@ -204,8 +210,8 @@ export const ChatSettingsDialog = ({
                 <Input
                   id="frequencyPenalty"
                   type="number"
-                  min="-2"
-                  max="2"
+                  min={PENALTY_MIN}
+                  max={PENALTY_MAX}
                   step="0.1"
                   value={frequencyPenalty ?? ""}
                   onChange={(e) =>

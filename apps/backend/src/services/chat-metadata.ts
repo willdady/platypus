@@ -9,7 +9,11 @@ import {
 import { openProvider } from "./provider.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
-import { UNTITLED_CHAT_TITLE, type Provider } from "@platypus/schemas";
+import {
+  UNTITLED_CHAT_TITLE,
+  chatSchema,
+  type Provider,
+} from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import { logger } from "../logger.ts";
 import { loadActivePath } from "./chat-messages.ts";
@@ -185,6 +189,12 @@ export const generateChatMetadata = async (
   // models don't respect the limit mentioned in the above prompt :\
   if (newTitle.length > 30) {
     newTitle = newTitle.slice(0, 29) + "…";
+  }
+  // This write skips zod, so check the title here. A too-short one is not
+  // padded: the chat stays Untitled and a later turn tries again.
+  if (!chatSchema.shape.title.safeParse(newTitle).success) {
+    logger.warn({ chatId, title: newTitle }, "Generated chat title rejected");
+    return null;
   }
 
   // Enforce kebab-case tags and dedupe.

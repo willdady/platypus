@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import {
   webhookEventSchema,
   webhookEventDataSchemas,
@@ -29,6 +30,10 @@ import {
   nextTurnOccupancy,
   attachmentCreateSchema,
   chatSubmitSchema,
+  chatSchema,
+  chatUpdateSchema,
+  agentCreateSchema,
+  agentUpdateSchema,
   isValidChatMaxSteps,
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
@@ -1786,5 +1791,66 @@ describe("Dashboard name bounds", () => {
     expect(parse("a".repeat(200)).success).toBe(true);
     expect(parse("").success).toBe(false);
     expect(parse("a".repeat(201)).success).toBe(false);
+  });
+});
+
+describe("sampling parameter bounds (#1144)", () => {
+  // [field, values that pass, values that fail]
+  const cases: [string, number[], number[]][] = [
+    ["temperature", [0, 0.7, 5], [-0.01]],
+    ["topP", [0, 1], [-0.01, 1.01, 1.5]],
+    ["topK", [1, 40], [0, 1.5]],
+    ["seed", [0, -3, 42], [1.5]],
+    ["presencePenalty", [-2, 0, 2], [-2.01, 2.01]],
+    ["frequencyPenalty", [-2, 0, 2], [-2.01, 2.01]],
+  ];
+  const schemas = {
+    agentCreateSchema,
+    agentUpdateSchema,
+    chat: chatSchema.pick({
+      temperature: true,
+      topP: true,
+      topK: true,
+      seed: true,
+      presencePenalty: true,
+      frequencyPenalty: true,
+    }),
+  };
+
+  for (const [name, schema] of Object.entries(schemas)) {
+    const shape = schema.shape as Record<string, z.ZodType>;
+    it.each(cases)(`${name}.%s enforces its bounds`, (field, ok, bad) => {
+      for (const v of ok) expect(shape[field].safeParse(v).success).toBe(true);
+      for (const v of bad)
+        expect(shape[field].safeParse(v).success, `${v}`).toBe(false);
+      expect(shape[field].safeParse(undefined).success).toBe(true);
+    });
+  }
+
+  it.each(cases)("Agent %s still accepts null", (field) => {
+    const shape = agentUpdateSchema.shape as Record<string, z.ZodType>;
+    expect(shape[field].safeParse(null).success).toBe(true);
+  });
+
+  it("rejects an out-of-range value on a Chat turn", () => {
+    const turn = {
+      id: "c1",
+      workspaceId: "w1",
+      agentId: "a1",
+      trigger: "regenerate-message",
+      messageId: "m1",
+    };
+    expect(chatSubmitSchema.safeParse({ ...turn, topP: 1 }).success).toBe(true);
+    expect(chatSubmitSchema.safeParse({ ...turn, topP: 1.5 }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe("chatUpdateSchema", () => {
+  it("accepts a lone field and returns only what was supplied", () => {
+    expect(chatUpdateSchema.parse({ isPinned: true })).toEqual({
+      isPinned: true,
+    });
   });
 });
