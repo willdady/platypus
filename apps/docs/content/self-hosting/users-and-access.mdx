@@ -69,10 +69,10 @@ password passes through an administrator's hands. Only the entrance changed.
 <Callout type="warning">
   **The link is the credential.** Whoever holds an invitation link can redeem it
   and become the account it names, so send it over a channel you would trust
-  with a password. If a link reaches the wrong person there is no revoke
-  button: delete the invitation — the trash icon at the end of its row in
-  **Organization settings → Invitations**, then **Delete** — and send a fresh
-  one. Expiry bounds the window either way.
+  with a password. If a link reaches the wrong person there is no revoke button:
+  delete the invitation — the trash icon at the end of its row in **Organization
+  settings → Invitations**, then **Delete** — and send a fresh one. Expiry
+  bounds the window either way.
 </Callout>
 
 Rate limiting for sign-in and invitation links belongs at the reverse proxy —
@@ -145,6 +145,12 @@ Either of the first two provisions the Workspace, with any Blueprints applied.
 An invitation is valid for `INVITATION_EXPIRY_DAYS` days, **7** by default. The
 Invitations table shows each one's **Status** and **Expires** date, and an expired
 invitation cannot be accepted — send a new one.
+
+An address can hold one pending invitation per Organization at a time. Once
+that invitation is declined or past its expiry date, you can invite the same
+address again without deleting the old row first. Someone who is already a
+member can't be invited again; if they leave or are removed, you can invite
+them back.
 
 ## Roles
 

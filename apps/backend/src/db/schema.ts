@@ -8,6 +8,7 @@ import {
   primaryKey,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
@@ -635,7 +636,11 @@ export const invitation = pgTable(
   (t) => [
     index("idx_invitation_email").on(t.email),
     index("idx_invitation_org_id").on(t.organizationId),
-    unique("unique_invitation_org_email").on(t.organizationId, t.email),
+    // Partial: only a pending invitation claims the address (#1131), so an
+    // accepted, declined or expired one never blocks re-inviting it.
+    uniqueIndex("unique_invitation_org_email")
+      .on(t.organizationId, t.email)
+      .where(sql`${t.status} = 'pending'`),
     unique("unique_invitation_token").on(t.token),
   ],
 );

@@ -299,6 +299,11 @@ type UniqueConstraint = {
   name: string;
   /** The columns whose combined value must be unique. */
   columns: string[];
+  /**
+   * A partial index's `WHERE`: only rows it accepts take part, on either side
+   * of the comparison. Omitted, every row does.
+   */
+  where?: (row: Row) => boolean;
 };
 
 export type FakeDbOptions = {
@@ -567,13 +572,17 @@ export const createFakeDb = (
         for (const row of inserted) {
           options.onInsert?.(name, row);
           for (const constraint of options.unique?.[name] ?? []) {
+            const covers = constraint.where ?? (() => true);
+            if (!covers(row)) continue;
             const resolve = flatResolver(row);
-            const clashes = rowsFor(table).some((existing) =>
-              constraint.columns.every(
-                (column) =>
-                  flatResolver(existing)({ table: name, name: column }) ===
-                  resolve({ table: name, name: column }),
-              ),
+            const clashes = rowsFor(table).some(
+              (existing) =>
+                covers(existing) &&
+                constraint.columns.every(
+                  (column) =>
+                    flatResolver(existing)({ table: name, name: column }) ===
+                    resolve({ table: name, name: column }),
+                ),
             );
             if (clashes) throw uniqueViolation(constraint.name);
           }

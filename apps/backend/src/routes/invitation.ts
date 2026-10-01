@@ -6,14 +6,16 @@ import {
   invitation as invitationTable,
   invitationBlueprint as invitationBlueprintTable,
   blueprint as blueprintTable,
+  organizationMember as organizationMemberTable,
+  user as userTable,
 } from "../db/schema.ts";
 import { invitationCreateSchema } from "@platypus/schemas";
-import { eq, and, inArray, asc } from "drizzle-orm";
+import { eq, and, inArray, asc, lte } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
-import { ConflictError } from "../errors.ts";
+import { ConflictError, isUniqueViolation } from "../errors.ts";
 
 const invitation = new Hono<{ Variables: Variables }>();
 
@@ -69,6 +71,26 @@ invitation.post(
       }
     }
 
+    // A member has nothing to accept: only a pending invitation used to block
+    // this by accident, and accepting again would provision a second
+    // Workspace (#1131).
+    const existingMembership = await db
+      .select({ id: organizationMemberTable.id })
+      .from(organizationMemberTable)
+      .innerJoin(userTable, eq(organizationMemberTable.userId, userTable.id))
+      .where(
+        and(
+          eq(organizationMemberTable.organizationId, orgId),
+          eq(userTable.email, normalizedEmail),
+        ),
+      )
+      .limit(1);
+    if (existingMembership.length > 0) {
+      throw new ConflictError(
+        "This user is already a member of the organization",
+      );
+    }
+
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS);
 
@@ -79,6 +101,22 @@ invitation.post(
     const token = nanoid();
     try {
       const record = await db.transaction(async (tx) => {
+        // Only a pending invitation blocks another for the same address
+        // (#1131). Expiry is lazy, so a lapsed invitation can still read
+        // `pending`: retire it here, or it would hold the slot it no
+        // longer has any claim to.
+        await tx
+          .update(invitationTable)
+          .set({ status: "expired" })
+          .where(
+            and(
+              eq(invitationTable.organizationId, orgId),
+              eq(invitationTable.email, normalizedEmail),
+              eq(invitationTable.status, "pending"),
+              lte(invitationTable.expiresAt, new Date()),
+            ),
+          );
+
         const [row] = await tx
           .insert(invitationTable)
           .values({
@@ -108,21 +146,7 @@ invitation.post(
 
       return c.json({ ...record, blueprintIds }, 201);
     } catch (error) {
-      const e = error as {
-        code?: string;
-        constraint?: string;
-        message?: string;
-        detail?: string;
-        cause?: { code?: string };
-      };
-      const isDuplicate =
-        e.code === "23505" ||
-        e.cause?.code === "23505" ||
-        e.constraint === "unique_invitation_org_email" ||
-        !!e.message?.includes("unique_invitation_org_email") ||
-        !!e.detail?.includes("already exists");
-
-      if (isDuplicate) {
+      if (isUniqueViolation(error)) {
         throw new ConflictError(
           "A pending invitation already exists for this user and organization",
         );

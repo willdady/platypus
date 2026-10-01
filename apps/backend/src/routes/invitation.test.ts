@@ -18,10 +18,8 @@ describe("Invitation Routes", () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      // Verify workspace belongs to org
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "ws-1", organizationId: orgId },
-      ]);
+      // Membership check: the invitee is not already a member.
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const mockInvitation = {
         id: "inv-1",
@@ -178,6 +176,137 @@ describe("Invitation Routes", () => {
         error:
           "A pending invitation already exists for this user and organization",
         files: undefined,
+      });
+    });
+
+    // #1131: only a *pending* invitation blocks another for the same address.
+    // The fake enforces the partial unique index the way Postgres does, so a
+    // route that let a stale row collide would 409 here.
+    describe("re-inviting an address with an earlier invitation", () => {
+      const seedWithInvitation = (
+        prior: { status: string; expiresAt: Date },
+        { inviteeIsMember = false } = {},
+      ) =>
+        seedDb(
+          {
+            user: [
+              { id: "user-1", email: "test@example.com" },
+              { id: "user-2", email: "user@example.com" },
+            ],
+            organization_member: [
+              {
+                id: "m1",
+                userId: "user-1",
+                organizationId: orgId,
+                role: "admin",
+              },
+              ...(inviteeIsMember
+                ? [
+                    {
+                      id: "m2",
+                      userId: "user-2",
+                      organizationId: orgId,
+                      role: "member",
+                    },
+                  ]
+                : []),
+            ],
+            invitation: [
+              {
+                id: "inv-old",
+                email: "user@example.com",
+                organizationId: orgId,
+                invitedBy: "user-1",
+                token: "old-token",
+                ...prior,
+              },
+            ],
+          },
+          {
+            unique: {
+              invitation: [
+                {
+                  name: "unique_invitation_org_email",
+                  columns: ["organizationId", "email"],
+                  where: (row) => row.status === "pending",
+                },
+              ],
+            },
+          },
+        );
+
+      const reinvite = () =>
+        app.request(baseUrl, {
+          method: "POST",
+          body: JSON.stringify({ email: "user@example.com" }),
+          headers: { "Content-Type": "application/json" },
+        });
+
+      const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      it.each(["declined", "accepted", "expired"])(
+        "creates a new invitation when the earlier one is %s",
+        async (status) => {
+          mockSession();
+          const fake = seedWithInvitation({ status, expiresAt: past });
+
+          const res = await reinvite();
+
+          expect(res.status).toBe(201);
+          expect(fake.tables.invitation).toHaveLength(2);
+          expect(fake.tables.invitation[1]).toMatchObject({
+            email: "user@example.com",
+            status: "pending",
+          });
+        },
+      );
+
+      it("expires a lapsed pending invitation and creates a new one", async () => {
+        // Expiry is lazy: a lapsed invitation still reads `pending` until
+        // something touches it, so the create must retire it first.
+        mockSession();
+        const fake = seedWithInvitation({ status: "pending", expiresAt: past });
+
+        const res = await reinvite();
+
+        expect(res.status).toBe(201);
+        expect(fake.tables.invitation).toEqual([
+          expect.objectContaining({ id: "inv-old", status: "expired" }),
+          expect.objectContaining({ status: "pending" }),
+        ]);
+      });
+
+      it("409s when the address already belongs to a member", async () => {
+        // Accepting again would provision the member a second Workspace.
+        mockSession();
+        const fake = seedWithInvitation(
+          { status: "accepted", expiresAt: past },
+          { inviteeIsMember: true },
+        );
+
+        const res = await reinvite();
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toMatchObject({
+          error: "This user is already a member of the organization",
+        });
+        expect(fake.tables.invitation).toHaveLength(1);
+      });
+
+      it("409s while the earlier invitation is still pending and live", async () => {
+        mockSession();
+        const fake = seedWithInvitation({
+          status: "pending",
+          expiresAt: future,
+        });
+
+        const res = await reinvite();
+
+        expect(res.status).toBe(409);
+        expect(fake.tables.invitation).toEqual([
+          expect.objectContaining({ id: "inv-old", status: "pending" }),
+        ]);
       });
     });
 
