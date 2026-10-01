@@ -6,7 +6,7 @@ import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
 import {
   NonRetryableSeedError,
-  seedFirstBoot,
+  seedFirstBootExclusively,
   type AdminCreateUser,
 } from "./src/db/seed.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
@@ -53,7 +53,11 @@ const main = async () => {
       // Enable pgvector extension for embedding storage (needed before drizzle-kit push in dev)
       await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
 
-      await seedFirstBoot(db, { createUser: createAdminUser });
+      // Under an advisory lock: replicas booting together would otherwise
+      // race to seed, and the loser fail on the admin User the winner created.
+      await seedFirstBootExclusively(db, db.$client, {
+        createUser: createAdminUser,
+      });
     });
 
     // Load plugins before the HTTP server accepts traffic so their Tool set

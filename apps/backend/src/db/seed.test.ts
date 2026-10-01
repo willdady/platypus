@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { seedDb, type Store } from "../test-utils.ts";
+import { fakeLockPool } from "./advisory-lock.test-fixtures.ts";
 import {
   seedFirstBoot,
+  seedFirstBootExclusively,
   NonRetryableSeedError,
   type SeedDatabase,
   type AdminCreateUser,
@@ -361,5 +363,61 @@ describe("seedFirstBoot", () => {
     );
     expect(fake.tables.organization).toHaveLength(1);
     expect(fake.tables.user).toHaveLength(0);
+  });
+});
+
+describe("seedFirstBootExclusively", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("seeds once when several replicas boot together, and the others carry on", async () => {
+    const fake = createFakeDb();
+    const createUser = createUserApi(fake.tables);
+    const { pool, held } = fakeLockPool();
+
+    const results = await Promise.all(
+      [1, 2, 3].map(() =>
+        seedFirstBootExclusively(asSeedDb(fake), pool, {
+          createUser,
+          env: VALID_ENV,
+        }),
+      ),
+    );
+
+    expect(results.filter((r) => r.seeded)).toHaveLength(1);
+    expect(results.filter((r) => !r.seeded)).toHaveLength(2);
+    expect(createUser).toHaveBeenCalledTimes(1);
+    expect(fake.tables.organization).toHaveLength(1);
+    expect(fake.tables.user).toHaveLength(1);
+    expect(fake.tables.organization_member).toHaveLength(1);
+    expect(held.size).toBe(0);
+  });
+
+  it("lets a waiting replica seed after the first one failed", async () => {
+    const fake = createFakeDb();
+    const createUser = createUserApi(fake.tables);
+    const failing = vi
+      .fn<AdminCreateUser>()
+      .mockRejectedValue(new Error("connection reset"));
+    const { pool } = fakeLockPool();
+
+    const [first, second] = await Promise.allSettled([
+      seedFirstBootExclusively(asSeedDb(fake), pool, {
+        createUser: failing,
+        env: VALID_ENV,
+      }),
+      seedFirstBootExclusively(asSeedDb(fake), pool, {
+        createUser,
+        env: VALID_ENV,
+      }),
+    ]);
+
+    expect(first.status).toBe("rejected");
+    expect(second).toMatchObject({
+      status: "fulfilled",
+      value: { seeded: true },
+    });
+    expect(fake.tables.organization).toHaveLength(1);
   });
 });
