@@ -43,19 +43,6 @@ Two more things worth doing every time:
 - **Bump both images together.** The backend and frontend are released as a pair
   and are only tested against each other.
 
-## Coming from 3.13
-
-Earlier releases let a user save more than one global Context, and let one user
-hold two memberships of the same Organization. From 3.14.0 each is allowed only
-once, and a migration removes the extras when the backend starts:
-
-- **Global Contexts.** Each user keeps the one they edited most recently. The
-  text of the others is deleted. If your users may have written several, take
-  the backup above before upgrading, so you can recover the text.
-- **Memberships.** The user keeps their oldest membership of the Organization,
-  with that membership's role. Check the Members page afterwards if a later
-  membership carried a different role.
-
 ## Coming from 3.4
 
 The Embed widget added in 3.4.0 was stored under the type name `iframe`. From
