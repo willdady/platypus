@@ -8,3 +8,11 @@ CHANGELOG.md
 # migration snapshots on every `generate`, and pnpm rewrites the lockfile.
 apps/backend/drizzle/
 pnpm-lock.yaml
+
+# Build output and generated types that only the apps' own .gitignore files
+# list — Prettier reads the root .gitignore alone.
+.open-next/
+.wrangler/
+apps/docs/public/_pagefind/
+next-env.d.ts
+cloudflare-env.d.ts
