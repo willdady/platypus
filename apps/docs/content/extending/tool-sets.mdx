@@ -35,8 +35,8 @@ what a Workspace Owner sees on the Agent form. Your tool names show too, in Chat
   grant is stored by id, and a turn that can't resolve the id degrades to no
   tools rather than erroring — so the symptom is an Agent that quietly stopped
   being able to do its job. Treat a shipped `id` as permanent. The same goes for
-  your manifest `name`: the stored id is prefixed with it, so renaming the Plugin
-  orphans every grant of every set it contributes.
+  your manifest `name`: the stored id is prefixed with it, so renaming the
+  Plugin orphans every grant of every set it contributes.
 </Callout>
 
 ## Static map or factory
@@ -173,7 +173,7 @@ a User sees: Widgets create issue
 That happens on every turn, whether or not anything collides, so a tool's name
 never depends on the order an Agent's Tool sets happen to sit in. It is also what
 stops core taking one of your names: a turn assigns `web_search`, `read_url`,
-`delegate` and `loadSkill` onto its tool map *after* your Tool set, so a set
+`delegate` and `loadSkill` onto its tool map _after_ your Tool set, so a set
 contributing a bare `web_search` used to lose it on every turn where search was
 on, with nothing anywhere saying so.
 

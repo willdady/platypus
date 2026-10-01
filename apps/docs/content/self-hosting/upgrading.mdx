@@ -29,8 +29,8 @@ newer schema in place under a backend that was never tested against it.
 
 <Callout type="warning">
   **Take a database backup first.** It is the only rollback path that works, and
-  the `pg_dump` command is in
-  [Running in production](/self-hosting/production#back-the-database-up-on-a-schedule-and-before-every-upgrade).
+  the `pg_dump` command is in [Running in
+  production](/self-hosting/production#back-the-database-up-on-a-schedule-and-before-every-upgrade).
   Uploaded files are not in that dump — back those up from the same moment, or a
   restore gives you Chats whose File parts have vanished.
 </Callout>
@@ -90,18 +90,18 @@ releases do bring migrations, which is why the section above still applies.
 
 <Callout type="warning">
   **The most common upgrade mistake: losing the web-fetch tool.** An unset or
-  empty `PLATYPUS_PLUGINS` loads **only** the always-on core tool sets — there is
-  no built-in default. A 1.x `.env` predates the Plugin system and has no
+  empty `PLATYPUS_PLUGINS` loads **only** the always-on core tool sets — there
+  is no built-in default. A 1.x `.env` predates the Plugin system and has no
   `PLATYPUS_PLUGINS` line at all, so upgrading silently strips web-fetch from
-  every Agent. Nothing errors; the tool is gone. To keep it you **must**
-  add `@platypus/web-fetch` to `PLATYPUS_PLUGINS`.
+  every Agent. Nothing errors; the tool is gone. To keep it you **must** add
+  `@platypus/web-fetch` to `PLATYPUS_PLUGINS`.
 </Callout>
 
 ### The three removed variables
 
 | Removed in 2.0                             | Replaced by                                                                                |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `PLATYPUS_SANDBOX_DOCKER_ENABLED`          | Listing `@platypus/docker` in `PLATYPUS_PLUGINS` (list membership _is_ the enable switch).  |
+| `PLATYPUS_SANDBOX_DOCKER_ENABLED`          | Listing `@platypus/docker` in `PLATYPUS_PLUGINS` (list membership _is_ the enable switch). |
 | `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG`.                |
 | `FETCH_TOOL_IGNORE_ROBOTS_TXT`             | `config.ignoreRobotsTxt` on `@platypus/web-fetch` in `PLATYPUS_PLUGIN_CONFIG`.             |
 

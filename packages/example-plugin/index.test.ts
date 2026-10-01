@@ -64,7 +64,7 @@ describe("@platypus-examples/tool-set", () => {
 
   it("greet returns a greeting for the given name", async () => {
     const tools = await resolveTools();
-    const result = await tools.greet.execute!(
+    const result: unknown = await tools.greet.execute!(
       { name: "Ada" },
       { toolCallId: "t1", messages: [], context: {} },
     );

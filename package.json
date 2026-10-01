@@ -21,16 +21,21 @@
     "drizzle-kit-push": "turbo run drizzle-kit-push -F @platypus/backend",
     "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @platypus/backend",
     "drizzle-kit-migrate": "turbo run drizzle-kit-migrate -F @platypus/backend",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
     "playwright": "^1.63.0",
     "prettier": "^3.9.9",
     "turbo": "^2.11.3",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.70.1"
   },
   "packageManager": "pnpm@10.26.1+sha512.664074abc367d2c9324fdc18037097ce0a8f126034160f709928e9e9f95d98714347044e5c3164d65bd5da6c59c6be362b107546292a8eecb7999196e5ce58fa",
   "engines": {

@@ -19,7 +19,7 @@ the server-side renderer.
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- | ---------------------- |
 | `BACKEND_URL`          | Backend base URL for **client-side** requests (browser → backend).                                                                                                                                           | `http://localhost:4001`   | **Yes**                |
 | `INTERNAL_BACKEND_URL` | Backend base URL for **server-side** requests (SSR → backend) over the internal Docker network. Only needed when running in Docker; leave unset for local development, where `BACKEND_URL` is used for both. | _(unset)_                 | When running in Docker |
-| `BASE_PATH`            | Optional base path for deploying the app under a subpath (e.g. `/platypus-app`). **Build-time only** — see the note below.                                                                                    | _(unset, served at root)_ | No                     |
+| `BASE_PATH`            | Optional base path for deploying the app under a subpath (e.g. `/platypus-app`). **Build-time only** — see the note below.                                                                                   | _(unset, served at root)_ | No                     |
 
 <Callout type="info">
   In Docker Compose, the browser and the SSR process reach the backend by
@@ -34,8 +34,8 @@ the server-side renderer.
   `basePath` into the compiled output during `next build`, so setting
   `BASE_PATH` in the Docker `.env` does nothing — the published
   `willdady/platypus-frontend` image was built without it and keeps serving at
-  the root. Every other variable on this page is read at run time and works
-  from `.env` as expected.
+  the root. Every other variable on this page is read at run time and works from
+  `.env` as expected.
 </Callout>
 
 Deploying under a subpath therefore means **building your own frontend image**.
@@ -61,7 +61,7 @@ docker build -f apps/frontend/Dockerfile --build-arg BASE_PATH=/platypus-app .
 
 ## Other
 
-| Variable                  | Purpose                                                                                                                                                            | Default               | Required |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | -------- |
+| Variable                  | Purpose                                                                                                                                                             | Default               | Required |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------- |
 | `ALLOWED_DEV_ORIGINS`     | Comma-separated origins added to Next.js [`allowedDevOrigins`](https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins). Dev server only. | _(unset, none added)_ | No       |
 | `NEXT_PUBLIC_APP_VERSION` | Version string shown on the in-app **About** page. Normally injected at build time rather than set per-deployment; falls back to `unknown`.                         | `unknown`             | No       |

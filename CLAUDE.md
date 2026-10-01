@@ -12,9 +12,10 @@ cp apps/backend/.env.example apps/backend/.env
 pnpm dev               # frontend + backend + local Postgres
 pnpm drizzle-kit-push  # apply schema changes (requires `pnpm dev` running)
 pnpm build
-pnpm format
-pnpm lint
-pnpm typecheck         # tsc --noEmit (apps/backend, apps/frontend); gated in CI
+pnpm format            # prettier --write .
+pnpm format:check      # prettier --check .; gated in CI
+pnpm lint              # ESLint, every package; gated in CI
+pnpm typecheck         # tsc --noEmit, every package; gated in CI
 pnpm test              # all tests (Vitest, orchestrated by Turborepo)
 ```
 

@@ -956,7 +956,7 @@ describe("Provider modelIds (per-model config)", () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data.modelIds).toHaveLength(1);
-        expect(result.data.modelIds![0].maxOutputTokens).toBeUndefined();
+        expect(result.data.modelIds[0].maxOutputTokens).toBeUndefined();
       }
     },
   );
@@ -1020,7 +1020,7 @@ describe("Provider modelIds (per-model config)", () => {
       // Asserted, not optional-chained: a schema that dropped `modelIds`
       // entirely would satisfy an `undefined` expectation vacuously.
       expect(result.data.modelIds).toHaveLength(1);
-      expect(result.data.modelIds![0].contextWindow).toBeUndefined();
+      expect(result.data.modelIds[0].contextWindow).toBeUndefined();
     }
   });
 

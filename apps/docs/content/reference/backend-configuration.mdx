@@ -57,13 +57,13 @@ The manifest side is in
 
 ## Authentication
 
-| Variable                 | Purpose                                                                                                                                                                                                                 | Default                                                    | Required |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------- |
-| `BETTER_AUTH_SECRET`     | Secret used to sign session tokens (better-auth). Must be a secure random string, 32+ characters. Treat like a password.                                                                                                | `your-secret-key-min-32-chars` _(placeholder — change it)_ | **Yes**  |
-| `BETTER_AUTH_URL`        | Public base URL of the backend, used by better-auth. Falls back to `http://localhost:4001`, which only works for local dev — a real deployment must set this explicitly or auth redirects and callbacks break silently. | `http://localhost:4001`                                    | No       |
-| `AUTH_COOKIE_DOMAIN`     | Parent domain session cookies are issued for, so a frontend and backend on two subdomains of one parent domain (e.g. `app.example.com` and `api.example.com`) can authenticate server-rendered requests. A bare domain (`example.com`), not a URL or a leading-dot form. Unset keeps cookies host-only, which is correct for a single-host deployment. On a topology this cannot cover the backend logs an error at startup and runs with server-rendered requests unauthenticated — see [supported topologies](/self-hosting/configuration#supported-topologies). | _(unset)_ | No       |
-| `INVITATION_EXPIRY_DAYS` | Days a Workspace/Org invitation remains valid.                                                                                                                                                                          | `7`                                                        | No       |
-| `REQUIRE_INVITATION_TO_SIGN_UP` | `true` closes public sign-up: the sign-in page stops offering **Sign up**, the sign-up page says that sign-up is by invitation, and an account can only be created by redeeming an invitation link. Sign-in, password changes, administrative password resets and first-boot seeding are unaffected. Anything other than `true` or `1` leaves sign-up open. See [Users & access](/self-hosting/users-and-access#who-can-create-an-account). | `false` | No |
+| Variable                        | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Default                                                    | Required |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | -------- |
+| `BETTER_AUTH_SECRET`            | Secret used to sign session tokens (better-auth). Must be a secure random string, 32+ characters. Treat like a password.                                                                                                                                                                                                                                                                                                                                                                                                                                           | `your-secret-key-min-32-chars` _(placeholder — change it)_ | **Yes**  |
+| `BETTER_AUTH_URL`               | Public base URL of the backend, used by better-auth. Falls back to `http://localhost:4001`, which only works for local dev — a real deployment must set this explicitly or auth redirects and callbacks break silently.                                                                                                                                                                                                                                                                                                                                            | `http://localhost:4001`                                    | No       |
+| `AUTH_COOKIE_DOMAIN`            | Parent domain session cookies are issued for, so a frontend and backend on two subdomains of one parent domain (e.g. `app.example.com` and `api.example.com`) can authenticate server-rendered requests. A bare domain (`example.com`), not a URL or a leading-dot form. Unset keeps cookies host-only, which is correct for a single-host deployment. On a topology this cannot cover the backend logs an error at startup and runs with server-rendered requests unauthenticated — see [supported topologies](/self-hosting/configuration#supported-topologies). | _(unset)_                                                  | No       |
+| `INVITATION_EXPIRY_DAYS`        | Days a Workspace/Org invitation remains valid.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `7`                                                        | No       |
+| `REQUIRE_INVITATION_TO_SIGN_UP` | `true` closes public sign-up: the sign-in page stops offering **Sign up**, the sign-up page says that sign-up is by invitation, and an account can only be created by redeeming an invitation link. Sign-in, password changes, administrative password resets and first-boot seeding are unaffected. Anything other than `true` or `1` leaves sign-up open. See [Users & access](/self-hosting/users-and-access#who-can-create-an-account).                                                                                                                        | `false`                                                    | No       |
 
 <Callout type="warning">
   `BETTER_AUTH_SECRET`'s 32+ character requirement is enforced only when
@@ -97,11 +97,11 @@ for the seeding rule and the recovery path.
 
 ## Background workers
 
-| Variable                         | Purpose                                                               | Default              | Required |
-| -------------------------------- | --------------------------------------------------------------------- | -------------------- | -------- |
-| `MEMORY_EXTRACTION_INTERVAL_MS`  | How often the memory-extraction worker runs, in milliseconds.         | `300000` (5 minutes) | No       |
+| Variable                         | Purpose                                                                                                                        | Default              | Required |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------- | -------- |
+| `MEMORY_EXTRACTION_INTERVAL_MS`  | How often the memory-extraction worker runs, in milliseconds.                                                                  | `300000` (5 minutes) | No       |
 | `SCHEDULE_SCHEDULER_INTERVAL_MS` | How often the scheduler runs, in milliseconds. Each pass starts due Triggers and recovers runs and Chats abandoned by a crash. | `60000` (1 minute)   | No       |
-| `SCHEDULE_MAX_CONCURRENT`        | Maximum parallel Trigger executions.                                  | `5`                  | No       |
+| `SCHEDULE_MAX_CONCURRENT`        | Maximum parallel Trigger executions.                                                                                           | `5`                  | No       |
 
 ## Triggers
 
@@ -127,12 +127,11 @@ later on the defaults.
 
 <Callout type="warning">
   Running several backends against one database looks like it needs no
-  co-ordination, because each run belongs to the instance driving it. The
-  sweep is the exception: it decides which runs are old enough to have no
-  live owner, and it decides that from its own
-  `TRIGGER_PER_RUN_TIMEOUT_MS`. Give an instance a shorter value than its
-  peers and it will mark their live runs as failed while they are still
-  working. Set the same value on every instance.
+  co-ordination, because each run belongs to the instance driving it. The sweep
+  is the exception: it decides which runs are old enough to have no live owner,
+  and it decides that from its own `TRIGGER_PER_RUN_TIMEOUT_MS`. Give an
+  instance a shorter value than its peers and it will mark their live runs as
+  failed while they are still working. Set the same value on every instance.
 </Callout>
 
 ### The run-rate breaker
@@ -156,11 +155,11 @@ Trigger has run more than **Max Runs to Keep** times, because the breaker counts
 those rows. A longer window therefore retains more run records. Suppressed rows
 get their own budget and do not consume **Max Runs to Keep**.
 
-| Variable                                      | Purpose                                                                                                        | Default              | Required |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------- | -------- |
-| `TRIGGER_BREAKER_MAX_RUNS`                    | Runs allowed per Trigger per record within the window; firings past it are suppressed.                         | `20`                 | No       |
-| `TRIGGER_BREAKER_WINDOW_SECONDS`              | Length of the rolling window, in seconds.                                                                      | `3600` (1 hour)      | No       |
-| `TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP`     | Suppressed run records retained per Trigger, separate from the Trigger's Max Runs to Keep.                     | `20`                 | No       |
+| Variable                                  | Purpose                                                                                    | Default         | Required |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------ | --------------- | -------- |
+| `TRIGGER_BREAKER_MAX_RUNS`                | Runs allowed per Trigger per record within the window; firings past it are suppressed.     | `20`            | No       |
+| `TRIGGER_BREAKER_WINDOW_SECONDS`          | Length of the rolling window, in seconds.                                                  | `3600` (1 hour) | No       |
+| `TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP` | Suppressed run records retained per Trigger, separate from the Trigger's Max Runs to Keep. | `20`            | No       |
 
 Each value must be a positive integer; a malformed setting fails the backend at
 startup rather than silently falling back to a default nobody chose.
@@ -190,19 +189,18 @@ itself roughly 35 minutes later on the defaults.
 
 <Callout type="warning">
   Running several backends against one database looks like it needs no
-  co-ordination, because each turn belongs to the instance serving it. The
-  sweep is the exception: it decides which Chats are old enough to have no
-  live owner, and it decides that from its own
-  `CHAT_PER_RUN_TIMEOUT_MS`. Give an instance a shorter value than its peers
-  and it will mark their live turns as failed mid-answer. Set the same value
-  on every instance.
+  co-ordination, because each turn belongs to the instance serving it. The sweep
+  is the exception: it decides which Chats are old enough to have no live owner,
+  and it decides that from its own `CHAT_PER_RUN_TIMEOUT_MS`. Give an instance a
+  shorter value than its peers and it will mark their live turns as failed
+  mid-answer. Set the same value on every instance.
 </Callout>
 
 ## Tools
 
-| Variable                        | Purpose                                                                                                                                   | Default                 | Required |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------- |
-| `FRONTEND_URL`                  | Frontend URL used to build resource links inside tool responses.                                                                          | `http://localhost:3001` | No       |
+| Variable                        | Purpose                                                                                                                                                            | Default                 | Required |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- | -------- |
+| `FRONTEND_URL`                  | Frontend URL used to build resource links inside tool responses.                                                                                                   | `http://localhost:3001` | No       |
 | `EGRESS_ALLOW_PRIVATE_NETWORKS` | Whether tools that fetch a **model-chosen** URL, and Webhook deliveries, may reach private networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`). | `true`                  | No       |
 
 Which address ranges the guard blocks regardless of that setting, and why the

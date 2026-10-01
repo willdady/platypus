@@ -91,10 +91,10 @@ you switched away from it stays remembered.
   There is no screen for viewing, editing, or deleting Memories, and deleting a
   Chat does not remove what was already extracted from it. Asking the assistant
   to forget something only changes today's summary. Short of deleting the
-  Workspace, the only thing that deletes summaries is the Workspace's [Memory Summary
-  Retention](/administering/workspaces#memory-summary-retention), which keeps
-  the newest **90** daily summaries by default. Treat anything you say in a
-  Workspace with Memory on as something it may keep.
+  Workspace, the only thing that deletes summaries is the Workspace's [Memory
+  Summary Retention](/administering/workspaces#memory-summary-retention), which
+  keeps the newest **90** daily summaries by default. Treat anything you say in
+  a Workspace with Memory on as something it may keep.
 </Callout>
 
 ## Context
@@ -117,15 +117,16 @@ Agent's Instructions.
   Your Workspace Context and the Workspace's **Context** field are not the same
   thing, and mixing them up is easy because both end up in the prompt.
 
-  Your Workspace Context is **yours**, written under **My settings → Contexts**,
-  and nobody else's chats see it. The **Context** field on the Workspace
-  settings form belongs to the **Workspace**, is written by whoever administers
-  it, and reaches every Chat anyone runs there.
+Your Workspace Context is **yours**, written under **My settings → Contexts**,
+and nobody else's chats see it. The **Context** field on the Workspace
+settings form belongs to the **Workspace**, is written by whoever administers
+it, and reaches every Chat anyone runs there.
 
-  So: put "I prefer terse answers with no preamble" in your own Context. Put "this
-  Workspace supports the payments team; the service is called Ledger" in the
-  Workspace's field. Writing the first one into the second inflicts your
-  preferences on everyone.
+So: put "I prefer terse answers with no preamble" in your own Context. Put "this
+Workspace supports the payments team; the service is called Ledger" in the
+Workspace's field. Writing the first one into the second inflicts your
+preferences on everyone.
+
 </Callout>
 
 The third is the model's own **Context window**: how many tokens a model can be

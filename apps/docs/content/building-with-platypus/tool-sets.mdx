@@ -17,21 +17,21 @@ has loaded. If something below isn't there, your Operator hasn't enabled it — 
 
 ## The catalogue
 
-| Tool set                | Category      | What it lets an Agent do                                                                                            | Availability                     |
-| ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| **Math Conversions**    | Math          | Convert temperature, distance, weight and volume between units.                                                     | Always                           |
-| **Time**                | Utilities     | Read the current time and convert between timezones.                                                                | Always                           |
-| **Identifiers**         | Utilities     | Generate unique ids — UUIDs, or short nanoids — for naming records and resources in external systems.               | Always                           |
-| **Kanban**              | Productivity  | Read a Board's full state and a card's history, and create, move, copy, bulk-edit and delete cards and their comments.                   | Always                           |
-| **Dashboards**          | Productivity  | List Dashboards and their widgets, and write new data into a widget.                                                | Always                           |
-| **Triggers**            | Automation    | List and read Triggers, and **create, edit and delete** them — including scheduling new unattended runs.             | Always                           |
-| **Agent Discovery**     | Productivity  | Read-only: list the Agents, Tool sets and Providers in the Workspace, and read one Agent's configuration.           | Always                           |
-| **Agent Management**    | Productivity  | **Create, update and delete Agents** in the Workspace.                                                              | Always                           |
-| **Skill Management**    | Productivity  | List and read Skills, and **create, update and delete** them.                                                       | Always                           |
-| **Notifications**       | Communication | Post a [Notification](/building-with-platypus/notifications) to the Workspace, then list, edit or dismiss its own.   | Always                           |
-| **Memory**              | Memory        | Search and fetch stored memories beyond the summaries already in every prompt.                                      | Always                           |
-| **Web Fetch**           | Web           | Fetch the contents of a URL the model chose.                                                                        | Operator must enable it          |
-| **Sandbox**             | Sandbox       | Run shell commands, read, write, edit and list files inside the Workspace's Sandbox, and offer you a file as a download (`fsDownload`). | Needs a Sandbox on the Workspace |
+| Tool set             | Category      | What it lets an Agent do                                                                                                                | Availability                     |
+| -------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| **Math Conversions** | Math          | Convert temperature, distance, weight and volume between units.                                                                         | Always                           |
+| **Time**             | Utilities     | Read the current time and convert between timezones.                                                                                    | Always                           |
+| **Identifiers**      | Utilities     | Generate unique ids — UUIDs, or short nanoids — for naming records and resources in external systems.                                   | Always                           |
+| **Kanban**           | Productivity  | Read a Board's full state and a card's history, and create, move, copy, bulk-edit and delete cards and their comments.                  | Always                           |
+| **Dashboards**       | Productivity  | List Dashboards and their widgets, and write new data into a widget.                                                                    | Always                           |
+| **Triggers**         | Automation    | List and read Triggers, and **create, edit and delete** them — including scheduling new unattended runs.                                | Always                           |
+| **Agent Discovery**  | Productivity  | Read-only: list the Agents, Tool sets and Providers in the Workspace, and read one Agent's configuration.                               | Always                           |
+| **Agent Management** | Productivity  | **Create, update and delete Agents** in the Workspace.                                                                                  | Always                           |
+| **Skill Management** | Productivity  | List and read Skills, and **create, update and delete** them.                                                                           | Always                           |
+| **Notifications**    | Communication | Post a [Notification](/building-with-platypus/notifications) to the Workspace, then list, edit or dismiss its own.                      | Always                           |
+| **Memory**           | Memory        | Search and fetch stored memories beyond the summaries already in every prompt.                                                          | Always                           |
+| **Web Fetch**        | Web           | Fetch the contents of a URL the model chose.                                                                                            | Operator must enable it          |
+| **Sandbox**          | Sandbox       | Run shell commands, read, write, edit and list files inside the Workspace's Sandbox, and offer you a file as a download (`fsDownload`). | Needs a Sandbox on the Workspace |
 
 ## Three of these change your Workspace
 
@@ -42,8 +42,9 @@ has loaded. If something below isn't there, your Operator hasn't enabled it — 
   unattended runs — all from a model's decision inside a Chat turn, with no
   confirmation step.
 
-  Grant them to an Agent whose job is genuinely to build things. Don't grant them
-  to a general-purpose assistant because they looked harmless in a list.
+Grant them to an Agent whose job is genuinely to build things. Don't grant them
+to a general-purpose assistant because they looked harmless in a list.
+
 </Callout>
 
 **Agent Discovery** is the safe half of the same idea: it reads the same

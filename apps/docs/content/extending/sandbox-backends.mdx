@@ -25,14 +25,14 @@ your adapter holds open during a turn. You **cannot** add, rename or re-sign a
 tool. Read the exact signatures off the package you have installed — this page
 states the rules those types don't encode.
 
-| Method      | Does                                              |
-| ----------- | ------------------------------------------------- |
+| Method      | Does                                                 |
+| ----------- | ---------------------------------------------------- |
 | `shellExec` | Runs a command and returns stdout, stderr, exit code |
-| `fsRead`    | Reads a file, optionally a line range             |
-| `fsWrite`   | Creates or overwrites a file                      |
-| `fsEdit`    | Replaces one exact string with another            |
-| `fsList`    | Lists a directory, optionally recursive or globbed |
-| `destroy`   | Tears the environment down                        |
+| `fsRead`    | Reads a file, optionally a line range                |
+| `fsWrite`   | Creates or overwrites a file                         |
+| `fsEdit`    | Replaces one exact string with another               |
+| `fsList`    | Lists a directory, optionally recursive or globbed   |
+| `destroy`   | Tears the environment down                           |
 
 That closure is the point: an Agent's Instructions must not depend on which
 backend it runs on, which is what lets an Operator swap Docker for a hosted
@@ -188,8 +188,8 @@ Add an entry to `contributes.sandboxBackends`. A
   has fields only for the Docker and SSH backends; for yours it saves an empty
   `config` and `credentials`. A schema with a required field makes every save
   fail with a 400. Put what your backend needs — region, endpoint, API token —
-  in your Plugin's
-  [deploy-time config and credentials](/extending/plugin-api-and-config#deploy-time-config-and-credentials)
+  in your Plugin's [deploy-time config and
+  credentials](/extending/plugin-api-and-config#deploy-time-config-and-credentials)
   and read them in `create`. That block is shared by every Workspace on the
   deployment.
 </Callout>
@@ -211,8 +211,8 @@ backend isn't offered in the **Backend** picker.
   eligible set at deploy time, an Org Admin picks a subset per Sandbox, and a
   Workspace Owner cannot widen it. Skip this and a Workspace Owner can point an
   Agent at your internal network by editing a form. The Docker adapter's network
-  allowlist is the worked example — see
-  [Sandbox infrastructure](/self-hosting/sandbox).
+  allowlist is the worked example — see [Sandbox
+  infrastructure](/self-hosting/sandbox).
 </Callout>
 
 <Callout type="info">

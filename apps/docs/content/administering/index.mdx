@@ -32,27 +32,27 @@ Provider reference, and this section doesn't repeat it.
 
 <Callout type="warning">
   A Provider is not visible to a Workspace merely because you created it at
-  Organization scope. It has to be **attached** — see
-  [Shared resources](/administering/shared-resources). A Workspace Owner
-  reporting an empty **Model** dropdown after you "already set up the Provider"
-  is usually a missing attachment.
+  Organization scope. It has to be **attached** — see [Shared
+  resources](/administering/shared-resources). A Workspace Owner reporting an
+  empty **Model** dropdown after you "already set up the Provider" is usually a
+  missing attachment.
 </Callout>
 
 ## The screens
 
 **Organization settings** holds:
 
-| Screen           | For                                                                                             |
-| ---------------- | ----------------------------------------------------------------------------------------------- |
-| **General**      | The Organization's name and its identity / context text, folded into every Chat in the Org       |
-| **Members**      | Who is in the Organization, and their **Org Role**                                              |
-| **Invitations**  | Inviting people in — see [Users & access](/self-hosting/users-and-access)                        |
-| **Providers**    | The credential-bearing model connections                                                        |
-| **MCP**          | Organization-scoped MCP servers                                                                 |
-| **Skills**       | Shared Skills, and where a promoted one is edited                                               |
-| **Agents**       | Shared Agents, same                                                                             |
-| **Blueprints**   | Named bundles of Shared resources you apply to a Workspace in one step                           |
-| **Plugins**      | Read-only: what the deployment actually loaded at boot                                          |
+| Screen          | For                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| **General**     | The Organization's name and its identity / context text, folded into every Chat in the Org |
+| **Members**     | Who is in the Organization, and their **Org Role**                                         |
+| **Invitations** | Inviting people in — see [Users & access](/self-hosting/users-and-access)                  |
+| **Providers**   | The credential-bearing model connections                                                   |
+| **MCP**         | Organization-scoped MCP servers                                                            |
+| **Skills**      | Shared Skills, and where a promoted one is edited                                          |
+| **Agents**      | Shared Agents, same                                                                        |
+| **Blueprints**  | Named bundles of Shared resources you apply to a Workspace in one step                     |
+| **Plugins**     | Read-only: what the deployment actually loaded at boot                                     |
 
 ### Members and roles
 
@@ -67,9 +67,9 @@ by an Org Admin.
 <Callout type="info">
   **Plugins** is deliberately read-only — there is no install or enable button.
   Which Plugins run is a deploy-time decision belonging to the Operator, so it
-  changes only when they edit configuration and restart. Use the screen to confirm
-  what loaded, and to trace a Tool set or Sandbox backend back to the Plugin that
-  provided it.
+  changes only when they edit configuration and restart. Use the screen to
+  confirm what loaded, and to trace a Tool set or Sandbox backend back to the
+  Plugin that provided it.
 </Callout>
 
 ### Deleting the Organization

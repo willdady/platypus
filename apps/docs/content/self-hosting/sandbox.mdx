@@ -40,8 +40,8 @@ the host's Docker daemon, accessed by **bind-mounting `/var/run/docker.sock`**
 into the backend container.
 
 <Callout type="error">
-  Mounting the Docker socket grants the backend container **effective root on the
-  host**. Use the Docker adapter only on single-node, single-operator
+  Mounting the Docker socket grants the backend container **effective root on
+  the host**. Use the Docker adapter only on single-node, single-operator
   deployments (your laptop, a personal VPS). Do **not** enable it on a host you
   share with anyone you don't trust, and never in a multi-tenant or
   hostile-tenant environment.
@@ -104,9 +104,9 @@ example with `env -i`) is not tracked and keeps running.
   A container created by an earlier release has no init process to clean up
   after a killed command, so its process cap still fills over time and commands
   start failing. Delete the Sandbox and create it again to get a container with
-  one, the same way as
-  [applying changed reachability](#applying-changed-reachability). Deleting the
-  Sandbox also removes its files.
+  one, the same way as [applying changed
+  reachability](#applying-changed-reachability). Deleting the Sandbox also
+  removes its files.
 </Callout>
 
 Horizontally-scaled deployments **cannot** use this adapter: sandbox state lives
@@ -120,15 +120,15 @@ granted — the safe, default-deny posture. Reachability is expressed as two
 per-Sandbox fields on the Docker adapter, both defaulting to empty:
 
 - **`networks`** — Docker networks the sandbox container attaches to (reaches
-  other *containers*).
-- **`extraHosts`** — host-gateway aliases (reaches non-containerized *host*
+  other _containers_).
+- **`extraHosts`** — host-gateway aliases (reaches non-containerized _host_
   processes, e.g. a bare-metal Ollama or internal proxy).
 
 The authority chain is honest and runs top-down:
 
 - The **Operator** declares the eligible set at deployment time via
   `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG_DOCKER` — a
-  JSON array set at the deployment layer, *not* an in-app screen.
+  JSON array set at the deployment layer, _not_ an in-app screen.
 - An **Org Admin** selects a per-Sandbox subset of that allowlist. Submissions
   are validated server-side against the allowlist; out-of-allowlist entries are
   rejected.
@@ -164,9 +164,9 @@ Two ways to make a change take:
 </Callout>
 
 <Callout type="warning">
-  The "Platypus database stays unreachable from sandboxes" property holds only as
-  long as the database's network is **not** in the allowlist. It's an outcome of
-  your allowlist configuration, not a structural guarantee — don't add the
+  The "Platypus database stays unreachable from sandboxes" property holds only
+  as long as the database's network is **not** in the allowlist. It's an outcome
+  of your allowlist configuration, not a structural guarantee — don't add the
   database network.
 </Callout>
 
@@ -204,15 +204,15 @@ row, set in the app under **Workspace settings → Sandbox** by an Org Admin (li
 every credential-bearing Sandbox field, it is **not** delegatable to a Workspace
 Owner). It is _not_ deployment env or Plugin config.
 
-| Field              | Required | Meaning                                                                                                                                 |
-| ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Host**           | Yes      | Hostname or IP of the operator-owned host to attach to.                                                                                 |
-| **Port**           | No       | SSH port. Defaults to `22`.                                                                                                             |
-| **User**           | Yes      | SSH login user. Public-key auth only.                                                                                                   |
-| **Workspace root** | No       | Directory the sandbox works in. Absolute, or resolved against the login `$HOME`. Defaults to `$HOME/platypus-workspace`, `mkdir -p`'d on first connect. |
-| **Host key**       | No       | Optional host-key pin (see [below](#host-key-verification)). Blank ⇒ connect unverified with a logged warning.                          |
+| Field              | Required | Meaning                                                                                                                                                                                                                           |
+| ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Host**           | Yes      | Hostname or IP of the operator-owned host to attach to.                                                                                                                                                                           |
+| **Port**           | No       | SSH port. Defaults to `22`.                                                                                                                                                                                                       |
+| **User**           | Yes      | SSH login user. Public-key auth only.                                                                                                                                                                                             |
+| **Workspace root** | No       | Directory the sandbox works in. Absolute, or resolved against the login `$HOME`. Defaults to `$HOME/platypus-workspace`, `mkdir -p`'d on first connect.                                                                           |
+| **Host key**       | No       | Optional host-key pin (see [below](#host-key-verification)). Blank ⇒ connect unverified with a logged warning.                                                                                                                    |
 | **Private key**    | Yes      | PEM or OpenSSH private key for the login user. Kept server-side, never sent to the model. Once saved, the field shows **Key stored**; click **Replace key** to enter a new one. Saving without replacing it keeps the stored key. |
-| **Key passphrase** | No       | Passphrase decrypting the private key, when it is encrypted. Enabled only while you're entering a key. A new key replaces the stored passphrase, so re-enter it with an encrypted key. |
+| **Key passphrase** | No       | Passphrase decrypting the private key, when it is encrypted. Enabled only while you're entering a key. A new key replaces the stored passphrase, so re-enter it with an encrypted key.                                            |
 
 ### Public-key setup
 
@@ -305,7 +305,7 @@ A Sandbox carries workspace-default environment variables that are merged into
 every shell execution **on the server, without transiting the model**. The
 motivating case is API keys (`OPENAI_API_KEY`, `GITHUB_TOKEN`, …): agent-written
 code can call third-party services without the secret values ever appearing in
-the prompt, tool-call transcripts, or logs. The model is shown the key *names*
+the prompt, tool-call transcripts, or logs. The model is shown the key _names_
 only.
 
 The env is split into two tiers to match the authorization model:

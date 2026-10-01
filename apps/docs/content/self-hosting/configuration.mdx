@@ -50,10 +50,11 @@ These have to agree. If the browser loads the app from one origin but
   the next request arrives unauthenticated. There is no error message for this;
   change all of them in one edit.
 
-  Getting all four right is **necessary but not sufficient**. If the two origins
-  end up on different hosts they must also share a parent domain named by
-  `AUTH_COOKIE_DOMAIN`, or server-rendered pages stay signed out. See
-  [Supported topologies](#supported-topologies) below.
+Getting all four right is **necessary but not sufficient**. If the two origins
+end up on different hosts they must also share a parent domain named by
+`AUTH_COOKIE_DOMAIN`, or server-rendered pages stay signed out. See
+[Supported topologies](#supported-topologies) below.
+
 </Callout>
 
 ### Supported topologies
@@ -124,13 +125,13 @@ Plugins come in two tiers:
 **The core Plugins.** This page owns the list; other pages link here rather than
 repeat it.
 
-| Plugin                     | Tier      | Contributes                                                                                          |
-| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------- |
-| `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time, identifiers.                                         |
+| Plugin                     | Tier      | Contributes                                                                                                                        |
+| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time, identifiers.                                                                      |
 | `@platypus/tools-platform` | Always-on | The Platypus-domain Tool sets — kanban, dashboards, triggers, memory, notifications, agent discovery/management, skill management. |
-| `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.             |
-| `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.sandbox.yaml` overlay.             |
-| `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. The one backend viable in horizontally-scaled deployments. |
+| `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.                                           |
+| `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.sandbox.yaml` overlay.                                           |
+| `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. The one backend viable in horizontally-scaled deployments.             |
 
 The two always-on Plugins load unconditionally and must not be listed. The three
 gate-able ones load only when named in `PLATYPUS_PLUGINS`. All five are internal
@@ -197,9 +198,9 @@ empty list unless it says otherwise, and silently runs without web-fetch.
   Compose resolves at higher precedence than the base `env_file: .env`. Whatever
   you wrote in `.env` is discarded, not appended to. The overlay ships
   `@platypus/web-fetch,@platypus/docker`, so an operator who adds
-  `@platypus/ssh` to `.env` and then composes the overlay silently loses it —
-  no error, the SSH backend simply isn't registered. When you run the overlay,
-  the list **inside `compose.sandbox.yaml`** must be your deployment's complete
+  `@platypus/ssh` to `.env` and then composes the overlay silently loses it — no
+  error, the SSH backend simply isn't registered. When you run the overlay, the
+  list **inside `compose.sandbox.yaml`** must be your deployment's complete
   gate-able set. Confirm what actually loaded in **Organization settings →
   Plugins**.
 </Callout>
@@ -347,12 +348,12 @@ and a hostname that fails to resolve fails closed.
 Some ranges are blocked whatever you configure, because no legitimate page read
 targets them:
 
-| Range                                | Why                                                        |
-| ------------------------------------ | ---------------------------------------------------------- |
-| `127.0.0.0/8`, `::1`                 | Loopback — the backend's own process                       |
-| `0.0.0.0/8`                          | Reaches localhost on Linux                                 |
-| `169.254.0.0/16`, `fe80::/10`         | Link-local, where AWS, Azure and GCP serve instance metadata |
-| `100.64.0.0/10`                      | Home to Alibaba Cloud's metadata service                   |
+| Range                         | Why                                                          |
+| ----------------------------- | ------------------------------------------------------------ |
+| `127.0.0.0/8`, `::1`          | Loopback — the backend's own process                         |
+| `0.0.0.0/8`                   | Reaches localhost on Linux                                   |
+| `169.254.0.0/16`, `fe80::/10` | Link-local, where AWS, Azure and GCP serve instance metadata |
+| `100.64.0.0/10`               | Home to Alibaba Cloud's metadata service                     |
 
 Private networks — `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7` —
 are **allowed by default**, which is the opposite of a textbook default-deny.
@@ -364,10 +365,10 @@ and whose Webhooks have no reason to target them.
 <Callout type="warning">
   The guard is a **pre-flight check on the URL**, so it removes the easy path
   rather than every path. Redirects are followed by the HTTP client after the
-  check, and the fetch resolves the hostname again independently — so a host that
-  passes and then redirects inward, or whose DNS records change in between, is not
-  caught. Treat it as defence against a prompt-injected model, not as an SSRF
-  boundary. If you need a boundary, put one in the network.
+  check, and the fetch resolves the hostname again independently — so a host
+  that passes and then redirects inward, or whose DNS records change in between,
+  is not caught. Treat it as defence against a prompt-injected model, not as an
+  SSRF boundary. If you need a boundary, put one in the network.
 </Callout>
 
 ## Other operational areas

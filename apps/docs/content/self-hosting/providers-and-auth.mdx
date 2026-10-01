@@ -59,13 +59,13 @@ services:
 ```
 
 <Callout type="warning">
-  Right URL, connection refused. Ollama listens on `127.0.0.1:11434` by
-  default, and traffic arriving through the host gateway reaches the bridge
-  address rather than loopback — so **Base URL** can be exactly right and the
-  Provider still fails to connect. Start Ollama with `OLLAMA_HOST=0.0.0.0` so it
-  accepts those connections. LM Studio and llama.cpp each have a listen-address
-  setting of their own and need the same change. That opens the port to every
-  interface the machine has, so firewall it where the machine isn't yours alone.
+  Right URL, connection refused. Ollama listens on `127.0.0.1:11434` by default,
+  and traffic arriving through the host gateway reaches the bridge address
+  rather than loopback — so **Base URL** can be exactly right and the Provider
+  still fails to connect. Start Ollama with `OLLAMA_HOST=0.0.0.0` so it accepts
+  those connections. LM Studio and llama.cpp each have a listen-address setting
+  of their own and need the same change. That opens the port to every interface
+  the machine has, so firewall it where the machine isn't yours alone.
 </Callout>
 
 **Or run the model server in the stack.** Where you operate both sides, add the
@@ -96,7 +96,8 @@ every turn fails no matter how correct the URL is.
   `extraHosts` allowlist has no bearing on. That allowlist governs what an
   agent's own execution container can reach — see [Sandbox
   infrastructure](/self-hosting/sandbox). Granting a Sandbox a host alias does
-  not make a Provider reachable, and a Provider that works needs nothing from it.
+  not make a Provider reachable, and a Provider that works needs nothing from
+  it.
 </Callout>
 
 ### What a Provider holds

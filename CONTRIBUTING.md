@@ -135,7 +135,7 @@ chore(tests): add missing test coverage
 > vulnerability as surely as an issue does. We can share a private fork with you
 > so the fix still lands as your work.
 
-1. Ensure your code passes all tests (`pnpm test`) and is formatted (`pnpm format`).
+1. Ensure your code passes all tests (`pnpm test`) and is formatted (`pnpm format`; CI runs `pnpm format:check`).
 2. Write clear, descriptive commit messages in English, following the conventions above.
 3. Update the docs in `apps/docs/content` in the same PR, not a follow-up one.
    If you changed an `.env.example`, a user-facing limit or enum in
@@ -157,15 +157,15 @@ chore(tests): add missing test coverage
 
 Platypus is a monorepo managed by [Turborepo](https://turbo.build/) with the following packages:
 
-| Package                  | Description                                                        |
-| ------------------------ | ------------------------------------------------------------------ |
-| `apps/frontend`          | Next.js web application                                            |
-| `apps/backend`           | Hono.js REST API server                                            |
-| `apps/docs`              | Documentation site (docs.platypus.chat)                            |
-| `apps/website`           | Marketing site (platypus.chat)                                     |
-| `packages/schemas`       | Shared Zod schemas for end-to-end type safety                      |
-| `packages/plugin-sdk`    | Published plugin contract                                          |
-| `packages/example-plugin` | Reference implementation for the plugin contract                  |
+| Package                   | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `apps/frontend`           | Next.js web application                          |
+| `apps/backend`            | Hono.js REST API server                          |
+| `apps/docs`               | Documentation site (docs.platypus.chat)          |
+| `apps/website`            | Marketing site (platypus.chat)                   |
+| `packages/schemas`        | Shared Zod schemas for end-to-end type safety    |
+| `packages/plugin-sdk`     | Published plugin contract                        |
+| `packages/example-plugin` | Reference implementation for the plugin contract |
 
 ## Reporting Issues
 

@@ -92,7 +92,7 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.439 0 0);
   --warning: oklch(0.75 0.15 75);
-  --warning-foreground: oklch(0.90 0.10 75);
+  --warning-foreground: oklch(0.9 0.1 75);
 }
 
 @keyframes collapsible-down {

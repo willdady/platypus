@@ -20,6 +20,7 @@
       "with": ["start-local-db"]
     },
     "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/eslint.config.base.mjs"],
       "outputs": []
     },
     "typecheck": {

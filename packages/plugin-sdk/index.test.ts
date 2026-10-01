@@ -238,7 +238,11 @@ describe("@platypuschat/plugin-sdk", () => {
     const shared: PluginConfigContext = {
       config: {},
       credentials: {},
-      logger: { ...silentLogger(), debug: (m) => written.push(String(m)) },
+      logger: {
+        ...silentLogger(),
+        debug: (m: object | string) =>
+          written.push(typeof m === "string" ? m : JSON.stringify(m)),
+      },
     };
     const backend: SandboxBackendContribution = {
       backend: "cloud",
@@ -404,7 +408,7 @@ describe("@platypuschat/plugin-sdk", () => {
     expect(closed).toEqual(["pool"]);
   });
 
-  it("leaves a Tool set factory free to register a closer too", () => {
+  it("leaves a Tool set factory free to register a closer too", async () => {
     const registered: Array<() => Promise<void> | void> = [];
     const contribution: ToolSetContribution = {
       id: "kanban",
@@ -417,7 +421,7 @@ describe("@platypuschat/plugin-sdk", () => {
     };
 
     if (typeof contribution.tools === "function") {
-      contribution.tools(
+      await contribution.tools(
         {
           orgId: "o",
           workspaceId: "w",

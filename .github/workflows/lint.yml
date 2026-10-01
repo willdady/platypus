@@ -1,8 +1,9 @@
 name: Lint
 
-# Reusable lint gate. Runs the full monorepo lint (`turbo run lint`) and is
-# called by the release deployment workflows (build-and-push, deploy-docs) so a
-# lint failure blocks deployment.
+# Reusable lint gate. Runs the full monorepo lint (`turbo run lint`) and the
+# Prettier check (`prettier --check .`), and is called by the release
+# deployment workflows (build-and-push, deploy-docs) so a lint or formatting
+# failure blocks deployment.
 on:
   workflow_call:
 
@@ -33,3 +34,6 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
