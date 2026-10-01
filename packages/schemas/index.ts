@@ -2827,7 +2827,7 @@ export * from "./widget-registry.ts";
 export const dashboardSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  name: z.string(),
+  name: z.string().min(1).max(200),
   description: z.string().max(500).nullable().optional(),
   desktopLayout: z.array(rglLayoutItemSchema),
   mobileLayout: z.array(rglLayoutItemSchema),
