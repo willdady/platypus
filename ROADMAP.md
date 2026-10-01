@@ -136,7 +136,7 @@ stays messaging-agnostic. The design is settled in ADR-0015.
 - **Inbound** messages drive Chat turns via the API and the reply streams back on that call.
   **Outbound** agent-initiated messages are **chat messages appended to the bound chat**,
   delivered over the webhook bus transport — _not_ the in-app notification surface, which
-  stays in-app and never routes to a channel.
+  stays in-app and never routes to a Surface.
 - **Platypus owns identity.** A channel account is _linked_ to a Platypus account via a
   short-lived, single-use code minted in the Platypus UI; the Gateway relays and Platypus
   authorizes. The Gateway is never an auth authority — which is what keeps multi-tenancy
