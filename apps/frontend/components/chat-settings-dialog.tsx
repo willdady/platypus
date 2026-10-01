@@ -107,6 +107,7 @@ export const ChatSettingsDialog = ({
                 size="icon"
                 className="size-8"
                 aria-label="Toggle advanced settings"
+                aria-expanded={isAdvancedOpen}
               >
                 <ChevronsUpDown />
               </Button>

@@ -98,6 +98,7 @@ function ColumnContent({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
+              aria-label={`Actions for ${column.name}`}
               className="p-1 hover:bg-muted rounded"
               onClick={(e) => e.stopPropagation()}
             >

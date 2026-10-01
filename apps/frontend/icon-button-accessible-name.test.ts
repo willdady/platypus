@@ -6,10 +6,11 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 /**
- * An icon-only `<Button size="icon">` has no text, so without an `aria-label`
- * a screen reader announces it only as "button" (issue #1137). Every such
- * Button must carry `aria-label` / `aria-labelledby`, or a `sr-only` text
- * child, in the source — `title` alone is not enough.
+ * An icon-only button has no text, so without an `aria-label` a screen reader
+ * announces it only as "button" (issue #1137). Every `<Button size="icon">`,
+ * and every raw `<button>` whose only children are components (icons), must
+ * carry `aria-label` / `aria-labelledby`, or a `sr-only` text child, in the
+ * source — `title` alone is not enough.
  */
 
 const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,22 @@ const isIconButton = (opening: ts.JsxOpeningLikeElement) => {
   return !!size && ts.isStringLiteral(size) && size.text.startsWith("icon");
 };
 
+/** A raw `<button>` whose children are all self-closing components, e.g. `<X />`. */
+const isIconOnlyRawButton = (node: ts.Node) => {
+  if (!ts.isJsxElement(node)) return false;
+  if (node.openingElement.tagName.getText() !== "button") return false;
+  const children = node.children.filter(
+    (c) => !(ts.isJsxText(c) && c.containsOnlyTriviaWhiteSpaces),
+  );
+  return (
+    children.length > 0 &&
+    children.every(
+      (c) =>
+        ts.isJsxSelfClosingElement(c) && /^[A-Z]/.test(c.tagName.getText()),
+    )
+  );
+};
+
 const hasSrOnlyChild = (element: ts.JsxElement): boolean => {
   let found = false;
   const visit = (node: ts.Node) => {
@@ -52,20 +69,29 @@ const hasSrOnlyChild = (element: ts.JsxElement): boolean => {
   return found;
 };
 
+/** A present, non-empty `aria-label` / `aria-labelledby`. */
+const hasNameAttr = (opening: ts.JsxOpeningLikeElement) =>
+  ["aria-label", "aria-labelledby"].some((name) => {
+    const a = attr(opening, name);
+    if (!a?.initializer) return false;
+    return (
+      !ts.isStringLiteral(a.initializer) || a.initializer.text.trim() !== ""
+    );
+  });
+
 const hasAccessibleName = (node: ts.JsxElement | ts.JsxSelfClosingElement) => {
   const opening = ts.isJsxElement(node) ? node.openingElement : node;
-  if (attr(opening, "aria-label") || attr(opening, "aria-labelledby"))
-    return true;
+  if (hasNameAttr(opening)) return true;
   return ts.isJsxElement(node) && hasSrOnlyChild(node);
 };
 
-describe("icon-only Buttons", () => {
+describe("icon-only buttons", () => {
   it("all have an accessible name", () => {
     const unnamed: string[] = [];
 
     for (const file of tsxFiles(APP_ROOT)) {
       const source = readFileSync(file, "utf8");
-      if (!/size="icon/.test(source)) continue;
+      if (!/size="icon|<button/.test(source)) continue;
       const sf = ts.createSourceFile(
         file,
         source,
@@ -81,7 +107,7 @@ describe("icon-only Buttons", () => {
             : null;
         if (
           opening &&
-          isIconButton(opening) &&
+          (isIconButton(opening) || isIconOnlyRawButton(node)) &&
           !hasAccessibleName(node as ts.JsxElement | ts.JsxSelfClosingElement)
         ) {
           const { line } = sf.getLineAndCharacterOfPosition(opening.getStart());
