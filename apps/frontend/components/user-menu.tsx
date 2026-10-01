@@ -44,7 +44,12 @@ export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-7">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label="Account menu"
+        >
           <User className="size-4" />
         </Button>
       </DropdownMenuTrigger>

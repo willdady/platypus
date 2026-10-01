@@ -24,6 +24,7 @@ const WorkspaceSettingsPage = () => {
               className="cursor-pointer text-muted-foreground"
               variant="ghost"
               size="icon"
+              aria-label="Copy Organization ID"
               onClick={() => {
                 navigator.clipboard.writeText(orgId);
                 toast.info("Copied to clipboard");
@@ -41,6 +42,7 @@ const WorkspaceSettingsPage = () => {
               className="cursor-pointer text-muted-foreground"
               variant="ghost"
               size="icon"
+              aria-label="Copy Workspace ID"
               onClick={() => {
                 navigator.clipboard.writeText(workspaceId);
                 toast.info("Copied to clipboard");

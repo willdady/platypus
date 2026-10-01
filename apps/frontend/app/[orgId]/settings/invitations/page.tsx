@@ -231,6 +231,7 @@ const OrgInvitationsPage = () => {
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label="Copy invitation link"
                             className="cursor-pointer"
                             title="Copy invitation link"
                             onClick={() => handleCopyLink(invite.token!)}
@@ -241,6 +242,7 @@ const OrgInvitationsPage = () => {
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Delete invitation for ${invite.email}`}
                           className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
                           onClick={() => setInvitationToDelete(invite.id)}
                         >

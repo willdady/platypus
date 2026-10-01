@@ -96,6 +96,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Actions for ${member.user.name}`}
                         className="cursor-pointer"
                       >
                         <MoreHorizontal className="h-4 w-4" />

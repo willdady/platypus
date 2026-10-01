@@ -50,7 +50,12 @@ export const ChatErrorDialog = ({
           </Alert>
         </div>
         <DialogFooter className="flex-row justify-end">
-          <Button variant="outline" size="icon" onClick={handleCopy}>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Copy error details"
+            onClick={handleCopy}
+          >
             {copied ? <Check /> : <Copy />}
           </Button>
           <Button onClick={() => onOpenChange(false)}>Ok</Button>

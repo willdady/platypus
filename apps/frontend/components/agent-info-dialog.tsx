@@ -158,7 +158,12 @@ export const AgentInfoDialog = ({
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">
               <span className="cursor-default">Advanced settings</span>
-              <Button variant="ghost" size="icon" className="size-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-label="Toggle advanced settings"
+              >
                 <ChevronsUpDown />
               </Button>
             </div>

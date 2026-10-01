@@ -218,6 +218,7 @@ export function KanbanBoardForm({
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label="Delete label"
                 onClick={() => handleDeleteLabel(label.id)}
                 disabled={isSubmitting}
               >

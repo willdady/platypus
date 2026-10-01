@@ -92,6 +92,7 @@ const UserSettingsPage = () => {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Edit name"
                 onClick={() => setIsEditing(true)}
                 className="cursor-pointer"
               >

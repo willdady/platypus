@@ -182,6 +182,7 @@ const WidgetTile = memo(function WidgetTile({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Edit widget"
                 className="h-6 w-6"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onEditToggle(widget.id)}
@@ -191,6 +192,7 @@ const WidgetTile = memo(function WidgetTile({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Delete widget"
                 className="h-6 w-6 text-destructive hover:text-destructive"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onDelete(widget.id)}
