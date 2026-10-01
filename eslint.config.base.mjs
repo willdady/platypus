@@ -74,8 +74,8 @@ export function baseConfig(tsconfigRootDir) {
     {
       // The flat-config file isn't in any tsconfig's `include`, and the SDK
       // packages (plugin-sdk, example-plugin) deliberately have no `@types/node`,
-      // so it can't be typed
-      // (`import.meta.dirname` resolves to an error type). Lint it untyped.
+      // so it can't be typed (`import.meta.dirname` resolves to an error type).
+      // Lint it untyped.
       files: ["**/*.mjs"],
       ...tseslint.configs.disableTypeChecked,
     },
