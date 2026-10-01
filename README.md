@@ -16,7 +16,7 @@
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-6.0-blue.svg" alt="TypeScript" /></a>
 </p>
 
-Platypus is an open-source, full-stack application for building AI Agents that reason, use tools, and keep working when you aren't watching. You bring the models — hosted, proxied, or running on your own hardware — and Platypus gives you the Agents, the tools they call, the schedules they run on, and the multi-tenant boundaries that keep one team's work out of another's.
+Platypus is an open-source, full-stack application for building AI Agents that reason, use tools, and keep working when you aren't watching. You bring the models — hosted, proxied, or running on your own hardware — and Platypus gives you the Agents, the tools they call, the Triggers that run them, and the multi-tenant boundaries that keep one team's work out of another's.
 
 🌐 **Visit the website at [platypus.chat](https://platypus.chat).**
 

@@ -14,7 +14,7 @@ team; horizons signal direction and sequencing, not delivery dates.
 > equips their whole team with always-on AI Agents.**
 
 The primary user is the **technical builder** — the Org Admin or Workspace Owner who
-wires up Agents, Tool sets, Sandboxes, MCPs, and schedules. Everyone else on the team
+wires up Agents, Tool sets, Sandboxes, MCPs, and Triggers. Everyone else on the team
 is a **consumer** of what that builder ships. Making Platypus approachable matters, but
 the goal is to make _one person able to equip many_, not to turn agent-building into a
 no-code activity for non-technical users.
@@ -26,7 +26,7 @@ Teams self-host Platypus for four reasons:
    for Platypus over a cloud assistant.
 2. **Always-on.** Agents run in the background on shared infrastructure — not on a
    laptop that has to stay awake and plugged in overnight.
-3. **Under one roof.** Agents, Boards, Dashboards, Sandboxes, MCP, schedules, and Memory
+3. **Under one roof.** Agents, Boards, Dashboards, Sandboxes, MCP, Triggers, and Memory
    in one platform, rather than a stack of stitched-together services.
 4. **Provider-agnostic.** Local _or_ frontier models, chosen per Agent and per task, so
    you control the cost/capability trade-off yourself.
@@ -53,7 +53,7 @@ option viable in horizontally-scaled deployments). We want more: hosted
 sandbox-as-a-service (Daytona, Modal), remote VMs, and so on.
 
 > **Contributions welcome.** A new backend implements the existing `SandboxBackend`
-> interface and is contributed through a plugin manifest's `contributes.sandboxBackends`
+> interface and is contributed through a Plugin manifest's `contributes.sandboxBackends`
 > array. This is a well-scoped, well-isolated entry point for a first contribution —
 > open a discussion describing the target backend before starting.
 
@@ -61,7 +61,7 @@ sandbox-as-a-service (Daytona, Modal), remote VMs, and so on.
 
 Filling the gaps in user- and contributor-facing docs so that self-hosting, configuring,
 and extending Platypus doesn't require reading the source. This covers setup and
-deployment guides, the domain model, and the extension points contributors are most
+deployment guides, the domain model, and the Extension points contributors are most
 likely to reach for.
 
 > **Contributions welcome.** Docs are one of the easiest ways to make a first contribution
@@ -72,25 +72,26 @@ likely to reach for.
 Items that have left the roadmap. Kept here briefly so a returning reader isn't
 told something is "not started" when it is running in production.
 
-### Extension / plugin system — 2.0.0
+### Extension / Plugin system — 2.0.0
 
-A first-class way to extend Platypus without maintaining a fork. A _plugin_ is a
+A first-class way to extend Platypus without maintaining a fork. A _Plugin_ is a
 distributable bundle (one package, one version, one config namespace, one enable/disable
-switch) contributing to typed **extension points** that core owns. There are two:
-**Sandbox backends** and **Tool sets**. Plugins are installed by the Operator at deploy
+switch) contributing to typed **Extension points** that core owns. There are three:
+**Sandbox backends** and **Tool sets** shipped with the Plugin system, and **Web-search
+backends** followed it. Plugins are installed by the Operator at deploy
 time, run in-process, and are enabled through `PLATYPUS_PLUGINS` and configured through
-one `PLATYPUS_PLUGIN_CONFIG_<NAME>` variable per plugin. The compile-time contract is published as
+one `PLATYPUS_PLUGIN_CONFIG_<NAME>` variable per Plugin. The compile-time contract is published as
 [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk);
-third-party plugins load from installed npm packages with their contribution ids
-namespaced by plugin name. See the
+third-party Plugins load from installed npm packages with their Contribution ids
+namespaced by Plugin name. See the
 [Extending guide](https://docs.platypus.chat/extending).
 
 **MCP remains the canonical path for connecting to external tool servers.** Plugins
 extend Platypus's _own_ capabilities; they don't duplicate MCP.
 
-> **Contributions welcome.** New extension points, and third-party plugins in the wild,
-> are both open. The messaging gateway (below) will _not_ become an extension point —
-> its Gateway adapters live in the separate gateway app behind their own seam.
+> **Contributions welcome.** New Extension points, and third-party Plugins in the wild,
+> are both open. The messaging Gateway (below) will _not_ become an Extension point —
+> its Gateway adapters live in the separate Gateway app behind their own seam.
 
 ### SSH Sandbox backend — 2.0.0
 
@@ -108,8 +109,9 @@ either **script steps** (run inside a Sandbox) or **Agent steps**, connected by 
 success/failure transitions — so the model is invoked only where reasoning genuinely adds
 value, and a single bad step can't silently derail the whole run.
 
-This sits _alongside_ the existing LLM-as-orchestrator Sub-Agent model, not in place of
-it: the dispatcher pattern stays for open-ended work; the DAG is for known pipelines.
+This sits _alongside_ the existing Sub-Agent model — an Agent delegating to its
+Sub-Agents through its one delegation Tool — not in place of it: delegation stays for
+open-ended work; the DAG is for known pipelines.
 
 > This **updates an earlier position** — we'd previously leaned on models improving rather
 > than building deterministic orchestration. The cost, fragility, and silent-failure modes
@@ -119,34 +121,34 @@ it: the dispatcher pattern stays for open-ended work; the DAG is for known pipel
 > It requires an ADR before any code and is sequenced after Sandbox backends mature, since
 > script steps execute in a Sandbox.
 
-### Messaging gateway
+### Messaging Gateway
 
 A **decoupled, stateful app** (deployed alongside the frontend and backend) that exposes
-Platypus to **bring-your-own chat surfaces** — Telegram, Slack, Discord, and others.
+Platypus to **bring-your-own chat Surfaces** — Telegram, Slack, Discord, and others.
 It is **bidirectional**: an agent can message you on your phone _and_ you can reply and
-chat from the surface. It holds the long-lived per-surface connections so the backend
+chat from the Surface. It holds the long-lived per-Surface connections so the backend
 stays messaging-agnostic. The design is settled in ADR-0015.
 
-- Each surface is a **gateway adapter** behind the gateway's **own adapter seam** —
-  first-party and in-repo. This is _not_ a contribution point of the backend plugin system
-  (a Tool set plugin can't run in the gateway, and vice-versa); third-party adapters are a
+- Each Surface is a **Gateway adapter** behind the Gateway's **own adapter seam** —
+  first-party and in-repo. This is _not_ an Extension point of the backend Plugin system
+  (a Tool set Plugin can't run in the Gateway, and vice-versa); third-party Gateway adapters are a
   later addition.
 - **Inbound** messages drive Chat turns via the API and the reply streams back on that call.
   **Outbound** agent-initiated messages are **chat messages appended to the bound chat**,
   delivered over the webhook bus transport — _not_ the in-app notification surface, which
   stays in-app and never routes to a channel.
 - **Platypus owns identity.** A channel account is _linked_ to a Platypus account via a
-  short-lived, single-use code minted in the Platypus UI; the gateway relays and Platypus
-  authorizes. The gateway is never an auth authority — which is what keeps multi-tenancy
+  short-lived, single-use code minted in the Platypus UI; the Gateway relays and Platypus
+  authorizes. The Gateway is never an auth authority — which is what keeps multi-tenancy
   intact.
-- A third-party gateway _may_ integrate by speaking the contract, but the default is a
-  thin first-party reference gateway. Platypus will not become a messaging platform.
+- A third-party Gateway _may_ integrate by speaking the contract, but the default is a
+  thin first-party reference Gateway. Platypus will not become a messaging platform.
 
 > **Human-in-the-loop approvals are deferred** — they need pause/resume in the run
-> lifecycle, a larger change than the gateway itself; the contract is shaped to add them
-> later without a breaking change. Sequenced after the extension/plugin system, whose
-> manifest/SDK _patterns_ the adapter seam borrows — though adapters are a separate seam,
-> not backend plugins.
+> lifecycle, a larger change than the Gateway itself; the contract is shaped to add them
+> later without a breaking change. Sequenced after the Extension / Plugin system, whose
+> manifest/SDK _patterns_ the adapter seam borrows — though Gateway adapters are a separate
+> seam, not backend Plugins.
 
 ## Non-goals
 
@@ -154,14 +156,14 @@ These are deliberate. PRs in these directions are unlikely to be accepted — pl
 discussion first if you think one of them should change.
 
 1. **Not a no-code Agent builder for non-technical users.** The builder persona is
-   technical; non-technical members consume what builders ship (via blueprints).
+   technical; non-technical members consume what builders ship (via Blueprints).
 2. **Not a kitchen-sink automation platform.** If code-driven workflows happen, they stay
    lean orchestration glue (Step Functions-shaped), not a visual mega-tool with hundreds
    of built-in integrations.
-3. **No messaging/notification stack inside the backend.** Channels live in the decoupled
-   gateway as adapters. The backend will not grow a sprawling in-process messaging
+3. **No messaging/notification stack inside the backend.** Surfaces live in the decoupled
+   Gateway as Gateway adapters. The backend will not grow a sprawling in-process messaging
    integration.
-4. **MCP stays the canonical path for external tool servers.** The plugin system extends
+4. **MCP stays the canonical path for external tool servers.** The Plugin system extends
    Platypus's own capabilities; it does not replace or duplicate MCP for connecting out.
 
 ## How to contribute or propose
