@@ -106,7 +106,9 @@ const UserInvitationsPage = () => {
               <div className="space-y-1">
                 <h3 className="font-semibold">{invite.organizationName}</h3>
                 <div className="text-sm text-muted-foreground space-y-1">
-                  <p>Invited by: {invite.invitedByName}</p>
+                  {invite.invitedByName && (
+                    <p>Invited by: {invite.invitedByName}</p>
+                  )}
                   <p>Expires: {formatDate(invite.expiresAt)}</p>
                 </div>
               </div>

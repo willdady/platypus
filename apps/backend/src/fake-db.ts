@@ -345,7 +345,7 @@ const uniqueViolation = (constraint: string) => {
  * empty rather than an error, so a query for a resource a test never created
  * simply finds nothing.
  *
- * Covers `select`/`from`/`innerJoin`/`where`/`orderBy`/`groupBy`/`limit`,
+ * Covers `select`/`from`/`innerJoin`/`leftJoin`/`where`/`orderBy`/`groupBy`/`limit`,
  * `insert`/`values`/`returning`, `update`/`set`/`where`/`returning`,
  * `delete`/`where`/`returning`, `execute`, and a `transaction` that really
  * rolls back: the callback gets a handle bound to a staging copy merged back
@@ -437,7 +437,7 @@ export const createFakeDb = (
       let take = Infinity;
       let order: OrderMarker[] = [];
       let grouping: ColumnRef[] = [];
-      const joins: { table: unknown; on: Condition }[] = [];
+      const joins: { table: unknown; on: Condition; left?: boolean }[] = [];
 
       const rows = (): Row[] => {
         const base = rowsFor(table);
@@ -457,6 +457,10 @@ export const createFakeDb = (
             );
             for (const partner of partners) {
               next.push({ ...row, [nameOf(join.table)]: partner });
+            }
+            // A left join keeps an unmatched row, its joined columns null.
+            if (join.left && !partners.length) {
+              next.push({ ...row, [nameOf(join.table)]: null });
             }
           }
           combined = next;
@@ -521,6 +525,10 @@ export const createFakeDb = (
         },
         innerJoin(t: unknown, on: Condition) {
           joins.push({ table: t, on });
+          return builder;
+        },
+        leftJoin(t: unknown, on: Condition) {
+          joins.push({ table: t, on, left: true });
           return builder;
         },
         where(c: Condition) {
