@@ -19,10 +19,15 @@ beforeAll(async () => {
     INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
       VALUES ('u1', 'Jane', 'jane@example.com', true, now(), now());
     INSERT INTO "organization" ("id", "name") VALUES ('org-1', 'Acme');
-    INSERT INTO "context" ("id", "user_id", "workspace_id", "content", "created_at")
-      VALUES ('ctx-newer', 'u1', NULL, 'newer', '2026-02-01'),
-             ('ctx-oldest', 'u1', NULL, 'oldest', '2026-01-01'),
-             ('ctx-newest', 'u1', NULL, 'newest', '2026-03-01');
+    INSERT INTO "context" ("id", "user_id", "workspace_id", "content", "created_at", "updated_at")
+      VALUES ('ctx-oldest', 'u1', NULL, 'oldest', '2026-01-01', '2026-01-01'),
+             ('ctx-edited', 'u1', NULL, 'edited', '2026-02-01', '2026-04-01'),
+             ('ctx-newest', 'u1', NULL, 'newest', '2026-03-01', '2026-03-01');
+    INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
+      VALUES ('u2', 'Sam', 'sam@example.com', true, now(), now());
+    INSERT INTO "context" ("id", "user_id", "workspace_id", "content", "created_at", "updated_at")
+      VALUES ('ctx-u2-older', 'u2', NULL, 'older', '2026-01-01', '2026-01-01'),
+             ('ctx-u2-newer', 'u2', NULL, 'newer', '2026-02-01', '2026-01-01');
     INSERT INTO "organization_member" ("id", "organization_id", "user_id", "role", "created_at")
       VALUES ('m-newer', 'org-1', 'u1', 'member', '2026-02-01'),
              ('m-oldest', 'org-1', 'u1', 'admin', '2026-01-01');
@@ -43,8 +48,8 @@ const sqlstateOf = (sql: string) =>
   );
 
 describe(MIGRATION, () => {
-  it("keeps only each user's oldest global Context", async () => {
-    expect(await ids("context")).toEqual(["ctx-oldest"]);
+  it("keeps each user's most recently edited global Context, newest on a tie", async () => {
+    expect(await ids("context")).toEqual(["ctx-edited", "ctx-u2-newer"]);
   });
 
   it("keeps only the oldest membership of an Organization", async () => {

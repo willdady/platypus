@@ -1,14 +1,18 @@
 -- Before the constraints below can be added, drop the duplicates the old ones
--- let through, keeping each user's oldest row (ties broken by id): a second
--- global Context (null workspace_id never collided) and a second membership of
--- the same Organization.
+-- let through: a second global Context (null workspace_id never collided) and
+-- a second membership of the same Organization.
+--
+-- A user keeps their most recently edited global Context (then newest, then
+-- highest id), the one they last wrote and most likely the one in effect, since
+-- prompt assembly took whichever duplicate it read last. A membership keeps the
+-- oldest row (ties broken by id).
 --
 -- `drizzle-kit push` does not run this file.
 DELETE FROM "context" c
 USING "context" keep
 WHERE c."user_id" = keep."user_id"
   AND c."workspace_id" IS NOT DISTINCT FROM keep."workspace_id"
-  AND (keep."created_at", keep."id") < (c."created_at", c."id");--> statement-breakpoint
+  AND (keep."updated_at", keep."created_at", keep."id") > (c."updated_at", c."created_at", c."id");--> statement-breakpoint
 DELETE FROM "organization_member" m
 USING "organization_member" keep
 WHERE m."organization_id" = keep."organization_id"
