@@ -156,7 +156,7 @@ const TriggerRunsPage = ({
         <BackButton fallbackHref={workspaceRoutes(orgId, workspaceId).root} />
         <h1 className="text-2xl mb-1 font-bold">Trigger runs</h1>
         <p className="text-muted-foreground mb-4">
-          Every run from every trigger in this workspace, newest first.
+          Recent runs from every trigger in this workspace, newest first.
         </p>
 
         <div className="flex flex-wrap gap-2 mb-4">

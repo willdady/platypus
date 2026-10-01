@@ -236,9 +236,10 @@ delivery — the `data` object it sends is what the Trigger received.
 
 **Trigger runs** is one page per Workspace, not a tab inside the Trigger
 editor. Open it from **Trigger runs** in the Triggers section of the Workspace
-home page, or from the command menu. Every run from every Trigger in the
-Workspace is there, newest first, each row naming the Trigger it came from and
-linking to it.
+home page, or from the command menu. Recent runs from every Trigger in the
+Workspace are there, newest first, each row naming the Trigger it came from and
+linking to it. Older runs are pruned per Trigger, keeping at least its newest
+**Max Runs to Keep** — see [What a run does](#what-a-run-does).
 
 That is the page that answers "what fired here recently?" and "which Trigger
 just failed?" — questions a per-Trigger list could only answer one Trigger at a
@@ -329,7 +330,9 @@ it is absent for a Provider that reports no cache detail.
 ### Why a Trigger didn't run
 
 A run that never happened leaves no row in **Trigger runs** — unless it was the
-[run limit](#run-limits) that dropped it, which records a _Suppressed_ row. For
+[run limit](#run-limits) that dropped it, which records a _Suppressed_ row. A
+run that did happen can be missing too: it was later pruned, once newer runs
+pushed it past the Trigger's [**Max Runs to Keep**](#what-a-run-does). For
 anything else the answer is in the backend logs. Every time an event reaches a
 Trigger that subscribes to it, Platypus writes one dispatch decision line naming
 the event, the Trigger, the Trigger's Agent, the Agents that were running when
