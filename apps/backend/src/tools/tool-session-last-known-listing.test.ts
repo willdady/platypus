@@ -23,6 +23,8 @@ const { server } = vi.hoisted(() => ({
     up: true,
     /** Accepts the connection, then never answers `tools/list` (#1135). */
     listHangs: false,
+    /** Accepts the connection, then never answers `initialize`. */
+    initializeHangs: false,
     tools: [] as Array<Record<string, unknown>>,
     opened: 0,
     closed: 0,
@@ -40,7 +42,10 @@ const fakeTransport = (): MCPTransport => {
       if (!("method" in message) || !("id" in message))
         return Promise.resolve();
       const params = (message.params ?? {}) as Record<string, unknown>;
-      if (message.method === "tools/list" && server.listHangs) {
+      if (
+        (message.method === "tools/list" && server.listHangs) ||
+        (message.method === "initialize" && server.initializeHangs)
+      ) {
         return Promise.resolve();
       }
       const result =
@@ -187,6 +192,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
   beforeEach(() => {
     server.up = true;
     server.listHangs = false;
+    server.initializeHangs = false;
     server.tools = structuredClone(TOOLS);
     server.opened = 0;
     server.closed = 0;
@@ -284,6 +290,60 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
     await session.dispose();
     expect(server.closed).toBe(closedBefore + 1);
+  });
+
+  // The stale tool's own connect is bounded like the fetch it stands in for,
+  // so a server that comes back hung fails the call instead of holding it
+  // until the step timer kills it (#1135).
+  it("fails a stale tool's call when the server connects but never answers, and connects afresh on the next call", async () => {
+    const { queries } = store();
+    await (await openToolSession(scope, agent, queries)).dispose();
+
+    server.up = false;
+    const session = await openToolSession(scope, agent, queries);
+
+    server.up = true;
+    server.initializeHangs = true;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const calling = call(session.tools.flaky__write, { body: "x" });
+      const settled = expect(calling).rejects.toThrow(
+        "MCP server 'Flaky MCP' is unreachable",
+      );
+      await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+      await settled;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // The next call connects afresh rather than reusing the failed attempt.
+    server.initializeHangs = false;
+    expect(await call(session.tools.flaky__write, { body: "x" })).toEqual(
+      expect.objectContaining({
+        content: [{ type: "text", text: "called write" }],
+      }),
+    );
+    await session.dispose();
+  });
+
+  it("does not wait on a stale tool's connect once the run is cancelled", async () => {
+    const { queries } = store();
+    await (await openToolSession(scope, agent, queries)).dispose();
+
+    server.up = false;
+    const run = new AbortController();
+    const session = await openToolSession(scope, agent, queries, {
+      signal: run.signal,
+    });
+
+    server.up = true;
+    server.initializeHangs = true;
+    const calling = call(session.tools.flaky__write, { body: "x" });
+    run.abort();
+    await expect(calling).rejects.toThrow(
+      "MCP server 'Flaky MCP' is unreachable",
+    );
+    await session.dispose();
   });
 
   it("writes the listing only when it changes", async () => {

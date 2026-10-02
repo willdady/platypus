@@ -123,18 +123,45 @@ const usableLastKnownListing = (mcp: McpRow): ListToolsResult | null => {
     : null;
 };
 
+/** An open MCP connection and the once-only close registered for it. */
+type OpenMcpClient = { client: MCPClient; close: () => Promise<void> };
+
 /**
  * Tools built from a stored listing whose `execute` connects when the model
  * calls one: the call runs if the server is back, and fails as unreachable if
  * not. One connection, opened by the first call that finds the server up;
- * `connect` registers it to close with the session like every other.
+ * `open` registers it to close with the session like every other.
+ *
+ * The connect runs under the same deadline and run abort as a live fetch: a
+ * server that takes the connection and never answers fails the call rather
+ * than holding it until the step timer kills it (#1135).
  */
 const lazyMcpTools = async (
   listing: ListToolsResult,
-  connect: () => Promise<MCPClient>,
+  open: () => Promise<OpenMcpClient>,
   mcpName: string,
+  signal: AbortSignal | undefined,
 ): Promise<Record<string, Tool>> => {
   let live: Promise<Record<string, Tool>> | undefined;
+  const connectLive = async (): Promise<Record<string, Tool>> => {
+    let opening: Promise<OpenMcpClient> | undefined;
+    try {
+      const { client } = await withDeadline(
+        () => (opening = open()),
+        TOOL_SET_RESOLVE_TIMEOUT_MS,
+        signal,
+      );
+      return client.toolsFromDefinitions(listing);
+    } catch (error) {
+      // Same as a live fetch's: a connect that outran the deadline is closed
+      // when it finally lands, not held open to the end of the turn.
+      void opening?.then(({ close }) => close()).catch(() => {});
+      live = undefined;
+      throw new Error(`MCP server '${mcpName}' is unreachable`, {
+        cause: error,
+      });
+    }
+  };
   const built = (await offlineMcpClient()).toolsFromDefinitions(listing);
   return Object.fromEntries(
     Object.entries(built).map(([name, tool]) => [
@@ -145,14 +172,7 @@ const lazyMcpTools = async (
           args: unknown,
           options: ToolExecutionOptions<unknown>,
         ) => {
-          live ??= connect()
-            .then((client) => client.toolsFromDefinitions(listing))
-            .catch((error: unknown) => {
-              live = undefined;
-              throw new Error(`MCP server '${mcpName}' is unreachable`, {
-                cause: error,
-              });
-            });
+          live ??= connectLive();
           return (await live)[name].execute!(args, options) as unknown;
         },
       },
@@ -389,10 +409,7 @@ export const openToolSession = async (
       mcpId: mcp.id,
       scope: mcp.organizationId ? "org" : "ws",
     } as const;
-    const openClient = async (): Promise<{
-      client: MCPClient;
-      close: () => Promise<void>;
-    }> => {
+    const openClient = async (): Promise<OpenMcpClient> => {
       const client = await createMCPClient({
         transport: buildMcpTransportConfig(mcp),
       });
@@ -408,8 +425,6 @@ export const openToolSession = async (
       registerCloser(close, attribution);
       return { client, close };
     };
-    const connect = async (): Promise<MCPClient> => (await openClient()).client;
-
     // Written by a live fetch when the listing changed or its fetched-at is due
     // a refresh, so most unchanged turns cost no write — and never at the
     // turn's expense: its own catch keeps a failed save from reaching the
@@ -490,7 +505,7 @@ export const openToolSession = async (
         `MCP '${toolSetId}' ${fault}; serving its last-known tool listing`,
       );
       definitions = listing;
-      mcpTools = await lazyMcpTools(listing, connect, mcp.name);
+      mcpTools = await lazyMcpTools(listing, openClient, mcp.name, signal);
     }
 
     // `true` only — the specification's own default for a missing hint, and

@@ -177,12 +177,14 @@ empty list unless it says otherwise, and silently runs without web-fetch.
 - **New gate-able core Plugins in a later release are not auto-enabled** — add
   them to your pinned list to opt in.
 - **After boot, a failing Plugin is a warning, not an outage.** A Tool set whose
-  factory throws or takes longer than 20 seconds during a Chat turn, or an MCP
-  server that is unreachable or doesn't answer within 20 seconds, contributes no
-  tools to that turn and logs a `warn` naming the Plugin and the
-  tool set. The chat still runs — with fewer tools, which reads to a user as an
-  Agent that suddenly can't do something. That warning is the only signal, so it
-  is worth alerting on.
+  factory throws or takes longer than 20 seconds during a Chat turn contributes
+  no tools to that turn and logs a `warn` naming the Plugin and the tool set. An
+  MCP server that is unreachable or doesn't answer within 20 seconds logs a
+  `warn` naming the MCP; if it answered within the last day its tools are still
+  offered and fail as unreachable when called, otherwise it contributes no
+  tools to that turn. Either way the chat still runs — with tools missing or
+  failing, which reads to a user as an Agent that suddenly can't do something.
+  That warning is the only signal, so it is worth alerting on.
 - **A Plugin logs into your stream, under your `LOG_LEVEL`.** Lines a Plugin
   writes carry `"plugin":"<name>"` and are formatted and filtered exactly like
   core's own, so raising `LOG_LEVEL` to `debug` while diagnosing one Plugin
