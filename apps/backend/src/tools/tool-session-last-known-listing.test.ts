@@ -455,7 +455,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       }
     });
 
-    it("keeps the stored listing", async () => {
+    it("keeps the stored listing after an auth failure", async () => {
       const { queries } = store();
       await (await openToolSession(scope, agent, queries)).dispose();
       server.rejectWith = new UnauthorizedError();

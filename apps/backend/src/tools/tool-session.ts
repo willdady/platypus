@@ -150,7 +150,7 @@ type OpenMcpClient = { client: MCPClient; close: () => Promise<void> };
 /**
  * Tools built from a stored listing whose `execute` connects when the model
  * calls one: the call runs if the server is back, and fails as unreachable if
- * not. One connection, opened by the first call that finds the server up;
+ * not — or as needing re-authorising if it rejects the MCP's credentials. One connection, opened by the first call that finds the server up;
  * `open` registers it to close with the session like every other.
  *
  * The connect runs under the same deadline and run abort as a live fetch: a
