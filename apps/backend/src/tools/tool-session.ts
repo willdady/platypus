@@ -123,6 +123,27 @@ const usableLastKnownListing = (mcp: McpRow): ListToolsResult | null => {
     : null;
 };
 
+/**
+ * Whether an MCP fetch or connect failed because the server rejected its
+ * credentials: `@ai-sdk/mcp`'s `UnauthorizedError` once an OAuth MCP's
+ * refresh/authorize retry fails, or its `MCPClientError` with a 401/403 for a
+ * Bearer or header MCP — anywhere in the `cause` chain. Matched by name, since
+ * `MCPClientError` is not exported. Not a blip a reconnect recovers from, so no
+ * Last-known listing is served for it.
+ */
+const isMcpAuthFailure = (error: unknown): boolean => {
+  for (let e = error; e instanceof Error; e = e.cause) {
+    if (e.name === "UnauthorizedError") return true;
+    const { statusCode } = e as { statusCode?: unknown };
+    if (
+      e.name === "MCPClientError" &&
+      (statusCode === 401 || statusCode === 403)
+    )
+      return true;
+  }
+  return false;
+};
+
 /** An open MCP connection and the once-only close registered for it. */
 type OpenMcpClient = { client: MCPClient; close: () => Promise<void> };
 
@@ -157,9 +178,10 @@ const lazyMcpTools = async (
       // when it finally lands, not held open to the end of the turn.
       void opening?.then(({ close }) => close()).catch(() => {});
       live = undefined;
-      throw new Error(`MCP server '${mcpName}' is unreachable`, {
-        cause: error,
-      });
+      const fault = isMcpAuthFailure(error)
+        ? "rejected its credentials; it needs re-authorising"
+        : "is unreachable";
+      throw new Error(`MCP server '${mcpName}' ${fault}`, { cause: error });
     }
   };
   const built = (await offlineMcpClient()).toolsFromDefinitions(listing);
@@ -488,6 +510,15 @@ export const openToolSession = async (
       // A cancelled turn will never read these tools, so it neither falls back
       // nor reports a server that may be perfectly healthy.
       if (error instanceof CallerAbortedError) return { kind: "none" };
+      // Reconnecting cannot fix rejected credentials, so the stored listing
+      // would only hand the model tools that fail until someone re-authorises.
+      if (isMcpAuthFailure(error)) {
+        logger.warn(
+          { error, ...attribution },
+          `MCP '${toolSetId}' rejected its credentials; it needs re-authorising — skipping its tools`,
+        );
+        return { kind: "none" };
+      }
       const fault =
         error instanceof DeadlineExceededError
           ? `did not answer within ${TOOL_SET_RESOLVE_TIMEOUT_MS}ms`
