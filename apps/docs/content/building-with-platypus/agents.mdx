@@ -59,6 +59,11 @@ you right there — the same capability check the Chat composer runs once
 someone actually attaches a file, surfaced earlier, before anyone sends this
 Agent something it can't read.
 
+### Save it
+
+Click **Save** to create the Agent. Reopen it to change any field later; the
+button then reads **Update**.
+
 </Steps>
 
 <Callout type="info">
@@ -100,8 +105,8 @@ Two levels of control over how the model generates:
 | **Top-p**             | `0`–`1`  | Nucleus sampling cutoff                       |
 | **Top-k**             | from `1` | Limits sampling to the _k_ most likely tokens |
 | **Seed**              | integer  | Fixes sampling for reproducible output        |
-| **Presence penalty**  | `-2`–`2` | Discourages repeating topics already present  |
-| **Frequency penalty** | `-2`–`2` | Discourages repeating the same tokens         |
+| **Presence Penalty**  | `-2`–`2` | Discourages repeating topics already present  |
+| **Frequency Penalty** | `-2`–`2` | Discourages repeating the same tokens         |
 
 <Callout type="warning">
   Not every Provider or model honours every parameter. Setting **Temperature**
@@ -115,7 +120,7 @@ Two levels of control over how the model generates:
 
 ## Grant tools and Skills
 
-An Agent that can only talk is limited. Give it the ability to _act_:
+Two cards on the form decide what the Agent can do beyond answering:
 
 - **Tools** — a card listing the **tool sets** available in your Workspace,
   grouped by category. Flip a switch to grant a tool set. Both Plugin-contributed
@@ -128,9 +133,9 @@ An Agent that can only talk is limited. Give it the ability to _act_:
   instructions on demand at run time.
 
 <Callout type="info">
-  The **Tools** and **Skills** cards only appear when your Workspace actually
-  has tool sets or Skills to grant. A brand-new Workspace with neither won't
-  show them.
+  The **Tools**, **Skills** and **Sub-Agents** cards only appear when there is
+  something to grant: tool sets, Skills, or at least one other Agent. A
+  brand-new Workspace shows none of them.
 </Callout>
 
 <Callout type="warning">
@@ -146,7 +151,7 @@ An Agent that can only talk is limited. Give it the ability to _act_:
 
 ## Compose Sub-Agents
 
-A **Sub-Agent** is just another Agent that this one can hand work to. In the
+A **Sub-Agent** is another Agent that this one can hand work to. In the
 **Sub-Agents** card, flip a switch for each Agent you want this Agent to be able
 to delegate to.
 
@@ -258,8 +263,12 @@ cut short at the step limit.**, and the parent Agent is told in the same breath
 that what came back is not a finished answer — so it reports a partial result
 rather than presenting it as the finding.
 
-Click **Save** to create the Agent. You can edit every field later from the same
-form.
+## Delete an Agent
+
+Open the Agent and click **Delete**. Deleting an Agent that a Trigger still runs
+is refused, naming each Trigger — delete those Triggers or switch them to
+another Agent first. A deleted Agent is also removed from every other Agent's
+**Sub-Agents** card.
 
 ## Where to next
 

@@ -16,9 +16,9 @@ Most of the screen explains itself. This page covers the parts that don't.
 ## Choosing what answers you
 
 Click the model selector in the prompt input. Under **Agents** are the Agents in
-your Workspace; under each **Provider** are its enabled models. Picking an Agent
-replaces picking a Provider and model — the Agent already carries both, plus its
-Instructions, tools and Skills.
+your Workspace; under each Provider's name are its enabled models. Picking an
+Agent replaces picking a Provider and model — the Agent already carries both,
+plus its Instructions, tools and Skills.
 
 A model may be listed under a [Model
 alias](/concepts/providers#model-aliases) — a stable name like `fast` — rather
@@ -26,8 +26,10 @@ than its vendor model id. Pick it and your Chat follows whatever model the alias
 points at, including after an Org Admin repoints it.
 
 With an Agent selected, an info button — tooltip **Agent info** — opens
-**Agent Information**, which shows what that Agent is actually bringing to the
-conversation: its model, its Tool sets, its Skills and its Sub-Agents.
+**Agent Information**, which shows what that Agent is bringing to the
+conversation: its **Provider** and **Model**, **Instructions**, **Max Steps**,
+**Tools**, **Skills** and **Sub-Agents**, and under **Advanced settings** its
+sampling parameters.
 
 ## Invoking a Skill yourself
 
@@ -124,7 +126,7 @@ already landed isn't uploaded twice.
 
 The model is told each file's path and size, never its contents. The
 Agent reads the file with its Sandbox tools. In the conversation the upload
-shows as a **Sandbox** chip with the file's name, path and size. It has no
+shows as a chip marked **Sandbox**, with the file's path and size. It has no
 download link. To get a file back out, ask the Agent for it as a download.
 
 While a Sandbox chip is in the input, the model selector is locked, with the
@@ -300,8 +302,8 @@ The ceiling itself is **Max output tokens** on the Provider's model, which an
 Org Admin sets — see
 [Capping a single reply](/self-hosting/providers-and-auth#capping-a-single-reply)
 if replies keep stopping short of what the model can write. Where one is set,
-hovering the model picker shows it ahead of time, so you don't have to hit the
-limit once to learn it exists.
+holding the pointer over the model picker shows **Max reply length** ahead of
+time, so you don't have to hit the limit once to learn it exists.
 
 <Callout type="warning">
   **Nothing resumes a cut-short reply.** **Regenerate** re-runs the whole turn
@@ -484,6 +486,9 @@ the model is sent, and what your next message follows.
 
 The sidebar lists your Chats. **New chat** starts one.
 
+The sidebar shows your 100 most recent Chats, **Pinned** first. An older Chat
+drops off the list but isn't deleted — find it with search.
+
 The **Search chats...** box filters by title **and** tags, so tagging is a real
 filing system rather than decoration.
 
@@ -501,9 +506,10 @@ Each Chat's menu offers:
 - **Delete** — permanent, and it says so before doing it.
 
 <Callout type="info">
-  A new Chat is called **Untitled** until the first reply comes back, then the
-  backend names it from the conversation. You don't have to wait — rename it
-  whenever you like and the automatic titling leaves your name alone.
+  A new Chat is called **Untitled** until a reply comes back, then the backend
+  names it from the conversation. If it can't produce a usable title, the Chat
+  stays **Untitled** and the next turn tries again. You don't have to wait —
+  rename it whenever you like and the automatic titling leaves your name alone.
 </Callout>
 
 ## Getting around without the mouse
@@ -511,9 +517,8 @@ Each Chat's menu offers:
 Press **⌘K** (**Ctrl+K** on Windows and Linux) anywhere in a Workspace to open
 the command palette. Type to filter.
 
-It offers **Actions** — home, switch org, new chat, new agent, new skill, new
-board, new dashboard, new trigger, add webhook, and the settings screens — and
-then your **Agents**, **Boards** and **Triggers** by name. Selecting an Agent
+It offers **Actions** (creating things and jumping to settings screens), then
+your **Agents**, **Boards** and **Triggers** by name. Selecting an Agent
 opens a new Chat already set to it. **Docs** opens this documentation site in a
 new tab. If your Agents, Boards or Triggers fail to load, the palette shows
 **Couldn't load agents. Retry** (or boards, or triggers) in their place; select

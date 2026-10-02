@@ -23,7 +23,8 @@ From your Workspace, go to the **Boards** section and click **Create board**.
 
 ### Name it and add labels
 
-- **Name** — what to call the board (1–100 characters).
+- **Name** — what to call the board (1–100 characters, unique within the
+  Workspace).
 - **Description** _(optional)_ — up to 500 characters.
 - **Labels** _(optional)_ — add colour-coded labels (each has a name and a colour
   from a fixed palette) that you can later apply to cards. Use **Add label** for
@@ -47,21 +48,25 @@ The board view scrolls horizontally across its **columns**. From here you:
 - **Add columns** with the dashed **Add column** button at the end of the row.
   A column's three-dot menu holds exactly four items: **Move column left**,
   **Move column right**, **Edit** (which is where you rename it), and
-  **Delete**.
+  **Delete**. **Delete** refuses a column that still holds cards — move or
+  delete them first.
 - **Add cards** with **Add card** at the bottom of a column.
-- **Drag** cards between and within columns, and reorder columns.
+- **Drag** cards between and within columns, and reorder columns. On a phone
+  you can't drag: use the card's **Column** field and the column menu's **Move
+  column left** / **Move column right**.
 - **Switch boards** from the name dropdown in the header.
 
 Click a card to open its detail dialog, where you can edit:
 
 - **Title** and **Description** (the description supports Markdown).
 - **Column**, **Labels**, and **Priority** (None, Low, Medium, High, Urgent).
-- **Due Date** and a single **Assignee** — which can be a Workspace member _or an
-  Agent_.
-- **Comments** — a threaded discussion on the card (also Markdown).
+- **Due Date** and a single **Assignee** — yourself or an Agent. An Agent with
+  the **Kanban** tool set can also assign other members of the Organization.
+- **Comments** — a discussion on the card (also Markdown).
 
 Below the comments, **History** lists how the card got here — newest first. It
-starts collapsed; click it to open.
+starts collapsed; click it to open. On a phone, **Details**, **Comments** and
+**History** are separate tabs.
 
 <Callout type="info">
   Cards record who created and last edited them — and that can be an **Agent**,
@@ -80,7 +85,7 @@ set lets an Agent:
   date, and assignee,
 - **move cards** between and within columns, **copy** and **delete** cards, and
   **bulk-edit** many cards at once,
-- **read, add, and edit comments** on a card.
+- **read, add, edit, and delete comments** on a card.
 
 <Callout type="info">
   An Agent is held to the same rules as a person editing the card: it can only
@@ -90,12 +95,12 @@ set lets an Agent:
   labels first rather than inventing one.
 </Callout>
 
-This is what makes boards a two-way surface: you arrange the work, and an Agent —
-in a Chat or on a schedule via a [Trigger](/building-with-platypus/triggers) — can
-keep it moving. Board activity (cards created, updated, or deleted) can in turn
-fire **Event** Triggers, so a change on a board can kick off another Agent run.
-Deleting a whole column or board is not card activity: the cards it removes fire
-nothing.
+This is what makes boards a two-way surface: you arrange the work, and an Agent
+— in a Chat or on a schedule via a [Trigger](/building-with-platypus/triggers) —
+can keep it moving. Board activity (cards created, moved, updated, or deleted)
+can in turn fire **Event** Triggers, so a change on a board can kick off another
+Agent run. Deleting a whole column or board is not card activity: the cards it
+removes fire nothing.
 
 ### When two people move the same card
 

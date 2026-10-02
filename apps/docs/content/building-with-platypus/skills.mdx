@@ -97,10 +97,11 @@ A Skill lives at exactly one scope:
 
 - **Workspace scope** — private to your Workspace. This is what you get when you
   create one from the Skills section above.
-- **Organization scope** — a [Shared resource](/concepts/sharing) defined once by
-  an Org Admin and attached to many Workspaces. Shared Skills appear **locked** in
-  your Workspace: you can attach them to your Agents and the Agent can `loadSkill`
-  them, but only an Org Admin can edit the Skill itself.
+- **Organization scope** — a [Shared resource](/concepts/sharing) defined once
+  by an Org Admin and attached to many Workspaces. Shared Skills appear with an
+  **Organization** badge and are read-only in your Workspace: you can attach
+  them to your Agents and the Agent can `loadSkill` them, but only an Org Admin
+  can edit the Skill itself.
 
 <Callout type="info">
   `loadSkill` resolves a Skill in your Workspace first, then falls back to a

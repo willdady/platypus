@@ -68,8 +68,9 @@ Agent whenever a card enters a specific column, without re-firing on later
 edits to cards already sitting there.
 
 When `card.updated` is among the selected events, an **Only when these fields
-change** control appears — pick one or more card attributes (Title, Body,
-Labels, Assignees, Due date, Priority) and `card.updated` fires only when one
+change (card.updated)** control appears — pick one or more card attributes
+(Title, Body, Labels, Assignees, Due date, Priority) and `card.updated` fires
+only when one
 of them actually changed, not on every write to a matching card. Leave them all
 off to fire on any change. It composes with the Board and Column filters: every
 filter set on the Trigger must match. See [Webhooks: the
@@ -95,7 +96,7 @@ enable **Web Search** (web search on the resolved Provider — its built-in tool
 or a Web-search backend selected on it; see [Providers &
 models](/concepts/providers#web-search)), and leave **Enabled** on. Expand
 **Advanced settings** if the run needs your Memory summaries — see [Memories in
-a run](#memories-in-a-run). Click save.
+a run](#memories-in-a-run). Click **Save**.
 
 </Steps>
 
@@ -111,8 +112,6 @@ When a Trigger fires, Platypus runs its Agent against the **instruction** as a
 background job — there's no live Chat window. The run is captured as a
 **trigger run** record: it starts as _running_, accrues stats (steps, tool calls,
 token counts, how full the Context window got), and ends _success_ or _failed_.
-
-A few details worth knowing:
 
 - **Scheduled (cron) runs** are checked about once a minute; a due Trigger is
   claimed and executed, then its next run time is recomputed from the cadence
@@ -173,12 +172,12 @@ Instruction is about you — a daily briefing, a summary written in your voice �
 and leave them off for a narrow, repetitive job.
 
 <Callout type="warning">
-  Upgrading to this version turns Memories **off for every Trigger you already
-  have** — before it, every run carried them. A Trigger whose Instruction
-  quietly relied on a summary — "the project I mentioned", "my usual format" —
-  has nothing to read it from on its next firing, and the run does not fail, it
-  just answers differently. Turn **Include Memories** back on for those
-  Triggers, or write the fact into the Instruction where it belongs.
+  Triggers created before **Include Memories** existed have it **off** — before
+  then, every run carried your summaries. A Trigger whose Instruction quietly
+  relied on a summary — "the project I mentioned", "my usual format" — has
+  nothing to read it from on its next firing, and the run does not fail, it
+  answers differently. Turn **Include Memories** back on for those Triggers, or
+  write the fact into the Instruction where it belongs.
 </Callout>
 
 The control governs the summaries in the system prompt, nothing else. An Agent
@@ -248,9 +247,8 @@ view survives a refresh and can be sent to a colleague as a link:
 
 - **Trigger** — all Triggers, or one of them. **View runs** on a Trigger's
   three-dot menu opens the page already filtered to it.
-- **Status** — all, or one of Success, Failed, Cancelled, Running, Pending,
-  Suppressed. _Cancelled_ is a run someone stopped, not one that failed: it
-  carries no error, and its timeline ends where the stop landed.
+- **Status** — all, or one of Pending, Running, Success, Failed, Cancelled,
+  Suppressed.
 
 The list loads 50 runs at a time; **Load more** fetches the next 50, and goes
 away once a batch comes back short of 50 — the end of the list. It refreshes
@@ -334,7 +332,7 @@ A run that never happened leaves no row in **Trigger runs** — unless it was th
 run that did happen can be missing too: it was later pruned, once newer runs
 pushed it past the Trigger's [**Max Runs to Keep**](#what-a-run-does). For
 anything else the answer is in the backend logs. Every time an event reaches a
-Trigger that subscribes to it, Platypus writes one dispatch decision line naming
+Trigger that subscribes to it, Platypus writes a dispatch decision line naming
 the event, the Trigger, the Trigger's Agent, the Agents that were running when
 the write happened, and one of four outcomes:
 
@@ -346,7 +344,10 @@ the write happened, and one of four outcomes:
   coalesced.
 - `suppressed` — the run limit had already been reached for this Trigger and
   record, so the firing was dropped before the Agent started. The dropped firing
-  is also recorded on **Trigger runs** as _Suppressed_.
+  is also recorded on **Trigger runs** as _Suppressed_. A suppressed firing
+  writes two lines: `fired` when the event arrives, then `suppressed` when the
+  debounce window closes and the limit drops it — so search for `suppressed`,
+  not for a missing `fired`.
 
 A Trigger the event didn't select — the wrong event type, or filters that didn't
 match — writes no line at all. So the absence of a decision is how you tell a

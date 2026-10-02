@@ -33,8 +33,8 @@ A Webhook subscribes to one or more events. The available events are:
 | `notification.read`      | A notification is marked read.                                |
 | `notification.dismissed` | A notification is dismissed.                                  |
 
-If you don't pick any events when creating a Webhook, it subscribes to all of
-them.
+Every event starts selected on a new Webhook; turn off the ones you don't want.
+A Webhook needs at least one.
 
 ## Create a Webhook
 
@@ -51,9 +51,10 @@ In your Workspace, go to **Settings → Webhooks** and click **Add webhook**.
   deployment's [egress guard](/self-hosting/configuration#the-egress-guard):
   loopback and cloud-metadata addresses are refused, and so are private
   networks if your Operator has turned them off. A refused URL fails on save.
-- **Events** — which events to subscribe to (defaults to all).
-- **Headers** — optional custom headers sent with every delivery (e.g. an
-  `Authorization` header your endpoint expects).
+- **Events** — which events to subscribe to (all start selected).
+- **Custom Headers** — optional headers sent with every delivery (e.g. an
+  `Authorization` header your endpoint expects). Click **Add header** for each
+  one.
 - **Enabled** — leave on to start delivering immediately.
 
 ### Save, then reopen to get the signing secret
@@ -305,7 +306,9 @@ Every delivery includes:
 | `X-Webhook-Signature` | HMAC-SHA256 of the raw request body, hex-encoded.        |
 | `X-Webhook-Timestamp` | ISO 8601 timestamp, identical to the body's `timestamp`. |
 
-Any custom **Headers** you configured on the Webhook are sent alongside these.
+Any **Custom Headers** you configured on the Webhook are sent alongside these.
+A custom header with the same name replaces Platypus's own, so don't reuse
+`X-Webhook-Signature` or `X-Webhook-Timestamp` — verification then fails.
 
 ## Verifying the signature
 

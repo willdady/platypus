@@ -56,7 +56,7 @@ Under **Custom Headers**, add any extra HTTP headers to send with every request
 - For **OAuth** servers, an authorization panel shows the status (**Not
   Authorized** / **Authorized**). Click **Authorize** to complete the OAuth flow;
   use **Re-authorize** or **Revoke** later as needed.
-- Click **Test Connection** to verify the server responds — on success it lists
+- Click **Test connection** to verify the server responds — on success it lists
   the tools the server exposes, already shown under the namespaced names
   described below. Then **Save**.
 
@@ -96,16 +96,14 @@ the same name (like the native Web-search tool) or another MCP's tool.
 
 Because two different names can lowercase and punctuation-strip to the same
 prefix (e.g. "Docs Search" and "Docs-Search"), an MCP's Name must be unique
-against every other MCP it could be granted alongside in one Agent — both other
-MCPs in the same Workspace or Organization, and (for a Shared MCP) every
-Workspace it could be attached to. Saving a conflicting name is rejected,
-naming the MCP it collides with; rename one of them to resolve it.
+against every other MCP in the Organization — including MCPs registered in
+other Workspaces, which you may not be able to see. Saving a conflicting name is
+rejected, naming the MCP it collides with; rename yours to resolve it.
 
-The combined `<slug>__<toolName>` name must also be 64 characters or fewer —
-the ceiling Anthropic and OpenAI models place on tool names. A tool name that
-doesn't fit is excluded from the turn (and flagged by **Test Connection**)
-rather than being cut short; if you hit this, the fix is to give the MCP a
-shorter Name.
+The combined `<slug>__<toolName>` name must also be 64 characters or fewer. A
+tool name that doesn't fit is excluded from the turn (and flagged by **Test
+connection**) rather than being cut short; if you hit this, the fix is to give
+the MCP a shorter Name.
 
 ### Read-only tools free up space automatically
 
