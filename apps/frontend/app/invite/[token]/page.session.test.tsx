@@ -1,5 +1,11 @@
-import { beforeEach, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { AuthProvider, useAuth } from "@/components/auth-provider";
 import { ProtectedRoute } from "@/components/protected-route";
 import InviteTokenPage from "./page";
@@ -89,6 +95,16 @@ beforeEach(() => {
       throw new Error(`Unexpected request: ${url}`);
     }),
   );
+});
+
+// Unmounting the real better-auth client schedules its nanostores cleanup
+// (`window.removeEventListener`) on a 1s timer. Flush it here so the last
+// test's timer can't fire after jsdom is torn down.
+afterEach(() => {
+  vi.useFakeTimers();
+  cleanup();
+  vi.runAllTimers();
+  vi.useRealTimers();
 });
 
 function renderPage() {
