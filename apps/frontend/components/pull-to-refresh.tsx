@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { RefreshCw } from "lucide-react";
+import { useTimeout } from "@/hooks/use-timeout";
 
 /** How far the finger must travel before releasing triggers a refresh. */
 const REFRESH_THRESHOLD = 80;
@@ -37,6 +38,7 @@ export function PullToRefresh({
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
+  const scheduleLinger = useTimeout();
 
   const startYRef = useRef(0);
   const startXRef = useRef(0);
@@ -128,7 +130,7 @@ export function PullToRefresh({
       try {
         await onRefresh();
         // Linger so the spinner is visible before the indicator exits
-        await new Promise<void>((resolve) => setTimeout(resolve, 600));
+        await new Promise<void>((resolve) => scheduleLinger(resolve, 600));
       } finally {
         isRefreshingRef.current = false;
         setIsRefreshing(false);
@@ -138,7 +140,7 @@ export function PullToRefresh({
       pullDistanceRef.current = 0;
       setPullDistance(0);
     }
-  }, [onRefresh]);
+  }, [onRefresh, scheduleLinger]);
 
   useEffect(() => {
     const el = containerRef.current;

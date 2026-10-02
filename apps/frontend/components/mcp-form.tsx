@@ -25,7 +25,7 @@ import {
   FormSkeletonSet,
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
@@ -136,6 +136,14 @@ const McpForm = ({
     error?: string;
   } | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
+  // Polls the OAuth popup until it closes. One at a time, and never past
+  // unmount.
+  const popupPollRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const stopPopupPoll = () => {
+    clearInterval(popupPollRef.current);
+    popupPollRef.current = undefined;
+  };
+  useEffect(() => stopPopupPoll, []);
   const [isRevoking, setIsRevoking] = useState(false);
 
   const router = useRouter();
@@ -437,9 +445,10 @@ const McpForm = ({
         } else {
           // Reset Authorize button when popup closes without success
           // (e.g. upstream provider rejects with 400 — no postMessage fires).
-          const interval = setInterval(() => {
+          stopPopupPoll();
+          popupPollRef.current = setInterval(() => {
             if (popup.closed) {
-              clearInterval(interval);
+              stopPopupPoll();
               setIsAuthorizing(false);
             }
           }, 500);

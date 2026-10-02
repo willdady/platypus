@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useTimeout } from "@/hooks/use-timeout";
 
 interface TagInputProps {
   value: string[];
@@ -29,6 +30,7 @@ export function TagInput({
 }: TagInputProps) {
   const [inputValue, setInputValue] = React.useState("");
   const [flashingTag, setFlashingTag] = React.useState<string | null>(null);
+  const scheduleFlashEnd = useTimeout();
 
   const addTag = (tag: string) => {
     const trimmedTag = tag.trim().toLowerCase();
@@ -38,7 +40,7 @@ export function TagInput({
 
     if (value.includes(trimmedTag)) {
       setFlashingTag(trimmedTag);
-      setTimeout(() => setFlashingTag(null), 1000);
+      scheduleFlashEnd(() => setFlashingTag(null), 1000);
       setInputValue("");
       return;
     }

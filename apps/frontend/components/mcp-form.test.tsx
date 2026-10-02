@@ -15,7 +15,10 @@ import {
   savedBody,
 } from "@/lib/form-test-harness";
 import { selectOption } from "@/lib/test-utils";
-import { OAUTH_MCP_SUCCESS_EVENT } from "@/lib/constants";
+import {
+  OAUTH_MCP_ERROR_EVENT,
+  OAUTH_MCP_SUCCESS_EVENT,
+} from "@/lib/constants";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -257,7 +260,7 @@ describe("McpForm test connection", () => {
       authType: "Bearer",
       bearerToken: "secret-token",
     } as unknown as MCP);
-    render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
+    return render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
   };
 
   it("tests the unsaved form and lists the tools, flagging names too long to namespace", async () => {
@@ -321,7 +324,7 @@ describe("McpForm OAuth", () => {
       oauthClientId: "client-id",
       oauthAuthorized,
     } as unknown as MCP);
-    render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
+    return render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
   };
 
   // The popup reports back by postMessage; only this app's own origin may
@@ -361,5 +364,52 @@ describe("McpForm OAuth", () => {
       "http://test/organizations/org1/workspaces/ws1/mcps/m1",
       "http://test/organizations/org1/workspaces/ws1/mcps/m1/oauth/authorize?force=true",
     ]);
+  });
+
+  // The form polls the popup until it closes. That poll belongs to the form:
+  // it must not outlive it, and a retry must replace it rather than stack.
+  it("keeps one popup poll at a time and stops it on unmount", async () => {
+    stubSaveSequence(
+      { status: 200, body: { id: "m1" } },
+      { status: 200, body: { authorizationUrl: "https://idp.test/auth" } },
+      { status: 200, body: { id: "m1" } },
+      { status: 200, body: { authorizationUrl: "https://idp.test/auth" } },
+    );
+    const openMock = vi.fn(() => ({ closed: false }));
+    vi.stubGlobal("open", openMock);
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    const polls = () =>
+      setIntervalSpy.mock.results
+        .filter((_, i) => setIntervalSpy.mock.calls[i][1] === 500)
+        .map((r) => r.value);
+    const live = () =>
+      polls().filter(
+        (id) => !clearIntervalSpy.mock.calls.some(([c]) => c === id),
+      );
+    const { unmount } = renderOAuthMcp(false);
+
+    const authorize = async (opens: number) => {
+      fireEvent.click(await screen.findByRole("button", { name: "Authorize" }));
+      await waitFor(() => expect(openMock).toHaveBeenCalledTimes(opens));
+    };
+
+    await authorize(1);
+    expect(live()).toHaveLength(1);
+
+    // The provider reports failure while the popup stays open; the reader
+    // tries again.
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: window.location.origin,
+        data: { type: OAUTH_MCP_ERROR_EVENT, message: "denied" },
+      }),
+    );
+    await authorize(2);
+    expect(polls()).toHaveLength(2);
+    expect(live()).toHaveLength(1);
+
+    unmount();
+    expect(live()).toHaveLength(0);
   });
 });

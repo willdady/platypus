@@ -47,6 +47,7 @@ import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
 import { clearedToolCallIds } from "@/lib/tool-result-clearing";
 import { useStableSet } from "@/hooks/use-stable-set";
+import { useTimeout } from "@/hooks/use-timeout";
 import { useStreamingFavicon } from "@/hooks/use-streaming-favicon";
 import { ContextMeter, ContextMeterEntrance } from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
@@ -303,6 +304,7 @@ export const Chat = ({
   const [isAgentInfoDialogOpen, setIsAgentInfoDialogOpen] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const scheduleCopiedReset = useTimeout();
 
   // Show the error dialog when a new error arrives from useChat. Keyed on the
   // error so the user can still dismiss the dialog while the error persists,
@@ -485,12 +487,12 @@ export const Chat = ({
         await navigator.clipboard.writeText(content);
         toast.info("Copied to clipboard");
         setCopiedMessageId(messageId);
-        setTimeout(() => setCopiedMessageId(null), 2000);
+        scheduleCopiedReset(() => setCopiedMessageId(null), 2000);
       } catch {
         toast.error("Failed to copy to clipboard");
       }
     },
-    [setCopiedMessageId],
+    [setCopiedMessageId, scheduleCopiedReset],
   );
 
   // Stored the moment it is clicked (ADR-0026), then the row is read back:

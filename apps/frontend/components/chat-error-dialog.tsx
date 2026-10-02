@@ -12,6 +12,7 @@ import {
 import { Button } from "./ui/button";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { TriangleAlert, Copy, Check } from "lucide-react";
+import { useTimeout } from "@/hooks/use-timeout";
 
 interface ChatErrorDialogProps {
   isOpen: boolean;
@@ -25,12 +26,13 @@ export const ChatErrorDialog = ({
   error,
 }: ChatErrorDialogProps) => {
   const [copied, setCopied] = useState(false);
+  const scheduleCopiedReset = useTimeout();
   const message = error?.message || "An unknown error occurred.";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    scheduleCopiedReset(() => setCopied(false), 2000);
   };
 
   return (
