@@ -51,7 +51,7 @@ isn't Shared, is a `NotFoundError` (404) naming what couldn't be used — not a
 
 Throwing is what lets one rule serve more than one surface: the Kanban rules
 answer both the HTTP routes and the Agent tool set from a single place. Reach
-for the seam whenever the failure is one of those four; a 4xx that only one
+for the seam whenever the failure is one of those five; a 4xx that only one
 route can produce still answers inline with `c.json({ error }, status)`. Both
 are current and roughly equally common — the seam is not a migration you
 should finish.
