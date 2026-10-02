@@ -192,7 +192,8 @@ a Provider uses is in [Providers & models](/concepts/providers#web-search).
 
 ## Voice input
 
-A microphone button next to it transcribes speech into the input box. The text
+A microphone button — tooltip **Microphone** — beside the attachments button
+transcribes speech into the input box. The text
 lands in the box rather than sending, so you can edit before pressing **Enter**.
 The same button is in the box you get when [rewriting a
 message](#rewriting-a-message), and it writes into that message rather than into
@@ -366,9 +367,9 @@ switch to a model with a bigger window. Nothing happens automatically.
   you.
 </Callout>
 
-**No meter at all** means one of two things, and both are normal: nobody has
-declared a **Context window** for this model, or the Provider does not report
-token usage. Either way the capacity or the reading is unknown, and Platypus
+**No meter at all** is normal, and means one of three things: the Chat has no
+reply yet, nobody has declared a **Context window** for this model, or the
+Provider does not report token usage. Either way the capacity or the reading is unknown, and Platypus
 would rather show nothing than a number you cannot interpret. An Org Admin
 declares the window on the Provider's model entry — see [Declaring a Context
 window](/self-hosting/providers-and-auth#declaring-a-context-window). Switching
@@ -377,19 +378,19 @@ model switches the meter with it, since the window belongs to the model.
 ## Freeing up space during a long tool-using turn
 
 Where a **Context window** is declared, a long turn that reads a lot of pages
-or files gets one piece of automatic help: once the meter above would be
-running high, older results from a small set of read-only tools stop being
-sent to the model. That set covers a handful of built-in reads — web search,
+or files gets one piece of automatic help: once the meter above reaches
+**70%**, older results from a small set of read-only tools stop being sent to
+the model, from earlier turns as well as this one. That set covers a handful of built-in reads — web search,
 reading a URL, reading a file or listing a directory in a Sandbox — plus any
 MCP tool whose server declares it read-only (see
 [MCP](/building-with-platypus/mcp)). An MCP server that declares nothing gets
-no benefit from this for that tool. Only the oldest results go, and only
-enough to make room; the most recent stay.
+no benefit from this for that tool. The four most recent results stay; every
+older one is no longer sent.
 
 Nothing is deleted. The full result is still in the message, still yours to
 read, and still there after a reload — this only changes what the model itself
 is sent starting from that point in the conversation. A tool result the model
-no longer has carries a small marker so you can tell; expand it to read what it
+no longer has carries a **Not sent to model** badge; expand it to read what it
 returned.
 
 <Callout type="warning">
@@ -415,7 +416,9 @@ Hover a message for its actions:
 | **‹ 2/3 ›**    | Any message that has Alternatives | Moves between its Alternatives — see below        |
 
 The actions are hidden on a reply that is still streaming, and **Regenerate**
-and the arrows on the rest of the Chat wait until it finishes. **Edit**,
+and the arrows on the rest of the Chat wait until it finishes. **Delete**
+stays clickable, but until then it is refused with **A reply is still being
+written in this Chat** — in another tab too. **Edit**,
 **Delete**, **Regenerate** and the arrows are absent entirely if you cannot send
 messages in this Chat — see [Sharing a Chat](#sharing-a-chat). **Copy** stays.
 
@@ -568,7 +571,7 @@ untouched.
 
 ## Per-Chat settings, and when they exist
 
-When you have picked a Provider and model directly, a gear button — tooltip
+When you have picked a Provider and model directly, or nothing yet, a gear button — tooltip
 **Settings** — opens **Chat Settings**: an **Instructions** box, and under
 **Advanced settings** the sampling parameters — **Temperature**, **Seed**,
 **Top-p**, **Top-k**, **Presence Penalty** and **Frequency Penalty** — plus
@@ -590,12 +593,15 @@ raise it.
 The sampling parameters take the same ranges as an Agent's — see
 [Tune generation](/building-with-platypus/agents#tune-generation). Leave one
 empty to use the Provider or model default. A value outside its range shows an
-error under the field, and the Chat won't send a message until you fix it.
+error under the field, and until you fix it the Chat refuses to send, save an
+edit, or **Regenerate**.
 
 <Callout type="warning">
-  **An older Chat can hold a value that's now out of range.** If a message is
-  refused with an error naming a setting, open **Chat Settings** and correct
-  that field.
+  **A Chat can refuse a message even though you never opened its settings.** A
+  value saved before the current ranges applied stays on the Chat, and every
+  send fails with a message such as **Temperature in Chat Settings must be at
+  least 0.** Open **Chat Settings** — the field is marked — and correct or clear
+  it.
 </Callout>
 
 <Callout type="warning">

@@ -16,7 +16,7 @@ Where a [Trigger](/building-with-platypus/triggers) runs an Agent _inside_
 Platypus in response to an event, a Webhook sends that same event _out_ to your
 own service. Both subscribe to the same set of events.
 
-You'll find Webhooks under **Settings → Webhooks** in your Workspace.
+You'll find Webhooks under **Workspace settings → Webhooks**.
 
 ## Subscribable events
 
@@ -42,7 +42,7 @@ A Webhook needs at least one.
 
 ### Open the Webhook form
 
-In your Workspace, go to **Settings → Webhooks** and click **Add webhook**.
+Go to **Workspace settings → Webhooks** and click **Add webhook**.
 
 ### Configure the endpoint
 
@@ -51,11 +51,11 @@ In your Workspace, go to **Settings → Webhooks** and click **Add webhook**.
   deployment's [egress guard](/self-hosting/configuration#the-egress-guard):
   loopback and cloud-metadata addresses are refused, and so are private
   networks if your Operator has turned them off. A refused URL fails on save.
+- **Enabled** — leave on to start delivering immediately.
 - **Events** — which events to subscribe to (all start selected).
 - **Custom Headers** — optional headers sent with every delivery (e.g. an
   `Authorization` header your endpoint expects). Click **Add header** for each
   one.
-- **Enabled** — leave on to start delivering immediately.
 
 ### Save, then reopen to get the signing secret
 
@@ -353,14 +353,15 @@ const ok = verify(rawBody, req.headers["x-webhook-signature"], signingSecret);
   given up.
 - Redirects are **not followed**. A `3xx` response counts as a failure, so point
   the Webhook at the final URL.
-- Every attempt re-checks the URL against the egress guard. If its hostname
-  now resolves somewhere the guard refuses, the delivery is dropped without
-  retrying.
+- Every attempt re-checks the URL against the egress guard. If the hostname
+  doesn't resolve, or resolves somewhere the guard refuses, the delivery is
+  dropped without retrying.
 - Disabled Webhooks, and Webhooks not subscribed to the event, are skipped.
 
 <Callout type="info">
-  Your endpoint should be idempotent — a retried delivery sends the same body,
-  so process the same `data.id` / event more than once safely.
+  Your endpoint should be idempotent. A retry sends the identical body, with the
+  same `timestamp` and signature, so processing the same body twice must be
+  safe.
 </Callout>
 
 ## Where to next

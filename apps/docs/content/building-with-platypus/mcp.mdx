@@ -55,21 +55,18 @@ Under **Custom Headers**, add any extra HTTP headers to send with every request
 
 - For **OAuth** servers, an authorization panel shows the status (**Not
   Authorized** / **Authorized**). Click **Authorize** to complete the OAuth flow;
-  use **Re-authorize** or **Revoke** later as needed.
+  use **Re-authorize** or **Revoke** later as needed. Changing an OAuth MCP's
+  **URL** also clears its **Client ID**, **Client Secret** and authorization —
+  re-enter them and click **Authorize** again.
 - Click **Test connection** to verify the server responds — on success it lists
   the tools the server exposes, already shown under the namespaced names
-  described below. Then **Save**.
+  described below. Then **Save** (**Update** on an MCP that already exists).
 
 ## How an MCP resolves to a tool set
 
-An Agent's granted tools are stored as a list of **tool set IDs**. When you grant
-an MCP, its ID goes into that same list. At **Chat-turn time**, Platypus walks the
-list: an ID that matches a **registered tool set** — one contributed by a Plugin,
-whether a core built-in like `web-fetch` or a third-party Plugin like
-`example.greeting` — resolves from that registry, and any other ID is looked up
-as an MCP. For an MCP, Platypus — using the auth and headers you configured —
-connects to the server and fetches its tools live. Either way, the resolved tools
-are merged into what the model can call for that turn.
+At the start of each Chat turn, Platypus connects to every MCP the Agent was
+granted, using the auth and headers you configured, and fetches its tools live.
+They join the Agent's other tool sets for that turn.
 
 <Callout type="info">
   Resolution is **fail-soft**: if an MCP server is unreachable when a turn runs,
@@ -81,11 +78,23 @@ If a server that answered recently goes down, Platypus keeps offering its tools
 for up to a day after it last listed them. A call the model makes to one of
 them runs if the server is back, and fails as unreachable if it is not. After a
 day, or for a server that has never answered, the MCP contributes no tools until
-it is reachable again. A server that rejects the MCP's credentials is different:
-reconnecting won't fix that, so the MCP contributes no tools until you
-re-authorise it or update its token or headers, and a remembered tool's call
-fails saying it needs re-authorising. Editing the MCP's URL, authentication or
-headers forgets the remembered tools, so the next turn lists them fresh.
+it is reachable again.
+
+A server that rejects the MCP's credentials gets no such grace: reconnecting
+won't fix it, so the MCP contributes no tools until you click **Re-authorize**
+or update its token or headers. A remembered tool that meets the rejection
+mid-turn fails saying the MCP needs re-authorizing.
+
+Editing the MCP's URL, authentication or headers forgets the remembered tools,
+so the next turn lists them fresh.
+
+<Callout type="warning">
+  An **Authorized** panel means Platypus holds a token, not that the server
+  still accepts it. The symptom is an Agent that quietly stops using an MCP's
+  tools: nothing in the Chat says the MCP was dropped. Open the MCP and click
+  **Test connection**. If it fails, click **Re-authorize**, or replace the
+  Bearer token or header.
+</Callout>
 
 ### Tool names are namespaced by MCP
 
@@ -106,7 +115,8 @@ rejected, naming the MCP it collides with; rename yours to resolve it.
 The combined `<slug>__<toolName>` name must also be 64 characters or fewer. A
 tool name that doesn't fit is excluded from the turn (and flagged by **Test
 connection**) rather than being cut short; if you hit this, the fix is to give
-the MCP a shorter Name.
+the MCP a shorter Name. A tool whose own name contains characters other than
+letters, digits, `_` and `-` is excluded the same way, and renaming won't help.
 
 ### Read-only tools free up space automatically
 
@@ -145,16 +155,15 @@ registered one in your Workspace and now want it shared, it has to be created
 again at the Organization level.
 
 <Callout type="warning">
-  Because MCP servers can carry credentials, registering them is often
-  restricted to Org Admins. A Workspace Owner can manage Workspace MCPs only
-  where that's been delegated; otherwise ask an Org Admin to register or attach
-  one.
+  By default only an Org Admin can add, edit, test or authorize a Workspace MCP.
+  A Workspace Owner can do it only after an Org Admin switches on
+  **Owner-managed MCP servers** in that Workspace's settings. Otherwise ask an
+  Org Admin to register or attach one.
 </Callout>
 
 A registered MCP's bearer token and custom headers are readable only by someone
 who can manage it. Everyone else still sees the server and can grant its tool
-set to an Agent; the credential fields come back empty, flagged only as set or
-unset.
+set to an Agent; the credential fields come back empty.
 
 ## Where to next
 

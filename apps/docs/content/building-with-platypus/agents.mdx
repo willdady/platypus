@@ -92,7 +92,7 @@ Two levels of control over how the model generates:
   that reaches the number stops there with work outstanding, and says so: the
   Chat reply carries a line reading **Response cut short at the step limit.**,
   and a Trigger run carries **Run cut short at the step limit.** in the runs
-  view. Unattended runs (triggers and scheduled Agents) also stop early if the
+  view. Unattended runs (Trigger runs and Sub-Agents) also stop early if the
   model makes no progress — repeating the same tool call for the same result —
   so a stuck run won't burn its whole step budget; that stop is reported as a
   failure with its own message, not as a step limit.
@@ -133,20 +133,19 @@ Two cards on the form decide what the Agent can do beyond answering:
   instructions on demand at run time.
 
 <Callout type="info">
-  The **Tools**, **Skills** and **Sub-Agents** cards only appear when there is
-  something to grant: tool sets, Skills, or at least one other Agent. A
-  brand-new Workspace shows none of them.
+  The **Skills** and **Sub-Agents** cards only appear when there is something to
+  grant: a Skill, or at least one other Agent. A brand-new Workspace shows
+  neither.
 </Callout>
 
 <Callout type="warning">
-  A missing **Tools** card means your Workspace has no tool sets. It does not
-  mean the Agent lost the ones it already had. If the app couldn't read them at
-  all you get **Tools couldn't be loaded** in the card's place instead — read
-  that as "couldn't ask", not "there are none". Save the Agent anyway and its
-  tool sets stay as they were; the notice only means you can't change them on
-  this visit. When it names authentication, sign in again — and if it comes
-  back, your Operator has `BACKEND_URL`, `BETTER_AUTH_URL`, `FRONTEND_URL` and
-  `ALLOWED_ORIGINS` disagreeing with each other.
+  If the app couldn't read the tool sets you get **Tools couldn't be loaded** in
+  place of the **Tools** card — read that as "couldn't ask", not "there are
+  none". Save the Agent anyway and its tool sets stay as they were; the notice
+  only means you can't change them on this visit. When it names authentication,
+  sign in again — and if it comes back, your Operator has `BACKEND_URL`,
+  `BETTER_AUTH_URL`, `FRONTEND_URL` and `ALLOWED_ORIGINS` disagreeing with each
+  other.
 </Callout>
 
 ## Compose Sub-Agents

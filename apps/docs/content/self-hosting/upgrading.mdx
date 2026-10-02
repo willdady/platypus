@@ -64,8 +64,17 @@ Two cases do:
 
 ## Coming from 2.x
 
-Nothing beyond the section above. Configuration is stable across 2.x, and the
-migrations that run at container start need no action from you.
+Configuration is stable across 2.x, and the migrations that run at container
+start need no action from you. One behaviour change does.
+
+**Triggers stop carrying Memory summaries.** Before 3.0 every Trigger run
+carried your Memory summaries. 3.0 added **Include Memories** to the Trigger
+form, and every existing Trigger has it **off**. A Trigger whose Instruction
+quietly relied on a summary, such as "the project I mentioned" or "my usual
+format", now has nothing to read it from. The run doesn't fail; it answers
+differently. Turn **Include Memories** back on for those Triggers under
+**Advanced settings**, or write the fact into the Instruction. See [Memories in
+a run](/building-with-platypus/triggers#memories-in-a-run).
 
 <Callout type="info">
   New **gate-able** core Plugins introduced in a later release are **not**

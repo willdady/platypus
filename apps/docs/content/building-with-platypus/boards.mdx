@@ -46,6 +46,7 @@ from the board's **Settings** (the gear icon).
 The board view scrolls horizontally across its **columns**. From here you:
 
 - **Add columns** with the dashed **Add column** button at the end of the row.
+  Column names must be unique on the board.
   A column's three-dot menu holds exactly four items: **Move column left**,
   **Move column right**, **Edit** (which is where you rename it), and
   **Delete**. **Delete** refuses a column that still holds cards — move or
@@ -58,11 +59,14 @@ The board view scrolls horizontally across its **columns**. From here you:
 
 Click a card to open its detail dialog, where you can edit:
 
-- **Title** and **Description** (the description supports Markdown).
+- The title and description (the description supports Markdown).
 - **Column**, **Labels**, and **Priority** (None, Low, Medium, High, Urgent).
-- **Due Date** and a single **Assignee** — yourself or an Agent. An Agent with
-  the **Kanban** tool set can also assign other members of the Organization.
+- **Due Date** and a single **Assignee** — yourself or an Agent.
 - **Comments** — a discussion on the card (also Markdown).
+
+You can edit or delete only your own comments, unless you are an Org Admin.
+That includes comments an Agent wrote: the **Delete** button is there, but the
+request is refused.
 
 Below the comments, **History** lists how the card got here — newest first. It
 starts collapsed; click it to open. On a phone, **Details**, **Comments** and
@@ -81,18 +85,21 @@ Grant an Agent the **Kanban** tool set (in the [Agent form](/building-with-platy
 set lets an Agent:
 
 - **list boards** and **read a board's state** (columns and card summaries),
+- **list Agents** it can assign cards to,
 - **read, create, and update cards** — title, description, labels, priority, due
   date, and assignee,
 - **move cards** between and within columns, **copy** and **delete** cards, and
-  **bulk-edit** many cards at once,
+  **bulk-edit** up to 30 cards at once,
 - **read, add, edit, and delete comments** on a card.
 
 <Callout type="info">
-  An Agent is held to the same rules as a person editing the card: it can only
-  apply labels the board actually has, and can only assign someone who can work
-  in this Workspace — a member of the Organization, or an Agent available here.
-  Ask it for anything else and it is refused, so tell it to read the board's
-  labels first rather than inventing one.
+  An Agent is held to the same rules as a person editing the card. It can only
+  assign someone who can work in this Workspace: a member of the Organization,
+  or an Agent available here. Labels are stricter than they look. A new card
+  with a label the board doesn't have is refused, but an edit or bulk edit drops
+  the unknown label and reports success, so the Agent believes it applied it.
+  Tell it to read the board's labels first and use their ids, rather than
+  inventing one.
 </Callout>
 
 This is what makes boards a two-way surface: you arrange the work, and an Agent
@@ -107,8 +114,9 @@ removes fire nothing.
 An Agent run can take minutes, and a board can be open in someone's browser the
 whole time — so a card can move while another move is already on its way.
 Platypus refuses the later move rather than letting it silently overwrite the
-first. The same holds between two Agents working one board at once: an Agent
-acting on a stale reading of the board is refused and told to look again.
+first. The same holds between two Agents working one board at once, when the
+moving Agent names the column it last saw the card in: a move made from a stale
+reading is refused, and the Agent is told to look again.
 
 <Callout type="warning">
   If you move a card that someone else has moved since your Board last
@@ -150,8 +158,9 @@ Two things it deliberately does not record:
   a card deletes its history with it.
 </Callout>
 
-An Agent with the **Kanban** tool set reads the same history when it fetches a
-card, so you can tell it to check how a card has moved before acting on it.
+An Agent with the **Kanban** tool set can read the same history when it fetches
+a card, but only when asked to, so tell it to check how a card has moved before
+acting on it.
 
 ## Where to next
 

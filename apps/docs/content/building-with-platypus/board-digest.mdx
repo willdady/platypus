@@ -15,7 +15,7 @@ files a digest of what moved and what's in flight as a card in a **Digests**
 column, and flags anything that hasn't moved in three days.
 
 It needs four things: a Board, an Agent with the **Kanban** Tool set, a Skill
-that holds the digest format, and a cron Trigger. Roughly twenty minutes.
+that holds the digest format, and a cron Trigger.
 
 <Callout type="info">
   You need a Provider with at least one model before any of this works. If the
@@ -172,16 +172,17 @@ the expression right before you wait a day to find out.
 ## 6. Confirm it fired
 
 The morning after, from the **Triggers** list, open the Trigger's three-dot menu
-and choose **View runs**. A green run and a new card in `Digests` is the whole
+and choose **View runs**. A **Success** run and a new card in `Digests` is the whole
 acceptance test.
 
 A run that failed shows its error there. The most common ones:
 
-| What the run says                   | Usually means                                                                                                         |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Failed, naming a repeated tool call | The Agent looped — it couldn't find the board, or the column name in the Instructions doesn't match the Board exactly |
-| Succeeded, but no card appeared     | The Agent decided not to; check its one-sentence report in the run                                                    |
-| Failed with a Provider error        | Credentials or a model id — the same failure a Chat would show                                                        |
+| What the run says                                  | Usually means                                                                                                         |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Failed, naming a repeated tool call                | The Agent looped — it couldn't find the board, or the column name in the Instructions doesn't match the Board exactly |
+| **Success**, but no card appeared                  | The Agent decided not to; check its one-sentence report in the run                                                    |
+| Success, with **Run cut short at the step limit.** | The Agent spent its steps fetching cards before filing the digest. Raise **Max steps** on the Agent form              |
+| Failed with a Provider error                       | Credentials or a model id — the same failure a Chat would show                                                        |
 
 ## What to take from this
 
