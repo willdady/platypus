@@ -1,5 +1,45 @@
 # Changelog
 
+## [3.14.0](https://github.com/willdady/platypus/compare/v3.13.0...v3.14.0) (2026-10-02)
+
+
+### Features
+
+* add one-line installer at platypus.chat/install.sh ([#1117](https://github.com/willdady/platypus/issues/1117)) ([85e9515](https://github.com/willdady/platypus/commit/85e9515d53a36829d1c0b019fc27e7efdd82c8f2))
+* **backend:** serve an MCP's last-known tool listing when a turn fails to fetch it ([#1110](https://github.com/willdady/platypus/issues/1110)) ([7fb82a4](https://github.com/willdady/platypus/commit/7fb82a45038b51bd5ea55252acb3324863959f05))
+
+
+### Bug Fixes
+
+* **backend:** answer invitations by id only from a verified address ([53f26e4](https://github.com/willdady/platypus/commit/53f26e423a95623c454b5bd98050d0dca28a720d))
+* **backend:** bound a stale MCP tool's connect by the resolve deadline and run abort ([#1191](https://github.com/willdady/platypus/issues/1191)) ([0902b9a](https://github.com/willdady/platypus/commit/0902b9af26fd3e16b128d93047883f33f1791b12))
+* **backend:** enforce one global Context per user and one membership per Organization ([#1160](https://github.com/willdady/platypus/issues/1160)) ([6f2f8d5](https://github.com/willdady/platypus/commit/6f2f8d5de7bf29169200cfd54b31525430c69fd0))
+* **backend:** finish a run failed when it throws after adopting its turn ([#1152](https://github.com/willdady/platypus/issues/1152)) ([0ccae95](https://github.com/willdady/platypus/commit/0ccae95cd5456cf3415de6467d51cf310be88ec0))
+* **backend:** index foreign keys that deletes scan and let an inviter be deleted ([#1166](https://github.com/willdady/platypus/issues/1166)) ([9faf0ad](https://github.com/willdady/platypus/commit/9faf0ad460837f735818f2bd4cdb09bb60496baf))
+* **backend:** keep each user's most recently edited global Context when deduplicating ([#1176](https://github.com/willdady/platypus/issues/1176)) ([bcfd5d9](https://github.com/willdady/platypus/commit/bcfd5d9945d71fd8bf9396dcc0a5107957309e9c))
+* **backend:** keep SSH sandbox connection drops from crashing the backend or cutting off long commands ([#1154](https://github.com/willdady/platypus/issues/1154)) ([ef6adca](https://github.com/willdady/platypus/commit/ef6adca89712c9eb86deb8186d4c2f2c22cd264d))
+* **backend:** kill a Docker sandbox command that times out or is aborted ([#1161](https://github.com/willdady/platypus/issues/1161)) ([a151ee0](https://github.com/willdady/platypus/commit/a151ee0b51881dcef579fbf22f4b035fb56e4dab))
+* **backend:** kill a Docker sandbox file read when the turn is cancelled ([#1192](https://github.com/willdady/platypus/issues/1192)) ([9d5f6f4](https://github.com/willdady/platypus/commit/9d5f6f495f7ea24b07bde6f7ac7758009edcb669))
+* **backend:** let an expired or declined invitation be re-sent to the same email ([#1170](https://github.com/willdady/platypus/issues/1170)) ([2de4b68](https://github.com/willdady/platypus/commit/2de4b6833b97a318fee0c1a9004efdd8280bdb96))
+* **backend:** retry a failed Trigger event flush and log flush failures ([#1151](https://github.com/willdady/platypus/issues/1151)) ([5c754c8](https://github.com/willdady/platypus/commit/5c754c8b046c701d70e783dd5954de5f0b7014ea))
+* **backend:** return 409 when deleting a Workspace Agent or Provider still in use ([#1163](https://github.com/willdady/platypus/issues/1163)) ([c5fb8be](https://github.com/willdady/platypus/commit/c5fb8befbd0ebaf68716348405feb922a09e95d7))
+* **backend:** serialise migrations and the first-boot seed across replicas ([#1168](https://github.com/willdady/platypus/issues/1168)) ([ecf5137](https://github.com/willdady/platypus/commit/ecf513782f42b520f65cbca439f04db359e1d85f))
+* **backend:** stop a hung Tool set factory or MCP server blocking turn preparation ([#1164](https://github.com/willdady/platypus/issues/1164)) ([0488324](https://github.com/willdady/platypus/commit/04883244df4082496da4821c130164088987556c))
+* **backend:** stop SSH shell.exec running the command when cd into cwd fails ([#1159](https://github.com/willdady/platypus/issues/1159)) ([a5e25e1](https://github.com/willdady/platypus/commit/a5e25e1225fc83f3af83b3a771b5781be3f1d74c))
+* **backend:** subscribe a Webhook created without events to card.moved too ([#1194](https://github.com/willdady/platypus/issues/1194)) ([eb5c5f6](https://github.com/willdady/platypus/commit/eb5c5f6b780d707dfbb396b560ce5086fdb4c151))
+* **backend:** take and release the scheduler advisory lock on one connection ([#1153](https://github.com/willdady/platypus/issues/1153)) ([363eb77](https://github.com/willdady/platypus/commit/363eb77369c4f73285f87dbc217e9ff94b5b276a))
+* **docs:** correct labels and behaviour in the building-with-platypus guides ([#1195](https://github.com/willdady/platypus/issues/1195)) ([b4864be](https://github.com/willdady/platypus/commit/b4864be1123df53ccdc0abe15e5c83d68c855cc1))
+* **frontend:** clear timers and intervals when components unmount ([#1185](https://github.com/willdady/platypus/issues/1185)) ([a9480f0](https://github.com/willdady/platypus/commit/a9480f0fa0ab035e3406d062b6d354b7c577c1e2))
+* **frontend:** give every icon-only button an accessible name ([#1169](https://github.com/willdady/platypus/issues/1169)) ([f9ec709](https://github.com/willdady/platypus/commit/f9ec70920d35f5cdf8c4802c4fce219145c913bd))
+* **frontend:** keep cached data during pull-to-refresh ([#1149](https://github.com/willdady/platypus/issues/1149)) ([66e7a0c](https://github.com/willdady/platypus/commit/66e7a0c03fc2dbe4e4553f55779239eab7e2d818))
+* **frontend:** show agent avatars as circles ([#1107](https://github.com/willdady/platypus/issues/1107)) ([726f5e3](https://github.com/willdady/platypus/commit/726f5e3fce238496c328ab0b79f234035b808e4e))
+* **frontend:** show an error with retry instead of an empty state when a fetch fails ([#1165](https://github.com/willdady/platypus/issues/1165)) ([02ccce1](https://github.com/willdady/platypus/commit/02ccce10091c9e4b035f509d47b06b3884e63eb6))
+* **frontend:** stop claiming the Trigger runs page lists every run ([#1173](https://github.com/willdady/platypus/issues/1173)) ([5726378](https://github.com/willdady/platypus/commit/5726378d91e0135beef6c452e742bbed29cca722))
+* match maxRunsToKeep's HTTP-create default to the trigger column and form ([#1155](https://github.com/willdady/platypus/issues/1155)) ([17bc09f](https://github.com/willdady/platypus/commit/17bc09f862c9895b652bbdfa611b2edf94030466))
+* refuse an admin password, email or host the installer can't use before writing anything ([#1193](https://github.com/willdady/platypus/issues/1193)) ([31df17b](https://github.com/willdady/platypus/commit/31df17bb5374be715cebb94f525003502eae819c))
+* **schemas:** enforce sampling bounds and make every Chat update field optional ([#1174](https://github.com/willdady/platypus/issues/1174)) ([37504ff](https://github.com/willdady/platypus/commit/37504fff8ff499b77cf34c18f05c7e519b4e2d78))
+* **schemas:** stop partial update schemas filling in Zod defaults ([#1150](https://github.com/willdady/platypus/issues/1150)) ([aaeeb23](https://github.com/willdady/platypus/commit/aaeeb2339773c243245e675e305791c3b8604077))
+
 ## [3.13.0](https://github.com/willdady/platypus/compare/v3.12.1...v3.13.0) (2026-09-27)
 
 
