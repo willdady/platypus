@@ -19,7 +19,11 @@ import {
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { checkEgress } from "../utils/egress-guard.ts";
 import { logger } from "../logger.ts";
-import { webhookCreateSchema, webhookUpdateSchema } from "@platypus/schemas";
+import {
+  webhookCreateSchema,
+  webhookEventSchema,
+  webhookUpdateSchema,
+} from "@platypus/schemas";
 import type { Variables } from "../server.ts";
 
 const webhook = new Hono<{ Variables: Variables }>();
@@ -81,16 +85,6 @@ webhook.post(
 
     await assertDeliverable(body.url);
 
-    const allEvents = [
-      "notification.created",
-      "notification.updated",
-      "notification.read",
-      "notification.dismissed",
-      "card.created",
-      "card.updated",
-      "card.deleted",
-    ];
-
     const now = new Date();
     const record = {
       id: nanoid(),
@@ -100,7 +94,9 @@ webhook.post(
       signingSecret: generateSigningSecret(),
       headers: body.headers ?? null,
       enabled: body.enabled ?? true,
-      events: body.events ?? allEvents,
+      // Every event the schema knows, not a hand-kept list: one here once
+      // missed `card.moved`.
+      events: body.events ?? webhookEventSchema.options,
       createdAt: now,
       updatedAt: now,
     };

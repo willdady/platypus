@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { webhookEventSchema } from "@platypus/schemas";
 import app from "../server.ts";
 
 // Mock crypto.randomBytes for predictable signing secrets
@@ -143,6 +144,31 @@ describe("Webhook Routes", () => {
       const data = (await res.json()) as { url: string; name: string };
       expect(data.url).toBe("https://example.com/webhook");
       expect(data.name).toBe("My Webhook");
+    });
+
+    // A hand-kept list here once missed `card.moved`, so an API-created
+    // Webhook that omitted `events` never heard about a card changing column.
+    it("subscribes to every event when events is omitted", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([{ id: "wh-1" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "My Webhook",
+          url: "https://example.com/webhook",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ events: webhookEventSchema.options }),
+      );
     });
 
     it("should reject a URL the network policy blocks", async () => {
