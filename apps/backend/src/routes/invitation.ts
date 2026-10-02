@@ -15,7 +15,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
-import { ConflictError, isUniqueViolation } from "../errors.ts";
+import { ConflictError, NotFoundError, isUniqueViolation } from "../errors.ts";
 
 const invitation = new Hono<{ Variables: Variables }>();
 
@@ -61,12 +61,8 @@ invitation.post(
       const foundSet = new Set(found.map((b) => b.id));
       const missing = blueprintIds.filter((id) => !foundSet.has(id));
       if (missing.length > 0) {
-        return c.json(
-          {
-            error: "One or more blueprints were not found in this organization",
-            missingBlueprintIds: missing,
-          },
-          422,
+        throw new NotFoundError(
+          `Blueprints not found in this organization: ${missing.join(", ")}`,
         );
       }
     }

@@ -469,7 +469,7 @@ describe("Context Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
-        message: "Context deleted successfully",
+        message: "Context deleted",
       });
       expect(mockDb.delete).toHaveBeenCalled();
     });

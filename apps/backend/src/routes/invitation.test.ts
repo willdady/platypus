@@ -109,7 +109,7 @@ describe("Invitation Routes", () => {
       ]);
     });
 
-    it("422s when a blueprint is not in this organization", async () => {
+    it("404s when a blueprint is not in this organization", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       // Only bp-1 resolves; bp-2 is foreign / missing.
@@ -126,11 +126,10 @@ describe("Invitation Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
-      expect(res.status).toBe(422);
-      expect(
-        ((await res.json()) as { missingBlueprintIds: string[] })
-          .missingBlueprintIds,
-      ).toEqual(["bp-2"]);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: "Blueprints not found in this organization: bp-2",
+      });
     });
 
     // ADR-0008: the invitation carries an optional Workspace name used to

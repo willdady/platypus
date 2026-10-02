@@ -652,7 +652,9 @@ describe("MCP Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ success: true });
+      expect(await res.json()).toEqual({
+        message: "OAuth authorization revoked",
+      });
       expect(mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({
           oauthAccessToken: null,

@@ -25,7 +25,7 @@ import {
   orgScopedWhereIn,
   type ScopedResourceType,
 } from "../services/scoped-resource.ts";
-import { isUniqueViolation } from "../errors.ts";
+import { NotFoundError, isUniqueViolation } from "../errors.ts";
 
 // Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
 // creates the Attachments for a chosen set of Shared resources in one step
@@ -54,14 +54,15 @@ const dedupeItems = (items: BlueprintItem[]): BlueprintItem[] => {
 };
 
 /**
- * Returns the subset of `items` that do NOT resolve to an org-scoped resource
- * in this organization. A Blueprint may only list Shared resources (ADR-0008),
- * so any workspace-private or foreign-org reference is a blocker.
+ * Throws `NotFoundError` naming every item that does NOT resolve to an
+ * org-scoped resource in this organization. A Blueprint may only list Shared
+ * resources (ADR-0008), so any workspace-private or foreign-org reference is a
+ * blocker.
  */
-const findNonSharedItems = async (
+const requireSharedItems = async (
   items: BlueprintItem[],
   orgId: string,
-): Promise<BlueprintItem[]> => {
+): Promise<void> => {
   const byType = new Map<ScopedResourceType, string[]>();
   for (const item of items) {
     const ids = byType.get(item.resourceType) ?? [];
@@ -69,14 +70,18 @@ const findNonSharedItems = async (
     byType.set(item.resourceType, ids);
   }
 
-  const invalid: BlueprintItem[] = [];
+  const invalid: string[] = [];
   for (const [resourceType, ids] of byType) {
     const found = await listOrgScopedIds(db, resourceType, ids, orgId);
     for (const id of ids) {
-      if (!found.has(id)) invalid.push({ resourceType, resourceId: id });
+      if (!found.has(id)) invalid.push(`${resourceType} ${id}`);
     }
   }
-  return invalid;
+  if (invalid.length > 0) {
+    throw new NotFoundError(
+      `Shared resources not found in this organization: ${invalid.join(", ")}`,
+    );
+  }
 };
 
 /** The non-null Tier 2 provider references carried by a create/update body. */
@@ -223,17 +228,7 @@ orgBlueprint.post(
     } = c.req.valid("json");
     const deduped = dedupeItems(items);
 
-    const invalid = await findNonSharedItems(deduped, orgId);
-    if (invalid.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint may only list organization-scoped (Shared) resources",
-          invalidItems: invalid,
-        },
-        422,
-      );
-    }
+    await requireSharedItems(deduped, orgId);
 
     // Tier 2 provider settings may only reference providers the blueprint also
     // attaches (ADR-0008) — so applying it never points a workspace at an
@@ -389,17 +384,7 @@ orgBlueprint.put(
       return c.json({ error: "Blueprint not found" }, 404);
     }
 
-    const invalid = await findNonSharedItems(deduped, orgId);
-    if (invalid.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint may only list organization-scoped (Shared) resources",
-          invalidItems: invalid,
-        },
-        422,
-      );
-    }
+    await requireSharedItems(deduped, orgId);
 
     const unattached = tier2ProvidersNotAttached(c.req.valid("json"), deduped);
     if (unattached.length > 0) {

@@ -446,7 +446,9 @@ describe("Organization MCP Routes", () => {
       const res = await revoke("mcp-1");
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ success: true });
+      expect(await res.json()).toEqual({
+        message: "OAuth authorization revoked",
+      });
       expect(tokensOf(fake, "mcp-1")).toEqual([null, null]);
       expect(tokensOf(fake, "mcp-ws")).toEqual(["access-old", "refresh-old"]);
     });

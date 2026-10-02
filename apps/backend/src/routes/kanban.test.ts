@@ -1630,7 +1630,7 @@ describe("Kanban Routes", () => {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ success: true });
+      expect(await res.json()).toEqual({ message: "Comment deleted" });
     });
 
     it("should return 404 if comment not found", async () => {
@@ -1688,7 +1688,7 @@ describe("Kanban Routes", () => {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ success: true });
+      expect(await res.json()).toEqual({ message: "Comment deleted" });
     });
   });
 });

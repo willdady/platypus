@@ -18,6 +18,9 @@ return c.json({ message: "Board deleted" });
 Never `message` on a 4xx/5xx — that is the one crossing the codebase does not
 make.
 
+A delete or action with nothing to return answers `200 { message }` — never a
+bodiless 204, and never `{ success: true }`.
+
 ## The error seam
 
 Five cross-cutting failures are **thrown**, not returned. A single `onError`
@@ -41,6 +44,10 @@ should throw a `ConflictError` naming what still uses the row first.
 if (!row) throw new NotFoundError("Card not found");
 throw new ValidationError("Invalid user assignee");
 ```
+
+A resource referenced in the request body that isn't in this Organization, or
+isn't Shared, is a `NotFoundError` (404) naming what couldn't be used — not a
+422, and no extra detail fields beside `error`.
 
 Throwing is what lets one rule serve more than one surface: the Kanban rules
 answer both the HTTP routes and the Agent tool set from a single place. Reach

@@ -95,7 +95,7 @@ notification.post(
       throw new NotFoundError("Notification not found");
     }
 
-    return c.json({ success: true });
+    return c.json({ message: "Notification marked as read" });
   },
 );
 
@@ -121,7 +121,7 @@ notification.post(
       );
     }
 
-    return c.json({ success: true });
+    return c.json({ message: "All notifications marked as read" });
   },
 );
 

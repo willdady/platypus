@@ -150,8 +150,9 @@ describe("Notification Routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(200);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.success).toBe(true);
+      expect(await res.json()).toEqual({
+        message: "Notification marked as read",
+      });
     });
 
     it("should return 404 if notification does not exist", async () => {
@@ -199,8 +200,9 @@ describe("Notification Routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(200);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.success).toBe(true);
+      expect(await res.json()).toEqual({
+        message: "All notifications marked as read",
+      });
     });
   });
 

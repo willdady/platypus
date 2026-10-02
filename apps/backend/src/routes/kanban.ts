@@ -424,7 +424,7 @@ kanban.delete(
     }
 
     await removeComment(db, existing);
-    return c.json({ success: true });
+    return c.json({ message: "Comment deleted" });
   },
 );
 

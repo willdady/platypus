@@ -232,7 +232,7 @@ describe("Dashboard Routes", () => {
       expect(res.status).toBe(404);
     });
 
-    it("deletes dashboard and returns 204", async () => {
+    it("deletes dashboard", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
@@ -243,7 +243,8 @@ describe("Dashboard Routes", () => {
       const res = await app.request(`${baseUrl}/${dashboardId}`, {
         method: "DELETE",
       });
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: "Dashboard deleted" });
     });
   });
 
@@ -497,7 +498,7 @@ describe("Dashboard Routes", () => {
       expect(res.status).toBe(404);
     });
 
-    it("deletes widget and returns 204", async () => {
+    it("deletes widget", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
@@ -510,7 +511,8 @@ describe("Dashboard Routes", () => {
         `${baseUrl}/${dashboardId}/widgets/${widgetId}`,
         { method: "DELETE" },
       );
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: "Widget deleted" });
     });
   });
 });

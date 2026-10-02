@@ -171,7 +171,6 @@ describe("MCP OAuth Callback Route", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      success: true,
       orgId: "org-1",
       workspaceId: "ws-1",
       mcpId: "mcp-1",

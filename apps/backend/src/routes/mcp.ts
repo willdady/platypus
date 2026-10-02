@@ -230,7 +230,7 @@ mcp.post(
       workspaceScopedWhere("mcp", mcpId, scope.workspaceId),
     );
 
-    return c.json({ success: true });
+    return c.json({ message: "OAuth authorization revoked" });
   },
 );
 

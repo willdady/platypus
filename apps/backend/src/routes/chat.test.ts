@@ -718,7 +718,7 @@ describe("Chat Routes", () => {
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
-        message: "Chat deleted successfully",
+        message: "Chat deleted",
       });
     });
 

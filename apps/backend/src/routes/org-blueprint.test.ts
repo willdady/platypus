@@ -32,7 +32,7 @@ describe("Organization Blueprint Routes", () => {
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
         .mockResolvedValueOnce([record]); // final read-back
-      // requireOrgAccess where (chain), then findNonSharedItems where (resolves
+      // requireOrgAccess where (chain), then requireSharedItems where (resolves
       // the org-scoped resources that exist).
       mockDb.where
         .mockReturnValueOnce(mockDb)
@@ -51,10 +51,10 @@ describe("Organization Blueprint Routes", () => {
       ]);
     });
 
-    it("422s when an item is not an org-scoped resource", async () => {
+    it("404s when an item is not an org-scoped resource", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      // findNonSharedItems finds nothing for the requested id → invalid.
+      // requireSharedItems finds nothing for the requested id → invalid.
       mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl, {
@@ -62,11 +62,10 @@ describe("Organization Blueprint Routes", () => {
         body: JSON.stringify(body),
         headers: { "Content-Type": "application/json" },
       });
-      expect(res.status).toBe(422);
-      const json = (await res.json()) as Record<string, unknown>;
-      expect(json.invalidItems).toEqual([
-        { resourceType: "agent", resourceId: "agent-1" },
-      ]);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: "Shared resources not found in this organization: agent agent-1",
+      });
     });
 
     it("409s on a duplicate blueprint name", async () => {
@@ -113,7 +112,7 @@ describe("Organization Blueprint Routes", () => {
         .mockResolvedValueOnce([record]); // final read-back
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "prov-1" }]); // findNonSharedItems (provider)
+        .mockResolvedValueOnce([{ id: "prov-1" }]); // requireSharedItems (provider)
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -160,7 +159,7 @@ describe("Organization Blueprint Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "prov-1" }]) // findNonSharedItems (provider attached)
+        .mockResolvedValueOnce([{ id: "prov-1" }]) // requireSharedItems (provider attached)
         .mockResolvedValueOnce([
           {
             id: "prov-1",
@@ -201,7 +200,7 @@ describe("Organization Blueprint Routes", () => {
         .mockResolvedValueOnce([record]); // read-back
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "prov-1" }]) // findNonSharedItems
+        .mockResolvedValueOnce([{ id: "prov-1" }]) // requireSharedItems
         .mockResolvedValueOnce([
           {
             id: "prov-1",
@@ -313,7 +312,7 @@ describe("Organization Blueprint Routes", () => {
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
         .mockReturnValueOnce(mockDb) // existing check (chain to limit)
-        .mockResolvedValueOnce([{ id: "skill-1" }]); // findNonSharedItems
+        .mockResolvedValueOnce([{ id: "skill-1" }]); // requireSharedItems
 
       const res = await app.request(`${baseUrl}/bp-1`, {
         method: "PUT",
@@ -344,7 +343,7 @@ describe("Organization Blueprint Routes", () => {
       expect(res.status).toBe(404);
     });
 
-    it("422s when an item is not org-scoped", async () => {
+    it("404s when an item is not org-scoped", async () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
@@ -352,14 +351,17 @@ describe("Organization Blueprint Routes", () => {
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
         .mockReturnValueOnce(mockDb) // existing check
-        .mockResolvedValueOnce([]); // findNonSharedItems: none found
+        .mockResolvedValueOnce([]); // requireSharedItems: none found
 
       const res = await app.request(`${baseUrl}/bp-1`, {
         method: "PUT",
         body: JSON.stringify(body),
         headers: { "Content-Type": "application/json" },
       });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: "Shared resources not found in this organization: skill skill-1",
+      });
     });
 
     it("409s when renamed to another blueprint's name", async () => {

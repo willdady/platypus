@@ -92,7 +92,6 @@ mcpOauthCallback.post(
 
       if (result === "AUTHORIZED") {
         return c.json({
-          success: true,
           orgId: redirectOrgId,
           workspaceId: mcpRecord[0].workspaceId,
           mcpId: mcpRecord[0].id,

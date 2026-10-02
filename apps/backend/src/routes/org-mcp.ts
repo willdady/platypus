@@ -171,7 +171,7 @@ orgMcp.post(
     await requireOrgScoped(db, "mcp", mcpId, orgId);
     await clearOAuthTokens(db, orgScopedWhere("mcp", mcpId, orgId));
 
-    return c.json({ success: true });
+    return c.json({ message: "OAuth authorization revoked" });
   },
 );
 

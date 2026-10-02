@@ -170,7 +170,7 @@ context.delete("/:contextId", requireAuth, async (c) => {
     return c.json({ error: "Context not found" }, 404);
   }
 
-  return c.json({ message: "Context deleted successfully" });
+  return c.json({ message: "Context deleted" });
 });
 
 export { context };

@@ -333,7 +333,7 @@ chat.delete(
       chatStorageKeyPrefix({ orgId, workspaceId, chatId }),
     );
 
-    return c.json({ message: "Chat deleted successfully" }, 200);
+    return c.json({ message: "Chat deleted" });
   },
 );
 

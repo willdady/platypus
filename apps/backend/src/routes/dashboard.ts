@@ -81,7 +81,7 @@ dashboard.delete("/:dashboardId", ...secured, async (c) => {
     c.req.param("dashboardId"),
     workspaceScopeOf(c).workspaceId,
   );
-  return c.body(null, 204);
+  return c.json({ message: "Dashboard deleted" });
 });
 dashboard.get("/:dashboardId/widgets", ...secured, async (c) => {
   const { workspaceId } = workspaceScopeOf(c);
@@ -137,7 +137,7 @@ dashboard.delete("/:dashboardId/widgets/:widgetId", ...secured, async (c) => {
     c.req.param("widgetId"),
     workspaceScopeOf(c).workspaceId,
   );
-  return c.body(null, 204);
+  return c.json({ message: "Widget deleted" });
 });
 
 export { dashboard };
