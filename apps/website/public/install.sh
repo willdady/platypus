@@ -45,10 +45,21 @@ main() {
   local password="${ADMIN_PASSWORD:-$(openssl rand -hex 12)}"
   local secret
   secret="$(openssl rand -hex 32)"
-  # Values are written single-quoted, so the one character they can't hold is '.
+  # Values are written single-quoted, one per line, so they can't hold a ' or
+  # a control character such as a newline.
   for value in "$host" "$email" "$password"; do
-    [[ "$value" != *"'"* ]] || fail "PLATYPUS_HOST, ADMIN_EMAIL and ADMIN_PASSWORD must not contain a single quote (')."
+    [[ "$value" != *"'"* && "$value" != *[[:cntrl:]]* ]] ||
+      fail "PLATYPUS_HOST, ADMIN_EMAIL and ADMIN_PASSWORD must not contain a single quote (') or a control character such as a newline."
   done
+  # A host name, IPv4 address or bracketed IPv6 address — it becomes the
+  # scheme-and-host of three URLs.
+  [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ || "$host" =~ ^\[[0-9A-Fa-f:.]+\]$ ]] ||
+    fail "PLATYPUS_HOST '$host' is not a host name or IP address (no scheme, port or path)."
+  [[ "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+$ ]] ||
+    fail "ADMIN_EMAIL '$email' is not an email address."
+  # The backend refuses to seed a shorter one, which would leave a half-started
+  # install this script then refuses to re-run over.
+  ((${#password} >= 8)) || fail "ADMIN_PASSWORD must be at least 8 characters."
 
   local dir="${PLATYPUS_DIR:-./platypus}"
   [[ ! -e "$dir/.env" ]] ||
@@ -56,7 +67,7 @@ main() {
 
   # A database left by an earlier install into a same-named directory would be
   # reused, and first boot would skip seeding the admin printed below.
-  # ponytail: mirrors Compose's project-name rule (lowercase, drop other chars); exotic dir names may differ.
+  # Mirrors Compose's project-name rule (lowercase, drop other chars); exotic dir names may differ.
   local project volume
   project="${COMPOSE_PROJECT_NAME:-$(basename "$dir" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')}"
   volume="${project}_postgres_data"

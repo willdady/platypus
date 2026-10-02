@@ -165,13 +165,13 @@ admin password.
 
 Set these as environment variables on the `bash` side of the pipe:
 
-| Variable           | Default                     | What it does                                                                                                 |
-| ------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `PLATYPUS_VERSION` | the latest release          | The release to install, e.g. `3.13.0`.                                                                       |
-| `PLATYPUS_DIR`     | `./platypus`                | The directory to install into.                                                                               |
-| `PLATYPUS_HOST`    | `localhost`                 | The host the browser reaches Platypus on. Sets `FRONTEND_URL`, `BACKEND_URL` and `ALLOWED_ORIGINS` together. |
-| `ADMIN_EMAIL`      | `admin@example.com`         | The initial admin's email.                                                                                   |
-| `ADMIN_PASSWORD`   | a random 24-character value | The initial admin's password. At least 8 characters.                                                         |
+| Variable           | Default                     | What it does                                                                                                                                                     |
+| ------------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLATYPUS_VERSION` | the latest release          | The release to install, e.g. `3.13.0`.                                                                                                                           |
+| `PLATYPUS_DIR`     | `./platypus`                | The directory to install into.                                                                                                                                   |
+| `PLATYPUS_HOST`    | `localhost`                 | The host the browser reaches Platypus on — a host name or IP address, with no scheme or port. Sets `FRONTEND_URL`, `BACKEND_URL` and `ALLOWED_ORIGINS` together. |
+| `ADMIN_EMAIL`      | `admin@example.com`         | The initial admin's email.                                                                                                                                       |
+| `ADMIN_PASSWORD`   | a random 24-character value | The initial admin's password. At least 8 characters.                                                                                                             |
 
 For example, on a server you reach as `platypus.internal`:
 

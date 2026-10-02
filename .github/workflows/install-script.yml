@@ -32,6 +32,29 @@ jobs:
       - name: Shellcheck
         run: shellcheck apps/website/public/install.sh
 
+  # A value the backend would refuse must stop the installer before it writes
+  # anything: a half-started install is one this script then won't re-run over.
+  preflight-refusals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Refuse bad values and write nothing
+        run: |
+          refuses() {
+            dir="$RUNNER_TEMP/refused"
+            if env "$@" PLATYPUS_DIR="$dir" bash < apps/website/public/install.sh; then
+              echo "expected the installer to refuse: $*" >&2
+              exit 1
+            fi
+            test ! -e "$dir" || { echo "installer wrote $dir for: $*" >&2; exit 1; }
+          }
+          refuses ADMIN_PASSWORD=short
+          refuses ADMIN_EMAIL=not-an-email
+          refuses PLATYPUS_HOST=http://example.com
+          refuses PLATYPUS_HOST=example.com:3000
+
   end-to-end:
     runs-on: ubuntu-latest
     steps:
