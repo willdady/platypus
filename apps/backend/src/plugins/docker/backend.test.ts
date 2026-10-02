@@ -1100,6 +1100,29 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     const read = mockState.execCalls[1];
     expect(killCallsFor(execMarker(read))).toHaveLength(1);
   });
+
+  // A cancelled read used to run on to its timeout: core stopped waiting, but
+  // the transport was never told, so `head` held its PID for the full 30s.
+  it("kills a read when the turn is cancelled, without waiting for its timeout", async () => {
+    setupFreshProvision();
+    queueExec({ closeDelayMs: 3_600_000, exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const controller = new AbortController();
+    const inflight = backend.fsRead(
+      ctx,
+      { path: "fifo" },
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(mockState.execCalls).toHaveLength(2));
+    controller.abort();
+
+    await expect(inflight).rejects.toThrow(/cancelled/i);
+    const read = mockState.execCalls[1];
+    await vi.waitFor(() =>
+      expect(killCallsFor(execMarker(read))).toHaveLength(1),
+    );
+  });
 });
 
 describe("DockerSandboxTransport — exit status", () => {

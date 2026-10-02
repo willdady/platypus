@@ -318,7 +318,12 @@ describe("createPosixSandbox — fs.read", () => {
       callOptions,
     );
 
-    expect(spy).toHaveBeenCalledWith(ctx, `${ROOT}/big.txt`, MAX_READ_BYTES);
+    expect(spy).toHaveBeenCalledWith(
+      ctx,
+      `${ROOT}/big.txt`,
+      MAX_READ_BYTES,
+      callOptions.signal,
+    );
   });
 
   it("flags truncated when the read came back filling the cap", async () => {
@@ -589,7 +594,12 @@ describe("createPosixSandbox — fs.readBytes / fs.writeBytes", () => {
       callOptions,
     );
 
-    expect(readFile).toHaveBeenCalledWith(ctx, `${ROOT}/a`, 11);
+    expect(readFile).toHaveBeenCalledWith(
+      ctx,
+      `${ROOT}/a`,
+      11,
+      callOptions.signal,
+    );
   });
 
   it("attributes a missing path to fs.readBytes", async () => {

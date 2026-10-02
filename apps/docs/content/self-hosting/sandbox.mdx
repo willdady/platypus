@@ -96,8 +96,9 @@ configurable per Sandbox.
 
 A command that hits its timeout, or whose Chat is stopped, is killed in the
 container along with the processes it started, including ones it sent to the
-background. The tool reports exit code `124` for a timeout. A file read gives
-up after **30 seconds**. A process that clears its own environment (for
+background. The tool reports exit code `124` for a timeout. A file read is
+killed the same way after **30 seconds**, or as soon as its Chat is stopped. A
+process that clears its own environment (for
 example with `env -i`) is not tracked and keeps running.
 
 <Callout type="warning">

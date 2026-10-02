@@ -674,11 +674,13 @@ class DockerSandboxTransport implements SandboxTransport {
   // reading at the cap in the container, so a huge file — or an endless one
   // like /dev/zero — costs no more than the cap; core's truncation rule is
   // `>= cap`, so no byte past it is needed. The timeout bounds what `head`
-  // cannot: a FIFO with no writer blocks on open forever.
+  // cannot: a FIFO with no writer blocks on open forever. The turn's signal
+  // ends it sooner, so a cancelled read is killed rather than left to time out.
   async readFile(
     ctx: SandboxContext,
     absPath: string,
     cap: number,
+    signal?: AbortSignal,
   ): Promise<Buffer> {
     const container = await this.ensureContainer(ctx);
     const res = await runExec(
@@ -689,6 +691,7 @@ class DockerSandboxTransport implements SandboxTransport {
         timeoutMs: READ_TIMEOUT_MS,
         stdoutCap: cap,
         stderrCap: MAX_SHELL_OUTPUT_BYTES,
+        signal,
         log: this.execLog(ctx),
       },
     );
