@@ -260,7 +260,7 @@ describe("McpForm test connection", () => {
       authType: "Bearer",
       bearerToken: "secret-token",
     } as unknown as MCP);
-    return render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
+    render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
   };
 
   it("tests the unsaved form and lists the tools, flagging names too long to namespace", async () => {

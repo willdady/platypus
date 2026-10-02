@@ -129,7 +129,9 @@ export function PullToRefresh({
       setPullDistance(0);
       try {
         await onRefresh();
-        // Linger so the spinner is visible before the indicator exits
+        // Linger so the spinner is visible before the indicator exits. On
+        // unmount the timer is dropped and this never settles, which is what
+        // we want: nothing is left to reset.
         await new Promise<void>((resolve) => scheduleLinger(resolve, 600));
       } finally {
         isRefreshingRef.current = false;
