@@ -201,6 +201,19 @@ export const isValidChatMaxSteps = (
   value: number | null | undefined,
 ): boolean => chatSchema.shape.maxSteps.safeParse(value).success;
 
+export type ChatSamplingField = keyof typeof samplingFields;
+
+/**
+ * Whether a Chat sampling value is one the turn endpoint will accept. Like
+ * {@link isValidChatMaxSteps}, decided by `chatSchema` itself so the settings
+ * inputs and the send guard cannot drift from the request validator. Unset
+ * (undefined) is valid — it means the Provider or model default.
+ */
+export const isValidChatSampling = (
+  field: ChatSamplingField,
+  value: number | undefined,
+): boolean => chatSchema.shape[field].safeParse(value).success;
+
 const chatTurnSchema = chatSchema
   .pick({
     id: true,

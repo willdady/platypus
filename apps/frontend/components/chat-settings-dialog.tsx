@@ -27,8 +27,10 @@ import {
   TOP_P_MAX,
   TOP_P_MIN,
   isValidChatMaxSteps,
+  isValidChatSampling,
+  type ChatSamplingField,
 } from "@platypus/schemas";
-import { CHAT_MAX_STEPS_ERROR } from "@/lib/chat-turn";
+import { CHAT_MAX_STEPS_ERROR, CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
 
 interface ChatSettingsDialogProps {
   instructions: string;
@@ -75,6 +77,21 @@ export const ChatSettingsDialog = ({
   // remounts while an out-of-range value stayed in state. Judged by the schema
   // that will judge the request, not by a copy of its bounds.
   const maxStepsInvalid = !isValidChatMaxSteps(maxSteps);
+
+  // Judged the same way, so a value saved before the bounds existed shows
+  // here before it can refuse a turn (#1177).
+  const samplingError = (
+    field: ChatSamplingField,
+    value: number | undefined,
+  ) => (isValidChatSampling(field, value) ? null : CHAT_SAMPLING_ERRORS[field]);
+  const errors = {
+    temperature: samplingError("temperature", temperature),
+    seed: samplingError("seed", seed),
+    topP: samplingError("topP", topP),
+    topK: samplingError("topK", topK),
+    presencePenalty: samplingError("presencePenalty", presencePenalty),
+    frequencyPenalty: samplingError("frequencyPenalty", frequencyPenalty),
+  };
 
   const handleMaxStepsChange = (value: string) => {
     onMaxStepsChange(value === "" ? undefined : parseInt(value));
@@ -125,6 +142,7 @@ export const ChatSettingsDialog = ({
                 <Label htmlFor="temperature">Temperature</Label>
                 <Input
                   id="temperature"
+                  aria-invalid={!!errors.temperature}
                   type="number"
                   min={TEMPERATURE_MIN}
                   step="0.1"
@@ -137,11 +155,17 @@ export const ChatSettingsDialog = ({
                     )
                   }
                 />
+                {errors.temperature && (
+                  <p className="text-destructive text-sm">
+                    {errors.temperature}
+                  </p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="seed">Seed</Label>
                 <Input
                   id="seed"
+                  aria-invalid={!!errors.seed}
                   type="number"
                   value={seed ?? ""}
                   onChange={(e) =>
@@ -152,11 +176,15 @@ export const ChatSettingsDialog = ({
                     )
                   }
                 />
+                {errors.seed && (
+                  <p className="text-destructive text-sm">{errors.seed}</p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="topP">Top-p</Label>
                 <Input
                   id="topP"
+                  aria-invalid={!!errors.topP}
                   type="number"
                   min={TOP_P_MIN}
                   max={TOP_P_MAX}
@@ -170,11 +198,15 @@ export const ChatSettingsDialog = ({
                     )
                   }
                 />
+                {errors.topP && (
+                  <p className="text-destructive text-sm">{errors.topP}</p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="topK">Top-k</Label>
                 <Input
                   id="topK"
+                  aria-invalid={!!errors.topK}
                   type="number"
                   min={TOP_K_MIN}
                   value={topK ?? ""}
@@ -186,11 +218,15 @@ export const ChatSettingsDialog = ({
                     )
                   }
                 />
+                {errors.topK && (
+                  <p className="text-destructive text-sm">{errors.topK}</p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="presencePenalty">Presence Penalty</Label>
                 <Input
                   id="presencePenalty"
+                  aria-invalid={!!errors.presencePenalty}
                   type="number"
                   min={PENALTY_MIN}
                   max={PENALTY_MAX}
@@ -204,11 +240,17 @@ export const ChatSettingsDialog = ({
                     )
                   }
                 />
+                {errors.presencePenalty && (
+                  <p className="text-destructive text-sm">
+                    {errors.presencePenalty}
+                  </p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="frequencyPenalty">Frequency Penalty</Label>
                 <Input
                   id="frequencyPenalty"
+                  aria-invalid={!!errors.frequencyPenalty}
                   type="number"
                   min={PENALTY_MIN}
                   max={PENALTY_MAX}
@@ -222,6 +264,11 @@ export const ChatSettingsDialog = ({
                     )
                   }
                 />
+                {errors.frequencyPenalty && (
+                  <p className="text-destructive text-sm">
+                    {errors.frequencyPenalty}
+                  </p>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="maxSteps">Max steps</Label>

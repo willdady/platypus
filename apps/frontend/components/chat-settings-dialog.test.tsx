@@ -3,6 +3,7 @@ import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Dialog } from "./ui/dialog";
 import { ChatSettingsDialog } from "./chat-settings-dialog";
+import { CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
 
 const renderDialog = (
   props: Partial<Parameters<typeof ChatSettingsDialog>[0]> = {},
@@ -29,6 +30,7 @@ const renderDialog = (
           onPresencePenaltyChange={vi.fn()}
           frequencyPenalty={undefined}
           onFrequencyPenaltyChange={vi.fn()}
+          {...props}
           maxSteps={maxSteps}
           onMaxStepsChange={(v) => {
             onMaxStepsChange(v);
@@ -115,5 +117,52 @@ describe("ChatSettingsDialog", () => {
       screen.queryByText("Max steps must be a whole number between 1 and 50."),
     ).not.toBeInTheDocument();
     expect(input).not.toHaveAttribute("aria-invalid", "true");
+  });
+
+  // #1177: the sampling inputs are judged like Max steps, with the string the
+  // send guard would refuse with.
+  it.each([
+    ["temperature", "Temperature", "-1"],
+    ["topP", "Top-p", "1.5"],
+    ["topK", "Top-k", "0"],
+    ["presencePenalty", "Presence Penalty", "3"],
+    ["frequencyPenalty", "Frequency Penalty", "-3"],
+  ] as const)("marks an out-of-range %s invalid", (field, label, value) => {
+    renderDialog({ [field]: Number(value) });
+
+    expect(screen.getByLabelText(label)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByText(CHAT_SAMPLING_ERRORS[field])).toBeInTheDocument();
+  });
+
+  // A stored pre-3.14.0 value can be fractional even though typing parses ints.
+  it.each([
+    ["topK", "Top-k"],
+    ["seed", "Seed"],
+  ] as const)("marks a fractional stored %s invalid", (field, label) => {
+    renderDialog({ [field]: 2.5 });
+
+    expect(screen.getByLabelText(label)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByText(CHAT_SAMPLING_ERRORS[field])).toBeInTheDocument();
+  });
+
+  it("shows no sampling errors for in-range values", () => {
+    renderDialog({
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 40,
+      seed: 1,
+      presencePenalty: 0,
+      frequencyPenalty: 0,
+    });
+
+    for (const message of Object.values(CHAT_SAMPLING_ERRORS)) {
+      expect(screen.queryByText(message)).not.toBeInTheDocument();
+    }
   });
 });

@@ -35,6 +35,7 @@ import {
   agentCreateSchema,
   agentUpdateSchema,
   isValidChatMaxSteps,
+  isValidChatSampling,
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
   SANDBOX_ENV_MAX_VALUE_BYTES,
@@ -631,6 +632,42 @@ describe("isValidChatMaxSteps", () => {
         chatSubmitSchema.safeParse({ ...base, maxSteps: value }).success,
       );
     }
+  });
+});
+
+describe("isValidChatSampling", () => {
+  // Judged by `chatSchema` itself so the Chat settings inputs, the send guard
+  // and the request validator share one set of bounds (#1177).
+  it.each([
+    ["temperature", 0],
+    ["temperature", 5],
+    ["topP", 0],
+    ["topP", 1],
+    ["topK", 1],
+    ["topK", 40],
+    ["seed", -7],
+    ["presencePenalty", -2],
+    ["frequencyPenalty", 2],
+  ] as const)("accepts %s of %s", (field, value) => {
+    expect(isValidChatSampling(field, value)).toBe(true);
+  });
+
+  it.each([
+    ["temperature", -1],
+    ["topP", -0.1],
+    ["topP", 1.5],
+    ["topK", 0],
+    ["topK", 2.5],
+    ["seed", 1.5],
+    ["presencePenalty", -3],
+    ["frequencyPenalty", 3],
+  ] as const)("rejects %s of %s", (field, value) => {
+    expect(isValidChatSampling(field, value)).toBe(false);
+  });
+
+  // Unset means the Provider or model default.
+  it("treats undefined as valid", () => {
+    expect(isValidChatSampling("topK", undefined)).toBe(true);
   });
 });
 
