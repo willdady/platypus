@@ -30,7 +30,7 @@ import { scopedUrl, writeAt } from "@/lib/api-write";
 const ACCESS_ENTITY = "inbound-triggers/access";
 
 const GATE_OPTIONS: { value: InboundTriggerGate; label: string }[] = [
-  { value: "off", label: "Off" },
+  { value: "off", label: "No workspaces" },
   { value: "all", label: "All workspaces" },
   { value: "selected", label: "Selected workspaces" },
 ];
@@ -121,12 +121,12 @@ export const OrgInboundTriggerAccess = ({ orgId }: { orgId: string }) => {
   return (
     <div className="flex flex-col gap-4">
       <FormSelectField
-        label="Accept calls from"
+        label="Allow Inbound Triggers in"
         name="inboundTriggerGate"
         value={gate}
         onValueChange={(value) => setGate(value as InboundTriggerGate)}
         disabled={isSaving}
-        description="Which workspaces accept calls from outside Platypus on their Inbound Triggers. Checked on every call, so turning it off stops calls straight away without deleting any trigger."
+        description="Which workspaces can use Inbound Triggers. Changes apply straight away, and no triggers are deleted."
       >
         {GATE_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value}>

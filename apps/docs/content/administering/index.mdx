@@ -102,16 +102,16 @@ Trigger a system outside Platypus starts over HTTP, with a token its Workspace
 Owner issues. Its run acts as that Owner, so it is a way in from outside, and
 whether a Workspace may have that is your decision.
 
-**Organization settings → Inbound Triggers → Accept calls from** decides it for
+**Organization settings → Inbound Triggers → Allow Inbound Triggers in** decides it for
 the whole Organization:
 
-| Setting                 | Calls are accepted for                                       |
-| ----------------------- | ------------------------------------------------------------ |
-| **Off** _(default)_     | No Workspace                                                 |
-| **All workspaces**      | Every Workspace, including ones created later                |
-| **Selected workspaces** | Only the Workspaces switched on under **Allowed workspaces** |
+| Setting                       | Calls are accepted for                                       |
+| ----------------------------- | ------------------------------------------------------------ |
+| **No workspaces** _(default)_ | No Workspace                                                 |
+| **All workspaces**            | Every Workspace, including ones created later                |
+| **Selected workspaces**       | Only the Workspaces switched on under **Allowed workspaces** |
 
-It is checked on every call. Switching to **Off**, or turning a Workspace's
+It is checked on every call. Switching to **No workspaces**, or turning a Workspace's
 switch off under **Selected workspaces**, refuses that Workspace's calls from
 the next one on. Its Triggers and their tokens stay as they are, so switching
 back resumes them. Owners can create Inbound Triggers whatever the setting
@@ -158,8 +158,8 @@ refreshes, so you can judge the new token before revoking it too.
 
 <Callout type="warning">
   A revoke is not lasting: the Owner can issue a new token straight away. To
-  stop a Workspace taking calls for good, change **Accept calls from** or switch
-  the Workspace off on this screen, which the Owner cannot.
+  stop a Workspace taking calls for good, change **Allow Inbound Triggers in**
+  or switch the Workspace off on this screen, which the Owner cannot.
 </Callout>
 
 ## Where to next

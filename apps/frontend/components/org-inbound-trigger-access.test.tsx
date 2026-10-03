@@ -104,7 +104,7 @@ describe("OrgInboundTriggerAccess", () => {
     mockScopedSWR({ "/inbound-triggers/access": access() });
     renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
-    await selectOption("All workspaces", "Off");
+    await selectOption("All workspaces", "No workspaces");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
