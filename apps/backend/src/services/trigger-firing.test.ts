@@ -162,81 +162,67 @@ describe("fireTrigger", () => {
       oldRun("old-3", 3),
     ];
 
-    it.each([
+    // The row as the scheduler's claim left it: the next slot already written
+    // for a recurring cron, a one-off already disabled. 14:00, not the 13:00
+    // the hourly cadence would name from completion, so a recompute shows.
+    const CLAIMED_NEXT = new Date("2026-08-30T14:00:00.000Z");
+    const cases = [
+      [
+        "a recurring cron",
+        makeTrigger({ maxRunsToKeep: 2, nextRunAt: CLAIMED_NEXT }),
+      ],
+      [
+        "a one-off cron",
+        makeTrigger({
+          maxRunsToKeep: 2,
+          enabled: false,
+          config: { ...cronConfig, isOneOff: true },
+        }),
+      ],
+      ["an event", eventTrigger({ maxRunsToKeep: 2 })],
+    ] as const;
+    const outcomes = [
       ["succeeds", "ran", () => drive("succeeded")],
       ["fails", "failed", () => drive("failed", new Error("Model error"))],
-    ] as const)(
-      "a recurring cron run that %s stamps completion, advances the schedule and trims history",
-      async (_, outcome, arrange) => {
-        const trigger = makeTrigger({ maxRunsToKeep: 2 });
+    ] as const;
+
+    it.each(
+      cases.flatMap(([kind, trigger]) =>
+        outcomes.map(
+          ([verb, outcome, arrange]) =>
+            [kind, verb, trigger, outcome, arrange] as const,
+        ),
+      ),
+    )(
+      "%s run that %s stamps completion and trims history, leaving the schedule alone",
+      async (_kind, _verb, trigger, outcome, arrange) => {
         const fake = world(trigger, threeOldRuns);
         arrange();
 
-        await expect(fireTrigger(trigger, { kind: "cron" })).resolves.toBe(
-          outcome,
-        );
+        await expect(
+          fireTrigger(
+            trigger,
+            trigger.type === "event"
+              ? {
+                  kind: "event",
+                  payload: cardEvent("card.created", { id: "c1" }),
+                }
+              : { kind: "cron" },
+          ),
+        ).resolves.toBe(outcome);
 
         expect(triggerRow(fake)).toMatchObject({
           lastRunAt: COMPLETED,
-          // "0 * * * *" from 12:41 is 13:00.
-          nextRunAt: new Date("2026-08-30T13:00:00.000Z"),
-          enabled: true,
+          nextRunAt: trigger.nextRunAt,
+          enabled: trigger.enabled,
         });
         // The newest two: this run and the newest of the old ones.
         expect(runIds(fake).sort()).toEqual(["old-3", "run-new"]);
       },
     );
 
-    it.each([
-      ["succeeds", () => drive("succeeded")],
-      ["fails", () => drive("failed", new Error("Model error"))],
-    ] as const)(
-      "a one-off cron run that %s disables itself",
-      async (_, arrange) => {
-        const trigger = makeTrigger({
-          config: { ...cronConfig, isOneOff: true },
-        });
-        const fake = world(trigger);
-        arrange();
-
-        await fireTrigger(trigger, { kind: "cron" });
-
-        expect(triggerRow(fake)).toMatchObject({
-          lastRunAt: COMPLETED,
-          enabled: false,
-          nextRunAt: null,
-        });
-      },
-    );
-
-    it.each([
-      ["succeeds", "ran", () => drive("succeeded")],
-      ["fails", "failed", () => drive("failed", new Error("Model error"))],
-    ] as const)(
-      "an event run that %s stamps completion and trims history, leaving the schedule alone",
-      async (_, outcome, arrange) => {
-        const trigger = eventTrigger({ maxRunsToKeep: 2 });
-        const fake = world(trigger, threeOldRuns);
-        arrange();
-
-        await expect(
-          fireTrigger(trigger, {
-            kind: "event",
-            payload: cardEvent("card.created", { id: "c1" }),
-          }),
-        ).resolves.toBe(outcome);
-
-        expect(triggerRow(fake)).toMatchObject({
-          lastRunAt: COMPLETED,
-          nextRunAt: null,
-          enabled: true,
-        });
-        expect(runIds(fake).sort()).toEqual(["old-3", "run-new"]);
-      },
-    );
-
-    it("advances the schedule when the Workspace is missing, without invoking an Agent", async () => {
-      const trigger = makeTrigger();
+    it("stamps completion when the Workspace is missing, without invoking an Agent", async () => {
+      const trigger = makeTrigger({ nextRunAt: CLAIMED_NEXT });
       const fake = world(trigger, [], { workspace: false });
 
       await expect(fireTrigger(trigger, { kind: "cron" })).resolves.toBe(
@@ -246,7 +232,7 @@ describe("fireTrigger", () => {
       expect(mockGenerate).not.toHaveBeenCalled();
       expect(triggerRow(fake)).toMatchObject({
         lastRunAt: NOW,
-        nextRunAt: new Date("2026-08-30T13:00:00.000Z"),
+        nextRunAt: CLAIMED_NEXT,
       });
     });
 
@@ -289,23 +275,6 @@ describe("fireTrigger", () => {
       },
     );
 
-    it("schedules from the config as edited mid-run, not the fired snapshot", async () => {
-      const snapshot = makeTrigger();
-      const fake = world({
-        ...snapshot,
-        config: { ...cronConfig, cronExpression: "*/15 * * * *" },
-      });
-      drive("succeeded");
-
-      await fireTrigger(snapshot, { kind: "cron" });
-
-      // Every fifteen minutes from 12:41 is 12:45 — the hourly snapshot would
-      // have said 13:00.
-      expect(triggerRow(fake).nextRunAt).toEqual(
-        new Date("2026-08-30T12:45:00.000Z"),
-      );
-    });
-
     it("tolerates a Trigger deleted mid-run", async () => {
       const snapshot = makeTrigger();
       const fake = world(null);
@@ -332,30 +301,6 @@ describe("fireTrigger", () => {
 
       expect(triggerRow(fake).lastRunAt).toEqual(COMPLETED);
       expect(runIds(fake)).toEqual(["run-new"]);
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({ triggerId: "trigger-1" }),
-        "Trigger row is malformed; its schedule was not updated",
-      );
-    });
-
-    it("leaves nextRunAt null and says so when the cron expression cannot be parsed", async () => {
-      const snapshot = makeTrigger();
-      const fake = world({
-        ...snapshot,
-        config: { ...cronConfig, cronExpression: "not a cron" },
-      });
-      drive("succeeded");
-
-      await fireTrigger(snapshot, { kind: "cron" });
-
-      expect(triggerRow(fake)).toMatchObject({
-        lastRunAt: COMPLETED,
-        nextRunAt: null,
-      });
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({ cronExpression: "not a cron" }),
-        "Failed to compute next run for trigger",
-      );
     });
   });
 

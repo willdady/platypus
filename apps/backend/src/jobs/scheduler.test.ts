@@ -347,41 +347,43 @@ describe("recoverStuckTriggers", () => {
     expect(params).toEqual(["run-1", "run-2", "running"]);
   });
 
-  it("touches no events and reads no Triggers when no run was orphaned", async () => {
+  it("touches no events when no run was orphaned", async () => {
     const { updates } = captureUpdates([]);
 
     await recoverStuckTriggers();
 
     expect(updates.map((c) => c.table)).toEqual([triggerRunTable]);
-    expect(mockDb.select).not.toHaveBeenCalled();
   });
 
-  it("reschedules only the claimed cron Triggers whose runs it just failed", async () => {
+  it("reschedules every enabled cron Trigger left with a NULL nextRunAt and no running run", async () => {
     const { updates, selects } = captureUpdates(
-      [
-        { id: "run-1", triggerId: "t1" },
-        { id: "run-2", triggerId: "t1" },
-      ],
+      [],
       [cronTrigger({ cronExpression: "0 * * * *", timezone: "UTC" })],
     );
 
     await recoverStuckTriggers();
 
-    // Restricted to the orphans' own Triggers, once each: a NULL `nextRunAt`
-    // with no stale run behind it is a peer's live claim, not a stuck row.
+    // Not only the orphans' own Triggers: a claim never writes NULL any more,
+    // so a NULL with no live run behind it is a stranded row, not a peer's
+    // claim.
+    const unscheduled = (type: number, enabled: number) =>
+      `("trigger"."type" = $${type} and "trigger"."enabled" = $${enabled} and ` +
+      `"trigger"."next_run_at" is null and not exists (select 1 from ` +
+      `"trigger_run" where "trigger_run"."trigger_id" = "trigger"."id" and ` +
+      `"trigger_run"."status" = 'running'))`;
     const { sql: text, params } = render(selects[0]);
-    expect(text).toBe(
-      `("trigger"."id" in ($1) and "trigger"."type" = $2 and ` +
-        `"trigger"."enabled" = $3 and "trigger"."next_run_at" is null)`,
-    );
-    expect(params).toEqual(["t1", "cron", true]);
+    expect(text).toBe(unscheduled(1, 2));
+    expect(params).toEqual(["cron", true]);
 
-    const reschedule = updates[2];
+    const reschedule = updates[1];
     expect(reschedule.table).toBe(triggerTable);
     expect(reschedule.set.nextRunAt).toEqual(
       new Date("2026-08-30T13:00:00.000Z"),
     );
-    expect(render(reschedule.where).params).toEqual(["t1"]);
+    // Rechecked at write time, so an edit or a claim in between wins.
+    expect(render(reschedule.where).sql).toBe(
+      `("trigger"."id" = $1 and ${unscheduled(2, 3)})`,
+    );
   });
 
   it.each([
@@ -389,17 +391,11 @@ describe("recoverStuckTriggers", () => {
     ["a malformed config", { cronExpression: "" }, 1],
     ["an unparseable cron expression", { cronExpression: "not a cron" }, 1],
   ])("leaves %s unscheduled", async (_label, config, errors) => {
-    const { updates } = captureUpdates(
-      [{ id: "run-1", triggerId: "t1" }],
-      [cronTrigger(config)],
-    );
+    const { updates } = captureUpdates([], [cronTrigger(config)]);
 
     await recoverStuckTriggers();
 
-    expect(updates.map((c) => c.table)).toEqual([
-      triggerRunTable,
-      triggerRunEventTable,
-    ]);
+    expect(updates.map((c) => c.table)).toEqual([triggerRunTable]);
     expect(mockLogger.error).toHaveBeenCalledTimes(errors);
   });
 });
@@ -561,74 +557,146 @@ describe("scheduleAligned", () => {
 });
 
 /**
- * One scheduler tick, end to end through the lock: both sweeps, then the due
+ * Every query a tick makes, answered by `answer` from the table it reads or
+ * writes. A select's `fields` tell the running-run count apart, and `orderBy`
+ * tells the due-Trigger read apart from the recovery sweep's.
+ */
+type Query = {
+  op: "select" | "update";
+  table: unknown;
+  fields?: unknown;
+  ordered: boolean;
+};
+const tickDb = (answer: (q: Query) => unknown[]) => {
+  const chain = (q: Query): unknown => {
+    const self: object = new Proxy(
+      {},
+      {
+        get: (_, key) =>
+          key === "then"
+            ? (ok: (v: unknown) => unknown, ko: (e: unknown) => unknown) =>
+                Promise.resolve()
+                  .then(() => answer(q))
+                  .then(ok, ko)
+            : (arg: unknown) => {
+                if (key === "from") q.table = arg;
+                if (key === "orderBy") q.ordered = true;
+                return self;
+              },
+      },
+    );
+    return self;
+  };
+  mockDb.select.mockImplementation((fields?: unknown) =>
+    chain({ op: "select", table: undefined, fields, ordered: false }),
+  );
+  mockDb.update.mockImplementation((table: unknown) =>
+    chain({ op: "update", table, ordered: false }),
+  );
+};
+
+/**
+ * Scheduler ticks, end to end through the lock: both sweeps, then the due
  * cron Triggers.
  */
 describe("startScheduler", () => {
-  const due = [
-    { id: "t1", name: "A", agentId: "a1" },
-    { id: "t2", name: "B", agentId: "a1" },
-  ];
-  let pg: ReturnType<typeof fakePg>;
+  const weekly = {
+    id: "weekly",
+    name: "Weekly research",
+    agentId: "a1",
+    type: "cron",
+    config: { cronExpression: "0 9 * * 1", timezone: "UTC" },
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-30T12:00:59.000Z"));
+    vi.setSystemTime(new Date("2026-08-31T08:59:59.000Z"));
     // Each round trip takes a few ms, as a real one does.
     pg = fakePg({ roundTripMs: 5 });
-    mockFireTrigger.mockResolvedValue("succeeded");
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  /** Advance to the next minute and let the tick run through its unlock. */
-  const tick = async () => {
-    startScheduler();
-    await vi.advanceTimersByTimeAsync(1_000 + 10);
-    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
-    expect(pg.held.size).toBe(0);
+  let pg: ReturnType<typeof fakePg>;
+
+  /** The 09:00 tick finds `weekly` due and claims it; later ticks find none. */
+  const weeklyDueOnce = (onQuery: (q: Query) => void = () => {}) => {
+    let claimed = false;
+    tickDb((q) => {
+      onQuery(q);
+      if (q.op === "select" && q.fields) return [{ running: 0 }];
+      if (q.op === "select" && q.ordered) return claimed ? [] : [weekly];
+      if (q.op === "update" && q.table === triggerTable && !claimed) {
+        claimed = true;
+        return [weekly];
+      }
+      return [];
+    });
   };
 
-  it("claims every due Trigger before firing any of them", async () => {
-    const { updates } = captureUpdates([], due);
-    const claimedBeforeFire: boolean[] = [];
-    mockFireTrigger.mockImplementation(() => {
-      claimedBeforeFire.push(updates.some((u) => u.table === triggerTable));
-      return Promise.resolve("succeeded");
+  // #1158: the tick used to await every run it started while holding the
+  // lock, so one long Cron run stopped both sweeps, on every instance, until
+  // it ended.
+  it("sweeps on every tick, on any instance, while a 45-minute Cron run is going", async () => {
+    const sweepTimes: string[] = [];
+    weeklyDueOnce((q) => {
+      if (q.op === "update" && q.table === chatTable) {
+        sweepTimes.push(new Date().toISOString().slice(11, 16));
+      }
     });
+    mockFireTrigger.mockImplementation(
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve("ran"), 45 * 60_000)),
+    );
 
-    await tick();
+    startScheduler(); // backend instance A
+    startScheduler(); // backend instance B, sharing the database lock
 
-    const claim = updates.find((u) => u.table === triggerTable)!;
-    // NULL is the claim: `nextRunAt <= NOW()` is false for it, so no later
-    // tick (on this instance or a peer) can pick the Trigger up again.
-    expect(claim.set).toEqual({ nextRunAt: null });
-    expect(render(claim.where).params).toEqual(["t1", "t2"]);
-    expect(mockFireTrigger.mock.calls).toEqual([
-      [due[0], { kind: "cron" }],
-      [due[1], { kind: "cron" }],
-    ]);
-    expect(claimedBeforeFire).toEqual([true, true]);
+    await vi.advanceTimersByTimeAsync(1_050); // through the 09:00 tick
+    expect(mockFireTrigger).toHaveBeenCalledTimes(1);
+    expect(sweepTimes).toEqual(["09:00"]);
+
+    await vi.advanceTimersByTimeAsync(30 * 60_000); // to 09:30
+    // One sweep a minute: whichever instance wins each tick runs it.
+    expect(sweepTimes).toEqual(
+      Array.from({ length: 31 }, (_, i) => `09:${String(i).padStart(2, "0")}`),
+    );
+    expect(mockFireTrigger).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the lock while a run it started never finishes", async () => {
+    weeklyDueOnce();
+    mockFireTrigger.mockReturnValue(new Promise(() => {}));
+
+    startScheduler();
+    await vi.advanceTimersByTimeAsync(1_050);
+
+    expect(mockFireTrigger).toHaveBeenCalledTimes(1);
+    expect(pg.held.size).toBe(0);
+    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
   });
 
   it("still sweeps Chats and fires due Triggers when the Trigger sweep fails", async () => {
-    const { updates } = captureUpdates([], due);
-    const update = mockDb.update.getMockImplementation()!;
-    mockDb.update.mockImplementation((table: unknown) => {
-      if (table === triggerRunTable) throw new Error("sweep down");
-      return update(table);
+    const tables: unknown[] = [];
+    weeklyDueOnce((q) => {
+      if (q.op === "update" && q.table === triggerRunTable) {
+        throw new Error("sweep down");
+      }
+      if (q.op === "update") tables.push(q.table);
     });
+    mockFireTrigger.mockResolvedValue("ran");
 
-    await tick();
+    startScheduler();
+    await vi.advanceTimersByTimeAsync(1_050);
 
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.anything(),
       "Trigger recovery sweep failed",
     );
-    expect(updates.map((u) => u.table)).toEqual([chatTable, triggerTable]);
-    expect(mockFireTrigger).toHaveBeenCalledTimes(2);
+    expect(tables).toEqual([chatTable, triggerTable]);
+    expect(mockFireTrigger).toHaveBeenCalledTimes(1);
   });
 });

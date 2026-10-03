@@ -162,7 +162,7 @@ A typed tile on a **Dashboard** — metric, text/markdown, image, Embed, weather
 _Avoid_: tile, panel, component.
 
 **Trigger**:
-A saved automation that runs an Agent unattended against a fixed Instruction — no Chat, nobody watching. One of two shapes: a **Cron Trigger**, firing on a schedule evaluated in the Trigger's own timezone, or an **Event Trigger**, firing when a subscribed **Webhook event** occurs in the Workspace, debounced so a burst coalesces into one run, and capped per entity so no Event Trigger runs without bound against one Card or Notification. The event's payload arrives above the Instruction, so the Instruction can point at it. An Agent's own writes never fire that Agent's own Event Trigger — including writes made on its behalf by a Sub-Agent, at any depth.
+A saved automation that runs an Agent unattended against a fixed Instruction — no Chat, nobody watching. One of two shapes: a **Cron Trigger**, firing on a schedule evaluated in the Trigger's own timezone and never overlapping itself — a run that comes due while its last run is still live is skipped, not queued — or an **Event Trigger**, firing when a subscribed **Webhook event** occurs in the Workspace, debounced so a burst coalesces into one run, and capped per entity so no Event Trigger runs without bound against one Card or Notification. The event's payload arrives above the Instruction, so the Instruction can point at it. An Agent's own writes never fire that Agent's own Event Trigger — including writes made on its behalf by a Sub-Agent, at any depth.
 _Avoid_: automation, job, scheduler, webhook (that delivers events out; it runs nothing).
 
 **Trigger run**:

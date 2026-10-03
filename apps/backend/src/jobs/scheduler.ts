@@ -1,4 +1,16 @@
-import { and, eq, isNull, lt, lte, or, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  isNull,
+  lt,
+  lte,
+  not,
+  or,
+  inArray,
+  sql,
+} from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   chat as chatTable,
@@ -7,7 +19,12 @@ import {
   triggerRunEvent as triggerRunEventTable,
 } from "../db/schema.ts";
 import { fireTrigger } from "../services/trigger-firing.ts";
-import { narrowTriggerConfig, nextCronRunAt } from "../services/trigger.ts";
+import {
+  narrowTriggerConfig,
+  nextCronRunAt,
+  type TriggerRow,
+} from "../services/trigger.ts";
+import type { CronTriggerConfig } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { ADVISORY_LOCK_IDS } from "../db/advisory-lock.ts";
 import { chatPerRunTimeoutMs } from "../runs/chat-timeouts.ts";
@@ -18,32 +35,11 @@ const SCHEDULER_INTERVAL_MS = parseInt(
   process.env.SCHEDULE_SCHEDULER_INTERVAL_MS || "60000",
 );
 
-// Maximum concurrent trigger executions
+// Maximum Cron Trigger runs in flight at once, across every instance sharing
+// the database. Event Trigger runs are not counted.
 const MAX_CONCURRENT_TRIGGERS = parseInt(
   process.env.SCHEDULE_MAX_CONCURRENT || "5",
 );
-
-/**
- * Runs items in parallel with a concurrency limit.
- * Uses a semaphore-style approach to ensure at most `limit` promises run at once.
- */
-async function withConcurrencyLimit<T>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<void>,
-): Promise<void> {
-  const executing: Promise<void>[] = [];
-  for (const item of items) {
-    const promise = fn(item).finally(() => {
-      void executing.splice(executing.indexOf(promise), 1);
-    });
-    executing.push(promise);
-    if (executing.length >= limit) {
-      await Promise.race(executing);
-    }
-  }
-  await Promise.all(executing);
-}
 
 /**
  * Attempts to acquire an advisory lock and runs the given function if successful.
@@ -161,13 +157,117 @@ export function scheduleAligned(
 }
 
 /**
+ * True while the Trigger has a `running` run of its own. Any `running` row
+ * counts: the stale-run sweep runs first in the same tick, so a row abandoned
+ * by a crash has already been failed.
+ */
+const hasRunningRun = sql`exists (select 1 from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id} and ${triggerRunTable.status} = 'running')`;
+
+/** The row's narrowed cron config, or `null` — logged — when it has none. */
+const cronConfigOrNull = (job: TriggerRow): CronTriggerConfig | null => {
+  try {
+    const typed = narrowTriggerConfig(job);
+    if (typed.type === "cron") return typed.config;
+  } catch (error) {
+    logger.error(
+      { triggerId: job.id, error },
+      "Skipped a malformed cron trigger",
+    );
+  }
+  return null;
+};
+
+/**
+ * Starts the due cron Triggers, oldest `nextRunAt` first, while slots remain
+ * under the cluster-wide cap, and returns without waiting for their runs.
+ *
+ * Each Trigger is claimed by its own conditional update, which writes its next
+ * schedule (a one-off is disabled instead) and matches only while the Trigger
+ * is enabled, due and not already running. `RETURNING` hands the row to the
+ * one process whose update matched, so a Trigger is fired once however many
+ * ticks race for it, and a crash after the claim can never leave it without a
+ * schedule. The count-then-claim relies on the scheduler lock: no peer claims
+ * between the two.
+ *
+ * A due Trigger still running from its last firing is skipped — its
+ * `nextRunAt` moves to the next slot — and takes no slot. One left over for
+ * want of a slot stays due, and a later tick claims it.
+ *
+ * The runs are observed only through `processSingleTrigger`'s logging;
+ * `fireTrigger` never rejects, so nothing is left unhandled.
+ */
+export async function processDueTriggers(): Promise<void> {
+  const now = new Date();
+
+  const [{ running }] = await db
+    .select({ running: count() })
+    .from(triggerRunTable)
+    .innerJoin(triggerTable, eq(triggerTable.id, triggerRunTable.triggerId))
+    .where(
+      and(eq(triggerRunTable.status, "running"), eq(triggerTable.type, "cron")),
+    );
+  let slots = MAX_CONCURRENT_TRIGGERS - running;
+
+  const isDue = and(
+    eq(triggerTable.type, "cron"),
+    eq(triggerTable.enabled, true),
+    lte(triggerTable.nextRunAt, now),
+  );
+  const due = await db
+    .select()
+    .from(triggerTable)
+    .where(isDue)
+    .orderBy(asc(triggerTable.nextRunAt));
+
+  for (const job of due) {
+    const config = cronConfigOrNull(job);
+    if (!config) continue;
+    const nextRunAt = nextCronRunAt(config);
+    if (!nextRunAt) {
+      logger.error(
+        { triggerId: job.id, cronExpression: config.cronExpression },
+        "Failed to compute next run for cron trigger; left unclaimed",
+      );
+      continue;
+    }
+
+    if (slots > 0) {
+      const [claimed] = await db
+        .update(triggerTable)
+        .set(
+          config.isOneOff
+            ? { enabled: false, nextRunAt: null, updatedAt: now }
+            : { nextRunAt, updatedAt: now },
+        )
+        .where(and(eq(triggerTable.id, job.id), isDue, not(hasRunningRun)))
+        .returning();
+      if (claimed) {
+        slots--;
+        void processSingleTrigger(claimed);
+        continue;
+      }
+    }
+
+    const skipped = await db
+      .update(triggerTable)
+      .set({ nextRunAt, updatedAt: now })
+      .where(and(eq(triggerTable.id, job.id), isDue, hasRunningRun))
+      .returning({ id: triggerTable.id });
+    if (skipped.length > 0) {
+      logger.info(
+        { triggerId: job.id, nextRunAt: nextRunAt.toISOString() },
+        "Skipped a cron firing: its previous run is still going",
+      );
+    }
+  }
+}
+
+/**
  * Fires one claimed cron Trigger. Firing owns the run and every bit of
  * bookkeeping after it, and never rejects, so one Trigger's failure cannot
  * block the others.
  */
-async function processSingleTrigger(
-  job: typeof triggerTable.$inferSelect,
-): Promise<void> {
+async function processSingleTrigger(job: TriggerRow): Promise<void> {
   logger.info(
     { triggerId: job.id, name: job.name, agentId: job.agentId },
     "Processing cron trigger",
@@ -176,50 +276,6 @@ async function processSingleTrigger(
   logger.info(
     { triggerId: job.id, name: job.name, outcome },
     "Cron trigger processed",
-  );
-}
-
-/**
- * Processes all due cron triggers.
- * Queries for triggers where type = 'cron' AND enabled = true AND nextRunAt <= NOW(),
- * claims them, and fires each one with controlled concurrency.
- */
-async function processDueTriggers(): Promise<void> {
-  const now = new Date();
-
-  // Find all due cron triggers
-  const dueJobs = await db
-    .select()
-    .from(triggerTable)
-    .where(
-      and(
-        eq(triggerTable.type, "cron"),
-        eq(triggerTable.enabled, true),
-        lte(triggerTable.nextRunAt, now),
-      ),
-    );
-
-  if (dueJobs.length === 0) {
-    logger.debug("No cron triggers due for execution");
-    return;
-  }
-
-  logger.info(
-    `Found ${dueJobs.length} cron trigger(s) due, max concurrent: ${MAX_CONCURRENT_TRIGGERS}`,
-  );
-
-  // Immediately claim all due jobs by nulling nextRunAt to prevent re-pickup
-  const dueJobIds = dueJobs.map((j) => j.id);
-  await db
-    .update(triggerTable)
-    .set({ nextRunAt: null })
-    .where(inArray(triggerTable.id, dueJobIds));
-
-  // Process triggers in parallel with controlled concurrency
-  await withConcurrencyLimit(
-    dueJobs,
-    MAX_CONCURRENT_TRIGGERS,
-    processSingleTrigger,
   );
 }
 
@@ -264,15 +320,9 @@ export function stuckTriggerCutoff(): Date {
 /**
  * Periodic recovery for state left behind by a server crash mid-execution.
  *
- * Two failure modes both manifest as "trigger never runs again":
+ * Two failure modes:
  *
- * 1. `processDueTriggers` claims a due trigger by setting `nextRunAt = NULL`
- *    before firing it. If the process dies before the firing's bookkeeping
- *    writes the next schedule, the trigger row is permanently stuck — the
- *    scheduler query `nextRunAt <= NOW()` is false for NULL, so the trigger
- *    is invisible on every subsequent tick.
- *
- * 2. `TriggerSink.onStart` writes a `trigger_run` row with status `running`.
+ * 1. `TriggerSink.onStart` writes a `trigger_run` row with status `running`.
  *    A crash leaves that row dangling, which clutters the UI and gives no
  *    indication the run failed. Its Run events (#647) dangle with it: whatever
  *    was open when the process died is still `running`, so the sweep closes
@@ -280,18 +330,22 @@ export function stuckTriggerCutoff(): Date {
  *    nobody saw them end. The detail page renders that as an unknown duration
  *    rather than a bar drawn to "now".
  *
+ * 2. A recurring cron Trigger with `nextRunAt = NULL` is invisible to the
+ *    scheduler's `nextRunAt <= NOW()`, so it never fires again. The claim now
+ *    writes the next schedule rather than NULL, but rows stranded by the old
+ *    NULL claim remain, so every enabled recurring cron Trigger with a NULL
+ *    `nextRunAt` and no `running` run is put back on its cadence. One with a
+ *    `running` run is left alone; it is repaired once that run ends or is
+ *    failed below.
+ *
  * Critical horizontal-scaling note: a `running` row may still be a peer
- * instance's live work — an Event Trigger run executes in the process that
- * dispatched it, outside the scheduler lock. We must NOT touch rows younger
- * than {@link stuckTriggerCutoff} (`TRIGGER_PER_RUN_TIMEOUT_MS` +
+ * instance's live work — a Trigger run executes in the process that started
+ * it, outside the scheduler lock. We must NOT touch rows younger than
+ * {@link stuckTriggerCutoff} (`TRIGGER_PER_RUN_TIMEOUT_MS` +
  * `RECOVERY_STALE_BUFFER_MS`), because a live instance would have aborted any
  * run older than that via its own per-run timeout. Recovery is gated on that
  * age threshold; the advisory lock only serializes concurrent recoveries, it
  * does not prevent racing live runs.
- *
- * Same reason for `nextRunAt`: we only recompute it for triggers whose latest
- * `running` row we just failed. If `nextRunAt IS NULL` but no run row crossed
- * the staleness threshold, a peer is currently executing — leave it alone.
  */
 export async function recoverStuckTriggers(): Promise<void> {
   const cutoff = stuckTriggerCutoff();
@@ -316,66 +370,44 @@ export async function recoverStuckTriggers(): Promise<void> {
       triggerId: triggerRunTable.triggerId,
     });
 
-  if (orphaned.length === 0) return;
-
-  // No terminal run leaves an open event. The sweep is one of the two paths
-  // that end a run without ending its events (cancellation is the other, and
-  // the sink covers that one).
-  await db
-    .update(triggerRunEventTable)
-    .set({ status: "error" })
-    .where(
-      and(
-        inArray(
-          triggerRunEventTable.runId,
-          orphaned.map((r) => r.id),
+  if (orphaned.length > 0) {
+    // No terminal run leaves an open event. The sweep is one of the two paths
+    // that end a run without ending its events (cancellation is the other, and
+    // the sink covers that one).
+    await db
+      .update(triggerRunEventTable)
+      .set({ status: "error" })
+      .where(
+        and(
+          inArray(
+            triggerRunEventTable.runId,
+            orphaned.map((r) => r.id),
+          ),
+          eq(triggerRunEventTable.status, "running"),
         ),
-        eq(triggerRunEventTable.status, "running"),
-      ),
+      );
+
+    logger.warn(
+      { count: orphaned.length, cutoff: cutoff.toISOString() },
+      "Marked orphaned trigger runs as failed (older than per-run timeout)",
     );
+  }
 
-  logger.warn(
-    { count: orphaned.length, cutoff: cutoff.toISOString() },
-    "Marked orphaned trigger runs as failed (older than per-run timeout)",
+  const unscheduled = and(
+    eq(triggerTable.type, "cron"),
+    eq(triggerTable.enabled, true),
+    isNull(triggerTable.nextRunAt),
+    not(hasRunningRun),
   );
-
-  // For each trigger whose run we just failed: if its nextRunAt is NULL
-  // (i.e. it was claimed but the schedule was never re-written), recompute
-  // it. Restricting the recompute to these triggers — instead of every
-  // NULL-nextRunAt trigger — ensures we don't reset the schedule for a
-  // trigger that a peer instance has currently claimed.
-  const orphanedTriggerIds = Array.from(
-    new Set(orphaned.map((r) => r.triggerId)),
-  );
-
-  const stuck = await db
-    .select()
-    .from(triggerTable)
-    .where(
-      and(
-        inArray(triggerTable.id, orphanedTriggerIds),
-        eq(triggerTable.type, "cron"),
-        eq(triggerTable.enabled, true),
-        isNull(triggerTable.nextRunAt),
-      ),
-    );
+  const stuck = await db.select().from(triggerTable).where(unscheduled);
 
   for (const job of stuck) {
-    let typed: ReturnType<typeof narrowTriggerConfig>;
-    try {
-      typed = narrowTriggerConfig(job);
-    } catch (error) {
-      logger.error(
-        { triggerId: job.id, error },
-        "Skipped a malformed trigger during recovery",
-      );
-      continue;
-    }
-    if (typed.type !== "cron" || typed.config.isOneOff) continue;
-    const nextRunAt = nextCronRunAt(typed.config);
+    const config = cronConfigOrNull(job);
+    if (!config || config.isOneOff) continue;
+    const nextRunAt = nextCronRunAt(config);
     if (!nextRunAt) {
       logger.error(
-        { triggerId: job.id, cronExpression: typed.config.cronExpression },
+        { triggerId: job.id, cronExpression: config.cronExpression },
         "Failed to recompute nextRunAt during recovery (invalid cron expression?)",
       );
       continue;
@@ -383,14 +415,14 @@ export async function recoverStuckTriggers(): Promise<void> {
     await db
       .update(triggerTable)
       .set({ nextRunAt, updatedAt: new Date() })
-      .where(eq(triggerTable.id, job.id));
+      .where(and(eq(triggerTable.id, job.id), unscheduled));
     logger.warn(
       {
         triggerId: job.id,
         name: job.name,
         nextRunAt: nextRunAt.toISOString(),
       },
-      "Recovered cron trigger with NULL nextRunAt after orphan sweep",
+      "Recovered cron trigger with NULL nextRunAt",
     );
   }
 }

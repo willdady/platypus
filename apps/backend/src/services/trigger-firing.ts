@@ -21,12 +21,7 @@ import {
   shouldSuppressTriggerRun,
   suppressTriggerRun,
 } from "./trigger-breaker.ts";
-import {
-  narrowTriggerConfig,
-  nextCronRunAt,
-  type TriggerRow,
-  type TypedTriggerConfig,
-} from "./trigger.ts";
+import type { TriggerRow } from "./trigger.ts";
 import type { RunInput } from "../runs/types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { WebhookEventPayload } from "@platypus/schemas";
@@ -36,8 +31,7 @@ import type { WebhookEventPayload } from "@platypus/schemas";
  *
  * A firing is the whole of what happens when a Trigger goes off — the
  * run-rate breaker, the Agent run under the Trigger timeouts, and the
- * bookkeeping every exit owes the row: `lastRunAt`, the next schedule (or a
- * one-off's self-disable), and run retention. The scheduler and event dispatch
+ * bookkeeping every exit owes the row: `lastRunAt` and run retention. The scheduler and event dispatch
  * decide *when* a Trigger fires; neither knows what firing involves.
  *
  * The bookkeeping used to live beside each caller, on the line after the run,
@@ -251,27 +245,16 @@ const runTrigger = async (
   );
 };
 
-/** The row's narrowed config, or `null` — logged — when it is malformed. */
-const narrowOrNull = (row: TriggerRow): TypedTriggerConfig | null => {
-  try {
-    return narrowTriggerConfig(row);
-  } catch (error) {
-    logger.error(
-      { triggerId: row.id, error: errorMessage(error) },
-      "Trigger row is malformed; its schedule was not updated",
-    );
-    return null;
-  }
-};
-
 /**
  * What every firing that got as far as a run owes its Trigger, whatever the
- * run's outcome: `lastRunAt` at completion, the next schedule, and retention.
+ * run's outcome: `lastRunAt` at completion, and retention. The schedule is not
+ * written here: the scheduler's claim already wrote a cron Trigger's next run
+ * (or disabled a one-off) before the run started.
  *
- * Reads the row as it is now rather than the snapshot the run was fired from,
- * and never writes `enabled: true`: a Workspace Owner who disables or edits a
- * Trigger mid-run keeps what they set. A row deleted mid-run is simply gone.
- * A failure here is logged and swallowed — the run already happened.
+ * Reads the row as it is now rather than the snapshot the run was fired from:
+ * a Workspace Owner who disables or edits a Trigger mid-run keeps what they
+ * set. A row deleted mid-run is simply gone. A failure here is logged and
+ * swallowed — the run already happened.
  */
 const recordFiring = async (triggerId: string): Promise<void> => {
   try {
@@ -286,44 +269,16 @@ const recordFiring = async (triggerId: string): Promise<void> => {
     }
 
     const now = new Date();
-    const typed = narrowOrNull(current);
-    const schedule: Partial<TriggerRow> = {};
-    if (!typed) {
-      // A malformed row gets no schedule written, but still its `lastRunAt`
-      // and retention: a run happened, and its history must stay bounded.
-    } else if (typed.type === "cron" && typed.config.isOneOff) {
-      // A one-off has had its one run, whether or not it succeeded — retrying
-      // a failed one every tick would be an unbounded loop.
-      schedule.enabled = false;
-      schedule.nextRunAt = null;
-    } else if (typed.type === "cron") {
-      schedule.nextRunAt = nextCronRunAt(typed.config);
-      if (!schedule.nextRunAt) {
-        logger.error(
-          { triggerId, cronExpression: typed.config.cronExpression },
-          "Failed to compute next run for trigger",
-        );
-      }
-    }
-
     await db
       .update(triggerTable)
-      .set({ lastRunAt: now, updatedAt: now, ...schedule })
+      .set({ lastRunAt: now, updatedAt: now })
       .where(eq(triggerTable.id, triggerId));
 
     // The newest maxRunsToKeep rows, plus everything inside the run-rate
     // breaker's window so its count is never pruned out from under it.
     await retainTriggerRuns(triggerId, current.maxRunsToKeep);
 
-    logger.info(
-      {
-        triggerId,
-        type: current.type,
-        enabled: schedule.enabled ?? current.enabled,
-        nextRunAt: schedule.nextRunAt?.toISOString(),
-      },
-      "Updated trigger after run",
-    );
+    logger.info({ triggerId, type: current.type }, "Updated trigger after run");
   } catch (error) {
     logger.error(
       { triggerId, error: errorMessage(error) },
