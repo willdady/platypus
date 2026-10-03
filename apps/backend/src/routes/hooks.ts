@@ -2,6 +2,7 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
+import { errorMessage } from "../utils/error-message.ts";
 import {
   acceptInboundCall,
   authenticateInboundCall,
@@ -85,7 +86,7 @@ const loadTargetForLog = async (
     logger.error(
       {
         triggerId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       },
       "Failed to look up the inbound trigger an oversized call named",
     );

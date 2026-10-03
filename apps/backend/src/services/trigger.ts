@@ -17,6 +17,7 @@ import { NotFoundError, ValidationError } from "../errors.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 import {
   generateInboundToken,
+  inboundTokenStatus,
   issuedTokenFields,
 } from "./inbound-trigger-token.ts";
 import { resolveScoped } from "./scoped-resource.ts";
@@ -217,16 +218,18 @@ const INBOUND_ONLY_IN_UI =
 
 /**
  * A Trigger row as either surface returns it: without the token's hash or the
- * notice bookkeeping, and with whether a token is currently issued. The one
+ * notice bookkeeping, and with whether a token is issued and how it stands. The one
  * projection both surfaces use, so a hash cannot reach a response or a Tool
  * result by a caller forgetting to strip it.
  */
 export const toPublicTrigger = (row: TriggerRow) => {
   const { tokenHash, tokenNotice: _tokenNotice, ...rest } = row;
-  return { ...rest, hasToken: tokenHash != null };
+  return {
+    ...rest,
+    hasToken: tokenHash != null,
+    tokenStatus: inboundTokenStatus(row),
+  };
 };
-
-export type PublicTrigger = ReturnType<typeof toPublicTrigger>;
 
 /** Throws `ValidationError` unless the Agent is usable in this Workspace. */
 const requireUsableAgent = async (
@@ -387,7 +390,6 @@ export async function updateTrigger(
     if (fields.config !== undefined) {
       updateData.config = parseInboundConfig(fields.config);
     }
-    updateData.nextRunAt = null;
   } else if (effectiveType === "cron") {
     if (fields.config !== undefined || fields.type !== undefined) {
       const effectiveConfigInput = fields.config ?? existing.config;

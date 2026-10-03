@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   INBOUND_TOKEN_STATUS_LABELS,
   INBOUND_TOKEN_STATUS_VARIANTS,
-  inboundTokenStatus,
 } from "@/lib/inbound-trigger";
 import {
   Item,
@@ -73,7 +72,7 @@ const describeSchedule = (cronExpression: string, timezone: string): string => {
   }
 };
 
-const TYPE_LABELS: Record<TriggerType, string> = {
+export const TRIGGER_TYPE_LABELS: Record<TriggerType, string> = {
   cron: "Cron",
   event: "Event",
   inbound: "Inbound",
@@ -95,16 +94,10 @@ export const TriggerCardsSkeleton = ({ cards }: { cards?: number }) => (
 );
 
 /** An Inbound Trigger's line: what it takes, and how its token stands. */
-const InboundSummary = ({
-  trigger,
-  now,
-}: {
-  trigger: Trigger;
-  now: number;
-}) => {
+const InboundSummary = ({ trigger }: { trigger: Trigger }) => {
   const config = trigger.config as InboundTriggerConfig;
-  const inputs = config.inputs ?? [];
-  const status = inboundTokenStatus(trigger, now);
+  const inputs = config.inputs;
+  const status = trigger.tokenStatus ?? "none";
   return (
     <span className="flex items-center gap-1 flex-wrap">
       <Webhook className="h-3 w-3" />
@@ -158,8 +151,6 @@ export const TriggerList = ({
   const routes = workspaceRoutes(orgId, workspaceId);
   const [triggerToToggle, setTriggerToToggle] = useState<Trigger | null>(null);
   const [isToggling, setIsToggling] = useState(false);
-  // One reading of the clock per mount, for each token's expiry standing.
-  const [now] = useState(() => Date.now());
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -244,7 +235,7 @@ export const TriggerList = ({
                   <div className="flex items-center gap-2">
                     <ItemTitle>{trigger.name}</ItemTitle>
                     <Badge variant="outline" className="text-xs">
-                      {TYPE_LABELS[trigger.type] ?? trigger.type}
+                      {TRIGGER_TYPE_LABELS[trigger.type] ?? trigger.type}
                     </Badge>
                     {trigger.type === "cron" &&
                       (trigger.config as CronTriggerConfig).isOneOff && (
@@ -295,7 +286,7 @@ export const TriggerList = ({
                         )}
                       </>
                     ) : trigger.type === "inbound" ? (
-                      <InboundSummary trigger={trigger} now={now} />
+                      <InboundSummary trigger={trigger} />
                     ) : (
                       <span className="flex items-center gap-1 flex-wrap">
                         <Zap className="h-3 w-3" />

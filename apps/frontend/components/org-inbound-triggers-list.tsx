@@ -25,11 +25,11 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
+import type { InboundTokenStatus } from "@platypus/schemas";
 import { formatDate, formatDateTime } from "@/lib/format-date";
 import {
   INBOUND_TOKEN_STATUS_LABELS,
   INBOUND_TOKEN_STATUS_VARIANTS,
-  type InboundTokenStatus,
 } from "@/lib/inbound-trigger";
 
 /**

@@ -9,6 +9,7 @@ import {
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
+import { errorMessage } from "../utils/error-message.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
 import { triggerTimeouts } from "../runs/trigger-timeouts.ts";
@@ -162,9 +163,6 @@ export const fireTrigger = async (
   await recordFiring(trigger.id);
   return outcome;
 };
-
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 /**
  * Ends an inbound run whose firing threw before its Drive adopted the row, so

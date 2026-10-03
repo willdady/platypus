@@ -140,7 +140,7 @@ describe("createTriggerTools", () => {
       } as never);
 
       expect(await callTool(tools.getTrigger, { triggerId: "t1" })).toEqual({
-        trigger: { ...trigger, hasToken: true },
+        trigger: { ...trigger, hasToken: true, tokenStatus: "none" },
       });
       expect(getTrigger).toHaveBeenCalledWith(ctx, "t1");
     });
@@ -174,7 +174,7 @@ describe("createTriggerTools", () => {
         }),
       ).toEqual({
         success: true,
-        trigger: { id: "t9", hasToken: false },
+        trigger: { id: "t9", hasToken: false, tokenStatus: "none" },
         url: "http://localhost:3000/org-1/workspace/ws-1/triggers/t9",
       });
       expect(createTrigger).toHaveBeenCalledWith(ctx, {
@@ -219,7 +219,7 @@ describe("createTriggerTools", () => {
         }),
       ).toEqual({
         success: true,
-        trigger: { id: "t1", hasToken: false },
+        trigger: { id: "t1", hasToken: false, tokenStatus: "none" },
         url: "http://localhost:3000/org-1/workspace/ws-1/triggers/t1",
       });
       expect(updateTrigger).toHaveBeenCalledWith(
