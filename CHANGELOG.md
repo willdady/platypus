@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.2](https://github.com/willdady/platypus/compare/v3.15.1...v3.15.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* **frontend:** create the better-auth client once instead of on every render attempt ([#1218](https://github.com/willdady/platypus/issues/1218)) ([59738be](https://github.com/willdady/platypus/commit/59738be06e5609e2ed9ac95455bc3b87d29ab5b2))
+
 ## [3.15.1](https://github.com/willdady/platypus/compare/v3.15.0...v3.15.1) (2026-10-03)
 
 
