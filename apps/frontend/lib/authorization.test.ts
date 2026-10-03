@@ -8,10 +8,10 @@ import {
   canConfigureWorkspaceResource,
   canCreateWorkspace,
   canListOrgMembers,
-  canOpenOrgSettings,
   canManageOrgSharedResource,
   canManageSharedResource,
   canManageWorkspaceDelegation,
+  canOpenOrgSettings,
   canSendChatMessages,
   isOperator,
   resolveActor,
@@ -125,6 +125,7 @@ describe.each([
   ["canListOrgMembers", canListOrgMembers],
   ["canCreateWorkspace", canCreateWorkspace],
   ["canManageWorkspaceDelegation", canManageWorkspaceDelegation],
+  ["canOpenOrgSettings", canOpenOrgSettings],
 ] as const)("%s — Org-Admin-tier, no Workspace requirement", (_name, fn) => {
   it("the Operator is allowed", () => {
     expect(fn("operator")).toBe(true);
@@ -150,17 +151,6 @@ describe("canSendChatMessages", () => {
 
   it("a non-owner is refused, regardless of admin tier", () => {
     expect(canSendChatMessages(false)).toBe(false);
-  });
-});
-
-describe("canOpenOrgSettings", () => {
-  it.each([
-    ["operator", null, true],
-    ["org-admin", "admin", true],
-    ["workspace-owner", "member", false],
-    ["org-member", "member", false],
-  ] as const)("%s (role %s) → %s", (actor, role, expected) => {
-    expect(canOpenOrgSettings(actor, role)).toBe(expected);
   });
 });
 

@@ -232,6 +232,44 @@ describe("AppSidebar workspace switcher", () => {
     });
     expect(item !== null).toBe(shown);
   });
+
+  describe("Organization settings item", () => {
+    beforeEach(() => {
+      vi.useRealTimers();
+      installRadixPointerPolyfills();
+    });
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it.each<Actor>(["operator", "org-admin"])(
+      "links the %s to the Organization's settings",
+      (actor) => {
+        auth.actor = actor;
+        seedHeader();
+        renderSidebar();
+
+        const item = within(openSwitcher()).getByRole("menuitem", {
+          name: "Organization settings",
+        });
+        expect(item).toHaveAttribute("href", "/org1/settings");
+      },
+    );
+
+    it.each<Actor>(["workspace-owner", "org-member"])(
+      "hides it from the %s",
+      (actor) => {
+        auth.actor = actor;
+        seedHeader();
+        renderSidebar();
+
+        expect(
+          within(openSwitcher()).queryByRole("menuitem", {
+            name: "Organization settings",
+          }),
+        ).not.toBeInTheDocument();
+      },
+    );
+  });
 });
 
 describe("AppSidebar chat actions", () => {

@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner";
 import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { canCreateWorkspace } from "@/lib/authorization";
+import { canCreateWorkspace, canOpenOrgSettings } from "@/lib/authorization";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   Sidebar,
@@ -63,6 +63,7 @@ import {
   ClockFading,
   CalendarDays,
   ArrowLeftRight,
+  Settings,
   Search,
   Loader2,
   X,
@@ -400,6 +401,16 @@ export function AppSidebar() {
                         <ArrowLeftRight /> Switch org
                       </Link>
                     </DropdownMenuItem>
+                    {canOpenOrgSettings(actor) && (
+                      <DropdownMenuItem asChild>
+                        <Link
+                          className="cursor-pointer"
+                          href={org.settings.root}
+                        >
+                          <Settings /> Organization settings
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -23,12 +23,9 @@ import { orgRoutes } from "@/lib/routes";
 // fallback alike, so switching Organizations keeps the page up instead of
 // swapping it for a placeholder shape for a frame.
 export function OrgHome({ orgId }: { orgId: string }) {
-  const { actor, orgMembership, isAuthLoading } = useAuth();
+  const { actor, isAuthLoading } = useAuth();
   const canCreate = canCreateWorkspace(actor);
-  const canOpenSettings = canOpenOrgSettings(
-    actor,
-    orgMembership?.role ?? null,
-  );
+  const canOpenSettings = canOpenOrgSettings(actor);
   const routes = orgRoutes(orgId);
 
   const { data: workspacesData, error: workspacesError } = useScopedSWR<{
