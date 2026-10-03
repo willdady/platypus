@@ -120,18 +120,22 @@ export function ProtectedRoute({
   } = useAuth();
   const router = useRouter();
 
+  // With no user, a failed read means the session was never read, not that
+  // there is none.
   useEffect(() => {
-    if (!isAuthLoading && !user) {
+    if (!isAuthLoading && !user && !accessReadError) {
       router.push("/sign-in");
     }
-  }, [user, isAuthLoading, router]);
+  }, [user, isAuthLoading, accessReadError, router]);
 
   if (isAuthLoading) {
     return <>{children}</>;
   }
 
   if (!user) {
-    return null;
+    return accessReadError ? (
+      <AccessReadFailed error={accessReadError} onRetry={retryAccessReads} />
+    ) : null;
   }
 
   if (requireSuperAdmin && !isOperator(actor)) {

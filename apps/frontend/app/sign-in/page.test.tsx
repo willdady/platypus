@@ -5,6 +5,7 @@ import SignInPage from "./page";
 
 const mockSignInEmail = vi.fn();
 const mockPush = vi.fn();
+const auth = vi.hoisted(() => ({ user: null as { id: string } | null }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
@@ -13,6 +14,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://backend.test",
   useAuth: () => ({
+    ...auth,
     authClient: {
       signIn: {
         email: mockSignInEmail,
@@ -146,5 +148,30 @@ describe("SignInPage form", () => {
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  });
+});
+
+// A reader who lands here still signed in — sent by a failed session read
+// before #1204 — is taken back into the app rather than shown the form.
+describe("SignInPage with a session", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubSignUpAvailability(true);
+    auth.user = null;
+  });
+
+  it("enters the app when already signed in", () => {
+    auth.user = { id: "u1" };
+    renderPage();
+
+    expect(mockPush).toHaveBeenCalledWith("/");
+  });
+
+  // Also what a failed session read leaves: no user to go on.
+  it("shows the form while signed out", () => {
+    renderPage();
+
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 });

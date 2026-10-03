@@ -50,6 +50,19 @@ describe("ProtectedRoute", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  // A session read that never landed says nothing about the session (#1204).
+  it("offers a retry, not sign-in, when the session read fails", () => {
+    Object.assign(auth, { user: null, accessReadError: { status: 500 } });
+    renderGate({});
+
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getByText("Couldn't load")).toBeInTheDocument();
+    expect(screen.queryByText("Secret page")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(auth.retryAccessReads).toHaveBeenCalled();
+  });
+
   it.each([
     {
       name: "a non-Operator from an Operator page",

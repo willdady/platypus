@@ -72,13 +72,13 @@ interface AuthContextType {
   /** ADR-0006 delegation flags for the Workspace in scope, if any. */
   workspaceDelegation: WorkspaceDelegationFlags | null;
   /**
-   * A membership or Workspace read that failed for a reason other than
-   * access (a 5xx, the network), with no row to fall back on. The `actor`
-   * then says less than the caller may hold, so a gate shows this as a
-   * retryable failure rather than turning the caller away.
+   * A session, membership or Workspace read that failed for a reason other
+   * than access (a 5xx, the network), with nothing to fall back on. The
+   * `user` and `actor` then say less than the caller may hold, so a gate
+   * shows this as a retryable failure rather than turning the caller away.
    */
   accessReadError: unknown;
-  /** Re-reads the membership and the Workspace. */
+  /** Re-reads the session, the membership and the Workspace. */
   retryAccessReads: () => void;
 }
 
@@ -140,16 +140,24 @@ export function AuthProvider({
     fetcher,
   );
 
+  // better-auth clears the session on a 401 — the server saying signed out —
+  // and keeps it through any other failure, so only a session never read is
+  // a failure to report. Taken as signed out, it sent the reader to /sign-in.
+  const sessionReadError =
+    error && !data && error.status !== 401 ? error : null;
   // A refused membership is the answer — not a member — whatever else
   // failed to load, so it leaves the gate to turn the caller away.
-  const accessReadError = isNotFoundOrForbidden(orgMembershipError)
-    ? null
-    : (transientReadError(orgMembershipError, orgMembership) ??
-      transientReadError(workspaceError, workspace));
+  const accessReadError =
+    sessionReadError ??
+    (isNotFoundOrForbidden(orgMembershipError)
+      ? null
+      : (transientReadError(orgMembershipError, orgMembership) ??
+        transientReadError(workspaceError, workspace)));
   const retryAccessReads = useCallback(() => {
+    void refetch();
     void mutateOrgMembership();
     void mutateWorkspace();
-  }, [mutateOrgMembership, mutateWorkspace]);
+  }, [refetch, mutateOrgMembership, mutateWorkspace]);
 
   // Computed permissions
   const isSuperAdmin =

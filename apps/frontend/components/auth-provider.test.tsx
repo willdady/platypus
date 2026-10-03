@@ -12,13 +12,15 @@ const { sessionData, sessionState } = vi.hoisted(() => {
     sessionState: {
       data: sessionData as typeof sessionData | null,
       isPending: false,
+      error: null as unknown,
+      refetch: vi.fn(),
     },
   };
 });
 
 vi.mock("better-auth/react", () => ({
   createAuthClient: () => ({
-    useSession: () => ({ ...sessionState, error: null }),
+    useSession: () => sessionState,
   }),
 }));
 
@@ -70,7 +72,7 @@ vi.mock("swr", () => ({
     if (key?.includes("/workspaces/ws1")) {
       return { ...reads.workspace, mutate: reads.mutateWorkspace };
     }
-    return { data: undefined, isLoading: false };
+    return { data: undefined, isLoading: false, mutate: vi.fn() };
   },
 }));
 
@@ -100,6 +102,8 @@ beforeEach(() => {
   onRender.mockClear();
   sessionState.data = sessionData;
   sessionState.isPending = false;
+  sessionState.error = null;
+  sessionState.refetch.mockReset();
 });
 
 describe("AuthProvider", () => {
@@ -288,5 +292,41 @@ describe("AuthProvider access read failures", () => {
 
     expect(reads.mutateMembership).toHaveBeenCalled();
     expect(reads.mutateWorkspace).toHaveBeenCalled();
+  });
+
+  // A dropped or failed session read is not an answer about the session, and
+  // reading it as signed out sent the reader to /sign-in (#1204).
+  it("reports a session read that failed with no session in hand", () => {
+    sessionState.data = null;
+    sessionState.error = { status: 500 };
+    renderConsumer();
+
+    expect(screen.getByText("access read failed")).toBeInTheDocument();
+  });
+
+  // better-auth clears the session on a 401: that is the server saying signed out.
+  it("leaves a 401 session read to the sign-in redirect", () => {
+    sessionState.data = null;
+    sessionState.error = { status: 401 };
+    renderConsumer();
+
+    expect(screen.getByText("access read ok")).toBeInTheDocument();
+  });
+
+  it("keeps a session already in hand when only its revalidation fails", () => {
+    sessionState.error = { status: 500 };
+    renderConsumer();
+
+    expect(screen.getByText("access read ok")).toBeInTheDocument();
+  });
+
+  it("retries a failed session read", () => {
+    sessionState.data = null;
+    sessionState.error = { status: 500 };
+    renderConsumer();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(sessionState.refetch).toHaveBeenCalled();
   });
 });
