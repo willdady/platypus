@@ -55,7 +55,7 @@ export function Header({
                 size="icon"
                 aria-label="Workspace settings"
                 asChild
-                className="size-7"
+                className="size-7 cursor-pointer"
               >
                 <Link
                   href={
