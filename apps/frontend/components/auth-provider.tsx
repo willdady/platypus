@@ -92,6 +92,24 @@ const transientReadError = (error: unknown, data: unknown): unknown =>
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// One client per backend URL for the life of the page, outside React. The
+// client owns the session store, and merely reading that store mounts it and
+// fires `/auth/get-session`. A `useMemo` in the component is recomputed on
+// every render attempt React throws away before the first commit — and while
+// a slow page hydrates it throws away thousands — so each attempt made a new
+// client and a new request: one reload sent 300+ `get-session` calls and
+// tripped the backend's rate limiter (#1216). Here the store is created once,
+// so every attempt reads the same one and it fetches once.
+const authClients = new Map<string, ReturnType<typeof createAuthClient>>();
+const getAuthClient = (backendUrl: string) => {
+  let client = authClients.get(backendUrl);
+  if (!client) {
+    client = createAuthClient({ baseURL: backendUrl, basePath: "/auth" });
+    authClients.set(backendUrl, client);
+  }
+  return client;
+};
+
 export function AuthProvider({
   children,
   backendUrl,
@@ -99,12 +117,7 @@ export function AuthProvider({
   children: ReactNode;
   backendUrl: string;
 }) {
-  const authClient = useMemo(() => {
-    return createAuthClient({
-      baseURL: backendUrl,
-      basePath: "/auth",
-    });
-  }, [backendUrl]);
+  const authClient = getAuthClient(backendUrl);
 
   const { data, isPending, error, refetch } = authClient.useSession();
   const params = useParams();
