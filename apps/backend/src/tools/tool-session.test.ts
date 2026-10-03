@@ -31,7 +31,6 @@ vi.mock("@ai-sdk/mcp", () => ({
 
 import {
   deferCloserRegistrar,
-  MCP_OPEN_TIMEOUT_MS,
   openToolSession,
   type ToolSession,
   type ToolSessionScope,
@@ -542,7 +541,7 @@ describe("openToolSession", () => {
           grantedAgent("mcp-1"),
           queriesFor([mcpRow()]),
         );
-        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
         const session = await opening;
 
         expect(session.tools).toEqual({});
@@ -577,7 +576,7 @@ describe("openToolSession", () => {
           grantedAgent("mcp-1"),
           queriesFor([mcpRow()]),
         );
-        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
         await opening;
         land();
         await vi.advanceTimersByTimeAsync(0);

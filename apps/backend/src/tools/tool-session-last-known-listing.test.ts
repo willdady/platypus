@@ -86,11 +86,11 @@ vi.mock("../services/mcp-oauth-provider.ts", () => ({
   buildMcpTransportConfig: () => fakeTransport(),
 }));
 
+import { TOOL_SET_RESOLVE_TIMEOUT_MS } from "./index.ts";
 import { logger } from "../logger.ts";
 import {
   FETCH_FAILURE_SKIP_WINDOW_MS,
   LAST_KNOWN_LISTING_MAX_AGE_MS,
-  MCP_OPEN_TIMEOUT_MS,
   openToolSession,
   type ToolSessionScope,
 } from "./tool-session.ts";
@@ -244,7 +244,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const opening = openToolSession(scope, agent, queries);
-      await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
       const session = await opening;
 
       expect(Object.keys(session.tools)).toEqual([
@@ -329,7 +329,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       const settled = expect(calling).rejects.toThrow(
         "MCP server 'Flaky MCP' is unreachable",
       );
-      await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
       await settled;
     } finally {
       vi.useRealTimers();
@@ -531,7 +531,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       try {
         const opening = openToolSession(scope, agent, queries);
-        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
         const session = await opening;
         // No listing to fall back to, so its tools are dropped.
         expect(session.tools).toEqual({});
@@ -657,7 +657,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
         const settled = expect(
           call(session.tools.flaky__write, { body: "x" }),
         ).rejects.toThrow("MCP server 'Flaky MCP' is unreachable");
-        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
         await settled;
       } finally {
         vi.useRealTimers();

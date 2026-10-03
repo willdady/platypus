@@ -34,16 +34,17 @@ import {
 } from "../utils/abort-race.ts";
 
 /**
- * How long one Tool set's factory may take before a turn stops waiting for it
- * and goes on without its tools (issue #1135). An MCP server's connect-and-list
- * has its own, shorter `MCP_OPEN_TIMEOUT_MS` (ADR-0031).
+ * How long one Tool set's factory, or one MCP server's connect-and-list, may
+ * take before a turn stops waiting for it and goes on without its tools (issue
+ * #1135).
  *
- * 20s: long enough for a factory that reads the database or builds a Sandbox
- * adapter on the way; short enough that a turn whose factory has hung still
- * reaches the model well inside the run's 2-minute step timer, rather than
- * being killed by it with a timeout that names neither. A session's ids
- * resolve concurrently, so this bounds its whole resolve phase rather than
- * adding up per id; a Sub-Agent's session, opened on its first
+ * 20s: long enough for a cold remote MCP server to accept a connection, refresh
+ * an OAuth token and answer `tools/list`, and for a factory that reads the
+ * database or builds a Sandbox adapter on the way; short enough that a turn
+ * whose server has hung still reaches the model well inside the run's 2-minute
+ * step timer, rather than being killed by it with a timeout that names neither.
+ * A session's ids resolve concurrently, so this bounds its whole resolve phase
+ * rather than adding up per id; a Sub-Agent's session, opened on its first
  * delegation, gets a window of its own. Not configurable: nothing has asked
  * for it.
  */

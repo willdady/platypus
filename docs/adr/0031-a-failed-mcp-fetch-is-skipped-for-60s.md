@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-# An MCP open is bounded at 10 s, and a failed one is skipped for 60 s
+# A failed MCP fetch is skipped for 60 s, and every MCP open is bounded at 20 s
 
 ADR-0029 made a failed fetch cheap in tools — the model still sees the MCP's
 **Last-known tool listing** — but not in time: every turn still tried the fetch
@@ -12,13 +12,13 @@ server that failed fast still cost its round trips (#557 measured +688 ms for
 one that failed to authenticate). Two decisions follow, from
 [#1105](https://github.com/willdady/platypus/issues/1105).
 
-**An MCP open is bounded at 10 seconds.** Connect plus `tools/list` on a turn,
-the lazy connect a stale tool makes on its first call, and **Test connection**
-all give up after `MCP_OPEN_TIMEOUT_MS`, and the client is closed when the
-connect lands rather than left running. A timeout is a failed fetch like any
-other. Tool set factories keep #1135's 20 s: a factory may read the database or
-build a Sandbox adapter, while an MCP open is two round trips, and now has the
-skip window below to soften a miss.
+**Every MCP open is bounded at 20 seconds.** Connect plus `tools/list` on a
+turn, the lazy connect a stale tool makes on its first call, and **Test
+connection** all give up after #1135's `TOOL_SET_RESOLVE_TIMEOUT_MS`, the same
+bound a Tool set factory has, and the client is closed when the connect lands
+rather than left running. Test connection had no bound before. A timeout is a
+failed fetch like any other, so the skip window below means a hung server costs
+20 s once a minute rather than on every turn.
 
 **A failed fetch is skipped for 60 seconds.** The MCP record carries
 `lastFetchFailedAt`, set when a turn's fetch or a stale tool's lazy connect
@@ -31,6 +31,11 @@ Test connection clears it, as does any edit that clears the listing.
 
 ## Considered Options
 
+- **A separate, shorter MCP open timeout (10 s).** Would cut the one turn a
+  minute that waits on a hung server, but #1135 chose 20 s to give a cold remote
+  server time to accept a connection, refresh an OAuth token and list its tools.
+  With the skip window paying for a timeout once a minute, a second constant
+  buys little and would treat slow-but-healthy servers as down.
 - **Exponential backoff, or counting failures.** Saves more round trips on a
   server that is gone for hours, but adds state and tuning for a cost that is
   already one failed fetch a minute per MCP. A fixed window is predictable: a
@@ -57,14 +62,14 @@ Test connection clears it, as does any edit that clears the listing.
   would serve its stale tools for the window and drop them after it — flapping
   the very prefix the listing protects — so the next turn fetches again and
   reports the same rejection instead.
-- **A cold server that takes more than 10 s to answer is treated as down** on
-  that turn, and its listing is served for the next minute. A server that slow on
+- **A server that takes more than 20 s to answer is treated as down** on that
+  turn, and its listing is served for the next minute. A server that slow on
   every connect never serves live tools; that is the ceiling of a fixed timeout.
 - **A connect that never settles is abandoned, not torn down.** `@ai-sdk/mcp`'s
   `createMCPClient` takes no abort signal, so a server that hangs during
   `initialize` leaves its request open until it settles or the platform's own
   socket timeouts end it; the client is closed if it ever lands. The turn and
-  Test connection stop waiting at 10 s either way.
+  Test connection stop waiting at 20 s either way.
 - **Test connection clears only for the saved connection.** A test of unsaved
   edits to the URL, auth or headers says nothing about the stored MCP, so it
   leaves the timestamp alone; saving those edits clears it anyway.

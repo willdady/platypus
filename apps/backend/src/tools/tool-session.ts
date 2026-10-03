@@ -20,6 +20,7 @@ import { runCloser, type Closer, type CoreCloserRegistrar } from "./closers.ts";
 import {
   getToolSet,
   reportToolNameCollisions,
+  TOOL_SET_RESOLVE_TIMEOUT_MS,
   type CoreToolSetContext,
   type ToolOwner,
   type ToolSetContext,
@@ -40,13 +41,6 @@ export const LAST_KNOWN_LISTING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
  * grace, for at most one write per MCP an hour.
  */
 const LISTING_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
-
-/**
- * How long an MCP has to connect and list its tools — on a turn, on a stale
- * tool's lazy connect, and on Test connection — before it counts as a failed
- * fetch (ADR-0031). Not configurable.
- */
-export const MCP_OPEN_TIMEOUT_MS = 10_000;
 
 /**
  * How long after a failed fetch a turn serves an MCP's Last-known tool listing
@@ -189,7 +183,7 @@ const lazyMcpTools = async (
     try {
       const { client } = await withDeadline(
         () => (opening = open()),
-        MCP_OPEN_TIMEOUT_MS,
+        TOOL_SET_RESOLVE_TIMEOUT_MS,
         signal,
       );
       await onConnect(true);
@@ -303,10 +297,9 @@ export type ToolSession = {
 export type ToolSessionOptions = {
   /**
    * The run's abort. Resolving an id stops waiting the moment it fires, on top
-   * of the `TOOL_SET_RESOLVE_TIMEOUT_MS` or {@link MCP_OPEN_TIMEOUT_MS} each id
-   * already resolves under (issue #1135). A nested session inherits it: a
-   * delegate resolves while the run that holds the parent session is still
-   * live.
+   * of the {@link TOOL_SET_RESOLVE_TIMEOUT_MS} each id already resolves under
+   * (issue #1135). A nested session inherits it: a delegate resolves while the
+   * run that holds the parent session is still live.
    */
   signal?: AbortSignal;
 };
@@ -319,9 +312,9 @@ export type ToolSessionOptions = {
  * Each assigned id is a registered Tool set or, failing that, an MCP server — the
  * two kinds an Agent's `toolSetIds` can name. Both fail soft: an id that resolves
  * to neither, a Tool set whose factory throws or outruns
- * `TOOL_SET_RESOLVE_TIMEOUT_MS`, an MCP server that is unreachable or does not
- * answer within {@link MCP_OPEN_TIMEOUT_MS} — each costs its own tools and
- * nothing else. A Chat turn is not the place to discover that a plugin is broken (ADR-0013: strict at boot, forgiving at
+ * {@link TOOL_SET_RESOLVE_TIMEOUT_MS}, an MCP server that is unreachable or
+ * never answers — each costs its own tools and nothing else. A Chat turn is not the place to
+ * discover that a plugin is broken (ADR-0013: strict at boot, forgiving at
  * runtime), and a Shared org-scoped MCP has org-wide blast radius (ADR-0007).
  */
 export const openToolSession = async (
@@ -550,7 +543,7 @@ export const openToolSession = async (
             });
             return { listed, tools: client.toolsFromDefinitions(listed) };
           },
-          MCP_OPEN_TIMEOUT_MS,
+          TOOL_SET_RESOLVE_TIMEOUT_MS,
           signal,
         );
         definitions = live.listed;
@@ -579,7 +572,7 @@ export const openToolSession = async (
         }
         const fault =
           error instanceof DeadlineExceededError
-            ? `did not answer within ${MCP_OPEN_TIMEOUT_MS}ms`
+            ? `did not answer within ${TOOL_SET_RESOLVE_TIMEOUT_MS}ms`
             : "is unreachable";
         definitions = usableLastKnownListing(mcp);
         if (!definitions) {

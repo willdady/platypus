@@ -41,5 +41,5 @@ from [#635](https://github.com/willdady/platypus/issues/635).
 
 The first "Not built" item is now built: a turn skips the fetch for 60 seconds
 after one fails, when the MCP has a usable listing, and every MCP open is bounded
-at 10 seconds. See
-[ADR-0031](./0031-an-mcp-open-is-bounded-at-10s-and-a-failed-one-is-skipped-for-60s.md).
+at 20 seconds. See
+[ADR-0031](./0031-a-failed-mcp-fetch-is-skipped-for-60s.md).

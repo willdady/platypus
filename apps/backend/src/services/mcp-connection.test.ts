@@ -8,7 +8,7 @@ import {
 import { mcp as mcpTable } from "../db/schema.ts";
 import type { McpRecord } from "./mcp-oauth-provider.ts";
 import { logger } from "../logger.ts";
-import { MCP_OPEN_TIMEOUT_MS } from "../tools/tool-session.ts";
+import { TOOL_SET_RESOLVE_TIMEOUT_MS } from "../tools/index.ts";
 import {
   authorizeMcpOAuth,
   clearOAuthTokens,
@@ -169,10 +169,10 @@ describe("mcp-connection", () => {
           { url: "http://mcp.example.com", authType: "None" } as never,
           null,
         );
-        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
         expect(await probing).toEqual({
           success: false,
-          error: `timed out after ${MCP_OPEN_TIMEOUT_MS}ms`,
+          error: `timed out after ${TOOL_SET_RESOLVE_TIMEOUT_MS}ms`,
           status: 400,
         });
         expect(close).toHaveBeenCalled();

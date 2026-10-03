@@ -17,7 +17,7 @@ import {
 } from "./mcp-oauth-provider.ts";
 import { resolveMcpTestToolNames } from "./mcp-test-tools.ts";
 import { logger } from "../logger.ts";
-import { MCP_OPEN_TIMEOUT_MS } from "../tools/tool-session.ts";
+import { TOOL_SET_RESOLVE_TIMEOUT_MS } from "../tools/index.ts";
 import { withDeadline } from "../utils/abort-race.ts";
 
 /**
@@ -90,7 +90,7 @@ const testedStoredConnection = (
  * what it was sent. A success with the stored connection clears the row's
  * recorded fetch failure, so the next turn tries the server again (ADR-0031).
  *
- * Bounded by `MCP_OPEN_TIMEOUT_MS`, like a turn's own fetch: a server that
+ * Bounded by `TOOL_SET_RESOLVE_TIMEOUT_MS`, like a turn's own fetch: a server that
  * takes the connection and never answers is reported, not waited on.
  */
 export const probeMcpConnection = async (
@@ -136,7 +136,7 @@ export const probeMcpConnection = async (
         client: connected,
         rawToolNames: Object.keys(await connected.tools()),
       };
-    }, MCP_OPEN_TIMEOUT_MS);
+    }, TOOL_SET_RESOLVE_TIMEOUT_MS);
     await client.close();
 
     if (
