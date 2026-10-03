@@ -151,8 +151,7 @@ describe("SignInPage form", () => {
   });
 });
 
-// A reader who lands here still signed in — sent by a failed session read
-// before #1204 — is taken back into the app rather than shown the form.
+// The form is for signing in; a reader who already is goes into the app.
 describe("SignInPage with a session", () => {
   beforeEach(() => {
     vi.clearAllMocks();
