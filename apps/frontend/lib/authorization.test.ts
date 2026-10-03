@@ -8,6 +8,7 @@ import {
   canConfigureWorkspaceResource,
   canCreateWorkspace,
   canListOrgMembers,
+  canOpenOrgSettings,
   canManageOrgSharedResource,
   canManageSharedResource,
   canManageWorkspaceDelegation,
@@ -149,6 +150,17 @@ describe("canSendChatMessages", () => {
 
   it("a non-owner is refused, regardless of admin tier", () => {
     expect(canSendChatMessages(false)).toBe(false);
+  });
+});
+
+describe("canOpenOrgSettings", () => {
+  it.each([
+    ["operator", null, true],
+    ["org-admin", "admin", true],
+    ["workspace-owner", "member", false],
+    ["org-member", "member", false],
+  ] as const)("%s (role %s) → %s", (actor, role, expected) => {
+    expect(canOpenOrgSettings(actor, role)).toBe(expected);
   });
 });
 

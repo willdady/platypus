@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Plus, Settings, FolderClosed } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { canCreateWorkspace } from "@/lib/authorization";
+import { canCreateWorkspace, canOpenOrgSettings } from "@/lib/authorization";
 import {
   Empty,
   EmptyContent,
@@ -23,8 +23,12 @@ import { orgRoutes } from "@/lib/routes";
 // fallback alike, so switching Organizations keeps the page up instead of
 // swapping it for a placeholder shape for a frame.
 export function OrgHome({ orgId }: { orgId: string }) {
-  const { actor, isAuthLoading } = useAuth();
+  const { actor, orgMembership, isAuthLoading } = useAuth();
   const canCreate = canCreateWorkspace(actor);
+  const canOpenSettings = canOpenOrgSettings(
+    actor,
+    orgMembership?.role ?? null,
+  );
   const routes = orgRoutes(orgId);
 
   const { data: workspacesData, error: workspacesError } = useScopedSWR<{
@@ -33,12 +37,12 @@ export function OrgHome({ orgId }: { orgId: string }) {
 
   // Wait for the org-membership fetch too, not just workspaces. Switching orgs
   // clears orgMembership and re-fetches it; if workspaces resolve first,
-  // canCreate is briefly false and the admin-only "Add workspace" button would
-  // render late, shifting the toolbar. Gating on isAuthLoading keeps the button
+  // canCreate is briefly false and the admin-only buttons would render late,
+  // shifting the toolbar. Gating on isAuthLoading keeps the button
   // row hidden until admin status is known so it appears fully formed.
   //
   // A failed read settles it as well: the list then reports the failure, and
-  // the button row still offers the way to the org settings.
+  // the button row still offers an admin the way to the org settings.
   const isReady = (!!workspacesData || !!workspacesError) && !isAuthLoading;
   const workspaces = workspacesData?.results || [];
 
@@ -48,13 +52,15 @@ export function OrgHome({ orgId }: { orgId: string }) {
         <div className="space-y-4">
           <WorkspaceList orgId={orgId} />
           {/* The button row, reserved so it doesn't pop in below the list.
-            Until the membership resolves, whether "Add workspace" shows is
+            Until the membership resolves, whether either button shows is
             unknown, so both are drawn. */}
           <div className="flex items-center gap-2">
             {(isAuthLoading || canCreate) && (
               <Skeleton className="h-9 w-36 rounded-md" />
             )}
-            <Skeleton className="h-9 w-48 rounded-md" />
+            {(isAuthLoading || canOpenSettings) && (
+              <Skeleton className="h-9 w-48 rounded-md" />
+            )}
           </div>
         </div>
       ) : workspaces.length > 0 || workspacesError ? (
@@ -69,11 +75,13 @@ export function OrgHome({ orgId }: { orgId: string }) {
                 </Link>
               </Button>
             )}
-            <Button variant="outline" asChild>
-              <Link href={routes.settings.root}>
-                <Settings className="size-4" /> Organization settings
-              </Link>
-            </Button>
+            {canOpenSettings && (
+              <Button variant="outline" asChild>
+                <Link href={routes.settings.root}>
+                  <Settings className="size-4" /> Organization settings
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       ) : (
@@ -99,11 +107,13 @@ export function OrgHome({ orgId }: { orgId: string }) {
                   </Link>
                 </Button>
               )}
-              <Button variant="outline" asChild>
-                <Link href={routes.settings.root}>
-                  <Settings className="size-4" /> Organization settings
-                </Link>
-              </Button>
+              {canOpenSettings && (
+                <Button variant="outline" asChild>
+                  <Link href={routes.settings.root}>
+                    <Settings className="size-4" /> Organization settings
+                  </Link>
+                </Button>
+              )}
             </div>
           </EmptyContent>
         </Empty>

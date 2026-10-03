@@ -109,6 +109,18 @@ export function canAccessOrganization(
 }
 
 /**
+ * May this actor open the Organization settings? The rule the settings
+ * layout's guard (`ProtectedRoute requireOrgAdmin`) enforces, so a link to
+ * them is drawn only for a caller who gets through.
+ */
+export function canOpenOrgSettings(
+  actor: Actor,
+  orgRole: OrgRole | null,
+): boolean {
+  return canAccessOrganization(actor, orgRole, "admin").allowed;
+}
+
+/**
  * May this actor reach a Workspace at all? Operator and Org Admin reach
  * every Workspace in the Organization; a Workspace Owner reaches their own
  * (the only one `resolveActor` would have classified them as owning); a
