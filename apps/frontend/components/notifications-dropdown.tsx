@@ -194,7 +194,7 @@ export function NotificationsDropdown({
                         </div>
                       )}
                       <div
-                        className={`text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary [&_li]:py-0 ${isExpanded ? "" : "line-clamp-2"}`}
+                        className={`text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary [&_ul]:m-0 [&_ol]:m-0 [&_li]:py-0 ${isExpanded ? "" : "line-clamp-2"}`}
                       >
                         <Markdown
                           allowedElements={[
