@@ -8,6 +8,7 @@ import {
 import { mcp as mcpTable } from "../db/schema.ts";
 import type { McpRecord } from "./mcp-oauth-provider.ts";
 import { logger } from "../logger.ts";
+import { MCP_OPEN_TIMEOUT_MS } from "../tools/tool-session.ts";
 import {
   authorizeMcpOAuth,
   clearOAuthTokens,
@@ -38,6 +39,7 @@ const baseMcp: McpRecord = {
   oauthRequestedScope: null,
   lastKnownToolListing: null,
   lastKnownToolListingFetchedAt: null,
+  lastFetchFailedAt: null,
   oauthAccessToken: null,
   oauthRefreshToken: null,
   oauthTokenExpiresAt: null,
@@ -147,10 +149,63 @@ describe("mcp-connection", () => {
         error: "server said no",
         status: 400,
       });
-      expect(logger.error).toHaveBeenCalledWith(
-        { error: closeError },
-        "Error closing MCP client",
+      await vi.waitFor(() =>
+        expect(logger.error).toHaveBeenCalledWith(
+          { error: closeError },
+          "Error closing MCP client",
+        ),
       );
+    });
+
+    it("reports a server that never answers within the open timeout, and closes it", async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(createMCPClient).mockResolvedValueOnce({
+        tools: vi.fn(() => new Promise(() => {})),
+        close,
+      } as never);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const probing = probeMcpConnection(
+          { url: "http://mcp.example.com", authType: "None" } as never,
+          null,
+        );
+        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+        expect(await probing).toEqual({
+          success: false,
+          error: `timed out after ${MCP_OPEN_TIMEOUT_MS}ms`,
+          status: 400,
+        });
+        expect(close).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("clears a stored MCP's recorded fetch failure on success", async () => {
+      const result = await probeMcpConnection(
+        {
+          url: "http://mcp.example.com",
+          authType: "None",
+          mcpId: "mcp-1",
+          name: "My Server",
+        } as never,
+        { ...baseMcp, lastFetchFailedAt: new Date() },
+      );
+      expect(result).toMatchObject({ success: true });
+      expect(mockDb.set).toHaveBeenCalledWith({ lastFetchFailedAt: null });
+    });
+
+    it("does not write when the stored MCP has no recorded failure", async () => {
+      await probeMcpConnection(
+        {
+          url: "http://mcp.example.com",
+          authType: "None",
+          mcpId: "mcp-1",
+          name: "My Server",
+        } as never,
+        baseMcp,
+      );
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 

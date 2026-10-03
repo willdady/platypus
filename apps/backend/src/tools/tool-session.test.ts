@@ -31,6 +31,7 @@ vi.mock("@ai-sdk/mcp", () => ({
 
 import {
   deferCloserRegistrar,
+  MCP_OPEN_TIMEOUT_MS,
   openToolSession,
   type ToolSession,
   type ToolSessionScope,
@@ -145,6 +146,7 @@ const queriesFor = (rows: McpRow[]) => ({
     Promise.resolve(rows.find((r) => r.id === id) ?? null),
   ),
   saveMcpToolListing: vi.fn(() => Promise.resolve()),
+  setMcpFetchFailedAt: vi.fn(() => Promise.resolve()),
 });
 
 const noMcps = () => queriesFor([]);
@@ -481,6 +483,7 @@ describe("openToolSession", () => {
             : Promise.reject(new Error("database is down")),
         ),
         saveMcpToolListing: vi.fn(() => Promise.resolve()),
+        setMcpFetchFailedAt: vi.fn(() => Promise.resolve()),
       };
 
       await expect(
@@ -539,7 +542,7 @@ describe("openToolSession", () => {
           grantedAgent("mcp-1"),
           queriesFor([mcpRow()]),
         );
-        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
         const session = await opening;
 
         expect(session.tools).toEqual({});
@@ -574,7 +577,7 @@ describe("openToolSession", () => {
           grantedAgent("mcp-1"),
           queriesFor([mcpRow()]),
         );
-        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
         await opening;
         land();
         await vi.advanceTimersByTimeAsync(0);

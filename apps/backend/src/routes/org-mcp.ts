@@ -119,10 +119,9 @@ orgMcp.post(
     const data = c.req.valid("json");
     const { orgId } = orgScopeOf(c);
 
-    const storedMcp =
-      data.authType === "OAuth" && data.mcpId
-        ? await resolveOrgScoped(db, "mcp", data.mcpId, orgId)
-        : null;
+    const storedMcp = data.mcpId
+      ? await resolveOrgScoped(db, "mcp", data.mcpId, orgId)
+      : null;
 
     const result = await probeMcpConnection(data, storedMcp);
     if (!result.success) {

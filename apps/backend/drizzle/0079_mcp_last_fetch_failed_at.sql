@@ -1,0 +1,1 @@
+ALTER TABLE "mcp" ADD COLUMN "last_fetch_failed_at" timestamp;

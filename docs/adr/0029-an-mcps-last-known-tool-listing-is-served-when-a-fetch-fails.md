@@ -36,3 +36,10 @@ from [#635](https://github.com/willdady/platypus/issues/635).
 - **A first turn has nothing to fall back to.** An MCP that has never been fetched successfully, or whose listing is over a day old, still drops its tools as before.
 - **Scope is MCP only.** A Web-search backend that yields no tools is a plugin fault already reported on the turn (#522), and a Sub-Agent whose Provider or model fails to resolve is a configuration error that does not recover on its own. Neither is a blip.
 - **Not built, and deliberately so.** Skipping the fetch for an MCP that failed recently — which would save the latency #557 measured on a dead server — is a separate decision with its own tuning. Sorting a server's tools by name is not done: the specification asks servers for a deterministic order, and reordering has not been observed.
+
+## Amended by ADR-0031
+
+The first "Not built" item is now built: a turn skips the fetch for 60 seconds
+after one fails, when the MCP has a usable listing, and every MCP open is bounded
+at 10 seconds. See
+[ADR-0031](./0031-an-mcp-open-is-bounded-at-10s-and-a-failed-one-is-skipped-for-60s.md).

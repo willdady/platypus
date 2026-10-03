@@ -120,7 +120,7 @@ _Avoid_: web search card, search result block (both name only the search case; t
 A Model Context Protocol server registered at Workspace scope, or — as a Shared resource — at Organization scope. Resolves to a Tool set at Chat-turn time.
 
 **Last-known tool listing**:
-An **MCP**'s tool definitions as its server last listed them, kept on the MCP itself and served when a **Chat turn** fails to reach the server — for up to a day after that last successful fetch. Keeps the tool list the model is sent unchanged across a blip, so the cached prompt survives it; a Tool served this way connects when called, and fails as unreachable if the server is still down. Not served when the server rejects the MCP's credentials: that is no blip, and needs re-authorising. Cleared when the MCP's URL, auth or headers are edited.
+An **MCP**'s tool definitions as its server last listed them, kept on the MCP itself and served when a **Chat turn** fails to reach the server — for up to a day after that last successful fetch. Keeps the tool list the model is sent unchanged across a blip, so the cached prompt survives it; a Tool served this way connects when called, and fails as unreachable if the server is still down. Not served when the server rejects the MCP's credentials: that is no blip, and needs re-authorising. Cleared when the MCP's URL, auth or headers are edited. For a minute after a fetch fails it is served at once, without trying the server again.
 _Avoid_: tool cache (it is not consulted when the server is up), stale tools.
 
 **Read-only hint**:

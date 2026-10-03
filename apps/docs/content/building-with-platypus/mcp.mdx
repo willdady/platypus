@@ -80,6 +80,10 @@ them runs if the server is back, and fails as unreachable if it is not. After a
 day, or for a server that has never answered, the MCP contributes no tools until
 it is reachable again.
 
+A server that doesn't answer within **10 seconds** counts as unreachable. Once a
+server fails, Platypus uses its saved tool list for about a minute before trying
+it again.
+
 A server that rejects the MCP's credentials gets no such grace: reconnecting
 won't fix it, so the MCP contributes no tools until you click **Re-authorize**
 or update its token or headers. A remembered tool that meets the rejection

@@ -1410,6 +1410,7 @@ describe("a turn that resolves after its run has already terminated", () => {
       {
         getMcp: () => Promise.resolve(null),
         saveMcpToolListing: () => Promise.resolve(),
+        setMcpFetchFailedAt: () => Promise.resolve(),
       },
     );
     const close = vi.fn().mockResolvedValue(undefined);

@@ -20,7 +20,6 @@ import { runCloser, type Closer, type CoreCloserRegistrar } from "./closers.ts";
 import {
   getToolSet,
   reportToolNameCollisions,
-  TOOL_SET_RESOLVE_TIMEOUT_MS,
   type CoreToolSetContext,
   type ToolOwner,
   type ToolSetContext,
@@ -41,6 +40,19 @@ export const LAST_KNOWN_LISTING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
  * grace, for at most one write per MCP an hour.
  */
 const LISTING_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * How long an MCP has to connect and list its tools — on a turn, on a stale
+ * tool's lazy connect, and on Test connection — before it counts as a failed
+ * fetch (ADR-0031). Not configurable.
+ */
+export const MCP_OPEN_TIMEOUT_MS = 10_000;
+
+/**
+ * How long after a failed fetch a turn serves an MCP's Last-known tool listing
+ * without trying the fetch first (ADR-0031). Fixed, with no backoff.
+ */
+export const FETCH_FAILURE_SKIP_WINDOW_MS = 60_000;
 
 /**
  * A client that never touches the network — a no-op transport and a canned
@@ -123,6 +135,11 @@ const usableLastKnownListing = (mcp: McpRow): ListToolsResult | null => {
     : null;
 };
 
+/** Whether an MCP's last fetch failed within {@link FETCH_FAILURE_SKIP_WINDOW_MS}. */
+const inSkipWindow = (mcp: McpRow): boolean =>
+  !!mcp.lastFetchFailedAt &&
+  Date.now() - mcp.lastFetchFailedAt.getTime() < FETCH_FAILURE_SKIP_WINDOW_MS;
+
 /**
  * Whether an MCP fetch or connect failed because the server rejected its
  * credentials: `@ai-sdk/mcp`'s `UnauthorizedError` once an OAuth MCP's
@@ -155,13 +172,16 @@ type OpenMcpClient = { client: MCPClient; close: () => Promise<void> };
  *
  * The connect runs under the same deadline and run abort as a live fetch: a
  * server that takes the connection and never answers fails the call rather
- * than holding it until the step timer kills it (#1135).
+ * than holding it until the step timer kills it (#1135). Its outcome is
+ * reported to `onConnect`, `true` on success, so it moves the MCP's skip
+ * window the way a live fetch does (ADR-0031).
  */
 const lazyMcpTools = async (
   listing: ListToolsResult,
   open: () => Promise<OpenMcpClient>,
   mcpName: string,
   signal: AbortSignal | undefined,
+  onConnect: (ok: boolean, error?: unknown) => Promise<void>,
 ): Promise<Record<string, Tool>> => {
   let live: Promise<Record<string, Tool>> | undefined;
   const connectLive = async (): Promise<Record<string, Tool>> => {
@@ -169,15 +189,17 @@ const lazyMcpTools = async (
     try {
       const { client } = await withDeadline(
         () => (opening = open()),
-        TOOL_SET_RESOLVE_TIMEOUT_MS,
+        MCP_OPEN_TIMEOUT_MS,
         signal,
       );
+      await onConnect(true);
       return client.toolsFromDefinitions(listing);
     } catch (error) {
       // Same as a live fetch's: a connect that outran the deadline is closed
       // when it finally lands, not held open to the end of the turn.
       void opening?.then(({ close }) => close()).catch(() => {});
       live = undefined;
+      await onConnect(false, error);
       const fault = isMcpAuthFailure(error)
         ? "rejected its credentials; it needs re-authorising"
         : "is unreachable";
@@ -225,6 +247,8 @@ export type ToolSessionQueries = {
     listing: ListToolsResult,
     fetchedAt: Date,
   ): Promise<void>;
+  /** Record when an MCP's fetch failed, or clear it with `null` (ADR-0031). */
+  setMcpFetchFailedAt(id: string, failedAt: Date | null): Promise<void>;
 };
 
 /**
@@ -279,8 +303,8 @@ export type ToolSession = {
 export type ToolSessionOptions = {
   /**
    * The run's abort. Resolving an id stops waiting the moment it fires, on top
-   * of the {@link TOOL_SET_RESOLVE_TIMEOUT_MS} each id already resolves under
-   * (issue #1135). A nested session inherits it: a delegate resolves while the
+   * of the `TOOL_SET_RESOLVE_TIMEOUT_MS` or {@link MCP_OPEN_TIMEOUT_MS}
+   * each id already resolves under (issue #1135). A nested session inherits it: a delegate resolves while the
    * run that holds the parent session is still live.
    */
   signal?: AbortSignal;
@@ -294,8 +318,8 @@ export type ToolSessionOptions = {
  * Each assigned id is a registered Tool set or, failing that, an MCP server — the
  * two kinds an Agent's `toolSetIds` can name. Both fail soft: an id that resolves
  * to neither, a Tool set whose factory throws or outruns
- * {@link TOOL_SET_RESOLVE_TIMEOUT_MS}, an MCP server that is unreachable or
- * never answers — each costs its own tools and nothing else. A Chat turn is not the place to
+ * `TOOL_SET_RESOLVE_TIMEOUT_MS`, an MCP server that is unreachable or
+ * does not answer within {@link MCP_OPEN_TIMEOUT_MS} — each costs its own tools and nothing else. A Chat turn is not the place to
  * discover that a plugin is broken (ADR-0013: strict at boot, forgiving at
  * runtime), and a Shared org-scoped MCP has org-wide blast radius (ADR-0007).
  */
@@ -470,6 +494,27 @@ export const openToolSession = async (
         );
       }
     };
+    // Moves the skip window (ADR-0031): set on a failed fetch or lazy
+    // connect, cleared on a successful one — and, like a listing save, never
+    // at the turn's expense. Skipped when there is nothing to clear, so a
+    // healthy MCP's turns cost no write. An auth failure clears rather than
+    // records: its listing is never served, so a skip would only flap its
+    // tools in and out.
+    let failedAt = mcp.lastFetchFailedAt;
+    const recordFetch = async (ok: boolean, error?: unknown): Promise<void> => {
+      if (error instanceof CallerAbortedError) return;
+      const next = ok || isMcpAuthFailure(error) ? null : new Date();
+      if (!next && !failedAt) return;
+      failedAt = next;
+      try {
+        await queries.setMcpFetchFailedAt(mcp.id, failedAt);
+      } catch (error) {
+        logger.warn(
+          { error, ...attribution },
+          "Failed to record an MCP's last fetch failure",
+        );
+      }
+    };
 
     // Split into the listing and the definitions-to-Tools conversion — still
     // one round trip, not two — so the raw `readOnlyHint` annotation (#626)
@@ -477,67 +522,85 @@ export const openToolSession = async (
     // steps and keeps only what it needs to resolve a display title, and the
     // hint is gone by the time it would return.
     //
-    // Connect and list run under one deadline and the run's abort (issue
-    // #1135): a server that takes the connection and never answers is a failed
-    // fetch like any other, and falls back to the stored listing below rather
-    // than holding the turn until the step timer kills it.
-    let definitions: ListToolsResult;
-    let mcpTools: Record<string, Tool>;
-    let opening: ReturnType<typeof openClient> | undefined;
-    try {
-      const live = await withDeadline(
-        async (deadline) => {
-          opening = openClient();
-          const { client } = await opening;
-          const listed = await client.listTools({
-            options: { signal: deadline },
-          });
-          return { listed, tools: client.toolsFromDefinitions(listed) };
-        },
-        TOOL_SET_RESOLVE_TIMEOUT_MS,
-        signal,
-      );
-      definitions = live.listed;
-      mcpTools = live.tools;
-      await rememberListing(definitions);
-    } catch (error) {
-      // An abandoned connection is closed as soon as it exists — now, or when
-      // a connect that outran the deadline finally lands — rather than held
-      // open to the end of the turn: it served nothing, and a stale tool opens
-      // its own if the model calls one. A close that fails is dispose's to
-      // report: it gets the same promise, through `runCloser`.
-      void opening?.then(({ close }) => close()).catch(() => {});
-      // A cancelled turn will never read these tools, so it neither falls back
-      // nor reports a server that may be perfectly healthy.
-      if (error instanceof CallerAbortedError) return { kind: "none" };
-      // Reconnecting cannot fix rejected credentials, so the stored listing
-      // would only hand the model tools that fail until someone re-authorises.
-      if (isMcpAuthFailure(error)) {
-        logger.warn(
-          { error, ...attribution },
-          `MCP '${toolSetId}' rejected its credentials; it needs re-authorising — skipping its tools`,
-        );
-        return { kind: "none" };
-      }
-      const fault =
-        error instanceof DeadlineExceededError
-          ? `did not answer within ${TOOL_SET_RESOLVE_TIMEOUT_MS}ms`
-          : "is unreachable";
-      const listing = usableLastKnownListing(mcp);
-      if (!listing) {
-        logger.warn(
-          { error, ...attribution },
-          `MCP '${toolSetId}' ${fault}; skipping its tools`,
-        );
-        return { kind: "none" };
-      }
+    // Inside the skip window, an MCP with a usable listing is served from it
+    // without a fetch — the fallback below, minus waiting for the server to
+    // fail again (ADR-0031). One with nothing usable is fetched regardless:
+    // the skip never drops tools.
+    let definitions = inSkipWindow(mcp) ? usableLastKnownListing(mcp) : null;
+    let mcpTools: Record<string, Tool> | undefined;
+    if (definitions) {
       logger.warn(
-        { error, ...attribution },
-        `MCP '${toolSetId}' ${fault}; serving its last-known tool listing`,
+        attribution,
+        `MCP '${toolSetId}' failed its last fetch moments ago; serving its last-known tool listing without trying it`,
       );
-      definitions = listing;
-      mcpTools = await lazyMcpTools(listing, openClient, mcp.name, signal);
+    } else {
+      // Connect and list run under one deadline and the run's abort (issue
+      // #1135): a server that takes the connection and never answers is a
+      // failed fetch like any other, and falls back to the stored listing
+      // below rather than holding the turn until the step timer kills it.
+      let opening: ReturnType<typeof openClient> | undefined;
+      try {
+        const live = await withDeadline(
+          async (deadline) => {
+            opening = openClient();
+            const { client } = await opening;
+            const listed = await client.listTools({
+              options: { signal: deadline },
+            });
+            return { listed, tools: client.toolsFromDefinitions(listed) };
+          },
+          MCP_OPEN_TIMEOUT_MS,
+          signal,
+        );
+        definitions = live.listed;
+        mcpTools = live.tools;
+        await Promise.all([rememberListing(definitions), recordFetch(true)]);
+      } catch (error) {
+        // An abandoned connection is closed as soon as it exists — now, or
+        // when a connect that outran the deadline finally lands — rather than
+        // held open to the end of the turn: it served nothing, and a stale
+        // tool opens its own if the model calls one. A close that fails is
+        // dispose's to report: it gets the same promise, through `runCloser`.
+        void opening?.then(({ close }) => close()).catch(() => {});
+        await recordFetch(false, error);
+        // A cancelled turn will never read these tools, so it neither falls
+        // back nor reports a server that may be perfectly healthy.
+        if (error instanceof CallerAbortedError) return { kind: "none" };
+        // Reconnecting cannot fix rejected credentials, so the stored listing
+        // would only hand the model tools that fail until someone
+        // re-authorises.
+        if (isMcpAuthFailure(error)) {
+          logger.warn(
+            { error, ...attribution },
+            `MCP '${toolSetId}' rejected its credentials; it needs re-authorising — skipping its tools`,
+          );
+          return { kind: "none" };
+        }
+        const fault =
+          error instanceof DeadlineExceededError
+            ? `did not answer within ${MCP_OPEN_TIMEOUT_MS}ms`
+            : "is unreachable";
+        definitions = usableLastKnownListing(mcp);
+        if (!definitions) {
+          logger.warn(
+            { error, ...attribution },
+            `MCP '${toolSetId}' ${fault}; skipping its tools`,
+          );
+          return { kind: "none" };
+        }
+        logger.warn(
+          { error, ...attribution },
+          `MCP '${toolSetId}' ${fault}; serving its last-known tool listing`,
+        );
+      }
     }
+    mcpTools ??= await lazyMcpTools(
+      definitions,
+      openClient,
+      mcp.name,
+      signal,
+      recordFetch,
+    );
 
     // `true` only — the specification's own default for a missing hint, and
     // the tri-state this reduces to a boolean at: a string `"false"`, a `1`,

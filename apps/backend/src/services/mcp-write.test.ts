@@ -188,6 +188,7 @@ describe("mcp write model", () => {
       const CLEARED = {
         lastKnownToolListing: null,
         lastKnownToolListingFetchedAt: null,
+        lastFetchFailedAt: null,
       };
 
       it.each<[string, Partial<McpUpdateFields>]>([
@@ -204,6 +205,7 @@ describe("mcp write model", () => {
       it("is kept when only the name changes, whatever order headers come in", async () => {
         const set = await setAfter({ ...bearerFields(), name: "Renamed" });
         expect(set).not.toHaveProperty("lastKnownToolListing");
+        expect(set).not.toHaveProperty("lastFetchFailedAt");
       });
     });
 

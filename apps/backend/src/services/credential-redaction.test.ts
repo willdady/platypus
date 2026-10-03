@@ -117,6 +117,7 @@ describe("read models", () => {
     oauthTokenExpiresAt: new Date(0),
     lastKnownToolListing: { tools: [] },
     lastKnownToolListingFetchedAt: new Date(0),
+    lastFetchFailedAt: new Date(0),
   } as unknown as McpRecord;
 
   it("strips minted OAuth secrets even when credentials are revealed", () => {
@@ -131,6 +132,7 @@ describe("read models", () => {
     // Internal to a Chat turn (ADR-0029), and no part of the MCP a reader edits.
     expect(out).not.toHaveProperty("lastKnownToolListing");
     expect(out).not.toHaveProperty("lastKnownToolListingFetchedAt");
+    expect(out).not.toHaveProperty("lastFetchFailedAt");
   });
 
   it("strips both secret classes when credentials are not revealed", () => {

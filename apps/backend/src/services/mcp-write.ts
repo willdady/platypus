@@ -162,6 +162,7 @@ export async function updateMcp(
       ...(connectionChanged && {
         lastKnownToolListing: null,
         lastKnownToolListingFetchedAt: null,
+        lastFetchFailedAt: null,
       }),
       updatedAt: new Date(),
     })

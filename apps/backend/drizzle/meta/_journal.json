@@ -554,6 +554,13 @@
       "when": 1790842116390,
       "tag": "0078_partial_unique_pending_invitation",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1790990323344,
+      "tag": "0079_mcp_last_fetch_failed_at",
+      "breakpoints": true
     }
   ]
 }

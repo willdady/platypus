@@ -389,6 +389,10 @@ export const mcp = pgTable(
     lastKnownToolListingFetchedAt: t.timestamp(
       "last_known_tool_listing_fetched_at",
     ),
+    // When a turn's fetch, or a stale tool's lazy connect, last failed (issue
+    // #1105). Within a minute of it a turn serves the listing above without
+    // trying the fetch (ADR-0031); null once the server answers again.
+    lastFetchFailedAt: t.timestamp("last_fetch_failed_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

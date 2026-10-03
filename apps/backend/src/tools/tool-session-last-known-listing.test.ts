@@ -28,6 +28,8 @@ const { server } = vi.hoisted(() => ({
     /** Accepts the connection, then never answers `initialize`. */
     initializeHangs: false,
     tools: [] as Array<Record<string, unknown>>,
+    /** Every connect attempt, whether or not it succeeds. */
+    attempts: 0,
     opened: 0,
     closed: 0,
   },
@@ -36,6 +38,7 @@ const { server } = vi.hoisted(() => ({
 const fakeTransport = (): MCPTransport => {
   const transport: MCPTransport = {
     start() {
+      server.attempts++;
       if (server.rejectWith) return Promise.reject(server.rejectWith);
       if (!server.up) return Promise.reject(new Error("connect ECONNREFUSED"));
       server.opened++;
@@ -83,10 +86,11 @@ vi.mock("../services/mcp-oauth-provider.ts", () => ({
   buildMcpTransportConfig: () => fakeTransport(),
 }));
 
-import { TOOL_SET_RESOLVE_TIMEOUT_MS } from "./index.ts";
 import { logger } from "../logger.ts";
 import {
+  FETCH_FAILURE_SKIP_WINDOW_MS,
   LAST_KNOWN_LISTING_MAX_AGE_MS,
+  MCP_OPEN_TIMEOUT_MS,
   openToolSession,
   type ToolSessionScope,
 } from "./tool-session.ts";
@@ -137,6 +141,7 @@ const store = () => {
     bearerToken: null,
     lastKnownToolListing: null,
     lastKnownToolListingFetchedAt: null,
+    lastFetchFailedAt: null,
   } as unknown as McpRow;
   const queries = {
     getMcp: vi.fn(() => Promise.resolve(row)),
@@ -152,14 +157,22 @@ const store = () => {
         return Promise.resolve();
       },
     ),
+    setMcpFetchFailedAt: vi.fn((_id: string, failedAt: Date | null) => {
+      row = { ...row, lastFetchFailedAt: failedAt };
+      return Promise.resolve();
+    }),
   };
   return {
     queries,
+    row: () => row,
     age: (ms: number) => {
       row = {
         ...row,
         lastKnownToolListingFetchedAt: new Date(Date.now() - ms),
       };
+    },
+    failedAgo: (ms: number) => {
+      row = { ...row, lastFetchFailedAt: new Date(Date.now() - ms) };
     },
   };
 };
@@ -199,6 +212,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     server.listHangs = false;
     server.initializeHangs = false;
     server.tools = structuredClone(TOOLS);
+    server.attempts = 0;
     server.opened = 0;
     server.closed = 0;
   });
@@ -230,7 +244,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const opening = openToolSession(scope, agent, queries);
-      await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
       const session = await opening;
 
       expect(Object.keys(session.tools)).toEqual([
@@ -315,7 +329,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       const settled = expect(calling).rejects.toThrow(
         "MCP server 'Flaky MCP' is unreachable",
       );
-      await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
       await settled;
     } finally {
       vi.useRealTimers();
@@ -485,5 +499,175 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
         await session.dispose();
       },
     );
+  });
+
+  describe("the skip window after a failed fetch (#1105)", () => {
+    it.each<[string, () => void]>([
+      [
+        "a refused connection",
+        () => {
+          server.up = false;
+        },
+      ],
+      [
+        "an HTTP 500",
+        () => {
+          server.rejectWith = Object.assign(new Error("HTTP 500"), {
+            name: "MCPClientError",
+            statusCode: 500,
+          });
+        },
+      ],
+    ])("records the failure on %s", async (_label, fail) => {
+      const { queries, row } = store();
+      fail();
+      await openToolSession(scope, agent, queries);
+      expect(row().lastFetchFailedAt).toBeInstanceOf(Date);
+    });
+
+    it("records the failure on a server that never answers, and resolves within the open timeout", async () => {
+      const { queries, row } = store();
+      server.initializeHangs = true;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const opening = openToolSession(scope, agent, queries);
+        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+        const session = await opening;
+        // No listing to fall back to, so its tools are dropped.
+        expect(session.tools).toEqual({});
+        expect(row().lastFetchFailedAt).toBeInstanceOf(Date);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // Recording it would serve stale tools for the window and drop them after
+    // it, flapping the prefix ADR-0029 exists to protect.
+    it("clears rather than records on an auth failure, since its listing is never served", async () => {
+      const { queries, row, failedAgo } = store();
+      await (await openToolSession(scope, agent, queries)).dispose();
+      failedAgo(FETCH_FAILURE_SKIP_WINDOW_MS);
+
+      server.rejectWith = new UnauthorizedError();
+      const session = await openToolSession(scope, agent, queries);
+      expect(session.tools).toEqual({});
+      expect(row().lastFetchFailedAt).toBeNull();
+    });
+
+    it("serves the listing without a connect attempt inside the window, byte-identical on the wire", async () => {
+      const { queries, failedAgo } = store();
+      const live = await openToolSession(scope, agent, queries);
+      const liveWire = await wireTools(live.tools);
+      await live.dispose();
+
+      failedAgo(FETCH_FAILURE_SKIP_WINDOW_MS - 1_000);
+      const attempts = server.attempts;
+      const warn = vi.spyOn(logger, "warn");
+      try {
+        const stale = await openToolSession(scope, agent, queries);
+        expect(server.attempts).toBe(attempts);
+        expect(Object.keys(stale.tools)).toEqual([
+          "flaky__search",
+          "flaky__write",
+        ]);
+        expect(await wireTools(stale.tools)).toBe(liveWire);
+        expect([...stale.readOnlyToolNames]).toEqual(["flaky__search"]);
+        expect(warn.mock.calls.map((c) => String(c[1]))).toContain(
+          "MCP 'mcp-1' failed its last fetch moments ago; serving its last-known tool listing without trying it",
+        );
+        await stale.dispose();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("fetches anyway inside the window when nothing was ever stored", async () => {
+      const { queries, failedAgo } = store();
+      failedAgo(1_000);
+      const session = await openToolSession(scope, agent, queries);
+      expect(server.attempts).toBe(1);
+      expect(Object.keys(session.tools)).toHaveLength(2);
+      await session.dispose();
+    });
+
+    it("fetches anyway inside the window when the stored listing is a day old", async () => {
+      const { queries, age, failedAgo } = store();
+      await (await openToolSession(scope, agent, queries)).dispose();
+      age(LAST_KNOWN_LISTING_MAX_AGE_MS);
+      failedAgo(1_000);
+      await (await openToolSession(scope, agent, queries)).dispose();
+      expect(server.attempts).toBe(2);
+    });
+
+    it("fetches again once the window has passed, and clears the failure when it succeeds", async () => {
+      const { queries, row, failedAgo } = store();
+      await (await openToolSession(scope, agent, queries)).dispose();
+      failedAgo(FETCH_FAILURE_SKIP_WINDOW_MS);
+      await (await openToolSession(scope, agent, queries)).dispose();
+      expect(server.attempts).toBe(2);
+      expect(row().lastFetchFailedAt).toBeNull();
+    });
+
+    it("does not write on a successful fetch when nothing had failed", async () => {
+      const { queries } = store();
+      await (await openToolSession(scope, agent, queries)).dispose();
+      expect(queries.setMcpFetchFailedAt).not.toHaveBeenCalled();
+    });
+
+    it("still serves the turn when recording the failure fails", async () => {
+      const { queries } = store();
+      await (await openToolSession(scope, agent, queries)).dispose();
+      queries.setMcpFetchFailedAt.mockRejectedValueOnce(new Error("db down"));
+      server.up = false;
+      const session = await openToolSession(scope, agent, queries);
+      expect(Object.keys(session.tools)).toHaveLength(2);
+    });
+
+    it("records a stale tool's failed lazy connect, and clears it when one succeeds", async () => {
+      const { queries, row, failedAgo } = store();
+      await (await openToolSession(scope, agent, queries)).dispose();
+      failedAgo(1_000);
+      const session = await openToolSession(scope, agent, queries);
+
+      server.up = false;
+      const before = row().lastFetchFailedAt!;
+      await expect(
+        call(session.tools.flaky__write, { body: "x" }),
+      ).rejects.toThrow("MCP server 'Flaky MCP' is unreachable");
+      expect(row().lastFetchFailedAt!.getTime()).toBeGreaterThan(
+        before.getTime(),
+      );
+
+      server.up = true;
+      await call(session.tools.flaky__write, { body: "x" });
+      expect(row().lastFetchFailedAt).toBeNull();
+      await session.dispose();
+    });
+
+    it("bounds a stale tool's lazy connect by the open timeout", async () => {
+      const { queries, row, failedAgo } = store();
+      await (await openToolSession(scope, agent, queries)).dispose();
+      failedAgo(1_000);
+      const session = await openToolSession(scope, agent, queries);
+      queries.setMcpFetchFailedAt.mockClear();
+
+      server.initializeHangs = true;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const settled = expect(
+          call(session.tools.flaky__write, { body: "x" }),
+        ).rejects.toThrow("MCP server 'Flaky MCP' is unreachable");
+        await vi.advanceTimersByTimeAsync(MCP_OPEN_TIMEOUT_MS);
+        await settled;
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(queries.setMcpFetchFailedAt).toHaveBeenCalledWith(
+        "mcp-1",
+        expect.any(Date),
+      );
+      expect(row().lastFetchFailedAt).toBeInstanceOf(Date);
+      await session.dispose();
+    });
   });
 });

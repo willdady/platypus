@@ -347,6 +347,13 @@ const drizzleChatTurnQueries: ChatTurnQueries = {
       .where(eq(mcpTable.id, id));
   },
 
+  async setMcpFetchFailedAt(id, failedAt) {
+    await db
+      .update(mcpTable)
+      .set({ lastFetchFailedAt: failedAt })
+      .where(eq(mcpTable.id, id));
+  },
+
   async getSubAgentsByIds(ids, orgId, workspaceId) {
     // A sub-Agent resolves at the parent's Workspace scope, or at Organization
     // scope where attached (ADR-0007) — the same rule `getAgent` applies, and the

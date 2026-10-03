@@ -104,7 +104,8 @@ export const redactMcpSecrets = <T extends McpSecretFields>(
  * the server is authorized. Unconditional — unlike {@link redactMcpSecrets},
  * these are never Operator-entered and belong in no response, so every route
  * returning an MCP row runs it, writes included. The Last-known tool listing
- * goes too: it is a Chat turn's internal cache (ADR-0029), not configuration.
+ * goes too, with when its fetch last failed: a Chat turn's internal cache
+ * (ADR-0029, ADR-0031), not configuration.
  */
 export const sanitizeMcpResponse = (record: McpRecord) => {
   const {
@@ -115,6 +116,7 @@ export const sanitizeMcpResponse = (record: McpRecord) => {
     oauthScope,
     lastKnownToolListing,
     lastKnownToolListingFetchedAt,
+    lastFetchFailedAt,
     ...rest
   } = record;
   return {
