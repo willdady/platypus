@@ -23,7 +23,11 @@ import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import { type Workspace, type Provider } from "@platypus/schemas";
+import {
+  type Organization,
+  type Workspace,
+  type Provider,
+} from "@platypus/schemas";
 import {
   CONTEXT_MAX_LENGTH,
   DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
@@ -35,6 +39,8 @@ import { canManageWorkspaceDelegation } from "@/lib/authorization";
 import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { organizationEntity } from "@/lib/api-write";
+import Link from "next/link";
 import {
   FieldSkeleton,
   FooterSkeleton,
@@ -118,6 +124,14 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
     results: Provider[];
   }>("providers", { orgId, workspaceId });
   const providers = providersData?.results || [];
+
+  // The Workspace's Inbound Trigger switch only counts under the
+  // Organization's "Selected workspaces" gate (ADR-0030).
+  const { data: organization } = useScopedSWR<Organization>(
+    organizationEntity(orgId),
+    canManageDelegation ? {} : null,
+  );
+  const inboundGate = organization?.inboundTriggerGate;
 
   const {
     loadState,
@@ -463,16 +477,32 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
                       Allow Inbound Triggers
                     </FieldLabel>
                     <FieldDescription>
-                      Let this workspace&apos;s Inbound Triggers accept calls
-                      from outside Platypus. Applies only while the
-                      organization&apos;s Inbound Triggers setting is Selected
-                      workspaces. Off by default.
+                      {inboundGate === "off" || inboundGate === "all" ? (
+                        <>
+                          {inboundGate === "all"
+                            ? "Your organization allows Inbound Triggers in every workspace."
+                            : "Your organization doesn't allow Inbound Triggers."}{" "}
+                          Change this in the organization&apos;s{" "}
+                          <Link
+                            href={orgRoutes(orgId).settings.inboundTriggers}
+                            className="underline"
+                          >
+                            Inbound Triggers
+                          </Link>{" "}
+                          settings.
+                        </>
+                      ) : (
+                        <>
+                          Let this workspace&apos;s Inbound Triggers accept
+                          calls from outside Platypus. Off by default.
+                        </>
+                      )}
                     </FieldDescription>
                   </div>
                   <Switch
                     id="inboundTriggersAllowed"
                     checked={formData.inboundTriggersAllowed}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || inboundGate !== "selected"}
                     onCheckedChange={(checked) =>
                       setFormData((prev) => ({
                         ...prev,

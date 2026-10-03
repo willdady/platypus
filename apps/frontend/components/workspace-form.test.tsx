@@ -131,6 +131,33 @@ describe("WorkspaceForm save", () => {
     });
   });
 
+  // ADR-0030: the Workspace switch only counts under "Selected workspaces".
+  it.each(["off", "all"])(
+    "locks the Inbound Trigger switch while the organization gate is %s",
+    (gate) => {
+      setDataFor(WORKSPACE_KEY, RESEARCH);
+      setDataFor("/organizations/org1", { inboundTriggerGate: gate });
+      renderForm();
+
+      expect(
+        screen.getByRole("switch", { name: "Allow Inbound Triggers" }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("link", { name: "Inbound Triggers" }),
+      ).toHaveAttribute("href", "/org1/settings/inbound-triggers");
+    },
+  );
+
+  it("unlocks the Inbound Trigger switch under Selected workspaces", () => {
+    setDataFor(WORKSPACE_KEY, RESEARCH);
+    setDataFor("/organizations/org1", { inboundTriggerGate: "selected" });
+    renderForm();
+
+    expect(
+      screen.getByRole("switch", { name: "Allow Inbound Triggers" }),
+    ).toBeEnabled();
+  });
+
   // ADR-0006: delegation is the org admin's to grant, not the owner's.
   it("hides the delegation switches from a workspace owner", () => {
     authState.actor = "workspace-owner";
