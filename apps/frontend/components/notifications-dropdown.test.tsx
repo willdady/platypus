@@ -188,3 +188,44 @@ describe("NotificationsDropdown feed", () => {
     );
   });
 });
+
+describe("NotificationsDropdown body", () => {
+  const renderBody = (body: string) => {
+    feeds["/notifications"] = { results: [{ ...unread, body }] };
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+    openDropdownMenu();
+  };
+
+  it("renders an unordered list with every item", () => {
+    renderBody("Acceptance criteria:\n- item one\n- item two\n\nSize: S");
+
+    const items = screen.getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual(["item one", "item two"]);
+    expect(items[0].closest("ul")).not.toBeNull();
+    expect(screen.getByText("Size: S")).toBeInTheDocument();
+  });
+
+  it("renders an ordered list with every item", () => {
+    renderBody("1. first\n2. second");
+
+    const items = screen.getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual(["first", "second"]);
+    expect(items[0].closest("ol")).not.toBeNull();
+  });
+
+  it("shows a disallowed block's text without its element", () => {
+    renderBody("## Title\n\nDetails");
+
+    expect(screen.getByText("Title")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Title" })).toBeNull();
+  });
+
+  it("opens a link in a new tab without toggling the entry", () => {
+    renderBody("See [the run](https://example.com/run)");
+
+    const link = screen.getByRole("link", { name: "the run" });
+    expect(link).toHaveAttribute("target", "_blank");
+    fireEvent.click(link);
+    expect(screen.queryByText("Show less")).toBeNull();
+  });
+});

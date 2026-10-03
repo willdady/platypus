@@ -194,10 +194,21 @@ export function NotificationsDropdown({
                         </div>
                       )}
                       <div
-                        className={`text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary ${isExpanded ? "" : "line-clamp-2"}`}
+                        className={`text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary [&_li]:py-0 ${isExpanded ? "" : "line-clamp-2"}`}
                       >
                         <Markdown
-                          allowedElements={["p", "a", "strong", "em", "code"]}
+                          allowedElements={[
+                            "p",
+                            "a",
+                            "strong",
+                            "em",
+                            "code",
+                            "ul",
+                            "ol",
+                            "li",
+                          ]}
+                          // Anything else keeps its text, just unstyled.
+                          unwrapDisallowed
                           components={{
                             // Streamdown's own link renders as a button that
                             // bubbles into the row's expand/collapse click.
