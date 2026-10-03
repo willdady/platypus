@@ -336,7 +336,8 @@ export default function HomePage() {
                     </span>
                     {"\n"}
                     <span className="text-primary-bright">curl</span> -fsSL
-                    https://platypus.chat/install.sh | bash
+                    https://platypus.chat/install.sh |
+                    ADMIN_EMAIL=you@example.com bash
                   </code>
                 </pre>
               </div>

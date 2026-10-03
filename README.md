@@ -54,7 +54,7 @@ See it all come together in the [daily board digest worked example](https://docs
 ## 🚀 Quick Start (Docker)
 
 ```bash
-curl -fsSL https://platypus.chat/install.sh | bash
+curl -fsSL https://platypus.chat/install.sh | ADMIN_EMAIL=you@example.com bash
 ```
 
 Needs Linux or macOS (Windows via WSL) and Docker with Compose v2. The installer pins the latest release, generates a secret and admin password, starts the stack, and prints where to sign in.

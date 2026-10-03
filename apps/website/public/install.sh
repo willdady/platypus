@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Platypus installer.
 #
-#   curl -fsSL https://platypus.chat/install.sh | bash
+#   curl -fsSL https://platypus.chat/install.sh | ADMIN_EMAIL=you@example.com bash
 #
 # Stands up a pinned Docker Compose deployment in ./platypus. Runs without
 # prompts; configure it with environment variables instead:
@@ -28,6 +28,7 @@ fail() {
 # by the network runs nothing rather than half a script.
 main() {
   # --- Preflight: nothing is written until all of these pass. ---
+  echo "Checking prerequisites (Docker can take a few seconds to answer)..."
   case "$(uname -s)" in
     Linux | Darwin) ;;
     *) fail "unsupported OS '$(uname -s)'. Platypus installs on Linux or macOS; on Windows, run this inside WSL." ;;
@@ -39,6 +40,13 @@ main() {
     fail "Docker Compose v2 ('docker compose') is required but was not found."
   docker info >/dev/null 2>&1 ||
     fail "the Docker daemon is not running (or this user cannot reach it). Start Docker and try again."
+  # Caught here, a taken port costs nothing; caught by 'docker compose up', it
+  # leaves a .env behind that stops this installer from re-running.
+  local port
+  for port in 3000 4000; do
+    ! (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null ||
+      fail "port $port is already in use on this host, and Platypus needs it. Stop whatever is using it (see: lsof -i :$port) and try again."
+  done
 
   local host="${PLATYPUS_HOST:-localhost}"
   local email="${ADMIN_EMAIL:-admin@example.com}"
@@ -72,11 +80,16 @@ main() {
   project="${COMPOSE_PROJECT_NAME:-$(basename "$dir" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')}"
   volume="${project}_postgres_data"
   ! docker volume inspect "$volume" >/dev/null 2>&1 ||
-    fail "a database from a previous Platypus install ($volume) is still on this host, and the admin password this installer generates wouldn't sign in to it. Delete it with 'docker volume rm $volume', or install into a different PLATYPUS_DIR."
+    fail "Docker volume '$volume' still holds the database of an earlier Platypus install.
+This install would reuse it, and the admin password printed at the end wouldn't sign in. Either:
+  - delete it, erasing that install's data:  docker volume rm $volume
+  - or keep it and install into a directory with another name:
+      curl -fsSL https://platypus.chat/install.sh | PLATYPUS_DIR=./platypus2 bash"
 
   # --- Resolve the version, from the redirect rather than the rate-limited API. ---
   local version="${PLATYPUS_VERSION:-}"
   if [[ -z "$version" ]]; then
+    echo "Finding the latest release..."
     local latest
     latest="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")" ||
       fail "could not reach GitHub to find the latest release. Set PLATYPUS_VERSION to install a specific one."
@@ -130,7 +143,31 @@ EOF
   chmod 600 "$dir/.env.tmp"
   mv "$dir/.env.tmp" "$dir/.env"
 
+  cat >"$dir/README.md" <<EOF
+# Platypus $version
+
+Installed by https://platypus.chat/install.sh. Run these from this directory.
+
+    docker compose up -d       # start
+    docker compose stop        # stop, keeping your data
+    docker compose restart     # restart
+    docker compose ps          # status
+    docker compose logs -f     # follow the logs
+
+Never run \`docker compose down -v\`: it deletes the database volume.
+
+Settings are in \`.env\`; run \`docker compose up -d\` after changing them.
+Upgrading: $DOCS/self-hosting/docker-compose#upgrading
+
+## Feedback and contributing
+
+Platypus is open source: https://github.com/$REPO
+Bug reports, ideas and pull requests are all welcome; see
+https://github.com/$REPO/blob/main/CONTRIBUTING.md
+EOF
+
   # --- Start the stack. ---
+  echo "Starting Platypus (the first run pulls images and can take a few minutes)..."
   (cd "$dir" && docker compose up -d --wait) ||
     fail "the stack did not start. See why with: cd $dir && docker compose logs backend
 Once fixed, start it with 'docker compose up -d' in $dir; re-running this installer will refuse, because .env now exists."
@@ -145,6 +182,8 @@ Platypus $version is running.
 
 These credentials are temporary: change the password after you first sign in.
 They are also saved in $dir/.env.
+
+To stop, start or upgrade Platypus, see $dir/README.md.
 EOF
 
   if [[ "$host" != "localhost" ]]; then

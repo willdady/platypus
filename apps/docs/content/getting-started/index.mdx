@@ -28,10 +28,10 @@ send a message**.
 
 ## Quick start (Docker)
 
-Run the installer:
+Run the installer, with your own email in place of `you@example.com`:
 
 ```bash
-curl -fsSL https://platypus.chat/install.sh | bash
+curl -fsSL https://platypus.chat/install.sh | ADMIN_EMAIL=you@example.com bash
 ```
 
 It installs the latest release into a `platypus` directory, generates a secret
@@ -40,7 +40,7 @@ database with pgvector. When the stack is healthy it prints where to sign in:
 
 ```text
   Sign in at:  http://localhost:3000
-  Email:       admin@example.com
+  Email:       you@example.com
   Password:    <generated>
 ```
 

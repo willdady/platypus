@@ -9,10 +9,11 @@ import { Callout, Steps } from "nextra/components";
 
 The fastest way to run Platypus is the one-line installer. It downloads the
 release's `compose.yaml`, pins the images to that release, writes a `.env` with a
-fresh secret and admin password, and starts the stack:
+fresh secret and admin password, and starts the stack. Replace
+`you@example.com` with your own email — it's how you sign in as the first admin:
 
 ```bash
-curl -fsSL https://platypus.chat/install.sh | bash
+curl -fsSL https://platypus.chat/install.sh | ADMIN_EMAIL=you@example.com bash
 ```
 
 The stack pulls the published images, wires the services together on a private
@@ -146,12 +147,13 @@ v2 plugin and a running daemon. It does not install Docker for you, and it exits
 before writing anything if one of these is missing.
 
 ```bash
-curl -fsSL https://platypus.chat/install.sh | bash
+curl -fsSL https://platypus.chat/install.sh | ADMIN_EMAIL=you@example.com bash
 ```
 
 The installer asks no questions. It creates a `platypus` directory in the
 current directory holding `compose.yaml`, a `compose.override.yaml` that pins
-both images to one exact version, and a `.env` readable only by you. Then it runs
+both images to one exact version, a `.env` readable only by you, and a
+`README.md` listing the commands to start, stop and restart the stack. Then it runs
 `docker compose up -d --wait` and prints the sign-in URL, the admin email and the
 admin password.
 
@@ -191,12 +193,14 @@ changes nothing there: that file holds the secret your sessions are signed with
 and can't be regenerated. To move an existing install to a new release, see
 [Upgrading](#upgrading).
 
-It also refuses when a database from an earlier install into a directory of the
+It also refuses when port `3000` or `4000` is already in use on the host, and
+when a database from an earlier install into a directory of the
 same name is still on the host, such as `platypus_postgres_data` after you
 deleted `./platypus`. The new admin password would never sign in to that
 database, because first boot doesn't run twice. Remove the volume with
-`docker volume rm platypus_postgres_data` if you mean to start over, or install
-into a different `PLATYPUS_DIR`.
+`docker volume rm platypus_postgres_data` if you mean to start over, or keep it
+and install into a directory with another name, such as
+`PLATYPUS_DIR=./platypus2`.
 
 ## Manual install
 
