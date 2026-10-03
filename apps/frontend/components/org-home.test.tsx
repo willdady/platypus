@@ -51,11 +51,7 @@ describe.each([
       render(<OrgHome orgId="org1" />);
 
       for (const name of [/Add workspace/, /Organization settings/]) {
-        if (shown) {
-          expect(screen.getByRole("link", { name })).toBeInTheDocument();
-        } else {
-          expect(screen.queryByRole("link", { name })).not.toBeInTheDocument();
-        }
+        expect(screen.queryByRole("link", { name }) !== null).toBe(shown);
       }
     },
   );

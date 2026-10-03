@@ -21,12 +21,13 @@ import {
   installRadixPointerPolyfills,
   jsonResponse,
 } from "@/lib/test-utils";
+import type { Actor } from "@/lib/authorization";
 
 // --- Module mocks ------------------------------------------------------------
 
 const { params, reads, auth } = vi.hoisted(() => ({
   params: { orgId: "org1", workspaceId: "ws1" },
-  auth: { actor: "org-admin" as string },
+  auth: { actor: "org-admin" as Actor },
   // Keyed by `${workspaceId}|${entity}`. Each entry is handed back by
   // reference, as SWR does, so a read's `data` identity is stable across
   // renders.
@@ -220,7 +221,7 @@ describe("AppSidebar workspace switcher", () => {
     ["the Operator", "operator", true],
     ["an Org Admin", "org-admin", true],
     ["a member who owns the Workspace", "workspace-owner", false],
-  ])("offers Add workspace to %s (%s): %s", (_who, actor, shown) => {
+  ] as const)("offers Add workspace to %s (%s): %s", (_who, actor, shown) => {
     installRadixPointerPolyfills();
     auth.actor = actor;
     seedHeader();
@@ -229,8 +230,7 @@ describe("AppSidebar workspace switcher", () => {
     const item = within(openSwitcher()).queryByRole("menuitem", {
       name: /Add workspace/,
     });
-    if (shown) expect(item).toBeInTheDocument();
-    else expect(item).not.toBeInTheDocument();
+    expect(item !== null).toBe(shown);
   });
 });
 
