@@ -5,8 +5,8 @@ const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 // Every partial update schema is built with this rather than `.partial()`: in
 // Zod 4 a `.default()` still fills an absent key after `.partial()`, so an
 // update touching one field would write every other defaulted field back to its
-// default. This drops the defaults, so a parsed update holds exactly the keys
-// the caller sent.
+// default. This drops each field's top-level `.default()`, so a parsed update
+// holds exactly the keys the caller sent.
 export const partialWithoutDefaults = <Shape extends z.ZodRawShape>(
   schema: z.ZodObject<Shape>,
 ) =>
