@@ -59,6 +59,7 @@ describe("WorkspaceWizard", () => {
     const fetchMock = stubAcceptedSave({ id: "ws9" });
     render(<WorkspaceWizard orgId="org1" />);
     fillWorkspaceStep();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "New provider" }));
 
     click("Next");
 
@@ -69,6 +70,25 @@ describe("WorkspaceWizard", () => {
       "Provider",
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the Provider step on Shared provider when the org has some", () => {
+    render(<WorkspaceWizard orgId="org1" />);
+    fillWorkspaceStep();
+
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "Shared provider",
+    );
+  });
+
+  it("opens the Provider step on New provider when the org has none", () => {
+    setDataFor("/organizations/org1/providers", { results: [] });
+    render(<WorkspaceWizard orgId="org1" />);
+    fillWorkspaceStep();
+
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "New provider",
+    );
   });
 
   // ADR-0008: an admin assigns the owner on creation; nothing is written until

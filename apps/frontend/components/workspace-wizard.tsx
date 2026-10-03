@@ -27,6 +27,12 @@ import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemTitle,
+} from "@/components/ui/item";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Empty,
@@ -98,7 +104,9 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
   const [ownerId, setOwnerId] = useState("");
   const [workspaceErrors, setWorkspaceErrors] = useState<FormErrors>({});
 
-  const [providerSource, setProviderSource] = useState<"new" | "shared">("new");
+  // Unset until the user picks a tab, so it can default to Shared once the
+  // org's Shared Providers load.
+  const [pickedSource, setProviderSource] = useState<"new" | "shared">();
   const [provider, setProvider] = useState<Record<string, unknown>>();
   const [sharedProviderIds, setSharedProviderIds] = useState<string[]>([]);
 
@@ -118,6 +126,8 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
   );
   const members = membersData?.results ?? [];
   const sharedProviders = sharedData?.results ?? [];
+  const providerSource =
+    pickedSource ?? (sharedProviders.length > 0 ? "shared" : "new");
   const hasSandboxBackends = (backendsData?.results.length ?? 0) > 0;
 
   // A super-admin acting on an org they're not enrolled in won't appear in
@@ -314,8 +324,8 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
           }
         >
           <TabsList className="mb-6">
-            <TabsTrigger value="new">New provider</TabsTrigger>
             <TabsTrigger value="shared">Shared provider</TabsTrigger>
+            <TabsTrigger value="new">New provider</TabsTrigger>
           </TabsList>
           {/* Force-mounted so switching tabs keeps a half-filled form. */}
           <TabsContent
@@ -347,32 +357,33 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
                 </EmptyHeader>
               </Empty>
             ) : (
-              <FieldSet className="mb-6">
-                <FieldGroup>
-                  {sharedProviders.map((p) => (
-                    <Field
-                      key={p.id}
-                      orientation="horizontal"
-                      className="items-center justify-between"
-                    >
-                      <FieldLabel htmlFor={`shared-${p.id}`}>
-                        {p.name}
-                      </FieldLabel>
-                      <Switch
-                        id={`shared-${p.id}`}
-                        checked={sharedProviderIds.includes(p.id)}
-                        onCheckedChange={(on) =>
-                          setSharedProviderIds((prev) =>
-                            on
-                              ? [...prev, p.id]
-                              : prev.filter((id) => id !== p.id),
-                          )
-                        }
-                      />
-                    </Field>
-                  ))}
-                </FieldGroup>
-              </FieldSet>
+              <ul className="mb-6">
+                {sharedProviders.map((p) => (
+                  <li key={p.id} className="mb-2">
+                    {/* The whole row toggles the switch. */}
+                    <Item variant="outline" className="cursor-pointer" asChild>
+                      <label htmlFor={`shared-${p.id}`}>
+                        <ItemContent>
+                          <ItemTitle>{p.name}</ItemTitle>
+                        </ItemContent>
+                        <ItemActions>
+                          <Switch
+                            id={`shared-${p.id}`}
+                            checked={sharedProviderIds.includes(p.id)}
+                            onCheckedChange={(on) =>
+                              setSharedProviderIds((prev) =>
+                                on
+                                  ? [...prev, p.id]
+                                  : prev.filter((id) => id !== p.id),
+                              )
+                            }
+                          />
+                        </ItemActions>
+                      </label>
+                    </Item>
+                  </li>
+                ))}
+              </ul>
             )}
             <div className="flex gap-2">
               <Button variant="outline" onClick={back}>
