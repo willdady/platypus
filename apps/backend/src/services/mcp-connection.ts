@@ -2,6 +2,7 @@ import {
   experimental_createMCPClient as createMCPClient,
   auth as mcpAuth,
 } from "@ai-sdk/mcp";
+import { isDeepStrictEqual } from "node:util";
 import { eq, type SQL } from "drizzle-orm";
 import type { mcpTestSchema } from "@platypus/schemas";
 import type { z } from "zod";
@@ -67,12 +68,27 @@ export type McpProbeResult =
   | { success: false; error: string; status: 400 | 404 };
 
 /**
+ * Whether a test connected the way a turn would — with the stored row's own
+ * connection, not unsaved edits to it — so its success says something about
+ * the stored MCP.
+ */
+const testedStoredConnection = (
+  data: McpTestInput,
+  stored: McpRecord,
+): boolean =>
+  data.authType === "OAuth" ||
+  (data.url === stored.url &&
+    data.authType === stored.authType &&
+    isDeepStrictEqual(data.headers ?? null, stored.headers ?? null) &&
+    (data.authType !== "Bearer" || data.bearerToken === stored.bearerToken));
+
+/**
  * Probes an MCP server and reports its (namespaced) tool names — the `/test`
  * route's whole job. `storedMcp` is the row a caller already resolved for
  * `data.mcpId` (`null` when there is none, or no such row is visible). Only an
  * OAuth test connects with its stored credentials; a Bearer/None test uses
- * what it was sent. A success clears the row's recorded fetch failure, so the
- * next turn tries the server again (ADR-0031).
+ * what it was sent. A success with the stored connection clears the row's
+ * recorded fetch failure, so the next turn tries the server again (ADR-0031).
  *
  * Bounded by `MCP_OPEN_TIMEOUT_MS`, like a turn's own fetch: a server that
  * takes the connection and never answers is reported, not waited on.
@@ -113,14 +129,20 @@ export const probeMcpConnection = async (
       });
     }
 
-    const client = opening;
-    const rawToolNames = await withDeadline(
-      async () => Object.keys(await (await client).tools()),
-      MCP_OPEN_TIMEOUT_MS,
-    );
-    await (await client).close();
+    const connecting = opening;
+    const { client, rawToolNames } = await withDeadline(async () => {
+      const connected = await connecting;
+      return {
+        client: connected,
+        rawToolNames: Object.keys(await connected.tools()),
+      };
+    }, MCP_OPEN_TIMEOUT_MS);
+    await client.close();
 
-    if (storedMcp?.lastFetchFailedAt) {
+    if (
+      storedMcp?.lastFetchFailedAt &&
+      testedStoredConnection(data, storedMcp)
+    ) {
       try {
         await db
           .update(mcpTable)

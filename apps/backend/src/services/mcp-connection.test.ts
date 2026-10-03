@@ -195,6 +195,19 @@ describe("mcp-connection", () => {
       expect(mockDb.set).toHaveBeenCalledWith({ lastFetchFailedAt: null });
     });
 
+    it("leaves the recorded failure when the test used unsaved connection edits", async () => {
+      await probeMcpConnection(
+        {
+          url: "http://other.example.com",
+          authType: "None",
+          mcpId: "mcp-1",
+          name: "My Server",
+        } as never,
+        { ...baseMcp, lastFetchFailedAt: new Date() },
+      );
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
     it("does not write when the stored MCP has no recorded failure", async () => {
       await probeMcpConnection(
         {

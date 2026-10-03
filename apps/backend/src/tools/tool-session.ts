@@ -303,9 +303,10 @@ export type ToolSession = {
 export type ToolSessionOptions = {
   /**
    * The run's abort. Resolving an id stops waiting the moment it fires, on top
-   * of the `TOOL_SET_RESOLVE_TIMEOUT_MS` or {@link MCP_OPEN_TIMEOUT_MS}
-   * each id already resolves under (issue #1135). A nested session inherits it: a delegate resolves while the
-   * run that holds the parent session is still live.
+   * of the `TOOL_SET_RESOLVE_TIMEOUT_MS` or {@link MCP_OPEN_TIMEOUT_MS} each id
+   * already resolves under (issue #1135). A nested session inherits it: a
+   * delegate resolves while the run that holds the parent session is still
+   * live.
    */
   signal?: AbortSignal;
 };
@@ -318,9 +319,9 @@ export type ToolSessionOptions = {
  * Each assigned id is a registered Tool set or, failing that, an MCP server — the
  * two kinds an Agent's `toolSetIds` can name. Both fail soft: an id that resolves
  * to neither, a Tool set whose factory throws or outruns
- * `TOOL_SET_RESOLVE_TIMEOUT_MS`, an MCP server that is unreachable or
- * does not answer within {@link MCP_OPEN_TIMEOUT_MS} — each costs its own tools and nothing else. A Chat turn is not the place to
- * discover that a plugin is broken (ADR-0013: strict at boot, forgiving at
+ * `TOOL_SET_RESOLVE_TIMEOUT_MS`, an MCP server that is unreachable or does not
+ * answer within {@link MCP_OPEN_TIMEOUT_MS} — each costs its own tools and
+ * nothing else. A Chat turn is not the place to discover that a plugin is broken (ADR-0013: strict at boot, forgiving at
  * runtime), and a Shared org-scoped MCP has org-wide blast radius (ADR-0007).
  */
 export const openToolSession = async (
@@ -508,9 +509,9 @@ export const openToolSession = async (
       failedAt = next;
       try {
         await queries.setMcpFetchFailedAt(mcp.id, failedAt);
-      } catch (error) {
+      } catch (writeError) {
         logger.warn(
-          { error, ...attribution },
+          { error: writeError, ...attribution },
           "Failed to record an MCP's last fetch failure",
         );
       }

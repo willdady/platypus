@@ -39,11 +39,11 @@ import {
  * has its own, shorter `MCP_OPEN_TIMEOUT_MS` (ADR-0031).
  *
  * 20s: long enough for a factory that reads the database or builds a Sandbox
- * adapter on the way; short enough that a turn
- * whose server has hung still reaches the model well inside the run's 2-minute
- * step timer, rather than being killed by it with a timeout that names neither.
- * A session's ids resolve concurrently, so this bounds its whole resolve phase
- * rather than adding up per id; a Sub-Agent's session, opened on its first
+ * adapter on the way; short enough that a turn whose factory has hung still
+ * reaches the model well inside the run's 2-minute step timer, rather than
+ * being killed by it with a timeout that names neither. A session's ids
+ * resolve concurrently, so this bounds its whole resolve phase rather than
+ * adding up per id; a Sub-Agent's session, opened on its first
  * delegation, gets a window of its own. Not configurable: nothing has asked
  * for it.
  */

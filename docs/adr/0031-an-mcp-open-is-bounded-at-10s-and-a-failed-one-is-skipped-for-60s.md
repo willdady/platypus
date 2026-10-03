@@ -60,6 +60,14 @@ Test connection clears it, as does any edit that clears the listing.
 - **A cold server that takes more than 10 s to answer is treated as down** on
   that turn, and its listing is served for the next minute. A server that slow on
   every connect never serves live tools; that is the ceiling of a fixed timeout.
+- **A connect that never settles is abandoned, not torn down.** `@ai-sdk/mcp`'s
+  `createMCPClient` takes no abort signal, so a server that hangs during
+  `initialize` leaves its request open until it settles or the platform's own
+  socket timeouts end it; the client is closed if it ever lands. The turn and
+  Test connection stop waiting at 10 s either way.
+- **Test connection clears only for the saved connection.** A test of unsaved
+  edits to the URL, auth or headers says nothing about the stored MCP, so it
+  leaves the timestamp alone; saving those edits clears it anyway.
 - **Writes are best-effort.** A failed write of `lastFetchFailedAt` is logged and
   ignored, like a failed listing save: it costs at most a skip, or one extra
   fetch.
