@@ -3,6 +3,15 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { NotificationsDropdown } from "@/components/notifications-dropdown";
 import { cn } from "@/lib/utils";
 import { type Scope } from "@/lib/api-write";
+import { workspaceRoutes } from "@/lib/routes";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Settings } from "lucide-react";
+import Link from "next/link";
 
 interface HeaderProps {
   leftContent?: React.ReactNode;
@@ -38,6 +47,29 @@ export function Header({
           workspaceId={scope?.workspaceId}
         />
         <ModeToggle />
+        {scope?.workspaceId && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Workspace settings"
+                asChild
+                className="size-7"
+              >
+                <Link
+                  href={
+                    workspaceRoutes(scope.orgId, scope.workspaceId).settings
+                      .root
+                  }
+                >
+                  <Settings className="size-4" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Workspace settings</TooltipContent>
+          </Tooltip>
+        )}
         <UserMenu orgId={scope?.orgId} workspaceId={scope?.workspaceId} />
       </div>
     </header>

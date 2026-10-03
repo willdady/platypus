@@ -17,7 +17,6 @@ import {
   MessageSquare,
   Plus,
   FolderOpen,
-  Settings,
   Sparkles,
   Zap,
   KanbanSquare,
@@ -302,20 +301,11 @@ const Workspace = () => {
         <span className="text-sm font-medium text-muted-foreground mb-1">
           {orgData?.name}
         </span>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <FolderOpen className="size-8" />
-            <h1 className="text-3xl font-bold tracking-tight">
-              {workspace.name}
-            </h1>
-          </div>
-          <Link
-            href={routes.settings.root}
-            aria-label="Workspace settings"
-            className="p-2 hover:bg-muted rounded-md transition-colors shrink-0"
-          >
-            <Settings className="h-5 w-5 text-muted-foreground" />
-          </Link>
+        <div className="flex items-center gap-3">
+          <FolderOpen className="size-8" />
+          <h1 className="text-3xl font-bold tracking-tight">
+            {workspace.name}
+          </h1>
         </div>
       </div>
 
