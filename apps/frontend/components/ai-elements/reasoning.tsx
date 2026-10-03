@@ -6,12 +6,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { linkSafety } from "@/components/link-safety";
 import { cn } from "@/lib/utils";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
 import { Streamdown } from "streamdown";
-import { linkSafety } from "@/components/link-safety";
 import { Shimmer } from "./shimmer";
 
 type ReasoningContextValue = {

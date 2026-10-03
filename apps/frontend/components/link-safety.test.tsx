@@ -21,8 +21,6 @@ const Card = ({ body }: { body: string }) => {
   );
 };
 
-const renderInDialog = (body: string) => render(<Card body={body} />);
-
 // Streamdown opens the confirmation after an async link check; clicking inside
 // act lets the nested layer finish mounting before the test presses Escape.
 const clickLink = (name: string) =>
@@ -35,7 +33,7 @@ const confirmation = () =>
 
 describe("link safety inside a Radix Dialog", () => {
   it("confirms an external link, showing the URL in full", async () => {
-    renderInDialog("[example](https://example.com/a/long/path)");
+    render(<Card body="[example](https://example.com/a/long/path)" />);
 
     await clickLink("example");
 
@@ -46,7 +44,7 @@ describe("link safety inside a Radix Dialog", () => {
   });
 
   it("closes on Close and leaves the parent dialog open", async () => {
-    renderInDialog("[example](https://example.com)");
+    render(<Card body="[example](https://example.com)" />);
     await clickLink("example");
     const dialog = confirmation();
 
@@ -59,7 +57,7 @@ describe("link safety inside a Radix Dialog", () => {
   });
 
   it("closes on Escape and leaves the parent dialog open", async () => {
-    renderInDialog("[example](https://example.com)");
+    render(<Card body="[example](https://example.com)" />);
     await clickLink("example");
     const dialog = confirmation();
 
@@ -74,7 +72,7 @@ describe("link safety inside a Radix Dialog", () => {
   it("opens the link in a new tab on Open link", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    renderInDialog("[example](https://example.com)");
+    render(<Card body="[example](https://example.com)" />);
     await clickLink("example");
     const dialog = confirmation();
 
@@ -93,7 +91,7 @@ describe("link safety inside a Radix Dialog", () => {
   it("copies the link", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
-    renderInDialog("[example](https://example.com)");
+    render(<Card body="[example](https://example.com)" />);
     await clickLink("example");
     const dialog = confirmation();
 
@@ -105,7 +103,7 @@ describe("link safety inside a Radix Dialog", () => {
   it("opens a same-origin link without confirming", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    renderInDialog(`[home](${window.location.origin}/org/workspace)`);
+    render(<Card body={`[home](${window.location.origin}/org/workspace)`} />);
 
     await clickLink("home");
 

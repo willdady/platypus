@@ -202,7 +202,7 @@ export function NotificationsDropdown({
                           const target = e.target as Element;
                           if (
                             !e.currentTarget.contains(target) ||
-                            target.closest("a, button")
+                            target.closest("button")
                           ) {
                             e.stopPropagation();
                           }

@@ -19,7 +19,7 @@ import {
  * clicked under another modal Radix layer (a card Dialog sets
  * `pointer-events: none` on body); a nested Radix Dialog can.
  */
-export const LinkSafetyDialog = ({
+const LinkSafetyDialog = ({
   isOpen,
   onClose,
   onConfirm,

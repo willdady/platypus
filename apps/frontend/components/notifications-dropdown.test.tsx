@@ -8,6 +8,7 @@ import {
   afterEach,
 } from "vitest";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -245,5 +246,21 @@ describe("NotificationsDropdown body", () => {
     );
     expect(screen.queryByText("Show less")).toBeNull();
     expect(screen.getByText("Nightly digest")).toBeInTheDocument();
+  });
+
+  it("cancels the confirmation and leaves the dropdown open", async () => {
+    renderBody("See [the run](https://example.com/run)");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "the run" }));
+    });
+    const dialog = screen.getByRole("dialog", { name: "Open external link?" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Open external link?" })).toBe(
+      null,
+    );
+    expect(screen.getByText("Nightly digest")).toBeInTheDocument();
+    expect(screen.queryByText("Show less")).toBeNull();
   });
 });
