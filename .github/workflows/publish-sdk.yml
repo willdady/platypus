@@ -33,7 +33,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate: lint, test and typecheck must pass before anything reaches npm.
+  checks:
+    uses: ./.github/workflows/checks.yml
+
   publish:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

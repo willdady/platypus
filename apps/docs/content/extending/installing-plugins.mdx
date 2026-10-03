@@ -102,9 +102,9 @@ RUN test ! -e /app/apps/node_modules && \
   `npm install` in the application directory instead: npm tries to reinstall the
   whole application and fails.
 - **The entrypoint, command and `/data` handling** all come from the base image
-  unchanged. The image has no health check: Compose defines one in
-  `compose.yaml`, so on Kubernetes write your own probe against the backend's
-  `GET /health`.
+  unchanged, and so does the health check, which polls the backend's
+  `GET /health`. Kubernetes ignores image health checks, so there write your own
+  probe against that endpoint.
 
 ### Build and boot it
 

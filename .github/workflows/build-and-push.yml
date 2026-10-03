@@ -16,16 +16,17 @@ permissions:
   contents: read
 
 jobs:
-  # Gate: lint must pass before any image is built or pushed.
-  lint:
-    uses: ./.github/workflows/lint.yml
+  # Gate: lint, test and typecheck must pass before any image is built or
+  # pushed.
+  checks:
+    uses: ./.github/workflows/checks.yml
 
   # Each architecture builds on its own native runner. Emulating arm64 under
   # QEMU made `pnpm install` run silently for 10+ minutes and releases were
   # cancelled as hung (#932). Every job pushes by digest; the merge job below
   # joins the two digests into one multi-arch manifest and applies the tags.
   build:
-    needs: lint
+    needs: checks
     strategy:
       matrix:
         image: [frontend, backend]

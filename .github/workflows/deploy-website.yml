@@ -18,12 +18,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Gate: lint must pass before the website is built and deployed.
-  lint:
-    uses: ./.github/workflows/lint.yml
+  # Gate: lint, test and typecheck must pass before the website is built and
+  # deployed.
+  checks:
+    uses: ./.github/workflows/checks.yml
 
   deploy-website:
-    needs: lint
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

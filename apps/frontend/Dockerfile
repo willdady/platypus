@@ -1,5 +1,9 @@
 # syntax=docker.io/docker/dockerfile:1
 
+# Node 25+ no longer bundles corepack. pnpm itself is pinned and hash-checked
+# through `packageManager` in the root package.json; this pins the shim.
+ARG COREPACK_VERSION=0.36.0
+
 FROM node:26-alpine AS base
 
 # Install dependencies only when needed
@@ -9,7 +13,8 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Install pnpm
-RUN npm install -g corepack && corepack enable pnpm
+ARG COREPACK_VERSION
+RUN npm install -g corepack@$COREPACK_VERSION && corepack enable pnpm
 
 # Copy monorepo files
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json .npmrc ./
@@ -28,7 +33,8 @@ FROM base AS builder
 WORKDIR /app
 
 # Install pnpm
-RUN npm install -g corepack && corepack enable pnpm
+ARG COREPACK_VERSION
+RUN npm install -g corepack@$COREPACK_VERSION && corepack enable pnpm
 
 # Copy installed dependencies
 COPY --from=deps app/ ./
@@ -45,11 +51,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build the frontend application
 RUN pnpm turbo build --filter=@platypus/frontend
-
-# Test stage
-FROM builder AS test
-WORKDIR /app
-RUN pnpm --filter @platypus/frontend test
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -80,4 +81,10 @@ ENV PORT=3000
 # In monorepos, the path mirrors the project structure
 # https://nextjs.org/docs/pages/api-reference/config/next-config-js/output
 ENV HOSTNAME="0.0.0.0"
+
+# `/` is a static page, so this probes the Next.js server alone, not the
+# backend behind it. Alpine has no curl, so use node's fetch.
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
+  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 3000) + '/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+
 CMD ["node", "apps/frontend/server.js"]

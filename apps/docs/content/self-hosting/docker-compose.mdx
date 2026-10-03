@@ -30,9 +30,8 @@ network, and seeds an initial organization and admin user on first boot.
 | `frontend` | `willdady/platypus-frontend:latest` | `3000:3000`           | Next.js web app                                |
 
 The services start in dependency order: the backend waits for the database to
-become healthy, and the frontend waits for the backend. Both the backend and the
-database publish Docker health checks so `docker compose` can gate startup and
-report status.
+become healthy, and the frontend waits for the backend. All three publish Docker
+health checks so `docker compose` can gate startup and report status.
 
 <Callout type="info">
   Postgres 18 is **not supported** (a Drizzle ORM incompatibility). Stay on the
@@ -354,8 +353,9 @@ settings after you first sign in.
 
 ## Health checks
 
-The backend exposes `GET /health`; its compose health check polls that endpoint,
-and the database health check runs `pg_isready`. Inspect status with:
+The backend image's health check polls its `GET /health` endpoint, the frontend
+image's polls its home page, and the database health check runs `pg_isready`.
+Inspect status with:
 
 ```bash
 docker compose ps

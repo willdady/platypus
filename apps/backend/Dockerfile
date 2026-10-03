@@ -1,35 +1,23 @@
+# Node 25+ no longer bundles corepack. pnpm itself is pinned and hash-checked
+# through `packageManager` in the root package.json; this pins the shim.
+ARG COREPACK_VERSION=0.36.0
+
 FROM node:26-alpine AS base
+ARG COREPACK_VERSION
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g corepack && corepack enable pnpm
+RUN npm install -g corepack@$COREPACK_VERSION && corepack enable pnpm
 
 FROM base AS builder
 RUN apk add --no-cache libc6-compat
-# Install turbo globally
-RUN npm install -g turbo
 WORKDIR /app
+# Install turbo at the exact version the root package.json pins, so the image
+# build prunes with the same turbo the repo uses.
+COPY package.json ./
+RUN npm install -g turbo@$(node -p "require('./package.json').devDependencies.turbo")
 COPY . .
 # Prune the workspace for backend
 RUN turbo prune --scope=@platypus/backend --docker
-
-# Stage to install dependencies and run tests
-FROM base AS tester
-RUN apk add --no-cache libc6-compat
-WORKDIR /app
-
-# Copy pruned package.json files and lockfile
-COPY --from=builder /app/out/json/ .
-COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY .npmrc ./
-
-# Install ALL dependencies (including devDependencies for testing)
-RUN pnpm install --frozen-lockfile
-
-# Copy source code
-COPY --from=builder /app/out/full/ .
-
-# Run tests
-RUN pnpm test
 
 # Stage to install production dependencies
 FROM base AS prod-deps
@@ -87,6 +75,11 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Expose port
 EXPOSE 4000
+
+# Probe the port the server actually listens on: PORT if set, else the app's
+# own default. Alpine has no curl, so use node's fetch.
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
+  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 4001) + '/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 
 # The entrypoint fixes ownership of the bind-mounted /data and then drops to
 # `platypus`, so the server below never runs as root. Deployments that would
