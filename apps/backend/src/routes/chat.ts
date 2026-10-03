@@ -104,17 +104,22 @@ chat.get(
     const { workspaceId } = workspaceScopeOf(c);
     const { limit: limitStr, offset: offsetStr, search } = c.req.valid("query");
 
-    const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
-    const offset = parseInt(offsetStr ?? "0") || 0;
+    const limit = Math.min(
+      Math.max(parseInt(limitStr ?? "100") || 100, 1),
+      100,
+    );
+    const offset = Math.max(parseInt(offsetStr ?? "0") || 0, 0);
 
-    // Build search filter using ILIKE on title and tags
-    const searchFilter =
-      search && search.trim() !== ""
-        ? or(
-            sql`${chatTable.title} ILIKE ${"%" + search.trim() + "%"}`,
-            sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${chatTable.tags}) AS t WHERE t ILIKE ${"%" + search.trim() + "%"})`,
-          )
-        : undefined;
+    // Build search filter using ILIKE on title and tags. `\` is Postgres's
+    // default LIKE escape, so escaping `%`, `_` and `\` matches them literally.
+    const term = search?.trim().replace(/[\\%_]/g, "\\$&");
+    const pattern = `%${term}%`;
+    const searchFilter = term
+      ? or(
+          sql`${chatTable.title} ILIKE ${pattern}`,
+          sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${chatTable.tags}) AS t WHERE t ILIKE ${pattern})`,
+        )
+      : undefined;
 
     const whereClause = and(
       eq(chatTable.workspaceId, workspaceId),

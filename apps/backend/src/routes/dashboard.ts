@@ -13,7 +13,7 @@ import {
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
-import { ValidationError } from "../errors.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
 import {
   createDashboard,
   createWidget,
@@ -126,7 +126,7 @@ dashboard.put(
     );
     if (result && "typeMismatch" in result)
       throw new ValidationError("Widget type mismatch");
-    if (!result) throw new ValidationError("Widget not found");
+    if (!result) throw new NotFoundError("Widget not found");
     return c.json(result);
   },
 );

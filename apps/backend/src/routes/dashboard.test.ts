@@ -422,6 +422,33 @@ describe("Dashboard Routes", () => {
       expect(res.status).toBe(404);
     });
 
+    it("returns 404 if widget is deleted mid-update", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: widgetId, dashboardId, type: "metric" },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([]);
+
+      const res = await app.request(
+        `${baseUrl}/${dashboardId}/widgets/${widgetId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            type: "metric",
+            data: { value: 42, label: "Sales" },
+          }),
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Widget not found" });
+    });
+
     it("returns 400 on widget type mismatch", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);

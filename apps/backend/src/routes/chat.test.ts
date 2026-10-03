@@ -26,6 +26,7 @@ vi.mock("../services/chat-execution.ts", () => ({
 }));
 
 import { createUIMessageStreamResponse, streamText } from "ai";
+import { sql } from "drizzle-orm";
 import app from "../server.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
@@ -247,6 +248,47 @@ describe("Chat Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ results: mockChats, totalCount: 3 });
+    });
+
+    const listChats = async (query: string) => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.offset.mockResolvedValueOnce([]);
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ totalCount: 0 }]);
+      return app.request(`${baseUrl}?${query}`);
+    };
+
+    it("clamps negative limit and offset", async () => {
+      const res = await listChats("limit=-1&offset=-1");
+      expect(res.status).toBe(200);
+      expect(mockDb.limit).toHaveBeenLastCalledWith(1);
+      expect(mockDb.offset).toHaveBeenLastCalledWith(0);
+    });
+
+    it("clamps limit to 100", async () => {
+      const res = await listChats("limit=500");
+      expect(res.status).toBe(200);
+      expect(mockDb.limit).toHaveBeenLastCalledWith(100);
+    });
+
+    it("escapes LIKE wildcards in the search term", async () => {
+      const res = await listChats(
+        `search=${encodeURIComponent("100%_done\\now")}`,
+      );
+      expect(res.status).toBe(200);
+      const pattern = "%100\\%\\_done\\\\now%";
+      // Title and tag filters both get the escaped pattern.
+      const withPattern = vi
+        .mocked(sql)
+        .mock.calls.filter(([, ...values]) => values.includes(pattern));
+      expect(withPattern).toHaveLength(2);
     });
   });
 
