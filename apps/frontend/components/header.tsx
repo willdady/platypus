@@ -9,8 +9,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Box, Info, Radio, Settings, Unplug, Wrench } from "lucide-react";
@@ -92,8 +90,6 @@ function WorkspaceSettingsDropdown({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Workspace settings</DropdownMenuLabel>
-        <DropdownMenuSeparator />
         {items.map(({ href, icon: Icon, label }) => (
           <DropdownMenuItem key={href} asChild className="cursor-pointer">
             <Link href={href}>
