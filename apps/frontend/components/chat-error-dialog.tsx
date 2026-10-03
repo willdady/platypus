@@ -47,7 +47,7 @@ export const ChatErrorDialog = ({
         <div className="py-4">
           <Alert variant="destructive">
             <TriangleAlert />
-            <AlertTitle>Error Details</AlertTitle>
+            <AlertTitle>Error details</AlertTitle>
             <AlertDescription className="break-all">{message}</AlertDescription>
           </Alert>
         </div>

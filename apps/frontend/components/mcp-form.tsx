@@ -705,7 +705,7 @@ const McpForm = ({
               ) : (
                 <Alert>
                   <ShieldOff />
-                  <AlertTitle>Not Authorized</AlertTitle>
+                  <AlertTitle>Not authorized</AlertTitle>
                   <AlertDescription>
                     This MCP server requires OAuth authorization before it can
                     be used.

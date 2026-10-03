@@ -43,8 +43,8 @@ export default function Home() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-8">
         <Alert variant="destructive" className="max-w-md">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Configuration Error</AlertTitle>
+          <AlertCircle />
+          <AlertTitle>Configuration error</AlertTitle>
           <AlertDescription>
             The <code>BACKEND_URL</code> environment variable is not set.
           </AlertDescription>
@@ -65,7 +65,7 @@ export default function Home() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-8">
         <Alert variant="destructive" className="max-w-md">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>Failed to load organizations</AlertDescription>
         </Alert>

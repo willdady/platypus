@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -131,6 +131,7 @@ export const InboundTokenDialog = ({
 
       <Alert>
         <TriangleAlert />
+        <AlertTitle>Shown only once</AlertTitle>
         <AlertDescription>
           This is the only time the token is shown. If you lose it, regenerate
           it on the trigger&apos;s page. That stops the old one working.

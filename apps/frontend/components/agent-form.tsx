@@ -29,6 +29,7 @@ import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import Link from "next/link";
 import { ChevronsUpDown, ImageIcon, Camera, X, Building } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -435,20 +436,23 @@ const AgentForm = ({
   const form = (
     <div className={classNames}>
       {readOnly && (
-        <div className="mb-6 rounded-md border bg-secondary/50 p-3 text-sm flex items-center gap-2">
-          <Building className="size-4 shrink-0" />
-          <span>
-            This is a shared organization agent and is read-only here. Edit it
-            in{" "}
-            <Link
-              href={orgRoutes(orgId).settings.agentDetail(agentId!)}
-              className="underline"
-            >
-              Organization settings
-            </Link>
-            .
-          </span>
-        </div>
+        <Alert className="mb-6">
+          <Building />
+          <AlertTitle>Read-only</AlertTitle>
+          <AlertDescription>
+            <span>
+              This is a shared organization agent and is read-only here. Edit it
+              in{" "}
+              <Link
+                href={orgRoutes(orgId).settings.agentDetail(agentId!)}
+                className="underline"
+              >
+                Organization settings
+              </Link>
+              .
+            </span>
+          </AlertDescription>
+        </Alert>
       )}
       <FieldSet className="mb-6">
         <div className="flex flex-col items-center">

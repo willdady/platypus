@@ -29,6 +29,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Tooltip,
   TooltipContent,
@@ -921,17 +922,21 @@ const ProviderForm = ({
   const form = (
     <div className={classNames}>
       {error && (
-        <div className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive flex items-center gap-2">
-          <OctagonX className="size-4" />
-          {error}
-        </div>
+        <Alert variant="destructive" className="mb-6">
+          <OctagonX />
+          <AlertTitle>Couldn&apos;t save the provider</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
       {isReadOnly && (
-        <div className="mb-6 p-4 rounded-lg bg-secondary/50 border border-secondary text-sm text-secondary-foreground flex items-center gap-2">
-          <Building className="size-4" />
-          This provider is managed at the organization level and cannot be
-          edited from this workspace.
-        </div>
+        <Alert className="mb-6">
+          <Building />
+          <AlertTitle>Read-only</AlertTitle>
+          <AlertDescription>
+            This provider is managed at the organization level and cannot be
+            edited from this workspace.
+          </AlertDescription>
+        </Alert>
       )}
       <FieldSet className="mb-6">
         <FieldGroup>

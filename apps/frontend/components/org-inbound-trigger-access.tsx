@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { TriangleAlert } from "lucide-react";
 import {
   type InboundTriggerAccess,
   type InboundTriggerGate,
@@ -14,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -185,6 +186,8 @@ export const OrgInboundTriggerAccess = ({ orgId }: { orgId: string }) => {
 
       {cutOff.length > 0 && (
         <Alert>
+          <TriangleAlert />
+          <AlertTitle>Calls will be refused</AlertTitle>
           <AlertDescription>
             {cutOff.length === 1
               ? `${cutOff[0].name} has Inbound Triggers but isn't allowed, so its calls will be refused.`
