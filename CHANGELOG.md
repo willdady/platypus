@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.16.0](https://github.com/willdady/platypus/compare/v3.15.2...v3.16.0) (2026-10-03)
+
+
+### Features
+
+* add a test curl command to the Inbound Trigger token dialog and stop flagging new tokens as expiring ([#1227](https://github.com/willdady/platypus/issues/1227)) ([a7a692f](https://github.com/willdady/platypus/commit/a7a692fd3b6380f21aec77eb6f35053b3b47b585))
+* add Inbound Triggers to fire an Agent from an authenticated HTTP call ([#1182](https://github.com/willdady/platypus/issues/1182)) ([ad64f5e](https://github.com/willdady/platypus/commit/ad64f5e268917b94aa6de21ff33e550e8801f5a0))
+* installer reports progress, checks ports first, and writes a README ([#1221](https://github.com/willdady/platypus/issues/1221)) ([3193ae3](https://github.com/willdady/platypus/commit/3193ae35b09ff8673a06b1d639909d555399c922))
+
+
+### Bug Fixes
+
+* **docs:** correct backend configuration, Workspace settings and Trigger claims ([#1224](https://github.com/willdady/platypus/issues/1224)) ([a6c2372](https://github.com/willdady/platypus/commit/a6c23726c2baf63d02cbd7a3a542d007752d27cd))
+* **docs:** correct Inbound Trigger gate and Last rejected claims ([#1230](https://github.com/willdady/platypus/issues/1230)) ([b7cce3c](https://github.com/willdady/platypus/commit/b7cce3cbc4159f653472510e8b98ad8598711572))
+* **frontend:** give every Alert an icon and title, and use Alert for form notices ([#1232](https://github.com/willdady/platypus/issues/1232)) ([e64a1f7](https://github.com/willdady/platypus/commit/e64a1f7b9533bd77e09b1a8ebc915fcb16691ae6))
+* **frontend:** hide Inbound Trigger fields when the Organization disallows them ([#1225](https://github.com/willdady/platypus/issues/1225)) ([1e5c305](https://github.com/willdady/platypus/commit/1e5c3053b235db509a454a12e32a2328933c5255))
+* **frontend:** lock the Workspace Inbound Trigger switch unless the Organization allows Selected workspaces ([#1226](https://github.com/willdady/platypus/issues/1226)) ([0acbce3](https://github.com/willdady/platypus/commit/0acbce3f7f39973ebfdec63a4680c0562856d8f9))
+* **frontend:** open the workspace wizard's Provider step on Shared providers ([#1222](https://github.com/willdady/platypus/issues/1222)) ([955bc28](https://github.com/willdady/platypus/commit/955bc28183b149459e29a2aa08e739fbc7ded247))
+
 ## [3.15.2](https://github.com/willdady/platypus/compare/v3.15.1...v3.15.2) (2026-10-03)
 
 
