@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 // --- Module mocks ------------------------------------------------------------
 
 const { authState } = vi.hoisted(() => ({
   authState: {
-    user: null as { id: string; name: string; email: string } | null,
+    user: null as {
+      id: string;
+      name: string;
+      email: string;
+      role?: string;
+    } | null,
     isPending: false,
     authClient: { signOut: () => Promise.resolve() },
   },
@@ -51,5 +56,42 @@ describe("UserMenu", () => {
 
     expect(screen.getByRole("button")).toHaveClass("size-7");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  const openMenu = () => {
+    const trigger = screen.getByRole("button", { name: "Account menu" });
+    fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
+    fireEvent.click(trigger, { button: 0 });
+  };
+
+  it("links to each settings page, without Users for a non-admin", () => {
+    authState.user = { id: "u1", name: "Ada", email: "ada@example.com" };
+    render(<UserMenu />);
+    openMenu();
+
+    expect(screen.getByRole("menuitem", { name: "Contexts" })).toHaveAttribute(
+      "href",
+      "/settings/contexts",
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "Users" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("links to Users for a super-admin", () => {
+    authState.user = {
+      id: "u1",
+      name: "Ada",
+      email: "ada@example.com",
+      role: "admin",
+    };
+    render(<UserMenu />);
+    openMenu();
+
+    expect(screen.getByRole("menuitem", { name: "Users" })).toHaveAttribute(
+      "href",
+      "/settings/users",
+    );
   });
 });

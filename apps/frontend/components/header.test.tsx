@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { Header } from "@/components/header";
 
 vi.mock("@/components/user-menu", () => ({ UserMenu: () => null }));
@@ -9,17 +9,26 @@ vi.mock("@/components/notifications-dropdown", () => ({
 }));
 
 describe("Header", () => {
-  it("links to the Workspace's settings when scoped to a Workspace", () => {
+  it("opens a Workspace settings menu when scoped to a Workspace", () => {
     render(<Header scope={{ orgId: "org1", workspaceId: "ws1" }} />);
-    expect(
-      screen.getByRole("link", { name: "Workspace settings" }),
-    ).toHaveAttribute("href", "/org1/workspace/ws1/settings");
+    const trigger = screen.getByRole("button", { name: "Workspace settings" });
+    fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
+    fireEvent.click(trigger, { button: 0 });
+    expect(screen.getByRole("menuitem", { name: "Workspace" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/settings",
+    );
+    expect(screen.getByRole("menuitem", { name: "Webhooks" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/settings/webhooks",
+    );
   });
 
-  it("has no Workspace settings link outside a Workspace", () => {
+  it("has no Workspace settings menu outside a Workspace", () => {
     render(<Header scope={{ orgId: "org1" }} />);
     expect(
-      screen.queryByRole("link", { name: "Workspace settings" }),
+      screen.queryByRole("button", { name: "Workspace settings" }),
     ).not.toBeInTheDocument();
   });
 });

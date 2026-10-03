@@ -2,7 +2,8 @@
 
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
-import { LogOut, User, Settings } from "lucide-react";
+import { BookText, LogOut, Mail, ShieldCheck, User, Users } from "lucide-react";
+import Link from "next/link";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,14 +14,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { userRoutes, workspaceRoutes } from "@/lib/routes";
+import { userRoutes } from "@/lib/routes";
 
-interface UserMenuProps {
-  orgId?: string;
-  workspaceId?: string;
-}
-
-export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
+export function UserMenu() {
   const { user, isPending, authClient } = useAuth();
   const router = useRouter();
 
@@ -40,6 +36,16 @@ export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
       />
     ) : null;
   }
+
+  const settingsItems = [
+    { href: userRoutes.profile, icon: User, label: "Profile" },
+    { href: userRoutes.contexts, icon: BookText, label: "Contexts" },
+    { href: userRoutes.security, icon: ShieldCheck, label: "Security" },
+    { href: userRoutes.invitations, icon: Mail, label: "Invitations" },
+    ...(user.role === "admin"
+      ? [{ href: userRoutes.users, icon: Users, label: "Users" }]
+      : []),
+  ];
 
   return (
     <DropdownMenu>
@@ -63,22 +69,16 @@ export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => router.push(userRoutes.profile)}
-          className="cursor-pointer"
-        >
-          <Settings className="size-4" /> My settings
-        </DropdownMenuItem>
-        {orgId && workspaceId && (
-          <DropdownMenuItem
-            onClick={() =>
-              router.push(workspaceRoutes(orgId, workspaceId).settings.root)
-            }
-            className="cursor-pointer"
-          >
-            <Settings className="size-4" /> Workspace settings
+        <DropdownMenuLabel className="text-xs text-muted-foreground">
+          My settings
+        </DropdownMenuLabel>
+        {settingsItems.map(({ href, icon: Icon, label }) => (
+          <DropdownMenuItem key={href} asChild className="cursor-pointer">
+            <Link href={href}>
+              <Icon className="size-4" /> {label}
+            </Link>
           </DropdownMenuItem>
-        )}
+        ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
           <LogOut className="size-4" /> Sign out

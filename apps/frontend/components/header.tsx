@@ -6,11 +6,14 @@ import { type Scope } from "@/lib/api-write";
 import { workspaceRoutes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Settings } from "lucide-react";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Box, Info, Radio, Settings, Unplug, Wrench } from "lucide-react";
 import Link from "next/link";
 
 interface HeaderProps {
@@ -48,30 +51,57 @@ export function Header({
         />
         <ModeToggle />
         {scope?.workspaceId && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Workspace settings"
-                asChild
-                className="size-7 cursor-pointer"
-              >
-                <Link
-                  href={
-                    workspaceRoutes(scope.orgId, scope.workspaceId).settings
-                      .root
-                  }
-                >
-                  <Settings className="size-4" />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Workspace settings</TooltipContent>
-          </Tooltip>
+          <WorkspaceSettingsDropdown
+            orgId={scope.orgId}
+            workspaceId={scope.workspaceId}
+          />
         )}
-        <UserMenu orgId={scope?.orgId} workspaceId={scope?.workspaceId} />
+        <UserMenu />
       </div>
     </header>
+  );
+}
+
+function WorkspaceSettingsDropdown({
+  orgId,
+  workspaceId,
+}: {
+  orgId: string;
+  workspaceId: string;
+}) {
+  const routes = workspaceRoutes(orgId, workspaceId).settings;
+  const items = [
+    { href: routes.root, icon: Settings, label: "Workspace" },
+    { href: routes.providers, icon: Unplug, label: "Providers" },
+    { href: routes.mcp, icon: Wrench, label: "MCP" },
+    { href: routes.sandbox, icon: Box, label: "Sandbox" },
+    { href: routes.webhooks, icon: Radio, label: "Webhooks" },
+    { href: routes.about, icon: Info, label: "About" },
+  ];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Workspace settings"
+          className="size-7 cursor-pointer"
+        >
+          <Settings className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Workspace settings</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {items.map(({ href, icon: Icon, label }) => (
+          <DropdownMenuItem key={href} asChild className="cursor-pointer">
+            <Link href={href}>
+              <Icon className="size-4" /> {label}
+            </Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
