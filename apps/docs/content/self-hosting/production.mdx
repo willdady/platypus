@@ -1,6 +1,6 @@
 ---
 title: Running in production
-description: TLS, a reverse proxy, the rate limiter Platypus does not have, the domain constraint that makes sign-in work, and backing the database up before you upgrade.
+description: TLS, a reverse proxy, the rate limiter you still need in front, the domain constraint that makes sign-in work, and backing the database up before you upgrade.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -41,10 +41,17 @@ an account is narrower than "anyone who can route to it".
 
 ## Put a rate limiter in front
 
-Platypus has **no in-app rate limiting**. Nothing in the backend slows down a
-client that submits a thousand sign-in attempts, a thousand invitation-link
-guesses, or a thousand password changes. That is the reverse proxy's job, and on
-a deployment anyone hostile can reach it is not optional.
+The backend's own rate limiting is thin, and it depends on your proxy. The
+authentication library throttles `/auth/sign-in/*`, `/auth/sign-up/*` and
+`/auth/change-password` to **3 requests per 10 seconds** and the rest of `/auth/`
+to **100 per 10 seconds**, keyed on the client address it reads from a
+single-value `X-Forwarded-For` header. If your proxy does not set that header,
+every client shares one bucket, and two people signing in within the same ten
+seconds is enough to turn one of them away. Nothing throttles invitation-link
+guesses or the admin password-change endpoint beyond that general ceiling.
+
+Put the real limit in the reverse proxy. On a deployment anyone hostile can
+reach, that is not optional.
 
 Limit the credential-bearing paths, per client address:
 
@@ -61,8 +68,9 @@ middleware and every cloud load balancer can express it.
 <Callout type="warning">
   Do not put that limit on all of `/auth/`. The app reads the session from
   `/auth/get-session` on every page load and again whenever a tab regains focus,
-  so a ten-a-minute ceiling there signs people out mid-session for no reason
-  they can see. Limit the paths above, not the prefix.
+  so a ten-a-minute ceiling there shows "Couldn't load" on a reload for no
+  reason the person can see. The backend's own limiter leaves that path alone
+  for the same reason. Limit the paths above, not the prefix.
 </Callout>
 
 ## Choose hostnames that let the cookie work

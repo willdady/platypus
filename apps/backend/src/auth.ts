@@ -41,6 +41,15 @@ export const auth = betterAuth({
       maxAge: 5 * 60, // 5 minutes
     },
   },
+  rateLimit: {
+    // better-auth's default limiter (on in production) counts a rolling
+    // window from the *last* request, so a client that reads the session at
+    // least once every 10 seconds never resets and hits the 100 cap: a page
+    // reload then gets a 429, which the frontend reports as a failed session
+    // read. `/get-session` is read on every page load and tab focus by every
+    // tab, so it is exempt; the credential paths keep the default limits.
+    customRules: { "/get-session": false },
+  },
   trustedOrigins: process.env.ALLOWED_ORIGINS?.split(",") || [],
   ...crossSubdomainCookieConfig(authCookieDomain),
   plugins: authPlugins,
