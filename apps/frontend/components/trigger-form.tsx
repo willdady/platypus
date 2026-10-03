@@ -1726,6 +1726,9 @@ const TriggerForm = ({
             backendUrl ?? "",
             shownToken.triggerId,
           )}
+          inputNames={inboundInputs
+            .map((input) => input.name.trim())
+            .filter(Boolean)}
           expiresAt={shownToken.expiresAt}
           onClose={closeTokenDialog}
         />

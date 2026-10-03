@@ -758,10 +758,10 @@ describe("inbound triggers", () => {
         inboundTokenStatus({ tokenHash: "h", tokenExpiresAt: at(-1) }, NOW),
       ).toBe("expired");
       expect(
-        inboundTokenStatus({ tokenHash: "h", tokenExpiresAt: at(30) }, NOW),
+        inboundTokenStatus({ tokenHash: "h", tokenExpiresAt: at(7) }, NOW),
       ).toBe("expiring");
       expect(
-        inboundTokenStatus({ tokenHash: "h", tokenExpiresAt: at(31) }, NOW),
+        inboundTokenStatus({ tokenHash: "h", tokenExpiresAt: at(8) }, NOW),
       ).toBe("active");
     });
 

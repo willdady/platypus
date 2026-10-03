@@ -838,7 +838,7 @@ export const inboundTokenStatus = (
   if (!trigger.tokenHash || !trigger.tokenExpiresAt) return "none";
   const left = trigger.tokenExpiresAt.getTime() - now.getTime();
   if (left <= 0) return "expired";
-  return left <= 30 * DAY_MS ? "expiring" : "active";
+  return left <= 7 * DAY_MS ? "expiring" : "active";
 };
 
 export type OrgInboundTrigger = {

@@ -334,6 +334,14 @@ describe("TriggerForm — Inbound Triggers", () => {
     expect(
       screen.getByDisplayValue("http://test/hooks/triggers/trigger-9"),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Test with curl")).toHaveValue(
+      [
+        "curl -X POST 'http://test/hooks/triggers/trigger-9' \\",
+        "  -H 'Authorization: Bearer pit_shown-once' \\",
+        "  -H 'Content-Type: application/json' \\",
+        `  -d '{"inputs":{"issueKey":"<issueKey>"}}'`,
+      ].join("\n"),
+    );
     expect(push).not.toHaveBeenCalled();
 
     // Only the button closes it: Escape does not, and there is no corner X.

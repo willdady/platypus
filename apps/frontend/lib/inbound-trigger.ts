@@ -1,11 +1,11 @@
 /**
  * How an Inbound Trigger's token stands (ADR-0030), with the same words the
  * backend's Org Admin list uses: no token (never issued, or revoked), active,
- * expiring within 30 days, or expired.
+ * expiring within 7 days, or expired.
  */
 export type InboundTokenStatus = "none" | "active" | "expiring" | "expired";
 
-const EXPIRING_WITHIN_MS = 30 * 24 * 60 * 60 * 1000;
+const EXPIRING_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const inboundTokenStatus = (
   trigger: {

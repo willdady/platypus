@@ -39,6 +39,7 @@ import {
   Trash2,
   Pause,
   List,
+  TriangleAlert,
 } from "lucide-react";
 import {
   type Trigger,
@@ -110,7 +111,7 @@ const InboundSummary = ({
       Called from outside
       {inputs.length > 0 && (
         <>
-          {" · "}
+          {" · Inputs:"}
           {inputs.map((input) => (
             <Badge
               key={input.name}
@@ -122,13 +123,25 @@ const InboundSummary = ({
           ))}
         </>
       )}
-      {status !== "active" && (
-        <Badge
-          variant={INBOUND_TOKEN_STATUS_VARIANTS[status]}
-          className="text-xs"
-        >
-          {INBOUND_TOKEN_STATUS_LABELS[status]}
-        </Badge>
+      {status === "expiring" && (
+        <>
+          {" · "}
+          <span className="flex items-center gap-1 text-warning-foreground">
+            <TriangleAlert className="h-3 w-3" />
+            Token expiring soon
+          </span>
+        </>
+      )}
+      {(status === "none" || status === "expired") && (
+        <>
+          {" · Token:"}
+          <Badge
+            variant={INBOUND_TOKEN_STATUS_VARIANTS[status]}
+            className="text-xs"
+          >
+            {INBOUND_TOKEN_STATUS_LABELS[status]}
+          </Badge>
+        </>
       )}
     </span>
   );
