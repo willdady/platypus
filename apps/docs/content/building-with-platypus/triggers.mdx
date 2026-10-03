@@ -360,6 +360,17 @@ one marked:
   separately, so a caller stuck re-firing on one issue is cut off for that issue
   alone.
 
+Expecting a second call about a busy record to reach the Agent later is the
+trap: Platypus does not queue it. A follow-up such as "also add the risks",
+sent while the first run is still going, gets `"deduplicated": true` and is
+gone. Queueing is the caller's job. When the response says
+`"deduplicated": true`, keep the call, [check on the run](#check-on-a-run), and
+send it again once the run has finished. If the Agent reads the record itself
+(the issue and its comments, say), one call after the run finishes is enough,
+because the new run reads everything that arrived in the meantime. A caller
+that needs every call handled on its own can use a finer record key, such as a
+comment id, and accept that several Agents may then work on one issue at once.
+
 With none marked, there is no dedup, and the run limit counts every call to the
 Trigger together — which a busy caller reaches quickly. Marking one is the
 expected setup.
