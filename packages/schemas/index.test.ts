@@ -69,6 +69,8 @@ import {
   triggerUpdateSchema,
   triggerCreateSchema,
   kanbanCardUpdateSchema,
+  kanbanCardCommentUpdateSchema,
+  partialWithoutDefaults,
   dashboardSchema,
   dashboardCreateSchema,
   dashboardUpdateSchema,
@@ -1803,6 +1805,25 @@ describe("partial update schemas", () => {
     expect(kanbanCardUpdateSchema.parse({ title: "x" })).toEqual({
       title: "x",
     });
+  });
+
+  it.each([
+    ["chat", chatUpdateSchema],
+    ["trigger", triggerUpdateSchema],
+    ["kanbanCard", kanbanCardUpdateSchema],
+    ["kanbanCardComment", kanbanCardCommentUpdateSchema],
+    ["dashboard", dashboardUpdateSchema],
+  ])("%s update schema parses {} to {}", (_, schema) => {
+    expect(schema.parse({})).toEqual({});
+  });
+
+  it("partialWithoutDefaults fills no default for an absent key", () => {
+    const schema = partialWithoutDefaults(
+      z.object({ a: z.string().min(1), b: z.number().default(5) }),
+    );
+    expect(schema.parse({ a: "x" })).toEqual({ a: "x" });
+    expect(schema.parse({ b: 1 })).toEqual({ b: 1 });
+    expect(schema.safeParse({ a: "" }).success).toBe(false);
   });
 });
 

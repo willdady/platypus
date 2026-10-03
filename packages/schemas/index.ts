@@ -2,6 +2,27 @@ import { z } from "zod";
 
 const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+// Every partial update schema is built with this rather than `.partial()`: in
+// Zod 4 a `.default()` still fills an absent key after `.partial()`, so an
+// update touching one field would write every other defaulted field back to its
+// default. This drops the defaults, so a parsed update holds exactly the keys
+// the caller sent.
+export const partialWithoutDefaults = <Shape extends z.ZodRawShape>(
+  schema: z.ZodObject<Shape>,
+) =>
+  schema.extend(
+    Object.fromEntries(
+      Object.entries(schema.shape).map(([key, field]) => [
+        key,
+        z.optional(field instanceof z.ZodDefault ? field.unwrap() : field),
+      ]),
+    ),
+  ) as unknown as z.ZodObject<{
+    [K in keyof Shape]: z.ZodOptional<
+      Shape[K] extends z.ZodDefault<infer Inner> ? Inner : Shape[K]
+    >;
+  }>;
+
 // Shared free-text bounds, exported so the forms' `maxLength` attributes read
 // the same source as the server rule.
 //
@@ -319,14 +340,14 @@ export const chatActiveLeafSchema = z.object({
   messageId: z.string().min(1),
 });
 
-export const chatUpdateSchema = chatSchema
-  .pick({
+export const chatUpdateSchema = partialWithoutDefaults(
+  chatSchema.pick({
     workspaceId: true,
     title: true,
     isPinned: true,
     tags: true,
-  })
-  .partial();
+  }),
+);
 
 export type ChatSubmitData = z.infer<typeof chatSubmitSchema>;
 
@@ -2196,26 +2217,20 @@ export const triggerCreateSchema = triggerSchema.pick({
   config: true,
 });
 
-// The defaulted fields are re-added as plain `.optional()` rather than left to
-// `.partial()`: a `.default()` still fills an absent key after `.partial()`, so a body carrying only
-// `{ enabled }` would come back with `maxRunsToKeep`, `search` and
-// `includeMemories` reset to their defaults — and be written as such.
-export const triggerUpdateSchema = triggerSchema
-  .pick({
+export const triggerUpdateSchema = partialWithoutDefaults(
+  triggerSchema.pick({
     name: true,
     description: true,
     instruction: true,
     agentId: true,
     type: true,
     config: true,
-  })
-  .partial()
-  .extend({
-    enabled: triggerSchema.shape.enabled.unwrap().optional(),
-    maxRunsToKeep: triggerSchema.shape.maxRunsToKeep.unwrap().optional(),
-    search: triggerSchema.shape.search.unwrap().optional(),
-    includeMemories: triggerSchema.shape.includeMemories.unwrap().optional(),
-  });
+    enabled: true,
+    maxRunsToKeep: true,
+    search: true,
+    includeMemories: true,
+  }),
+);
 
 // Trigger Run
 
@@ -2648,21 +2663,16 @@ export const kanbanCardCreateSchema = kanbanCardSchema.pick({
   priority: true,
 });
 
-// The defaulted fields are re-added as plain `.optional()` rather than left to
-// `.partial()`, so an update that only touches the title leaves the card's labels,
-// assignees and priority alone (see `triggerUpdateSchema`).
-export const kanbanCardUpdateSchema = kanbanCardSchema
-  .pick({
+export const kanbanCardUpdateSchema = partialWithoutDefaults(
+  kanbanCardSchema.pick({
     title: true,
     body: true,
     dueDate: true,
-  })
-  .partial()
-  .extend({
-    labelIds: kanbanCardSchema.shape.labelIds.unwrap().optional(),
-    assignees: kanbanCardSchema.shape.assignees.unwrap().optional(),
-    priority: kanbanCardSchema.shape.priority.unwrap().optional(),
-  });
+    labelIds: true,
+    assignees: true,
+    priority: true,
+  }),
+);
 
 export const kanbanCardMoveSchema = z.object({
   columnId: z.string(),
@@ -2692,9 +2702,9 @@ export const kanbanCardCommentCreateSchema = kanbanCardCommentSchema.pick({
   body: true,
 });
 
-export const kanbanCardCommentUpdateSchema = kanbanCardCommentSchema
-  .pick({ body: true })
-  .partial();
+export const kanbanCardCommentUpdateSchema = partialWithoutDefaults(
+  kanbanCardCommentSchema.pick({ body: true }),
+);
 
 export type KanbanCardComment = z.infer<typeof kanbanCardCommentSchema>;
 
@@ -2879,14 +2889,14 @@ export const dashboardCreateSchema = dashboardSchema.pick({
   description: true,
 });
 
-export const dashboardUpdateSchema = dashboardSchema
-  .pick({
+export const dashboardUpdateSchema = partialWithoutDefaults(
+  dashboardSchema.pick({
     name: true,
     description: true,
     desktopLayout: true,
     mobileLayout: true,
-  })
-  .partial();
+  }),
+);
 
 // --- Webhook event payloads --------------------------------------------------
 
