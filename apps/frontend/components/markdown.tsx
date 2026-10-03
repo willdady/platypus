@@ -2,6 +2,7 @@
 
 import type { ComponentProps } from "react";
 import { Streamdown } from "streamdown";
+import { linkSafety } from "@/components/link-safety";
 
 /**
  * Markdown that is already whole when it renders: card bodies and comments,
@@ -11,5 +12,10 @@ import { Streamdown } from "streamdown";
  * code blocks and tables.
  */
 export const Markdown = (props: ComponentProps<typeof Streamdown>) => (
-  <Streamdown controls={false} mode="static" {...props} />
+  <Streamdown
+    controls={false}
+    mode="static"
+    linkSafety={linkSafety}
+    {...props}
+  />
 );

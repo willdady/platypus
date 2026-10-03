@@ -7,7 +7,13 @@ import {
   beforeEach,
   afterEach,
 } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   installRadixPointerPolyfills,
   jsonResponse,
@@ -220,12 +226,24 @@ describe("NotificationsDropdown body", () => {
     expect(screen.queryByRole("heading", { name: "Title" })).toBeNull();
   });
 
-  it("opens a link in a new tab without toggling the entry", () => {
+  it("confirms a link before opening it, without toggling the entry", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
     renderBody("See [the run](https://example.com/run)");
 
-    const link = screen.getByRole("link", { name: "the run" });
-    expect(link).toHaveAttribute("target", "_blank");
-    fireEvent.click(link);
+    fireEvent.click(screen.getByRole("button", { name: "the run" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Open external link?",
+    });
+    expect(open).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Open link" }));
+    expect(open).toHaveBeenCalledWith(
+      "https://example.com/run",
+      "_blank",
+      "noreferrer",
+    );
     expect(screen.queryByText("Show less")).toBeNull();
+    expect(screen.getByText("Nightly digest")).toBeInTheDocument();
   });
 });
