@@ -360,7 +360,7 @@ describe("TriggerForm — Inbound Triggers", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says the gate is closed once the Workspace has loaded without the allow flag", async () => {
+  it("says the gate is closed and hides the fields once the Workspace has loaded without the allow flag", async () => {
     setDataFor("/organizations/org1", { inboundTriggerGate: "selected" });
     setDataFor("/workspaces/ws1", { inboundTriggersAllowed: false });
     await renderInboundTriggerForm();
@@ -368,6 +368,8 @@ describe("TriggerForm — Inbound Triggers", () => {
     expect(
       screen.getByText(/doesn.t allow Inbound Triggers/),
     ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
   });
 
   it("unmarks the record key when its input stops being required", async () => {
