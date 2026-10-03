@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.1](https://github.com/willdady/platypus/compare/v3.15.0...v3.15.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **backend:** exempt /auth/get-session from better-auth's built-in rate limiter ([#1216](https://github.com/willdady/platypus/issues/1216)) ([ae80f3e](https://github.com/willdady/platypus/commit/ae80f3eeb339a670f36af5f56683e5b613c4d871))
+
 ## [3.15.0](https://github.com/willdady/platypus/compare/v3.14.0...v3.15.0) (2026-10-03)
 
 
