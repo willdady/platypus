@@ -42,6 +42,19 @@ export const inboundTriggerGateSchema = z.enum(["off", "all", "selected"]);
 
 export type InboundTriggerGate = z.infer<typeof inboundTriggerGateSchema>;
 
+/**
+ * How an Inbound Trigger's token stands: no token (never issued, or revoked),
+ * active, expiring within 7 days, or expired. Worked out by the backend.
+ */
+export const inboundTokenStatusSchema = z.enum([
+  "none",
+  "active",
+  "expiring",
+  "expired",
+]);
+
+export type InboundTokenStatus = z.infer<typeof inboundTokenStatusSchema>;
+
 export const organizationSchema = z.object({
   id: z.string(),
   name: z.string().min(3).max(30),
@@ -2229,7 +2242,7 @@ export const DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS = 90;
  * An input's name is an identifier, so the Instruction can refer to it by name
  * and the caller's JSON key is unambiguous.
  */
-const inboundTriggerInputNameRegex = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const inboundTriggerInputNameRegex = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export const inboundTriggerInputSchema = z.object({
   name: z
@@ -2342,6 +2355,7 @@ export const triggerSchema = z.object({
   // Inbound Triggers only. The token itself is never returned after it is
   // issued; these describe it.
   hasToken: z.boolean().optional(),
+  tokenStatus: inboundTokenStatusSchema.optional(),
   tokenCreatedAt: z.date().nullable().optional(),
   tokenExpiresAt: z.date().nullable().optional(),
   lastUsedAt: z.date().nullable().optional(),

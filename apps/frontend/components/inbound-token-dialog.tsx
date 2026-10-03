@@ -99,21 +99,19 @@ const CopyRow = ({
  * cannot be shown again; a lost one is replaced by regenerating.
  */
 export const InboundTokenDialog = ({
-  open,
   token,
   endpointUrl,
   inputNames,
   expiresAt,
   onClose,
 }: {
-  open: boolean;
   token: string;
   endpointUrl: string;
   inputNames: string[];
   expiresAt?: string | Date | null;
   onClose: () => void;
 }) => (
-  <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+  <Dialog open onOpenChange={(next) => !next && onClose()}>
     <DialogContent
       // Closing is the one irreversible step, so neither a stray click
       // outside, Escape nor a corner X may do it: only the button does.

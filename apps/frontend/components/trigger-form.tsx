@@ -74,6 +74,7 @@ import {
   INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH,
   INBOUND_TRIGGER_MAX_INPUTS,
   INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
+  inboundTriggerInputNameRegex,
   TRIGGER_INSTRUCTION_MAX_LENGTH,
   TRIGGER_MAX_RUNS_TO_KEEP_MAX,
   TRIGGER_MAX_RUNS_TO_KEEP_MIN,
@@ -94,8 +95,8 @@ import {
   INBOUND_TOKEN_STATUS_LABELS,
   INBOUND_TOKEN_STATUS_VARIANTS,
   inboundGateAdmits,
-  inboundTokenStatus,
 } from "@/lib/inbound-trigger";
+import { TRIGGER_TYPE_LABELS } from "@/components/trigger-list";
 
 const TIMEZONES = ["UTC", ...Intl.supportedValuesOf("timeZone")];
 
@@ -360,9 +361,6 @@ type InboundInputDraft = {
   description: string;
 };
 
-/** Mirrors the backend's rule, so a bad name is caught before saving. */
-const INPUT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
 /**
  * What stops the declared inputs from saving, if anything. The backend checks
  * the same rules; this only moves the message next to the rows.
@@ -370,7 +368,7 @@ const INPUT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const inboundInputsProblem = (inputs: InboundInputDraft[]): string | null => {
   const names = inputs.map((input) => input.name.trim());
   if (names.some((name) => name === "")) return "Every input needs a name.";
-  const bad = names.find((name) => !INPUT_NAME_PATTERN.test(name));
+  const bad = names.find((name) => !inboundTriggerInputNameRegex.test(name));
   if (bad !== undefined) {
     return `"${bad}" is not a valid input name. Start with a letter or underscore, then use only letters, digits and underscores.`;
   }
@@ -489,8 +487,6 @@ const TriggerForm = ({
   const [shownToken, setShownToken] = useState<ShownToken | null>(null);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  // One reading of the clock per mount, for the token's expiry standing.
-  const [now] = useState(() => Date.now());
   const backendUrl = useBackendUrl();
 
   // Whether the Organization gate lets this Workspace take calls, so an Owner
@@ -766,7 +762,7 @@ const TriggerForm = ({
     .filter(([key]) => key === "config" || key.startsWith("config."))
     .map(([, message]) => message);
 
-  const tokenStatus = trigger ? inboundTokenStatus(trigger, now) : "none";
+  const tokenStatus = trigger?.tokenStatus ?? "none";
   // Only once everything the answer depends on has loaded: under `selected`
   // that includes the Workspace's own flag, and a Workspace still loading (or
   // failed to load) is unknown, not disallowed.
@@ -865,9 +861,11 @@ const TriggerForm = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="cron">Cron</SelectItem>
-                <SelectItem value="event">Event</SelectItem>
-                <SelectItem value="inbound">Inbound</SelectItem>
+                {Object.entries(TRIGGER_TYPE_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
@@ -1444,68 +1442,42 @@ const TriggerForm = ({
                     ))}
                   </Field>
 
-                  <Field>
-                    <FieldLabel>Record key</FieldLabel>
-                    <Select
-                      value={effectiveRecordKey || "__none__"}
-                      onValueChange={(value) =>
-                        setRecordKey(value === "__none__" ? "" : value)
-                      }
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger
-                        aria-label="Record key"
-                        disabled={isSubmitting}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {requiredInputNames.map((name) => (
-                          <SelectItem key={name} value={name}>
-                            {name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldDescription>
-                      The required input that says which record a call is about,
-                      such as an issue key. Only one run per record is active at
-                      a time, and the run-rate limit counts each record
-                      separately. With none, the limit counts the whole trigger.
-                      Marking one is the expected setup.
-                    </FieldDescription>
-                  </Field>
+                  <FormSelectField
+                    label="Record key"
+                    name="recordKey"
+                    value={effectiveRecordKey || "__none__"}
+                    onValueChange={(value) =>
+                      setRecordKey(value === "__none__" ? "" : value)
+                    }
+                    disabled={isSubmitting}
+                    description="The required input that says which record a call is about, such as an issue key. Only one run per record is active at a time, and the run-rate limit counts each record separately. With none, the limit counts the whole trigger. Marking one is the expected setup."
+                  >
+                    <SelectItem value="__none__">None</SelectItem>
+                    {requiredInputNames.map((name) => (
+                      <SelectItem key={name} value={name}>
+                        {name}
+                      </SelectItem>
+                    ))}
+                  </FormSelectField>
 
-                  <Field>
-                    <FieldLabel>Token lifetime</FieldLabel>
-                    <Select
-                      value={String(tokenExpiryDays)}
-                      onValueChange={(value) =>
-                        setTokenExpiryDays(Number(value))
-                      }
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger
-                        aria-label="Token lifetime"
-                        disabled={isSubmitting}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS.map((days) => (
-                          <SelectItem key={days} value={String(days)}>
-                            {days} days
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldDescription>
-                      {triggerId
+                  <FormSelectField
+                    label="Token lifetime"
+                    name="tokenExpiryDays"
+                    value={String(tokenExpiryDays)}
+                    onValueChange={(value) => setTokenExpiryDays(Number(value))}
+                    disabled={isSubmitting}
+                    description={
+                      triggerId
                         ? "Applies to the next token you issue. The current token keeps its expiry date."
-                        : "How long the token works. You get a notification 30 and 7 days before it expires."}
-                    </FieldDescription>
-                  </Field>
+                        : "How long the token works. You get a notification 30 and 7 days before it expires."
+                    }
+                  >
+                    {INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS.map((days) => (
+                      <SelectItem key={days} value={String(days)}>
+                        {days} days
+                      </SelectItem>
+                    ))}
+                  </FormSelectField>
 
                   {triggerId && trigger && (
                     <Field>
@@ -1720,7 +1692,6 @@ const TriggerForm = ({
 
       {shownToken && (
         <InboundTokenDialog
-          open
           token={shownToken.token}
           endpointUrl={inboundEndpointUrl(
             backendUrl ?? "",

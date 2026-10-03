@@ -3,7 +3,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { NotificationsDropdown } from "@/components/notifications-dropdown";
 import { cn } from "@/lib/utils";
 import { type Scope } from "@/lib/api-write";
-import { workspaceRoutes } from "@/lib/routes";
+import { workspaceSettingsLinks } from "@/lib/settings-links";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Box, Info, Radio, Settings, Unplug, Wrench } from "lucide-react";
+import { Settings } from "lucide-react";
 import Link from "next/link";
 
 interface HeaderProps {
@@ -67,16 +67,6 @@ function WorkspaceSettingsDropdown({
   orgId: string;
   workspaceId: string;
 }) {
-  const routes = workspaceRoutes(orgId, workspaceId).settings;
-  const items = [
-    { href: routes.root, icon: Settings, label: "Workspace" },
-    { href: routes.providers, icon: Unplug, label: "Providers" },
-    { href: routes.mcp, icon: Wrench, label: "MCP" },
-    { href: routes.sandbox, icon: Box, label: "Sandbox" },
-    { href: routes.webhooks, icon: Radio, label: "Webhooks" },
-    { href: routes.about, icon: Info, label: "About" },
-  ];
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -90,13 +80,15 @@ function WorkspaceSettingsDropdown({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {items.map(({ href, icon: Icon, label }) => (
-          <DropdownMenuItem key={href} asChild className="cursor-pointer">
-            <Link href={href}>
-              <Icon className="size-4" /> {label}
-            </Link>
-          </DropdownMenuItem>
-        ))}
+        {workspaceSettingsLinks(orgId, workspaceId).map(
+          ({ href, icon: Icon, label }) => (
+            <DropdownMenuItem key={href} asChild className="cursor-pointer">
+              <Link href={href}>
+                <Icon className="size-4" /> {label}
+              </Link>
+            </DropdownMenuItem>
+          ),
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -199,6 +199,7 @@ describe("TriggerList inbound triggers", () => {
         tokenExpiryDays: 90,
       },
       hasToken: true,
+      tokenStatus: "active",
       tokenExpiresAt: new Date(Date.now() + 80 * 24 * 60 * 60 * 1000),
       ...over,
     }) as unknown as Trigger;
@@ -214,10 +215,16 @@ describe("TriggerList inbound triggers", () => {
 
   it("flags a trigger whose token was revoked or has expired", () => {
     renderTriggers([
-      inboundTrigger({ id: "t3", name: "Revoked", hasToken: false }),
+      inboundTrigger({
+        id: "t3",
+        name: "Revoked",
+        hasToken: false,
+        tokenStatus: "none",
+      }),
       inboundTrigger({
         id: "t4",
         name: "Old",
+        tokenStatus: "expired",
         tokenExpiresAt: new Date(Date.now() - 1000),
       }),
     ]);

@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
-import { BookText, LogOut, Mail, ShieldCheck, User, Users } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import Link from "next/link";
 import {
   DropdownMenu,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { userRoutes } from "@/lib/routes";
+import { userSettingsLinks } from "@/lib/settings-links";
 
 export function UserMenu() {
   const { user, isPending, authClient } = useAuth();
@@ -36,16 +36,6 @@ export function UserMenu() {
       />
     ) : null;
   }
-
-  const settingsItems = [
-    { href: userRoutes.profile, icon: User, label: "Profile" },
-    { href: userRoutes.contexts, icon: BookText, label: "Contexts" },
-    { href: userRoutes.security, icon: ShieldCheck, label: "Security" },
-    { href: userRoutes.invitations, icon: Mail, label: "Invitations" },
-    ...(user.role === "admin"
-      ? [{ href: userRoutes.users, icon: Users, label: "Users" }]
-      : []),
-  ];
 
   return (
     <DropdownMenu>
@@ -72,13 +62,15 @@ export function UserMenu() {
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           My settings
         </DropdownMenuLabel>
-        {settingsItems.map(({ href, icon: Icon, label }) => (
-          <DropdownMenuItem key={href} asChild className="cursor-pointer">
-            <Link href={href}>
-              <Icon className="size-4" /> {label}
-            </Link>
-          </DropdownMenuItem>
-        ))}
+        {userSettingsLinks(user.role === "admin").map(
+          ({ href, icon: Icon, label }) => (
+            <DropdownMenuItem key={href} asChild className="cursor-pointer">
+              <Link href={href}>
+                <Icon className="size-4" /> {label}
+              </Link>
+            </DropdownMenuItem>
+          ),
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
           <LogOut className="size-4" /> Sign out

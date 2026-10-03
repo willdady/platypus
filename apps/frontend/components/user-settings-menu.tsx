@@ -8,70 +8,35 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { User, ShieldCheck, Mail, Users, BookText } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
-import { userRoutes } from "@/lib/routes";
+import { userSettingsLinks } from "@/lib/settings-links";
 
 export function UserSettingsMenu() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const profileHref = userRoutes.profile;
-  const contextsHref = userRoutes.contexts;
-  const securityHref = userRoutes.security;
-  const invitationsHref = userRoutes.invitations;
-  const usersHref = userRoutes.users;
-
-  const isSuperAdmin = user?.role === "admin";
 
   return (
     <SidebarContent>
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === profileHref}>
-                <Link href={profileHref}>
-                  <User /> Profile
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(contextsHref)}
-              >
-                <Link href={contextsHref}>
-                  <BookText /> Contexts
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === securityHref}>
-                <Link href={securityHref}>
-                  <ShieldCheck /> Security
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname === invitationsHref}
-              >
-                <Link href={invitationsHref}>
-                  <Mail /> Invitations
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            {isSuperAdmin && (
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === usersHref}>
-                  <Link href={usersHref}>
-                    <Users /> Users
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+            {userSettingsLinks(user?.role === "admin").map(
+              ({ href, icon: Icon, label, exact }) => (
+                <SidebarMenuItem key={href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={
+                      exact ? pathname === href : pathname.startsWith(href)
+                    }
+                  >
+                    <Link href={href}>
+                      <Icon /> {label}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ),
             )}
           </SidebarMenu>
         </SidebarGroupContent>

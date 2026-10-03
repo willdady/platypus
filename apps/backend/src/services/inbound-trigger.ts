@@ -18,6 +18,7 @@ import type {
   InboundTriggerConfig,
   InboundTriggerGate,
   InboundTriggerInput,
+  InboundTokenStatus,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
@@ -29,6 +30,7 @@ import {
 } from "../db/schema.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 import { logger } from "../logger.ts";
+import { errorMessage } from "../utils/error-message.ts";
 import { createNotification } from "./notification.ts";
 import {
   readPositiveInt,
@@ -38,7 +40,9 @@ import {
 import { fireTrigger } from "./trigger-firing.ts";
 import { narrowTriggerConfig, type TriggerRow } from "./trigger.ts";
 import {
+  DAY_MS,
   inboundTokenMatches,
+  inboundTokenStatus,
   revokedTokenFields,
   tokenNoticeSent,
   type TokenNotice,
@@ -250,7 +254,7 @@ export const authenticateInboundCall = async (
     logger.error(
       {
         triggerId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       },
       "Inbound trigger row is malformed; call refused",
     );
@@ -337,7 +341,7 @@ const tryAcquireRunSlot = (max: number): boolean => {
 };
 
 const releaseRunSlot = (): void => {
-  activeInboundRuns = Math.max(0, activeInboundRuns - 1);
+  activeInboundRuns -= 1;
 };
 
 /** Test seam: the count of slots currently held. */
@@ -483,7 +487,7 @@ export const acceptInboundCall = async (
         logger.error(
           {
             triggerId: trigger.id,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage(error),
           },
           "Failed to apply retention after a suppressed inbound call",
         ),
@@ -561,7 +565,7 @@ export const touchInboundTrigger = async (
       {
         triggerId,
         column,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       },
       "Failed to record inbound trigger use",
     );
@@ -608,8 +612,6 @@ export const getInboundRunStatus = async (
 
 // ----------------------------------------------------------------- notices
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 const formatDate = (date: Date): string => date.toISOString().slice(0, 10);
 
 /**
@@ -639,7 +641,7 @@ const notifyOwner = async (
     logger.error(
       {
         triggerId: target.trigger.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       },
       "Failed to notify the Workspace Owner about an inbound trigger token",
     );
@@ -704,7 +706,7 @@ const releaseNotice = async (
       {
         triggerId,
         notice,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       },
       "Failed to hand back an unsent inbound trigger token notice",
     );
@@ -729,7 +731,7 @@ const noticeExpiredTokenUse = async (target: InboundTarget): Promise<void> => {
     logger.error(
       {
         triggerId: trigger.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       },
       "Failed to record an expired inbound trigger token's use",
     );
@@ -818,7 +820,7 @@ export const sendInboundTokenReminders = async (
       logger.error(
         {
           triggerId: trigger.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         },
         "Failed to send an inbound trigger token reminder",
       );
@@ -827,19 +829,6 @@ export const sendInboundTokenReminders = async (
 };
 
 // ----------------------------------------------------------------- org admin
-
-/** How an Inbound Trigger's token stands, as the Org Admin list flags it. */
-export type InboundTokenStatus = "none" | "active" | "expiring" | "expired";
-
-export const inboundTokenStatus = (
-  trigger: Pick<TriggerRow, "tokenHash" | "tokenExpiresAt">,
-  now: Date = new Date(),
-): InboundTokenStatus => {
-  if (!trigger.tokenHash || !trigger.tokenExpiresAt) return "none";
-  const left = trigger.tokenExpiresAt.getTime() - now.getTime();
-  if (left <= 0) return "expired";
-  return left <= 7 * DAY_MS ? "expiring" : "active";
-};
 
 export type OrgInboundTrigger = {
   id: string;

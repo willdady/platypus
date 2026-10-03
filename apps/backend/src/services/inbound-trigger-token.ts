@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { InboundTokenStatus } from "@platypus/schemas";
 
 /**
  * The Inbound Trigger token (ADR-0030): one bearer credential per Trigger that
@@ -16,7 +17,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
  */
 const TOKEN_PREFIX = "pit_";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const hashInboundToken = (token: string): string =>
   createHash("sha256").update(token, "utf8").digest("hex");
@@ -55,6 +56,20 @@ export const issuedTokenFields = (
   tokenExpiresAt: new Date(now.getTime() + expiryDays * DAY_MS),
   tokenNotice: null,
 });
+
+/**
+ * How a Trigger's token stands: no token (never issued, or revoked), active,
+ * expiring within 7 days, or expired. Every surface that shows it reads this.
+ */
+export const inboundTokenStatus = (
+  trigger: { tokenHash: string | null; tokenExpiresAt: Date | null },
+  now: Date = new Date(),
+): InboundTokenStatus => {
+  if (!trigger.tokenHash || !trigger.tokenExpiresAt) return "none";
+  const left = trigger.tokenExpiresAt.getTime() - now.getTime();
+  if (left <= 0) return "expired";
+  return left <= 7 * DAY_MS ? "expiring" : "active";
+};
 
 /** The columns a revoke writes: no token, and nothing left to notify about. */
 export const revokedTokenFields = () => ({

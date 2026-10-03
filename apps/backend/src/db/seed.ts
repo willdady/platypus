@@ -2,6 +2,7 @@ import { count, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { db } from "../index.ts";
 import { logger } from "../logger.ts";
+import { errorMessage } from "../utils/error-message.ts";
 import {
   ADVISORY_LOCK_IDS,
   withAdvisoryLock,
@@ -67,9 +68,6 @@ const isDeterministicRejection = (error: unknown): boolean => {
   const status = (error as { statusCode?: unknown } | null)?.statusCode;
   return typeof status === "number" && status >= 400 && status < 500;
 };
-
-const errorMessage = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 /**
  * better-auth's default minimum, which its sign-up and password-change

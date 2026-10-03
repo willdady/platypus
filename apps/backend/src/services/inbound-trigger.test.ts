@@ -11,7 +11,10 @@ vi.mock("./notification.ts", () => ({
 
 import { fireTrigger } from "./trigger-firing.ts";
 import { createNotification } from "./notification.ts";
-import { hashInboundToken } from "./inbound-trigger-token.ts";
+import {
+  hashInboundToken,
+  inboundTokenStatus,
+} from "./inbound-trigger-token.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 import {
   acceptInboundCall,
@@ -20,7 +23,6 @@ import {
   bearerToken,
   dueReminder,
   getInboundTriggerAccess,
-  inboundTokenStatus,
   listOrgInboundTriggers,
   logInboundCall,
   resetInboundRunSlots,
