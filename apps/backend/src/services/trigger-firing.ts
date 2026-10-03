@@ -31,8 +31,9 @@ import type { WebhookEventPayload } from "@platypus/schemas";
  *
  * A firing is the whole of what happens when a Trigger goes off — the
  * run-rate breaker, the Agent run under the Trigger timeouts, and the
- * bookkeeping every exit owes the row: `lastRunAt` and run retention. The scheduler and event dispatch
- * decide *when* a Trigger fires; neither knows what firing involves.
+ * bookkeeping every exit owes the row: `lastRunAt` and run retention. The
+ * scheduler and event dispatch decide *when* a Trigger fires; neither knows
+ * what firing involves.
  *
  * The bookkeeping used to live beside each caller, on the line after the run,
  * so a run that threw skipped it: a failing Trigger's history grew without

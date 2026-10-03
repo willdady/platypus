@@ -207,6 +207,9 @@ describe("processDueTriggers", () => {
     );
   });
 
+  // PGlite serialises the two ticks' queries, so this pins that the second
+  // tick's claim no longer matches once the first has run, not true overlap;
+  // under real concurrency the row lock on the conditional update does that.
   it("fires a Trigger once when two ticks race for it", async () => {
     await seedTrigger("t1");
 
@@ -222,6 +225,17 @@ describe("processDueTriggers", () => {
     await processDueTriggers();
 
     expect(firedIds()).toEqual(["t1"]);
+  });
+
+  it("disables a one-off at claim even when its next slot cannot be computed", async () => {
+    await seedTrigger("once", {
+      config: { cronExpression: "not a cron", timezone: "UTC", isOneOff: true },
+    });
+
+    await processDueTriggers();
+
+    expect(firedIds()).toEqual(["once"]);
+    expect((await row("once")).enabled).toBe(false);
   });
 
   it("leaves a recurring Trigger whose next slot cannot be computed unclaimed", async () => {

@@ -11,6 +11,7 @@ import {
   inArray,
   sql,
 } from "drizzle-orm";
+import type { CronTriggerConfig } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
   chat as chatTable,
@@ -24,7 +25,6 @@ import {
   nextCronRunAt,
   type TriggerRow,
 } from "../services/trigger.ts";
-import type { CronTriggerConfig } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { ADVISORY_LOCK_IDS } from "../db/advisory-lock.ts";
 import { chatPerRunTimeoutMs } from "../runs/chat-timeouts.ts";
@@ -187,7 +187,9 @@ const cronConfigOrNull = (job: TriggerRow): CronTriggerConfig | null => {
  * one process whose update matched, so a Trigger is fired once however many
  * ticks race for it, and a crash after the claim can never leave it without a
  * schedule. The count-then-claim relies on the scheduler lock: no peer claims
- * between the two.
+ * between the two. A run claimed by the previous tick counts only once its
+ * run row exists, so a tick landing in that gap can undercount by those runs;
+ * it cannot fire them twice, as their claim already moved `nextRunAt` on.
  *
  * A due Trigger still running from its last firing is skipped — its
  * `nextRunAt` moves to the next slot — and takes no slot. One left over for
@@ -222,8 +224,9 @@ export async function processDueTriggers(): Promise<void> {
   for (const job of due) {
     const config = cronConfigOrNull(job);
     if (!config) continue;
+    // A one-off needs no next slot to be claimed, only to be skipped.
     const nextRunAt = nextCronRunAt(config);
-    if (!nextRunAt) {
+    if (!nextRunAt && !config.isOneOff) {
       logger.error(
         { triggerId: job.id, cronExpression: config.cronExpression },
         "Failed to compute next run for cron trigger; left unclaimed",
@@ -248,6 +251,7 @@ export async function processDueTriggers(): Promise<void> {
       }
     }
 
+    if (!nextRunAt) continue;
     const skipped = await db
       .update(triggerTable)
       .set({ nextRunAt, updatedAt: now })

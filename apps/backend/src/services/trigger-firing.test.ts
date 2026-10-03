@@ -166,7 +166,7 @@ describe("fireTrigger", () => {
     // for a recurring cron, a one-off already disabled. 14:00, not the 13:00
     // the hourly cadence would name from completion, so a recompute shows.
     const CLAIMED_NEXT = new Date("2026-08-30T14:00:00.000Z");
-    const cases = [
+    const firedTriggers = [
       [
         "a recurring cron",
         makeTrigger({ maxRunsToKeep: 2, nextRunAt: CLAIMED_NEXT }),
@@ -181,14 +181,14 @@ describe("fireTrigger", () => {
       ],
       ["an event", eventTrigger({ maxRunsToKeep: 2 })],
     ] as const;
-    const outcomes = [
+    const runOutcomes = [
       ["succeeds", "ran", () => drive("succeeded")],
       ["fails", "failed", () => drive("failed", new Error("Model error"))],
     ] as const;
 
     it.each(
-      cases.flatMap(([kind, trigger]) =>
-        outcomes.map(
+      firedTriggers.flatMap(([kind, trigger]) =>
+        runOutcomes.map(
           ([verb, outcome, arrange]) =>
             [kind, verb, trigger, outcome, arrange] as const,
         ),

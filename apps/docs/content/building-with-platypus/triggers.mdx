@@ -121,21 +121,19 @@ _Cancelled_.
 
 - **Scheduled (cron) runs** are checked about once a minute. When a due
   Trigger's run starts, its next run time is set from the cadence straight away,
-  not after the run finishes (a one-off Trigger disables itself at that point
-  instead). Switching **Enabled** back on
-  restarts the cadence from that moment: the first run lands on the next slot
-  the schedule names, so a Trigger that was off over one of its slots does not
-  fire the moment you re-enable it to catch up. A _failed_ run moves the
-  schedule on just as a successful one does, and a one-off Trigger disables
-  itself either way.
+  not after the run finishes, so a _failed_ run moves the schedule on just as a
+  successful one does. A one-off Trigger disables itself at that point instead.
+  Switching **Enabled** back on restarts the cadence from that moment: the first
+  run lands on the next slot the schedule names, so a Trigger that was off over
+  one of its slots does not fire the moment you re-enable it to catch up.
 - **A scheduled run never overlaps the last one.** If a Trigger comes due while
   its previous run is still going, that slot is skipped and the Trigger waits
   for the next one. No catch-up run follows when the long run ends.
-- **Under load, due Triggers wait rather than drop.** At most
-  `SCHEDULE_MAX_CONCURRENT` scheduled runs (5 by default) go at once across
-  your backends. A Trigger that comes due while they're all taken waits for a
-  free slot and runs once, late, with its next run time counted from when it
-  started.
+- **Under load, due Triggers wait rather than drop.** Only so many scheduled
+  runs go at once (see
+  [`SCHEDULE_MAX_CONCURRENT`](/reference/backend-configuration#background-workers)).
+  A Trigger that comes due while they're all taken waits for a free slot and
+  runs once, late, with its next run time counted from when it started.
 - **Switching Enabled off during a run** lets that run finish, and the Trigger
   stays off afterwards.
 - **Event runs** fire 5 seconds after a matching event, per Trigger and per
