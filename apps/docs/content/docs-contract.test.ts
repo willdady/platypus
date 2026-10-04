@@ -1770,6 +1770,13 @@ const BACKEND_CONSTANTS = [
     ],
     cost: "An integrator waits the wrong time for a stuck record to take calls again.",
   },
+  {
+    source: "apps/backend/src/services/a2a-push.ts",
+    name: "MAX_PUSH_CONFIGS_PER_TASK",
+    phrase: (count: number) => `**Up to ${count} URLs per Task.**`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A client is refused a push URL at a count the page never warned of.",
+  },
 ] as const;
 
 describe("backend constants the concept pages quote", () => {

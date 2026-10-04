@@ -995,7 +995,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     expect(rows("a2a_push_config")).toHaveLength(1);
   });
 
-  it("pushes a Task whose run died with its instance, once the sweep fails it", async () => {
+  it("pushes a Task whose run died with its instance, without holding up the sweep", async () => {
     const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
     seedConversation({
       chat: [
@@ -1044,10 +1044,19 @@ describe("POST /a2a/:endpointId — push notifications", () => {
       ],
     });
     vi.stubEnv("CHAT_PER_RUN_TIMEOUT_MS", "1000");
+    // The client's server has not answered yet.
+    let answer = () => {};
+    push.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = () => resolve(new Response(null, { status: 200 }));
+      }),
+    );
 
+    // Resolves while the push is still in flight.
     await recoverStuckChats();
 
-    expect(push).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    answer();
     expect(pushed()[0].body.task).toMatchObject({
       id: "task-1",
       status: { state: "TASK_STATE_FAILED" },
@@ -1087,6 +1096,25 @@ describe("POST /a2a/:endpointId — push notifications", () => {
       expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
     });
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("refuses authentication missing its scheme or its credentials", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+
+    for (const authentication of [
+      { scheme: "Bearer", credentials: "" },
+      { scheme: "", credentials: "client-secret" },
+    ]) {
+      const res = await rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        ...config({ authentication }),
+      });
+      expect(res.body.error.code).toBe(-32602);
+    }
+
+    expect(rows("a2a_push_config")).toHaveLength(0);
+    release();
   });
 
   it("gets, lists and deletes a Task's configs; a deleted one is not pushed", async () => {

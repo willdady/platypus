@@ -523,7 +523,9 @@ export async function recoverStuckChats(): Promise<void> {
     "Marked orphaned Chats as failed (older than the Chat per-run timeout)",
   );
   // Their runs died with an instance, so no run's end pushes their Tasks.
-  await Promise.all(orphaned.map(({ id }) => pushA2aChatEnded(id)));
+  // Not awaited: this runs under the scheduler's lock, and a slow client URL
+  // must not hold up due Triggers.
+  for (const { id } of orphaned) void pushA2aChatEnded(id);
 }
 
 /**

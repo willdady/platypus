@@ -167,6 +167,11 @@ export const checkPushConfig = async (
     );
   }
   const auth = config.authentication;
+  if (!auth?.scheme !== !auth?.credentials) {
+    throw new RequestMalformedError(
+      "Push notification authentication needs both a scheme and credentials",
+    );
+  }
   if (
     (auth?.scheme && !AUTH_SCHEME.test(auth.scheme)) ||
     (auth?.credentials && hasControlChar(auth.credentials)) ||
