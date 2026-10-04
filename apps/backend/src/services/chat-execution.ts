@@ -175,6 +175,8 @@ export type PrepareChatTurnInput = TurnRequest & {
    * user line and surfaces the agent's own identity.
    */
   runMode?: "interactive" | "headless";
+  /** The A2A token's name, when an A2A client started the turn (ADR-0032). */
+  a2aClientName?: string;
   /**
    * Called when a tool call begins and again when it settles. The run
    * lifecycle logs both and holds its per-step stall timer down in between, so
@@ -542,6 +544,7 @@ export const prepareChatTurn = async (
     origin,
     frontendUrl,
     runMode = "interactive",
+    a2aClientName,
     onActivity,
     run,
     signal,
@@ -686,6 +689,7 @@ export const prepareChatTurn = async (
       sandboxEnvKeys,
       fallbackInstructions: request.instructions,
       runMode,
+      a2aClientName,
       securityGuardrails: context.guardrails,
       organizationIdentityContext: organization?.identityContext,
     };

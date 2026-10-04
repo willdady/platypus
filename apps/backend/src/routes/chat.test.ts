@@ -301,6 +301,39 @@ describe("Chat Routes", () => {
     });
   });
 
+  describe("A2A Chats", () => {
+    it("are labelled with the token's name in the list and on the Chat", async () => {
+      mockSession();
+      seedTenant({
+        chat: [
+          {
+            id: "chat-a2a",
+            workspaceId,
+            title: "From Telegram",
+            a2aTokenId: "tok-1",
+          },
+          { id: "chat-ui", workspaceId, title: "Mine", a2aTokenId: null },
+        ],
+        a2a_token: [
+          { id: "tok-1", endpointId: "ep-1", name: "Telegram via Hermes" },
+        ],
+      });
+
+      const list = (await (await app.request(baseUrl)).json()) as {
+        results: Row[];
+      };
+      const one = (await (
+        await app.request(`${baseUrl}/chat-a2a`)
+      ).json()) as Row;
+
+      const byId = (id: string) => list.results.find((chat) => chat.id === id);
+      expect(byId("chat-a2a")?.a2aClientName).toBe("Telegram via Hermes");
+      expect(byId("chat-ui")).not.toHaveProperty("a2aClientName");
+      expect(one.a2aClientName).toBe("Telegram via Hermes");
+      expect(one).not.toHaveProperty("a2aTokenId");
+    });
+  });
+
   describe("GET /:chatId", () => {
     it("returns the Active path and the tree, and nothing internal", async () => {
       mockSession();

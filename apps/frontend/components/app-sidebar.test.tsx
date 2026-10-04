@@ -142,6 +142,21 @@ describe("AppSidebar chat history", () => {
     expect(screen.getByText("First chat")).toBeInTheDocument();
   });
 
+  it("labels an A2A Chat with its client's name", () => {
+    seedHeader();
+    setRead("ws1", CHAT_LIST, {
+      results: [
+        {
+          ...chat("c1", "Order question"),
+          a2aClientName: "Telegram via Hermes",
+        },
+      ],
+    });
+    renderSidebar();
+
+    expect(screen.getByText("Telegram via Hermes")).toBeInTheDocument();
+  });
+
   it("keeps the last list, without a false no-match, while a search is in flight", () => {
     seedHeader();
     setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });

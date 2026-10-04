@@ -350,7 +350,7 @@ const uniqueViolation = (constraint: string) => {
  * empty rather than an error, so a query for a resource a test never created
  * simply finds nothing.
  *
- * Covers `select`/`from`/`innerJoin`/`leftJoin`/`where`/`orderBy`/`groupBy`/`limit`,
+ * Covers `select`/`from`/`innerJoin`/`leftJoin`/`where`/`orderBy`/`groupBy`/`limit`/`offset`,
  * `insert`/`values`/`returning`, `update`/`set`/`where`/`returning`,
  * `delete`/`where`/`returning`, `execute`, and a `transaction` that really
  * rolls back: the callback gets a handle bound to a staging copy merged back
@@ -440,6 +440,7 @@ export const createFakeDb = (
       let table: unknown;
       let condition: Condition;
       let take = Infinity;
+      let skip = 0;
       let order: OrderMarker[] = [];
       let grouping: ColumnRef[] = [];
       const joins: { table: unknown; on: Condition; left?: boolean }[] = [];
@@ -517,7 +518,7 @@ export const createFakeDb = (
           ];
         }
 
-        const page = matched.slice(0, take);
+        const page = matched.slice(skip, skip + take);
         return page.map((row) =>
           project(row, resolverFor(row), selection, [resolverFor(row)]),
         );
@@ -550,6 +551,10 @@ export const createFakeDb = (
         },
         limit(n: number) {
           take = n;
+          return builder;
+        },
+        offset(n: number) {
+          skip = n;
           return builder;
         },
         // This fake is single-threaded; lock behavior is tested on Postgres.

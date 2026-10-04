@@ -57,7 +57,9 @@ export type GenerateResult = {
 const userFromScope = (scope: WorkspaceScope): { id: string; name: string } => {
   const p = scope.principal;
   if (p.kind === "user") return { id: p.userId, name: p.name };
-  if (p.kind === "trigger") return { id: p.onBehalfOfUserId, name: p.name };
+  if (p.kind === "trigger" || p.kind === "a2a") {
+    return { id: p.onBehalfOfUserId, name: p.name };
+  }
   return { id: actorUserId(scope.principal), name: "Sub-agent" };
 };
 
@@ -166,6 +168,8 @@ export class AgentRunner {
       origin,
       frontendUrl,
       runMode: scope.principal.kind === "user" ? "interactive" : "headless",
+      a2aClientName:
+        scope.principal.kind === "a2a" ? scope.principal.name : undefined,
       onActivity,
       // Sub-agent delegate tools built for this turn register their own runs
       // as children of this one, so they need to know whose child they are and

@@ -14,6 +14,7 @@ import {
   loadLiveA2aEndpoint,
   toPublicToken,
   type A2aEndpointRow,
+  type LiveA2aEndpoint,
 } from "./a2a-endpoint.ts";
 import { requireOwned } from "./workspace-resource.ts";
 import { bearerToken, dueReminder } from "./inbound-trigger.ts";
@@ -37,7 +38,7 @@ import {
 export type A2aTokenRow = typeof a2aTokenTable.$inferSelect;
 
 export type A2aAuthResult =
-  | { ok: true; endpoint: A2aEndpointRow; token: A2aTokenRow }
+  | { ok: true; endpoint: LiveA2aEndpoint; token: A2aTokenRow }
   /** `404` is the card's answer for an endpoint that isn't live. */
   | { ok: false; status: 401 | 404 };
 

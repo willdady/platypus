@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
 import { db } from "../index.ts";
-import { chat as chatTable } from "../db/schema.ts";
+import { a2aToken as a2aTokenTable, chat as chatTable } from "../db/schema.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 import {
   chatActiveLeafSchema,
@@ -59,6 +59,7 @@ const chatResponse = ({
   lastTurnAt: _lastTurnAt,
   memoryCursorId: _memoryCursorId,
   activeLeafId: _activeLeafId,
+  a2aTokenId: _a2aTokenId,
   ...response
 }: typeof chatTable.$inferSelect) => response;
 
@@ -126,10 +127,12 @@ chat.get(
         agentId: chatTable.agentId,
         providerId: chatTable.providerId,
         modelId: chatTable.modelId,
+        a2aClientName: a2aTokenTable.name,
         createdAt: chatTable.createdAt,
         updatedAt: chatTable.updatedAt,
       })
       .from(chatTable)
+      .leftJoin(a2aTokenTable, eq(a2aTokenTable.id, chatTable.a2aTokenId))
       .where(whereClause)
       .orderBy(desc(chatTable.isPinned), desc(chatTable.createdAt))
       .limit(limit)
@@ -140,7 +143,13 @@ chat.get(
       .from(chatTable)
       .where(whereClause);
 
-    return c.json({ results: records, totalCount });
+    return c.json({
+      results: records.map(({ a2aClientName, ...record }) => ({
+        ...record,
+        ...(a2aClientName ? { a2aClientName } : {}),
+      })),
+      totalCount,
+    });
   },
 );
 
@@ -155,9 +164,16 @@ chat.get(
 
     const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
     const { messages, tree } = await loadActivePath(chatId, chat.activeLeafId);
+    const [a2aToken] = chat.a2aTokenId
+      ? await db
+          .select({ name: a2aTokenTable.name })
+          .from(a2aTokenTable)
+          .where(eq(a2aTokenTable.id, chat.a2aTokenId))
+      : [];
 
     return c.json({
       ...chatResponse(chat),
+      ...(a2aToken ? { a2aClientName: a2aToken.name } : {}),
       messages: servedMessages(messages, getOrigin(c)),
       tree,
     });

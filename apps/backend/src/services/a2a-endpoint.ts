@@ -185,6 +185,12 @@ export const deleteA2aToken = async (
 
 // ------------------------------------------------------------ public side
 
+/** A live endpoint, with what a turn needs to act as its Owner. */
+export type LiveA2aEndpoint = A2aEndpointRow & {
+  organizationId: string;
+  ownerId: string;
+};
+
 /**
  * The endpoint a public call names, if it is live: it exists and is enabled,
  * the Organization's A2A gate admits its Workspace, and the Workspace Owner is
@@ -194,7 +200,7 @@ export const deleteA2aToken = async (
  */
 export const loadLiveA2aEndpoint = async (
   endpointId: string,
-): Promise<A2aEndpointRow | null> => {
+): Promise<LiveA2aEndpoint | null> => {
   const [row] = await db
     .select()
     .from(a2aEndpointTable)
@@ -220,7 +226,11 @@ export const loadLiveA2aEndpoint = async (
   ) {
     return null;
   }
-  return row.a2a_endpoint;
+  return {
+    ...row.a2a_endpoint,
+    organizationId: row.workspace.organizationId,
+    ownerId: row.workspace.ownerId,
+  };
 };
 
 /** The JSON-RPC interface URL an endpoint's card names. */
@@ -246,7 +256,7 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   capabilities: {
     streaming: false,
     pushNotifications: false,
-    extendedAgentCard: false,
+    extendedAgentCard: true,
   },
   securitySchemes: {
     bearer: { httpAuthSecurityScheme: { scheme: "Bearer" } },
@@ -255,6 +265,26 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   defaultInputModes: ["text/plain", "application/json"],
   defaultOutputModes: ["text/plain"],
   skills: [],
+});
+
+/**
+ * The authenticated extended card: the public card plus one skill, built from
+ * the same public name and description.
+ */
+export const extendedAgentCard = (endpoint: A2aEndpointRow) => ({
+  ...publicAgentCard(endpoint),
+  skills: [
+    {
+      id: endpoint.id,
+      name: endpoint.name,
+      description: endpoint.description,
+      tags: [],
+      examples: [],
+      inputModes: [],
+      outputModes: [],
+      securityRequirements: [],
+    },
+  ],
 });
 
 // ------------------------------------------------------------ Org Admin oversight

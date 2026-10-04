@@ -3,7 +3,7 @@ import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
 import { ownedWhere } from "./workspace-resource.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
-import { ChatSink } from "../runs/sinks/chat-sink.ts";
+import { ChatSink, type ChatSinkParams } from "../runs/sinks/chat-sink.ts";
 import type { RunInput } from "../runs/types.ts";
 import { chatTimeouts } from "../runs/chat-timeouts.ts";
 import { actorUserId, type WorkspaceScope } from "../scope.ts";
@@ -29,8 +29,10 @@ export const startChatTurn = async (params: {
   request: ChatSubmitData;
   includeMemories: boolean;
   origin: string;
+  /** Columns a Chat this turn creates starts with (see `ChatSinkParams`). */
+  newChat?: ChatSinkParams["newChat"];
 }): Promise<Response> => {
-  const { scope, request, includeMemories, origin } = params;
+  const { scope, request, includeMemories, origin, newChat } = params;
 
   // ADR-0020: resolve the pinned Memories block OUTSIDE composition. This
   // service owns the chat row, so it does the arithmetic — compare the gap
@@ -124,6 +126,7 @@ export const startChatTurn = async (params: {
     workspaceId: scope.workspaceId,
     message: turn.message,
     parentId: turn.parentId,
+    newChat,
   });
 
   // A rejected attachment (issue #328), an unresolved Agent/Provider/model,
