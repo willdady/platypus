@@ -26,7 +26,7 @@ export const hashInboundToken = (token: string): string =>
  * A fresh token, and the hash that is all the database keeps of it. A2A
  * tokens (ADR-0032) are made the same way under their own prefix.
  */
-export const generateInboundToken = (
+export const generateBearerToken = (
   prefix: string = TOKEN_PREFIX,
 ): { token: string; hash: string } => {
   const token = prefix + randomBytes(32).toString("base64url");

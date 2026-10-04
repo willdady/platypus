@@ -33,7 +33,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { A2aEndpointNotices } from "@/components/a2a-endpoint-notices";
 import { A2aTokenDialog } from "@/components/a2a-token-dialog";
-import { CopyRow } from "@/components/inbound-token-dialog";
+import { CopyRow } from "@/components/copy-row";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";

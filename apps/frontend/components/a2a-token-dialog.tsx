@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { CopyRow } from "@/components/inbound-token-dialog";
+import { CopyRow } from "@/components/copy-row";
 
 /**
  * Shows an A2A token the one time it is readable, beside the card URL the

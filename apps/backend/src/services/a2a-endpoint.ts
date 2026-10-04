@@ -1,9 +1,11 @@
 import { and, asc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import type {
-  A2aAccess,
-  A2aAccessUpdate,
-  InboundTriggerGate,
+import {
+  a2aInterfaceUrl as interfaceUrl,
+  gateAdmits,
+  type A2aAccess,
+  type OrgGateAccessUpdate,
+  type OrgGate,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
@@ -23,13 +25,8 @@ import {
   requireOwned,
   updateOwned,
 } from "./workspace-resource.ts";
-import { generateInboundToken } from "./inbound-trigger-token.ts";
-import {
-  gateAdmits,
-  getGateAccess,
-  setGateAccess,
-  type GateAccess,
-} from "./org-gate.ts";
+import { generateBearerToken } from "./inbound-trigger-token.ts";
+import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
 import { ownerMembershipJoin } from "./owner-membership.ts";
 
 /**
@@ -138,7 +135,7 @@ export const createA2aToken = async (
   name: string,
 ) => {
   await requireOwned(db, "a2aEndpoint", { id: endpointId, workspaceId });
-  const { token, hash } = generateInboundToken(A2A_TOKEN_PREFIX);
+  const { token, hash } = generateBearerToken(A2A_TOKEN_PREFIX);
   const [row] = await db
     .insert(a2aTokenTable)
     .values({
@@ -200,7 +197,7 @@ export const loadLiveA2aEndpoint = async (
     !row ||
     !row.a2a_endpoint.enabled ||
     !gateAdmits(
-      row.organization.a2aGate as InboundTriggerGate,
+      row.organization.a2aGate as OrgGate,
       row.workspace.a2aAllowed,
     ) ||
     !row.organization_member
@@ -212,7 +209,7 @@ export const loadLiveA2aEndpoint = async (
 
 /** The JSON-RPC interface URL an endpoint's card names. */
 export const a2aInterfaceUrl = (endpointId: string) =>
-  `${backendBaseUrl().replace(/\/+$/, "")}/a2a/${endpointId}`;
+  interfaceUrl(backendBaseUrl(), endpointId);
 
 /**
  * The public Agent Card (A2A 1.0): the endpoint's public name and description,
@@ -276,7 +273,7 @@ export const getA2aAccess = async (orgId: string): Promise<A2aAccess> =>
 
 export const setA2aAccess = async (
   orgId: string,
-  update: A2aAccessUpdate,
+  update: OrgGateAccessUpdate,
   actorUserId: string,
 ): Promise<A2aAccess> =>
   toA2aAccess(await setGateAccess(A2A_GATE, orgId, update, actorUserId));

@@ -11,13 +11,14 @@ import {
   sql,
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import type {
-  InboundTriggerAccess,
-  InboundTriggerAccessUpdate,
-  InboundTriggerConfig,
-  InboundTriggerGate,
-  InboundTriggerInput,
-  InboundTokenStatus,
+import {
+  gateAdmits,
+  type InboundTriggerAccess,
+  type OrgGateAccessUpdate,
+  type InboundTriggerConfig,
+  type OrgGate,
+  type InboundTriggerInput,
+  type InboundTokenStatus,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
@@ -31,12 +32,7 @@ import { ConflictError } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { createNotification } from "./notification.ts";
-import {
-  gateAdmits,
-  getGateAccess,
-  setGateAccess,
-  type GateAccess,
-} from "./org-gate.ts";
+import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
 import {
   readPositiveInt,
   retainTriggerRuns,
@@ -167,7 +163,7 @@ export type InboundTarget = {
   trigger: TriggerRow;
   organizationId: string;
   workspaceId: string;
-  gate: InboundTriggerGate;
+  gate: OrgGate;
   workspaceAllowed: boolean;
 };
 
@@ -190,7 +186,7 @@ export const loadInboundTarget = async (
     trigger: row.trigger,
     organizationId: row.organization.id,
     workspaceId: row.workspace.id,
-    gate: row.organization.inboundTriggerGate as InboundTriggerGate,
+    gate: row.organization.inboundTriggerGate as OrgGate,
     workspaceAllowed: row.workspace.inboundTriggersAllowed,
   };
 };
@@ -1002,7 +998,7 @@ export const getInboundTriggerAccess = async (
 /** Saves the Inbound Trigger gate; see {@link setGateAccess}. */
 export const setInboundTriggerAccess = async (
   orgId: string,
-  update: InboundTriggerAccessUpdate,
+  update: OrgGateAccessUpdate,
   actorUserId: string,
 ): Promise<InboundTriggerAccess> =>
   toInboundAccess(

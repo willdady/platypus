@@ -6,7 +6,7 @@ import { TriangleAlert } from "lucide-react";
 import type {
   A2aAccess,
   InboundTriggerAccess,
-  InboundTriggerGate,
+  OrgGate,
 } from "@platypus/schemas";
 import {
   Table,
@@ -29,13 +29,13 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 
-const GATE_OPTIONS: { value: InboundTriggerGate; label: string }[] = [
+const GATE_OPTIONS: { value: OrgGate; label: string }[] = [
   { value: "off", label: "No workspaces" },
   { value: "all", label: "All workspaces" },
   { value: "selected", label: "Selected workspaces" },
 ];
 
-type Draft = { gate: InboundTriggerGate; allowed: Set<string> };
+type Draft = { gate: OrgGate; allowed: Set<string> };
 
 const sameSet = (a: Set<string>, b: Set<string>) =>
   a.size === b.size && [...a].every((id) => b.has(id));
@@ -49,7 +49,7 @@ type GateWorkspace = {
 };
 
 type Access<W extends GateWorkspace> = {
-  gate: InboundTriggerGate;
+  gate: OrgGate;
   workspaces: W[];
 };
 
@@ -123,8 +123,7 @@ export const OrgGateAccess = <W extends GateWorkspace>({
         )
       : [];
 
-  const setGate = (next: InboundTriggerGate) =>
-    setDraft({ gate: next, allowed });
+  const setGate = (next: OrgGate) => setDraft({ gate: next, allowed });
   const toggle = (workspaceId: string, on: boolean) => {
     const next = new Set(allowed);
     if (on) next.add(workspaceId);
@@ -161,7 +160,7 @@ export const OrgGateAccess = <W extends GateWorkspace>({
         label={copy.selectLabel}
         name={copy.selectName}
         value={gate}
-        onValueChange={(value) => setGate(value as InboundTriggerGate)}
+        onValueChange={(value) => setGate(value as OrgGate)}
         disabled={isSaving}
         description={copy.selectDescription}
       >

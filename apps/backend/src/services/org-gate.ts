@@ -1,8 +1,5 @@
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type {
-  InboundTriggerAccessUpdate,
-  InboundTriggerGate,
-} from "@platypus/schemas";
+import type { OrgGateAccessUpdate, OrgGate } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
   organization as organizationTable,
@@ -28,7 +25,7 @@ type GateKind = {
 };
 
 export type GateAccess = {
-  gate: InboundTriggerGate;
+  gate: OrgGate;
   workspaces: {
     id: string;
     name: string;
@@ -37,12 +34,6 @@ export type GateAccess = {
     count: number;
   }[];
 };
-
-/** Whether a gate lets this Workspace in. */
-export const gateAdmits = (
-  gate: InboundTriggerGate,
-  workspaceAllowed: boolean,
-): boolean => gate === "all" || (gate === "selected" && workspaceAllowed);
 
 /**
  * The gate and every Workspace with its own switch and how many of the gated
@@ -72,7 +63,7 @@ export const getGateAccess = async (
     counts.set(workspaceId, (counts.get(workspaceId) ?? 0) + 1);
   }
   return {
-    gate: (org?.gate ?? "off") as InboundTriggerGate,
+    gate: (org?.gate ?? "off") as OrgGate,
     workspaces: workspaces
       .map((workspace) => ({
         ...workspace,
@@ -91,7 +82,7 @@ export const getGateAccess = async (
 export const setGateAccess = async (
   kind: GateKind,
   orgId: string,
-  update: InboundTriggerAccessUpdate,
+  update: OrgGateAccessUpdate,
   actorUserId: string,
 ): Promise<GateAccess> => {
   const allowedColumn = workspaceTable[kind.allowed];

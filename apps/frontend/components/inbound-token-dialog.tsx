@@ -10,13 +10,9 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Copy, TriangleAlert } from "lucide-react";
-import { toast } from "sonner";
+import { TriangleAlert } from "lucide-react";
 import { formatDateTime } from "@/lib/format-date";
-import { copyToClipboard } from "@/lib/clipboard";
+import { CopyRow } from "@/components/copy-row";
 
 /** The fire endpoint an external caller POSTs to (ADR-0030). */
 export const inboundEndpointUrl = (backendUrl: string, triggerId: string) =>
@@ -36,61 +32,6 @@ export const inboundCurlCommand = (
     `  -d '${JSON.stringify({ inputs })}'`,
   ].join("\n");
 };
-
-export const CopyRow = ({
-  id,
-  label,
-  value,
-  copiedMessage,
-  multiline = false,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  copiedMessage: string;
-  multiline?: boolean;
-}) => (
-  <Field className="min-w-0">
-    <FieldLabel htmlFor={id}>{label}</FieldLabel>
-    <div className="flex min-w-0 items-start gap-2">
-      {multiline ? (
-        <Textarea
-          id={id}
-          value={value}
-          readOnly
-          rows={value.split("\n").length}
-          wrap="off"
-          className="min-w-0 font-mono text-xs resize-none"
-        />
-      ) : (
-        <Input id={id} value={value} readOnly className="font-mono text-xs" />
-      )}
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="shrink-0 cursor-pointer"
-        aria-label={`Copy ${label.toLowerCase()}`}
-        onClick={async () => {
-          if (await copyToClipboard(value)) {
-            toast.success(copiedMessage);
-          } else {
-            // Leave the value selected so Ctrl+C still gets it.
-            const input = document.getElementById(id);
-            if (
-              input instanceof HTMLInputElement ||
-              input instanceof HTMLTextAreaElement
-            )
-              input.select();
-            toast.error("Couldn't copy. Select the text and press Ctrl+C.");
-          }
-        }}
-      >
-        <Copy className="h-4 w-4" />
-      </Button>
-    </div>
-  </Field>
-);
 
 /**
  * Shows an Inbound Trigger's token the one time it is readable — on creation

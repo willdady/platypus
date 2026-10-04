@@ -1,11 +1,14 @@
 "use client";
 
 import { Ban, TriangleAlert } from "lucide-react";
-import type { Organization, Workspace } from "@platypus/schemas";
+import {
+  gateAdmits,
+  type Organization,
+  type Workspace,
+} from "@platypus/schemas";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { organizationEntity, workspaceEntity } from "@/lib/api-write";
-import { a2aGateAdmits } from "@/lib/a2a-endpoint";
 
 /**
  * What an Owner must know before handing out an A2A endpoint: its runs act
@@ -32,7 +35,7 @@ export const A2aEndpointNotices = ({
   const gateClosed =
     organization !== undefined &&
     (organization.a2aGate !== "selected" || workspace !== undefined) &&
-    !a2aGateAdmits(organization.a2aGate, workspace?.a2aAllowed);
+    !gateAdmits(organization.a2aGate, workspace?.a2aAllowed);
 
   return (
     <div className="mb-6 flex flex-col gap-4">

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { a2aAccessUpdateSchema } from "@platypus/schemas";
+import { orgGateAccessUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import { getA2aAccess, setA2aAccess } from "../services/a2a-endpoint.ts";
@@ -21,7 +21,7 @@ orgA2a.put(
   "/access",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", a2aAccessUpdateSchema),
+  sValidator("json", orgGateAccessUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const user = c.get("user")!;
