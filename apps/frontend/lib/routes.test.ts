@@ -23,6 +23,7 @@ describe("orgRoutes", () => {
     expect(routes.settings.inboundTriggers).toBe(
       "/org1/settings/inbound-triggers",
     );
+    expect(routes.settings.a2a).toBe("/org1/settings/a2a");
   });
 
   it("builds the organization settings create paths", () => {
@@ -43,6 +44,7 @@ describe("orgRoutes", () => {
 
   it("exposes exactly the organization settings keys", () => {
     expect(Object.keys(routes.settings).sort()).toEqual([
+      "a2a",
       "agentDetail",
       "agents",
       "blueprintDetail",
@@ -168,11 +170,23 @@ describe("workspaceRoutes", () => {
     expect(routes.settings.webhookDetail("w1")).toBe(
       "/org1/workspace/ws1/settings/webhooks/w1",
     );
+    expect(routes.settings.a2aEndpoints).toBe(
+      "/org1/workspace/ws1/settings/a2a-endpoints",
+    );
+    expect(routes.settings.createA2aEndpoint).toBe(
+      "/org1/workspace/ws1/settings/a2a-endpoints/create",
+    );
+    expect(routes.settings.a2aEndpointDetail("e1")).toBe(
+      "/org1/workspace/ws1/settings/a2a-endpoints/e1",
+    );
   });
 
   it("exposes exactly the workspace settings keys", () => {
     expect(Object.keys(routes.settings).sort()).toEqual([
+      "a2aEndpointDetail",
+      "a2aEndpoints",
       "about",
+      "createA2aEndpoint",
       "createMcp",
       "createWebhook",
       "mcp",

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { inboundTriggerAccessUpdateSchema } from "@platypus/schemas";
+import { orgGateAccessUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import {
@@ -51,7 +51,7 @@ orgInboundTrigger.put(
   "/access",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", inboundTriggerAccessUpdateSchema),
+  sValidator("json", orgGateAccessUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const user = c.get("user")!;

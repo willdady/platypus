@@ -12,6 +12,7 @@ import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
+import { ownerMembershipJoin } from "./owner-membership.ts";
 import { triggerTimeouts } from "../runs/trigger-timeouts.ts";
 import { workspaceScopeForTrigger } from "../scope.ts";
 import {
@@ -249,13 +250,7 @@ const runTrigger = async (
     })
     .from(workspaceTable)
     .innerJoin(userTable, eq(userTable.id, workspaceTable.ownerId))
-    .leftJoin(
-      organizationMember,
-      and(
-        eq(organizationMember.organizationId, workspaceTable.organizationId),
-        eq(organizationMember.userId, workspaceTable.ownerId),
-      ),
-    )
+    .leftJoin(organizationMember, ownerMembershipJoin())
     .where(eq(workspaceTable.id, workspaceId))
     .limit(1);
 

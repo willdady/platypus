@@ -37,6 +37,7 @@ export function orgRoutes(orgId: string) {
         `${settings}/blueprints/${blueprintId}`,
       plugins: `${settings}/plugins`,
       inboundTriggers: `${settings}/inbound-triggers`,
+      a2a: `${settings}/a2a`,
     },
   };
 }
@@ -95,6 +96,10 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
       webhooks: `${settings}/webhooks`,
       createWebhook: `${settings}/webhooks/create`,
       webhookDetail: (webhookId: string) => `${settings}/webhooks/${webhookId}`,
+      a2aEndpoints: `${settings}/a2a-endpoints`,
+      createA2aEndpoint: `${settings}/a2a-endpoints/create`,
+      a2aEndpointDetail: (endpointId: string) =>
+        `${settings}/a2a-endpoints/${endpointId}`,
       about: `${settings}/about`,
     },
   };

@@ -2,7 +2,7 @@
 // Chat comes first — it is the screen everyone uses before they build anything.
 // Then the build sequence: the Agent, the capabilities you give it (Skills, tool
 // sets, MCP), the surfaces it works against (Triggers, Boards, Dashboards,
-// Notifications), and integrating outward (Webhooks). The worked example sits
+// Notifications), and integrating outward (Webhooks, A2A endpoints). The worked example sits
 // last because it uses every form above it.
 const meta = {
   index: "Overview",
@@ -16,6 +16,7 @@ const meta = {
   dashboards: "Dashboards",
   notifications: "Notifications",
   webhooks: "Webhooks",
+  "a2a-endpoints": "A2A endpoints",
   "board-digest": "Worked example: a daily board digest",
 };
 

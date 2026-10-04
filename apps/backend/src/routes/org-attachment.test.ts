@@ -299,6 +299,36 @@ describe("Organization Attachment (central sharing) Routes", () => {
       ]);
     });
 
+    it("deletes the Workspace's A2A endpoints for a detached Shared Agent", async () => {
+      mockSession();
+      const endpoint = (id: string, workspaceId: string, agentId: string) => ({
+        id,
+        workspaceId,
+        agentId,
+        name: "Public",
+        description: "Public",
+        enabled: true,
+      });
+      const fake = seed({
+        organization_member: membership("admin"),
+        workspace: workspaces,
+        attachment: attachments,
+        a2a_endpoint: [
+          endpoint("ep-detached", "ws-1", "agent-1"),
+          endpoint("ep-other-agent", "ws-1", "agent-2"),
+          endpoint("ep-other-workspace", "ws-2", "agent-1"),
+        ],
+      });
+
+      const res = await app.request(delUrl, { method: "DELETE" });
+
+      expect(res.status).toBe(200);
+      expect(fake.tables.a2a_endpoint.map((e) => e.id)).toEqual([
+        "ep-other-agent",
+        "ep-other-workspace",
+      ]);
+    });
+
     it("404s when no such attachment exists", async () => {
       mockSession();
       seed({

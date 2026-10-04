@@ -1,4 +1,4 @@
-import { OrgInboundTriggerAccess } from "@/components/org-inbound-trigger-access";
+import { OrgInboundTriggerAccess } from "@/components/org-gate-access";
 import { OrgInboundTriggersList } from "@/components/org-inbound-triggers-list";
 
 const OrgInboundTriggersPage = async ({

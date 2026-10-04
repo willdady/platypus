@@ -1,0 +1,111 @@
+---
+title: A2A endpoints
+description: Make an Agent reachable from outside Platypus over the A2A protocol — creating an endpoint, issuing a token per client, the public Agent Card, and what the endpoint exposes.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# A2A endpoints
+
+An **A2A endpoint** makes one Agent in your Workspace reachable from outside
+Platypus over [A2A](https://a2a-protocol.org), the open protocol one agent uses
+to talk to another. A client such as a messaging gateway or another agent
+discovers the Agent through the endpoint's **Agent Card**, and authenticates
+with a token you issue to it.
+
+You'll find them under **Workspace settings → A2A endpoints**. Only the
+Workspace Owner creates, edits and deletes endpoints and tokens. An Org Admin
+opening your Workspace sees them read-only, and no Agent Tool can read or
+change them.
+
+<Callout type="warning">
+  An A2A endpoint serves its Agent Card and doesn't accept messages. A client
+  can discover the Agent but can't talk to it.
+</Callout>
+
+## Before you start
+
+Your Organization decides which Workspaces may have A2A endpoints, and it is
+off until an Org Admin turns it on (see
+[A2A endpoints](/administering#a2a-endpoints)). While it is off for your
+Workspace, the screen says so and every endpoint answers **Not Found**. You can
+still create endpoints and tokens in the meantime.
+
+## Runs act as you
+
+<Callout type="warning">
+  Anyone holding a token can talk to the Agent, and every run acts as you, with
+  every Tool the Agent has. A token is only as safe as the Agent's Tools are
+  narrow. To expose less, make a narrower Agent and give the endpoint that one.
+</Callout>
+
+## Create an endpoint
+
+<Steps>
+
+### Open the form
+
+Go to **Workspace settings → A2A endpoints** and click **Add endpoint**.
+
+### Fill it in
+
+- **Agent** — the Agent callers talk to. Any Agent in the Workspace, including
+  an attached Shared Agent. You can't change it later.
+- **Name** — what callers see as the agent's name, up to 100 characters. Leave
+  it blank to use the Agent's name.
+- **Description** — what callers see in place of the Agent's description, up to
+  1000 characters. Leave it blank to use the Agent's description, then
+  rewrite it for outsiders: the Agent's description is written for you and for
+  other Agents.
+- **Enabled** — when off, the endpoint answers every call with **Not Found**.
+
+Click **Save**. The new endpoint's page opens.
+
+### Add a token for each client
+
+Under **Tokens**, name the token after the client it's for, up to 100
+characters (for example `Hermes on Telegram`), and click **Add token**. Copy the
+token from the dialog. It's shown once and Platypus keeps only a hash of it, so
+if you lose it, delete it and add another.
+
+Give each client its own token. Deleting one stops only that client.
+
+</Steps>
+
+An Agent can have several endpoints. Give clients that should see a different
+name or description their own endpoint, or retire one client's URL without
+touching the others.
+
+## The Agent Card
+
+Each endpoint has its own **Agent card URL**, shown on its page. The address is
+generated for the endpoint, so it reveals nothing about the Agent or the
+Workspace. Anyone with the URL can fetch the card, without a token:
+
+```bash
+curl https://platypus.example.com/a2a/<endpoint-id>/.well-known/agent-card.json
+```
+
+The card carries the endpoint's **Name** and **Description**, says the client
+authenticates with an HTTP bearer token, and names the address the client
+sends requests to. It never carries the Agent's own description, Tool sets or
+Skills.
+
+An endpoint that is disabled or deleted, in a Workspace the Organization doesn't
+allow, or whose Workspace Owner has left the Organization answers
+**Not Found**, exactly like one that never existed.
+
+## Deleting
+
+- **Delete** on the endpoint's page removes it. Its URL and every one of its
+  tokens stop working at once.
+- Deleting the Agent deletes its endpoints and their tokens.
+- Detaching a Shared Agent from the Workspace deletes the Workspace's endpoints
+  for it, and their tokens.
+
+## Where to next
+
+- **[Agents](/building-with-platypus/agents)** — build a narrow Agent to
+  expose.
+- **[Triggers](/building-with-platypus/triggers)** — run an Agent from an
+  outside system with a fixed instruction, instead of a conversation.

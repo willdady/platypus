@@ -35,12 +35,19 @@ export const CONTEXT_MAX_LENGTH = 1000;
 // Organization
 
 /**
- * Which Workspaces an Organization lets take Inbound Trigger calls
- * (ADR-0030): none, every one, or those with `inboundTriggersAllowed` set.
+ * An Organization gate on a way in from outside — Inbound Triggers (ADR-0030)
+ * or A2A endpoints (ADR-0032): no Workspace, every one, or those whose own
+ * switch is on.
  */
-export const inboundTriggerGateSchema = z.enum(["off", "all", "selected"]);
+export const orgGateSchema = z.enum(["off", "all", "selected"]);
 
-export type InboundTriggerGate = z.infer<typeof inboundTriggerGateSchema>;
+export type OrgGate = z.infer<typeof orgGateSchema>;
+
+/** Whether a gate lets a Workspace in, given that Workspace's own switch. */
+export const gateAdmits = (
+  gate: OrgGate | undefined,
+  workspaceAllowed: boolean | undefined,
+): boolean => gate === "all" || (gate === "selected" && !!workspaceAllowed);
 
 /**
  * How an Inbound Trigger's token stands: no token (never issued, or revoked),
@@ -70,7 +77,11 @@ export const organizationSchema = z.object({
   // Which Workspaces may take calls on an Inbound Trigger (ADR-0030). `off`
   // by default; `selected` defers to each Workspace's
   // `inboundTriggersAllowed`. Settable only by an Org Admin.
-  inboundTriggerGate: inboundTriggerGateSchema.optional(),
+  inboundTriggerGate: orgGateSchema.optional(),
+  // Which Workspaces may have A2A endpoints (ADR-0032). Same shape as the
+  // Inbound Trigger gate and separate from it; `selected` defers to each
+  // Workspace's `a2aAllowed`. Settable only by an Org Admin.
+  a2aGate: orgGateSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -81,27 +92,25 @@ export const organizationCreateSchema = organizationSchema.pick({ name: true });
 
 // The Inbound Trigger gate is not here: it is saved with the per-Workspace
 // switches on the Organization's Inbound Triggers screen
-// (`inboundTriggerAccessUpdateSchema`), so one place owns it.
+// (`orgGateAccessUpdateSchema`), so one place owns it.
 export const organizationUpdateSchema = organizationSchema.pick({
   name: true,
   identityContext: true,
 });
 
 /**
- * Who may take Inbound Trigger calls, as an Org Admin saves it (ADR-0030).
- * `allowedWorkspaceIds` sets every Workspace's `inboundTriggersAllowed` in
- * the same write — on for those listed, off for the rest — so switching to
- * `selected` never refuses calls between two saves. Omitted, the switches
- * stay as they are.
+ * An Organization gate as an Org Admin saves it, for Inbound Triggers
+ * (ADR-0030) or A2A endpoints (ADR-0032). `allowedWorkspaceIds` sets every
+ * Workspace's own switch in the same write — on for those listed, off for the
+ * rest — so switching to `selected` never refuses calls between two saves.
+ * Omitted, the switches stay as they are.
  */
-export const inboundTriggerAccessUpdateSchema = z.object({
-  gate: inboundTriggerGateSchema,
+export const orgGateAccessUpdateSchema = z.object({
+  gate: orgGateSchema,
   allowedWorkspaceIds: z.array(z.string()).max(10_000).optional(),
 });
 
-export type InboundTriggerAccessUpdate = z.infer<
-  typeof inboundTriggerAccessUpdateSchema
->;
+export type OrgGateAccessUpdate = z.infer<typeof orgGateAccessUpdateSchema>;
 
 /** One Workspace as the Inbound Triggers screen lists it. */
 export const inboundTriggerAccessWorkspaceSchema = z.object({
@@ -113,11 +122,27 @@ export const inboundTriggerAccessWorkspaceSchema = z.object({
 });
 
 export const inboundTriggerAccessSchema = z.object({
-  gate: inboundTriggerGateSchema,
+  gate: orgGateSchema,
   workspaces: z.array(inboundTriggerAccessWorkspaceSchema),
 });
 
 export type InboundTriggerAccess = z.infer<typeof inboundTriggerAccessSchema>;
+
+/** One Workspace as the Organization's A2A endpoints screen lists it. */
+export const a2aAccessWorkspaceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  ownerName: z.string(),
+  allowed: z.boolean(),
+  a2aEndpointCount: z.number().int(),
+});
+
+export const a2aAccessSchema = z.object({
+  gate: orgGateSchema,
+  workspaces: z.array(a2aAccessWorkspaceSchema),
+});
+
+export type A2aAccess = z.infer<typeof a2aAccessSchema>;
 
 // Workspace
 
@@ -158,6 +183,10 @@ export const workspaceSchema = z.object({
   // Organization gate is `selected` (ADR-0030). Settable only by an org admin;
   // ignored under `off` and `all`.
   inboundTriggersAllowed: z.boolean().optional(),
+  // Whether this Workspace's A2A endpoints are reachable while the
+  // Organization's A2A gate is `selected` (ADR-0032). Set only on the
+  // Organization's A2A endpoints screen.
+  a2aAllowed: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -3037,6 +3066,55 @@ export const webhookUpdateSchema = z.object({
   enabled: z.boolean().optional(),
   events: z.array(webhookEventSchema).min(1).optional(),
 });
+
+// A2A endpoint (ADR-0032): one Agent made reachable over A2A from one
+// Workspace, under its own unguessable URL. The public name and description
+// are what outside callers see on the Agent Card; they default to the Agent's.
+
+export const A2A_ENDPOINT_NAME_MAX_LENGTH = 100;
+export const A2A_ENDPOINT_DESCRIPTION_MAX_LENGTH = 1000;
+export const A2A_TOKEN_NAME_MAX_LENGTH = 100;
+
+export const a2aEndpointSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  agentId: z.string(),
+  name: z.string().min(1).max(A2A_ENDPOINT_NAME_MAX_LENGTH),
+  description: z.string().min(1).max(A2A_ENDPOINT_DESCRIPTION_MAX_LENGTH),
+  enabled: z.boolean(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type A2aEndpoint = z.infer<typeof a2aEndpointSchema>;
+
+/** The JSON-RPC interface URL of an endpoint; its Agent Card sits beneath. */
+export const a2aInterfaceUrl = (backendUrl: string, endpointId: string) =>
+  `${backendUrl.replace(/\/+$/, "")}/a2a/${endpointId}`;
+
+// Name and description are optional on create: omitted, they are copied from
+// the Agent.
+export const a2aEndpointCreateSchema = a2aEndpointSchema
+  .pick({ agentId: true, enabled: true, name: true, description: true })
+  .partial({ enabled: true, name: true, description: true });
+
+// The Agent is fixed once the endpoint exists: its URL and tokens were handed
+// out for that Agent.
+export const a2aEndpointUpdateSchema = a2aEndpointSchema
+  .pick({ name: true, description: true, enabled: true })
+  .partial();
+
+/** A token as listed: never its value, which is shown once on creation. */
+export const a2aTokenSchema = z.object({
+  id: z.string(),
+  endpointId: z.string(),
+  name: z.string().min(1).max(A2A_TOKEN_NAME_MAX_LENGTH),
+  createdAt: z.date(),
+});
+
+export type A2aToken = z.infer<typeof a2aTokenSchema>;
+
+export const a2aTokenCreateSchema = a2aTokenSchema.pick({ name: true });
 
 // Dashboard
 

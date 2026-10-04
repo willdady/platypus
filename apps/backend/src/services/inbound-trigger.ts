@@ -7,18 +7,18 @@ import {
   isNull,
   lt,
   lte,
-  notInArray,
   or,
   sql,
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import type {
-  InboundTriggerAccess,
-  InboundTriggerAccessUpdate,
-  InboundTriggerConfig,
-  InboundTriggerGate,
-  InboundTriggerInput,
-  InboundTokenStatus,
+import {
+  gateAdmits,
+  type InboundTriggerAccess,
+  type OrgGateAccessUpdate,
+  type InboundTriggerConfig,
+  type OrgGate,
+  type InboundTriggerInput,
+  type InboundTokenStatus,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
@@ -28,10 +28,11 @@ import {
   user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import { ConflictError, NotFoundError } from "../errors.ts";
+import { ConflictError } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { createNotification } from "./notification.ts";
+import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
 import {
   readPositiveInt,
   retainTriggerRuns,
@@ -162,7 +163,7 @@ export type InboundTarget = {
   trigger: TriggerRow;
   organizationId: string;
   workspaceId: string;
-  gate: InboundTriggerGate;
+  gate: OrgGate;
   workspaceAllowed: boolean;
 };
 
@@ -185,16 +186,10 @@ export const loadInboundTarget = async (
     trigger: row.trigger,
     organizationId: row.organization.id,
     workspaceId: row.workspace.id,
-    gate: row.organization.inboundTriggerGate as InboundTriggerGate,
+    gate: row.organization.inboundTriggerGate as OrgGate,
     workspaceAllowed: row.workspace.inboundTriggersAllowed,
   };
 };
-
-/** Whether the Organization gate lets this Workspace take calls. */
-export const gateAdmits = (
-  gate: InboundTriggerGate,
-  workspaceAllowed: boolean,
-): boolean => gate === "all" || (gate === "selected" && workspaceAllowed);
 
 /**
  * The token an `Authorization: Bearer <token>` header carries, or `null`.
@@ -957,131 +952,55 @@ export const revokeInboundTriggerToken = async (
   return true;
 };
 
-/**
- * Who may take Inbound Trigger calls, for the Org Admin's Inbound Triggers
- * screen: the Organization gate, and every Workspace with its own switch and
- * how many Inbound Triggers it holds, so the Admin can see which ones a
- * change would cut off.
- */
-export const getInboundTriggerAccess = async (
-  orgId: string,
-): Promise<InboundTriggerAccess> => {
-  const [org] = await db
-    .select({ gate: organizationTable.inboundTriggerGate })
-    .from(organizationTable)
-    .where(eq(organizationTable.id, orgId))
-    .limit(1);
-  const workspaces = await db
-    .select({
-      id: workspaceTable.id,
-      name: workspaceTable.name,
-      allowed: workspaceTable.inboundTriggersAllowed,
-      ownerName: userTable.name,
-    })
-    .from(workspaceTable)
-    .innerJoin(userTable, eq(userTable.id, workspaceTable.ownerId))
-    .where(eq(workspaceTable.organizationId, orgId));
-  const triggers = await db
-    .select({ workspaceId: triggerTable.workspaceId })
-    .from(triggerTable)
-    .innerJoin(workspaceTable, eq(workspaceTable.id, triggerTable.workspaceId))
-    .where(
-      and(
-        eq(workspaceTable.organizationId, orgId),
-        eq(triggerTable.type, "inbound"),
-      ),
-    );
-  const counts = new Map<string, number>();
-  for (const { workspaceId } of triggers) {
-    if (workspaceId)
-      counts.set(workspaceId, (counts.get(workspaceId) ?? 0) + 1);
-  }
-  return {
-    gate: (org?.gate ?? "off") as InboundTriggerGate,
-    workspaces: workspaces
-      .map((workspace) => ({
-        ...workspace,
-        inboundTriggerCount: counts.get(workspace.id) ?? 0,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
-  };
-};
-
-/**
- * Saves the Organization gate and, when `allowedWorkspaceIds` is given, every
- * Workspace's switch with it: on for those listed, off for the rest. One
- * transaction, so a switch to `selected` takes effect with the Workspaces it
- * should keep already allowed. A listed id outside the Organization refuses
- * the whole save.
- */
-export const setInboundTriggerAccess = async (
-  orgId: string,
-  update: InboundTriggerAccessUpdate,
-  actorUserId: string,
-): Promise<InboundTriggerAccess> => {
-  const allowedIds = update.allowedWorkspaceIds
-    ? [...new Set(update.allowedWorkspaceIds)]
-    : null;
-  if (allowedIds && allowedIds.length > 0) {
-    const found = await db
-      .select({ id: workspaceTable.id })
-      .from(workspaceTable)
-      .where(
-        and(
-          eq(workspaceTable.organizationId, orgId),
-          inArray(workspaceTable.id, allowedIds),
-        ),
-      );
-    if (found.length !== allowedIds.length) {
-      throw new NotFoundError("Workspace not found in this organization");
-    }
-  }
-
-  await db.transaction(async (tx) => {
-    if (allowedIds) {
-      const now = new Date();
-      // Only rows whose switch changes are written, so a Workspace's
-      // updatedAt still means something changed on it.
-      if (allowedIds.length > 0) {
-        await tx
-          .update(workspaceTable)
-          .set({ inboundTriggersAllowed: true, updatedAt: now })
-          .where(
-            and(
-              eq(workspaceTable.organizationId, orgId),
-              inArray(workspaceTable.id, allowedIds),
-              eq(workspaceTable.inboundTriggersAllowed, false),
-            ),
-          );
-      }
-      await tx
-        .update(workspaceTable)
-        .set({ inboundTriggersAllowed: false, updatedAt: now })
+const INBOUND_GATE = {
+  gate: "inboundTriggerGate",
+  allowed: "inboundTriggersAllowed",
+  resourceWorkspaceIds: async (orgId: string) =>
+    (
+      await db
+        .select({ workspaceId: triggerTable.workspaceId })
+        .from(triggerTable)
+        .innerJoin(
+          workspaceTable,
+          eq(workspaceTable.id, triggerTable.workspaceId),
+        )
         .where(
           and(
             eq(workspaceTable.organizationId, orgId),
-            eq(workspaceTable.inboundTriggersAllowed, true),
-            allowedIds.length > 0
-              ? notInArray(workspaceTable.id, allowedIds)
-              : undefined,
+            eq(triggerTable.type, "inbound"),
           ),
-        );
-    }
-    await tx
-      .update(organizationTable)
-      .set({ inboundTriggerGate: update.gate, updatedAt: new Date() })
-      .where(eq(organizationTable.id, orgId));
-  });
+        )
+    ).map((row) => row.workspaceId),
+  changedMessage: "Inbound trigger access changed by an Org Admin",
+} as const;
 
-  // Who opened or closed a way in from outside, and how wide.
-  logger.info(
-    {
-      organizationId: orgId,
-      userId: actorUserId,
-      gate: update.gate,
-      allowedWorkspaceCount: allowedIds?.length,
-    },
-    "Inbound trigger access changed by an Org Admin",
+const toInboundAccess = ({
+  gate,
+  workspaces,
+}: GateAccess): InboundTriggerAccess => ({
+  gate,
+  workspaces: workspaces.map(({ count, ...workspace }) => ({
+    ...workspace,
+    inboundTriggerCount: count,
+  })),
+});
+
+/**
+ * Who may take Inbound Trigger calls, for the Org Admin's Inbound Triggers
+ * screen: the Organization gate, and every Workspace with its own switch and
+ * how many Inbound Triggers it holds.
+ */
+export const getInboundTriggerAccess = async (
+  orgId: string,
+): Promise<InboundTriggerAccess> =>
+  toInboundAccess(await getGateAccess(INBOUND_GATE, orgId));
+
+/** Saves the Inbound Trigger gate; see {@link setGateAccess}. */
+export const setInboundTriggerAccess = async (
+  orgId: string,
+  update: OrgGateAccessUpdate,
+  actorUserId: string,
+): Promise<InboundTriggerAccess> =>
+  toInboundAccess(
+    await setGateAccess(INBOUND_GATE, orgId, update, actorUserId),
   );
-  return getInboundTriggerAccess(orgId);
-};

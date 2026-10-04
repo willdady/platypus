@@ -38,6 +38,9 @@ import { webBackends } from "./routes/web-backends.ts";
 import { sandboxBackends } from "./routes/sandbox-backends.ts";
 import { hooks } from "./routes/hooks.ts";
 import { orgInboundTrigger } from "./routes/org-inbound-trigger.ts";
+import { a2a } from "./routes/a2a.ts";
+import { a2aEndpoint } from "./routes/a2a-endpoint.ts";
+import { orgA2a } from "./routes/org-a2a.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 import { mapError } from "./errors.ts";
@@ -153,10 +156,12 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 // discloses nothing an anonymous caller could not learn by trying to sign up.
 app.get("/sign-up", (c) => c.json({ open: !requireInvitationToSignUp() }));
 
-// Callers that are not a browser session (ADR-0030). Outside
-// `/organizations/...` so an Operator can expose `/hooks/*` alone; every route
-// under it authenticates its own bearer token and reads no session.
+// Callers that are not a browser session (ADR-0030, ADR-0032). Outside
+// `/organizations/...` so an Operator can expose `/hooks/*` or `/a2a/*` alone;
+// every route under them authenticates its own bearer token, or none, and
+// reads no session.
 app.route("/hooks", hooks);
+app.route("/a2a", a2a);
 app.route("/files", files);
 app.route("/organizations", organization);
 app.route("/organizations/:orgId/workspaces", workspace);
@@ -174,6 +179,7 @@ app.route("/organizations/:orgId/tools", orgTool);
 app.route("/organizations/:orgId/attachments", orgAttachment);
 app.route("/organizations/:orgId/blueprints", orgBlueprint);
 app.route("/organizations/:orgId/inbound-triggers", orgInboundTrigger);
+app.route("/organizations/:orgId/a2a", orgA2a);
 app.route(
   "/organizations/:orgId/workspaces/:workspaceId/attachments",
   attachment,
@@ -196,6 +202,10 @@ app.route(
   notification,
 );
 app.route("/organizations/:orgId/workspaces/:workspaceId/webhooks", webhook);
+app.route(
+  "/organizations/:orgId/workspaces/:workspaceId/a2a-endpoints",
+  a2aEndpoint,
+);
 app.route("/organizations/:orgId/invitations", invitation);
 app.route("/invitation-links", invitationLink);
 app.route("/organizations/:orgId/members", member);

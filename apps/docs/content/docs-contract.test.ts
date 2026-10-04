@@ -34,6 +34,8 @@ import { fileURLToPath } from "node:url";
 import GithubSlugger from "github-slugger";
 import { describe, expect, it } from "vitest";
 import {
+  a2aEndpointSchema,
+  a2aTokenSchema,
   agentSchema,
   chatSchema,
   invitationRedemptionRegisterSchema,
@@ -1401,6 +1403,24 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     expected: {
       max: stringField(inboundTriggerInputSchema, "description").max,
     },
+  },
+  {
+    doc: "building-with-platypus/a2a-endpoints.mdx",
+    anchor: "**Name** — what callers see",
+    source: "packages/schemas/index.ts (a2aEndpointSchema.name)",
+    expected: { max: stringField(a2aEndpointSchema, "name").max },
+  },
+  {
+    doc: "building-with-platypus/a2a-endpoints.mdx",
+    anchor: "**Description** — what callers see",
+    source: "packages/schemas/index.ts (a2aEndpointSchema.description)",
+    expected: { max: stringField(a2aEndpointSchema, "description").max },
+  },
+  {
+    doc: "building-with-platypus/a2a-endpoints.mdx",
+    anchor: "Under **Tokens**, name the token",
+    source: "packages/schemas/index.ts (a2aTokenSchema.name)",
+    expected: { max: stringField(a2aTokenSchema, "name").max },
   },
 ];
 

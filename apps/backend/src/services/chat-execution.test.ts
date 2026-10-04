@@ -180,6 +180,7 @@ const baseWorkspace = {
   providerSelfManagement: false,
   mcpSelfManagement: false,
   inboundTriggersAllowed: false,
+  a2aAllowed: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

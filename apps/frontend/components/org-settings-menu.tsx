@@ -14,6 +14,7 @@ import {
   Bot,
   Layers,
   Mail,
+  Network,
   Plug,
   Settings,
   Sparkles,
@@ -52,6 +53,7 @@ export function OrgSettingsMenu({
   const blueprintsHref = routes.settings.blueprints;
   const pluginsHref = routes.settings.plugins;
   const inboundTriggersHref = routes.settings.inboundTriggers;
+  const a2aHref = routes.settings.a2a;
 
   return (
     <SidebarContent>
@@ -164,6 +166,16 @@ export function OrgSettingsMenu({
               >
                 <Link href={inboundTriggersHref}>
                   <Webhook /> Inbound Triggers
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(a2aHref)}
+              >
+                <Link href={a2aHref}>
+                  <Network /> A2A endpoints
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -22,9 +22,14 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 export const hashInboundToken = (token: string): string =>
   createHash("sha256").update(token, "utf8").digest("hex");
 
-/** A fresh token, and the hash that is all the database keeps of it. */
-export const generateInboundToken = (): { token: string; hash: string } => {
-  const token = TOKEN_PREFIX + randomBytes(32).toString("base64url");
+/**
+ * A fresh token, and the hash that is all the database keeps of it. A2A
+ * tokens (ADR-0032) are made the same way under their own prefix.
+ */
+export const generateBearerToken = (
+  prefix: string = TOKEN_PREFIX,
+): { token: string; hash: string } => {
+  const token = prefix + randomBytes(32).toString("base64url");
   return { token, hash: hashInboundToken(token) };
 };
 

@@ -16,7 +16,7 @@ import type { ScopeContext } from "../scope.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 import {
-  generateInboundToken,
+  generateBearerToken,
   inboundTokenStatus,
   issuedTokenFields,
 } from "./inbound-trigger-token.ts";
@@ -272,7 +272,7 @@ export async function createTrigger(
   } else if (fields.type === "inbound") {
     const inbound = parseInboundConfig(fields.config);
     config = inbound;
-    const generated = generateInboundToken();
+    const generated = generateBearerToken();
     token = generated.token;
     tokenFields = issuedTokenFields(generated.hash, inbound.tokenExpiryDays);
   } else {
@@ -500,7 +500,7 @@ export async function regenerateTriggerToken(
       "This trigger's configuration is invalid. Save its inputs again, then regenerate the token.",
     );
   }
-  const { token, hash } = generateInboundToken();
+  const { token, hash } = generateBearerToken();
   const fields = issuedTokenFields(hash, parsed.data.tokenExpiryDays);
   const row = await updateOwned(
     db,
