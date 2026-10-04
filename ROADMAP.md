@@ -131,7 +131,7 @@ in ADR-0032.
 - **Chat platforms are reached through other projects' gateways**, such as Hermes Agent
   and OpenClaw, which call the Agent over A2A. Platypus does not maintain an adapter for
   each chat platform.
-- **Access is a per-client bearer token on the Agent**, behind an Organization gate that is
+- **Access is a per-client bearer token on an A2A endpoint**, behind an Organization gate that is
   off by default. Each run acts as the Workspace Owner, and records which client started it.
 - **Exposing Agents over MCP is likely later.** As of the 2026-07-28 spec, MCP has no
   notion of a conversation. It has far wider client reach, so it is worth adding once it

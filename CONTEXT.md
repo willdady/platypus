@@ -35,6 +35,10 @@ _Avoid_: parsed text, converted file, OCR (Platypus does not OCR).
 **Agent**:
 A configurable preset that pins a Provider, model, Instructions, generation parameters, Tools, Skills, and Sub-Agents. Selecting an Agent on a Chat turn replaces direct Provider/model selection.
 
+**A2A endpoint**:
+An **Agent** made reachable to outside agents and chat platforms over A2A from one Workspace, under its own unguessable URL. Each endpoint has its own public name and description, which may differ from the Agent's own description, its own tokens (one per client) and its own memory settings. An Agent can have several endpoints. Every conversation through an endpoint is an ordinary **Chat** the Owner can read and continue. The run acts as the Workspace Owner, so a token is only as safe as the Agent's tools are narrow. Reachable only while the Organization's gate admits its Workspace and the Workspace has an Owner who is still a member.
+_Avoid_: published Agent (an endpoint is not public), A2A exposure, API key (a token reaches one endpoint, not the API).
+
 **Sub-Agent**:
 An Agent referenced by a parent Agent, advertised to it in a catalogue and reachable by name through the parent's one delegation Tool. Invoking it starts a run in its own right — bounded by the same per-step and per-run timeouts the parent turn was started under, and cancelled when the parent is — but never a Chat, and never a run record of its own: under a **Trigger run** its work is persisted as **Run events** nested beneath the parent's delegation, and under a Chat turn only as the parent message's tool part.
 
