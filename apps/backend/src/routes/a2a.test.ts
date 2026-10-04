@@ -59,6 +59,7 @@ import { hashInboundToken } from "../services/inbound-trigger-token.ts";
 import { resetA2aTokenTouches } from "../services/a2a-token.ts";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
+import { recoverStuckChats } from "../jobs/scheduler.ts";
 
 const CARD_PATH = "/.well-known/agent-card.json";
 
@@ -971,6 +972,86 @@ describe("POST /a2a/:endpointId — push notifications", () => {
 
     await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("pushes once however often the same config is registered", async () => {
+    seedConversation();
+    const sent = await send({ messageId: "msg-a" });
+    const task = sent.body.result.task;
+
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+    await send({ messageId: "msg-a" });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(rows("a2a_push_config")).toHaveLength(1);
+  });
+
+  it("pushes a Task whose run died with its instance, once the sweep fails it", async () => {
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Orphaned",
+          status: "running",
+          activeLeafId: "msg-a",
+          lastTurnAt: hourAgo,
+          updatedAt: hourAgo,
+        },
+      ],
+      chat_message: [
+        {
+          chatId: "chat-1",
+          id: "msg-a",
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "Where is my order?" }],
+          deletedAt: null,
+          createdAt: hourAgo,
+        },
+      ],
+      a2a_task: [
+        {
+          id: "task-1",
+          chatId: "chat-1",
+          messageId: "msg-a",
+          endpointId: "ep-1",
+          tokenId: "tok-1",
+          createdAt: hourAgo,
+        },
+      ],
+      a2a_push_config: [
+        {
+          id: "cfg-1",
+          taskId: "task-1",
+          url: PUSH_URL,
+          token: null,
+          authentication: null,
+          notifiedAt: null,
+          createdAt: hourAgo,
+        },
+      ],
+    });
+    vi.stubEnv("CHAT_PER_RUN_TIMEOUT_MS", "1000");
+
+    await recoverStuckChats();
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(pushed()[0].body.task).toMatchObject({
+      id: "task-1",
+      status: { state: "TASK_STATE_FAILED" },
+    });
   });
 
   it("retries a delivery the client's server refused", async () => {

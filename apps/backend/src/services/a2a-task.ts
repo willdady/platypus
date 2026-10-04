@@ -27,7 +27,11 @@ import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
 import { workspaceScopeForA2a } from "../scope.ts";
 import { startChatTurn } from "./chat-turn.ts";
 import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
-import { readTask, TERMINAL, type TaskRow } from "./a2a-task-state.ts";
+import {
+  readTask,
+  TERMINAL_TASK_STATES,
+  type TaskRow,
+} from "./a2a-task-state.ts";
 import { checkPushConfig, storePushConfig } from "./a2a-push.ts";
 
 /**
@@ -142,7 +146,8 @@ const busyError = async (caller: A2aCaller, chatId: string) => {
 const waitForTask = async (task: TaskRow, deadline: number): Promise<Task> => {
   for (;;) {
     const read = await readTask(task);
-    if (TERMINAL.has(read.status!.state) || Date.now() >= deadline) return read;
+    if (TERMINAL_TASK_STATES.has(read.status!.state) || Date.now() >= deadline)
+      return read;
     await new Promise((resolve) => setTimeout(resolve, BLOCKING_POLL_MS));
   }
 };

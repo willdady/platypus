@@ -33,8 +33,7 @@ export async function deliverWebhook(
 /**
  * The Webhook transport: POSTs `body` to a user-supplied URL behind the
  * egress guard, retrying a failed attempt with backoff. Also carries A2A push
- * notifications (ADR-0032), which bring their own headers. Resolves whether
- * the delivery landed; it never throws.
+ * notifications (ADR-0032), which bring their own headers. It never throws.
  */
 export async function postWithRetries(params: {
   url: string;
@@ -42,7 +41,7 @@ export async function postWithRetries(params: {
   headers: Record<string, string>;
   /** What is delivered, as the log lines name it. */
   label: string;
-}): Promise<boolean> {
+}): Promise<void> {
   const { url, body, headers, label } = params;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
@@ -64,7 +63,7 @@ export async function postWithRetries(params: {
           { url, reason: egress.reason },
           `${label} delivery blocked by network policy`,
         );
-        return false;
+        return;
       }
 
       const response = await fetch(url, {
@@ -82,7 +81,7 @@ export async function postWithRetries(params: {
           { url, attempt: attempt + 1 },
           `${label} delivered successfully`,
         );
-        return true;
+        return;
       }
 
       logger.warn(
@@ -104,5 +103,4 @@ export async function postWithRetries(params: {
   }
 
   logger.error({ url }, `${label} delivery exhausted all retries`);
-  return false;
 }

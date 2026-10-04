@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, count, eq, isNull } from "drizzle-orm";
 import {
   A2A_CONTENT_TYPE,
   StreamResponse,
@@ -11,10 +11,15 @@ import { db } from "../index.ts";
 import {
   a2aPushConfig as a2aPushConfigTable,
   a2aTask as a2aTaskTable,
+  type A2aPushAuthentication,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { checkEgress } from "../utils/egress-guard.ts";
-import { readTask, TERMINAL, type TaskRow } from "./a2a-task-state.ts";
+import {
+  readTask,
+  TERMINAL_TASK_STATES,
+  type TaskRow,
+} from "./a2a-task-state.ts";
 import { postWithRetries } from "./webhook-delivery.ts";
 
 /**
@@ -25,9 +30,24 @@ import { postWithRetries } from "./webhook-delivery.ts";
  *
  * Each config is delivered once. Its `notifiedAt` is claimed before sending,
  * so the run's end and a registration landing just after it can't both push.
+ *
+ * ponytail: at most once. A process that dies between the claim and a landed
+ * delivery loses that push; the client can still poll `GetTask`. Claim after
+ * delivering, with a lease, if clients need it guaranteed.
  */
 
 type PushConfigRow = typeof a2aPushConfigTable.$inferSelect;
+
+/** One config of one Task. */
+const configKey = (taskId: string, id: string) =>
+  and(eq(a2aPushConfigTable.taskId, taskId), eq(a2aPushConfigTable.id, id));
+
+/** A Task's configs not yet delivered. */
+const pending = (taskId: string) =>
+  and(
+    eq(a2aPushConfigTable.taskId, taskId),
+    isNull(a2aPushConfigTable.notifiedAt),
+  );
 
 /** The headers carrying the client's own credentials back to it. */
 const credentialHeaders = (config: PushConfigRow): Record<string, string> => ({
@@ -56,30 +76,14 @@ const deliver = async (config: PushConfigRow, task: Task) => {
  * throws: a push is fire-and-forget beside the run or call that noticed the
  * end.
  */
-export const pushA2aTaskIfEnded = async (row: TaskRow): Promise<void> => {
+const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
   try {
-    const [pending] = await db
-      .select({ id: a2aPushConfigTable.id })
-      .from(a2aPushConfigTable)
-      .where(
-        and(
-          eq(a2aPushConfigTable.taskId, row.id),
-          isNull(a2aPushConfigTable.notifiedAt),
-        ),
-      )
-      .limit(1);
-    if (!pending) return;
     const task = await readTask(row);
-    if (!TERMINAL.has(task.status!.state)) return;
+    if (!TERMINAL_TASK_STATES.has(task.status!.state)) return;
     const claimed = await db
       .update(a2aPushConfigTable)
       .set({ notifiedAt: new Date() })
-      .where(
-        and(
-          eq(a2aPushConfigTable.taskId, row.id),
-          isNull(a2aPushConfigTable.notifiedAt),
-        ),
-      )
+      .where(pending(row.id))
       .returning();
     await Promise.all(claimed.map((config) => deliver(config, task)));
   } catch (error) {
@@ -88,25 +92,34 @@ export const pushA2aTaskIfEnded = async (row: TaskRow): Promise<void> => {
 };
 
 /**
- * A Chat turn's run has ended: push its Task, if the turn has one. `messageId`
- * is the user message the turn answered.
+ * A run in the Chat has ended — on its own, or marked failed by the sweep
+ * after its instance died: push each of the Chat's Tasks that has ended and
+ * still owes a push. Never throws.
  */
-export const pushA2aTurnEnded = async (
-  chatId: string,
-  messageId: string,
-): Promise<void> => {
+export const pushA2aChatEnded = async (chatId: string): Promise<void> => {
   try {
-    const [task] = await db
-      .select()
+    const tasks: TaskRow[] = await db
+      .select({
+        id: a2aTaskTable.id,
+        chatId: a2aTaskTable.chatId,
+        messageId: a2aTaskTable.messageId,
+        endpointId: a2aTaskTable.endpointId,
+        tokenId: a2aTaskTable.tokenId,
+        createdAt: a2aTaskTable.createdAt,
+      })
       .from(a2aTaskTable)
+      .innerJoin(
+        a2aPushConfigTable,
+        eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
+      )
       .where(
         and(
           eq(a2aTaskTable.chatId, chatId),
-          eq(a2aTaskTable.messageId, messageId),
+          isNull(a2aPushConfigTable.notifiedAt),
         ),
-      )
-      .limit(1);
-    if (task) await pushA2aTaskIfEnded(task);
+      );
+    const unique = new Map(tasks.map((task) => [task.id, task]));
+    await Promise.all([...unique.values()].map(pushTaskIfEnded));
   } catch (error) {
     logger.error({ error, chatId }, "A2A push notification failed");
   }
@@ -128,7 +141,7 @@ export type CheckedPushConfig = {
   id: string;
   url: string;
   token: string | null;
-  authentication: { scheme: string; credentials: string } | null;
+  authentication: A2aPushAuthentication | null;
 };
 
 /**
@@ -177,65 +190,63 @@ export const checkPushConfig = async (
 /**
  * Stores a checked config on `task`, replacing one with the same id. A config
  * without an id replaces one with the same URL, so a `SendMessage` retried
- * with its config registers it once. If the Task has already ended, it is
- * pushed now: a run can end before its client registers.
+ * with its config registers it once. A replacement to the same URL keeps its
+ * delivery, so re-registering never pushes an ended Task twice. If the Task
+ * has already ended and the config is new, it is pushed now: a run can end
+ * before its client registers.
  */
 export const storePushConfig = async (
   task: TaskRow,
   config: CheckedPushConfig,
 ): Promise<PushConfigRow> => {
-  const [sameUrl] = config.id
-    ? []
-    : await db
-        .select({ id: a2aPushConfigTable.id })
-        .from(a2aPushConfigTable)
-        .where(
-          and(
-            eq(a2aPushConfigTable.taskId, task.id),
-            eq(a2aPushConfigTable.url, config.url),
-          ),
-        )
-        .limit(1);
-  const id = config.id || sameUrl?.id || randomUUID();
-
-  const [{ n }] = await db
-    .select({ n: count() })
-    .from(a2aPushConfigTable)
-    .where(
-      and(
-        eq(a2aPushConfigTable.taskId, task.id),
-        ne(a2aPushConfigTable.id, id),
-      ),
-    );
-  if (n >= MAX_PUSH_CONFIGS_PER_TASK) {
-    throw new RequestMalformedError(
-      `A Task takes at most ${MAX_PUSH_CONFIGS_PER_TASK} push notification configs`,
-    );
-  }
-
+  const values = {
+    url: config.url,
+    token: config.token,
+    authentication: config.authentication,
+  };
   const row = await db.transaction(async (tx) => {
-    await tx
-      .delete(a2aPushConfigTable)
+    const [existing] = await tx
+      .select()
+      .from(a2aPushConfigTable)
       .where(
-        and(
-          eq(a2aPushConfigTable.taskId, task.id),
-          eq(a2aPushConfigTable.id, id),
-        ),
+        config.id
+          ? configKey(task.id, config.id)
+          : and(
+              eq(a2aPushConfigTable.taskId, task.id),
+              eq(a2aPushConfigTable.url, config.url),
+            ),
+      )
+      .limit(1);
+    if (existing) {
+      const [updated] = await tx
+        .update(a2aPushConfigTable)
+        .set({
+          ...values,
+          notifiedAt: existing.url === config.url ? existing.notifiedAt : null,
+        })
+        .where(configKey(task.id, existing.id))
+        .returning();
+      return updated;
+    }
+
+    // ponytail: a soft cap. Two registrations racing can each see room for
+    // one more; lock the Task row if that matters.
+    const [{ n }] = await tx
+      .select({ n: count() })
+      .from(a2aPushConfigTable)
+      .where(eq(a2aPushConfigTable.taskId, task.id));
+    if (n >= MAX_PUSH_CONFIGS_PER_TASK) {
+      throw new RequestMalformedError(
+        `A Task takes at most ${MAX_PUSH_CONFIGS_PER_TASK} push notification configs`,
       );
+    }
     const [inserted] = await tx
       .insert(a2aPushConfigTable)
-      .values({
-        id,
-        taskId: task.id,
-        url: config.url,
-        token: config.token,
-        authentication: config.authentication,
-        createdAt: new Date(),
-      })
+      .values({ id: config.id || randomUUID(), taskId: task.id, ...values })
       .returning();
     return inserted;
   });
-  void pushA2aTaskIfEnded(task);
+  if (!row.notifiedAt) void pushTaskIfEnded(task);
   return row;
 };
 
@@ -280,13 +291,10 @@ export const getA2aPushConfig = async (
   const [row] = await db
     .select()
     .from(a2aPushConfigTable)
-    .where(
-      and(
-        eq(a2aPushConfigTable.taskId, task.id),
-        eq(a2aPushConfigTable.id, params.id),
-      ),
-    )
+    .where(configKey(task.id, params.id))
     .limit(1);
+  // A2A has no error of its own for a missing config; the SDK's handler
+  // answers this one too.
   if (!row) throw new TaskNotFoundError("Push notification config not found");
   return toWire(row);
 };
@@ -311,12 +319,5 @@ export const deleteA2aPushConfig = async (
   params: { taskId: string; id: string },
 ): Promise<void> => {
   const task = await endpointTask(endpointId, params.taskId);
-  await db
-    .delete(a2aPushConfigTable)
-    .where(
-      and(
-        eq(a2aPushConfigTable.taskId, task.id),
-        eq(a2aPushConfigTable.id, params.id),
-      ),
-    );
+  await db.delete(a2aPushConfigTable).where(configKey(task.id, params.id));
 };

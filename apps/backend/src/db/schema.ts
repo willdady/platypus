@@ -1237,6 +1237,9 @@ export const a2aTask = pgTable(
   ],
 );
 
+/** How an A2A client asked its push notifications to authenticate. */
+export type A2aPushAuthentication = { scheme: string; credentials: string };
+
 // Where an A2A client asked to be called when a Task ends (ADR-0032). The id
 // is the client's own, unique within its Task. The credentials are the
 // client's, sent back to it on delivery, so they are stored as given, like a
@@ -1251,9 +1254,7 @@ export const a2aPushConfig = pgTable(
       .references(() => a2aTask.id, { onDelete: "cascade" }),
     url: t.text("url").notNull(),
     token: t.text("token"),
-    authentication: t
-      .jsonb("authentication")
-      .$type<{ scheme: string; credentials: string }>(),
+    authentication: t.jsonb("authentication").$type<A2aPushAuthentication>(),
     notifiedAt: t.timestamp("notified_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),

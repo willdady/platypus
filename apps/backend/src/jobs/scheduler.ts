@@ -31,6 +31,7 @@ import { logger } from "../logger.ts";
 import { ADVISORY_LOCK_IDS } from "../db/advisory-lock.ts";
 import { chatPerRunTimeoutMs } from "../runs/chat-timeouts.ts";
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
+import { pushA2aChatEnded } from "../services/a2a-push.ts";
 
 // Check interval: 60 seconds (1 minute)
 const SCHEDULER_INTERVAL_MS = parseInt(
@@ -521,6 +522,8 @@ export async function recoverStuckChats(): Promise<void> {
     { count: orphaned.length, cutoff: cutoff.toISOString() },
     "Marked orphaned Chats as failed (older than the Chat per-run timeout)",
   );
+  // Their runs died with an instance, so no run's end pushes their Tasks.
+  await Promise.all(orphaned.map(({ id }) => pushA2aChatEnded(id)));
 }
 
 /**

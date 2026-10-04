@@ -35,10 +35,10 @@ export type ChatSinkParams = {
    */
   newChat?: { agentId: string; a2aTokenId: string; a2aEndpointId: string };
   /**
-   * Called once the run's terminal status is written, with the message the
-   * turn answered. Not awaited by the run: it must not delay or fail it.
+   * Called once the run's terminal status is written. Not awaited by the run:
+   * it must not delay or fail it.
    */
-  onEnded?: (answeredId: string) => void;
+  onEnded?: () => void;
   /** Override the FlushScheduler interval. Defaults to 5 seconds. */
   flushIntervalMs?: number;
 };
@@ -222,7 +222,7 @@ export class ChatSink implements RunSink {
     }
 
     await this.restoreLeaf();
-    if (this.answeredId) this.params.onEnded?.(this.answeredId);
+    this.params.onEnded?.();
   }
 
   /** Writes only the Chat row's status. */

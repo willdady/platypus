@@ -104,7 +104,7 @@ export const readTask = async (task: TaskRow): Promise<Task> => {
   };
 };
 
-export const TERMINAL = new Set([
+export const TERMINAL_TASK_STATES = new Set([
   TaskState.TASK_STATE_COMPLETED,
   TaskState.TASK_STATE_FAILED,
   TaskState.TASK_STATE_CANCELED,
