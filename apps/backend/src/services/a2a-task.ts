@@ -119,6 +119,8 @@ const taskFor = async (
 const busyError = async (caller: A2aCaller, chatId: string) => {
   const turnId = await currentTurnId(chatId);
   const task = turnId ? await taskFor(caller, chatId, turnId, null) : undefined;
+  // Reading it records its end, should its run have ended as it was made.
+  if (task) await readTask(task);
   return new UnsupportedOperationError({
     message: CHAT_BUSY_MESSAGE,
     metadata: task ? { taskId: task.id } : undefined,

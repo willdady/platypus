@@ -31,7 +31,7 @@ import { logger } from "../logger.ts";
 import { ADVISORY_LOCK_IDS } from "../db/advisory-lock.ts";
 import { chatPerRunTimeoutMs } from "../runs/chat-timeouts.ts";
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
-import { endA2aTurn } from "../services/a2a-push.ts";
+import { onA2aTurnEnded } from "../services/a2a-push.ts";
 
 // Check interval: 60 seconds (1 minute)
 const SCHEDULER_INTERVAL_MS = parseInt(
@@ -526,7 +526,7 @@ export async function recoverStuckChats(): Promise<void> {
   // Tasks. Not awaited: this runs under the scheduler's lock, and a slow
   // client URL must not hold up due Triggers.
   for (const { id } of orphaned) {
-    void endA2aTurn({ chatId: id, status: "failed" });
+    void onA2aTurnEnded({ chatId: id, status: "failed" });
   }
 }
 

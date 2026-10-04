@@ -134,7 +134,7 @@ const pushA2aChatEnded = async (chatId: string): Promise<void> => {
  * has one, then pushes. `messageId` names the turn; without it, the Chat's
  * current turn. Never throws.
  */
-export const endA2aTurn = async ({
+export const onA2aTurnEnded = async ({
   chatId,
   messageId,
   status,

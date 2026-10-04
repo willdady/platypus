@@ -497,6 +497,24 @@ const send = (
 
 const rows = (table: string) => tables[table] ?? [];
 
+/** A Task whose run has written its first words and is held there. */
+const startMidReply = async () => {
+  model.holdMidReply = new Promise(() => {});
+  const sent = await send({ messageId: "msg-a" }, { returnImmediately: true });
+  await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+  return sent.body.result.task;
+};
+
+/** The Chat moves on: the next turn is sent, and ends. */
+const moveOn = async (contextId: string) => {
+  model.holdMidReply = null;
+  const next = await send({ messageId: "msg-b", contextId });
+  expect(next.body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
+};
+
+const stateOf = async (taskId: string) =>
+  (await rpc("GetTask", { id: taskId })).body.result.status.state;
+
 describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   beforeEach(() => {
     resetMockDb();
@@ -827,27 +845,6 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   });
 
   describe("a Task that ended after writing part of a reply", () => {
-    /** A Task whose run has written its first words and is held there. */
-    const startMidReply = async () => {
-      model.holdMidReply = new Promise(() => {});
-      const sent = await send(
-        { messageId: "msg-a" },
-        { returnImmediately: true },
-      );
-      await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
-      return sent.body.result.task;
-    };
-
-    /** The Owner's Chat moves on: the next turn is sent, and ends. */
-    const moveOn = async (contextId: string) => {
-      model.holdMidReply = null;
-      const next = await send({ messageId: "msg-b", contextId });
-      expect(next.body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
-    };
-
-    const stateOf = async (taskId: string) =>
-      (await rpc("GetTask", { id: taskId })).body.result.status.state;
-
     afterEach(() => vi.unstubAllEnvs());
 
     it("still reads canceled once the Chat has moved on", async () => {
@@ -881,6 +878,59 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       await moveOn(task.contextId);
 
       expect(await stateOf(task.id)).toBe("TASK_STATE_FAILED");
+    });
+
+    it("keeps the end of a Task made just as its run ended", async () => {
+      // The run ended between the busy refusal and its Task being made, so
+      // the run's end found no Task to record on.
+      seedConversation({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId: "ws-1",
+            agentId: "agent-1",
+            title: "Ended",
+            status: "cancelled",
+            activeLeafId: "reply-a",
+          },
+        ],
+        chat_message: [
+          {
+            chatId: "chat-1",
+            id: "msg-a",
+            parentId: null,
+            role: "user",
+            parts: [{ type: "text", text: "Where is my order?" }],
+            deletedAt: null,
+            createdAt: new Date(Date.now() - 1000),
+          },
+          {
+            chatId: "chat-1",
+            id: "reply-a",
+            parentId: "msg-a",
+            role: "assistant",
+            parts: [{ type: "text", text: "Let me ch" }],
+            deletedAt: null,
+            createdAt: new Date(Date.now() - 1000),
+          },
+        ],
+        a2a_task: [
+          {
+            id: "task-1",
+            chatId: "chat-1",
+            messageId: "msg-a",
+            endpointId: "ep-1",
+            tokenId: "tok-1",
+            state: null,
+            createdAt: new Date(),
+          },
+        ],
+      });
+
+      expect(await stateOf("task-1")).toBe("TASK_STATE_CANCELED");
+      await moveOn("chat-1");
+
+      expect(await stateOf("task-1")).toBe("TASK_STATE_CANCELED");
     });
 
     it("reads failed after the stuck-Chat sweep, once the Chat has moved on", async () => {
@@ -1117,19 +1167,12 @@ describe("POST /a2a/:endpointId — push notifications", () => {
 
   it("pushes the stored end to a URL registered after the Chat moved on", async () => {
     seedConversation();
-    model.holdMidReply = new Promise(() => {});
-    const sent = await send(
-      { messageId: "msg-a" },
-      { returnImmediately: true },
-    );
-    const task = sent.body.result.task;
-    await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+    const task = await startMidReply();
     await cancelRun(task.contextId);
-    await vi.waitFor(() =>
-      expect(rows("a2a_task")[0]).toMatchObject({ state: "canceled" }),
+    await vi.waitFor(async () =>
+      expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED"),
     );
-    model.holdMidReply = null;
-    await send({ messageId: "msg-b", contextId: task.contextId });
+    await moveOn(task.contextId);
 
     await rpc("CreateTaskPushNotificationConfig", {
       taskId: task.id,

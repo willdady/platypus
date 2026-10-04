@@ -27,7 +27,7 @@ const a2aTextPart = (text: string): Part => ({
 });
 
 /** A finished run's Chat status as the end a Task records. */
-const END_OF_RUN: Partial<Record<string, A2aTaskEndState>> = {
+const END_OF_RUN: Partial<Record<RunStatus, A2aTaskEndState>> = {
   succeeded: "completed",
   failed: "failed",
   cancelled: "canceled",
@@ -87,19 +87,44 @@ export const currentTurnId = async (
 };
 
 /**
- * The Task as the client reads it. Once its run has ended, its state is the
- * end recorded on it. Before that it comes from the Chat's run: `submitted`
- * until the reply's first write and `working` after. The final assistant
- * text is the Task's artifact.
+ * The Task's state. Once its run has ended, the end recorded on it. Before
+ * that it comes from the Chat's run: `submitted` until the reply's first
+ * write and `working` after. An end read from this turn's own run that is
+ * not yet recorded — a Task made just as its run ended — is recorded here,
+ * so it stands once the Chat moves on.
  */
+const taskState = async (
+  task: TaskRow,
+  replyId: string | undefined,
+): Promise<TaskState> => {
+  if (task.state) return STATE_OF_END[task.state];
+  const [chat] = await db
+    .select({ status: chatTable.status, leafId: chatTable.activeLeafId })
+    .from(chatTable)
+    .where(eq(chatTable.id, task.chatId))
+    .limit(1);
+  const isThisTurn =
+    chat?.leafId === task.messageId ||
+    (replyId !== undefined && chat?.leafId === replyId);
+  // Moved past with no end recorded, which the end of its run and its first
+  // read both missed. Its reply, if any, is the best evidence of how it ended.
+  if (!isThisTurn) {
+    return replyId
+      ? TaskState.TASK_STATE_COMPLETED
+      : TaskState.TASK_STATE_FAILED;
+  }
+  if (chat.status === "running") {
+    return replyId
+      ? TaskState.TASK_STATE_WORKING
+      : TaskState.TASK_STATE_SUBMITTED;
+  }
+  const status = chat.status as RunStatus;
+  await recordTaskEnd(task.chatId, task.messageId, status);
+  return STATE_OF_END[END_OF_RUN[status] ?? "failed"];
+};
+
+/** The Task as the client reads it. The final assistant text is its artifact. */
 export const readTask = async (task: TaskRow): Promise<Task> => {
-  const [chat] = task.state
-    ? []
-    : await db
-        .select({ status: chatTable.status, leafId: chatTable.activeLeafId })
-        .from(chatTable)
-        .where(eq(chatTable.id, task.chatId))
-        .limit(1);
   // The reply this turn wrote: the first assistant message under it. A later
   // one is a regenerate the Owner ran in the UI.
   const [reply] = await db
@@ -115,23 +140,7 @@ export const readTask = async (task: TaskRow): Promise<Task> => {
     )
     .orderBy(asc(chatMessage.createdAt))
     .limit(1);
-
-  const isThisTurn =
-    chat?.leafId === task.messageId ||
-    (reply !== undefined && chat?.leafId === reply.id);
-  const state = task.state
-    ? STATE_OF_END[task.state]
-    : !isThisTurn
-      ? // Moved past with no end recorded: one that ended before its Task
-        // was made. Its reply, if any, is the best evidence of how.
-        reply
-        ? TaskState.TASK_STATE_COMPLETED
-        : TaskState.TASK_STATE_FAILED
-      : chat.status === "running"
-        ? reply
-          ? TaskState.TASK_STATE_WORKING
-          : TaskState.TASK_STATE_SUBMITTED
-        : STATE_OF_END[END_OF_RUN[chat.status] ?? "failed"];
+  const state = await taskState(task, reply?.id);
 
   const text =
     state === TaskState.TASK_STATE_COMPLETED && reply
