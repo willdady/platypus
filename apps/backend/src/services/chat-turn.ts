@@ -32,8 +32,10 @@ export const startChatTurn = async (params: {
   origin: string;
   /** Columns a Chat this turn creates starts with (see `ChatSinkParams`). */
   newChat?: ChatSinkParams["newChat"];
+  /** Called once the run's terminal status is written (see `ChatSinkParams`). */
+  onEnded?: () => void;
 }): Promise<Response> => {
-  const { scope, request, includeMemories, origin, newChat } = params;
+  const { scope, request, includeMemories, origin, newChat, onEnded } = params;
 
   // ADR-0020: resolve the pinned Memories block OUTSIDE composition. This
   // service owns the chat row, so it does the arithmetic — compare the gap
@@ -130,7 +132,10 @@ export const startChatTurn = async (params: {
     newChat,
     // Any turn in a Chat may be an A2A Task's, the Owner's own included: one
     // a client was refused for as busy and is following (ADR-0032).
-    onEnded: () => void pushA2aChatEnded(request.id),
+    onEnded: () => {
+      onEnded?.();
+      void pushA2aChatEnded(request.id);
+    },
   });
 
   // A rejected attachment (issue #328), an unresolved Agent/Provider/model,

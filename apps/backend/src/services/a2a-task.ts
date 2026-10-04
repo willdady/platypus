@@ -33,6 +33,7 @@ import {
   type TaskRow,
 } from "./a2a-task-state.ts";
 import { checkPushConfig, storePushConfig } from "./a2a-push.ts";
+import { A2aAtCapacityError, acquireA2aRunSlot } from "./a2a-call.ts";
 
 /**
  * A2A conversations (ADR-0032): `SendMessage` starts a turn in a Chat and
@@ -232,6 +233,11 @@ export const sendA2aMessage = async (
     }
   }
 
+  // Asked only by a call that would start a run: a retry above answers with
+  // its Task at any load. Past the cap, nothing has been written.
+  const release = acquireA2aRunSlot();
+  if (!release) throw new A2aAtCapacityError();
+
   const chatId = contextId ?? randomUUID();
   const scope = workspaceScopeForA2a({
     endpointId: endpoint.id,
@@ -258,11 +264,14 @@ export const sendA2aMessage = async (
         a2aTokenId: token.id,
         a2aEndpointId: endpoint.id,
       },
+      onEnded: release,
     });
     // The run goes on server-side; the client follows it by Task, not by
     // this stream.
     await response.body?.cancel();
   } catch (error) {
+    // No run is left going, or the one that started has already ended.
+    release();
     if (error instanceof ConflictError) throw await busyError(caller, chatId);
     if (error instanceof ValidationError) {
       throw new RequestMalformedError(error.message);

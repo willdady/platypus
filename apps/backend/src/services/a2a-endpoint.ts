@@ -39,6 +39,7 @@ import {
 } from "./inbound-trigger-token.ts";
 import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
 import { ownerMembershipJoin } from "./owner-membership.ts";
+import type { A2aRejectReason } from "./a2a-call.ts";
 
 /**
  * A2A endpoints (ADR-0032): one Agent made reachable over A2A from one
@@ -190,16 +191,32 @@ export type LiveA2aEndpoint = A2aEndpointRow & {
   ownerId: string;
 };
 
+/** Why an endpoint a public call names isn't live. */
+export type A2aEndpointNotLive = Extract<
+  A2aRejectReason,
+  "unknown_endpoint" | "disabled" | "gate" | "owner_left"
+>;
+
+export type A2aEndpointLookup =
+  | { live: true; endpoint: LiveA2aEndpoint }
+  | {
+      live: false;
+      reason: A2aEndpointNotLive;
+      /** Known unless the endpoint is unknown; for the call log. */
+      organizationId?: string;
+      workspaceId?: string;
+    };
+
 /**
  * The endpoint a public call names, if it is live: it exists and is enabled,
  * the Organization's A2A gate admits its Workspace, and the Workspace Owner is
- * still a member of the Organization. Anything else is `null`, which every
- * public route answers with the same `404`, so a caller can't tell which
- * endpoints exist.
+ * still a member of the Organization. Anything else says why, for the call
+ * log only: every public route answers it with the same `404`, so a caller
+ * can't tell which endpoints exist.
  */
-export const loadLiveA2aEndpoint = async (
+export const lookupA2aEndpoint = async (
   endpointId: string,
-): Promise<LiveA2aEndpoint | null> => {
+): Promise<A2aEndpointLookup> => {
   const [row] = await db
     .select()
     .from(a2aEndpointTable)
@@ -214,21 +231,27 @@ export const loadLiveA2aEndpoint = async (
     .leftJoin(organizationMember, ownerMembershipJoin())
     .where(eq(a2aEndpointTable.id, endpointId))
     .limit(1);
-  if (
-    !row ||
-    !row.a2a_endpoint.enabled ||
-    !gateAdmits(
-      row.organization.a2aGate as OrgGate,
-      row.workspace.a2aAllowed,
-    ) ||
-    !row.organization_member
-  ) {
-    return null;
-  }
-  return {
-    ...row.a2a_endpoint,
+  if (!row) return { live: false, reason: "unknown_endpoint" };
+  const notLive = (reason: A2aEndpointNotLive): A2aEndpointLookup => ({
+    live: false,
+    reason,
     organizationId: row.workspace.organizationId,
-    ownerId: row.workspace.ownerId,
+    workspaceId: row.workspace.id,
+  });
+  if (!row.a2a_endpoint.enabled) return notLive("disabled");
+  if (
+    !gateAdmits(row.organization.a2aGate as OrgGate, row.workspace.a2aAllowed)
+  ) {
+    return notLive("gate");
+  }
+  if (!row.organization_member) return notLive("owner_left");
+  return {
+    live: true,
+    endpoint: {
+      ...row.a2a_endpoint,
+      organizationId: row.workspace.organizationId,
+      ownerId: row.workspace.ownerId,
+    },
   };
 };
 
