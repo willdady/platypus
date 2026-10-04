@@ -1237,6 +1237,29 @@ export const a2aTask = pgTable(
   ],
 );
 
+// Where an A2A client asked to be called when a Task ends (ADR-0032). The id
+// is the client's own, unique within its Task. The credentials are the
+// client's, sent back to it on delivery, so they are stored as given, like a
+// Webhook's headers. `notifiedAt` claims the one delivery a config gets.
+export const a2aPushConfig = pgTable(
+  "a2a_push_config",
+  (t) => ({
+    id: t.text("id").notNull(),
+    taskId: t
+      .text("task_id")
+      .notNull()
+      .references(() => a2aTask.id, { onDelete: "cascade" }),
+    url: t.text("url").notNull(),
+    token: t.text("token"),
+    authentication: t
+      .jsonb("authentication")
+      .$type<{ scheme: string; credentials: string }>(),
+    notifiedAt: t.timestamp("notified_at"),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [primaryKey({ columns: [t.taskId, t.id] })],
+);
+
 export const kanbanCardComment = pgTable(
   "kanban_card_comment",
   (t) => ({
