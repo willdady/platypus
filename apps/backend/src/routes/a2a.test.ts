@@ -8,6 +8,8 @@ import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 const { model } = vi.hoisted(() => ({
   model: {
     reply: "Hello from Helper",
+    /** The reply's deltas, when a test streams it in pieces. */
+    deltas: null as string[] | null,
     hold: null as Promise<void> | null,
     prompts: [] as unknown[],
   },
@@ -23,7 +25,13 @@ vi.mock("../services/provider.ts", async (importOriginal) => ({
           const chunks: LanguageModelV3StreamPart[] = [
             { type: "stream-start", warnings: [] },
             { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", delta: model.reply },
+            ...(model.deltas ?? [model.reply]).map(
+              (delta): LanguageModelV3StreamPart => ({
+                type: "text-delta",
+                id: "t1",
+                delta,
+              }),
+            ),
             { type: "text-end", id: "t1" },
             {
               type: "finish",
@@ -148,7 +156,7 @@ describe("GET /a2a/:endpointId/.well-known/agent-card.json", () => {
       ],
       version: "1.0.0",
       capabilities: {
-        streaming: false,
+        streaming: true,
         pushNotifications: true,
         extendedAgentCard: true,
       },
@@ -1174,5 +1182,263 @@ describe("POST /a2a/:endpointId — push notifications", () => {
 
     expect(res.body.error.code).toBe(-32001);
     expect(rows("a2a_push_config")).toHaveLength(0);
+  });
+});
+
+describe("POST /a2a/:endpointId — streaming", () => {
+  type StreamEvent = {
+    task?: RpcTask;
+    statusUpdate?: {
+      taskId: string;
+      contextId: string;
+      status: { state: string };
+    };
+    artifactUpdate?: {
+      taskId: string;
+      append?: boolean;
+      lastChunk?: boolean;
+      artifact: { artifactId: string; parts: { text: string }[] };
+    };
+  };
+
+  /** Opens a streaming call; the response comes back once its first event is ready. */
+  const open = (
+    method: string,
+    params: unknown,
+    {
+      token = TOKEN,
+      endpointId = "ep-1",
+    }: { token?: string; endpointId?: string } = {},
+  ) =>
+    app.request(`/a2a/${endpointId}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
+    });
+
+  /** Every event of a stream, read to its end. */
+  const eventsOf = async (res: Response) =>
+    (await res.text())
+      .split("\n\n")
+      .filter((frame) => frame.startsWith("data: "))
+      .map(
+        (frame) =>
+          (JSON.parse(frame.slice(6)) as { result: StreamEvent }).result,
+      );
+
+  const streamSend = (message: Record<string, unknown>) =>
+    open("SendStreamingMessage", {
+      message: {
+        role: "ROLE_USER",
+        parts: [text("Where is my order?")],
+        ...message,
+      },
+    });
+
+  const artifactUpdates = (events: StreamEvent[]) =>
+    events.flatMap((e) => (e.artifactUpdate ? [e.artifactUpdate] : []));
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.deltas = null;
+    model.hold = null;
+    model.prompts = [];
+    resetA2aTokenTouches();
+  });
+
+  it("streams the reply as artifact updates, from the Task to its completed status", async () => {
+    seedConversation();
+    model.deltas = ["Hello ", "from ", "Helper"];
+
+    const res = await streamSend({ messageId: "msg-a" });
+
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    const events = await eventsOf(res);
+    const task = events[0].task!;
+    expect(task.contextId).toBe(rows("chat")[0].id);
+    expect(task.status.state).toMatch(/SUBMITTED|WORKING/);
+
+    const updates = artifactUpdates(events);
+    expect(updates.slice(0, 3).map((u) => u.artifact.parts[0].text)).toEqual([
+      "Hello ",
+      "from ",
+      "Helper",
+    ]);
+    expect(updates.slice(0, 3).map((u) => u.append ?? false)).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    // The finished artifact replaces the streamed one, under the same id.
+    const final = updates.at(-1)!;
+    expect(final.append ?? false).toBe(false);
+    expect(final.lastChunk).toBe(true);
+    expect(final.artifact.parts[0].text).toBe("Hello from Helper");
+    expect(new Set(updates.map((u) => u.artifact.artifactId)).size).toBe(1);
+
+    expect(events.at(-1)!.statusUpdate).toMatchObject({
+      taskId: task.id,
+      contextId: task.contextId,
+      status: { state: "TASK_STATE_COMPLETED" },
+    });
+    for (const e of events.slice(1)) {
+      expect((e.statusUpdate ?? e.artifactUpdate)!.taskId).toBe(task.id);
+    }
+    const got = await rpc("GetTask", { id: task.id });
+    expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+  });
+
+  it("answers a refused message with a JSON-RPC error, not a stream", async () => {
+    seedConversation();
+
+    const res = await streamSend({
+      messageId: "msg-a",
+      parts: [{ url: "https://x.test/a.png", mediaType: "image/png" }],
+    });
+
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const body = (await res.json()) as RpcBody;
+    expect(body.error.code).toBe(-32005);
+    expect(rows("chat")).toHaveLength(0);
+  });
+
+  it("answers a retried messageId with its Task, without a second run", async () => {
+    seedConversation();
+    const first = await send({ messageId: "msg-a" });
+
+    const events = await eventsOf(await streamSend({ messageId: "msg-a" }));
+
+    expect(events).toHaveLength(1);
+    expect(events[0].task).toMatchObject({
+      id: first.body.result.task.id,
+      status: { state: "TASK_STATE_COMPLETED" },
+    });
+    expect(model.prompts).toHaveLength(1);
+  });
+
+  it("follows a running Task on SubscribeToTask, with no token deltas", async () => {
+    seedConversation();
+    model.deltas = ["Hello ", "from ", "Helper"];
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const sent = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+    const taskId = sent.body.result.task.id;
+
+    const res = await open("SubscribeToTask", { id: taskId });
+    release();
+    const events = await eventsOf(res);
+
+    expect(events[0].task!.id).toBe(taskId);
+    const updates = artifactUpdates(events);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ taskId, lastChunk: true });
+    expect(updates[0].artifact.parts[0].text).toBe("Hello from Helper");
+    expect(events.at(-1)!.statusUpdate!.status.state).toBe(
+      "TASK_STATE_COMPLETED",
+    );
+  });
+
+  it("follows a Task from the database alone, as another instance would", async () => {
+    // A run no process here holds: only its rows say how it goes.
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Elsewhere",
+          status: "running",
+          activeLeafId: "msg-a",
+        },
+      ],
+      chat_message: [
+        {
+          chatId: "chat-1",
+          id: "msg-a",
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "Where is my order?" }],
+          deletedAt: null,
+          createdAt: new Date(),
+        },
+      ],
+      a2a_task: [
+        {
+          id: "task-1",
+          chatId: "chat-1",
+          messageId: "msg-a",
+          endpointId: "ep-1",
+          tokenId: "tok-1",
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    const res = await open("SubscribeToTask", { id: "task-1" });
+    rows("chat_message").push({
+      chatId: "chat-1",
+      id: "reply-1",
+      parentId: "msg-a",
+      role: "assistant",
+      parts: [{ type: "text", text: "On its way" }],
+      deletedAt: null,
+      createdAt: new Date(),
+    });
+    Object.assign(rows("chat")[0], {
+      status: "succeeded",
+      activeLeafId: "reply-1",
+    });
+    const events = await eventsOf(res);
+
+    expect(events[0].task).toMatchObject({
+      id: "task-1",
+      status: { state: "TASK_STATE_SUBMITTED" },
+    });
+    const updates = artifactUpdates(events);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({
+      taskId: "task-1",
+      artifact: { artifactId: "reply-1", parts: [{ text: "On its way" }] },
+    });
+    expect(events.at(-1)!.statusUpdate!.status.state).toBe(
+      "TASK_STATE_COMPLETED",
+    );
+  });
+
+  it("refuses to subscribe to a Task that has ended", async () => {
+    seedConversation();
+    const sent = await send({ messageId: "msg-a" });
+
+    const res = await open("SubscribeToTask", { id: sent.body.result.task.id });
+
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(((await res.json()) as RpcBody).error.code).toBe(-32004);
+  });
+
+  it("does not subscribe to another endpoint's Task", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const sent = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+
+    const res = await open(
+      "SubscribeToTask",
+      { id: sent.body.result.task.id },
+      { endpointId: "ep-2", token: "pa2a_second-token" },
+    );
+    release();
+
+    expect(((await res.json()) as RpcBody).error.code).toBe(-32001);
   });
 });
