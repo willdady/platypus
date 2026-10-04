@@ -195,8 +195,6 @@ export const loadInboundTarget = async (
   };
 };
 
-export { gateAdmits };
-
 /**
  * The token an `Authorization: Bearer <token>` header carries, or `null`.
  * The header is the only place a token is read from — never the query string,

@@ -147,7 +147,7 @@ describe("A2A endpoint routes", () => {
 
       const res = await send("", "POST", { agentId: "agent-elsewhere" });
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(404);
       expect(fake.tables.a2a_endpoint).toHaveLength(0);
     });
 

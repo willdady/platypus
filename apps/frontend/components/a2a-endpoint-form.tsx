@@ -351,7 +351,7 @@ const A2aEndpointForm = ({
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete A2A endpoint"
-        description="Its URL and every one of its tokens stop working straight away. Chats it started stay in this workspace."
+        description="Its URL and every one of its tokens stop working straight away."
         onConfirm={handleDelete}
         loading={isDeleting}
       />

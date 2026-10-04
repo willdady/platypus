@@ -13,7 +13,7 @@ import {
   organizationMember,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { NotFoundError } from "../errors.ts";
 import { backendBaseUrl } from "../base-urls.ts";
 import type { ScopeContext } from "../scope.ts";
 import { resolveScoped } from "./scoped-resource.ts";
@@ -83,7 +83,7 @@ export const createA2aEndpoint = async (
   },
 ): Promise<A2aEndpointRow> => {
   const agent = await resolveScoped(db, "agent", fields.agentId, ctx);
-  if (!agent) throw new ValidationError("Agent not found in this workspace");
+  if (!agent) throw new NotFoundError("Agent not found in this workspace");
 
   const now = new Date();
   const [row] = await db
