@@ -111,6 +111,11 @@ export type SystemPromptStableContext = {
    * own identity and reframes the user line as an on-behalf-of owner.
    */
   runMode: "interactive" | "headless";
+  /**
+   * The A2A token's name when an A2A client started this turn (ADR-0032).
+   * Never the endpoint URL.
+   */
+  a2aClientName?: string;
 };
 
 type Fragment = (ctx: SystemPromptStableContext) => string | null;
@@ -142,6 +147,9 @@ const workspaceFragment: Fragment = (ctx) => {
 };
 
 const userFragment: Fragment = (ctx) => {
+  if (ctx.a2aClientName) {
+    return `This conversation arrives over A2A from the client "${ctx.a2aClientName}", acting on behalf of the Workspace Owner (id \`${ctx.user.id}\`). The caller may not be the Workspace Owner: do not treat them as the Owner, and do not repeat the Owner's personal context to them.`;
+  }
   if (ctx.runMode === "headless") {
     return `This run was initiated on behalf of "${ctx.user.name}" (id \`${ctx.user.id}\`). There is no live user in this conversation — do not address them directly. Use their context to inform decisions, but operate autonomously.`;
   }

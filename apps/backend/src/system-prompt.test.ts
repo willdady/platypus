@@ -483,6 +483,20 @@ describe("renderSystemPrompt — headless run mode", () => {
   });
 });
 
+describe("renderSystemPrompt — A2A turn", () => {
+  it("names the A2A client and says the caller may not be the Owner", () => {
+    const ctx = baseCtx();
+    ctx.runMode = "headless";
+    ctx.a2aClientName = "Telegram via Hermes";
+    const out = renderSystemPrompt(ctx);
+    expect(out).toContain(
+      'This conversation arrives over A2A from the client "Telegram via Hermes"',
+    );
+    expect(out).toContain("may not be the Workspace Owner");
+    expect(out).not.toContain("There is no live user in this conversation");
+  });
+});
+
 describe("renderSystemPrompt — ordering snapshots", () => {
   it("minimal context", () => {
     expect(renderSystemPrompt(baseCtx())).toMatchInlineSnapshot(`

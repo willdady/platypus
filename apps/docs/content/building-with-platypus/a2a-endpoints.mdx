@@ -20,11 +20,6 @@ change them. An Org Admin can
 [revoke](/administering#see-and-revoke-endpoints) any endpoint or token in the
 Organization, and you get a notification when they do.
 
-<Callout type="warning">
-  An A2A endpoint serves its Agent Card and doesn't accept messages. A client
-  can discover the Agent but can't talk to it.
-</Callout>
-
 ## Before you start
 
 Your Organization decides which Workspaces may have A2A endpoints, and it is
@@ -120,6 +115,48 @@ An endpoint that is disabled or deleted, in a Workspace the Organization doesn't
 allow, or whose Workspace Owner has left the Organization answers
 **Not Found**, exactly like one that never existed.
 
+A client that authenticates can also fetch the **extended Agent Card**
+(`GetExtendedAgentCard`). It adds one skill, built from the same Name and
+Description.
+
+## Conversations
+
+A client talks to the Agent by sending JSON-RPC requests to the endpoint's
+address, with its token in an `Authorization: Bearer` header. A missing or
+wrong token gets **401 Unauthorized**.
+
+Each conversation is an ordinary Chat in your Chat list, labelled with the
+token's name, so you can read what the client asked and what the Agent did. You
+can continue the Chat yourself, and the client's next message follows your
+turns.
+
+- **`SendMessage` without a `contextId`** starts a new Chat with the endpoint's
+  Agent. The answer's `contextId` is that Chat; send it with later messages to
+  continue the conversation.
+- **Each message is a Task.** `SendMessage` answers with the Task once the run
+  has started. A client that sets `returnImmediately` gets it at once;
+  otherwise the request waits up to **30 seconds** for the run to end, then
+  answers with the Task as it stands. Runs can take far longer than that, so a
+  client follows the Task with **`GetTask`** until it is `completed`, `failed`
+  or `canceled`. The Agent's final reply is the Task's artifact.
+- **A retry is safe.** The client's `messageId` becomes the message's id in the
+  Chat, so sending the same `messageId` again answers with the Task it already
+  started, never a second run.
+- **One run at a time.** A message sent while the Chat still has a run going,
+  including one you started in the Chat yourself, is refused with an error
+  carrying the running Task's id. The client can follow that Task and send
+  again once it ends.
+- **Text and data parts.** Data parts reach the Agent as labelled JSON. A
+  message with a file part is refused with an error rather than sent without
+  it.
+
+The Agent is told the conversation arrives over A2A from the client the token
+is named after, and that the caller may not be you. A2A runs don't include
+your Memories.
+
+Streaming, cancelling a Task and push notifications aren't offered yet: those
+methods answer with an "unsupported operation" error.
+
 ## Deleting
 
 - **Delete** on the endpoint's page removes it. Its URL and every one of its
@@ -127,6 +164,8 @@ allow, or whose Workspace Owner has left the Organization answers
 - Deleting the Agent deletes its endpoints and their tokens.
 - Detaching a Shared Agent from the Workspace deletes the Workspace's endpoints
   for it, and their tokens.
+- An endpoint's Chats stay when the endpoint is deleted. Deleting a Chat ends
+  its Tasks: `GetTask` answers that they don't exist.
 
 ## Where to next
 

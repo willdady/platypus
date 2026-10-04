@@ -247,11 +247,19 @@ export const chat = pgTable(
     // dedicated signal is the only writer-free answer.
     lastTurnAt: t.timestamp("last_turn_at"),
 
+    // The A2A token whose client started this Chat (ADR-0032), so the Chat
+    // list can show the client's name. Null for a Chat started in the UI.
+    a2aTokenId: t
+      .text("a2a_token_id")
+      .references((): AnyPgColumn => a2aToken.id, { onDelete: "set null" }),
+
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
     index("idx_chat_workspace_id").on(t.workspaceId),
+    // A retried A2A message is found among the Chats its token started.
+    index("idx_chat_a2a_token_id").on(t.a2aTokenId),
     index("idx_chat_tags").using("gin", t.tags),
     index("idx_chat_memory_processing").on(
       t.memoryExtractionStatus,
@@ -1187,6 +1195,36 @@ export const a2aToken = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [index("idx_a2a_token_endpoint_id").on(t.endpointId)],
+);
+
+// One A2A turn as a Task (ADR-0032), under a random UUID. Its state is
+// derived from the Chat's run, never stored. The turn is named by its user message — the client's
+// `messageId` — whose reply is the assistant message. Lives as long as its
+// Chat; an endpoint or token deleted later leaves it with no way to be read.
+export const a2aTask = pgTable(
+  "a2a_task",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    chatId: t.text("chat_id").notNull(),
+    messageId: t.text("message_id").notNull(),
+    endpointId: t
+      .text("endpoint_id")
+      .references(() => a2aEndpoint.id, { onDelete: "set null" }),
+    tokenId: t
+      .text("token_id")
+      .references(() => a2aToken.id, { onDelete: "set null" }),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    uniqueIndex("idx_a2a_task_chat_id_message_id").on(t.chatId, t.messageId),
+    index("idx_a2a_task_endpoint_id").on(t.endpointId),
+    index("idx_a2a_task_token_id").on(t.tokenId),
+    // Deleted with its Chat, and never names a message the Chat lacks.
+    foreignKey({
+      columns: [t.chatId, t.messageId],
+      foreignColumns: [chatMessage.chatId, chatMessage.id],
+    }).onDelete("cascade"),
+  ],
 );
 
 export const kanbanCardComment = pgTable(

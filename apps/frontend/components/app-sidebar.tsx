@@ -482,6 +482,11 @@ export function AppSidebar() {
                                 />
                               )}
                               <p className="truncate">{chat.title}</p>
+                              {chat.a2aClientName && (
+                                <span className="ml-auto max-w-[40%] shrink-0 truncate text-xs text-muted-foreground">
+                                  {chat.a2aClientName}
+                                </span>
+                              )}
                             </Link>
                           </SidebarMenuButton>
                           <DropdownMenu modal={false}>

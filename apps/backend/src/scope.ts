@@ -8,6 +8,8 @@ type SessionUser = typeof auth.$Infer.Session.user;
  * - `user`: an interactive user from an HTTP session.
  * - `trigger`: a scheduled or event-driven trigger run, executing on behalf
  *   of the workspace owner.
+ * - `a2a`: a turn an A2A client started through an A2A endpoint (ADR-0032),
+ *   on behalf of the workspace owner. `name` is the token's name.
  * - `subAgent`: a nested run spawned from a parent run; chases up
  *   `rootPrincipal` to find the real actor.
  */
@@ -18,6 +20,13 @@ export type Principal =
       triggerId: string;
       onBehalfOfUserId: string;
       name: string;
+    }
+  | {
+      kind: "a2a";
+      endpointId: string;
+      tokenId: string;
+      name: string;
+      onBehalfOfUserId: string;
     }
   | { kind: "subAgent"; parentRunId: string; rootPrincipal: Principal };
 
@@ -99,6 +108,30 @@ export const workspaceScopeForTrigger = (params: {
     triggerId: params.triggerId,
     onBehalfOfUserId: params.ownerUserId,
     name: params.ownerName,
+  },
+  orgId: params.organizationId,
+  workspaceId: params.workspaceId,
+  isWorkspaceOwner: true,
+});
+
+/**
+ * Builds a scope for an A2A turn. Like a trigger run, it acts as the
+ * workspace owner, who issued the token.
+ */
+export const workspaceScopeForA2a = (params: {
+  endpointId: string;
+  tokenId: string;
+  tokenName: string;
+  workspaceId: string;
+  organizationId: string;
+  ownerUserId: string;
+}): WorkspaceScope => ({
+  principal: {
+    kind: "a2a",
+    endpointId: params.endpointId,
+    tokenId: params.tokenId,
+    name: params.tokenName,
+    onBehalfOfUserId: params.ownerUserId,
   },
   orgId: params.organizationId,
   workspaceId: params.workspaceId,

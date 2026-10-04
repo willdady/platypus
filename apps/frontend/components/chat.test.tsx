@@ -459,6 +459,22 @@ describe("composer tool row", () => {
   });
 });
 
+describe("an A2A Chat", () => {
+  it("says which A2A client started it", () => {
+    harness.data.set("/agents", { results: [] });
+    harness.data.set(`/chat/${CHAT_ID}`, {
+      status: "succeeded",
+      messages: [],
+      a2aClientName: "Telegram via Hermes",
+    });
+    render(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(
+      screen.getByText("Over A2A from Telegram via Hermes"),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Upload to Sandbox", () => {
   const renderOn = ({
     toolSetIds = ["sandbox"],

@@ -725,6 +725,11 @@ export const Chat = ({
             Thinking and tool disclosures, Sources and notices carry no margins
             of their own, so every gap in the transcript is this one. */}
             <div className="w-full flex flex-col gap-4 xl:w-4/5 max-w-4xl">
+              {chatData?.a2aClientName && (
+                <p className="text-center text-xs text-muted-foreground">
+                  Over A2A from {chatData.a2aClientName}
+                </p>
+              )}
               {messages.map((message, messageIndex) => (
                 <ChatMessage
                   key={message.id}
