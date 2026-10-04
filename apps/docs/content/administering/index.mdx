@@ -60,6 +60,7 @@ Admins and Operators see either link.
 | **Blueprints**       | Named bundles of Shared resources you apply to a Workspace in one step                                                                    |
 | **Plugins**          | Read-only: what the deployment actually loaded at boot                                                                                    |
 | **Inbound Triggers** | Which Workspaces take [Inbound Trigger](#inbound-triggers) calls, and every Trigger an outside system can call, with its token's standing |
+| **A2A endpoints**    | Which Workspaces may make their Agents reachable over [A2A](#a2a-endpoints)                                                               |
 
 ### Members and roles
 
@@ -161,6 +162,31 @@ refreshes, so you can judge the new token before revoking it too.
   stop a Workspace taking calls for good, change **Allow Inbound Triggers in**
   or switch the Workspace off on this screen, which the Owner cannot.
 </Callout>
+
+## A2A endpoints
+
+An [A2A endpoint](/building-with-platypus/a2a-endpoints) makes an Agent
+reachable from outside Platypus over the A2A protocol, by any client holding a
+token its Workspace Owner issues. Its runs act as that Owner with all of the
+Agent's Tools, so whether a Workspace may have endpoints is your decision.
+
+**Organization settings → A2A endpoints → Allow A2A endpoints in** decides it,
+separately from Inbound Triggers:
+
+| Setting                       | Endpoints answer in                                          |
+| ----------------------------- | ------------------------------------------------------------ |
+| **No workspaces** _(default)_ | No Workspace                                                 |
+| **All workspaces**            | Every Workspace, including ones created later                |
+| **Selected workspaces**       | Only the Workspaces switched on under **Allowed workspaces** |
+
+It is checked on every call. A Workspace it doesn't allow answers every call
+with **Not Found**. Its endpoints and their tokens stay as they are, so allowing
+it again resumes them. Under **Selected workspaces**, the screen lists every
+Workspace with its Owner, how many A2A endpoints it holds and a switch, and
+names the Workspaces with endpoints that a save would cut off.
+
+An endpoint also stops answering once its Workspace Owner leaves the
+Organization.
 
 ## Where to next
 

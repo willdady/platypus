@@ -3,6 +3,7 @@ import {
   Box,
   Info,
   Mail,
+  Network,
   Radio,
   Settings,
   ShieldCheck,
@@ -27,6 +28,7 @@ export function workspaceSettingsLinks(orgId: string, workspaceId: string) {
     { href: routes.mcp, icon: Wrench, label: "MCP" },
     { href: routes.sandbox, icon: Box, label: "Sandbox" },
     { href: routes.webhooks, icon: Radio, label: "Webhooks" },
+    { href: routes.a2aEndpoints, icon: Network, label: "A2A endpoints" },
     { href: routes.about, icon: Info, label: "About" },
   ];
 }

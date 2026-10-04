@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
+  a2aEndpoint as a2aEndpointTable,
   attachment as attachmentTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
@@ -159,17 +160,31 @@ export async function detachResource(
     await requireWorkspaceInOrg(orgId, workspaceId);
   }
 
-  const result = await db
-    .delete(attachmentTable)
-    .where(
-      and(
-        eq(attachmentTable.workspaceId, workspaceId),
-        eq(attachmentTable.resourceType, resourceType),
-        eq(attachmentTable.resourceId, resourceId),
-      ),
-    )
-    .returning();
-  if (result.length === 0) {
-    throw new NotFoundError("Attachment not found");
-  }
+  await db.transaction(async (tx) => {
+    const result = await tx
+      .delete(attachmentTable)
+      .where(
+        and(
+          eq(attachmentTable.workspaceId, workspaceId),
+          eq(attachmentTable.resourceType, resourceType),
+          eq(attachmentTable.resourceId, resourceId),
+        ),
+      )
+      .returning();
+    if (result.length === 0) {
+      throw new NotFoundError("Attachment not found");
+    }
+    // A detached Shared Agent is no longer this Workspace's to expose, so
+    // its A2A endpoints and their tokens go with the Attachment (ADR-0032).
+    if (resourceType === "agent") {
+      await tx
+        .delete(a2aEndpointTable)
+        .where(
+          and(
+            eq(a2aEndpointTable.workspaceId, workspaceId),
+            eq(a2aEndpointTable.agentId, resourceId),
+          ),
+        );
+    }
+  });
 }

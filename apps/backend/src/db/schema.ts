@@ -45,6 +45,9 @@ export const organization = pgTable("organization", (t) => ({
   // "all" | "selected". Checked on every call, so changing it takes effect
   // on the next one. Settable only by an Org Admin.
   inboundTriggerGate: t.text("inbound_trigger_gate").notNull().default("off"),
+  // Which Workspaces may have A2A endpoints (ADR-0032), in the same shape as
+  // the Inbound Trigger gate and separate from it. Checked on every call.
+  a2aGate: t.text("a2a_gate").notNull().default("off"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));
@@ -161,6 +164,9 @@ export const workspace = pgTable(
       .boolean("inbound_triggers_allowed")
       .notNull()
       .default(false),
+    // Whether this Workspace's A2A endpoints are reachable while the
+    // Organization's A2A gate is "selected" (ADR-0032). Org Admin-only.
+    a2aAllowed: t.boolean("a2a_allowed").notNull().default(false),
 
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
@@ -1126,6 +1132,52 @@ export const webhook = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [index("idx_webhook_workspace_id").on(t.workspaceId)],
+);
+
+// An Agent made reachable over A2A from one Workspace (ADR-0032). The id is
+// the public, unguessable part of the URL — never the Agent's id. Deleting
+// the Agent deletes its endpoints; detaching a Shared Agent deletes them in
+// `detachResource`, since no foreign key sees the Attachment.
+export const a2aEndpoint = pgTable(
+  "a2a_endpoint",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    agentId: t
+      .text("agent_id")
+      .notNull()
+      .references(() => agent.id, { onDelete: "cascade" }),
+    // What outside callers see on the Agent Card, in place of the Agent's own.
+    name: t.text("name").notNull(),
+    description: t.text("description").notNull(),
+    enabled: t.boolean("enabled").notNull().default(true),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_a2a_endpoint_workspace_id").on(t.workspaceId),
+    index("idx_a2a_endpoint_agent_id").on(t.agentId),
+  ],
+);
+
+// One bearer token per A2A client. Shown once and stored as a SHA-256 hash,
+// as an Inbound Trigger's token is (ADR-0030).
+export const a2aToken = pgTable(
+  "a2a_token",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    endpointId: t
+      .text("endpoint_id")
+      .notNull()
+      .references(() => a2aEndpoint.id, { onDelete: "cascade" }),
+    name: t.text("name").notNull(),
+    tokenHash: t.text("token_hash").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [index("idx_a2a_token_endpoint_id").on(t.endpointId)],
 );
 
 export const kanbanCardComment = pgTable(

@@ -37,7 +37,7 @@ export const inboundCurlCommand = (
   ].join("\n");
 };
 
-const CopyRow = ({
+export const CopyRow = ({
   id,
   label,
   value,

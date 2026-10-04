@@ -8,13 +8,14 @@ import {
   webhook as webhookTable,
   notification as notificationTable,
   sandbox as sandboxTable,
+  a2aEndpoint as a2aEndpointTable,
 } from "../db/schema.ts";
 import { db } from "../index.ts";
 import { NotFoundError } from "../errors.ts";
 
 /**
  * The **Workspace-child resource**: a Chat, Dashboard, Trigger, Webhook,
- * Webhook, Notification, Widget, or Sandbox whose row lives at exactly one
+ * A2A endpoint, Notification, Widget, or Sandbox whose row lives at exactly one
  * Workspace — no dual scope, no Attachment, unlike the Scoped resources in
  * `scoped-resource.ts`. Containment used to be hand-rolled at each of the 13
  * route files that own one of these tables, with the write side
@@ -56,12 +57,13 @@ export type WorkspaceResourceType =
   | "dashboard"
   | "trigger"
   | "webhook"
+  | "a2aEndpoint"
   | "notification"
   | "widget"
   | "sandbox";
 
 /**
- * The seven Workspace-child tables, each at its real type. They share the
+ * The eight Workspace-child tables, each at its real type. They share the
  * `id` column and a scope column this module relies on; the per-resource row
  * type is recovered via the `RowOf` cast at each return.
  */
@@ -70,6 +72,7 @@ type WorkspaceTable =
   | typeof dashboardTable
   | typeof triggerTable
   | typeof webhookTable
+  | typeof a2aEndpointTable
   | typeof notificationTable
   | typeof widgetTable
   | typeof sandboxTable;
@@ -80,6 +83,7 @@ type RowOf = {
   dashboard: typeof dashboardTable.$inferSelect;
   trigger: typeof triggerTable.$inferSelect;
   webhook: typeof webhookTable.$inferSelect;
+  a2aEndpoint: typeof a2aEndpointTable.$inferSelect;
   notification: typeof notificationTable.$inferSelect;
   widget: typeof widgetTable.$inferSelect;
   sandbox: typeof sandboxTable.$inferSelect;
@@ -97,6 +101,7 @@ type ScopeOf = {
   dashboard: WorkspaceScope;
   trigger: WorkspaceScope;
   webhook: WorkspaceScope;
+  a2aEndpoint: WorkspaceScope;
   notification: WorkspaceScope;
   widget: { dashboardId: string };
   sandbox: WorkspaceScope;
@@ -156,6 +161,11 @@ const REGISTRY: Record<WorkspaceResourceType, RegistryEntry> = {
     label: "Webhook",
     scope: { column: webhookTable.workspaceId, param: "workspaceId" },
   },
+  a2aEndpoint: {
+    table: a2aEndpointTable,
+    label: "A2A endpoint",
+    scope: { column: a2aEndpointTable.workspaceId, param: "workspaceId" },
+  },
   notification: {
     table: notificationTable,
     label: "Notification",
@@ -186,7 +196,7 @@ const allOf = (...conditions: (SQL | undefined)[]): SQL => and(...conditions)!;
 
 /**
  * The scope-half of every predicate here: this scope column equals this
- * value. The one place that equality is written for all seven tables.
+ * value. The one place that equality is written for all eight tables.
  */
 const scopeWhere = (scope: RegistryEntry["scope"], scopeValue: string): SQL =>
   eq(scope.column, scopeValue);
