@@ -135,7 +135,8 @@ const finishFailedOnThrow = async <T>(
  * Run lifetime is decoupled from the HTTP request: the runner registers
  * each run with `RunRegistry`, which owns the `AbortController` and the
  * per-step / per-run timeout timers. Cancellation goes through
- * `agentRunner.cancel(runId)` (e.g. from the chat cancel route).
+ * `agentRunner.cancel(runId)`, or `cancelRun` (`run-cancel.ts`) where the run
+ * may be held by another backend instance (the chat cancel route).
  *
  * A delegated (sub-agent) run is not driven from here: the delegate tool owns
  * its own turn, already resolved by the parent's `prepareChatTurn`. It shares

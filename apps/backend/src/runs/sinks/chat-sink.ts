@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "../../index.ts";
 import { chat as chatTable, chatMessage } from "../../db/schema.ts";
+import { ConflictError, isUniqueViolation } from "../../errors.ts";
 import { logger } from "../../logger.ts";
 import { generateChatMetadata } from "../../services/chat-metadata.ts";
 import { extractFiles } from "../../storage/utils.ts";
@@ -32,9 +33,11 @@ export type ChatSinkParams = {
  * Persists a Chat turn at run lifecycle boundaries, writing only the rows the
  * turn itself produced (ADR-0026) — never a row it continues from.
  *
- * - `onStart`: flip the Chat row to `status: "running"` (creating it for a new
- *   Chat), insert the submitted user message and point the leaf at the message
- *   being answered, so a disconnected client can read the in-progress state.
+ * - `onStart`: claim the Chat by flipping its row to `status: "running"`
+ *   (creating it for a new Chat), insert the submitted user message and point
+ *   the leaf at the message being answered, so a disconnected client can read
+ *   the in-progress state. The claim is the one-run-per-Chat lock across every
+ *   backend instance (#1237): a Chat already `running` is a `ConflictError`.
  * - `onProgress`: drive a FlushScheduler that periodically upserts the reply
  *   while keeping `status: "running"`.
  * - `onFinish`: write the terminal status (`succeeded`, `failed`,
@@ -57,6 +60,9 @@ export class ChatSink implements RunSink {
   /** On a regenerate, the leaf before `onStart` moved it to `answeredId`. */
   private leafBefore?: string | null;
   private replyWritten = false;
+  /** Whether `onStart` claimed the Chat. A sink that lost the claim writes
+   *  nothing, since the row belongs to the run that holds it. */
+  private claimed = false;
 
   constructor(params: ChatSinkParams) {
     this.params = params;
@@ -84,6 +90,8 @@ export class ChatSink implements RunSink {
         lastTurnAt: new Date(),
         updatedAt: new Date(),
       };
+      // The claim. Conditional, so of two instances racing for one Chat the
+      // second waits on the first's row lock and then matches nothing.
       const updated = await tx
         .update(chatTable)
         .set(running)
@@ -91,21 +99,33 @@ export class ChatSink implements RunSink {
           and(
             eq(chatTable.id, ctx.runId),
             eq(chatTable.workspaceId, workspaceId),
+            ne(chatTable.status, "running"),
           ),
         )
-        .returning({ id: chatTable.id, activeLeafId: chatTable.activeLeafId });
+        .returning({
+          id: chatTable.id,
+          activeLeafId: chatTable.activeLeafId,
+        });
       if (!message) this.leafBefore = updated[0]?.activeLeafId;
 
       if (updated.length === 0) {
-        // Fails on a Chat id another Workspace holds, before any message is
-        // written into that Chat.
-        await tx.insert(chatTable).values({
-          id: ctx.runId,
-          workspaceId,
-          title: "Untitled",
-          createdAt: new Date(),
-          ...running,
-        });
+        // A new Chat, unless the id is taken: a Chat already running, or one
+        // another Workspace holds. Either way the claim fails before any
+        // message is written into it.
+        try {
+          await tx.insert(chatTable).values({
+            id: ctx.runId,
+            workspaceId,
+            title: "Untitled",
+            createdAt: new Date(),
+            ...running,
+          });
+        } catch (error) {
+          if (!isUniqueViolation(error)) throw error;
+          throw new ConflictError(
+            `A run is already in progress for '${ctx.runId}'`,
+          );
+        }
       }
 
       if (message) {
@@ -127,6 +147,7 @@ export class ChatSink implements RunSink {
         .set({ activeLeafId: this.answeredId })
         .where(eq(chatTable.id, ctx.runId));
     });
+    this.claimed = true;
   }
 
   // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
@@ -161,6 +182,7 @@ export class ChatSink implements RunSink {
     stats: RunStats;
     error?: Error;
   }): Promise<void> {
+    if (!this.claimed) return;
     await this.flusher?.dispose();
     this.flusher = undefined;
 

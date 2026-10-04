@@ -14,10 +14,15 @@ import {
 import { mockLogger } from "../test-setup.ts";
 import { getStorage } from "../storage/index.ts";
 
-const { mockPrepareChatTurn, mockValidateTurnAttachments } = vi.hoisted(() => ({
-  mockPrepareChatTurn: vi.fn(),
-  mockValidateTurnAttachments: vi.fn().mockResolvedValue(undefined),
-}));
+const { mockPrepareChatTurn, mockValidateTurnAttachments, mockCancelRun } =
+  vi.hoisted(() => ({
+    mockPrepareChatTurn: vi.fn(),
+    mockValidateTurnAttachments: vi.fn().mockResolvedValue(undefined),
+    mockCancelRun: vi.fn(),
+  }));
+
+// Cancel across instances is exercised by run-cancel tests.
+vi.mock("../runs/run-cancel.ts", () => ({ cancelRun: mockCancelRun }));
 
 vi.mock("../services/chat-execution.ts", () => ({
   prepareChatTurn: mockPrepareChatTurn,
@@ -111,13 +116,17 @@ const stored = (
 
 /** user-1 as the owner of ws-1, plus whatever the test adds. */
 const seedTenant = (rows: Store = {}, owner = "user-1") =>
-  seedDb({
-    organization_member: [
-      { id: "m1", userId: "user-1", organizationId: "org-1", role: "admin" },
-    ],
-    workspace: [{ id: "ws-1", organizationId: "org-1", ownerId: owner }],
-    ...rows,
-  });
+  seedDb(
+    {
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: "org-1", role: "admin" },
+      ],
+      workspace: [{ id: "ws-1", organizationId: "org-1", ownerId: owner }],
+      ...rows,
+    },
+    // The Chat's primary key is what a turn's claim on a new Chat leans on.
+    { unique: { chat: [{ name: "chat_pkey", columns: ["id"] }] } },
+  );
 
 describe("Chat Routes", () => {
   beforeEach(() => {
@@ -885,6 +894,8 @@ describe("Chat Routes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.message).toMatch(/cancel/i);
+      // Whichever instance holds the run, not just this one (#1237).
+      expect(mockCancelRun).toHaveBeenCalledWith("chat-1");
     });
 
     it("returns 200 when called twice (idempotent)", async () => {
@@ -1130,6 +1141,25 @@ describe("Chat Routes", () => {
         expect(res.status).toBe(409);
       });
 
+      // The turn is another instance's, so this process's registry has never
+      // heard of it: only the row says the Chat is taken (#1237).
+      it("409s a turn while another instance runs one, writing nothing", async () => {
+        mockSession();
+        const fake = seedChat();
+        fake.tables.chat[0].status = "running";
+        startsTurn();
+
+        const res = await post({ message: message("u3"), parentId: "a2" });
+
+        expect(res.status).toBe(409);
+        expect(fake.tables.chat_message).toHaveLength(4);
+        expect(fake.tables.chat[0]).toMatchObject({
+          status: "running",
+          activeLeafId: "a2",
+        });
+        mockPrepareChatTurn.mockReset();
+      });
+
       it.each([
         ["a user message", "u2", () => {}],
         [
@@ -1343,16 +1373,15 @@ describe("Chat Routes", () => {
         expect((await deleteMessage("nope")).status).toBe(404);
       });
 
+      // Read from the row, not this process: the run may be another
+      // instance's (#1237).
       it("409s while a run is in flight", async () => {
         mockSession();
         const fake = seedChat();
-        runRegistry.register("chat-1");
-        try {
-          expect((await deleteMessage("u2")).status).toBe(409);
-          expect(rowOf(fake, "u2")?.deletedAt).toBeNull();
-        } finally {
-          runRegistry.unregister("chat-1");
-        }
+        fake.tables.chat[0].status = "running";
+
+        expect((await deleteMessage("u2")).status).toBe(409);
+        expect(rowOf(fake, "u2")?.deletedAt).toBeNull();
       });
 
       it("is refused to anyone but the Workspace Owner", async () => {
@@ -1485,15 +1514,13 @@ describe("Chat Routes", () => {
       it("409s while a run is in flight", async () => {
         mockSession();
         const fake = seedAlternatives();
-        runRegistry.register("chat-1");
-        try {
-          const res = await switchTo("u2");
-          expect(res.status).toBe(409);
-          expect(await res.json()).toHaveProperty("error");
-          expect(fake.tables.chat[0].activeLeafId).toBe("a2b");
-        } finally {
-          runRegistry.unregister("chat-1");
-        }
+        // Another instance's run: nothing in this process's registry.
+        fake.tables.chat[0].status = "running";
+
+        const res = await switchTo("u2");
+        expect(res.status).toBe(409);
+        expect(await res.json()).toHaveProperty("error");
+        expect(fake.tables.chat[0].activeLeafId).toBe("a2b");
       });
 
       it("is refused to anyone but the Workspace Owner", async () => {

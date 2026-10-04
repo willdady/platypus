@@ -27,7 +27,7 @@ import { rewriteStorageUrls, deleteStoredPrefix } from "../storage/utils.ts";
 import { chatStorageKeyPrefix } from "../storage/keys.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
-import { runRegistry } from "../runs/run-registry.ts";
+import { cancelRun } from "../runs/run-cancel.ts";
 import { ChatSink } from "../runs/sinks/chat-sink.ts";
 import { normalizeWebToolParts } from "../runs/web-tool-normalize.ts";
 import type { RunInput } from "../runs/types.ts";
@@ -74,11 +74,11 @@ const chatResponse = ({
 
 /**
  * A run moves the leaf onto its own reply as it goes, and a delete or a switch
- * landing mid-run would race it (ADR-0026). A Chat turn runs under its Chat's
- * id.
+ * landing mid-run would race it (ADR-0026). Read from the row the run claimed,
+ * since the run may be another instance's (#1237).
  */
-const refuseWhileRunning = (chatId: string) => {
-  if (runRegistry.has(chatId)) {
+const refuseWhileRunning = (chat: { status: string }) => {
+  if (chat.status === "running") {
     throw new ConflictError("A reply is still being written in this Chat");
   }
 };
@@ -309,9 +309,10 @@ chat.post(
     // only thing the registry sees.
     await requireOwned(db, "chat", { id: chatId, workspaceId });
 
-    // Idempotent: cancel returns false for unknown / already-finished
-    // runs, but we still respond 200 so flaky clients can safely retry.
-    agentRunner.cancel(chatId);
+    // Idempotent: an unknown or already-finished run is a no-op, but we still
+    // respond 200 so flaky clients can safely retry. The run may be another
+    // instance's, so this reaches whichever holds it (#1237).
+    await cancelRun(chatId);
     return c.json({ message: "Cancellation requested" }, 200);
   },
 );
@@ -352,8 +353,9 @@ chat.delete(
     const { chatId, messageId } = c.req.param();
     const { workspaceId } = workspaceScopeOf(c);
 
-    await requireOwned(db, "chat", { id: chatId, workspaceId });
-    refuseWhileRunning(chatId);
+    refuseWhileRunning(
+      await requireOwned(db, "chat", { id: chatId, workspaceId }),
+    );
 
     await deleteMessage(chatId, messageId);
 
@@ -373,8 +375,9 @@ chat.put(
     const { workspaceId } = workspaceScopeOf(c);
     const { messageId } = c.req.valid("json");
 
-    await requireOwned(db, "chat", { id: chatId, workspaceId });
-    refuseWhileRunning(chatId);
+    refuseWhileRunning(
+      await requireOwned(db, "chat", { id: chatId, workspaceId }),
+    );
 
     const { messages, tree } = await switchActivePath(chatId, messageId);
 

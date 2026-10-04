@@ -11,6 +11,7 @@ import {
 } from "./src/db/seed.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduler } from "./src/jobs/scheduler.ts";
+import { listenForRunCancels } from "./src/runs/run-cancel.ts";
 import { loadPlugins, type LoadPluginsResult } from "./src/plugins/loader.ts";
 import { setLoadedPlugins } from "./src/plugins/registry.ts";
 import { installProviderWarningLogger } from "./src/provider-warnings.ts";
@@ -110,6 +111,8 @@ const main = async () => {
   // Start background jobs (safe for horizontal scaling)
   startMemoryScheduler();
   startScheduler();
+  // A cancel received by another instance reaches the runs held here.
+  listenForRunCancels();
 };
 
 const exponentialBackoff = async <T>(

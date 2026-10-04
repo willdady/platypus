@@ -29,6 +29,7 @@ vi.mock("../../services/chat-metadata.ts", () => ({
 
 import { ChatSink, type ChatSinkParams } from "./chat-sink.ts";
 import { extractFiles } from "../../storage/utils.ts";
+import { ConflictError } from "../../errors.ts";
 import type { ResolvedRunPlan } from "../types.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 
@@ -90,15 +91,20 @@ const storedRow = (
 });
 
 /** A Chat holding one exchange, u0 → a0. */
+const chatPkey = { unique: { chat: [{ name: "chat_pkey", columns: ["id"] }] } };
+
 const seedChat = (rows: Row[] = []) =>
-  seedDb({
-    chat: [chatRow()],
-    chat_message: [
-      storedRow("u0", null, "user"),
-      storedRow("a0", "u0", "assistant"),
-      ...rows,
-    ],
-  });
+  seedDb(
+    {
+      chat: [chatRow()],
+      chat_message: [
+        storedRow("u0", null, "user"),
+        storedRow("a0", "u0", "assistant"),
+        ...rows,
+      ],
+    },
+    chatPkey,
+  );
 
 const u0: PlatypusUIMessage = {
   id: "u0",
@@ -220,7 +226,7 @@ describe("ChatSink", () => {
     it("fails, writing no message, on a Chat id another Workspace holds", async () => {
       const fake = seedDb(
         { chat: [chatRow({ workspaceId: "ws-other" })] },
-        { unique: { chat: [{ name: "chat_pkey", columns: ["id"] }] } },
+        chatPkey,
       );
 
       await expect(
@@ -228,9 +234,47 @@ describe("ChatSink", () => {
           runId: "chat-1",
           messages: [u1],
         }),
-      ).rejects.toThrow(/chat_pkey/);
+      ).rejects.toThrow(ConflictError);
       expect(fake.tables.chat_message ?? []).toHaveLength(0);
     });
+
+    // The one-run-per-Chat lock, held in the row so it holds across backend
+    // instances (#1237): the turn running here may be another process's.
+    it.each([
+      ["an existing Chat", () => seedChat()],
+      [
+        "a new Chat another instance just created",
+        () => seedDb({ chat: [], chat_message: [] }, chatPkey),
+      ],
+    ])(
+      "refuses a second turn on %s while one runs, and the loser writes nothing",
+      async (_, seed) => {
+        const fake = seed();
+        const winner = submitSink({
+          parentId: fake.tables.chat.length ? "a0" : null,
+        });
+        await winner.onStart({ runId: "chat-1", messages: [u1] });
+        const before = structuredClone(fake.tables);
+
+        const loser = submitSink({
+          message: { ...u1, id: "u2" },
+          parentId: null,
+        });
+        await expect(
+          loser.onStart({ runId: "chat-1", messages: [u1] }),
+        ).rejects.toThrow(ConflictError);
+        // What the runner does with a start hook that threw.
+        await loser.onFinish({
+          runId: "chat-1",
+          status: "failed",
+          messages: [],
+          stats: {},
+        });
+
+        expect(fake.tables).toEqual(before);
+        expect(rowOf(fake, "chat", "chat-1")?.status).toBe("running");
+      },
+    );
   });
 
   describe("onProgress + FlushScheduler", () => {

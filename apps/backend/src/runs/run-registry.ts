@@ -5,9 +5,11 @@ import type { RunId } from "./types.ts";
  * In-memory, single-process registry of in-flight runs.
  *
  * Owns the AbortController per Run plus its per-step and per-run timeout
- * timers. Cancellation works only when reaching the same process holding the
- * Run; if the deployment topology ever becomes multi-process, this module
- * is the first thing to revisit.
+ * timers — the state that is truly per process. What the deployment shares
+ * lives in Postgres (#1237): a Chat's one-run lock is its row's `running`
+ * status (`ChatSink`), and a cancel reaches the process holding the Run
+ * through `run-cancel.ts`. A runId claimed here is refused only within this
+ * process.
  *
  * Cancellation is idempotent. Looking up an unknown runId returns
  * `false` / `undefined` without throwing.
