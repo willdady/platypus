@@ -34,6 +34,11 @@ export type ChatSinkParams = {
    * (ADR-0032). Ignored when the Chat already exists.
    */
   newChat?: { agentId: string; a2aTokenId: string; a2aEndpointId: string };
+  /**
+   * Called once the run's terminal status is written. Not awaited by the run:
+   * it must not delay or fail it.
+   */
+  onEnded?: () => void;
   /** Override the FlushScheduler interval. Defaults to 5 seconds. */
   flushIntervalMs?: number;
 };
@@ -217,6 +222,7 @@ export class ChatSink implements RunSink {
     }
 
     await this.restoreLeaf();
+    this.params.onEnded?.();
   }
 
   /** Writes only the Chat row's status. */

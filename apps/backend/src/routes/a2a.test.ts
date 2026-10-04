@@ -58,6 +58,8 @@ import { createNotification } from "../services/notification.ts";
 import { hashInboundToken } from "../services/inbound-trigger-token.ts";
 import { resetA2aTokenTouches } from "../services/a2a-token.ts";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
+import { cancelRun } from "../runs/run-cancel.ts";
+import { recoverStuckChats } from "../jobs/scheduler.ts";
 
 const CARD_PATH = "/.well-known/agent-card.json";
 
@@ -147,7 +149,7 @@ describe("GET /a2a/:endpointId/.well-known/agent-card.json", () => {
       version: "1.0.0",
       capabilities: {
         streaming: false,
-        pushNotifications: false,
+        pushNotifications: true,
         extendedAgentCard: true,
       },
       securitySchemes: {
@@ -812,5 +814,365 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     );
 
     expect(res.body.error.code).toBe(-32001);
+  });
+});
+
+describe("POST /a2a/:endpointId — push notifications", () => {
+  const PUSH_URL = "https://203.0.113.10/push";
+  const push = vi.fn<typeof fetch>();
+  /** A push config as a client registers it. */
+  const config = (over: Record<string, unknown> = {}) => ({
+    url: PUSH_URL,
+    token: "client-verification-token",
+    authentication: { scheme: "Bearer", credentials: "client-secret" },
+    ...over,
+  });
+
+  type Pushed = {
+    url: string;
+    headers: Record<string, string>;
+    body: { task: RpcTask };
+  };
+  const pushed = (): Pushed[] =>
+    push.mock.calls.map(([url, init]) => ({
+      url: url as string,
+      headers: init?.headers as Record<string, string>,
+      body: JSON.parse(init?.body as string) as { task: RpcTask },
+    }));
+
+  /** A Task left running: its model call waits until `release()`. */
+  const startHeld = async () => {
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const sent = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+    return { task: sent.body.result.task, release };
+  };
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.hold = null;
+    model.prompts = [];
+    resetA2aTokenTouches();
+    push.mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", push);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("POSTs the finished Task with the client's credentials, and nothing before", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+
+    const created = await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+    expect(created.body.result).toMatchObject({
+      taskId: task.id,
+      url: PUSH_URL,
+    });
+    // Still running: nothing is pushed for an intermediate state.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).not.toHaveBeenCalled();
+
+    release();
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    const [call] = pushed();
+    expect(call.url).toBe(PUSH_URL);
+    expect(call.headers).toMatchObject({
+      "Content-Type": "application/a2a+json",
+      Authorization: "Bearer client-secret",
+      "X-A2A-Notification-Token": "client-verification-token",
+    });
+    expect(call.body.task).toMatchObject({
+      id: task.id,
+      contextId: task.contextId,
+      status: { state: "TASK_STATE_COMPLETED" },
+    });
+    expect(call.body.task.artifacts[0].parts[0].text).toBe("Hello from Helper");
+    // No message content leaks into what the server signs or logs: only the
+    // client's own config is stored.
+    expect(rows("a2a_push_config")).toEqual([
+      expect.objectContaining({ taskId: task.id, url: PUSH_URL }),
+    ]);
+  });
+
+  it("registers a config sent with SendMessage and pushes once when the Task ends", async () => {
+    seedConversation();
+
+    const sent = await rpc("SendMessage", {
+      message: {
+        role: "ROLE_USER",
+        messageId: "msg-a",
+        parts: [text("Where is my order?")],
+      },
+      configuration: {
+        returnImmediately: false,
+        taskPushNotificationConfig: config(),
+      },
+    });
+
+    const task = sent.body.result.task;
+    expect(task.status.state).toBe("TASK_STATE_COMPLETED");
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(pushed()[0].body.task.id).toBe(task.id);
+    // However the end is noticed — the run's end or the registration — it is
+    // pushed once.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("pushes at once when a config is registered on a Task that already ended", async () => {
+    seedConversation();
+    const sent = await send({ messageId: "msg-a" });
+    const task = sent.body.result.task;
+
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_COMPLETED");
+  });
+
+  it("pushes a failed Task", async () => {
+    // A run that outlives its bound ends failed.
+    vi.stubEnv("CHAT_PER_RUN_TIMEOUT_MS", "300");
+    seedConversation();
+    const { task, release } = await startHeld();
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    release();
+    expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_FAILED");
+  });
+
+  it("pushes a canceled Task", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+
+    await cancelRun(task.contextId);
+    release();
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("pushes once however often the same config is registered", async () => {
+    seedConversation();
+    const sent = await send({ messageId: "msg-a" });
+    const task = sent.body.result.task;
+
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+    await send({ messageId: "msg-a" });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(rows("a2a_push_config")).toHaveLength(1);
+  });
+
+  it("pushes a Task whose run died with its instance, without holding up the sweep", async () => {
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Orphaned",
+          status: "running",
+          activeLeafId: "msg-a",
+          lastTurnAt: hourAgo,
+          updatedAt: hourAgo,
+        },
+      ],
+      chat_message: [
+        {
+          chatId: "chat-1",
+          id: "msg-a",
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "Where is my order?" }],
+          deletedAt: null,
+          createdAt: hourAgo,
+        },
+      ],
+      a2a_task: [
+        {
+          id: "task-1",
+          chatId: "chat-1",
+          messageId: "msg-a",
+          endpointId: "ep-1",
+          tokenId: "tok-1",
+          createdAt: hourAgo,
+        },
+      ],
+      a2a_push_config: [
+        {
+          id: "cfg-1",
+          taskId: "task-1",
+          url: PUSH_URL,
+          token: null,
+          authentication: null,
+          notifiedAt: null,
+          createdAt: hourAgo,
+        },
+      ],
+    });
+    vi.stubEnv("CHAT_PER_RUN_TIMEOUT_MS", "1000");
+    // The client's server has not answered yet.
+    let answer = () => {};
+    push.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = () => resolve(new Response(null, { status: 200 }));
+      }),
+    );
+
+    // Resolves while the push is still in flight.
+    await recoverStuckChats();
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    answer();
+    expect(pushed()[0].body.task).toMatchObject({
+      id: "task-1",
+      status: { state: "TASK_STATE_FAILED" },
+    });
+  });
+
+  it("retries a delivery the client's server refused", async () => {
+    seedConversation();
+    push.mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const { task, release } = await startHeld();
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+
+    release();
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(2), {
+      timeout: 3000,
+    });
+  });
+
+  it("refuses a URL the network policy blocks, and never calls it", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+
+    const res = await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config({ url: "http://169.254.169.254/latest/meta-data" }),
+    });
+
+    expect(res.body.error.code).toBe(-32602);
+    expect(rows("a2a_push_config")).toHaveLength(0);
+    release();
+    await vi.waitFor(async () => {
+      const got = await rpc("GetTask", { id: task.id });
+      expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+    });
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("refuses authentication missing its scheme or its credentials", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+
+    for (const authentication of [
+      { scheme: "Bearer", credentials: "" },
+      { scheme: "", credentials: "client-secret" },
+    ]) {
+      const res = await rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        ...config({ authentication }),
+      });
+      expect(res.body.error.code).toBe(-32602);
+    }
+
+    expect(rows("a2a_push_config")).toHaveLength(0);
+    release();
+  });
+
+  it("gets, lists and deletes a Task's configs; a deleted one is not pushed", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+    const created = await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      id: "cfg-1",
+      ...config(),
+    });
+    expect(created.body.result).toMatchObject({ id: "cfg-1" });
+
+    const got = await rpc("GetTaskPushNotificationConfig", {
+      taskId: task.id,
+      id: "cfg-1",
+    });
+    expect(got.body.result).toMatchObject({
+      id: "cfg-1",
+      taskId: task.id,
+      url: PUSH_URL,
+    });
+    const listed = await rpc("ListTaskPushNotificationConfigs", {
+      taskId: task.id,
+    });
+    expect(listed.body.result).toMatchObject({
+      configs: [expect.objectContaining({ id: "cfg-1" })],
+    });
+
+    await rpc("DeleteTaskPushNotificationConfig", {
+      taskId: task.id,
+      id: "cfg-1",
+    });
+    const gone = await rpc("GetTaskPushNotificationConfig", {
+      taskId: task.id,
+      id: "cfg-1",
+    });
+    expect(gone.body.error.code).toBe(-32001);
+
+    release();
+    await vi.waitFor(async () => {
+      const read = await rpc("GetTask", { id: task.id });
+      expect(read.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("does not register a config on another endpoint's Task", async () => {
+    seedConversation();
+    const sent = await send({ messageId: "msg-a" });
+
+    const res = await rpc(
+      "CreateTaskPushNotificationConfig",
+      { taskId: sent.body.result.task.id, ...config() },
+      { endpointId: "ep-2", token: "pa2a_second-token" },
+    );
+
+    expect(res.body.error.code).toBe(-32001);
+    expect(rows("a2a_push_config")).toHaveLength(0);
   });
 });

@@ -17,8 +17,32 @@ export async function deliverWebhook(
   timestamp: string,
   customHeaders: Record<string, string> | null,
 ): Promise<void> {
-  const signature = computeSignature(payload, signingSecret);
+  await postWithRetries({
+    url,
+    body: payload,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Webhook-Signature": computeSignature(payload, signingSecret),
+      "X-Webhook-Timestamp": timestamp,
+      ...customHeaders,
+    },
+    label: "Webhook",
+  });
+}
 
+/**
+ * The Webhook transport: POSTs `body` to a user-supplied URL behind the
+ * egress guard, retrying a failed attempt with backoff. Also carries A2A push
+ * notifications (ADR-0032), which bring their own headers. It never throws.
+ */
+export async function postWithRetries(params: {
+  url: string;
+  body: string;
+  headers: Record<string, string>;
+  /** What is delivered, as the log lines name it. */
+  label: string;
+}): Promise<void> {
+  const { url, body, headers, label } = params;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
       await new Promise((resolve) =>
@@ -31,28 +55,21 @@ export async function deliverWebhook(
 
     try {
       // Checked on every attempt: the URL's DNS records can change between
-      // retries, and a Webhook URL is user-supplied, so it gets the same egress
+      // retries, and the URL is user-supplied, so it gets the same egress
       // policy as a model-chosen one.
       const egress = await checkEgress(url);
       if (!egress.allowed) {
         logger.warn(
           { url, reason: egress.reason },
-          "Webhook delivery blocked by network policy",
+          `${label} delivery blocked by network policy`,
         );
         return;
       }
 
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        "X-Webhook-Signature": signature,
-        "X-Webhook-Timestamp": timestamp,
-        ...customHeaders,
-      };
-
       const response = await fetch(url, {
         method: "POST",
         headers,
-        body: payload,
+        body,
         // Redirects are not followed: a redirect target would skip the egress
         // check above. A 3xx is a non-OK response like any other.
         redirect: "manual",
@@ -62,14 +79,14 @@ export async function deliverWebhook(
       if (response.ok) {
         logger.info(
           { url, attempt: attempt + 1 },
-          "Webhook delivered successfully",
+          `${label} delivered successfully`,
         );
         return;
       }
 
       logger.warn(
         { url, status: response.status, attempt: attempt + 1 },
-        "Webhook delivery failed with non-OK status",
+        `${label} delivery failed with non-OK status`,
       );
     } catch (error) {
       logger.warn(
@@ -78,12 +95,12 @@ export async function deliverWebhook(
           attempt: attempt + 1,
           error: error instanceof Error ? error.message : String(error),
         },
-        "Webhook delivery attempt failed",
+        `${label} delivery attempt failed`,
       );
     } finally {
       clearTimeout(timeoutId);
     }
   }
 
-  logger.error({ url }, "Webhook delivery exhausted all retries");
+  logger.error({ url }, `${label} delivery exhausted all retries`);
 }

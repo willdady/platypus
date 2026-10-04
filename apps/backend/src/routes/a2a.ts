@@ -17,6 +17,12 @@ import {
   sendA2aMessage,
   type A2aCaller,
 } from "../services/a2a-task.ts";
+import {
+  createA2aPushConfig,
+  deleteA2aPushConfig,
+  getA2aPushConfig,
+  listA2aPushConfigs,
+} from "../services/a2a-push.ts";
 import { logger } from "../logger.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import type { Variables } from "../server.ts";
@@ -61,8 +67,8 @@ const guarded =
 
 /**
  * The JSON-RPC methods, answered from the database. Methods other tickets
- * add (streaming, cancel, push notifications) are unsupported until then;
- * an unknown method is JSON-RPC "method not found".
+ * add (streaming, cancel) are unsupported until then; an unknown method is
+ * JSON-RPC "method not found".
  */
 const requestHandler = (caller: A2aCaller): A2ARequestHandler => ({
   // Our cards are wire JSON; the transport serializes from the SDK's shape.
@@ -75,10 +81,18 @@ const requestHandler = (caller: A2aCaller): A2ARequestHandler => ({
   sendMessageStream: unsupported,
   resubscribe: unsupported,
   cancelTask: unsupported,
-  createTaskPushNotificationConfig: unsupported,
-  getTaskPushNotificationConfig: unsupported,
-  listTaskPushNotificationConfigs: unsupported,
-  deleteTaskPushNotificationConfig: unsupported,
+  createTaskPushNotificationConfig: guarded((params) =>
+    createA2aPushConfig(caller.endpoint.id, params),
+  ),
+  getTaskPushNotificationConfig: guarded((params) =>
+    getA2aPushConfig(caller.endpoint.id, params),
+  ),
+  listTaskPushNotificationConfigs: guarded((params) =>
+    listA2aPushConfigs(caller.endpoint.id, params),
+  ),
+  deleteTaskPushNotificationConfig: guarded((params) =>
+    deleteA2aPushConfig(caller.endpoint.id, params),
+  ),
   listTasks: unsupported,
 });
 
