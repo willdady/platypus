@@ -3110,13 +3110,10 @@ export const a2aEndpointCreateSchema = a2aEndpointSchema
     includeMemories: true,
     extractMemories: true,
   })
-  .partial({
-    enabled: true,
-    name: true,
-    description: true,
-    includeMemories: true,
-    extractMemories: true,
-  });
+  .partial()
+  .required({ agentId: true });
+
+export type A2aEndpointCreate = z.infer<typeof a2aEndpointCreateSchema>;
 
 // The Agent is fixed once the endpoint exists: its URL and tokens were handed
 // out for that Agent.
@@ -3129,6 +3126,8 @@ export const a2aEndpointUpdateSchema = a2aEndpointSchema
     extractMemories: true,
   })
   .partial();
+
+export type A2aEndpointUpdate = z.infer<typeof a2aEndpointUpdateSchema>;
 
 /**
  * A token as listed: never its value, which is shown once when it is issued
