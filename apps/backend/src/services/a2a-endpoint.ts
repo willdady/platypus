@@ -4,6 +4,8 @@ import {
   a2aInterfaceUrl as interfaceUrl,
   gateAdmits,
   type A2aAccess,
+  type A2aEndpointCreate,
+  type A2aEndpointUpdate,
   type OrgGateAccessUpdate,
   type OrgGate,
 } from "@platypus/schemas";
@@ -87,12 +89,7 @@ export const getA2aEndpoint = async (workspaceId: string, id: string) => {
  */
 export const createA2aEndpoint = async (
   ctx: ScopeContext,
-  fields: {
-    agentId: string;
-    name?: string;
-    description?: string;
-    enabled?: boolean;
-  },
+  fields: A2aEndpointCreate,
 ): Promise<A2aEndpointRow> => {
   const agent = await resolveScoped(db, "agent", fields.agentId, ctx);
   if (!agent) throw new NotFoundError("Agent not found in this workspace");
@@ -108,6 +105,8 @@ export const createA2aEndpoint = async (
       name: fields.name ?? agent.row.name,
       description: fields.description ?? agent.row.description,
       enabled: fields.enabled ?? true,
+      includeMemories: fields.includeMemories ?? false,
+      extractMemories: fields.extractMemories ?? false,
       createdAt: now,
       updatedAt: now,
     })
@@ -118,7 +117,7 @@ export const createA2aEndpoint = async (
 export const updateA2aEndpoint = async (
   workspaceId: string,
   id: string,
-  fields: { name?: string; description?: string; enabled?: boolean },
+  fields: A2aEndpointUpdate,
 ): Promise<A2aEndpointRow> => {
   const row = await updateOwned(
     db,

@@ -6,6 +6,7 @@ import {
   and,
   or,
   isNotNull,
+  isNull,
   sql,
   inArray,
   desc,
@@ -13,6 +14,7 @@ import {
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
+  a2aEndpoint as a2aEndpointTable,
   chat as chatTable,
   memoryDailySummary as memoryDailySummaryTable,
   workspace as workspaceTable,
@@ -384,7 +386,10 @@ type ChatToProcess = {
  *
  * A Chat is due when it is not mid-turn and its Active path ends somewhere its
  * cursor does not: a turn, an edit, a move to another Alternative or a
- * Delete. A Chat whose last pass failed waits an hour before its retry.
+ * Delete. A Chat whose last pass failed waits an hour before its retry. A
+ * Chat an A2A endpoint started is read only while that endpoint extracts
+ * memories (ADR-0032), whoever added its turns; one whose endpoint is gone
+ * never is.
  */
 const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
   // Find workspaces with memory extraction enabled
@@ -453,9 +458,17 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
       memoryCursorId: chatTable.memoryCursorId,
     })
     .from(chatTable)
+    .leftJoin(
+      a2aEndpointTable,
+      eq(a2aEndpointTable.id, chatTable.a2aEndpointId),
+    )
     .where(
       and(
         inArray(chatTable.workspaceId, workspaceIds),
+        or(
+          isNull(chatTable.a2aEndpointId),
+          eq(a2aEndpointTable.extractMemories, true),
+        ),
         ne(chatTable.status, "running"),
         sql`${chatTable.activeLeafId} IS DISTINCT FROM ${chatTable.memoryCursorId}`,
         or(

@@ -185,6 +185,51 @@ describe("A2A endpoint routes", () => {
       });
     });
 
+    it("creates an endpoint with both memory settings off unless set", async () => {
+      const fake = seed({ endpoints: [] });
+
+      await send("", "POST", { agentId: "agent-1" });
+      await send("", "POST", {
+        agentId: "agent-1",
+        includeMemories: true,
+        extractMemories: true,
+      });
+
+      expect(fake.tables.a2a_endpoint).toEqual([
+        expect.objectContaining({
+          includeMemories: false,
+          extractMemories: false,
+        }),
+        expect.objectContaining({
+          includeMemories: true,
+          extractMemories: true,
+        }),
+      ]);
+    });
+
+    it("updates the memory settings", async () => {
+      const fake = seed({
+        endpoints: [
+          endpoint({ includeMemories: false, extractMemories: false }),
+        ],
+      });
+
+      const res = await send("/ep-1", "PUT", {
+        includeMemories: true,
+        extractMemories: true,
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        includeMemories: true,
+        extractMemories: true,
+      });
+      expect(fake.tables.a2a_endpoint[0]).toMatchObject({
+        includeMemories: true,
+        extractMemories: true,
+      });
+    });
+
     it("ignores an attempt to move the endpoint to another Agent", async () => {
       const fake = seed();
 

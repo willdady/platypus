@@ -459,6 +459,21 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect(chatRow("empty").lastMemoryProcessedAt).toBeNull();
   });
 
+  it("reads an A2A Chat only while its endpoint extracts memories", async () => {
+    seedChats(
+      chat("ui"),
+      chat("extracting", { a2aEndpointId: "ep-on" }),
+      chat("not-extracting", { a2aEndpointId: "ep-off" }),
+      chat("endpoint-deleted", { a2aEndpointId: "ep-gone" }),
+    );
+    fake.tables.a2a_endpoint = [
+      { id: "ep-on", extractMemories: true },
+      { id: "ep-off", extractMemories: false },
+    ];
+
+    expect((await run()).sort()).toEqual(["extracting", "ui"]);
+  });
+
   it("skips a Chat that is mid-turn", async () => {
     seedChats(
       chat("never-read", { status: "running" }),

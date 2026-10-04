@@ -62,6 +62,8 @@ const INITIAL_DATA = {
   name: "",
   description: "",
   enabled: true,
+  includeMemories: false,
+  extractMemories: false,
 };
 
 /**
@@ -113,6 +115,8 @@ const A2aEndpointForm = ({
       name: record.name,
       description: record.description,
       enabled: record.enabled,
+      includeMemories: record.includeMemories,
+      extractMemories: record.extractMemories,
     }),
     retractableFields: ["agentId", "name", "description", "enabled"],
     // On create, a blank name or description is left for the backend to copy
@@ -123,10 +127,14 @@ const A2aEndpointForm = ({
             name: data.name,
             description: data.description,
             enabled: data.enabled,
+            includeMemories: data.includeMemories,
+            extractMemories: data.extractMemories,
           }
         : {
             agentId: data.agentId,
             enabled: data.enabled,
+            includeMemories: data.includeMemories,
+            extractMemories: data.extractMemories,
             ...(data.name.trim() ? { name: data.name } : {}),
             ...(data.description.trim()
               ? { description: data.description }
@@ -296,6 +304,51 @@ const A2aEndpointForm = ({
             <FieldDescription>
               When disabled, the endpoint answers every call with Not Found.
             </FieldDescription>
+          </Field>
+
+          {/* Both off by default: whoever holds a token may not be you. */}
+          <Field orientation="horizontal">
+            <Switch
+              id="includeMemories"
+              className="cursor-pointer"
+              checked={formData.includeMemories}
+              onCheckedChange={(checked) =>
+                setField("includeMemories", checked)
+              }
+              disabled={isSubmitting || readOnly}
+            />
+            <FieldLabel htmlFor="includeMemories">
+              <div className="flex flex-col">
+                <p>Include Memories</p>
+                <p className="text-xs text-muted-foreground">
+                  Add your recent memory summaries to the agent&apos;s system
+                  prompt on this endpoint&apos;s runs. Leave off if anyone other
+                  than you holds a token.
+                </p>
+              </div>
+            </FieldLabel>
+          </Field>
+
+          <Field orientation="horizontal">
+            <Switch
+              id="extractMemories"
+              className="cursor-pointer"
+              checked={formData.extractMemories}
+              onCheckedChange={(checked) =>
+                setField("extractMemories", checked)
+              }
+              disabled={isSubmitting || readOnly}
+            />
+            <FieldLabel htmlFor="extractMemories">
+              <div className="flex flex-col">
+                <p>Extract Memories</p>
+                <p className="text-xs text-muted-foreground">
+                  Let this endpoint&apos;s chats feed your memories, including
+                  turns you add to them yourself. Leave off if anyone other than
+                  you holds a token.
+                </p>
+              </div>
+            </FieldLabel>
           </Field>
 
           {cardUrl && (

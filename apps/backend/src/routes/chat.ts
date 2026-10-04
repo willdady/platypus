@@ -60,6 +60,7 @@ const chatResponse = ({
   memoryCursorId: _memoryCursorId,
   activeLeafId: _activeLeafId,
   a2aTokenId: _a2aTokenId,
+  a2aEndpointId: _a2aEndpointId,
   ...response
 }: typeof chatTable.$inferSelect) => response;
 

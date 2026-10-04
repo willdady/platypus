@@ -252,6 +252,11 @@ export const chat = pgTable(
     a2aTokenId: t
       .text("a2a_token_id")
       .references((): AnyPgColumn => a2aToken.id, { onDelete: "set null" }),
+    // The A2A endpoint that started this Chat, whose `extractMemories` decides
+    // whether memory extraction reads it. No foreign key: the id outlives a
+    // deleted endpoint, so its Chats stay out of extraction rather than
+    // falling back to looking like the Owner's own.
+    a2aEndpointId: t.text("a2a_endpoint_id"),
 
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
@@ -1162,6 +1167,11 @@ export const a2aEndpoint = pgTable(
     name: t.text("name").notNull(),
     description: t.text("description").notNull(),
     enabled: t.boolean("enabled").notNull().default(true),
+    // Both off by default: the caller may not be the Owner. `includeMemories`
+    // puts the Owner's Memories in a turn's System prompt; `extractMemories`
+    // lets the endpoint's Chats feed memory extraction, UI turns included.
+    includeMemories: t.boolean("include_memories").notNull().default(false),
+    extractMemories: t.boolean("extract_memories").notNull().default(false),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

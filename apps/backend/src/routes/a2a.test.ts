@@ -57,6 +57,7 @@ import app from "../server.ts";
 import { createNotification } from "../services/notification.ts";
 import { hashInboundToken } from "../services/inbound-trigger-token.ts";
 import { resetA2aTokenTouches } from "../services/a2a-token.ts";
+import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 
 const CARD_PATH = "/.well-known/agent-card.json";
 
@@ -595,6 +596,75 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
         tokenId: "tok-1",
       }),
     ]);
+  });
+
+  describe("memory settings", () => {
+    /** ep-1 with its memory settings, and one Memory of its Owner's. */
+    const seedMemories = (settings: {
+      includeMemories: boolean;
+      extractMemories: boolean;
+    }) => {
+      seedConversation();
+      Object.assign(rows("a2a_endpoint")[0], settings);
+      rows("workspace")[0].memoryExtractionProviderId = "p-1";
+      tables.memory_daily_summary = [
+        {
+          id: "sum-1",
+          userId: "owner-1",
+          workspaceId: "ws-1",
+          summaryDate: new Date().toISOString().slice(0, 10),
+          summary: "Olive is planning a trip to Lisbon",
+        },
+      ];
+    };
+
+    it("leaves the Owner's Memories out of the System prompt when includeMemories is off", async () => {
+      seedMemories({ includeMemories: false, extractMemories: false });
+
+      await send({ messageId: "msg-a" });
+
+      expect(JSON.stringify(model.prompts[0])).not.toContain("Lisbon");
+      expect(rows("chat")[0].memorySnapshot ?? null).toBeNull();
+    });
+
+    it("puts the Owner's Memories in the System prompt when includeMemories is on", async () => {
+      seedMemories({ includeMemories: true, extractMemories: false });
+
+      await send({ messageId: "msg-a" });
+
+      expect(JSON.stringify(model.prompts[0])).toContain(
+        "Olive is planning a trip to Lisbon",
+      );
+    });
+
+    it.each([
+      ["skips", false, undefined],
+      ["extracts", true, "failed"],
+    ])(
+      "%s the endpoint's Chats in memory extraction when extractMemories is %s",
+      async (_case, extractMemories, status) => {
+        seedMemories({ includeMemories: false, extractMemories });
+        await send({ messageId: "msg-a" });
+
+        // The mocked model refuses to generate, so a Chat the pass reads
+        // ends it failed; one it skips is never touched.
+        await processMemoryExtractionBatch();
+
+        expect(rows("chat")[0].memoryExtractionStatus).toBe(status);
+      },
+    );
+
+    it("keeps skipping the endpoint's Chats once the endpoint is deleted", async () => {
+      seedMemories({ includeMemories: false, extractMemories: false });
+      await send({ messageId: "msg-a" });
+      tables.a2a_endpoint = tables.a2a_endpoint.filter((e) => e.id !== "ep-1");
+      tables.a2a_token = tables.a2a_token.filter((t) => t.id !== "tok-1");
+      rows("chat")[0].a2aTokenId = null;
+
+      await processMemoryExtractionBatch();
+
+      expect(rows("chat")[0].memoryExtractionStatus).toBeUndefined();
+    });
   });
 
   it("tells the Agent the turn arrives over A2A from the token's name", async () => {

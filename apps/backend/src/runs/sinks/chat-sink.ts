@@ -30,10 +30,10 @@ export type ChatSinkParams = {
   parentId: string | null;
   /**
    * Columns a Chat this turn creates starts with, beside the defaults: an A2A
-   * Chat is bound to its endpoint's Agent and token from its first row
+   * Chat is bound to its endpoint, its Agent and its token from its first row
    * (ADR-0032). Ignored when the Chat already exists.
    */
-  newChat?: { agentId: string; a2aTokenId: string };
+  newChat?: { agentId: string; a2aTokenId: string; a2aEndpointId: string };
   /** Override the FlushScheduler interval. Defaults to 5 seconds. */
   flushIntervalMs?: number;
 };
