@@ -1293,6 +1293,27 @@ describe("POST /a2a/:endpointId — streaming", () => {
     expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
   });
 
+  it("keeps the run going when the client hangs up", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+
+    const res = await streamSend({ messageId: "msg-a" });
+    const reader = res.body!.getReader();
+    const { value } = await reader.read();
+    const first = new TextDecoder().decode(value);
+    const taskId = (
+      JSON.parse(first.slice("data: ".length)) as { result: StreamEvent }
+    ).result.task!.id;
+    await reader.cancel();
+    release();
+
+    await vi.waitFor(async () => {
+      const got = await rpc("GetTask", { id: taskId });
+      expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+    });
+  });
+
   it("answers a refused message with a JSON-RPC error, not a stream", async () => {
     seedConversation();
 

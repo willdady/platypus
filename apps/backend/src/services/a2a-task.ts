@@ -177,7 +177,7 @@ export const startA2aTurn = async (
   const push =
     params.configuration?.taskPushNotificationConfig &&
     (await checkPushConfig(params.configuration.taskPushNotificationConfig));
-  const answer = async (task: TaskRow) => {
+  const withPush = async (task: TaskRow) => {
     if (push) await storePushConfig(task, push);
     return task;
   };
@@ -209,7 +209,9 @@ export const startA2aTurn = async (
       .limit(1);
     if (sent) {
       return {
-        task: await answer(await taskFor(caller, contextId, sent.id, token.id)),
+        task: await withPush(
+          await taskFor(caller, contextId, sent.id, token.id),
+        ),
       };
     }
     parentId = chat.leafId;
@@ -230,7 +232,7 @@ export const startA2aTurn = async (
       .limit(1);
     if (opened) {
       return {
-        task: await answer(
+        task: await withPush(
           await taskFor(caller, opened.chatId, message.messageId, token.id),
         ),
       };
@@ -276,7 +278,7 @@ export const startA2aTurn = async (
 
   try {
     return {
-      task: await answer(
+      task: await withPush(
         await taskFor(caller, chatId, message.messageId, token.id),
       ),
       run,
