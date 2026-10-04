@@ -117,7 +117,11 @@ const guardedFor =
         throw error;
       }
       if (error instanceof A2AError) {
-        if (error.message === CHAT_BUSY_MESSAGE) log.reason = "busy";
+        if (error.message === CHAT_BUSY_MESSAGE) {
+          // The running Task the refusal names, for the client to follow.
+          log.reason = "busy";
+          log.taskId = error.metadata?.taskId;
+        }
         throw error;
       }
       logger.error({ error }, "A2A call failed");

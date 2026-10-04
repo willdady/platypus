@@ -1507,7 +1507,18 @@ describe("the A2A call log", () => {
           agentId: "agent-1",
           title: "Busy",
           status: "running",
-          activeLeafId: null,
+          activeLeafId: "owner-msg",
+        },
+      ],
+      chat_message: [
+        {
+          chatId: "chat-1",
+          id: "owner-msg",
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "Owner asks" }],
+          deletedAt: null,
+          createdAt: new Date(),
         },
       ],
     });
@@ -1521,6 +1532,7 @@ describe("the A2A call log", () => {
         method: "SendMessage",
         outcome: "rejected",
         reason: "busy",
+        taskId: rows("a2a_task")[0].id,
       }),
     ]);
   });

@@ -233,11 +233,6 @@ export const sendA2aMessage = async (
     }
   }
 
-  // Asked only by a call that would start a run: a retry above answers with
-  // its Task at any load. Past the cap, nothing has been written.
-  const release = acquireA2aRunSlot();
-  if (!release) throw new A2aAtCapacityError();
-
   const chatId = contextId ?? randomUUID();
   const scope = workspaceScopeForA2a({
     endpointId: endpoint.id,
@@ -247,6 +242,11 @@ export const sendA2aMessage = async (
     organizationId: endpoint.organizationId,
     ownerUserId: endpoint.ownerId,
   });
+  // Asked only by a call that would start a run: a retry above answers with
+  // its Task at any load. Past the cap, nothing has been written. Taken just
+  // before the `try`, so every way out of it gives the slot back.
+  const release = acquireA2aRunSlot();
+  if (!release) throw new A2aAtCapacityError();
   try {
     const response = await startChatTurn({
       scope,
