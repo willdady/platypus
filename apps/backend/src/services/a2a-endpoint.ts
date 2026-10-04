@@ -92,6 +92,8 @@ export const createA2aEndpoint = async (
     name?: string;
     description?: string;
     enabled?: boolean;
+    includeMemories?: boolean;
+    extractMemories?: boolean;
   },
 ): Promise<A2aEndpointRow> => {
   const agent = await resolveScoped(db, "agent", fields.agentId, ctx);
@@ -108,6 +110,8 @@ export const createA2aEndpoint = async (
       name: fields.name ?? agent.row.name,
       description: fields.description ?? agent.row.description,
       enabled: fields.enabled ?? true,
+      includeMemories: fields.includeMemories ?? false,
+      extractMemories: fields.extractMemories ?? false,
       createdAt: now,
       updatedAt: now,
     })
@@ -118,7 +122,13 @@ export const createA2aEndpoint = async (
 export const updateA2aEndpoint = async (
   workspaceId: string,
   id: string,
-  fields: { name?: string; description?: string; enabled?: boolean },
+  fields: {
+    name?: string;
+    description?: string;
+    enabled?: boolean;
+    includeMemories?: boolean;
+    extractMemories?: boolean;
+  },
 ): Promise<A2aEndpointRow> => {
   const row = await updateOwned(
     db,

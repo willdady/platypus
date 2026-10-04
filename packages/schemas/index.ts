@@ -3086,6 +3086,9 @@ export const a2aEndpointSchema = z.object({
   name: z.string().min(1).max(A2A_ENDPOINT_NAME_MAX_LENGTH),
   description: z.string().min(1).max(A2A_ENDPOINT_DESCRIPTION_MAX_LENGTH),
   enabled: z.boolean(),
+  // Both default off, because the caller may not be the Owner.
+  includeMemories: z.boolean(),
+  extractMemories: z.boolean(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -3099,13 +3102,32 @@ export const a2aInterfaceUrl = (backendUrl: string, endpointId: string) =>
 // Name and description are optional on create: omitted, they are copied from
 // the Agent.
 export const a2aEndpointCreateSchema = a2aEndpointSchema
-  .pick({ agentId: true, enabled: true, name: true, description: true })
-  .partial({ enabled: true, name: true, description: true });
+  .pick({
+    agentId: true,
+    enabled: true,
+    name: true,
+    description: true,
+    includeMemories: true,
+    extractMemories: true,
+  })
+  .partial({
+    enabled: true,
+    name: true,
+    description: true,
+    includeMemories: true,
+    extractMemories: true,
+  });
 
 // The Agent is fixed once the endpoint exists: its URL and tokens were handed
 // out for that Agent.
 export const a2aEndpointUpdateSchema = a2aEndpointSchema
-  .pick({ name: true, description: true, enabled: true })
+  .pick({
+    name: true,
+    description: true,
+    enabled: true,
+    includeMemories: true,
+    extractMemories: true,
+  })
   .partial();
 
 /**

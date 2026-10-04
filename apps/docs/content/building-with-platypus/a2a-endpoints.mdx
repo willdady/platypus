@@ -1,6 +1,6 @@
 ---
 title: A2A endpoints
-description: Make an Agent reachable from outside Platypus over the A2A protocol — creating an endpoint, issuing a token per client, the public Agent Card, and what the endpoint exposes.
+description: Make an Agent reachable from outside Platypus over the A2A protocol — creating an endpoint, issuing a token per client, the public Agent Card, memory settings, and what the endpoint exposes.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -55,6 +55,9 @@ Go to **Workspace settings → A2A endpoints** and click **Add endpoint**.
   rewrite it for outsiders: the Agent's description is written for you and for
   other Agents.
 - **Enabled** — when off, the endpoint answers every call with **Not Found**.
+- **Include Memories** and **Extract Memories** — whether the endpoint's runs
+  read your Memories and its Chats write to them. Both are off by default; see
+  [Memories](#memories).
 
 Click **Save**. The new endpoint's page opens.
 
@@ -151,11 +154,33 @@ turns.
   it.
 
 The Agent is told the conversation arrives over A2A from the client the token
-is named after, and that the caller may not be you. A2A runs don't include
-your Memories.
+is named after, and that the caller may not be you.
 
 Streaming, cancelling a Task and push notifications aren't offered yet: those
 methods answer with an "unsupported operation" error.
+
+## Memories
+
+Two switches on the endpoint decide how its conversations touch your Memories.
+Both are **off** by default, because whoever holds a token may not be you.
+
+- **Include Memories** adds your recent Memory summaries to the Agent's system
+  prompt on the endpoint's runs. Off, the runs carry none.
+- **Extract Memories** lets the endpoint's Chats feed your Memories. Off,
+  Platypus never reads them for Memories — including any turns you add to them
+  yourself in the Chat.
+
+<Callout type="warning">
+  A messaging gateway can put a stranger in front of the Agent: anyone in a
+  group chat the client sits in. With **Include Memories** on, the Agent can
+  repeat your personal context to them; with **Extract Memories** on, what they
+  say lands in your Memories. Turn either on only for an endpoint whose tokens
+  are held by you alone.
+</Callout>
+
+**Include Memories** applies from the endpoint's next run. Turning **Extract
+Memories** on applies to the endpoint's existing Chats too, not only new ones.
+A Chat started on an endpoint you later delete stays out of your Memories.
 
 ## Deleting
 

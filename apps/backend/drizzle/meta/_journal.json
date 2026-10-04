@@ -589,6 +589,13 @@
       "when": 1791108727214,
       "tag": "0083_a2a_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1791151108137,
+      "tag": "0084_a2a_endpoint_memory_settings",
+      "breakpoints": true
     }
   ]
 }

@@ -336,11 +336,13 @@ export const sendA2aMessage = async (
         message: { id: message.messageId, role: "user", parts },
         parentId,
       },
-      // ponytail: Memories stay off until the endpoint carries its own
-      // setting (#1245).
-      includeMemories: false,
+      includeMemories: endpoint.includeMemories,
       origin: caller.origin,
-      newChat: { agentId: endpoint.agentId, a2aTokenId: token.id },
+      newChat: {
+        agentId: endpoint.agentId,
+        a2aTokenId: token.id,
+        a2aEndpointId: endpoint.id,
+      },
     });
     // The run goes on server-side; the client follows it by Task, not by
     // this stream.

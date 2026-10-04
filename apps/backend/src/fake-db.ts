@@ -177,6 +177,11 @@ const matchesSql = (
     const value = resolve(refOf(left));
     return typeof value === "string" && value.toLowerCase() === right;
   }
+  if (shape === "?>=?") {
+    // A column against a literal, as memory retrieval's date cutoff is.
+    const value = resolve(refOf(left));
+    return value != null && (value as string) >= (right as string);
+  }
   if (shape === "?ISDISTINCTFROM?") {
     // Null-safe: two nulls are not distinct, a null and a value are.
     return (resolve(refOf(left)) ?? null) !== (resolve(refOf(right)) ?? null);

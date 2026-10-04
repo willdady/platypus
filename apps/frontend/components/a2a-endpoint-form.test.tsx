@@ -28,6 +28,8 @@ const endpoint = {
   name: "Acme helpdesk",
   description: "Ask about your order",
   enabled: true,
+  includeMemories: false,
+  extractMemories: false,
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-01T00:00:00.000Z",
   tokens: [
@@ -82,7 +84,38 @@ describe("A2aEndpointForm", () => {
         "/org1/workspace/ws1/settings/a2a-endpoints/ep-1",
       ),
     );
-    expect(savedBody(fetchMock)).toEqual({ agentId: "agent-1", enabled: true });
+    expect(savedBody(fetchMock)).toEqual({
+      agentId: "agent-1",
+      enabled: true,
+      includeMemories: false,
+      extractMemories: false,
+    });
+  });
+
+  it("turns on both memory settings", async () => {
+    setDataFor("/a2a-endpoints/ep-1", endpoint);
+    const fetchMock = stubAcceptedSave(endpoint);
+    render(
+      <A2aEndpointForm orgId="org1" workspaceId="ws1" endpointId="ep-1" />,
+    );
+
+    const include = screen.getByRole("switch", { name: /Include Memories/ });
+    const extract = screen.getByRole("switch", { name: /Extract Memories/ });
+    expect(include).not.toBeChecked();
+    expect(extract).not.toBeChecked();
+    fireEvent.click(include);
+    fireEvent.click(extract);
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() =>
+      expect(savedBody(fetchMock)).toEqual({
+        name: "Acme helpdesk",
+        description: "Ask about your order",
+        enabled: true,
+        includeMemories: true,
+        extractMemories: true,
+      }),
+    );
   });
 
   it("shows the card URL and a new token once", async () => {
