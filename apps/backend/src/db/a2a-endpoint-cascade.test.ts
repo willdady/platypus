@@ -21,8 +21,8 @@ beforeAll(async () => {
       VALUES ('agent-1', 'ws-1', 'p1', 'Helper', 'Helps', 'm');
     INSERT INTO "a2a_endpoint" ("id", "workspace_id", "agent_id", "name", "description")
       VALUES ('ep-1', 'ws-1', 'agent-1', 'Helper', 'Helps');
-    INSERT INTO "a2a_token" ("id", "endpoint_id", "name", "token_hash")
-      VALUES ('tok-1', 'ep-1', 'Hermes', 'h');
+    INSERT INTO "a2a_token" ("id", "endpoint_id", "name", "token_hash", "token_created_at", "token_expires_at")
+      VALUES ('tok-1', 'ep-1', 'Hermes', 'h', now(), now() + interval '90 days');
   `);
 }, 60_000);
 afterAll(() => pg.close());
