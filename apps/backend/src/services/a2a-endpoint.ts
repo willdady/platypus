@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   a2aInterfaceUrl as interfaceUrl,
@@ -11,11 +11,16 @@ import { db } from "../index.ts";
 import {
   a2aEndpoint as a2aEndpointTable,
   a2aToken as a2aTokenTable,
+  agent as agentTable,
   organization as organizationTable,
   organizationMember,
+  user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { NotFoundError } from "../errors.ts";
+import { logger } from "../logger.ts";
+import { errorMessage } from "../utils/error-message.ts";
+import { createNotification } from "./notification.ts";
 import { backendBaseUrl } from "../base-urls.ts";
 import type { ScopeContext } from "../scope.ts";
 import { resolveScoped } from "./scoped-resource.ts";
@@ -251,6 +256,179 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   defaultOutputModes: ["text/plain"],
   skills: [],
 });
+
+// ------------------------------------------------------------ Org Admin oversight
+
+/**
+ * Every A2A endpoint in the Organization with its tokens, for its Org Admins:
+ * where it is, whose it is and which Agent it reaches. Never a token's value
+ * or hash.
+ */
+export const listOrgA2aEndpoints = async (orgId: string) => {
+  const inOrg = eq(workspaceTable.organizationId, orgId);
+  const [endpoints, tokens] = await Promise.all([
+    db
+      .select()
+      .from(a2aEndpointTable)
+      .innerJoin(
+        workspaceTable,
+        eq(workspaceTable.id, a2aEndpointTable.workspaceId),
+      )
+      .innerJoin(userTable, eq(userTable.id, workspaceTable.ownerId))
+      .innerJoin(agentTable, eq(agentTable.id, a2aEndpointTable.agentId))
+      .where(inOrg)
+      .orderBy(desc(a2aEndpointTable.createdAt)),
+    db
+      .select()
+      .from(a2aTokenTable)
+      .innerJoin(
+        a2aEndpointTable,
+        eq(a2aEndpointTable.id, a2aTokenTable.endpointId),
+      )
+      .innerJoin(
+        workspaceTable,
+        eq(workspaceTable.id, a2aEndpointTable.workspaceId),
+      )
+      .where(inOrg)
+      .orderBy(asc(a2aTokenTable.createdAt)),
+  ]);
+  return endpoints.map(
+    ({ a2a_endpoint: endpoint, workspace, user, agent }) => ({
+      id: endpoint.id,
+      name: endpoint.name,
+      enabled: endpoint.enabled,
+      agentId: agent.id,
+      agentName: agent.name,
+      workspaceId: workspace.id,
+      workspaceName: workspace.name,
+      ownerId: user.id,
+      ownerName: user.name,
+      createdAt: endpoint.createdAt,
+      tokens: tokens
+        .filter((row) => row.a2a_token.endpointId === endpoint.id)
+        .map((row) => toPublicToken(row.a2a_token)),
+    }),
+  );
+};
+
+/** The endpoint, if it is in the Organization, with its Workspace. */
+const findOrgEndpoint = async (orgId: string, endpointId: string) => {
+  const [row] = await db
+    .select()
+    .from(a2aEndpointTable)
+    .innerJoin(
+      workspaceTable,
+      eq(workspaceTable.id, a2aEndpointTable.workspaceId),
+    )
+    .where(
+      and(
+        eq(a2aEndpointTable.id, endpointId),
+        eq(workspaceTable.organizationId, orgId),
+      ),
+    )
+    .limit(1);
+  return row?.a2a_endpoint ?? null;
+};
+
+/**
+ * Tells the Workspace Owner an Org Admin revoked something of theirs. A
+ * failure is logged, not thrown: the revoke has already happened.
+ */
+const notifyOwnerOfRevoke = async (
+  orgId: string,
+  endpoint: A2aEndpointRow,
+  title: string,
+  body: string,
+) => {
+  try {
+    await createNotification(
+      db,
+      {
+        orgId,
+        workspaceId: endpoint.workspaceId,
+        agentId: endpoint.agentId,
+      },
+      { title, body },
+    );
+  } catch (error) {
+    logger.error(
+      { endpointId: endpoint.id, error: errorMessage(error) },
+      "Failed to notify the Workspace Owner about an A2A revoke",
+    );
+  }
+};
+
+/**
+ * Revokes an endpoint on an Org Admin's behalf by deleting it: its URL and
+ * every token stop working at once, and its Chats stay. The Owner is told.
+ * `false` when no endpoint by that id is in the Organization.
+ */
+export const revokeOrgA2aEndpoint = async (
+  orgId: string,
+  endpointId: string,
+): Promise<boolean> => {
+  const endpoint = await findOrgEndpoint(orgId, endpointId);
+  if (!endpoint) return false;
+  const deleted = await db
+    .delete(a2aEndpointTable)
+    .where(eq(a2aEndpointTable.id, endpointId))
+    .returning({ id: a2aEndpointTable.id });
+  // The Owner deleted it in the meantime: nothing left to tell them about.
+  if (deleted.length === 0) return false;
+
+  await notifyOwnerOfRevoke(
+    orgId,
+    endpoint,
+    "A2A endpoint revoked",
+    `An Organization Admin revoked the A2A endpoint "${endpoint.name}", so its URL and every one of its tokens are refused. Its Chats are kept. If clients should reach this agent again, create a new endpoint and give them its URL and new tokens.`,
+  );
+  logger.info(
+    { endpointId, organizationId: orgId, workspaceId: endpoint.workspaceId },
+    "A2A endpoint revoked by an Org Admin",
+  );
+  return true;
+};
+
+/**
+ * Revokes one token on an Org Admin's behalf by deleting it; the endpoint's
+ * other tokens keep working. The Owner is told. `false` when the token is not
+ * on that endpoint, or the endpoint is not in the Organization.
+ */
+export const revokeOrgA2aToken = async (
+  orgId: string,
+  endpointId: string,
+  tokenId: string,
+): Promise<boolean> => {
+  const endpoint = await findOrgEndpoint(orgId, endpointId);
+  if (!endpoint) return false;
+  const [token] = await db
+    .delete(a2aTokenTable)
+    .where(
+      and(
+        eq(a2aTokenTable.id, tokenId),
+        eq(a2aTokenTable.endpointId, endpointId),
+      ),
+    )
+    .returning({ name: a2aTokenTable.name });
+  if (!token) return false;
+
+  await notifyOwnerOfRevoke(
+    orgId,
+    endpoint,
+    "A2A token revoked",
+    `An Organization Admin revoked the token "${token.name}" on the A2A endpoint "${endpoint.name}", so calls with it are refused. If that client should keep working, issue it a new token on the endpoint's page.`,
+  );
+  logger.info(
+    {
+      endpointId,
+      tokenId,
+      organizationId: orgId,
+      workspaceId: endpoint.workspaceId,
+    },
+    "A2A token revoked by an Org Admin",
+  );
+  return true;
+};
 
 // ------------------------------------------------------------ the gate
 
