@@ -61,3 +61,19 @@ Platypus will not build the messaging Gateway that ADR-0015 decided on. Instead,
 - **Parts.** Inbound: text and data parts. Data parts are rendered as labelled JSON, like Inbound Trigger inputs. Outbound: the final assistant text as a Task artifact. File parts in either direction are deferred until a client needs them. Inbound would reuse the composer upload path (ADR-0028), and outbound would offer sandbox downloads as signed URLs.
 - **Deleting an endpoint, its Agent, or a Shared Agent's Attachment** deletes the endpoint and its tokens. Its Chats stay, as Chats do when their Agent is deleted.
 - **Supersedes ADR-0015** in full. ADR-0030's reference to the Gateway as the interactive path is replaced by this ADR. CONTEXT.md's Gateway vocabulary and the ROADMAP Messaging Gateway section are withdrawn with it.
+
+## Amendment — only an expired token stamps last rejected (#1243)
+
+A2A tokens follow ADR-0030's lifecycle, with one difference in which
+rejections stamp last rejected. An Inbound Trigger has one token, so any call
+refused for its token (missing, wrong or expired) can stamp that Trigger. An
+A2A endpoint has one token per client, and last rejected is kept per token. A
+missing or wrong token matches no token, so there is nothing to stamp.
+
+**Only a call with an expired token stamps last rejected**, on the token it
+presented. A missing or wrong token is still answered `401`.
+
+- Stamping the endpoint instead was the alternative. It would add a column
+  that answers "someone without a valid token called", which says nothing
+  about any one client. The `401` and the call log already tell that caller
+  and the Operator.
