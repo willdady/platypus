@@ -131,6 +131,14 @@ _Avoid_: tool cache (it is not consulted when the server is up), stale tools.
 An **MCP** server's own declaration that one of its tools does not change anything — it only reads. Self-reported and unverified, which is what "hint" is doing in the name: the protocol states plainly that it may not describe a tool faithfully. Trusted in proportion to what acting on it costs, and decided per consumer rather than once for all of them (ADR-0021): enough to let **Tool-result clearing** drop a result, never enough to skip something a User would want to have been asked about. A tool that declares nothing is treated as one that writes.
 _Avoid_: read-only flag, safe tool, tool safety (all three claim a verification nobody performed), annotation (that names the protocol's whole carrier, of which this is one field).
 
+**Tool gate**:
+An Extension point whose Contributions see a tool call before it runs and return a **Verdict** on it (ADR-0033, not yet built). A gate only gates: it never changes a call's arguments or its result. Gates apply deployment-wide to every tool call the backend executes, in every Chat turn, Trigger run, A2A call and Sub-Agent run. A tool the Provider executes itself never reaches a gate. A gate that throws or times out has said `ask`, never `allow`.
+_Avoid_: tool-call middleware (middleware can also transform; a gate cannot), guardrail (that names the Provider's system-prompt text), approval (that names the User's answer to an `ask`).
+
+**Verdict**:
+A **Tool gate**'s answer about one tool call: `allow`, `ask` or `deny`, optionally with a reason. Several gates combine to the most restrictive Verdict. `deny` is final. `ask` puts the call to the User only in a top-level Chat turn, and is `deny` in a Trigger run, an A2A call or a Sub-Agent run, because there is no one there to answer. A denied call reaches the model as a tool error carrying the reason, and the run continues.
+_Avoid_: score, confidence (a decision model's output, which a gate turns into a Verdict; core never sees it), decision.
+
 **Skill**:
 A named capability with a description, attached to an Agent. Its instructions are loaded on demand rather than carried in the prompt, by either of two routes: the model requests it through the `loadSkill` Tool, or a User names it with a **Slash command**. A Skill marked user-invocable only is left out of the catalogue the model is shown and stays reachable by the second route alone. Lives at Workspace scope, or — as a Shared resource — at Organization scope.
 
@@ -210,7 +218,7 @@ A distributable bundle — one package, one version, one config namespace, one e
 _Avoid_: extension (reserve for Extension point), add-on, module.
 
 **Extension point**:
-A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The Extension points are Sandbox backends, Tool sets and Web-search backends (ADR-0014); the first two shipped with the Plugin system, the third followed it.
+A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The Extension points are Sandbox backends, Tool sets and Web-search backends (ADR-0014); the first two shipped with the Plugin system, the third followed it. A fourth, **Tool gates**, is decided but not yet built (ADR-0033).
 _Avoid_: hook, slot.
 
 **Contribution**:
