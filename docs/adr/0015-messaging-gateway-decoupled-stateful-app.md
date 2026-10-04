@@ -1,6 +1,5 @@
 ---
-status: accepted-pending-implementation
-implemented-by: none yet (no implementation ticket exists at the time of this correction)
+status: superseded-by-0032
 ---
 
 # The messaging Gateway is a decoupled, stateful app bridging chat Surfaces to a messaging-agnostic backend
@@ -46,3 +45,11 @@ Platypus can be reached from external chat **Surfaces** (Telegram, Slack, Discor
 - **v1 scope.** **Telegram adapter first** (native deep-link linking, no OAuth/ingress, exercises the single-stream / `/new`-rebind path we were least sure of), **Slack second** (validates the thread = Chat branch), **Discord later**. Deferred: HITL approvals, third-party adapters, progressive streaming, multi-instance/sharding.
 
 - **Roadmap / ADR reconciliation.** Corrects three pieces of roadmap wording — (1) channels are a separate seam in a separate app, _not_ a backend Plugin Extension point; (2) "outbound rides the webhook event bus" is true only as _transport_ — channel content is Chat messages, not the Notification object; (3) "subsumes notifications and approvals" — the _capability_ is delivered via Chat messages, and approvals are deferred. Supersedes ADR-0013's planned "messaging-gateway adapter as a third Extension point" without altering ADR-0013's recorded history.
+
+## Superseded by ADR-0032
+
+Never built. [ADR-0032](0032-agents-are-reachable-over-a2a-not-a-platypus-messaging-gateway.md)
+withdraws the whole decision: Platypus ships no messaging Gateway, and Agents
+are reached over A2A through Gateways other projects maintain. Every claim above
+is withdrawn, including the backend changes it planned (Identity link and
+Conversation binding records, the outbound Chat-message event).

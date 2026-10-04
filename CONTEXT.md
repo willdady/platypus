@@ -198,7 +198,7 @@ One of the enumerated Workspace occurrences a **Webhook** subscribes to and an *
 _Avoid_: domain event, platform event; "notification" (reserved for the Notification itself).
 
 **Notification**:
-A short message an Agent posts to a Workspace's feed — the reply an unattended run leaves when there was no Chat anyone was watching. In-app only: nothing is emailed or pushed, and in-app Notifications never route to a messaging **Surface**. Read-state tracked per User; an Agent can edit and dismiss only the Notifications it posted itself. Posting one is granted per-Agent through the Notifications Tool set.
+A short message an Agent posts to a Workspace's feed — the reply an unattended run leaves when there was no Chat anyone was watching. In-app only: nothing is emailed or pushed. Read-state tracked per User; an Agent can edit and dismiss only the Notifications it posted itself. Posting one is granted per-Agent through the Notifications Tool set.
 _Avoid_: alert, push, mention, message (that names a Chat's unit).
 
 **Plugin**:
@@ -206,7 +206,7 @@ A distributable bundle — one package, one version, one config namespace, one e
 _Avoid_: extension (reserve for Extension point), add-on, module.
 
 **Extension point**:
-A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The Extension points are Sandbox backends, Tool sets and Web-search backends (ADR-0014); the first two shipped with the Plugin system, the third followed it. The messaging **Gateway adapter** is deliberately _not_ a backend Extension point — it lives in the separate **Gateway** app behind its own adapter seam (ADR-0015).
+A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The Extension points are Sandbox backends, Tool sets and Web-search backends (ADR-0014); the first two shipped with the Plugin system, the third followed it.
 _Avoid_: hook, slot.
 
 **Contribution**:
@@ -265,32 +265,6 @@ _Avoid_: magic link, signup link, activation link.
 Creating an account through the public form, reached from the sign-in page's **Sign up** link — as opposed to redeeming an Invitation link. Open by default; the Operator closes it deployment-wide with `REQUIRE_INVITATION_TO_SIGN_UP`, after which an Invitation link is the only way an account comes into existence.
 _Avoid_: registration, self-registration.
 
-**Gateway** (Messaging gateway):
-A decoupled, stateful app — deployed alongside the frontend and backend — that bridges external chat Surfaces to Platypus, relaying messages both ways. Holds the long-lived per-Surface connections and hosts Gateway adapters; the backend itself stays messaging-agnostic. Platypus, not the Gateway, is the identity authority.
-_Avoid_: bot, bridge, connector.
-
-**Surface**:
-An external chat platform Platypus can be reached through — Telegram, Slack, Discord, and others.
-_Avoid_: channel (a Surface's own rooms are "channels"), platform.
-
-**Gateway adapter**:
-The first-party, in-repo module that integrates one Surface with the Gateway, implementing a uniform capability contract (auth, inbound, outbound, streaming, threading, pairing). Contributed through the Gateway's own adapter seam — not the backend Plugin system.
-_Avoid_: channel adapter, connector, driver.
-
-**Sender**:
-The identity of whoever sent a message on a Surface (e.g. a Telegram user, a Slack team+user, a Discord user). Resolved to a User through an Identity link — this is what authorizes a relayed message.
-_Avoid_: from, author.
-
-**Conversation locus**:
-The addressable place on a Surface where one conversation lives and where replies are posted — a direct message, or a thread/room. Resolved to a Chat through a Conversation binding — this is what routes messages.
-_Avoid_: conversation, channel, thread.
-
-**Identity link**:
-The record binding a Sender to a User. Created only through a User-authenticated linking flow (a Platypus-minted, single-use, short-lived code the User relays to the Surface); the Gateway can relay but never mint one. Authorizes; does not route.
-
-**Conversation binding**:
-The record binding a Conversation locus to a Chat (which carries the Workspace + Agent). On a single-stream Surface (e.g. a Telegram DM) it is the single rolling Chat, rebound by `/new`; on a thread-capable Surface each thread is its own binding and Chat. Routes; does not authorize.
-
 ## Relationships
 
 - An **Organization** has many **Workspaces**.
@@ -318,9 +292,6 @@ The record binding a Conversation locus to a Chat (which carries the Workspace +
 - **Workspaces** are created only by **Org Admins** — directly, or auto-provisioned for a member when they accept an invitation. An invitation carries an ordered set of zero-or-more **Blueprints**; on accept they are applied to the new Workspace in order (Attachments union; later Blueprints win on any single-valued pointer-setting). Members do not create their own Workspaces.
 - An **Invitation** is redeemed through its **Invitation link**, which creates the account and joins the Organization in one act; a person who already holds an account instead accepts the Invitation in-app. Where the Operator requires invitations, redemption is the only way an account comes into existence — admission is the **Operator**'s to constrain, never an **Org Admin**'s to widen.
 - Authority over configuration runs **Operator** → **Org Admin** → **Workspace Owner**; each tier is bounded by the tier above it.
-- A **Gateway** hosts many **Gateway adapters**, one per **Surface**. A message on a **Surface** carries a **Sender** and arrives at a **Conversation locus**.
-- A **Sender** resolves to a **User** through an **Identity link** (authorizes); a **Conversation locus** resolves to a **Chat** through a **Conversation binding** (routes). The two are separate because in a shared room "who spoke" and "where it happened" diverge; a direct message collapses them 1:1.
-- An inbound Surface message drives a **Chat turn** as the linked **User**; the reply streams back over the inbound call. Agent-initiated (proactive) output appends a message to the bound **Chat** and is delivered to its **Conversation locus** — distinct from in-app notifications, which never route to a **Surface**.
 
 ## Example dialogue
 

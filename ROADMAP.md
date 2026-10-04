@@ -90,8 +90,7 @@ namespaced by Plugin name. See the
 extend Platypus's _own_ capabilities; they don't duplicate MCP.
 
 > **Contributions welcome.** New Extension points, and third-party Plugins in the wild,
-> are both open. The messaging Gateway (below) will _not_ become an Extension point —
-> its Gateway adapters live in the separate Gateway app behind their own seam.
+> are both open.
 
 ### SSH Sandbox backend — 2.0.0
 
@@ -121,34 +120,25 @@ open-ended work; the DAG is for known pipelines.
 > It requires an ADR before any code and is sequenced after Sandbox backends mature, since
 > script steps execute in a Sandbox.
 
-### Messaging Gateway
+### Agents over A2A
 
-A **decoupled, stateful app** (deployed alongside the frontend and backend) that exposes
-Platypus to **bring-your-own chat Surfaces** — Telegram, Slack, Discord, and others.
-It is **bidirectional**: an agent can message you on your phone _and_ you can reply and
-chat from the Surface. It holds the long-lived per-Surface connections so the backend
-stays messaging-agnostic. The design is settled in ADR-0015.
+An Owner can expose an Agent as an **A2A server**, so other agents and chat platforms
+can hold a conversation with it. Every conversation is an ordinary Chat the Owner can
+read and continue in the UI. Runs are long, so callers follow them by polling, by
+streaming or by push notification, not by holding a request open. The design is settled
+in ADR-0032.
 
-- Each Surface is a **Gateway adapter** behind the Gateway's **own adapter seam** —
-  first-party and in-repo. This is _not_ an Extension point of the backend Plugin system
-  (a Tool set Plugin can't run in the Gateway, and vice-versa); third-party Gateway adapters are a
-  later addition.
-- **Inbound** messages drive Chat turns via the API and the reply streams back on that call.
-  **Outbound** agent-initiated messages are **chat messages appended to the bound chat**,
-  delivered over the webhook bus transport — _not_ the in-app notification surface, which
-  stays in-app and never routes to a Surface.
-- **Platypus owns identity.** A channel account is _linked_ to a Platypus account via a
-  short-lived, single-use code minted in the Platypus UI; the Gateway relays and Platypus
-  authorizes. The Gateway is never an auth authority — which is what keeps multi-tenancy
-  intact.
-- A third-party Gateway _may_ integrate by speaking the contract, but the default is a
-  thin first-party reference Gateway. Platypus will not become a messaging platform.
+- **Chat platforms are reached through other projects' gateways**, such as Hermes Agent
+  and OpenClaw, which call the Agent over A2A. Platypus does not maintain an adapter for
+  each chat platform.
+- **Access is a per-client bearer token on the Agent**, behind an Organization gate that is
+  off by default. Each run acts as the Workspace Owner, and records which client started it.
+- **Exposing Agents over MCP is likely later.** As of the 2026-07-28 spec, MCP has no
+  notion of a conversation. It has far wider client reach, so it is worth adding once it
+  fits.
 
-> **Human-in-the-loop approvals are deferred** — they need pause/resume in the run
-> lifecycle, a larger change than the Gateway itself; the contract is shaped to add them
-> later without a breaking change. Sequenced after the Extension / Plugin system, whose
-> manifest/SDK _patterns_ the adapter seam borrows — though Gateway adapters are a separate
-> seam, not backend Plugins.
+> **Proactive messages are out of scope.** Neither A2A nor MCP lets a server start a
+> message in a conversation. Delivering one is left to a gateway's own delivery endpoint.
 
 ## Non-goals
 
@@ -160,9 +150,8 @@ discussion first if you think one of them should change.
 2. **Not a kitchen-sink automation platform.** If code-driven workflows happen, they stay
    lean orchestration glue (Step Functions-shaped), not a visual mega-tool with hundreds
    of built-in integrations.
-3. **No messaging/notification stack inside the backend.** Surfaces live in the decoupled
-   Gateway as Gateway adapters. The backend will not grow a sprawling in-process messaging
-   integration.
+3. **No messaging Gateway.** Platypus does not ship an adapter for each chat platform.
+   Chat platforms reach Agents over A2A, through gateways that other projects maintain.
 4. **MCP stays the canonical path for external tool servers.** The Plugin system extends
    Platypus's own capabilities; it does not replace or duplicate MCP for connecting out.
 

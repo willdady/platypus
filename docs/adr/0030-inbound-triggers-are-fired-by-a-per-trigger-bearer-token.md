@@ -143,3 +143,13 @@ is what the time reports.
   where a legitimate caller already learns why from the `413` itself.
 - The `413` still writes its call-log line with reason `body_too_large`, so
   an Operator sees the call. Every other rejection stamps as before.
+
+## Amended by ADR-0032
+
+ADR-0015's Gateway was never built and is superseded by
+[ADR-0032](0032-agents-are-reachable-over-a2a-not-a-platypus-messaging-gateway.md).
+The considered option "Riding the messaging Gateway" therefore refers to
+something that will not exist. Interactive Chats with an external caller now go
+through the A2A server instead. The reasoning still holds: an Inbound Trigger is
+headless and unattended, and the caller fills in declared inputs, not a prompt.
+A2A does not replace Inbound Triggers.
