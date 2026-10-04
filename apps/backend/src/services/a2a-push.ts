@@ -15,8 +15,11 @@ import {
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { checkEgress } from "../utils/egress-guard.ts";
+import type { RunStatus } from "../runs/types.ts";
 import {
+  currentTurnId,
   readTask,
+  recordTaskEnd,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
@@ -92,11 +95,10 @@ const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
 };
 
 /**
- * A run in the Chat has ended — on its own, or marked failed by the sweep
- * after its instance died: push each of the Chat's Tasks that has ended and
- * still owes a push. Never throws.
+ * A run in the Chat has ended: push each of the Chat's Tasks that has ended
+ * and still owes a push. Never throws.
  */
-export const pushA2aChatEnded = async (chatId: string): Promise<void> => {
+const pushA2aChatEnded = async (chatId: string): Promise<void> => {
   try {
     const tasks: TaskRow[] = await db
       .select({
@@ -105,6 +107,7 @@ export const pushA2aChatEnded = async (chatId: string): Promise<void> => {
         messageId: a2aTaskTable.messageId,
         endpointId: a2aTaskTable.endpointId,
         tokenId: a2aTaskTable.tokenId,
+        state: a2aTaskTable.state,
         createdAt: a2aTaskTable.createdAt,
       })
       .from(a2aTaskTable)
@@ -123,6 +126,30 @@ export const pushA2aChatEnded = async (chatId: string): Promise<void> => {
   } catch (error) {
     logger.error({ error, chatId }, "A2A push notification failed");
   }
+};
+
+/**
+ * A turn in the Chat has ended with `status` — on its own, or marked failed by
+ * the sweep after its instance died. Records the end on the turn's Task, if it
+ * has one, then pushes. `messageId` names the turn; without it, the Chat's
+ * current turn. Never throws.
+ */
+export const endA2aTurn = async ({
+  chatId,
+  messageId,
+  status,
+}: {
+  chatId: string;
+  messageId?: string | null;
+  status: RunStatus;
+}): Promise<void> => {
+  try {
+    const turnId = messageId ?? (await currentTurnId(chatId));
+    if (turnId) await recordTaskEnd(chatId, turnId, status);
+  } catch (error) {
+    logger.error({ error, chatId }, "Recording an A2A Task's end failed");
+  }
+  await pushA2aChatEnded(chatId);
 };
 
 // ------------------------------------------------------------ Client config

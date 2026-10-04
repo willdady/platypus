@@ -35,10 +35,10 @@ export type ChatSinkParams = {
    */
   newChat?: { agentId: string; a2aTokenId: string; a2aEndpointId: string };
   /**
-   * Called once the run's terminal status is written. Not awaited by the run:
-   * it must not delay or fail it.
+   * Called once the run's terminal status is written, with that status. Not
+   * awaited by the run: it must not delay or fail it.
    */
-  onEnded?: () => void;
+  onEnded?: (status: RunStatus) => void;
   /** Override the FlushScheduler interval. Defaults to 5 seconds. */
   flushIntervalMs?: number;
 };
@@ -199,6 +199,7 @@ export class ChatSink implements RunSink {
     await this.flusher?.dispose();
     this.flusher = undefined;
 
+    let status = ctx.status;
     if (!this.plan) {
       // Resolution failed before we had any plan to persist; just update
       // the status on the row that onStart inserted.
@@ -210,7 +211,10 @@ export class ChatSink implements RunSink {
         messages: ctx.messages,
       });
       // A reply that could not be stored must not leave the Chat `running`.
-      if (!written) await this.writeStatus("failed");
+      if (!written) {
+        status = "failed";
+        await this.writeStatus(status);
+      }
 
       // Fire-and-forget authoritative titling. Runs for every terminal status
       // (succeeded / failed / cancelled) so a chat is titled even when the
@@ -222,7 +226,7 @@ export class ChatSink implements RunSink {
     }
 
     await this.restoreLeaf();
-    this.params.onEnded?.();
+    this.params.onEnded?.(status);
   }
 
   /** Writes only the Chat row's status. */
