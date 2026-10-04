@@ -1175,6 +1175,15 @@ export const a2aToken = pgTable(
       .references(() => a2aEndpoint.id, { onDelete: "cascade" }),
     name: t.text("name").notNull(),
     tokenHash: t.text("token_hash").notNull(),
+    // The current value's lifecycle, as on an Inbound Trigger (ADR-0030):
+    // regenerating moves both times on and clears `tokenNotice`, the latest
+    // expiry Notification sent for this value.
+    tokenCreatedAt: t.timestamp("token_created_at").notNull(),
+    tokenExpiresAt: t.timestamp("token_expires_at").notNull(),
+    tokenNotice: t.text("token_notice"),
+    // Each written at most once a minute per token.
+    lastUsedAt: t.timestamp("last_used_at"),
+    lastRejectedAt: t.timestamp("last_rejected_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [index("idx_a2a_token_endpoint_id").on(t.endpointId)],

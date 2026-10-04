@@ -25,7 +25,11 @@ import {
   requireOwned,
   updateOwned,
 } from "./workspace-resource.ts";
-import { generateBearerToken } from "./inbound-trigger-token.ts";
+import {
+  generateBearerToken,
+  inboundTokenStatus,
+  issuedTokenFields,
+} from "./inbound-trigger-token.ts";
 import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
 import { ownerMembershipJoin } from "./owner-membership.ts";
 
@@ -41,10 +45,16 @@ export type A2aEndpointRow = typeof a2aEndpointTable.$inferSelect;
 type A2aTokenRow = typeof a2aTokenTable.$inferSelect;
 
 /** Makes a leaked A2A token recognisable, beside Inbound Triggers' `pit_`. */
-const A2A_TOKEN_PREFIX = "pa2a_";
+export const A2A_TOKEN_PREFIX = "pa2a_";
 
-/** A token as the Owner sees it listed: never its value or hash. */
-const toPublicToken = ({ tokenHash: _tokenHash, ...rest }: A2aTokenRow) => rest;
+/**
+ * A token as the Owner sees it listed: how it stands, never its value, hash
+ * or reminder bookkeeping.
+ */
+export const toPublicToken = (row: A2aTokenRow) => {
+  const { tokenHash: _tokenHash, tokenNotice: _tokenNotice, ...rest } = row;
+  return { ...rest, tokenStatus: inboundTokenStatus(row) };
+};
 
 export const listA2aEndpoints = (workspaceId: string) =>
   listOwned(
@@ -126,24 +136,25 @@ export const deleteA2aEndpoint = async (
 };
 
 /**
- * Issues a named token on the endpoint. The plaintext is in this return value
+ * Issues a named token on the endpoint, expiring after `expiryDays`. The plaintext is in this return value
  * and nowhere else: only its hash is stored.
  */
 export const createA2aToken = async (
   workspaceId: string,
   endpointId: string,
-  name: string,
+  { name, expiryDays }: { name: string; expiryDays: number },
 ) => {
   await requireOwned(db, "a2aEndpoint", { id: endpointId, workspaceId });
   const { token, hash } = generateBearerToken(A2A_TOKEN_PREFIX);
+  const now = new Date();
   const [row] = await db
     .insert(a2aTokenTable)
     .values({
       id: nanoid(),
       endpointId,
       name,
-      tokenHash: hash,
-      createdAt: new Date(),
+      ...issuedTokenFields(hash, expiryDays, now),
+      createdAt: now,
     })
     .returning();
   return { ...toPublicToken(row), token };

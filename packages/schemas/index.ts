@@ -3104,17 +3104,29 @@ export const a2aEndpointUpdateSchema = a2aEndpointSchema
   .pick({ name: true, description: true, enabled: true })
   .partial();
 
-/** A token as listed: never its value, which is shown once on creation. */
+/**
+ * A token as listed: never its value, which is shown once when it is issued
+ * or regenerated. Its lifecycle follows an Inbound Trigger's token.
+ */
 export const a2aTokenSchema = z.object({
   id: z.string(),
   endpointId: z.string(),
   name: z.string().min(1).max(A2A_TOKEN_NAME_MAX_LENGTH),
+  tokenStatus: inboundTokenStatusSchema,
+  tokenCreatedAt: z.date(),
+  tokenExpiresAt: z.date(),
+  lastUsedAt: z.date().nullable(),
+  lastRejectedAt: z.date().nullable(),
   createdAt: z.date(),
 });
 
 export type A2aToken = z.infer<typeof a2aTokenSchema>;
 
-export const a2aTokenCreateSchema = a2aTokenSchema.pick({ name: true });
+export const a2aTokenCreateSchema = a2aTokenSchema.pick({ name: true }).extend({
+  expiryDays: z
+    .literal(INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS)
+    .default(DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS),
+});
 
 // Dashboard
 

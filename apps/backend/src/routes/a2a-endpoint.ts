@@ -21,6 +21,7 @@ import {
   listA2aEndpoints,
   updateA2aEndpoint,
 } from "../services/a2a-endpoint.ts";
+import { regenerateA2aToken } from "../services/a2a-token.ts";
 import type { Variables } from "../server.ts";
 
 /**
@@ -90,7 +91,7 @@ a2aEndpoint.post(
       await createA2aToken(
         workspaceId,
         c.req.param("endpointId"),
-        c.req.valid("json").name,
+        c.req.valid("json"),
       ),
       201,
     );
@@ -106,5 +107,24 @@ a2aEndpoint.delete("/:endpointId/tokens/:tokenId", ...owner, async (c) => {
   );
   return c.json({ message: "A2A token deleted" });
 });
+
+/**
+ * A new value for a token: the old one stops working at once, and the new one
+ * is in this response and never again.
+ */
+a2aEndpoint.post(
+  "/:endpointId/tokens/:tokenId/regenerate",
+  ...owner,
+  async (c) => {
+    const { workspaceId } = workspaceScopeOf(c);
+    return c.json(
+      await regenerateA2aToken(
+        workspaceId,
+        c.req.param("endpointId"),
+        c.req.param("tokenId"),
+      ),
+    );
+  },
+);
 
 export { a2aEndpoint };

@@ -21,6 +21,7 @@ import {
 } from "../db/schema.ts";
 import { fireTrigger } from "../services/trigger-firing.ts";
 import { sendInboundTokenReminders } from "../services/inbound-trigger.ts";
+import { sendA2aTokenReminders } from "../services/a2a-token.ts";
 import {
   narrowTriggerConfig,
   nextCronRunAt,
@@ -523,7 +524,7 @@ export async function recoverStuckChats(): Promise<void> {
 }
 
 /**
- * How often the Inbound Trigger token reminders are swept. Their thresholds
+ * How often the Inbound Trigger and A2A token reminders are swept. Their thresholds
  * are days, so the scheduler's every-minute tick would only repeat a query
  * that finds nothing new; hourly keeps a reminder at most an hour late.
  */
@@ -549,6 +550,7 @@ export async function sweepInboundTokenRemindersIfDue(
     return;
   }
   await sendInboundTokenReminders(new Date(now));
+  await sendA2aTokenReminders(new Date(now));
   lastInboundReminderSweepAt = now;
 }
 
@@ -588,7 +590,7 @@ export function startScheduler(): void {
       try {
         await sweepInboundTokenRemindersIfDue();
       } catch (error) {
-        logger.error({ error }, "Inbound trigger token reminders failed");
+        logger.error({ error }, "Token expiry reminders failed");
       }
       await processDueTriggers();
     });

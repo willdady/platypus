@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
   A2A_ENDPOINT_DESCRIPTION_MAX_LENGTH,
   A2A_ENDPOINT_NAME_MAX_LENGTH,
   A2A_TOKEN_NAME_MAX_LENGTH,
+  DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
+  INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
   type A2aEndpoint,
   type A2aToken,
   type Agent,
@@ -22,7 +24,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { SelectItem } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FormTextField } from "@/components/form-text-field";
 import { FormTextareaField } from "@/components/form-textarea-field";
 import { FormSelectField } from "@/components/form-select-field";
@@ -39,7 +48,11 @@ import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { a2aCardUrl } from "@/lib/a2a-endpoint";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatDateTime } from "@/lib/format-date";
+import {
+  INBOUND_TOKEN_STATUS_LABELS,
+  INBOUND_TOKEN_STATUS_VARIANTS,
+} from "@/lib/inbound-trigger";
 import { workspaceRoutes } from "@/lib/routes";
 
 type Endpoint = A2aEndpoint & { tokens: A2aToken[] };
@@ -147,10 +160,17 @@ const A2aEndpointForm = ({
   });
 
   const [tokenName, setTokenName] = useState("");
+  const [expiryDays, setExpiryDays] = useState<number>(
+    DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
+  );
   const [isIssuing, setIsIssuing] = useState(false);
   const [issued, setIssued] = useState<string | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<A2aToken | null>(null);
   const [isDeletingToken, setIsDeletingToken] = useState(false);
+  const [tokenToRegenerate, setTokenToRegenerate] = useState<A2aToken | null>(
+    null,
+  );
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const tokensUrl = backendUrl
     ? `${scopedUrl(backendUrl, "a2a-endpoints", scope)}/${endpointId}/tokens`
@@ -161,7 +181,7 @@ const A2aEndpointForm = ({
     setIsIssuing(true);
     const outcome = await writeAt<A2aToken & { token: string }>(tokensUrl, {
       method: "POST",
-      data: { name: tokenName.trim() },
+      data: { name: tokenName.trim(), expiryDays },
     });
     if (outcome.outcome === "success") {
       setIssued(outcome.data.token);
@@ -187,6 +207,23 @@ const A2aEndpointForm = ({
     }
     setTokenToDelete(null);
     setIsDeletingToken(false);
+  };
+
+  const regenerateToken = async () => {
+    if (!tokensUrl || !tokenToRegenerate) return;
+    setIsRegenerating(true);
+    const outcome = await writeAt<A2aToken & { token: string }>(
+      `${tokensUrl}/${tokenToRegenerate.id}/regenerate`,
+      { method: "POST" },
+    );
+    if (outcome.outcome === "success") {
+      setIssued(outcome.data.token);
+      await mutateRecord();
+    } else {
+      toast.error(outcome.message);
+    }
+    setTokenToRegenerate(null);
+    setIsRegenerating(false);
   };
 
   const cardUrl =
@@ -275,7 +312,8 @@ const A2aEndpointForm = ({
               <FieldLabel>Tokens</FieldLabel>
               <FieldDescription>
                 Give each client its own token, so you can delete one without
-                breaking the others.
+                breaking the others. You get a notification 30 and 7 days before
+                a token expires.
               </FieldDescription>
               {endpoint.tokens.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No tokens yet.</p>
@@ -287,24 +325,56 @@ const A2aEndpointForm = ({
                       className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {token.name}
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium">
+                            {token.name}
+                          </p>
+                          <Badge
+                            variant={
+                              INBOUND_TOKEN_STATUS_VARIANTS[token.tokenStatus]
+                            }
+                          >
+                            {INBOUND_TOKEN_STATUS_LABELS[token.tokenStatus]}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Created {formatDate(token.createdAt)} · Expires{" "}
+                          {formatDateTime(token.tokenExpiresAt)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Created {formatDate(token.createdAt)}
+                          Last used{" "}
+                          {token.lastUsedAt
+                            ? formatDateTime(token.lastUsedAt)
+                            : "never"}{" "}
+                          · Last rejected{" "}
+                          {token.lastRejectedAt
+                            ? formatDateTime(token.lastRejectedAt)
+                            : "never"}
                         </p>
                       </div>
                       {!readOnly && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          aria-label={`Delete token ${token.name}`}
-                          className="shrink-0 cursor-pointer"
-                          onClick={() => setTokenToDelete(token)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex shrink-0 gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={`Regenerate token ${token.name}`}
+                            className="cursor-pointer"
+                            onClick={() => setTokenToRegenerate(token)}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={`Delete token ${token.name}`}
+                            className="cursor-pointer"
+                            onClick={() => setTokenToDelete(token)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       )}
                     </li>
                   ))}
@@ -320,6 +390,25 @@ const A2aEndpointForm = ({
                     onChange={(e) => setTokenName(e.target.value)}
                     disabled={isIssuing}
                   />
+                  <Select
+                    value={String(expiryDays)}
+                    onValueChange={(value) => setExpiryDays(Number(value))}
+                    disabled={isIssuing}
+                  >
+                    <SelectTrigger
+                      aria-label="Token lifetime"
+                      className="w-32 shrink-0"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS.map((days) => (
+                        <SelectItem key={days} value={String(days)}>
+                          {days} days
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     variant="outline"
@@ -365,6 +454,16 @@ const A2aEndpointForm = ({
         confirmVariant="destructive"
         onConfirm={deleteToken}
         loading={isDeletingToken}
+      />
+
+      <ConfirmDialog
+        open={tokenToRegenerate !== null}
+        onOpenChange={(open) => !open && setTokenToRegenerate(null)}
+        title="Regenerate token"
+        description={`The current "${tokenToRegenerate?.name}" token stops working straight away. Update the client that uses it with the new one.`}
+        confirmLabel="Regenerate"
+        onConfirm={regenerateToken}
+        loading={isRegenerating}
       />
 
       {issued && cardUrl && (
