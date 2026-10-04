@@ -24,12 +24,17 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
-import { formatDate } from "@/lib/format-date";
+import type { InboundTokenStatus } from "@platypus/schemas";
+import { formatDate, formatDateTime } from "@/lib/format-date";
+import {
+  INBOUND_TOKEN_STATUS_LABELS,
+  INBOUND_TOKEN_STATUS_VARIANTS,
+} from "@/lib/inbound-trigger";
 
 /**
  * One row of `GET /organizations/:orgId/a2a/endpoints` (ADR-0032): where the
- * endpoint is, whose it is, which Agent it reaches and its tokens. Never a
- * token's value.
+ * endpoint is, whose it is, which Agent it reaches, and how each of its tokens
+ * stands. Never a token's value.
  */
 interface OrgA2aEndpoint {
   id: string;
@@ -39,7 +44,17 @@ interface OrgA2aEndpoint {
   workspaceName: string;
   ownerName: string;
   createdAt: string;
-  tokens: { id: string; name: string; createdAt: string }[];
+  tokens: {
+    id: string;
+    name: string;
+    createdAt: string;
+    tokenStatus: InboundTokenStatus;
+    // When the current value was issued: the marker a revoke names.
+    tokenCreatedAt: string;
+    tokenExpiresAt: string;
+    lastUsedAt: string | null;
+    lastRejectedAt: string | null;
+  }[];
 }
 
 /** What a revoke stops: the endpoint, or just one of its tokens. */
@@ -48,7 +63,14 @@ interface RevokeTarget {
   token?: OrgA2aEndpoint["tokens"][number];
 }
 
-const COLUMNS = ["Endpoint", "Workspace", "Created"] as const;
+const COLUMNS = [
+  "Endpoint",
+  "Workspace",
+  "Created",
+  "Expires",
+  "Last used",
+  "Last rejected",
+] as const;
 
 /**
  * Every A2A endpoint and token in the Organization, for its Org Admins. The
@@ -72,7 +94,11 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
     const outcome = await writeAt(
       joinUrl(
         scopedUrl(backendUrl, "a2a/endpoints", scope),
-        token ? `/${endpoint.id}/tokens/${token.id}` : `/${endpoint.id}`,
+        // Names the value this row showed, so a token the Owner regenerated
+        // since the list loaded is refused rather than revoked unseen.
+        token
+          ? `/${endpoint.id}/tokens/${token.id}?${new URLSearchParams({ tokenCreatedAt: token.tokenCreatedAt })}`
+          : `/${endpoint.id}`,
       ),
       { method: "DELETE" },
     );
@@ -81,6 +107,8 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
     } else {
       toast.error(outcome.message);
     }
+    // After a failure too: a token regenerated since the list loaded is
+    // refused, and the list should show the one that is current now.
     await mutate();
     setIsRevoking(false);
     setToRevoke(null);
@@ -90,7 +118,7 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
     return (
       <LoadingRegion label="Loading A2A endpoints">
         <TableSkeleton
-          tableClassName="min-w-[560px]"
+          tableClassName="min-w-[720px]"
           columns={[
             ...COLUMNS.map((header) => ({
               header,
@@ -130,7 +158,7 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
     <>
       <div className="border rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <Table className="min-w-[560px]">
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
                 {COLUMNS.map((header) => (
@@ -169,6 +197,7 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
                       </div>
                     </TableCell>
                     <TableCell>{formatDate(endpoint.createdAt)}</TableCell>
+                    <TableCell colSpan={3} />
                     <TableCell className="text-right">
                       <Button
                         variant="outline"
@@ -188,6 +217,34 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
                       </TableCell>
                       <TableCell />
                       <TableCell>{formatDate(token.createdAt)}</TableCell>
+                      <TableCell>
+                        {/* A date like the other columns; only a token that
+                            needs attention gets a badge under it. */}
+                        <div className="flex flex-col gap-1">
+                          <span>{formatDate(token.tokenExpiresAt)}</span>
+                          {(token.tokenStatus === "expiring" ||
+                            token.tokenStatus === "expired") && (
+                            <Badge
+                              variant={
+                                INBOUND_TOKEN_STATUS_VARIANTS[token.tokenStatus]
+                              }
+                              className="w-fit text-xs"
+                            >
+                              {INBOUND_TOKEN_STATUS_LABELS[token.tokenStatus]}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {token.lastUsedAt
+                          ? formatDateTime(token.lastUsedAt)
+                          : "Never"}
+                      </TableCell>
+                      <TableCell>
+                        {token.lastRejectedAt
+                          ? formatDateTime(token.lastRejectedAt)
+                          : "Never"}
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="outline"

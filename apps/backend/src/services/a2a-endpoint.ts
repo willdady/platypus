@@ -17,7 +17,7 @@ import {
   user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import { NotFoundError } from "../errors.ts";
+import { ConflictError, NotFoundError } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { createNotification } from "./notification.ts";
@@ -389,28 +389,53 @@ export const revokeOrgA2aEndpoint = async (
   return true;
 };
 
+const TOKEN_REPLACED_MESSAGE =
+  "The token was replaced since you loaded the list. Refresh it and revoke the new one if it should stop too.";
+
 /**
  * Revokes one token on an Org Admin's behalf by deleting it; the endpoint's
  * other tokens keep working. The Owner is told. `false` when the token is not
  * on that endpoint, or the endpoint is not in the Organization.
+ *
+ * `seenTokenCreatedAt` is when the value the Admin was looking at was issued.
+ * Regenerating keeps the token's id but issues a new value, which the Admin
+ * never judged, so a revoke naming any other time is refused rather than
+ * deleting it.
  */
 export const revokeOrgA2aToken = async (
   orgId: string,
   endpointId: string,
   tokenId: string,
+  seenTokenCreatedAt: Date,
 ): Promise<boolean> => {
   const endpoint = await findOrgEndpoint(orgId, endpointId);
   if (!endpoint) return false;
   const [token] = await db
-    .delete(a2aTokenTable)
+    .select()
+    .from(a2aTokenTable)
     .where(
       and(
         eq(a2aTokenTable.id, tokenId),
         eq(a2aTokenTable.endpointId, endpointId),
       ),
     )
-    .returning({ name: a2aTokenTable.name });
+    .limit(1);
   if (!token) return false;
+  if (token.tokenCreatedAt.getTime() !== seenTokenCreatedAt.getTime()) {
+    throw new ConflictError(TOKEN_REPLACED_MESSAGE);
+  }
+  // A regenerate landing between the read above and this delete is refused
+  // the same way, so the delete is conditional on the hash just read.
+  const deleted = await db
+    .delete(a2aTokenTable)
+    .where(
+      and(
+        eq(a2aTokenTable.id, tokenId),
+        eq(a2aTokenTable.tokenHash, token.tokenHash),
+      ),
+    )
+    .returning({ id: a2aTokenTable.id });
+  if (deleted.length === 0) throw new ConflictError(TOKEN_REPLACED_MESSAGE);
 
   await notifyOwnerOfRevoke(
     orgId,

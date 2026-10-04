@@ -34,6 +34,11 @@ const endpoint = (over: Record<string, unknown> = {}) => ({
       endpointId: "ep-1",
       name: "Telegram",
       createdAt: "2026-09-02T10:00:00.000Z",
+      tokenStatus: "expiring",
+      tokenCreatedAt: "2026-07-01T10:00:00.000Z",
+      tokenExpiresAt: "2026-10-15T10:00:00.000Z",
+      lastUsedAt: null,
+      lastRejectedAt: "2026-09-28T10:00:00.000Z",
     },
   ],
   ...over,
@@ -64,6 +69,20 @@ describe("OrgA2aEndpointsList", () => {
     expect(within(endpointRow).getByText("Dana Owner")).toBeInTheDocument();
     expect(within(endpointRow).getByText("Disabled")).toBeInTheDocument();
     expect(within(tokenRow).getByText("Telegram")).toBeInTheDocument();
+    expect(within(tokenRow).getByText("Expiring soon")).toBeInTheDocument();
+    expect(within(tokenRow).getByText("Never")).toBeInTheDocument();
+  });
+
+  it("badges only a token that needs attention, not an active one", () => {
+    const active = endpoint();
+    active.tokens[0].tokenStatus = "active";
+    mockScopedSWR({ "/a2a/endpoints": [active] });
+    renderList(<OrgA2aEndpointsList orgId="org1" />);
+
+    expect(
+      screen.getByRole("columnheader", { name: "Expires" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
   });
 
   it("offers revoke and nothing that edits", () => {
@@ -90,7 +109,7 @@ describe("OrgA2aEndpointsList", () => {
     );
   });
 
-  it("revokes one token through the Org route and revalidates", async () => {
+  it("revokes the token value the row showed through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "A2A token revoked" });
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] });
     renderList(<OrgA2aEndpointsList orgId="org1" />);
@@ -99,7 +118,7 @@ describe("OrgA2aEndpointsList", () => {
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://test/organizations/org1/a2a/endpoints/ep-1/tokens/tok-1",
+      "http://test/organizations/org1/a2a/endpoints/ep-1/tokens/tok-1?tokenCreatedAt=2026-07-01T10%3A00%3A00.000Z",
       expect.objectContaining({ method: "DELETE" }),
     );
   });
