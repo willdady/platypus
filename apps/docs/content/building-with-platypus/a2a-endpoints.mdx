@@ -64,9 +64,10 @@ Click **Save**. The new endpoint's page opens.
 ### Add a token for each client
 
 Under **Tokens**, name the token after the client it's for, up to 100
-characters (for example `Hermes on Telegram`), and click **Add token**. Copy the
-token from the dialog. It's shown once and Platypus keeps only a hash of it, so
-if you lose it, delete it and add another.
+characters (for example `Hermes on Telegram`), pick how long it lasts — 30, 90,
+180 or 365 days, 90 by default — and click **Add token**. Copy the token from
+the dialog. It's shown once and Platypus keeps only a hash of it, so if you lose
+it, regenerate it.
 
 Give each client its own token. Deleting one stops only that client.
 
@@ -75,6 +76,28 @@ Give each client its own token. Deleting one stops only that client.
 An Agent can have several endpoints. Give clients that should see a different
 name or description their own endpoint, or retire one client's URL without
 touching the others.
+
+## Tokens
+
+Each token on the endpoint's page shows its standing — **Active**, **Expiring
+soon** (within 7 days) or **Expired** — when it expires, and when it was
+**Last used** and **Last rejected**. **Last rejected** moves when a call with
+the expired token is refused. Both times update at most once a minute.
+
+- **Every token expires** after the lifetime you picked. A call with an expired
+  token, like one with a missing or wrong token, gets `401 Unauthorized`.
+- **You get a notification** 30 days and 7 days before a token expires (a
+  30-day token only gets the 7-day one), and the first time a client uses it
+  after it expires.
+- **Regenerate** issues a new value for the token, with the same name and
+  lifetime, and stops the old value at once. The new value is shown once. Use it
+  when a token is about to expire, is lost, or may have leaked, then update the
+  client.
+
+<Callout type="warning">
+  Rotating a token usually means updating the client's configuration, so act on
+  the 30-day reminder, not the 7-day one.
+</Callout>
 
 ## The Agent Card
 

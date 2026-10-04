@@ -6,6 +6,22 @@ import app from "../server.ts";
 
 const baseUrl = "/organizations/org-1/workspaces/ws-1/a2a-endpoints";
 const createdAt = new Date("2026-09-01T00:00:00.000Z");
+const DAY = 24 * 60 * 60 * 1000;
+const farFuture = new Date("2099-01-01T00:00:00.000Z");
+
+const liveToken = (over: Row = {}): Row => ({
+  id: "tok-1",
+  endpointId: "ep-1",
+  name: "Hermes",
+  tokenHash: "h",
+  tokenCreatedAt: createdAt,
+  tokenExpiresAt: farFuture,
+  tokenNotice: null,
+  lastUsedAt: null,
+  lastRejectedAt: null,
+  createdAt,
+  ...over,
+});
 
 const endpoint = (over: Row = {}): Row => ({
   id: "ep-1",
@@ -224,6 +240,99 @@ describe("A2A endpoint routes", () => {
       expect(JSON.stringify(detail)).not.toContain(stored.tokenHash as string);
     });
 
+    it("issues a token for 90 days by default, or for the lifetime picked", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(createdAt);
+      try {
+        const fake = seed();
+
+        await send("/ep-1/tokens", "POST", { name: "Default" });
+        await send("/ep-1/tokens", "POST", { name: "Short", expiryDays: 30 });
+        const refused = await send("/ep-1/tokens", "POST", {
+          name: "Odd",
+          expiryDays: 45,
+        });
+
+        expect(refused.status).toBe(400);
+        expect(
+          fake.tables.a2a_token.map((t) => [t.name, t.tokenExpiresAt]),
+        ).toEqual([
+          ["Default", new Date(createdAt.getTime() + 90 * DAY)],
+          ["Short", new Date(createdAt.getTime() + 30 * DAY)],
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("lists each token's expiry, status, last used and last rejected", async () => {
+      seed({ tokens: [liveToken({ lastUsedAt: createdAt })] });
+
+      const detail = (await (await app.request(`${baseUrl}/ep-1`)).json()) as {
+        tokens: Row[];
+      };
+
+      expect(detail.tokens).toEqual([
+        {
+          id: "tok-1",
+          endpointId: "ep-1",
+          name: "Hermes",
+          tokenStatus: "active",
+          tokenCreatedAt: createdAt.toISOString(),
+          tokenExpiresAt: farFuture.toISOString(),
+          lastUsedAt: createdAt.toISOString(),
+          lastRejectedAt: null,
+          createdAt: createdAt.toISOString(),
+        },
+      ]);
+    });
+
+    it("regenerates a token: the new value once, the old one dead, the reminders cleared", async () => {
+      const fake = seed({
+        tokens: [
+          liveToken({
+            tokenHash: hashInboundToken("pa2a_old"),
+            tokenCreatedAt: createdAt,
+            tokenExpiresAt: new Date(createdAt.getTime() + 30 * DAY),
+            tokenNotice: "expired",
+          }),
+        ],
+      });
+
+      const res = await send("/ep-1/tokens/tok-1/regenerate", "POST");
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Row & { token: string };
+      expect(body.token).toMatch(/^pa2a_/);
+      expect(body).toMatchObject({ id: "tok-1", name: "Hermes" });
+      expect(body).not.toHaveProperty("tokenHash");
+      const [stored] = fake.tables.a2a_token;
+      expect(stored.tokenHash).toBe(hashInboundToken(body.token));
+      expect(stored.tokenHash).not.toBe(hashInboundToken("pa2a_old"));
+      expect(stored.tokenNotice).toBeNull();
+      // The same lifetime as before, from now.
+      const created = (stored.tokenCreatedAt as Date).getTime();
+      expect((stored.tokenExpiresAt as Date).getTime() - created).toBe(
+        30 * DAY,
+      );
+      expect(created).toBeGreaterThan(createdAt.getTime());
+    });
+
+    it("404s regenerating a token on another endpoint or Workspace", async () => {
+      const fake = seed({
+        endpoints: [endpoint(), endpoint({ id: "ep-2", workspaceId: "ws-2" })],
+        tokens: [liveToken({ endpointId: "ep-2", tokenHash: "h" })],
+      });
+
+      expect((await send("/ep-1/tokens/tok-1/regenerate", "POST")).status).toBe(
+        404,
+      );
+      expect((await send("/ep-2/tokens/tok-1/regenerate", "POST")).status).toBe(
+        404,
+      );
+      expect(fake.tables.a2a_token[0].tokenHash).toBe("h");
+    });
+
     it("deletes a token", async () => {
       const fake = seed({
         tokens: [
@@ -302,7 +411,11 @@ describe("A2A endpoint routes", () => {
         403,
       );
       expect((await send("/ep-1/tokens/tok-1", "DELETE")).status).toBe(403);
+      expect((await send("/ep-1/tokens/tok-1/regenerate", "POST")).status).toBe(
+        403,
+      );
       expect(fake.tables.a2a_endpoint).toEqual([endpoint()]);
+      expect(fake.tables.a2a_token[0].tokenHash).toBe("h");
       expect(fake.tables.a2a_token).toHaveLength(1);
     });
   });

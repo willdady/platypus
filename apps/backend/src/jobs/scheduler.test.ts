@@ -10,16 +10,18 @@ import { sql, type SQL } from "drizzle-orm";
  * drizzle real and renders the query instead.
  */
 
-const { mockDb, mockFireTrigger, mockSendReminders } = vi.hoisted(() => ({
-  mockDb: {
-    update: vi.fn<(table: unknown) => unknown>(),
-    select: vi.fn(),
-    execute: vi.fn<(query: SQL) => Promise<unknown>>(),
-    $client: { connect: vi.fn<() => Promise<unknown>>() },
-  },
-  mockFireTrigger: vi.fn(),
-  mockSendReminders: vi.fn<(now: Date) => Promise<void>>(),
-}));
+const { mockDb, mockFireTrigger, mockSendReminders, mockSendA2aReminders } =
+  vi.hoisted(() => ({
+    mockDb: {
+      update: vi.fn<(table: unknown) => unknown>(),
+      select: vi.fn(),
+      execute: vi.fn<(query: SQL) => Promise<unknown>>(),
+      $client: { connect: vi.fn<() => Promise<unknown>>() },
+    },
+    mockFireTrigger: vi.fn(),
+    mockSendReminders: vi.fn<(now: Date) => Promise<void>>(),
+    mockSendA2aReminders: vi.fn<(now: Date) => Promise<void>>(),
+  }));
 
 vi.mock("../index.ts", () => ({ db: mockDb }));
 vi.mock("../services/trigger-firing.ts", () => ({
@@ -27,6 +29,9 @@ vi.mock("../services/trigger-firing.ts", () => ({
 }));
 vi.mock("../services/inbound-trigger.ts", () => ({
   sendInboundTokenReminders: mockSendReminders,
+}));
+vi.mock("../services/a2a-token.ts", () => ({
+  sendA2aTokenReminders: mockSendA2aReminders,
 }));
 
 import { mockLogger } from "../test-setup.ts";
@@ -422,6 +427,7 @@ describe("sweepInboundTokenRemindersIfDue", () => {
     vi.clearAllMocks();
     resetInboundReminderSweep();
     mockSendReminders.mockResolvedValue(undefined);
+    mockSendA2aReminders.mockResolvedValue(undefined);
   });
 
   it("sweeps at most once an hour: the reminders' thresholds are days", async () => {
@@ -429,6 +435,8 @@ describe("sweepInboundTokenRemindersIfDue", () => {
     await sweepInboundTokenRemindersIfDue(T0 + HOUR - 1);
     expect(mockSendReminders).toHaveBeenCalledTimes(1);
     expect(mockSendReminders).toHaveBeenCalledWith(new Date(T0));
+    expect(mockSendA2aReminders).toHaveBeenCalledTimes(1);
+    expect(mockSendA2aReminders).toHaveBeenCalledWith(new Date(T0));
 
     await sweepInboundTokenRemindersIfDue(T0 + HOUR);
     expect(mockSendReminders).toHaveBeenCalledTimes(2);

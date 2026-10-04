@@ -35,6 +35,11 @@ const endpoint = {
       id: "tok-1",
       endpointId: "ep-1",
       name: "Hermes",
+      tokenStatus: "expiring",
+      tokenCreatedAt: "2026-09-02T00:00:00.000Z",
+      tokenExpiresAt: "2026-10-02T00:00:00.000Z",
+      lastUsedAt: null,
+      lastRejectedAt: "2026-09-20T10:00:00.000Z",
       createdAt: "2026-09-02T00:00:00.000Z",
     },
   ],
@@ -110,10 +115,64 @@ describe("A2aEndpointForm", () => {
       "http://test/organizations/org1/workspaces/ws1/a2a-endpoints/ep-1/tokens",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(savedBody(fetchMock)).toEqual({ name: "Rovo" });
+    expect(savedBody(fetchMock)).toEqual({ name: "Rovo", expiryDays: 90 });
 
     fireEvent.click(screen.getByRole("button", { name: "I've copied it" }));
     expect(screen.queryByDisplayValue("pa2a_secret")).not.toBeInTheDocument();
+  });
+
+  it("shows each token's status, expiry, last used and last rejected", () => {
+    setDataFor("/a2a-endpoints/ep-1", endpoint);
+    render(
+      <A2aEndpointForm orgId="org1" workspaceId="ws1" endpointId="ep-1" />,
+    );
+
+    expect(screen.getByText("Expiring soon")).toBeInTheDocument();
+    expect(screen.getByText(/Expires .*2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Last used never/)).toBeInTheDocument();
+    expect(screen.getByText(/Last rejected .*2026/)).toBeInTheDocument();
+  });
+
+  it("issues a token with the lifetime picked", async () => {
+    setDataFor("/a2a-endpoints/ep-1", endpoint);
+    const fetchMock = stubAcceptedSave({ ...endpoint.tokens[0], token: "x" });
+    render(
+      <A2aEndpointForm orgId="org1" workspaceId="ws1" endpointId="ep-1" />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Token name"), {
+      target: { value: "Rovo" },
+    });
+    await selectOption("90 days", "365 days");
+    fireEvent.click(screen.getByRole("button", { name: "Add token" }));
+
+    await waitFor(() =>
+      expect(savedBody(fetchMock)).toEqual({ name: "Rovo", expiryDays: 365 }),
+    );
+  });
+
+  it("regenerates a token after confirming, and shows the new one once", async () => {
+    setDataFor("/a2a-endpoints/ep-1", endpoint);
+    const fetchMock = stubAcceptedSave({
+      ...endpoint.tokens[0],
+      token: "pa2a_fresh",
+    });
+    render(
+      <A2aEndpointForm orgId="org1" workspaceId="ws1" endpointId="ep-1" />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Regenerate token Hermes" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Token")).toHaveValue("pa2a_fresh"),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/workspaces/ws1/a2a-endpoints/ep-1/tokens/tok-1/regenerate",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("is read-only for an Org Admin in another Owner's workspace", () => {
@@ -133,6 +192,9 @@ describe("A2aEndpointForm", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Delete token Hermes" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Regenerate token Hermes" }),
     ).not.toBeInTheDocument();
   });
 });

@@ -16,7 +16,7 @@ import { CopyRow } from "@/components/copy-row";
 /**
  * Shows an A2A token the one time it is readable, beside the card URL the
  * client needs with it. Only its hash is stored, so once this closes the
- * token can't be shown again; a lost one is replaced by adding another.
+ * token can't be shown again; a lost one is replaced by regenerating it.
  */
 export const A2aTokenDialog = ({
   token,
@@ -47,8 +47,8 @@ export const A2aTokenDialog = ({
         <TriangleAlert />
         <AlertTitle>Shown only once</AlertTitle>
         <AlertDescription>
-          This is the only time the token is shown. If you lose it, delete it
-          and add a new one.
+          This is the only time the token is shown. If you lose it, regenerate
+          it.
         </AlertDescription>
       </Alert>
 
