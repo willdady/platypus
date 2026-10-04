@@ -1,6 +1,6 @@
 ---
 status: accepted-pending-implementation
-implemented-by: none yet (no implementation ticket exists at the time of writing)
+implemented-by: "#1239"
 ---
 
 # Agents are reachable over A2A, and Platypus ships no messaging Gateway
