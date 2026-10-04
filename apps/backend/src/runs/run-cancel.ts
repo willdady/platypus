@@ -23,6 +23,10 @@ export const cancelRun = async (runId: RunId): Promise<void> => {
  * Holds one connection LISTENing for cancels, reconnecting when it drops. A
  * cancel sent while it is down is missed; the run's own timeout still bounds
  * it.
+ *
+ * ponytail: reconnects only on a connection `error`; a silently half-open
+ * socket stays deaf until the run times out. Add a periodic heartbeat query if
+ * that bites.
  */
 export const listenForRunCancels = (): void => {
   void listen();

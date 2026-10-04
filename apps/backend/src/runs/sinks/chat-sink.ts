@@ -15,6 +15,9 @@ import type {
   RunStatus,
 } from "../types.ts";
 
+/** Why a Chat refuses a turn, a delete or a leaf switch while a run holds it. */
+export const CHAT_BUSY_MESSAGE = "A reply is still being written in this Chat";
+
 export type ChatSinkParams = {
   orgId: string;
   workspaceId: string;
@@ -122,9 +125,7 @@ export class ChatSink implements RunSink {
           });
         } catch (error) {
           if (!isUniqueViolation(error)) throw error;
-          throw new ConflictError(
-            `A run is already in progress for '${ctx.runId}'`,
-          );
+          throw new ConflictError(CHAT_BUSY_MESSAGE);
         }
       }
 

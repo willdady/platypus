@@ -28,7 +28,7 @@ import { chatStorageKeyPrefix } from "../storage/keys.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
-import { ChatSink } from "../runs/sinks/chat-sink.ts";
+import { CHAT_BUSY_MESSAGE, ChatSink } from "../runs/sinks/chat-sink.ts";
 import { normalizeWebToolParts } from "../runs/web-tool-normalize.ts";
 import type { RunInput } from "../runs/types.ts";
 import { actorUserId } from "../scope.ts";
@@ -79,7 +79,7 @@ const chatResponse = ({
  */
 const refuseWhileRunning = (chat: { status: string }) => {
   if (chat.status === "running") {
-    throw new ConflictError("A reply is still being written in this Chat");
+    throw new ConflictError(CHAT_BUSY_MESSAGE);
   }
 };
 

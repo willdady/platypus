@@ -1147,7 +1147,6 @@ describe("Chat Routes", () => {
         mockSession();
         const fake = seedChat();
         fake.tables.chat[0].status = "running";
-        startsTurn();
 
         const res = await post({ message: message("u3"), parentId: "a2" });
 
@@ -1157,7 +1156,7 @@ describe("Chat Routes", () => {
           status: "running",
           activeLeafId: "a2",
         });
-        mockPrepareChatTurn.mockReset();
+        expect(mockPrepareChatTurn).not.toHaveBeenCalled();
       });
 
       it.each([

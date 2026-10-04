@@ -1057,6 +1057,24 @@ describe("AgentRunner — duplicate submission for a live run", () => {
     expect(runRegistry.has("chat-start-throws")).toBe(false);
     expect(mockStreamText).not.toHaveBeenCalled();
   });
+
+  // Another instance holds the Chat (#1237): an expected refusal, not a fault.
+  it("answers a lost claim with its ConflictError and logs no error", async () => {
+    const sink = new RecordingSink();
+    sink.onStart = () => Promise.reject(new ConflictError("busy"));
+
+    await expect(
+      runner.stream({
+        scope,
+        input: { ...baseInput, runId: "chat-start-throws" },
+        sink,
+        options: { origin: "http://test" },
+      }),
+    ).rejects.toThrow(ConflictError);
+
+    expect(runRegistry.has("chat-start-throws")).toBe(false);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
 });
 
 // Issue #1122. Once the run has adopted its turn, a throw before the drive
@@ -1192,7 +1210,7 @@ describe("AgentRunner.cancel", () => {
     // Wait a tick so the run registers
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(runner.cancel("cancel-1")).toBe(true);
+    expect(runRegistry.cancel("cancel-1")).toBe(true);
 
     await expect(inFlight).rejects.toThrow();
 
@@ -1229,7 +1247,7 @@ describe("AgentRunner.cancel", () => {
     });
 
     await new Promise((r) => setTimeout(r, 0));
-    expect(runner.cancel("cancel-dispose")).toBe(true);
+    expect(runRegistry.cancel("cancel-dispose")).toBe(true);
     await expect(inFlight).rejects.toThrow();
 
     expect(dispose).toHaveBeenCalledTimes(1);
@@ -1241,10 +1259,6 @@ describe("AgentRunner.cancel", () => {
       { name: "onFinish" }
     >;
     expect(finish.status).toBe("cancelled");
-  });
-
-  it("cancel(unknown) returns false", () => {
-    expect(runner.cancel("never-existed")).toBe(false);
   });
 
   it("per-run timeout produces onFinish with status=failed and TimeoutError", async () => {
@@ -1282,7 +1296,7 @@ describe("AgentRunner.cancel", () => {
       sink,
     });
 
-    expect(runner.cancel("ok-1")).toBe(false);
+    expect(runRegistry.cancel("ok-1")).toBe(false);
     expect(runRegistry.has("ok-1")).toBe(false);
   });
 });
@@ -1473,7 +1487,7 @@ describe("a turn that resolves after its run has already terminated", () => {
     inFlight.catch(() => {});
 
     await vi.advanceTimersByTimeAsync(10);
-    expect(runner.cancel("cancel-prepare")).toBe(true);
+    expect(runRegistry.cancel("cancel-prepare")).toBe(true);
     await vi.advanceTimersByTimeAsync(60);
 
     await expect(inFlight).rejects.toThrow(
@@ -1830,7 +1844,7 @@ describe("AgentRunner.stream — success & interruption", () => {
     queue.push(partial);
     await tick();
 
-    expect(runner.cancel("s-cancel")).toBe(true);
+    expect(runRegistry.cancel("s-cancel")).toBe(true);
     // The SDK observes the abort and finishes the UI stream.
     await streamHarness.onFinish!({ messages: [partial] });
     queue.end();

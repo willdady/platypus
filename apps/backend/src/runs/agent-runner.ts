@@ -10,18 +10,18 @@ import {
   type ChatTurn,
 } from "../services/chat-execution.ts";
 import type { ToolActivityEvent } from "../services/tool-activity.ts";
+import { ConflictError } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { convertDataPart } from "../sandbox/upload-note.ts";
 import { actorUserId, type WorkspaceScope } from "../scope.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-import { runRegistry, type RunTimeouts } from "./run-registry.ts";
+import type { RunTimeouts } from "./run-registry.ts";
 import { startRun, type RunLifecycle } from "./run-lifecycle.ts";
 import { driveChat, driveOnce } from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import { withStreamKeepalive } from "./stream-keepalive.ts";
 import type {
   ResolvedRunPlan,
-  RunId,
   RunInput,
   RunSink,
   RunStats,
@@ -119,7 +119,10 @@ const finishFailedOnThrow = async <T>(
     return await work();
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    logger.error({ error, runId: run.handle.runId }, message);
+    // A Chat another instance is running is refused, not failed (#1237).
+    if (!(err instanceof ConflictError)) {
+      logger.error({ error, runId: run.handle.runId }, message);
+    }
     await run.finish("failed", err);
     throw err;
   }
@@ -134,9 +137,8 @@ const finishFailedOnThrow = async <T>(
  *
  * Run lifetime is decoupled from the HTTP request: the runner registers
  * each run with `RunRegistry`, which owns the `AbortController` and the
- * per-step / per-run timeout timers. Cancellation goes through
- * `agentRunner.cancel(runId)`, or `cancelRun` (`run-cancel.ts`) where the run
- * may be held by another backend instance (the chat cancel route).
+ * per-step / per-run timeout timers. Cancellation goes through `cancelRun`
+ * (`run-cancel.ts`), which reaches whichever backend instance holds the run.
  *
  * A delegated (sub-agent) run is not driven from here: the delegate tool owns
  * its own turn, already resolved by the parent's `prepareChatTurn`. It shares
@@ -173,14 +175,6 @@ export class AgentRunner {
       // waiting on a Tool set or MCP server that has not answered (#1135).
       signal,
     });
-  }
-
-  /**
-   * Cancel an in-flight run. Idempotent. Returns true if a run was
-   * cancelled, false if the runId was unknown or already finished.
-   */
-  cancel(runId: RunId): boolean {
-    return runRegistry.cancel(runId);
   }
 
   /**

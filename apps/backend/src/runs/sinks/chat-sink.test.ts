@@ -90,9 +90,10 @@ const storedRow = (
   ...overrides,
 });
 
-/** A Chat holding one exchange, u0 → a0. */
+/** The Chat's primary key, which a turn's claim on a new Chat leans on. */
 const chatPkey = { unique: { chat: [{ name: "chat_pkey", columns: ["id"] }] } };
 
+/** A Chat holding one exchange, u0 → a0. */
 const seedChat = (rows: Row[] = []) =>
   seedDb(
     {
