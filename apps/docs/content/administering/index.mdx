@@ -188,6 +188,33 @@ names the Workspaces with endpoints that a save would cut off.
 An endpoint also stops answering once its Workspace Owner leaves the
 Organization.
 
+### See and revoke endpoints
+
+**Organization settings → A2A endpoints** also lists every A2A endpoint in the
+Organization: its Agent, its Workspace and that Workspace's Owner, whom the runs
+act as, when it was created, and a **Disabled** badge if its Owner turned it
+off. Each endpoint's tokens are listed beneath it by name, with when each
+expires and when it was **Last used** and **Last rejected**. A token that needs
+a look is flagged **Expiring soon** (within 7 days) or **Expired**; an active
+one shows only its expiry. It never shows a token. Both times update at most
+once a minute.
+
+**Revoke endpoint** deletes the endpoint with all of its tokens, so its URL
+stops answering at once. Its Chats are kept. **Revoke token** deletes one token
+and leaves the endpoint's other tokens working. Either sends the Owner a
+notification. Revoking is the only thing you can do to another person's
+endpoint here. You cannot edit or disable one. **Revoke token** revokes only
+the token the list showed you: if the Owner regenerated it since you opened
+the page, the revoke is refused and the list refreshes, so you can judge the
+new token before revoking it too.
+
+<Callout type="warning">
+  A revoke is not lasting: the Owner can create a new endpoint or token straight
+  away. To stop a Workspace having endpoints for good, change **Allow A2A
+  endpoints in** or switch the Workspace off on this screen, which the Owner
+  cannot.
+</Callout>
+
 ## Where to next
 
 - **[Shared resources](/administering/shared-resources)** — Promote, attach, and
