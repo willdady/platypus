@@ -1,4 +1,5 @@
-import { Hono, type Context } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import {
   JsonRpcTransportHandler,
   ServerCallContext,
@@ -34,6 +35,7 @@ import {
   A2A_RETRY_AFTER_SECONDS,
   A2aAtCapacityError,
   AGENT_CARD_METHOD,
+  a2aSettings,
   logA2aCall,
   reasonOfRpcCode,
   rpcMethodOf,
@@ -41,6 +43,7 @@ import {
 } from "../services/a2a-call.ts";
 import { logger } from "../logger.ts";
 import { getOrigin } from "../utils/get-origin.ts";
+import { errorMessage } from "../utils/error-message.ts";
 import type { Variables } from "../server.ts";
 
 /**
@@ -275,14 +278,57 @@ const eventStream = async (
 };
 
 /**
- * JSON-RPC. Every method passes the token check first: a missing, wrong or
- * expired token on a live endpoint is `401`, and the token's last used or
- * last rejected is stamped. A turn past the load cap is `429`, having written
- * nothing.
+ * Answers a body past the cap with its log line. The cap runs before the
+ * token, so no token is named or stamped: a caller with none at all could
+ * otherwise move an endpoint's "last rejected". The endpoint's ids are
+ * best-effort; the line is owed whether or not the lookup works.
  */
-a2a.post("/:endpointId", (c) => {
+const bodyTooLarge = (c: Context) => {
   const log: A2aCallLogEntry = {
-    endpointId: c.req.param("endpointId"),
+    endpointId: c.req.param("endpointId") ?? "",
+    outcome: "rejected",
+    reason: "body_too_large",
+  };
+  return withCallLog(log, async () => {
+    try {
+      const lookup = await lookupA2aEndpoint(log.endpointId);
+      log.organizationId = lookup.live
+        ? lookup.endpoint.organizationId
+        : lookup.organizationId;
+      log.workspaceId = lookup.live
+        ? lookup.endpoint.workspaceId
+        : lookup.workspaceId;
+    } catch (error) {
+      logger.error(
+        { endpointId: log.endpointId, error: errorMessage(error) },
+        "Failed to look up the A2A endpoint an oversized call named",
+      );
+    }
+    return c.json({ error: "Payload Too Large" }, 413);
+  });
+};
+
+/**
+ * The body cap is checked first, before the body is read or the token looked
+ * at, so no caller can stream an unbounded body into memory. Read per call
+ * like every other setting.
+ */
+const capBody: MiddlewareHandler = (c, next) =>
+  bodyLimit({
+    maxSize: a2aSettings().maxBodyBytes,
+    onError: bodyTooLarge,
+  })(c, next);
+
+/**
+ * JSON-RPC. A body past the cap is `413`. Every method then passes the token
+ * check: a missing, wrong or expired token on a live endpoint is `401`, and
+ * the token's last used or last rejected is stamped. A turn past the load cap
+ * is `429`, having written nothing.
+ */
+a2a.post("/:endpointId", capBody, (c) => {
+  const log: A2aCallLogEntry = {
+    // Always present: the path names it. `capBody` widens the context type.
+    endpointId: c.req.param("endpointId") ?? "",
     outcome: "rejected",
   };
   return withCallLog(log, () => answerRpc(c, log));
