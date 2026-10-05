@@ -247,11 +247,14 @@ export const chat = pgTable(
     // dedicated signal is the only writer-free answer.
     lastTurnAt: t.timestamp("last_turn_at"),
 
-    // The A2A token whose client started this Chat (ADR-0032), so the Chat
-    // list can show the client's name. Null for a Chat started in the UI.
+    // The A2A token whose client started this Chat (ADR-0032), so a retried
+    // message finds its Chat. Null for a Chat started in the UI.
     a2aTokenId: t
       .text("a2a_token_id")
       .references((): AnyPgColumn => a2aToken.id, { onDelete: "set null" }),
+    // That token's name when the Chat started, the client label the Chat
+    // list shows. Copied rather than joined so it outlives the token.
+    a2aClientName: t.text("a2a_client_name"),
     // The A2A endpoint that started this Chat, whose `extractMemories` decides
     // whether memory extraction reads it. No foreign key: the id outlives a
     // deleted endpoint, so its Chats stay out of extraction rather than

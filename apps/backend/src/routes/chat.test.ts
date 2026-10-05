@@ -332,6 +332,31 @@ describe("Chat Routes", () => {
       expect(one.a2aClientName).toBe("Telegram via Hermes");
       expect(one).not.toHaveProperty("a2aTokenId");
     });
+
+    it("keep the client's name once the token is deleted", async () => {
+      mockSession();
+      seedTenant({
+        chat: [
+          {
+            id: "chat-a2a",
+            workspaceId,
+            title: "From Telegram",
+            a2aTokenId: null,
+            a2aClientName: "Telegram via Hermes",
+          },
+        ],
+      });
+
+      const list = (await (await app.request(baseUrl)).json()) as {
+        results: Row[];
+      };
+      const one = (await (
+        await app.request(`${baseUrl}/chat-a2a`)
+      ).json()) as Row;
+
+      expect(list.results[0].a2aClientName).toBe("Telegram via Hermes");
+      expect(one.a2aClientName).toBe("Telegram via Hermes");
+    });
   });
 
   describe("GET /:chatId", () => {

@@ -617,6 +617,13 @@
       "when": 1791167532260,
       "tag": "0087_a2a_task_canceled_at",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1791193825918,
+      "tag": "0088_a2a_chat_client_name",
+      "breakpoints": true
     }
   ]
 }

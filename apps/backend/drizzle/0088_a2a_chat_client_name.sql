@@ -1,0 +1,1 @@
+ALTER TABLE "chat" ADD COLUMN "a2a_client_name" text;

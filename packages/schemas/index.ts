@@ -298,8 +298,8 @@ export const chatSchema = z.object({
     .max(CHAT_MAX_STEPS_MAX)
     .nullable()
     .optional(),
-  // The name of the A2A token whose client started this Chat (ADR-0032).
-  // Absent for a Chat started in the UI, or once the token is deleted.
+  // The name of the A2A token whose client started this Chat (ADR-0032),
+  // kept after the token is deleted. Absent for a Chat started in the UI.
   a2aClientName: z.string().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),

@@ -61,6 +61,7 @@ const chatResponse = ({
   activeLeafId: _activeLeafId,
   a2aTokenId: _a2aTokenId,
   a2aEndpointId: _a2aEndpointId,
+  a2aClientName: _a2aClientName,
   ...response
 }: typeof chatTable.$inferSelect) => response;
 
@@ -128,7 +129,9 @@ chat.get(
         agentId: chatTable.agentId,
         providerId: chatTable.providerId,
         modelId: chatTable.modelId,
-        a2aClientName: a2aTokenTable.name,
+        a2aClientName: chatTable.a2aClientName,
+        // A Chat started before its client's name was stored on it.
+        a2aTokenName: a2aTokenTable.name,
         createdAt: chatTable.createdAt,
         updatedAt: chatTable.updatedAt,
       })
@@ -145,10 +148,10 @@ chat.get(
       .where(whereClause);
 
     return c.json({
-      results: records.map(({ a2aClientName, ...record }) => ({
-        ...record,
-        ...(a2aClientName ? { a2aClientName } : {}),
-      })),
+      results: records.map(({ a2aClientName, a2aTokenName, ...record }) => {
+        const name = a2aClientName ?? a2aTokenName;
+        return { ...record, ...(name ? { a2aClientName: name } : {}) };
+      }),
       totalCount,
     });
   },
@@ -165,16 +168,20 @@ chat.get(
 
     const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
     const { messages, tree } = await loadActivePath(chatId, chat.activeLeafId);
-    const [a2aToken] = chat.a2aTokenId
-      ? await db
-          .select({ name: a2aTokenTable.name })
-          .from(a2aTokenTable)
-          .where(eq(a2aTokenTable.id, chat.a2aTokenId))
-      : [];
+    // A Chat started before its client's name was stored on it reads the
+    // name from its token.
+    const [a2aToken] =
+      !chat.a2aClientName && chat.a2aTokenId
+        ? await db
+            .select({ name: a2aTokenTable.name })
+            .from(a2aTokenTable)
+            .where(eq(a2aTokenTable.id, chat.a2aTokenId))
+        : [];
+    const a2aClientName = chat.a2aClientName ?? a2aToken?.name;
 
     return c.json({
       ...chatResponse(chat),
-      ...(a2aToken ? { a2aClientName: a2aToken.name } : {}),
+      ...(a2aClientName ? { a2aClientName } : {}),
       messages: servedMessages(messages, getOrigin(c)),
       tree,
     });

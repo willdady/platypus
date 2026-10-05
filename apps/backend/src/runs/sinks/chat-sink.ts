@@ -33,7 +33,12 @@ export type ChatSinkParams = {
    * Chat is bound to its endpoint, its Agent and its token from its first row
    * (ADR-0032). Ignored when the Chat already exists.
    */
-  newChat?: { agentId: string; a2aTokenId: string; a2aEndpointId: string };
+  newChat?: {
+    agentId: string;
+    a2aTokenId: string;
+    a2aClientName: string;
+    a2aEndpointId: string;
+  };
   /**
    * Called once the run's terminal status is written, with that status. Not
    * awaited by the run: it must not delay or fail it.
