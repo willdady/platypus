@@ -13,7 +13,7 @@ import { errorMessage } from "../utils/error-message.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
 import { callerDataBlock } from "./caller-data.ts";
-import { ownerMembershipJoin } from "./owner-membership.ts";
+import { ownerMayAct, ownerMembershipJoin } from "./owner-membership.ts";
 import { triggerTimeouts } from "../runs/trigger-timeouts.ts";
 import { workspaceScopeForTrigger } from "../scope.ts";
 import {
@@ -241,12 +241,14 @@ const runTrigger = async (
   // The owner's Organization membership is joined too. Removing a member
   // disables their Triggers, but a firing already selected when that happens,
   // or any path that starts a run without consulting `enabled`, would still
-  // run as a user who has left. Refuse those here.
+  // run as a user who has left. Refuse those here — unless the owner is a
+  // super admin, who acts in every Organization without a membership.
   const [workspace] = await db
     .select({
       organizationId: workspaceTable.organizationId,
       ownerId: workspaceTable.ownerId,
       ownerName: userTable.name,
+      ownerRole: userTable.role,
       membershipId: organizationMember.id,
     })
     .from(workspaceTable)
@@ -260,7 +262,7 @@ const runTrigger = async (
   if (!workspace) {
     throw new Error(`Workspace '${workspaceId}' not found for trigger '${id}'`);
   }
-  if (!workspace.membershipId) {
+  if (!ownerMayAct(workspace.membershipId, workspace.ownerRole)) {
     throw new Error(
       `Owner of workspace '${workspaceId}' is no longer a member of its organization; trigger '${id}' not run`,
     );

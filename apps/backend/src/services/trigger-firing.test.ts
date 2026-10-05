@@ -101,13 +101,14 @@ const world = (
   {
     workspace = true,
     member = true,
-  }: { workspace?: boolean; member?: boolean } = {},
+    ownerRole = "user",
+  }: { workspace?: boolean; member?: boolean; ownerRole?: string } = {},
 ): FakeDb =>
   seedDb({
     workspace: workspace
       ? [{ id: "ws-1", organizationId: "org-1", ownerId: "user-1" }]
       : [],
-    user: [{ id: "user-1", name: "Ada Lovelace" }],
+    user: [{ id: "user-1", name: "Ada Lovelace", role: ownerRole }],
     organization_member: member
       ? [{ id: "member-1", organizationId: "org-1", userId: "user-1" }]
       : [],
@@ -262,6 +263,16 @@ describe("fireTrigger", () => {
         lastRunAt: NOW,
         nextRunAt: CLAIMED_NEXT,
       });
+    });
+
+    it("runs for a super admin owner who holds no Organization membership", async () => {
+      const trigger = makeTrigger();
+      world(trigger, [], { member: false, ownerRole: "admin" });
+      drive("succeeded");
+
+      await expect(fireTrigger(trigger, { kind: "cron" })).resolves.toBe("ran");
+
+      expect(mockGenerate).toHaveBeenCalledOnce();
     });
 
     it("logs a run failure rather than rejecting", async () => {
