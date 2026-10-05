@@ -7,7 +7,7 @@ vi.mock("./notification.ts", () => ({
 
 import { createNotification } from "./notification.ts";
 import { sendA2aTokenReminders, touchA2aToken } from "./a2a-token.ts";
-import { resetTokenTouches } from "./bearer-token.ts";
+import { resetTokenTouches, tokenTouchCount } from "./bearer-token.ts";
 
 const NOW = new Date("2026-10-04T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -139,6 +139,26 @@ describe("A2A tokens", () => {
       );
 
       expect(fake.tables.a2a_token[0].lastUsedAt).toEqual(NOW);
+    });
+
+    it("forgets touches older than a minute, so memory stays bounded", async () => {
+      seed([token(), token({ id: "tok-2" })]);
+
+      await touchA2aToken("tok-1", "lastUsedAt", NOW);
+      await touchA2aToken(
+        "tok-1",
+        "lastRejectedAt",
+        new Date(NOW.getTime() + 30_000),
+      );
+      expect(tokenTouchCount()).toBe(2);
+
+      // Drops the expired touch, keeps the one still inside the minute.
+      await touchA2aToken(
+        "tok-2",
+        "lastUsedAt",
+        new Date(NOW.getTime() + 61_000),
+      );
+      expect(tokenTouchCount()).toBe(2);
     });
   });
 });

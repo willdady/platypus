@@ -17,6 +17,7 @@ import {
   dueReminder,
   hashBearerToken,
   resetTokenTouches,
+  tokenTouchCount,
 } from "./bearer-token.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 import {
@@ -578,6 +579,27 @@ describe("inbound triggers", () => {
       const later = new Date(NOW.getTime() + 61_000);
       await touchInboundTrigger("trig-1", "lastUsedAt", later);
       expect(fake.tables.trigger[0].lastUsedAt).toEqual(later);
+    });
+
+    it("forgets touches older than a minute, so memory stays bounded", async () => {
+      seed();
+
+      await touchInboundTrigger("trig-1", "lastUsedAt", NOW);
+      await touchInboundTrigger("trig-1", "lastRejectedAt", NOW);
+      await touchInboundTrigger(
+        "trig-2",
+        "lastUsedAt",
+        new Date(NOW.getTime() + 30_000),
+      );
+      expect(tokenTouchCount()).toBe(3);
+
+      // Drops the expired touches, keeps the one still inside the minute.
+      await touchInboundTrigger(
+        "trig-3",
+        "lastUsedAt",
+        new Date(NOW.getTime() + 61_000),
+      );
+      expect(tokenTouchCount()).toBe(2);
     });
   });
 
