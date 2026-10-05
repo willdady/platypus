@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
@@ -56,6 +56,8 @@ import {
 import { workspaceRoutes } from "@/lib/routes";
 
 type Endpoint = A2aEndpoint & { tokens: A2aToken[] };
+
+const ACCESS_SECTION_ID = "access";
 
 const INITIAL_DATA = {
   agentId: "",
@@ -142,10 +144,13 @@ const A2aEndpointForm = ({
           },
     successMessage: () =>
       isEditMode ? "A2A endpoint updated" : "A2A endpoint created",
-    // A new endpoint lands on its own page, where its tokens are issued.
+    // A new endpoint lands on its own page, scrolled to where its tokens
+    // are issued.
     onSuccess: (saved) =>
       router.push(
-        isEditMode ? routes.a2aEndpoints : routes.a2aEndpointDetail(saved.id),
+        isEditMode
+          ? routes.a2aEndpoints
+          : `${routes.a2aEndpointDetail(saved.id)}#${ACCESS_SECTION_ID}`,
       ),
   });
 
@@ -166,6 +171,34 @@ const A2aEndpointForm = ({
       close();
     },
   });
+
+  // Picking an Agent fills the name and description, unless the Owner has
+  // typed their own over what the previous pick filled in.
+  const selectAgent = (agentId: string) => {
+    const previous = agents.find((a) => a.id === formData.agentId);
+    const next = agents.find((a) => a.id === agentId);
+    setField("agentId", agentId);
+    if (!next) return;
+    for (const field of ["name", "description"] as const) {
+      const current = formData[field];
+      if (!current.trim() || current === previous?.[field])
+        setField(field, next[field]);
+    }
+  };
+
+  // The browser's own jump to #access fires before the endpoint loads, so
+  // land on the card URL and token controls once they render.
+  const accessRef = useRef<HTMLDivElement>(null);
+  const tokenNameRef = useRef<HTMLInputElement>(null);
+  const hasEndpoint = !!endpoint;
+  useEffect(() => {
+    if (!hasEndpoint || window.location.hash !== `#${ACCESS_SECTION_ID}`)
+      return;
+    // Drop the hash so a reload or Back doesn't land here again.
+    history.replaceState(null, "", window.location.pathname);
+    accessRef.current?.scrollIntoView({ block: "start" });
+    tokenNameRef.current?.focus({ preventScroll: true });
+  }, [hasEndpoint]);
 
   const [tokenName, setTokenName] = useState("");
   const [expiryDays, setExpiryDays] = useState<number>(
@@ -247,7 +280,7 @@ const A2aEndpointForm = ({
             label="Agent"
             name="agentId"
             value={formData.agentId}
-            onValueChange={(value) => setField("agentId", value)}
+            onValueChange={selectAgent}
             disabled={isSubmitting || isEditMode || readOnly}
             placeholder="Select an agent"
             error={validationErrors.agentId}
@@ -351,129 +384,138 @@ const A2aEndpointForm = ({
             </FieldLabel>
           </Field>
 
-          {cardUrl && (
-            <CopyRow
-              id="a2a-card-url"
-              label="Agent card URL"
-              value={cardUrl}
-              copiedMessage="Agent card URL copied to clipboard"
-            />
-          )}
-
           {endpoint && (
-            <Field>
-              <FieldLabel>Tokens</FieldLabel>
-              <FieldDescription>
-                Give each client its own token, so you can delete one without
-                breaking the others. You get a notification 30 and 7 days before
-                a token expires.
-              </FieldDescription>
-              {endpoint.tokens.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No tokens yet.</p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {endpoint.tokens.map((token) => (
-                    <li
-                      key={token.id}
-                      className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-medium">
-                            {token.name}
+            <div
+              id={ACCESS_SECTION_ID}
+              ref={accessRef}
+              className="flex scroll-mt-4 flex-col gap-7"
+            >
+              {cardUrl && (
+                <CopyRow
+                  id="a2a-card-url"
+                  label="Agent card URL"
+                  value={cardUrl}
+                  copiedMessage="Agent card URL copied to clipboard"
+                />
+              )}
+
+              <Field>
+                <FieldLabel>Tokens</FieldLabel>
+                <FieldDescription>
+                  Give each client its own token, so you can delete one without
+                  breaking the others. You get a notification 30 and 7 days
+                  before a token expires.
+                </FieldDescription>
+                {endpoint.tokens.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No tokens yet.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {endpoint.tokens.map((token) => (
+                      <li
+                        key={token.id}
+                        className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-medium">
+                              {token.name}
+                            </p>
+                            <Badge
+                              variant={
+                                INBOUND_TOKEN_STATUS_VARIANTS[token.tokenStatus]
+                              }
+                            >
+                              {INBOUND_TOKEN_STATUS_LABELS[token.tokenStatus]}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Created {formatDate(token.createdAt)} · Expires{" "}
+                            {formatDateTime(token.tokenExpiresAt)}
                           </p>
-                          <Badge
-                            variant={
-                              INBOUND_TOKEN_STATUS_VARIANTS[token.tokenStatus]
-                            }
-                          >
-                            {INBOUND_TOKEN_STATUS_LABELS[token.tokenStatus]}
-                          </Badge>
+                          <p className="text-xs text-muted-foreground">
+                            Last used{" "}
+                            {token.lastUsedAt
+                              ? formatDateTime(token.lastUsedAt)
+                              : "never"}{" "}
+                            · Last rejected{" "}
+                            {token.lastRejectedAt
+                              ? formatDateTime(token.lastRejectedAt)
+                              : "never"}
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Created {formatDate(token.createdAt)} · Expires{" "}
-                          {formatDateTime(token.tokenExpiresAt)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Last used{" "}
-                          {token.lastUsedAt
-                            ? formatDateTime(token.lastUsedAt)
-                            : "never"}{" "}
-                          · Last rejected{" "}
-                          {token.lastRejectedAt
-                            ? formatDateTime(token.lastRejectedAt)
-                            : "never"}
-                        </p>
-                      </div>
-                      {!readOnly && (
-                        <div className="flex shrink-0 gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            aria-label={`Regenerate token ${token.name}`}
-                            className="cursor-pointer"
-                            onClick={() => setTokenToRegenerate(token)}
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            aria-label={`Delete token ${token.name}`}
-                            className="cursor-pointer"
-                            onClick={() => setTokenToDelete(token)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {!readOnly && (
-                <div className="flex items-center gap-2">
-                  <Input
-                    aria-label="Token name"
-                    placeholder="Who the token is for, e.g. Hermes on Telegram"
-                    value={tokenName}
-                    maxLength={A2A_TOKEN_NAME_MAX_LENGTH}
-                    onChange={(e) => setTokenName(e.target.value)}
-                    disabled={isIssuing}
-                  />
-                  <Select
-                    value={String(expiryDays)}
-                    onValueChange={(value) => setExpiryDays(Number(value))}
-                    disabled={isIssuing}
-                  >
-                    <SelectTrigger
-                      aria-label="Token lifetime"
-                      className="w-32 shrink-0"
+                        {!readOnly && (
+                          <div className="flex shrink-0 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              aria-label={`Regenerate token ${token.name}`}
+                              className="cursor-pointer"
+                              onClick={() => setTokenToRegenerate(token)}
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              aria-label={`Delete token ${token.name}`}
+                              className="cursor-pointer"
+                              onClick={() => setTokenToDelete(token)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!readOnly && (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      ref={tokenNameRef}
+                      aria-label="Token name"
+                      placeholder="Who the token is for"
+                      value={tokenName}
+                      maxLength={A2A_TOKEN_NAME_MAX_LENGTH}
+                      onChange={(e) => setTokenName(e.target.value)}
+                      disabled={isIssuing}
+                    />
+                    <Select
+                      value={String(expiryDays)}
+                      onValueChange={(value) => setExpiryDays(Number(value))}
+                      disabled={isIssuing}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS.map((days) => (
-                        <SelectItem key={days} value={String(days)}>
-                          {days} days
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="shrink-0 cursor-pointer"
-                    disabled={isIssuing || !tokenName.trim()}
-                    onClick={() => void issueToken()}
-                  >
-                    <Plus className="h-4 w-4" /> Add token
-                  </Button>
-                </div>
-              )}
-            </Field>
+                      <SelectTrigger
+                        aria-label="Token lifetime"
+                        className="w-32 shrink-0"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS.map((days) => (
+                          <SelectItem key={days} value={String(days)}>
+                            {days} days
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 cursor-pointer"
+                      disabled={isIssuing || !tokenName.trim()}
+                      onClick={() => void issueToken()}
+                    >
+                      <Plus className="h-4 w-4" /> Add token
+                    </Button>
+                  </div>
+                )}
+              </Field>
+            </div>
           )}
         </FieldGroup>
       </FieldSet>
