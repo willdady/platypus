@@ -4,7 +4,8 @@ import { readPositiveInt } from "./trigger-breaker.ts";
 
 /**
  * What bounds and records outside calls to A2A endpoints (ADR-0032): the
- * server-wide cap on active A2A runs, and the one log line every call writes.
+ * server-wide cap on active A2A runs, the cap on a call's body, and the one
+ * log line every call writes.
  * The route maps these onto status codes; the turn path takes the slots.
  */
 
@@ -13,12 +14,15 @@ import { readPositiveInt } from "./trigger-breaker.ts";
 export type A2aSettings = {
   /** A2A runs this backend instance will have active at once. */
   maxConcurrentRuns: number;
+  /** The largest request body a JSON-RPC call may send, in bytes. */
+  maxBodyBytes: number;
 };
 
 export const a2aSettings = (
   env: NodeJS.ProcessEnv = process.env,
 ): A2aSettings => ({
   maxConcurrentRuns: readPositiveInt("A2A_MAX_CONCURRENT_RUNS", 10, env),
+  maxBodyBytes: readPositiveInt("A2A_MAX_BODY_BYTES", 1048576, env),
 });
 
 /**
@@ -86,6 +90,8 @@ export type A2aRejectReason =
   | "missing_token"
   | "bad_token"
   | "expired_token"
+  /** The body was past the cap. Checked before the token. */
+  | "body_too_large"
   /** The Chat already has a run going. */
   | "busy"
   | "parse_error"

@@ -1735,6 +1735,135 @@ describe("POST /a2a/:endpointId — the load cap", () => {
   });
 });
 
+describe("POST /a2a/:endpointId — the body cap", () => {
+  /** A SendMessage whose body is well past a 64-byte cap. */
+  const oversized = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "SendMessage",
+    params: {
+      message: {
+        messageId: "msg-big",
+        role: "ROLE_USER",
+        parts: [text("x".repeat(200))],
+      },
+    },
+  });
+
+  const post = (body: BodyInit, token: string | null = TOKEN) =>
+    app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body,
+      // A streamed body carries no Content-Length.
+      ...(body instanceof ReadableStream ? { duplex: "half" } : {}),
+    });
+
+  const callLogLines = () =>
+    mockLogger.info.mock.calls
+      .filter(([, message]) => message === "A2A call")
+      .map(([fields]) => fields as Record<string, unknown>);
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.hold = null;
+    model.prompts = [];
+    resetA2aTokenTouches();
+    resetA2aRunSlots();
+    process.env.A2A_MAX_BODY_BYTES = "64";
+  });
+
+  afterEach(() => {
+    delete process.env.A2A_MAX_BODY_BYTES;
+  });
+
+  it.each([
+    ["a live token", TOKEN],
+    ["a wrong token", "pa2a_a-wrong-token"],
+    ["no token", null],
+  ])(
+    "answers 413 with %s, before the token is checked",
+    async (_case, token) => {
+      seedConversation();
+
+      const res = await post(oversized, token);
+      // A token stamp is not awaited by the route; let one land if sent.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(res.status).toBe(413);
+      expect(await res.json()).toEqual({ error: "Payload Too Large" });
+      expect(rows("chat")).toEqual([]);
+      expect(rows("a2a_task")).toEqual([]);
+      expect(model.prompts).toEqual([]);
+      expect(rows("a2a_token")[0].lastUsedAt).toBeNull();
+      expect(rows("a2a_token")[0].lastRejectedAt).toBeNull();
+    },
+  );
+
+  it("answers 413 to a streamed body with no Content-Length", async () => {
+    seedConversation();
+    const bytes = new TextEncoder().encode(oversized);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, 50));
+        controller.enqueue(bytes.slice(50));
+        controller.close();
+      },
+    });
+
+    const res = await post(stream);
+
+    expect(res.status).toBe(413);
+    expect(rows("a2a_task")).toEqual([]);
+  });
+
+  it("logs the 413 once, with the endpoint's ids and no token", async () => {
+    seedConversation();
+
+    await post(oversized);
+
+    expect(callLogLines()).toEqual([
+      {
+        organizationId: "org-1",
+        workspaceId: "ws-1",
+        endpointId: "ep-1",
+        tokenId: null,
+        method: null,
+        outcome: "rejected",
+        reason: "body_too_large",
+        taskId: null,
+        chatId: null,
+      },
+    ]);
+  });
+
+  it("answers a body within the cap as usual", async () => {
+    process.env.A2A_MAX_BODY_BYTES = "65536";
+    seedConversation();
+
+    const sent = await send({ messageId: "msg-a" });
+
+    expect(sent.status).toBe(200);
+    expect(sent.body.result.task.id).toBeDefined();
+  });
+
+  it("leaves the Agent Card alone", async () => {
+    seedConversation();
+
+    const res = await card();
+
+    expect(res.status).toBe(200);
+    expect(callLogLines()).toEqual([
+      expect.objectContaining({ method: "GetAgentCard", outcome: "ok" }),
+    ]);
+  });
+});
+
 describe("the A2A call log", () => {
   /** The call-log lines written so far, as their field objects. */
   const callLogLines = () =>
