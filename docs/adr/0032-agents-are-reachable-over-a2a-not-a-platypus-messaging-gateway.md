@@ -77,8 +77,7 @@ presented. A missing or wrong token is still answered `401`.
 
 The decision above calls the load bound "a server-wide cap on active A2A runs".
 That still holds within one backend instance. What this narrows is the word
-"server-wide", the same way ADR-0030's amendment narrowed it for the Inbound
-Trigger cap.
+"server-wide", the same way [ADR-0030's #1114 amendment](0030-inbound-triggers-are-fired-by-a-per-trigger-bearer-token.md) narrowed it for the Inbound Trigger cap.
 
 **"Server-wide" means per backend instance.** The count of active A2A runs is
 held by the process that started them, because an A2A run executes in that
