@@ -79,6 +79,12 @@ vi.mock("../services/provider.ts", async (importOriginal) => ({
   }),
 }));
 
+// Real, but watchable: a test can see which run a cancel asked to stop.
+vi.mock("../runs/run-cancel.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runs/run-cancel.ts")>();
+  return { ...actual, cancelRun: vi.fn(actual.cancelRun) };
+});
+
 vi.mock("../services/notification.ts", () => ({
   createNotification: vi.fn(() => Promise.resolve({ id: "notification-1" })),
 }));
@@ -1019,6 +1025,118 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   });
 });
 
+/** A Chat whose run another instance holds: no process here can abort it. */
+const seedRunElsewhere = () =>
+  seedConversation({
+    chat: [
+      {
+        id: "chat-1",
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        title: "Elsewhere",
+        status: "running",
+        activeLeafId: "msg-a",
+      },
+    ],
+    chat_message: [
+      {
+        chatId: "chat-1",
+        id: "msg-a",
+        parentId: null,
+        role: "user",
+        parts: [{ type: "text", text: "Where is my order?" }],
+        deletedAt: null,
+        createdAt: new Date(),
+      },
+    ],
+    a2a_task: [
+      {
+        id: "task-1",
+        chatId: "chat-1",
+        messageId: "msg-a",
+        endpointId: "ep-1",
+        tokenId: "tok-1",
+        state: null,
+        createdAt: new Date(),
+      },
+    ],
+  });
+
+describe("POST /a2a/:endpointId — CancelTask", () => {
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.deltas = null;
+    model.hold = null;
+    model.holdMidReply = null;
+    model.prompts = [];
+    resetA2aTokenTouches();
+    resetA2aRunSlots();
+  });
+
+  it("stops a running Task's run and answers with the Task, canceled", async () => {
+    seedConversation();
+    const task = await startMidReply();
+
+    const res = await rpc("CancelTask", { id: task.id });
+
+    expect(res.body.result).toMatchObject({
+      id: task.id,
+      contextId: task.contextId,
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+    expect(cancelRun).toHaveBeenCalledWith(task.contextId);
+    await vi.waitFor(() =>
+      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
+    );
+    expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("cancels a run another instance holds, and reads canceled at once", async () => {
+    seedRunElsewhere();
+    vi.mocked(cancelRun).mockResolvedValueOnce();
+
+    const res = await rpc("CancelTask", { id: "task-1" });
+
+    expect(res.body.result.status.state).toBe("TASK_STATE_CANCELED");
+    expect(cancelRun).toHaveBeenCalledWith("chat-1");
+    expect(rows("a2a_task")[0]).toMatchObject({ state: "canceled" });
+    expect(await stateOf("task-1")).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("answers a Task that has already ended with its final state, stopping nothing", async () => {
+    seedConversation();
+    const sent = await send({ messageId: "msg-a" });
+    const taskId = sent.body.result.task.id;
+
+    const res = await rpc("CancelTask", { id: taskId });
+
+    expect(res.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(res.body.result.artifacts[0].parts[0].text).toBe(
+      "Hello from Helper",
+    );
+    expect(cancelRun).not.toHaveBeenCalled();
+    expect(await stateOf(taskId)).toBe("TASK_STATE_COMPLETED");
+  });
+
+  it("does not cancel another endpoint's Task", async () => {
+    seedConversation();
+    const task = await startMidReply();
+
+    const res = await rpc(
+      "CancelTask",
+      { id: task.id },
+      { endpointId: "ep-2", token: "pa2a_second-token" },
+    );
+
+    expect(res.body.error.code).toBe(-32001);
+    expect(cancelRun).not.toHaveBeenCalled();
+    expect(rows("chat")[0]).toMatchObject({ status: "running" });
+    await rpc("CancelTask", { id: task.id });
+  });
+});
+
 describe("POST /a2a/:endpointId — push notifications", () => {
   const PUSH_URL = "https://203.0.113.10/push";
   const push = vi.fn<typeof fetch>();
@@ -1176,6 +1294,23 @@ describe("POST /a2a/:endpointId — push notifications", () => {
 
     await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("pushes a Task canceled with CancelTask once, though another instance holds its run", async () => {
+    seedRunElsewhere();
+    vi.mocked(cancelRun).mockResolvedValueOnce();
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: "task-1",
+      ...config(),
+    });
+
+    await rpc("CancelTask", { id: "task-1" });
+    await rpc("CancelTask", { id: "task-1" });
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_CANCELED");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).toHaveBeenCalledTimes(1);
   });
 
   it("pushes the stored end to a URL registered after the Chat moved on", async () => {
@@ -1958,6 +2093,7 @@ describe("POST /a2a/:endpointId — streaming", () => {
     model.reply = "Hello from Helper";
     model.deltas = null;
     model.hold = null;
+    model.holdMidReply = null;
     model.prompts = [];
     resetA2aTokenTouches();
   });
@@ -2143,6 +2279,39 @@ describe("POST /a2a/:endpointId — streaming", () => {
     expect(events.at(-1)!.statusUpdate!.status.state).toBe(
       "TASK_STATE_COMPLETED",
     );
+  });
+
+  it("ends a SendStreamingMessage stream canceled when its Task is canceled", async () => {
+    seedConversation();
+    model.holdMidReply = new Promise(() => {});
+
+    const res = await streamSend({ messageId: "msg-a" });
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+    const taskId = rows("a2a_task")[0].id as string;
+    await rpc("CancelTask", { id: taskId });
+    const events = await eventsOf(res);
+
+    expect(events.at(-1)!.statusUpdate).toMatchObject({
+      taskId,
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+  });
+
+  it("ends a SubscribeToTask stream canceled, though another instance holds the run", async () => {
+    seedRunElsewhere();
+    vi.mocked(cancelRun).mockResolvedValueOnce();
+
+    const res = await open("SubscribeToTask", { id: "task-1" });
+    await rpc("CancelTask", { id: "task-1" });
+    const events = await eventsOf(res);
+
+    expect(events[0].task!.status.state).toBe("TASK_STATE_SUBMITTED");
+    expect(events.at(-1)!.statusUpdate).toMatchObject({
+      taskId: "task-1",
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+    // The run never stopped here: the Task's recorded end ended the stream.
+    expect(rows("chat")[0]).toMatchObject({ status: "running" });
   });
 
   it("refuses to subscribe to a Task that has ended", async () => {

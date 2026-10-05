@@ -87,7 +87,7 @@ export const currentTurnId = async (
 };
 
 /**
- * The Task's state. Once its run has ended, the end recorded on it. Before
+ * The Task's state. Once it has ended, the end recorded on it, read afresh. Before
  * that it comes from the Chat's run: `submitted` until the reply's first
  * write and `working` after. An end read from this turn's own run that is
  * not yet recorded — a Task made just as its run ended — is recorded here,
@@ -98,6 +98,14 @@ const taskState = async (
   replyId: string | undefined,
 ): Promise<TaskState> => {
   if (task.state) return STATE_OF_END[task.state];
+  // An end recorded since `task` was read, as a cancel records it before its
+  // run has stopped: a follower holding the row sees it on its next read.
+  const [stored] = await db
+    .select({ state: a2aTaskTable.state })
+    .from(a2aTaskTable)
+    .where(eq(a2aTaskTable.id, task.id))
+    .limit(1);
+  if (stored?.state) return STATE_OF_END[stored.state];
   const [chat] = await db
     .select({ status: chatTable.status, leafId: chatTable.activeLeafId })
     .from(chatTable)

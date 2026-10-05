@@ -13,6 +13,7 @@ import {
 } from "../services/a2a-endpoint.ts";
 import { authenticateA2aCall } from "../services/a2a-token.ts";
 import {
+  cancelA2aTask,
   getA2aTask,
   sendA2aMessage,
   type A2aCaller,
@@ -176,9 +177,8 @@ const noteIds = (log: A2aCallLogEntry, params: unknown, result: unknown) => {
 };
 
 /**
- * The JSON-RPC methods, answered from the database. Methods other tickets
- * add (cancel) are unsupported until then; an unknown method is JSON-RPC
- * "method not found".
+ * The JSON-RPC methods, answered from the database. `ListTasks` is
+ * unsupported; an unknown method is JSON-RPC "method not found".
  */
 const requestHandler = (
   caller: A2aCaller,
@@ -196,7 +196,7 @@ const requestHandler = (
     streamA2aMessage(caller, params),
   ),
   resubscribe: guardedStream((params) => subscribeToA2aTask(caller, params.id)),
-  cancelTask: unsupported,
+  cancelTask: guarded((params) => cancelA2aTask(caller, params.id)),
   createTaskPushNotificationConfig: guarded((params) =>
     createA2aPushConfig(caller.endpoint.id, params),
   ),

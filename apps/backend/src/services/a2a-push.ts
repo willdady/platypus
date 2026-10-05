@@ -95,10 +95,10 @@ const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
 };
 
 /**
- * A run in the Chat has ended: push each of the Chat's Tasks that has ended
- * and still owes a push. Never throws.
+ * A run in the Chat has ended, or a Task in it was canceled: push each of the
+ * Chat's Tasks that has ended and still owes a push. Never throws.
  */
-const pushA2aChatEnded = async (chatId: string): Promise<void> => {
+export const pushA2aChatEnded = async (chatId: string): Promise<void> => {
   try {
     const tasks: TaskRow[] = await db
       .select({

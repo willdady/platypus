@@ -163,8 +163,8 @@ turns.
 The Agent is told the conversation arrives over A2A from the client the token
 is named after, and that the caller may not be you.
 
-Cancelling a Task isn't offered yet: `CancelTask` answers with an
-"unsupported operation" error.
+A client can stop a Task it no longer needs with
+[`CancelTask`](#cancelling-a-task).
 
 ## Streaming
 
@@ -192,6 +192,24 @@ server-sent events instead of polling.
 
 A stream sends a comment line every 15 seconds while the Agent is quiet, so a
 proxy with an idle timeout doesn't cut it off.
+
+## Cancelling a Task
+
+**`CancelTask`** stops a running Task's run and answers with the Task,
+`canceled`. The run stops whichever server it is running on, so the Agent stops
+working and stops spending.
+
+- **The Task reads `canceled` straight away**, from `GetTask`, from a stream
+  following it, which ends with that status, and in a
+  [push notification](#push-notifications).
+- **Anything the Agent wrote before the cancel stays in the Chat**, but the Task
+  has no artifact.
+- **A Task that has already ended** is answered as it ended: a `completed` Task
+  stays `completed`, with its reply. Nothing is stopped, so a retried cancel is
+  safe.
+- **The Chat takes the next message once the run has stopped.** A message sent
+  in the moment before then is refused like any other sent while a run is
+  going.
 
 ## Push notifications
 

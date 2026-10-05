@@ -127,7 +127,15 @@ async function* streamRun(
   // A text part after the first is set apart as `readTask` joins them.
   let separate = false;
   for (;;) {
-    const { done, value } = await chunks.read();
+    let next: Awaited<ReturnType<ChunkReader["read"]>>;
+    try {
+      next = await chunks.read();
+    } catch {
+      // A cancel or a timeout aborts the run, breaking off its stream. How
+      // it ended is the Task's to say.
+      return last;
+    }
+    const { done, value } = next;
     if (done) return last;
     if (!value.success) continue;
     const chunk = value.value;
