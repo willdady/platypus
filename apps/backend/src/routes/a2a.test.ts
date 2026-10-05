@@ -203,6 +203,20 @@ describe("GET /a2a/:endpointId/.well-known/agent-card.json", () => {
     });
   });
 
+  it("lets a client cache the card, and revalidate it by ETag", async () => {
+    seed();
+
+    const res = await card();
+    const etag = res.headers.get("etag");
+    expect(etag).toBeTruthy();
+    const again = await app.request(`/a2a/ep-1${CARD_PATH}`, {
+      headers: { "if-none-match": etag! },
+    });
+
+    expect(res.headers.get("cache-control")).toBe("private, max-age=300");
+    expect(again.status).toBe(304);
+  });
+
   it("never carries the Agent's own description, Tool sets or Skills", async () => {
     seed();
 
@@ -464,6 +478,7 @@ type RpcTask = {
   artifacts: { parts: { text: string; mediaType?: string }[] }[];
 };
 type RpcBody = {
+  id?: unknown;
   result: RpcTask & {
     task: RpcTask;
     name?: string;
@@ -605,6 +620,14 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     const res = await rpc("DoSomething", {});
 
     expect(res.body.error.code).toBe(-32601);
+  });
+
+  it("answers at the endpoint's URL with a trailing slash", async () => {
+    seedConversation();
+
+    const res = await rpc("GetExtendedAgentCard", {}, { endpointId: "ep-1/" });
+
+    expect(res.body.result.name).toBe("Acme helpdesk");
   });
 
   it("adds one skill on the authenticated extended card", async () => {
@@ -814,6 +837,91 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
 
     expect(res.body.error.code).toBe(-32001);
     expect(model.prompts).toHaveLength(0);
+  });
+
+  it.each([
+    ["99.0", -32009],
+    ["1.0", undefined],
+    ["1.0.2", undefined],
+    ["", undefined],
+  ])("answers A2A-Version %j with error %s", async (version, code) => {
+    seedConversation();
+
+    const res = await app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${TOKEN}`,
+        "a2a-version": version,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7,
+        method: "SendMessage",
+        params: {
+          message: {
+            role: "ROLE_USER",
+            messageId: "msg-a",
+            parts: [text("hi")],
+          },
+        },
+      }),
+    });
+    const body = (await res.json()) as RpcBody;
+
+    expect(body.id).toBe(7);
+    expect(body.error?.code).toBe(code);
+    expect(model.prompts).toHaveLength(code ? 0 : 1);
+  });
+
+  describe("a message naming a taskId", () => {
+    it("is refused with task not found for a Task the endpoint doesn't have", async () => {
+      seedConversation();
+
+      const res = await send({ messageId: "msg-a", taskId: "no-such-task" });
+
+      expect(res.body.error.code).toBe(-32001);
+      expect(model.prompts).toHaveLength(0);
+    });
+
+    it("is refused when its contextId is not the Task's", async () => {
+      seedConversation();
+      const first = await send({ messageId: "msg-a" });
+
+      const res = await send({
+        messageId: "msg-b",
+        taskId: first.body.result.task.id,
+        contextId: "another-context",
+      });
+
+      expect(res.body.error.code).toBe(-32602);
+      expect(model.prompts).toHaveLength(1);
+    });
+
+    it("is refused once the Task has ended, starting nothing", async () => {
+      seedConversation();
+      const first = await send({ messageId: "msg-a" });
+
+      const res = await send({
+        messageId: "msg-b",
+        taskId: first.body.result.task.id,
+      });
+
+      expect(res.body.error.code).toBe(-32004);
+      expect(model.prompts).toHaveLength(1);
+    });
+
+    it("is refused as busy while the Task runs, naming it", async () => {
+      seedConversation();
+      const task = await startMidReply();
+
+      const res = await send({ messageId: "msg-b", taskId: task.id });
+
+      expect(res.body.error.code).toBe(-32004);
+      expect(res.body.error.data[0].metadata).toEqual({ taskId: task.id });
+      expect(model.prompts).toHaveLength(1);
+      await rpc("CancelTask", { id: task.id });
+    });
   });
 
   it("refuses a message while the Owner's run is active, naming its Task", async () => {
@@ -1171,17 +1279,14 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     await rpc("CancelTask", { id: next.body.result.task.id });
   });
 
-  it("answers a Task that has already ended with its final state, stopping nothing", async () => {
+  it("refuses a Task that has already ended as not cancelable, stopping nothing", async () => {
     seedConversation();
     const sent = await send({ messageId: "msg-a" });
     const taskId = sent.body.result.task.id;
 
     const res = await rpc("CancelTask", { id: taskId });
 
-    expect(res.body.result.status.state).toBe("TASK_STATE_COMPLETED");
-    expect(res.body.result.artifacts[0].parts[0].text).toBe(
-      "Hello from Helper",
-    );
+    expect(res.body.error.code).toBe(-32002);
     expect(cancelRun).not.toHaveBeenCalled();
     expect(await stateOf(taskId)).toBe("TASK_STATE_COMPLETED");
   });

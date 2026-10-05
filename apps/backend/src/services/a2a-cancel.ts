@@ -1,5 +1,6 @@
 import { and, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { Task } from "@a2a-js/sdk";
+import { TaskNotCancelableError } from "@a2a-js/sdk/errors";
 import { db } from "../index.ts";
 import { a2aTask as a2aTaskTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
@@ -9,7 +10,6 @@ import { findA2aTask, type A2aCaller } from "./a2a-task.ts";
 import {
   currentTurnId,
   readTask,
-  readTaskAfresh,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
@@ -35,8 +35,8 @@ const isCurrentTurn = async (task: Pick<TaskRow, "chatId" | "messageId">) =>
 
 /**
  * `CancelTask`: one of this endpoint's Tasks, `canceled`, its run stopped on
- * whichever instance holds it. A Task that has already ended is answered as
- * it ended, and nothing is stopped.
+ * whichever instance holds it. A Task that has already ended is refused as
+ * not cancelable, and nothing is stopped.
  */
 export const cancelA2aTask = async (
   caller: A2aCaller,
@@ -44,7 +44,9 @@ export const cancelA2aTask = async (
 ): Promise<Task> => {
   const task = await findA2aTask(caller, taskId);
   const read = await readTask(task);
-  if (TERMINAL_TASK_STATES.has(read.status!.state)) return read;
+  if (TERMINAL_TASK_STATES.has(read.status!.state)) {
+    throw new TaskNotCancelableError();
+  }
 
   const canceledAt = new Date();
   // Claimed only while no end is recorded: a run that ended first keeps its
@@ -54,7 +56,7 @@ export const cancelA2aTask = async (
     .set({ state: "canceled", canceledAt })
     .where(and(eq(a2aTaskTable.id, task.id), isNull(a2aTaskTable.state)))
     .returning();
-  if (!claimed) return readTaskAfresh(task);
+  if (!claimed) throw new TaskNotCancelableError();
 
   if (await isCurrentTurn(task)) {
     // A cancel that can't be sent is still recorded; the sweep stops the run.

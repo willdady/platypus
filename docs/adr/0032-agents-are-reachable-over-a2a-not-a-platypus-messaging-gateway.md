@@ -1,13 +1,8 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#1239"
+status: accepted
 ---
 
 # Agents are reachable over A2A, and Platypus ships no messaging Gateway
-
-> State of the code today: no A2A endpoint, Agent Card, A2A token or `a2a`
-> Principal exists. This ADR records the decision only. It moves to `accepted`
-> in the pull request that builds the A2A server.
 
 Platypus will not build the messaging Gateway that ADR-0015 decided on. Instead, an Owner can make an Agent reachable over A2A (A2A 1.0) through an **A2A endpoint**. Messaging Surfaces are reached through projects that already maintain Gateways (Hermes Agent, OpenClaw), and other A2A clients (Jira Rovo, other agents) call the Agent the same way. No particular client is assumed. The Gateway was a separate stateful app with an adapter for each Surface. For a project with one maintainer that is a permanent cost, and it duplicates work those projects already do. A2A is the emerging standard for "a client talks to a remote agent", and the integration cost it puts on Platypus is a single protocol, not one per Surface. Platypus runs are **long-running**: a turn can take minutes to hours of tool calls and sandbox work. So the server is designed around asynchronous Tasks, not a reply on a single held request.
 
