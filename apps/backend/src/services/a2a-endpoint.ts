@@ -37,7 +37,7 @@ import {
   notifyTokenOwner,
 } from "./bearer-token.ts";
 import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
-import { ownerMembershipJoin } from "./owner-membership.ts";
+import { ownerMayAct, ownerMembershipJoin } from "./owner-membership.ts";
 import type { A2aRejectReason } from "./a2a-call.ts";
 
 /**
@@ -227,6 +227,7 @@ export const lookupA2aEndpoint = async (
       organizationTable,
       eq(organizationTable.id, workspaceTable.organizationId),
     )
+    .innerJoin(userTable, eq(userTable.id, workspaceTable.ownerId))
     .leftJoin(organizationMember, ownerMembershipJoin())
     .where(eq(a2aEndpointTable.id, endpointId))
     .limit(1);
@@ -243,7 +244,9 @@ export const lookupA2aEndpoint = async (
   ) {
     return notLive("gate");
   }
-  if (!row.organization_member) return notLive("owner_left");
+  if (!ownerMayAct(row.organization_member?.id, row.user.role)) {
+    return notLive("owner_left");
+  }
   return {
     live: true,
     endpoint: {

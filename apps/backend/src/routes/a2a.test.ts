@@ -111,12 +111,14 @@ const seed = ({
   gate = "all",
   allowed = false,
   ownerIsMember = true,
+  ownerRole = "user",
   tokens = [],
 }: {
   endpoint?: Row;
   gate?: string;
   allowed?: boolean;
   ownerIsMember?: boolean;
+  ownerRole?: string;
   tokens?: Row[];
 } = {}) =>
   seedDb({
@@ -130,6 +132,7 @@ const seed = ({
         a2aAllowed: allowed,
       },
     ],
+    user: [{ id: "owner-1", name: "Owner", role: ownerRole }],
     organization_member: ownerIsMember
       ? [
           {
@@ -232,6 +235,12 @@ describe("GET /a2a/:endpointId/.well-known/agent-card.json", () => {
 
   it("is served under a selected Workspace", async () => {
     seed({ gate: "selected", allowed: true });
+
+    expect((await card()).status).toBe(200);
+  });
+
+  it("is served when the Owner is a super admin with no membership", async () => {
+    seed({ ownerIsMember: false, ownerRole: "admin" });
 
     expect((await card()).status).toBe(200);
   });
