@@ -118,18 +118,34 @@ const taskFor = async (
 
 /**
  * The refusal for a message sent while the Chat's run is still going,
- * carrying that run's Task so the client can follow it. A run the Owner
- * started in the UI gets a Task here, so it can be followed the same way.
+ * carrying that run's Task in its error data so the client can follow it.
+ * The spec has no error for a busy context; it answers a Task that cannot
+ * take a message with "unsupported operation", so this is answered as that.
+ */
+export class A2aChatBusyError extends UnsupportedOperationError {
+  readonly taskId?: string;
+
+  constructor(taskId?: string) {
+    super({
+      message: CHAT_BUSY_MESSAGE,
+      metadata: taskId ? { taskId } : undefined,
+    });
+    // The transports pick the wire code by name.
+    this.name = "UnsupportedOperationError";
+    this.taskId = taskId;
+  }
+}
+
+/**
+ * `A2aChatBusyError` for the Chat's running turn. A run the Owner started in
+ * the UI gets a Task here, so it can be followed the same way.
  */
 const busyError = async (caller: A2aCaller, chatId: string) => {
   const turnId = await currentTurnId(chatId);
   const task = turnId ? await taskFor(caller, chatId, turnId, null) : undefined;
   // Reading it records its end, should its run have ended as it was made.
   if (task) await readTask(task);
-  return new UnsupportedOperationError({
-    message: CHAT_BUSY_MESSAGE,
-    metadata: task ? { taskId: task.id } : undefined,
-  });
+  return new A2aChatBusyError(task?.id);
 };
 
 /** The Task once it ends, or as it stands when `deadline` passes. */

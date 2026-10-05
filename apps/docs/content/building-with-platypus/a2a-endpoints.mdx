@@ -149,9 +149,9 @@ turns.
   Chat, so sending the same `messageId` again answers with the Task it already
   started, never a second run.
 - **One run at a time.** A message sent while the Chat still has a run going,
-  including one you started in the Chat yourself, is refused with an error
-  carrying the running Task's id. The client can follow that Task and send
-  again once it ends.
+  including one you started in the Chat yourself, is refused with an
+  "unsupported operation" error whose data carries the running Task's id as
+  `taskId`. The client can follow that Task and send again once it ends.
 - **A busy server says so.** Your Operator caps how many A2A runs can be going
   at once across the server. A message that would start one past the cap gets
   `429 Too Many Requests` with a `Retry-After` header, and nothing is written:
