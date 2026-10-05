@@ -98,6 +98,26 @@ The second reference Sandbox backend, and the only one viable in horizontally-sc
 deployments. See [Additional Sandbox backends](#additional-sandbox-backends) for what's
 still wanted here.
 
+### Agents over A2A — 3.16.0
+
+An Owner can expose an Agent as an **A2A server**, so other agents and chat platforms
+can hold a conversation with it. Every conversation is an ordinary Chat the Owner can
+read and continue in the UI. Runs are long, so callers follow them by polling, by
+streaming or by push notification, not by holding a request open. See the
+[A2A endpoints guide](https://docs.platypus.chat/building-with-platypus/a2a-endpoints).
+
+- **Chat platforms are reached through other projects' gateways**, such as Hermes Agent
+  and OpenClaw, which call the Agent over A2A. Platypus does not maintain an adapter for
+  each chat platform.
+- **Access is a per-client bearer token on an A2A endpoint**, behind an Organization gate that is
+  off by default. Each run acts as the Workspace Owner, and records which client started it.
+- **Exposing Agents over MCP is likely later.** As of the 2026-07-28 spec, MCP has no
+  notion of a conversation. It has far wider client reach, so it is worth adding once it
+  fits.
+
+> **Proactive messages are out of scope.** Neither A2A nor MCP lets a server start a
+> message in a conversation. Delivering one is left to a gateway's own delivery endpoint.
+
 ## Later / Exploring
 
 ### Deterministic, code-driven workflows
@@ -119,26 +139,6 @@ open-ended work; the DAG is for known pipelines.
 > glue shaped like AWS Step Functions, _not_ a kitchen-sink automation platform like n8n.
 > It requires an ADR before any code and is sequenced after Sandbox backends mature, since
 > script steps execute in a Sandbox.
-
-### Agents over A2A
-
-An Owner can expose an Agent as an **A2A server**, so other agents and chat platforms
-can hold a conversation with it. Every conversation is an ordinary Chat the Owner can
-read and continue in the UI. Runs are long, so callers follow them by polling, by
-streaming or by push notification, not by holding a request open. The design is settled
-in ADR-0032.
-
-- **Chat platforms are reached through other projects' gateways**, such as Hermes Agent
-  and OpenClaw, which call the Agent over A2A. Platypus does not maintain an adapter for
-  each chat platform.
-- **Access is a per-client bearer token on an A2A endpoint**, behind an Organization gate that is
-  off by default. Each run acts as the Workspace Owner, and records which client started it.
-- **Exposing Agents over MCP is likely later.** As of the 2026-07-28 spec, MCP has no
-  notion of a conversation. It has far wider client reach, so it is worth adding once it
-  fits.
-
-> **Proactive messages are out of scope.** Neither A2A nor MCP lets a server start a
-> message in a conversation. Delivering one is left to a gateway's own delivery endpoint.
 
 ## Non-goals
 
