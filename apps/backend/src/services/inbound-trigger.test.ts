@@ -12,21 +12,21 @@ vi.mock("./notification.ts", () => ({
 import { fireTrigger } from "./trigger-firing.ts";
 import { createNotification } from "./notification.ts";
 import {
-  hashInboundToken,
-  inboundTokenStatus,
-} from "./inbound-trigger-token.ts";
+  bearerToken,
+  bearerTokenStatus,
+  dueReminder,
+  hashBearerToken,
+  resetTokenTouches,
+} from "./bearer-token.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 import {
   acceptInboundCall,
   activeInboundRunCount,
   authenticateInboundCall,
-  bearerToken,
-  dueReminder,
   getInboundTriggerAccess,
   listOrgInboundTriggers,
   logInboundCall,
   resetInboundRunSlots,
-  resetInboundTouches,
   revokeInboundTriggerToken,
   sendInboundTokenReminders,
   setInboundTriggerAccess,
@@ -59,7 +59,7 @@ const inboundTrigger = (over: Row = {}): Row => ({
   enabled: true,
   maxRunsToKeep: 10,
   config,
-  tokenHash: hashInboundToken(TOKEN),
+  tokenHash: hashBearerToken(TOKEN),
   tokenCreatedAt: new Date(NOW.getTime() - 10 * DAY),
   tokenExpiresAt: new Date(NOW.getTime() + 80 * DAY),
   tokenNotice: null,
@@ -111,7 +111,7 @@ describe("inbound triggers", () => {
     resetMockDb();
     vi.clearAllMocks();
     resetInboundRunSlots();
-    resetInboundTouches();
+    resetTokenTouches();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
   });
@@ -747,23 +747,23 @@ describe("inbound triggers", () => {
         workspaceName: "Support",
         ownerName: "Owner",
       });
-      expect(JSON.stringify(rows)).not.toContain(hashInboundToken(TOKEN));
+      expect(JSON.stringify(rows)).not.toContain(hashBearerToken(TOKEN));
       expect(await listOrgInboundTriggers("org-2", NOW)).toEqual([]);
     });
 
     it("classifies a token's standing", () => {
       const at = (days: number) => new Date(NOW.getTime() + days * DAY);
       expect(
-        inboundTokenStatus({ tokenHash: null, tokenExpiresAt: null }, NOW),
+        bearerTokenStatus({ tokenHash: null, tokenExpiresAt: null }, NOW),
       ).toBe("none");
       expect(
-        inboundTokenStatus({ tokenHash: "h", tokenExpiresAt: at(-1) }, NOW),
+        bearerTokenStatus({ tokenHash: "h", tokenExpiresAt: at(-1) }, NOW),
       ).toBe("expired");
       expect(
-        inboundTokenStatus({ tokenHash: "h", tokenExpiresAt: at(7) }, NOW),
+        bearerTokenStatus({ tokenHash: "h", tokenExpiresAt: at(7) }, NOW),
       ).toBe("expiring");
       expect(
-        inboundTokenStatus({ tokenHash: "h", tokenExpiresAt: at(8) }, NOW),
+        bearerTokenStatus({ tokenHash: "h", tokenExpiresAt: at(8) }, NOW),
       ).toBe("active");
     });
 

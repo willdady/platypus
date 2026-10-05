@@ -1,10 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  INBOUND_TOKEN_STATUS_LABELS,
-  INBOUND_TOKEN_STATUS_VARIANTS,
-} from "@/lib/inbound-trigger";
+import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import {
   Item,
   ItemTitle,
@@ -128,11 +125,8 @@ const InboundSummary = ({ trigger }: { trigger: Trigger }) => {
       {(status === "none" || status === "expired") && (
         <>
           {" · Token:"}
-          <Badge
-            variant={INBOUND_TOKEN_STATUS_VARIANTS[status]}
-            className="text-xs"
-          >
-            {INBOUND_TOKEN_STATUS_LABELS[status]}
+          <Badge variant={TOKEN_STATUS_VARIANTS[status]} className="text-xs">
+            {TOKEN_STATUS_LABELS[status]}
           </Badge>
         </>
       )}

@@ -91,8 +91,10 @@ vi.mock("../services/notification.ts", () => ({
 
 import app from "../server.ts";
 import { createNotification } from "../services/notification.ts";
-import { hashInboundToken } from "../services/inbound-trigger-token.ts";
-import { resetA2aTokenTouches } from "../services/a2a-token.ts";
+import {
+  hashBearerToken,
+  resetTokenTouches,
+} from "../services/bearer-token.ts";
 import { activeA2aRunCount, resetA2aRunSlots } from "../services/a2a-call.ts";
 import { mockLogger } from "../test-setup.ts";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
@@ -259,7 +261,7 @@ describe("POST /a2a/:endpointId — the token", () => {
     id: "tok-1",
     endpointId: "ep-1",
     name: "Hermes",
-    tokenHash: hashInboundToken(TOKEN),
+    tokenHash: hashBearerToken(TOKEN),
     tokenCreatedAt: new Date(NOW.getTime() - 10 * DAY),
     tokenExpiresAt: new Date(NOW.getTime() + 80 * DAY),
     tokenNotice: null,
@@ -282,7 +284,7 @@ describe("POST /a2a/:endpointId — the token", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    resetA2aTokenTouches();
+    resetTokenTouches();
     resetA2aRunSlots();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
@@ -445,14 +447,14 @@ const seedConversation = (rows: Record<string, Row[]> = {}) =>
           id: "tok-1",
           endpointId: "ep-1",
           name: "Telegram via Hermes",
-          tokenHash: hashInboundToken(TOKEN),
+          tokenHash: hashBearerToken(TOKEN),
           ...LIVE,
         },
         {
           id: "tok-2",
           endpointId: "ep-2",
           name: "Rovo",
-          tokenHash: hashInboundToken("pa2a_second-token"),
+          tokenHash: hashBearerToken("pa2a_second-token"),
           ...LIVE,
         },
       ],
@@ -558,7 +560,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     model.hold = null;
     model.holdMidReply = null;
     model.prompts = [];
-    resetA2aTokenTouches();
+    resetTokenTouches();
     resetA2aRunSlots();
   });
 
@@ -1201,7 +1203,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     model.hold = null;
     model.holdMidReply = null;
     model.prompts = [];
-    resetA2aTokenTouches();
+    resetTokenTouches();
     resetA2aRunSlots();
   });
 
@@ -1351,7 +1353,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     model.hold = null;
     model.holdMidReply = null;
     model.prompts = [];
-    resetA2aTokenTouches();
+    resetTokenTouches();
     resetA2aRunSlots();
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
@@ -1717,7 +1719,7 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     model.reply = "Hello from Helper";
     model.hold = null;
     model.prompts = [];
-    resetA2aTokenTouches();
+    resetTokenTouches();
     resetA2aRunSlots();
     process.env.A2A_MAX_CONCURRENT_RUNS = "1";
   });
@@ -1938,7 +1940,7 @@ describe("POST /a2a/:endpointId — the body cap", () => {
     model.reply = "Hello from Helper";
     model.hold = null;
     model.prompts = [];
-    resetA2aTokenTouches();
+    resetTokenTouches();
     resetA2aRunSlots();
     process.env.A2A_MAX_BODY_BYTES = "64";
   });
@@ -2058,7 +2060,7 @@ describe("the A2A call log", () => {
     model.reply = "Hello from Helper";
     model.hold = null;
     model.prompts = [];
-    resetA2aTokenTouches();
+    resetTokenTouches();
     resetA2aRunSlots();
   });
 
@@ -2439,7 +2441,7 @@ describe("POST /a2a/:endpointId — streaming", () => {
     model.hold = null;
     model.holdMidReply = null;
     model.prompts = [];
-    resetA2aTokenTouches();
+    resetTokenTouches();
   });
 
   it("streams the reply as artifact updates, from the Task to its completed status", async () => {

@@ -24,12 +24,9 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
-import type { InboundTokenStatus } from "@platypus/schemas";
-import { formatDate, formatDateTime } from "@/lib/format-date";
-import {
-  INBOUND_TOKEN_STATUS_LABELS,
-  INBOUND_TOKEN_STATUS_VARIANTS,
-} from "@/lib/inbound-trigger";
+import type { BearerTokenStatus } from "@platypus/schemas";
+import { formatDate } from "@/lib/format-date";
+import { TokenCells } from "@/components/bearer-token";
 
 /**
  * One row of `GET /organizations/:orgId/a2a/endpoints` (ADR-0032): where the
@@ -48,7 +45,7 @@ interface OrgA2aEndpoint {
     id: string;
     name: string;
     createdAt: string;
-    tokenStatus: InboundTokenStatus;
+    tokenStatus: BearerTokenStatus;
     // When the current value was issued: the marker a revoke names.
     tokenCreatedAt: string;
     tokenExpiresAt: string;
@@ -217,34 +214,7 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
                       </TableCell>
                       <TableCell />
                       <TableCell>{formatDate(token.createdAt)}</TableCell>
-                      <TableCell>
-                        {/* A date like the other columns; only a token that
-                            needs attention gets a badge under it. */}
-                        <div className="flex flex-col gap-1">
-                          <span>{formatDate(token.tokenExpiresAt)}</span>
-                          {(token.tokenStatus === "expiring" ||
-                            token.tokenStatus === "expired") && (
-                            <Badge
-                              variant={
-                                INBOUND_TOKEN_STATUS_VARIANTS[token.tokenStatus]
-                              }
-                              className="w-fit text-xs"
-                            >
-                              {INBOUND_TOKEN_STATUS_LABELS[token.tokenStatus]}
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {token.lastUsedAt
-                          ? formatDateTime(token.lastUsedAt)
-                          : "Never"}
-                      </TableCell>
-                      <TableCell>
-                        {token.lastRejectedAt
-                          ? formatDateTime(token.lastRejectedAt)
-                          : "Never"}
-                      </TableCell>
+                      <TokenCells token={token} />
                       <TableCell className="text-right">
                         <Button
                           variant="outline"

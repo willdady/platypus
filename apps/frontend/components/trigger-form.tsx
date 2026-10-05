@@ -69,11 +69,11 @@ import {
   type Workspace,
 } from "@platypus/schemas";
 import {
-  DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
+  DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
   INBOUND_TRIGGER_INPUT_DESCRIPTION_MAX_LENGTH,
   INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH,
   INBOUND_TRIGGER_MAX_INPUTS,
-  INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
+  BEARER_TOKEN_EXPIRY_DAYS,
   inboundTriggerInputNameRegex,
   TRIGGER_INSTRUCTION_MAX_LENGTH,
   TRIGGER_MAX_RUNS_TO_KEEP_MAX,
@@ -91,11 +91,8 @@ import {
   writeAt,
 } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
-import {
-  INBOUND_TOKEN_STATUS_LABELS,
-  INBOUND_TOKEN_STATUS_VARIANTS,
-  inboundGateAdmits,
-} from "@/lib/inbound-trigger";
+import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
+import { inboundGateAdmits } from "@/lib/inbound-trigger";
 import { TRIGGER_TYPE_LABELS } from "@/components/trigger-list";
 
 const TIMEZONES = ["UTC", ...Intl.supportedValuesOf("timeZone")];
@@ -482,7 +479,7 @@ const TriggerForm = ({
   const [inboundInputs, setInboundInputs] = useState<InboundInputDraft[]>([]);
   const [recordKey, setRecordKey] = useState<string>("");
   const [tokenExpiryDays, setTokenExpiryDays] = useState<number>(
-    DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
+    DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
   );
   const [shownToken, setShownToken] = useState<ShownToken | null>(null);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
@@ -1472,7 +1469,7 @@ const TriggerForm = ({
                         : "How long the token works. You get a notification 30 and 7 days before it expires."
                     }
                   >
-                    {INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS.map((days) => (
+                    {BEARER_TOKEN_EXPIRY_DAYS.map((days) => (
                       <SelectItem key={days} value={String(days)}>
                         {days} days
                       </SelectItem>
@@ -1484,10 +1481,8 @@ const TriggerForm = ({
                       <FieldLabel>Token</FieldLabel>
                       <div className="flex flex-col gap-2 rounded-md border p-3 text-sm">
                         <div className="flex items-center justify-between gap-2">
-                          <Badge
-                            variant={INBOUND_TOKEN_STATUS_VARIANTS[tokenStatus]}
-                          >
-                            {INBOUND_TOKEN_STATUS_LABELS[tokenStatus]}
+                          <Badge variant={TOKEN_STATUS_VARIANTS[tokenStatus]}>
+                            {TOKEN_STATUS_LABELS[tokenStatus]}
                           </Badge>
                           <Button
                             type="button"

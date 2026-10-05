@@ -531,39 +531,39 @@ export async function recoverStuckChats(): Promise<void> {
 }
 
 /**
- * How often the Inbound Trigger and A2A token reminders are swept. Their thresholds
- * are days, so the scheduler's every-minute tick would only repeat a query
+ * How often the Inbound Trigger and A2A token reminders are swept. Their
+ * thresholds are days, so the scheduler's every-minute tick would only repeat a query
  * that finds nothing new; hourly keeps a reminder at most an hour late.
  */
-const INBOUND_REMINDER_INTERVAL_MS = 60 * 60 * 1000;
+const TOKEN_REMINDER_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
  * When this process last finished a reminder sweep. Per process: each claim
  * is conditional, so a peer sweeping too never repeats a reminder.
  */
-let lastInboundReminderSweepAt: number | null = null;
+let lastTokenReminderSweepAt: number | null = null;
 
 /**
  * The reminder sweep, when it is due. A sweep that throws is not recorded, so
  * the next tick tries again rather than waiting out the interval.
  */
-export async function sweepInboundTokenRemindersIfDue(
+export async function sweepTokenRemindersIfDue(
   now: number = Date.now(),
 ): Promise<void> {
   if (
-    lastInboundReminderSweepAt !== null &&
-    now - lastInboundReminderSweepAt < INBOUND_REMINDER_INTERVAL_MS
+    lastTokenReminderSweepAt !== null &&
+    now - lastTokenReminderSweepAt < TOKEN_REMINDER_INTERVAL_MS
   ) {
     return;
   }
   await sendInboundTokenReminders(new Date(now));
   await sendA2aTokenReminders(new Date(now));
-  lastInboundReminderSweepAt = now;
+  lastTokenReminderSweepAt = now;
 }
 
 /** Test seam: forget when the reminders were last swept. */
-export function resetInboundReminderSweep(): void {
-  lastInboundReminderSweepAt = null;
+export function resetTokenReminderSweep(): void {
+  lastTokenReminderSweepAt = null;
 }
 
 /**
@@ -595,7 +595,7 @@ export function startScheduler(): void {
         logger.error({ error }, "Chat recovery sweep failed");
       }
       try {
-        await sweepInboundTokenRemindersIfDue();
+        await sweepTokenRemindersIfDue();
       } catch (error) {
         logger.error({ error }, "Token expiry reminders failed");
       }

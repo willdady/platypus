@@ -21,8 +21,6 @@ import {
 } from "../db/schema.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 import { logger } from "../logger.ts";
-import { errorMessage } from "../utils/error-message.ts";
-import { createNotification } from "./notification.ts";
 import { backendBaseUrl } from "../base-urls.ts";
 import type { ScopeContext } from "../scope.ts";
 import { resolveScoped } from "./scoped-resource.ts";
@@ -34,9 +32,10 @@ import {
 } from "./workspace-resource.ts";
 import {
   generateBearerToken,
-  inboundTokenStatus,
+  bearerTokenStatus,
   issuedTokenFields,
-} from "./inbound-trigger-token.ts";
+  notifyTokenOwner,
+} from "./bearer-token.ts";
 import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
 import { ownerMembershipJoin } from "./owner-membership.ts";
 import type { A2aRejectReason } from "./a2a-call.ts";
@@ -61,7 +60,7 @@ export const A2A_TOKEN_PREFIX = "pa2a_";
  */
 export const toPublicToken = (row: A2aTokenRow) => {
   const { tokenHash: _tokenHash, tokenNotice: _tokenNotice, ...rest } = row;
-  return { ...rest, tokenStatus: inboundTokenStatus(row) };
+  return { ...rest, tokenStatus: bearerTokenStatus(row) };
 };
 
 export const listA2aEndpoints = (workspaceId: string) =>
@@ -391,23 +390,12 @@ const notifyOwnerOfRevoke = async (
   endpoint: A2aEndpointRow,
   title: string,
   body: string,
-) => {
-  try {
-    await createNotification(
-      db,
-      {
-        orgId,
-        workspaceId: endpoint.workspaceId,
-        agentId: endpoint.agentId,
-      },
-      { title, body },
-    );
-  } catch (error) {
-    logger.error(
-      { endpointId: endpoint.id, error: errorMessage(error) },
-      "Failed to notify the Workspace Owner about an A2A revoke",
-    );
-  }
+): Promise<void> => {
+  await notifyTokenOwner(
+    { orgId, workspaceId: endpoint.workspaceId, agentId: endpoint.agentId },
+    title,
+    body,
+  );
 };
 
 /**

@@ -39,13 +39,13 @@ import { mockLogger } from "../test-setup.ts";
 import {
   recoverStuckChats,
   recoverStuckTriggers,
-  resetInboundReminderSweep,
+  resetTokenReminderSweep,
   runWithLock,
   scheduleAligned,
   startScheduler,
   stuckChatCutoff,
   stuckTriggerCutoff,
-  sweepInboundTokenRemindersIfDue,
+  sweepTokenRemindersIfDue,
 } from "./scheduler.ts";
 import {
   chat as chatTable,
@@ -419,36 +419,34 @@ describe("recoverStuckTriggers", () => {
   });
 });
 
-describe("sweepInboundTokenRemindersIfDue", () => {
+describe("sweepTokenRemindersIfDue", () => {
   const HOUR = 60 * 60 * 1000;
   const T0 = new Date("2026-08-30T12:00:00.000Z").getTime();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetInboundReminderSweep();
+    resetTokenReminderSweep();
     mockSendReminders.mockResolvedValue(undefined);
     mockSendA2aReminders.mockResolvedValue(undefined);
   });
 
   it("sweeps at most once an hour: the reminders' thresholds are days", async () => {
-    await sweepInboundTokenRemindersIfDue(T0);
-    await sweepInboundTokenRemindersIfDue(T0 + HOUR - 1);
+    await sweepTokenRemindersIfDue(T0);
+    await sweepTokenRemindersIfDue(T0 + HOUR - 1);
     expect(mockSendReminders).toHaveBeenCalledTimes(1);
     expect(mockSendReminders).toHaveBeenCalledWith(new Date(T0));
     expect(mockSendA2aReminders).toHaveBeenCalledTimes(1);
     expect(mockSendA2aReminders).toHaveBeenCalledWith(new Date(T0));
 
-    await sweepInboundTokenRemindersIfDue(T0 + HOUR);
+    await sweepTokenRemindersIfDue(T0 + HOUR);
     expect(mockSendReminders).toHaveBeenCalledTimes(2);
   });
 
   it("tries again on the next tick after a sweep that failed", async () => {
     mockSendReminders.mockRejectedValueOnce(new Error("db down"));
 
-    await expect(sweepInboundTokenRemindersIfDue(T0)).rejects.toThrow(
-      "db down",
-    );
-    await sweepInboundTokenRemindersIfDue(T0 + 60_000);
+    await expect(sweepTokenRemindersIfDue(T0)).rejects.toThrow("db down");
+    await sweepTokenRemindersIfDue(T0 + 60_000);
     expect(mockSendReminders).toHaveBeenCalledTimes(2);
   });
 });
