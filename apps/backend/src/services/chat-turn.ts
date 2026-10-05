@@ -14,7 +14,7 @@ import {
 } from "./memory-retrieval.ts";
 import { seedUserInvokedSkill } from "./slash-command.ts";
 import { resolveTurn } from "./chat-messages.ts";
-import { pushA2aChatEnded } from "./a2a-push.ts";
+import { onA2aTurnEnded } from "./a2a-push.ts";
 
 /**
  * Starts one Chat turn and returns its streaming response — the one path every
@@ -130,7 +130,12 @@ export const startChatTurn = async (params: {
     newChat,
     // Any turn in a Chat may be an A2A Task's, the Owner's own included: one
     // a client was refused for as busy and is following (ADR-0032).
-    onEnded: () => void pushA2aChatEnded(request.id),
+    onEnded: (status) =>
+      void onA2aTurnEnded({
+        chatId: request.id,
+        messageId: turn.message?.id ?? turn.parentId,
+        status,
+      }),
   });
 
   // A rejected attachment (issue #328), an unresolved Agent/Provider/model,

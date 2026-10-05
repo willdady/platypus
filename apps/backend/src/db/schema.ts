@@ -1207,10 +1207,15 @@ export const a2aToken = pgTable(
   (t) => [index("idx_a2a_token_endpoint_id").on(t.endpointId)],
 );
 
-// One A2A turn as a Task (ADR-0032), under a random UUID. Its state is
-// derived from the Chat's run, never stored. The turn is named by its user message — the client's
-// `messageId` — whose reply is the assistant message. Lives as long as its
-// Chat; an endpoint or token deleted later leaves it with no way to be read.
+/** How an A2A Task ended, as recorded when its run ended. */
+export type A2aTaskEndState = "completed" | "failed" | "canceled";
+
+// One A2A turn as a Task (ADR-0032), under a random UUID. While it runs, its
+// state is derived from the Chat's run; `state` records how that run ended,
+// since a Chat that moves on no longer has it. The turn is named by its user
+// message — the client's `messageId` — whose reply is the assistant message.
+// Lives as long as its Chat; an endpoint or token deleted later leaves it with
+// no way to be read.
 export const a2aTask = pgTable(
   "a2a_task",
   (t) => ({
@@ -1223,6 +1228,7 @@ export const a2aTask = pgTable(
     tokenId: t
       .text("token_id")
       .references(() => a2aToken.id, { onDelete: "set null" }),
+    state: t.text("state").$type<A2aTaskEndState>(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [
