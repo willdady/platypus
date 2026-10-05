@@ -72,3 +72,23 @@ presented. A missing or wrong token is still answered `401`.
   that answers "someone without a valid token called", which says nothing
   about any one client. The `401` and the call log already tell that caller
   and the Operator.
+
+## Amendment — the A2A run cap is per backend instance (#1274)
+
+The decision above calls the load bound "a server-wide cap on active A2A runs".
+That still holds within one backend instance. What this narrows is the word
+"server-wide", the same way ADR-0030's amendment narrowed it for the Inbound
+Trigger cap.
+
+**"Server-wide" means per backend instance.** The count of active A2A runs is
+held by the process that started them, because an A2A run executes in that
+process, so its own count is what bounds its own load. With several instances,
+a deployment admits up to the number of instances times the setting. A
+cluster-wide count would need a shared counter whose slots leak when a process
+dies mid-run, and so a recovery sweep of its own, all for a bound the Operator
+already gets by dividing the setting by the number of instances. The backend
+configuration reference says so.
+
+- This does not contradict A2A working whichever instance a call lands on.
+  `GetTask`, `CancelTask` and the busy check reach any instance's runs; only
+  the admission count is local.
