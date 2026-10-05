@@ -806,6 +806,7 @@ describe("webhook event payloads", () => {
  * service builds.
  */
 const TRIGGER_PREFIX_SOURCE = "apps/backend/src/services/trigger-firing.ts";
+const CALLER_DATA_SOURCE = "apps/backend/src/services/caller-data.ts";
 
 /**
  * The fixed text of the event prefix template, in order — the parts of the
@@ -953,15 +954,23 @@ const parseAlwaysOnPluginNames = (): string[] => {
  * on the Triggers page must show the header the service actually writes.
  */
 const parseInboundInputsHeader = (): string => {
-  const source = readRepoFile(TRIGGER_PREFIX_SOURCE);
-  const header = source.match(/"(Inbound call inputs[^"]*)"/);
-  if (!header) {
+  const label = readRepoFile(TRIGGER_PREFIX_SOURCE).match(
+    /callerDataBlock\(\s*"(Inbound call inputs[^"]*)"/,
+  );
+  if (!label) {
     throw new Error(
-      `No "Inbound call inputs" header string in ${TRIGGER_PREFIX_SOURCE}. ` +
+      `No callerDataBlock("Inbound call inputs", …) in ${TRIGGER_PREFIX_SOURCE}. ` +
         `The inputs block moved or was renamed; re-anchor this test.`,
     );
   }
-  return header[1];
+  const caveat = readRepoFile(CALLER_DATA_SOURCE).match(/`\$\{label\}([^`]*)`/);
+  if (!caveat) {
+    throw new Error(
+      `No \`\${label}…\` header template in ${CALLER_DATA_SOURCE}. ` +
+        `The caveat moved or was reworded; re-anchor this test.`,
+    );
+  }
+  return label[1] + caveat[1];
 };
 
 describe("inbound trigger inputs block", () => {
