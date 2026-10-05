@@ -64,6 +64,36 @@ describe("RunRegistry", () => {
     expect(registry.cancel("dup-3")).toBe(true);
   });
 
+  describe("a cancel decided at a moment", () => {
+    it("stops a run that started before it", () => {
+      const handle = registry.register("run-1");
+      const decidedAt = Date.now() + 1;
+
+      expect(registry.cancel("run-1", { startedBefore: decidedAt })).toBe(true);
+      expect(handle.signal.aborted).toBe(true);
+    });
+
+    it("spares a run that started after it, under the same id", () => {
+      const decidedAt = Date.now();
+      vi.advanceTimersByTime(10);
+      const handle = registry.register("run-1");
+
+      expect(registry.cancel("run-1", { startedBefore: decidedAt })).toBe(
+        false,
+      );
+      expect(handle.signal.aborted).toBe(false);
+    });
+  });
+
+  it("lists the runs it holds, with when each started", () => {
+    const startedAt = Date.now();
+    registry.register("run-1");
+    registry.register("run-2");
+    registry.cancel("run-2");
+
+    expect(registry.heldRuns()).toEqual([{ runId: "run-1", startedAt }]);
+  });
+
   it("cancel is idempotent", () => {
     registry.register("run-2");
     expect(registry.cancel("run-2")).toBe(true);

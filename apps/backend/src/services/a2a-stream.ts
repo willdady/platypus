@@ -9,16 +9,17 @@ import { UnsupportedOperationError } from "@a2a-js/sdk/errors";
 import { findA2aTask, startA2aTurn, type A2aCaller } from "./a2a-task.ts";
 import {
   readTask,
+  readTaskAfresh,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
 
 /**
  * A2A Tasks over SSE (ADR-0032): `SendStreamingMessage` and `SubscribeToTask`.
- * Status always comes from `readTask`, so it says what `GetTask` says. Token
- * deltas exist only on the connection that started the run, read from the
- * run's own stream; any other follower, on any instance, gets status and
- * artifact events read from the database.
+ * Status always comes from `readTask`, read afresh, so it says what `GetTask`
+ * says. Token deltas exist only on the connection that started the run, read
+ * from the run's own stream; any other follower, on any instance, gets status
+ * and artifact events read from the database.
  */
 
 /** How often a stream re-reads its Task's status. */
@@ -89,7 +90,7 @@ async function* followTask(
   let last = seen;
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, STREAM_POLL_MS));
-    const read = await readTask(task);
+    const read = await readTaskAfresh(task);
     if (isTerminal(read)) {
       for (const artifact of read.artifacts) {
         yield artifactEvent(read, artifact, { append: false, lastChunk: true });
@@ -127,8 +128,11 @@ async function* streamRun(
   // A text part after the first is set apart as `readTask` joins them.
   let separate = false;
   for (;;) {
-    const { done, value } = await chunks.read();
-    if (done) return last;
+    // A cancel or a timeout aborts the run, breaking off its stream. How it
+    // ended is the Task's to say.
+    const next = await chunks.read().catch(() => null);
+    if (!next || next.done) return last;
+    const { value } = next;
     if (!value.success) continue;
     const chunk = value.value;
     if (chunk.type === "start" && chunk.messageId) replyId = chunk.messageId;
@@ -144,7 +148,7 @@ async function* streamRun(
     }
     if (Date.now() - readAt >= STREAM_POLL_MS) {
       readAt = Date.now();
-      const read = await readTask(task);
+      const read = await readTaskAfresh(task);
       if (read.status!.state !== last.status!.state) yield statusEvent(read);
       last = read;
     }

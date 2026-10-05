@@ -95,10 +95,10 @@ const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
 };
 
 /**
- * A run in the Chat has ended: push each of the Chat's Tasks that has ended
- * and still owes a push. Never throws.
+ * A run in the Chat has ended, or a Task in it was canceled: push each of the
+ * Chat's Tasks that has ended and still owes a push. Never throws.
  */
-const pushA2aChatEnded = async (chatId: string): Promise<void> => {
+export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
   try {
     const tasks: TaskRow[] = await db
       .select({
@@ -108,6 +108,7 @@ const pushA2aChatEnded = async (chatId: string): Promise<void> => {
         endpointId: a2aTaskTable.endpointId,
         tokenId: a2aTaskTable.tokenId,
         state: a2aTaskTable.state,
+        canceledAt: a2aTaskTable.canceledAt,
         createdAt: a2aTaskTable.createdAt,
       })
       .from(a2aTaskTable)
@@ -149,7 +150,7 @@ export const onA2aTurnEnded = async ({
   } catch (error) {
     logger.error({ error, chatId }, "Recording an A2A Task's end failed");
   }
-  await pushA2aChatEnded(chatId);
+  await pushEndedA2aTasks(chatId);
 };
 
 // ------------------------------------------------------------ Client config

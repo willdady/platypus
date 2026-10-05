@@ -125,6 +125,14 @@ type Entry = {
   /** When this run last showed a sign of life — a step boundary, a tool-call
    *  edge, or a streamed chunk. The per-step bound is measured from here. */
   lastActivityAt: number;
+  /** When the run was claimed, so a cancel decided earlier can spare it. */
+  startedAt: number;
+};
+
+/** Narrows a cancel to the run that was going when it was decided. */
+export type CancelOptions = {
+  /** Spare a run claimed after this moment (epoch ms): a later turn's. */
+  startedBefore?: number;
 };
 
 export class RunRegistry {
@@ -160,6 +168,7 @@ export class RunRegistry {
       finished: false,
       holds: 0,
       lastActivityAt: Date.now(),
+      startedAt: Date.now(),
     };
 
     const fireTimeout = (kind: "step" | "run") => {
@@ -240,11 +249,18 @@ export class RunRegistry {
 
   /**
    * Cancel a run by id. Returns `true` if a run was cancelled, `false` if
-   * the run was unknown or already finished. Repeated calls are safe.
+   * the run was unknown, already finished, or claimed after `startedBefore`.
+   * Repeated calls are safe.
    */
-  cancel(runId: RunId): boolean {
+  cancel(runId: RunId, options: CancelOptions = {}): boolean {
     const entry = this.entries.get(runId);
     if (!entry || entry.finished) return false;
+    if (
+      options.startedBefore !== undefined &&
+      entry.startedAt > options.startedBefore
+    ) {
+      return false;
+    }
     entry.finished = true;
     if (entry.stepTimer) clearTimeout(entry.stepTimer);
     if (entry.runTimer) clearTimeout(entry.runTimer);
@@ -260,6 +276,13 @@ export class RunRegistry {
     if (entry.stepTimer) clearTimeout(entry.stepTimer);
     if (entry.runTimer) clearTimeout(entry.runTimer);
     this.entries.delete(runId);
+  }
+
+  /** The runs going here, with when each was claimed. */
+  heldRuns(): { runId: RunId; startedAt: number }[] {
+    return [...this.entries]
+      .filter(([, entry]) => !entry.finished)
+      .map(([runId, entry]) => ({ runId, startedAt: entry.startedAt }));
   }
 
   has(runId: RunId): boolean {

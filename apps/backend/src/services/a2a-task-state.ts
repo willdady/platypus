@@ -172,6 +172,21 @@ export const readTask = async (task: TaskRow): Promise<Task> => {
   };
 };
 
+/**
+ * `readTask`, from the Task's row as it is now. A caller following a Task
+ * reads it this way, so an end recorded since it last fetched the row — a
+ * cancel, which is recorded before its run has stopped, from any instance —
+ * is seen on the next read.
+ */
+export const readTaskAfresh = async (task: TaskRow): Promise<Task> => {
+  const [row] = await db
+    .select()
+    .from(a2aTaskTable)
+    .where(eq(a2aTaskTable.id, task.id))
+    .limit(1);
+  return readTask(row ?? task);
+};
+
 export const TERMINAL_TASK_STATES = new Set([
   TaskState.TASK_STATE_COMPLETED,
   TaskState.TASK_STATE_FAILED,
