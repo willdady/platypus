@@ -23,7 +23,7 @@ import {
   type TriggerRow,
   type TriggerUpdateFields,
 } from "./trigger.ts";
-import { hashInboundToken } from "./inbound-trigger-token.ts";
+import { hashBearerToken } from "./bearer-token.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 
 const ctx = { orgId: "org-1", workspaceId: "ws-1" };
@@ -645,7 +645,7 @@ describe("trigger module", () => {
 
       expect(row.issuedToken).toMatch(/^pit_[A-Za-z0-9_-]{43}$/);
       const [stored] = fake.tables.trigger;
-      expect(stored.tokenHash).toBe(hashInboundToken(row.issuedToken!));
+      expect(stored.tokenHash).toBe(hashBearerToken(row.issuedToken!));
       expect(JSON.stringify(stored)).not.toContain(row.issuedToken!);
       const lifetime =
         (stored.tokenExpiresAt as Date).getTime() -
@@ -749,7 +749,7 @@ describe("trigger module", () => {
       );
 
       const [stored] = fake.tables.trigger;
-      expect(stored.tokenHash).toBe(hashInboundToken(token));
+      expect(stored.tokenHash).toBe(hashBearerToken(token));
       expect(stored.tokenNotice).toBeNull();
       expect(stored.tokenExpiresAt).toEqual(tokenExpiresAt);
       expect(

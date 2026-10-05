@@ -1,15 +1,4 @@
-import {
-  and,
-  eq,
-  gt,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   gateAdmits,
@@ -18,7 +7,7 @@ import {
   type InboundTriggerConfig,
   type OrgGate,
   type InboundTriggerInput,
-  type InboundTokenStatus,
+  type BearerTokenStatus,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
@@ -31,7 +20,6 @@ import {
 import { ConflictError } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
-import { createNotification } from "./notification.ts";
 import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
 import {
   readPositiveInt,
@@ -41,13 +29,19 @@ import {
 import { fireTrigger } from "./trigger-firing.ts";
 import { narrowTriggerConfig, type TriggerRow } from "./trigger.ts";
 import {
+  bearerToken,
+  bearerTokenStatus,
   DAY_MS,
-  inboundTokenMatches,
-  inboundTokenStatus,
+  dueReminder,
+  hashBearerToken,
+  noticeDate,
+  notifyTokenOwner,
   revokedTokenFields,
+  sendTokenNotice,
   tokenNoticeSent,
-  type TokenNotice,
-} from "./inbound-trigger-token.ts";
+  touchToken,
+  type TokenOwner,
+} from "./bearer-token.ts";
 
 /**
  * Inbound Triggers (ADR-0030): the backend's one ingress that is not a
@@ -191,16 +185,6 @@ export const loadInboundTarget = async (
   };
 };
 
-/**
- * The token an `Authorization: Bearer <token>` header carries, or `null`.
- * The header is the only place a token is read from — never the query string,
- * which proxies and access logs record.
- */
-export const bearerToken = (header: string | undefined): string | null => {
-  const match = header?.match(/^Bearer\s+(\S+)\s*$/i);
-  return match ? match[1] : null;
-};
-
 export type InboundAuthResult =
   | { ok: true; target: InboundTarget; config: InboundTriggerConfig }
   | { ok: false; reason: InboundRejectReason; target: InboundTarget | null };
@@ -229,7 +213,7 @@ export const authenticateInboundCall = async (
 
   const token = bearerToken(authorization);
   if (!token) return { ok: false, reason: "missing_token", target };
-  if (!trigger.tokenHash || !inboundTokenMatches(token, trigger.tokenHash)) {
+  if (!trigger.tokenHash || trigger.tokenHash !== hashBearerToken(token)) {
     return { ok: false, reason: "bad_token", target };
   }
   if (!trigger.tokenExpiresAt || trigger.tokenExpiresAt <= now) {
@@ -517,55 +501,12 @@ const startAcceptedRun = (
 
 // ----------------------------------------------------------------- last used
 
-const TOUCH_INTERVAL_MS = 60_000;
-const lastTouched = new Map<string, number>();
-
-/** Test seam: forget when each Trigger was last touched. */
-export const resetInboundTouches = (): void => lastTouched.clear();
-
-/**
- * Stamps `lastUsedAt` or `lastRejectedAt`, at most once a minute per Trigger,
- * so a flood of calls cannot become a flood of writes. Checked in memory
- * first, so a flood costs no query either; the conditional `WHERE` holds the
- * same limit across instances. Best-effort: a failure is logged, never
- * surfaced to the caller.
- */
-export const touchInboundTrigger = async (
+/** Stamps last used or last rejected; see {@link touchToken}. */
+export const touchInboundTrigger = (
   triggerId: string,
   column: "lastUsedAt" | "lastRejectedAt",
   now: Date = new Date(),
-): Promise<void> => {
-  const key = `${triggerId}:${column}`;
-  const previous = lastTouched.get(key);
-  if (previous !== undefined && now.getTime() - previous < TOUCH_INTERVAL_MS) {
-    return;
-  }
-  lastTouched.set(key, now.getTime());
-  const stamped = triggerTable[column];
-  try {
-    await db
-      .update(triggerTable)
-      .set({ [column]: now })
-      .where(
-        and(
-          eq(triggerTable.id, triggerId),
-          or(
-            isNull(stamped),
-            lt(stamped, new Date(now.getTime() - TOUCH_INTERVAL_MS)),
-          ),
-        ),
-      );
-  } catch (error) {
-    logger.error(
-      {
-        triggerId,
-        column,
-        error: errorMessage(error),
-      },
-      "Failed to record inbound trigger use",
-    );
-  }
-};
+): Promise<void> => touchToken(triggerTable, triggerId, column, now);
 
 // ----------------------------------------------------------------- run status
 
@@ -607,106 +548,16 @@ export const getInboundRunStatus = async (
 
 // ----------------------------------------------------------------- notices
 
-const formatDate = (date: Date): string => date.toISOString().slice(0, 10);
-
-/**
- * Posts a Notification to the Trigger's Workspace, from the Trigger's Agent.
- * `false` — logged — when it could not be posted, so a notice claimed for it
- * can be handed back and sent again.
- */
-const notifyOwner = async (
+/** Where a notice about the Trigger's token goes. */
+const tokenOwner = (
   target: Pick<InboundTarget, "organizationId" | "workspaceId"> & {
-    trigger: Pick<TriggerRow, "id" | "agentId">;
+    trigger: Pick<TriggerRow, "agentId">;
   },
-  title: string,
-  body: string,
-): Promise<boolean> => {
-  try {
-    await createNotification(
-      db,
-      {
-        orgId: target.organizationId,
-        workspaceId: target.workspaceId,
-        agentId: target.trigger.agentId,
-      },
-      { title, body },
-    );
-    return true;
-  } catch (error) {
-    logger.error(
-      {
-        triggerId: target.trigger.id,
-        error: errorMessage(error),
-      },
-      "Failed to notify the Workspace Owner about an inbound trigger token",
-    );
-    return false;
-  }
-};
-
-/**
- * Records `notice` as sent for the token `tokenHash` names, moving it on from
- * `from`. Conditional on both, so two instances cannot both send it and a
- * token regenerated in the meantime does not inherit the record. `true` when
- * this call is the one that recorded it, and so owes the Notification.
- */
-const claimNotice = async (
-  triggerId: string,
-  tokenHash: string,
-  from: string | null,
-  notice: TokenNotice,
-): Promise<boolean> => {
-  const claimed = await db
-    .update(triggerTable)
-    .set({ tokenNotice: notice })
-    .where(
-      and(
-        eq(triggerTable.id, triggerId),
-        eq(triggerTable.tokenHash, tokenHash),
-        from === null
-          ? isNull(triggerTable.tokenNotice)
-          : eq(triggerTable.tokenNotice, from),
-      ),
-    )
-    .returning({ id: triggerTable.id });
-  return claimed.length > 0;
-};
-
-/**
- * Hands back a notice {@link claimNotice} recorded but whose Notification
- * could not be posted, so the next reminder sweep — or the next call with an
- * expired token — sends it after all. Conditional like the claim, so it never
- * undoes a later notice or reaches a token issued since. Best-effort: a
- * failure is logged, and costs only that one Notification.
- */
-const releaseNotice = async (
-  triggerId: string,
-  tokenHash: string,
-  notice: TokenNotice,
-  previous: string | null,
-): Promise<void> => {
-  try {
-    await db
-      .update(triggerTable)
-      .set({ tokenNotice: previous })
-      .where(
-        and(
-          eq(triggerTable.id, triggerId),
-          eq(triggerTable.tokenHash, tokenHash),
-          eq(triggerTable.tokenNotice, notice),
-        ),
-      );
-  } catch (error) {
-    logger.error(
-      {
-        triggerId,
-        notice,
-        error: errorMessage(error),
-      },
-      "Failed to hand back an unsent inbound trigger token notice",
-    );
-  }
-};
+): TokenOwner => ({
+  orgId: target.organizationId,
+  workspaceId: target.workspaceId,
+  agentId: target.trigger.agentId,
+});
 
 /**
  * The first call with an expired token tells the Owner, once per token: the
@@ -715,61 +566,26 @@ const releaseNotice = async (
  */
 const noticeExpiredTokenUse = async (target: InboundTarget): Promise<void> => {
   const { trigger } = target;
-  // Read once, before the claim moves the row on: the hand-back restores this.
-  const { tokenHash, tokenNotice: previous } = trigger;
-  if (!tokenHash || tokenNoticeSent(previous, "expired")) return;
-  try {
-    if (!(await claimNotice(trigger.id, tokenHash, previous, "expired"))) {
-      return;
-    }
-  } catch (error) {
-    logger.error(
-      {
-        triggerId: trigger.id,
-        error: errorMessage(error),
-      },
-      "Failed to record an expired inbound trigger token's use",
-    );
-    return;
-  }
+  const { tokenHash } = trigger;
+  if (!tokenHash || tokenNoticeSent(trigger.tokenNotice, "expired")) return;
   const expired = trigger.tokenExpiresAt
-    ? ` on ${formatDate(trigger.tokenExpiresAt)}`
+    ? ` on ${noticeDate(trigger.tokenExpiresAt)}`
     : "";
-  const sent = await notifyOwner(
-    target,
+  await sendTokenNotice(
+    triggerTable,
+    { ...trigger, tokenHash },
+    "expired",
+    tokenOwner(target),
     "Inbound trigger token has expired",
     `A call to the inbound trigger "${trigger.name}" used its token after it expired${expired}, and was refused. Regenerate the token on the trigger's page and update the system that calls it.`,
   );
-  if (!sent) await releaseNotice(trigger.id, tokenHash, "expired", previous);
-};
-
-/**
- * The expiry reminder a token is owed at `now`, if any: 7 days before expiry,
- * or 30 days before it until the 7-day one falls due. A reminder whose moment
- * falls at or before the token was issued is skipped, so a 30-day token only
- * ever gets the 7-day one.
- */
-export const dueReminder = (
-  token: { tokenCreatedAt: Date | null; tokenExpiresAt: Date },
-  now: Date,
-): Extract<TokenNotice, "expiring_30" | "expiring_7"> | null => {
-  const expires = token.tokenExpiresAt.getTime();
-  const created = token.tokenCreatedAt?.getTime() ?? -Infinity;
-  const left = expires - now.getTime();
-  if (left <= 0) return null;
-  const at = (days: number) => expires - days * DAY_MS;
-  if (left <= 7 * DAY_MS) return at(7) > created ? "expiring_7" : null;
-  if (left <= 30 * DAY_MS) return at(30) > created ? "expiring_30" : null;
-  return null;
 };
 
 /**
  * Sends each Inbound Trigger token's expiry reminders as they fall due. Run
- * from the scheduler, under its lock. Each reminder is claimed on the row
- * before it is sent, so a sweep that runs twice, or a peer, never repeats one,
- * and deleting the Notification never brings it back; one that could not be
- * posted is handed back and sent by the next sweep. Each Trigger is handled
- * on its own, so one that fails does not hold back the rest.
+ * from the scheduler, under its lock; see {@link sendTokenNotice}. Each
+ * Trigger is handled on its own, so one that fails does not hold back the
+ * rest.
  */
 export const sendInboundTokenReminders = async (
   now: Date = new Date(),
@@ -789,37 +605,25 @@ export const sendInboundTokenReminders = async (
 
   for (const row of rows) {
     const trigger = row.trigger;
-    // Read once, before the claim moves the row on: the hand-back restores it.
-    const { tokenHash, tokenExpiresAt, tokenNotice: previous } = trigger;
+    const { tokenHash, tokenExpiresAt } = trigger;
     if (!tokenHash || !tokenExpiresAt) continue;
     const due = dueReminder(
       { tokenCreatedAt: trigger.tokenCreatedAt, tokenExpiresAt },
       now,
     );
-    if (!due || tokenNoticeSent(previous, due)) continue;
-    try {
-      if (!(await claimNotice(trigger.id, tokenHash, previous, due))) continue;
-      const sent = await notifyOwner(
-        {
-          organizationId: row.workspace.organizationId,
-          workspaceId: row.workspace.id,
-          trigger,
-        },
-        "Inbound trigger token expires soon",
-        `The token for the inbound trigger "${trigger.name}" expires on ${formatDate(tokenExpiresAt)}. Regenerate it on the trigger's page and update the system that calls it; calls with the current token are refused once it expires.`,
-      );
-      if (!sent) {
-        await releaseNotice(trigger.id, tokenHash, due, previous);
-      }
-    } catch (error) {
-      logger.error(
-        {
-          triggerId: trigger.id,
-          error: errorMessage(error),
-        },
-        "Failed to send an inbound trigger token reminder",
-      );
-    }
+    if (!due || tokenNoticeSent(trigger.tokenNotice, due)) continue;
+    await sendTokenNotice(
+      triggerTable,
+      { ...trigger, tokenHash },
+      due,
+      tokenOwner({
+        organizationId: row.workspace.organizationId,
+        workspaceId: row.workspace.id,
+        trigger,
+      }),
+      "Inbound trigger token expires soon",
+      `The token for the inbound trigger "${trigger.name}" expires on ${noticeDate(tokenExpiresAt)}. Regenerate it on the trigger's page and update the system that calls it; calls with the current token are refused once it expires.`,
+    );
   }
 };
 
@@ -834,7 +638,7 @@ export type OrgInboundTrigger = {
   ownerId: string;
   ownerName: string;
   createdAt: Date;
-  tokenStatus: InboundTokenStatus;
+  tokenStatus: BearerTokenStatus;
   tokenCreatedAt: Date | null;
   tokenExpiresAt: Date | null;
   lastUsedAt: Date | null;
@@ -870,7 +674,7 @@ export const listOrgInboundTriggers = async (
       ownerId: user.id,
       ownerName: user.name,
       createdAt: trigger.createdAt,
-      tokenStatus: inboundTokenStatus(trigger, now),
+      tokenStatus: bearerTokenStatus(trigger, now),
       tokenCreatedAt: trigger.tokenCreatedAt,
       tokenExpiresAt: trigger.tokenExpiresAt,
       lastUsedAt: trigger.lastUsedAt,
@@ -936,12 +740,12 @@ export const revokeInboundTriggerToken = async (
     throw new ConflictError(TOKEN_REPLACED_MESSAGE);
   }
 
-  await notifyOwner(
-    {
+  await notifyTokenOwner(
+    tokenOwner({
       organizationId: orgId,
       workspaceId: row.workspace.id,
       trigger: row.trigger,
-    },
+    }),
     "Inbound trigger token revoked",
     `An Organization Admin revoked the token for the inbound trigger "${row.trigger.name}", so calls with it are refused. If the integration should keep working, regenerate the token on the trigger's page and update the system that calls it.`,
   );

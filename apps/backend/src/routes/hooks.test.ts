@@ -11,11 +11,11 @@ vi.mock("../services/notification.ts", () => ({
 
 import app from "../server.ts";
 import { fireTrigger } from "../services/trigger-firing.ts";
-import { hashInboundToken } from "../services/inbound-trigger-token.ts";
 import {
-  resetInboundRunSlots,
-  resetInboundTouches,
-} from "../services/inbound-trigger.ts";
+  hashBearerToken,
+  resetTokenTouches,
+} from "../services/bearer-token.ts";
+import { resetInboundRunSlots } from "../services/inbound-trigger.ts";
 
 const TOKEN = "pit_the-right-token";
 const DAY = 24 * 60 * 60 * 1000;
@@ -34,7 +34,7 @@ const inbound = (over: Row = {}): Row => ({
     recordKey: "issueKey",
     tokenExpiryDays: 90,
   },
-  tokenHash: hashInboundToken(TOKEN),
+  tokenHash: hashBearerToken(TOKEN),
   tokenCreatedAt: new Date(Date.now() - DAY),
   tokenExpiresAt: new Date(Date.now() + 89 * DAY),
   tokenNotice: null,
@@ -99,7 +99,7 @@ describe("/hooks/triggers", () => {
     resetMockDb();
     vi.clearAllMocks();
     resetInboundRunSlots();
-    resetInboundTouches();
+    resetTokenTouches();
   });
 
   afterEach(() => {

@@ -17,9 +17,9 @@ import { NotFoundError, ValidationError } from "../errors.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 import {
   generateBearerToken,
-  inboundTokenStatus,
+  bearerTokenStatus,
   issuedTokenFields,
-} from "./inbound-trigger-token.ts";
+} from "./bearer-token.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import {
   deleteOwned,
@@ -28,6 +28,9 @@ import {
   resolveOwned,
   updateOwned,
 } from "./workspace-resource.ts";
+
+/** Makes a leaked Inbound Trigger token recognisable; see `generateBearerToken`. */
+const INBOUND_TOKEN_PREFIX = "pit_";
 
 /**
  * The Trigger model: the one place `type`/`config` validation, the Agent
@@ -227,7 +230,7 @@ export const toPublicTrigger = (row: TriggerRow) => {
   return {
     ...rest,
     hasToken: tokenHash != null,
-    tokenStatus: inboundTokenStatus(row),
+    tokenStatus: bearerTokenStatus(row),
   };
 };
 
@@ -272,7 +275,7 @@ export async function createTrigger(
   } else if (fields.type === "inbound") {
     const inbound = parseInboundConfig(fields.config);
     config = inbound;
-    const generated = generateBearerToken();
+    const generated = generateBearerToken(INBOUND_TOKEN_PREFIX);
     token = generated.token;
     tokenFields = issuedTokenFields(generated.hash, inbound.tokenExpiryDays);
   } else {
@@ -500,7 +503,7 @@ export async function regenerateTriggerToken(
       "This trigger's configuration is invalid. Save its inputs again, then regenerate the token.",
     );
   }
-  const { token, hash } = generateBearerToken();
+  const { token, hash } = generateBearerToken(INBOUND_TOKEN_PREFIX);
   const fields = issuedTokenFields(hash, parsed.data.tokenExpiryDays);
   const row = await updateOwned(
     db,

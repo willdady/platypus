@@ -8,8 +8,8 @@ import {
   A2A_ENDPOINT_DESCRIPTION_MAX_LENGTH,
   A2A_ENDPOINT_NAME_MAX_LENGTH,
   A2A_TOKEN_NAME_MAX_LENGTH,
-  DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
-  INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
+  DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
+  BEARER_TOKEN_EXPIRY_DAYS,
   type A2aEndpoint,
   type A2aToken,
   type Agent,
@@ -49,10 +49,7 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { a2aCardUrl } from "@/lib/a2a-endpoint";
 import { formatDate, formatDateTime } from "@/lib/format-date";
-import {
-  INBOUND_TOKEN_STATUS_LABELS,
-  INBOUND_TOKEN_STATUS_VARIANTS,
-} from "@/lib/inbound-trigger";
+import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import { workspaceRoutes } from "@/lib/routes";
 
 type Endpoint = A2aEndpoint & { tokens: A2aToken[] };
@@ -202,7 +199,7 @@ const A2aEndpointForm = ({
 
   const [tokenName, setTokenName] = useState("");
   const [expiryDays, setExpiryDays] = useState<number>(
-    DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS,
+    DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
   );
   const [isIssuing, setIsIssuing] = useState(false);
   const [issued, setIssued] = useState<string | null>(null);
@@ -423,11 +420,9 @@ const A2aEndpointForm = ({
                               {token.name}
                             </p>
                             <Badge
-                              variant={
-                                INBOUND_TOKEN_STATUS_VARIANTS[token.tokenStatus]
-                              }
+                              variant={TOKEN_STATUS_VARIANTS[token.tokenStatus]}
                             >
-                              {INBOUND_TOKEN_STATUS_LABELS[token.tokenStatus]}
+                              {TOKEN_STATUS_LABELS[token.tokenStatus]}
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">
@@ -496,7 +491,7 @@ const A2aEndpointForm = ({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS.map((days) => (
+                        {BEARER_TOKEN_EXPIRY_DAYS.map((days) => (
                           <SelectItem key={days} value={String(days)}>
                             {days} days
                           </SelectItem>

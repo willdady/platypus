@@ -1,6 +1,4 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
-import { orgGateAccessUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import {
@@ -9,7 +7,8 @@ import {
   revokeInboundTriggerToken,
   setInboundTriggerAccess,
 } from "../services/inbound-trigger.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { NotFoundError } from "../errors.ts";
+import { mountGateAccess, seenTokenCreatedAt } from "./org-gate-access.ts";
 import type { Variables } from "../server.ts";
 
 /**
@@ -32,33 +31,10 @@ orgInboundTrigger.get(
   },
 );
 
-/** The Organization gate and every Workspace's switch. */
-orgInboundTrigger.get(
-  "/access",
-  requireAuth,
-  requireOrgAccess(["admin"]),
-  async (c) => {
-    const { orgId } = orgScopeOf(c);
-    return c.json(await getInboundTriggerAccess(orgId));
-  },
-);
-
-/**
- * Set the gate and, with `allowedWorkspaceIds`, every Workspace's switch in
- * the same write. Answers with the access as it now stands.
- */
-orgInboundTrigger.put(
-  "/access",
-  requireAuth,
-  requireOrgAccess(["admin"]),
-  sValidator("json", orgGateAccessUpdateSchema),
-  async (c) => {
-    const { orgId } = orgScopeOf(c);
-    const user = c.get("user")!;
-    return c.json(
-      await setInboundTriggerAccess(orgId, c.req.valid("json"), user.id),
-    );
-  },
+mountGateAccess(
+  orgInboundTrigger,
+  getInboundTriggerAccess,
+  setInboundTriggerAccess,
 );
 
 /**
@@ -72,16 +48,10 @@ orgInboundTrigger.delete(
   requireOrgAccess(["admin"]),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    const seenTokenCreatedAt = new Date(c.req.query("tokenCreatedAt") ?? "");
-    if (Number.isNaN(seenTokenCreatedAt.getTime())) {
-      throw new ValidationError(
-        "tokenCreatedAt must name the token to revoke, as the list reported it.",
-      );
-    }
     const found = await revokeInboundTriggerToken(
       orgId,
       c.req.param("triggerId"),
-      seenTokenCreatedAt,
+      seenTokenCreatedAt(c),
     );
     if (!found) {
       throw new NotFoundError("Inbound trigger not found");

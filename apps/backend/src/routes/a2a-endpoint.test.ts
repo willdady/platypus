@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockSession, resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { mockNanoid } from "../test-setup.ts";
-import { hashInboundToken } from "../services/inbound-trigger-token.ts";
+import { hashBearerToken } from "../services/bearer-token.ts";
 import app from "../server.ts";
 
 const baseUrl = "/organizations/org-1/workspaces/ws-1/a2a-endpoints";
@@ -271,7 +271,7 @@ describe("A2A endpoint routes", () => {
       expect(body).toMatchObject({ id: "tok-1", name: "Hermes on Telegram" });
       expect(body.token).toMatch(/^pa2a_/);
       const [stored] = fake.tables.a2a_token;
-      expect(stored.tokenHash).toBe(hashInboundToken(body.token));
+      expect(stored.tokenHash).toBe(hashBearerToken(body.token));
       expect(Object.values(stored)).not.toContain(body.token);
 
       // Never readable again.
@@ -336,7 +336,7 @@ describe("A2A endpoint routes", () => {
       const fake = seed({
         tokens: [
           liveToken({
-            tokenHash: hashInboundToken("pa2a_old"),
+            tokenHash: hashBearerToken("pa2a_old"),
             tokenCreatedAt: createdAt,
             tokenExpiresAt: new Date(createdAt.getTime() + 30 * DAY),
             tokenNotice: "expired",
@@ -352,8 +352,8 @@ describe("A2A endpoint routes", () => {
       expect(body).toMatchObject({ id: "tok-1", name: "Hermes" });
       expect(body).not.toHaveProperty("tokenHash");
       const [stored] = fake.tables.a2a_token;
-      expect(stored.tokenHash).toBe(hashInboundToken(body.token));
-      expect(stored.tokenHash).not.toBe(hashInboundToken("pa2a_old"));
+      expect(stored.tokenHash).toBe(hashBearerToken(body.token));
+      expect(stored.tokenHash).not.toBe(hashBearerToken("pa2a_old"));
       expect(stored.tokenNotice).toBeNull();
       // The same lifetime as before, from now.
       const created = (stored.tokenCreatedAt as Date).getTime();

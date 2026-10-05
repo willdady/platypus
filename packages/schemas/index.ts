@@ -50,17 +50,18 @@ export const gateAdmits = (
 ): boolean => gate === "all" || (gate === "selected" && !!workspaceAllowed);
 
 /**
- * How an Inbound Trigger's token stands: no token (never issued, or revoked),
- * active, expiring within 7 days, or expired. Worked out by the backend.
+ * How a bearer token stands — an Inbound Trigger's or an A2A token's: no token
+ * (never issued, or revoked), active, expiring within 7 days, or expired.
+ * Worked out by the backend.
  */
-export const inboundTokenStatusSchema = z.enum([
+export const bearerTokenStatusSchema = z.enum([
   "none",
   "active",
   "expiring",
   "expired",
 ]);
 
-export type InboundTokenStatus = z.infer<typeof inboundTokenStatusSchema>;
+export type BearerTokenStatus = z.infer<typeof bearerTokenStatusSchema>;
 
 export const organizationSchema = z.object({
   id: z.string(),
@@ -2268,8 +2269,8 @@ export const INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH = 64;
 export const INBOUND_TRIGGER_INPUT_DESCRIPTION_MAX_LENGTH = 500;
 
 /** The token lifetimes an Owner picks from, in days. */
-export const INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS = [30, 90, 180, 365] as const;
-export const DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS = 90;
+export const BEARER_TOKEN_EXPIRY_DAYS = [30, 90, 180, 365] as const;
+export const DEFAULT_BEARER_TOKEN_EXPIRY_DAYS = 90;
 
 /**
  * An input's name is an identifier, so the Instruction can refer to it by name
@@ -2315,8 +2316,8 @@ export const inboundTriggerConfigSchema = z
      * current token's expiry; regenerating does.
      */
     tokenExpiryDays: z
-      .literal(INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS)
-      .default(DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS),
+      .literal(BEARER_TOKEN_EXPIRY_DAYS)
+      .default(DEFAULT_BEARER_TOKEN_EXPIRY_DAYS),
   })
   .superRefine((config, ctx) => {
     const seen = new Set<string>();
@@ -2388,7 +2389,7 @@ export const triggerSchema = z.object({
   // Inbound Triggers only. The token itself is never returned after it is
   // issued; these describe it.
   hasToken: z.boolean().optional(),
-  tokenStatus: inboundTokenStatusSchema.optional(),
+  tokenStatus: bearerTokenStatusSchema.optional(),
   tokenCreatedAt: z.date().nullable().optional(),
   tokenExpiresAt: z.date().nullable().optional(),
   lastUsedAt: z.date().nullable().optional(),
@@ -3137,7 +3138,7 @@ export const a2aTokenSchema = z.object({
   id: z.string(),
   endpointId: z.string(),
   name: z.string().min(1).max(A2A_TOKEN_NAME_MAX_LENGTH),
-  tokenStatus: inboundTokenStatusSchema,
+  tokenStatus: bearerTokenStatusSchema,
   tokenCreatedAt: z.date(),
   tokenExpiresAt: z.date(),
   lastUsedAt: z.date().nullable(),
@@ -3149,8 +3150,8 @@ export type A2aToken = z.infer<typeof a2aTokenSchema>;
 
 export const a2aTokenCreateSchema = a2aTokenSchema.pick({ name: true }).extend({
   expiryDays: z
-    .literal(INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS)
-    .default(DEFAULT_INBOUND_TRIGGER_TOKEN_EXPIRY_DAYS),
+    .literal(BEARER_TOKEN_EXPIRY_DAYS)
+    .default(DEFAULT_BEARER_TOKEN_EXPIRY_DAYS),
 });
 
 // Dashboard

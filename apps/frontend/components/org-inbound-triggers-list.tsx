@@ -25,12 +25,9 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
-import type { InboundTokenStatus } from "@platypus/schemas";
-import { formatDate, formatDateTime } from "@/lib/format-date";
-import {
-  INBOUND_TOKEN_STATUS_LABELS,
-  INBOUND_TOKEN_STATUS_VARIANTS,
-} from "@/lib/inbound-trigger";
+import type { BearerTokenStatus } from "@platypus/schemas";
+import { formatDate } from "@/lib/format-date";
+import { TokenCells } from "@/components/bearer-token";
 
 /**
  * One row of `GET /organizations/:orgId/inbound-triggers` (ADR-0030): where
@@ -45,7 +42,7 @@ interface OrgInboundTrigger {
   ownerId: string;
   ownerName: string;
   createdAt: string;
-  tokenStatus: InboundTokenStatus;
+  tokenStatus: BearerTokenStatus;
   tokenCreatedAt: string | null;
   tokenExpiresAt: string | null;
   lastUsedAt: string | null;
@@ -183,38 +180,7 @@ export const OrgInboundTriggersList = ({ orgId }: { orgId: string }) => {
                     </div>
                   </TableCell>
                   <TableCell>{formatDate(trigger.createdAt)}</TableCell>
-                  <TableCell>
-                    {/* A date like the other columns; only a token that needs
-                        attention gets a badge under it. */}
-                    {trigger.tokenExpiresAt ? (
-                      <div className="flex flex-col gap-1">
-                        <span>{formatDate(trigger.tokenExpiresAt)}</span>
-                        {(trigger.tokenStatus === "expiring" ||
-                          trigger.tokenStatus === "expired") && (
-                          <Badge
-                            variant={
-                              INBOUND_TOKEN_STATUS_VARIANTS[trigger.tokenStatus]
-                            }
-                            className="w-fit text-xs"
-                          >
-                            {INBOUND_TOKEN_STATUS_LABELS[trigger.tokenStatus]}
-                          </Badge>
-                        )}
-                      </div>
-                    ) : (
-                      INBOUND_TOKEN_STATUS_LABELS.none
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {trigger.lastUsedAt
-                      ? formatDateTime(trigger.lastUsedAt)
-                      : "Never"}
-                  </TableCell>
-                  <TableCell>
-                    {trigger.lastRejectedAt
-                      ? formatDateTime(trigger.lastRejectedAt)
-                      : "Never"}
-                  </TableCell>
+                  <TokenCells token={trigger} />
                   <TableCell className="text-right">
                     <Button
                       variant="outline"

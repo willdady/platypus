@@ -6,11 +6,8 @@ vi.mock("./notification.ts", () => ({
 }));
 
 import { createNotification } from "./notification.ts";
-import {
-  resetA2aTokenTouches,
-  sendA2aTokenReminders,
-  touchA2aToken,
-} from "./a2a-token.ts";
+import { sendA2aTokenReminders, touchA2aToken } from "./a2a-token.ts";
+import { resetTokenTouches } from "./bearer-token.ts";
 
 const NOW = new Date("2026-10-04T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -49,7 +46,7 @@ describe("A2A tokens", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    resetA2aTokenTouches();
+    resetTokenTouches();
   });
 
   describe("expiry reminders", () => {

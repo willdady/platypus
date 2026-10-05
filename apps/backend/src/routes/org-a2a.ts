@@ -1,6 +1,4 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
-import { orgGateAccessUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import {
@@ -10,7 +8,8 @@ import {
   revokeOrgA2aToken,
   setA2aAccess,
 } from "../services/a2a-endpoint.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { NotFoundError } from "../errors.ts";
+import { mountGateAccess, seenTokenCreatedAt } from "./org-gate-access.ts";
 import type { Variables } from "../server.ts";
 
 /**
@@ -21,22 +20,7 @@ import type { Variables } from "../server.ts";
  */
 const orgA2a = new Hono<{ Variables: Variables }>();
 
-orgA2a.get("/access", requireAuth, requireOrgAccess(["admin"]), async (c) => {
-  const { orgId } = orgScopeOf(c);
-  return c.json(await getA2aAccess(orgId));
-});
-
-orgA2a.put(
-  "/access",
-  requireAuth,
-  requireOrgAccess(["admin"]),
-  sValidator("json", orgGateAccessUpdateSchema),
-  async (c) => {
-    const { orgId } = orgScopeOf(c);
-    const user = c.get("user")!;
-    return c.json(await setA2aAccess(orgId, c.req.valid("json"), user.id));
-  },
-);
+mountGateAccess(orgA2a, getA2aAccess, setA2aAccess);
 
 /** Every endpoint in the Organization with its tokens. Never a token. */
 orgA2a.get(
@@ -74,17 +58,11 @@ orgA2a.delete(
   requireOrgAccess(["admin"]),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    const seenTokenCreatedAt = new Date(c.req.query("tokenCreatedAt") ?? "");
-    if (Number.isNaN(seenTokenCreatedAt.getTime())) {
-      throw new ValidationError(
-        "tokenCreatedAt must name the token to revoke, as the list reported it.",
-      );
-    }
     const found = await revokeOrgA2aToken(
       orgId,
       c.req.param("endpointId"),
       c.req.param("tokenId"),
-      seenTokenCreatedAt,
+      seenTokenCreatedAt(c),
     );
     if (!found) throw new NotFoundError("A2A token not found");
     return c.json({ message: "A2A token revoked" });
