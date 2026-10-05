@@ -87,8 +87,8 @@ export const currentTurnId = async (
 };
 
 /**
- * The Task's state. Once it has ended, the end recorded on it, read afresh. Before
- * that it comes from the Chat's run: `submitted` until the reply's first
+ * The Task's state. Once it has ended, the end recorded on it, read afresh.
+ * Before that it comes from the Chat's run: `submitted` until the reply's first
  * write and `working` after. An end read from this turn's own run that is
  * not yet recorded — a Task made just as its run ended — is recorded here,
  * so it stands once the Chat moves on.

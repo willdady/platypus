@@ -199,9 +199,9 @@ proxy with an idle timeout doesn't cut it off.
 `canceled`. The run stops whichever server it is running on, so the Agent stops
 working and stops spending.
 
-- **The Task reads `canceled` straight away**, from `GetTask`, from a stream
-  following it, which ends with that status, and in a
+- **The Task reads `canceled` straight away**, in `GetTask` and in a
   [push notification](#push-notifications).
+- **A stream following the Task ends** with the `canceled` status.
 - **Anything the Agent wrote before the cancel stays in the Chat**, but the Task
   has no artifact.
 - **A Task that has already ended** is answered as it ended: a `completed` Task

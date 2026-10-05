@@ -1133,6 +1133,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     expect(res.body.error.code).toBe(-32001);
     expect(cancelRun).not.toHaveBeenCalled();
     expect(rows("chat")[0]).toMatchObject({ status: "running" });
+    // Its own endpoint stops the held run, so it doesn't outlive the test.
     await rpc("CancelTask", { id: task.id });
   });
 });

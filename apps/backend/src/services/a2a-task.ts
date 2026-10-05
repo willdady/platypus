@@ -37,7 +37,7 @@ import {
 } from "./a2a-task-state.ts";
 import {
   checkPushConfig,
-  pushA2aChatEnded,
+  pushEndedA2aTasks,
   storePushConfig,
 } from "./a2a-push.ts";
 import { A2aAtCapacityError, acquireA2aRunSlot } from "./a2a-call.ts";
@@ -344,6 +344,6 @@ export const cancelA2aTask = async (
   // A run's id is its Chat's.
   await cancelRun(task.chatId);
   await recordTaskEnd(task.chatId, task.messageId, "cancelled");
-  void pushA2aChatEnded(task.chatId);
-  return readTask(await findA2aTask(caller, taskId));
+  void pushEndedA2aTasks(task.chatId);
+  return readTask(task);
 };

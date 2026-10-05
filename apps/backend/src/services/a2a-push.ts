@@ -98,7 +98,7 @@ const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
  * A run in the Chat has ended, or a Task in it was canceled: push each of the
  * Chat's Tasks that has ended and still owes a push. Never throws.
  */
-export const pushA2aChatEnded = async (chatId: string): Promise<void> => {
+export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
   try {
     const tasks: TaskRow[] = await db
       .select({
@@ -149,7 +149,7 @@ export const onA2aTurnEnded = async ({
   } catch (error) {
     logger.error({ error, chatId }, "Recording an A2A Task's end failed");
   }
-  await pushA2aChatEnded(chatId);
+  await pushEndedA2aTasks(chatId);
 };
 
 // ------------------------------------------------------------ Client config
