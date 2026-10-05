@@ -207,7 +207,7 @@ export const startA2aTurn = async (
   let parentId: string | null = null;
   if (contextId) {
     const [chat] = await db
-      .select({ leafId: chatTable.activeLeafId })
+      .select({ leafId: chatTable.activeLeafId, status: chatTable.status })
       .from(chatTable)
       .where(
         and(
@@ -235,6 +235,9 @@ export const startA2aTurn = async (
         ),
       };
     }
+    // Before the slot is taken, so a busy Chat is answered with its Task at
+    // any load. The claim in the run still refuses one that turns busy after.
+    if (chat.status === "running") throw await busyError(caller, contextId);
     parentId = chat.leafId;
   } else {
     // A retry of the message that opened a Chat names no context yet: find
