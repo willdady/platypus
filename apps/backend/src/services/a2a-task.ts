@@ -26,6 +26,7 @@ import {
 import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
 import { workspaceScopeForA2a } from "../scope.ts";
 import { startChatTurn } from "./chat-turn.ts";
+import { callerDataBlock } from "./caller-data.ts";
 import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
 import {
   currentTurnId,
@@ -66,7 +67,9 @@ const fromA2aPart = (part: Part) => {
     case "data":
       return {
         type: "text" as const,
-        text: `Data:\n${JSON.stringify(part.content.value, null, 2)}`,
+        text: callerDataBlock("A2A message data", [
+          JSON.stringify(part.content.value, null, 2),
+        ]),
       };
     default:
       throw new ContentTypeNotSupportedError(

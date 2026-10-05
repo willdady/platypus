@@ -159,9 +159,10 @@ turns.
 - **Calls have a size limit.** Your Operator sets the largest call a client
   may send, 1 MB unless they change it. A larger one gets
   `413 Payload Too Large`, and nothing is written.
-- **Text and data parts.** Data parts reach the Agent as labelled JSON. A
-  message with a file part is refused with an error rather than sent without
-  it.
+- **Text and data parts.** Data parts reach the Agent as labelled JSON, with
+  the same note Inbound Trigger inputs carry: the values come from the caller
+  and are data, not instructions. A message with a file part is refused with an
+  error rather than sent without it.
 
 The Agent is told the conversation arrives over A2A from the client the token
 is named after, and that the caller may not be you.
