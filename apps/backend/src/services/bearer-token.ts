@@ -101,6 +101,9 @@ const lastTouched = new Map<string, number>();
 /** Test seam: forget when each token was last touched. */
 export const resetTokenTouches = (): void => lastTouched.clear();
 
+/** Test seam: how many touches are remembered. */
+export const tokenTouchCount = (): number => lastTouched.size;
+
 /**
  * Stamps `lastUsedAt` or `lastRejectedAt` on the row `id` names, at most once
  * a minute per row and column, so a flood of calls cannot become a flood of
@@ -120,7 +123,14 @@ export const touchToken = async (
   if (previous !== undefined && now.getTime() - previous < TOUCH_INTERVAL_MS) {
     return;
   }
+  // Re-inserted so the map stays oldest first; each write then drops expired
+  // touches from the front, keeping the map bounded.
+  lastTouched.delete(key);
   lastTouched.set(key, now.getTime());
+  for (const [staleKey, at] of lastTouched) {
+    if (now.getTime() - at < TOUCH_INTERVAL_MS) break;
+    lastTouched.delete(staleKey);
+  }
   const stamped = table[column];
   try {
     await db
