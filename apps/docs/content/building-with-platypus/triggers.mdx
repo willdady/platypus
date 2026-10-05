@@ -403,9 +403,11 @@ the token's standing — **Active**, **Expiring soon** (within 7 days),
 and **Last rejected**. Both times update at most once a minute, so a second
 test call straight after the first does not move them. **Last used** moves on a
 `202` that started or joined a run, not on one past the run limit; **Last
-rejected** moves when this Trigger refuses a call with a `404`, `400` or `429`. A body
-that is too large is refused before the token is read, so it says nothing
-about the token and leaves **Last rejected** alone.
+rejected** moves when this Trigger refuses a call with a `404` or `400`. A body
+that is too large is refused before the token is read, and a `429` means the
+server is running as many inbound runs as it allows, not that the token is
+wrong, so neither moves **Last
+rejected**.
 
 - **Regenerate** issues a new token and stops the old one at once. Use it when
   a token is lost or may have leaked, then update the caller.

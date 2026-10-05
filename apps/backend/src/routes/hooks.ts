@@ -182,7 +182,7 @@ const fire = async (c: Context, triggerId: string) => {
       outcome: "rate_limited",
       recordKey,
     });
-    await touchInboundTrigger(triggerId, "lastRejectedAt");
+    // No "last rejected": it reports bad tokens, and this one was valid.
     c.header("Retry-After", String(INBOUND_RETRY_AFTER_SECONDS));
     return c.json({ error: "Too Many Requests" }, 429);
   }

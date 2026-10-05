@@ -153,3 +153,13 @@ something that will not exist. Interactive Chats with an external caller now go
 through the A2A server instead. The reasoning still holds: an Inbound Trigger is
 headless and unattended, and the caller fills in declared inputs, not a prompt.
 A2A does not replace Inbound Triggers.
+
+## Amendment — a `429` does not stamp last rejected (#1276)
+
+**A call refused at the concurrency cap is answered `429` and logged as rate
+limited, but does not stamp last rejected.** It reached the cap only after its
+token was accepted, so the time an Owner reads as "something called with a bad
+or stale token" would report a caller that is configured correctly. A `400`
+for inputs that don't match still stamps: that caller is misconfigured, which
+is what an Owner watching last rejected needs to see. A2A tokens
+already behave this way: only an expired token stamps theirs (ADR-0032).
