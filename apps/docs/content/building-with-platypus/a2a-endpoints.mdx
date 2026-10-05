@@ -296,8 +296,9 @@ A Chat started on an endpoint you later delete stays out of your Memories.
 - Deleting the Agent deletes its endpoints and their tokens.
 - Detaching a Shared Agent from the Workspace deletes the Workspace's endpoints
   for it, and their tokens.
-- An endpoint's Chats stay when the endpoint is deleted. Deleting a Chat ends
-  its Tasks: `GetTask` answers that they don't exist.
+- A Chat stays when its endpoint or token is deleted, still labelled with the
+  token's name. Deleting a Chat ends its Tasks: `GetTask` answers that they
+  don't exist.
 
 ## Where to next
 

@@ -290,6 +290,7 @@ export const startA2aTurn = async (
       newChat: {
         agentId: endpoint.agentId,
         a2aTokenId: token.id,
+        a2aClientName: token.name,
         a2aEndpointId: endpoint.id,
       },
       onEnded: release,

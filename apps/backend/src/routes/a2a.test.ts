@@ -664,6 +664,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       workspaceId: "ws-1",
       agentId: "agent-1",
       a2aTokenId: "tok-1",
+      a2aClientName: "Telegram via Hermes",
       status: "succeeded",
     });
     expect(rows("chat_message")[0]).toMatchObject({
