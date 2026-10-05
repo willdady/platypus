@@ -111,8 +111,8 @@ curl https://platypus.example.com/a2a/<endpoint-id>/.well-known/agent-card.json
 
 The card carries the endpoint's **Name** and **Description**, says the client
 authenticates with an HTTP bearer token, names the address the client sends
-requests to, and says the endpoint offers push notifications. It never carries the Agent's own description, Tool sets or
-Skills.
+requests to, and says the endpoint offers streaming and push notifications. It
+never carries the Agent's own description, Tool sets or Skills.
 
 An endpoint that is disabled or deleted, in a Workspace the Organization doesn't
 allow, or whose Workspace Owner has left the Organization answers
@@ -141,7 +141,7 @@ turns.
   otherwise the request waits up to **30 seconds** for the run to end, then
   answers with the Task as it stands. Runs can take far longer than that, so a
   client follows the Task with **`GetTask`** until it is `completed`, `failed`
-  or `canceled`, or registers for a
+  or `canceled`, [streams it](#streaming), or registers for a
   [push notification](#push-notifications) when it ends. The Agent's final
   reply is the Task's artifact. A Task that has ended keeps its state, even
   after you or the client continue the Chat.
@@ -163,8 +163,35 @@ turns.
 The Agent is told the conversation arrives over A2A from the client the token
 is named after, and that the caller may not be you.
 
-Streaming and cancelling a Task aren't offered yet: those methods answer with
-an "unsupported operation" error.
+Cancelling a Task isn't offered yet: `CancelTask` answers with an
+"unsupported operation" error.
+
+## Streaming
+
+A client with someone waiting on the reply can watch it arrive over
+server-sent events instead of polling.
+
+- **`SendStreamingMessage`** takes the same message as `SendMessage` and
+  answers with a stream: first the Task, then the Agent's reply as it is
+  written, as artifact updates that each add to the last, then the finished
+  reply as one artifact and the Task's final status. The stream ends with the
+  Task.
+- **`SubscribeToTask`** rejoins a Task that is still running, for example
+  after the client's connection dropped. It sends the Task as it stands, any
+  change of status, and once the Task ends its finished reply and final
+  status. It doesn't send the reply word by word: only the connection that
+  started the run does. A Task that has already ended is refused with an
+  "unsupported operation" error; read it with `GetTask` instead.
+- **A dropped connection doesn't stop the run.** It goes on, and the client
+  can rejoin with `SubscribeToTask` or read the result with `GetTask`.
+- **A retried `SendStreamingMessage`**, with a `messageId` already sent,
+  follows the Task it already started, like `SubscribeToTask`, rather than
+  starting a second run.
+- A message the endpoint refuses (a file part, a Chat with a run still going)
+  is answered with a plain JSON-RPC error, not a stream.
+
+A stream sends a comment line every 15 seconds while the Agent is quiet, so a
+proxy with an idle timeout doesn't cut it off.
 
 ## Push notifications
 

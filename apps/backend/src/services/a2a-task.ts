@@ -139,14 +139,17 @@ const waitForTask = async (task: TaskRow, deadline: number): Promise<Task> => {
 };
 
 /**
- * `SendMessage`: a turn in a new Chat bound to the endpoint's Agent, or in the
- * Chat `contextId` names. The client's `messageId` is the user message's id,
- * so a retry answers with the Task it already started.
+ * A turn in a new Chat bound to the endpoint's Agent, or in the Chat
+ * `contextId` names, and its Task. The client's `messageId` is the user
+ * message's id, so a retry finds the Task it already started and starts
+ * nothing. `run` is the run's response body when this call started the run;
+ * the run goes on server-side whether or not the caller reads it, and a
+ * caller that does not must cancel it.
  */
-export const sendA2aMessage = async (
+export const startA2aTurn = async (
   caller: A2aCaller,
   params: SendMessageRequest,
-): Promise<Task> => {
+): Promise<{ task: TaskRow; run?: ReadableStream<Uint8Array> }> => {
   const { endpoint, token } = caller;
   const message: Message | undefined = params.message;
   if (!message?.messageId) {
@@ -156,15 +159,13 @@ export const sendA2aMessage = async (
     throw new RequestMalformedError("A message needs at least one part");
   }
   const parts = message.parts.map(fromA2aPart);
-  const blocking = !params.configuration?.returnImmediately;
-  const deadline = Date.now() + A2A_BLOCKING_WAIT_MS;
   // Checked before the run starts, so a refused config starts nothing.
   const push =
     params.configuration?.taskPushNotificationConfig &&
     (await checkPushConfig(params.configuration.taskPushNotificationConfig));
-  const answer = async (task: TaskRow) => {
+  const withPush = async (task: TaskRow) => {
     if (push) await storePushConfig(task, push);
-    return blocking ? waitForTask(task, deadline) : readTask(task);
+    return task;
   };
 
   const contextId = message.contextId || undefined;
@@ -193,7 +194,11 @@ export const sendA2aMessage = async (
       )
       .limit(1);
     if (sent) {
-      return answer(await taskFor(caller, contextId, sent.id, token.id));
+      return {
+        task: await withPush(
+          await taskFor(caller, contextId, sent.id, token.id),
+        ),
+      };
     }
     parentId = chat.leafId;
   } else {
@@ -212,9 +217,11 @@ export const sendA2aMessage = async (
       )
       .limit(1);
     if (opened) {
-      return answer(
-        await taskFor(caller, opened.chatId, message.messageId, token.id),
-      );
+      return {
+        task: await withPush(
+          await taskFor(caller, opened.chatId, message.messageId, token.id),
+        ),
+      };
     }
   }
 
@@ -232,6 +239,7 @@ export const sendA2aMessage = async (
   // before the `try`, so every way out of it gives the slot back.
   const release = acquireA2aRunSlot();
   if (!release) throw new A2aAtCapacityError();
+  let run: ReadableStream<Uint8Array> | undefined;
   try {
     const response = await startChatTurn({
       scope,
@@ -251,9 +259,7 @@ export const sendA2aMessage = async (
       },
       onEnded: release,
     });
-    // The run goes on server-side; the client follows it by Task, not by
-    // this stream.
-    await response.body?.cancel();
+    run = response.body ?? undefined;
   } catch (error) {
     // No run is left going, or the one that started has already ended.
     release();
@@ -264,14 +270,41 @@ export const sendA2aMessage = async (
     throw error;
   }
 
-  return answer(await taskFor(caller, chatId, message.messageId, token.id));
+  try {
+    return {
+      task: await withPush(
+        await taskFor(caller, chatId, message.messageId, token.id),
+      ),
+      run,
+    };
+  } catch (error) {
+    await run?.cancel();
+    throw error;
+  }
 };
 
-/** `GetTask`: one of this endpoint's Tasks, read from the database. */
-export const getA2aTask = async (
+/**
+ * `SendMessage`: the turn's Task once its run has started, or once it ends if
+ * the client asked to block and it ends soon enough.
+ */
+export const sendA2aMessage = async (
+  caller: A2aCaller,
+  params: SendMessageRequest,
+): Promise<Task> => {
+  const deadline = Date.now() + A2A_BLOCKING_WAIT_MS;
+  const { task, run } = await startA2aTurn(caller, params);
+  // The client follows the run by Task, not by this stream.
+  await run?.cancel();
+  return params.configuration?.returnImmediately
+    ? readTask(task)
+    : waitForTask(task, deadline);
+};
+
+/** One of this endpoint's Tasks. */
+export const findA2aTask = async (
   caller: A2aCaller,
   taskId: string,
-): Promise<Task> => {
+): Promise<TaskRow> => {
   const task = await findTask(
     and(
       eq(a2aTaskTable.id, taskId),
@@ -279,5 +312,11 @@ export const getA2aTask = async (
     ),
   );
   if (!task) throw new TaskNotFoundError();
-  return readTask(task);
+  return task;
 };
+
+/** `GetTask`: one of this endpoint's Tasks, read from the database. */
+export const getA2aTask = async (
+  caller: A2aCaller,
+  taskId: string,
+): Promise<Task> => readTask(await findA2aTask(caller, taskId));

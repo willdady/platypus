@@ -276,7 +276,7 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   ],
   version: "1.0.0",
   capabilities: {
-    streaming: false,
+    streaming: true,
     pushNotifications: true,
     extendedAgentCard: true,
   },

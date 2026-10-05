@@ -332,7 +332,8 @@ rejected call's `reason` is one of:
 </Callout>
 
 `outcome` describes the call, not the run: an `ok` `SendMessage` starts a run
-that can still end `failed`. Follow it by `taskId`.
+that can still end `failed`. Follow it by `taskId`. A `SendStreamingMessage`
+or `SubscribeToTask` is logged once, when its stream opens.
 
 ## Chat
 
