@@ -1761,6 +1761,48 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     release();
   });
 
+  it("refuses a message to a busy Chat with its Task, not 429, at the cap", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const first = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+    const { id: taskId, contextId } = first.body.result.task;
+
+    const res = await send({ messageId: "msg-b", contextId });
+
+    expect(res.status).toBe(200);
+    expect(res.body.error.code).toBe(-32004);
+    expect(res.body.error.data[0].metadata).toEqual({ taskId });
+    expect(activeA2aRunCount()).toBe(1);
+    expect(model.prompts).toHaveLength(1);
+    release();
+  });
+
+  it("refuses the loser of two messages racing into an idle Chat as busy", async () => {
+    process.env.A2A_MAX_CONCURRENT_RUNS = "2";
+    seedConversation();
+    const first = await send({ messageId: "msg-a" });
+    const { contextId } = first.body.result.task;
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+
+    const [b, c] = await Promise.all([
+      send({ messageId: "msg-b", contextId }, { returnImmediately: true }),
+      send({ messageId: "msg-c", contextId }, { returnImmediately: true }),
+    ]);
+
+    const [won, lost] = b.body.result ? [b, c] : [c, b];
+    // The Task it names is not pinned: the mock db has no transaction
+    // isolation, so the loser reads the leaf before the winner's claim moves it.
+    expect(won.body.result.task.id).toBeDefined();
+    expect(lost.body.error.code).toBe(-32004);
+    expect(activeA2aRunCount()).toBe(1);
+    release();
+  });
+
   it("still answers a retry, and GetTask, while at the cap", async () => {
     seedConversation();
     let release = () => {};
