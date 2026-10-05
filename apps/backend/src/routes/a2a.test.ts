@@ -97,6 +97,7 @@ import { activeA2aRunCount, resetA2aRunSlots } from "../services/a2a-call.ts";
 import { mockLogger } from "../test-setup.ts";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
+import { stopCanceledA2aRuns } from "../services/a2a-cancel.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
 
 const CARD_PATH = "/.well-known/agent-card.json";
@@ -1086,7 +1087,9 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
       contextId: task.contextId,
       status: { state: "TASK_STATE_CANCELED" },
     });
-    expect(cancelRun).toHaveBeenCalledWith(task.contextId);
+    expect(cancelRun).toHaveBeenCalledWith(task.contextId, {
+      startedBefore: expect.any(Date) as unknown,
+    });
     await vi.waitFor(() =>
       expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
     );
@@ -1100,9 +1103,52 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     const res = await rpc("CancelTask", { id: "task-1" });
 
     expect(res.body.result.status.state).toBe("TASK_STATE_CANCELED");
-    expect(cancelRun).toHaveBeenCalledWith("chat-1");
-    expect(rows("a2a_task")[0]).toMatchObject({ state: "canceled" });
+    expect(cancelRun).toHaveBeenCalledWith("chat-1", {
+      startedBefore: expect.any(Date) as unknown,
+    });
+    expect(rows("a2a_task")[0]).toMatchObject({
+      state: "canceled",
+      canceledAt: expect.any(Date) as unknown,
+    });
     expect(await stateOf("task-1")).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("stops a run whose cancel never reached it, on the next sweep", async () => {
+    seedConversation();
+    const task = await startMidReply();
+    // Lost on its way, as while the listener reconnects.
+    vi.mocked(cancelRun).mockResolvedValueOnce();
+
+    await rpc("CancelTask", { id: task.id });
+    expect(rows("chat")[0]).toMatchObject({ status: "running" });
+    await stopCanceledA2aRuns();
+
+    await vi.waitFor(() =>
+      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
+    );
+    expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("never sweeps up the run of a later turn in the same Chat", async () => {
+    seedConversation();
+    const first = await startMidReply();
+    await rpc("CancelTask", { id: first.id });
+    await vi.waitFor(() =>
+      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
+    );
+    const next = await send(
+      { messageId: "msg-b", contextId: first.contextId },
+      { returnImmediately: true },
+    );
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(2));
+
+    await stopCanceledA2aRuns();
+
+    expect(rows("chat")[0]).toMatchObject({ status: "running" });
+    expect(await stateOf(next.body.result.task.id)).toMatch(
+      /SUBMITTED|WORKING/,
+    );
+    await rpc("CancelTask", { id: next.body.result.task.id });
   });
 
   it("answers a Task that has already ended with its final state, stopping nothing", async () => {

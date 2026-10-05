@@ -1214,8 +1214,9 @@ export type A2aTaskEndState = "completed" | "failed" | "canceled";
 // state is derived from the Chat's run; `state` records how that run ended,
 // since a Chat that moves on no longer has it. The turn is named by its user
 // message — the client's `messageId` — whose reply is the assistant message.
-// Lives as long as its Chat; an endpoint or token deleted later leaves it with
-// no way to be read.
+// `canceledAt` is when a client's `CancelTask` claimed it: a run the cancel
+// message missed is found and stopped from it. Lives as long as its Chat; an
+// endpoint or token deleted later leaves it with no way to be read.
 export const a2aTask = pgTable(
   "a2a_task",
   (t) => ({
@@ -1229,6 +1230,7 @@ export const a2aTask = pgTable(
       .text("token_id")
       .references(() => a2aToken.id, { onDelete: "set null" }),
     state: t.text("state").$type<A2aTaskEndState>(),
+    canceledAt: t.timestamp("canceled_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [

@@ -12,6 +12,7 @@ import {
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduler } from "./src/jobs/scheduler.ts";
 import { listenForRunCancels } from "./src/runs/run-cancel.ts";
+import { watchForCanceledA2aRuns } from "./src/services/a2a-cancel.ts";
 import { loadPlugins, type LoadPluginsResult } from "./src/plugins/loader.ts";
 import { setLoadedPlugins } from "./src/plugins/registry.ts";
 import { installProviderWarningLogger } from "./src/provider-warnings.ts";
@@ -116,6 +117,8 @@ const main = async () => {
   startScheduler();
   // A cancel received by another instance reaches the runs held here.
   listenForRunCancels();
+  // An A2A cancel that missed the run held here, as while listening resumed.
+  watchForCanceledA2aRuns();
 };
 
 const exponentialBackoff = async <T>(

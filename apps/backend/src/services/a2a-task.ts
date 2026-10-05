@@ -24,22 +24,17 @@ import {
   ValidationError,
 } from "../errors.ts";
 import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
-import { cancelRun } from "../runs/run-cancel.ts";
 import { workspaceScopeForA2a } from "../scope.ts";
 import { startChatTurn } from "./chat-turn.ts";
 import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
 import {
   currentTurnId,
   readTask,
-  recordTaskEnd,
+  readTaskAfresh,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
-import {
-  checkPushConfig,
-  pushEndedA2aTasks,
-  storePushConfig,
-} from "./a2a-push.ts";
+import { checkPushConfig, storePushConfig } from "./a2a-push.ts";
 import { A2aAtCapacityError, acquireA2aRunSlot } from "./a2a-call.ts";
 
 /**
@@ -137,7 +132,7 @@ const busyError = async (caller: A2aCaller, chatId: string) => {
 /** The Task once it ends, or as it stands when `deadline` passes. */
 const waitForTask = async (task: TaskRow, deadline: number): Promise<Task> => {
   for (;;) {
-    const read = await readTask(task);
+    const read = await readTaskAfresh(task);
     if (TERMINAL_TASK_STATES.has(read.status!.state) || Date.now() >= deadline)
       return read;
     await new Promise((resolve) => setTimeout(resolve, BLOCKING_POLL_MS));
@@ -326,24 +321,3 @@ export const getA2aTask = async (
   caller: A2aCaller,
   taskId: string,
 ): Promise<Task> => readTask(await findA2aTask(caller, taskId));
-
-/**
- * `CancelTask`: stops the run of one of this endpoint's Tasks, on whichever
- * instance holds it, and answers with the Task, `canceled`. The end is
- * recorded at once, so every reader and follower sees it even before the run
- * has stopped, and even if the cancel never reaches it. A Task that has
- * already ended is answered as it ended, and nothing is stopped.
- */
-export const cancelA2aTask = async (
-  caller: A2aCaller,
-  taskId: string,
-): Promise<Task> => {
-  const task = await findA2aTask(caller, taskId);
-  const read = await readTask(task);
-  if (TERMINAL_TASK_STATES.has(read.status!.state)) return read;
-  // A run's id is its Chat's.
-  await cancelRun(task.chatId);
-  await recordTaskEnd(task.chatId, task.messageId, "cancelled");
-  void pushEndedA2aTasks(task.chatId);
-  return readTask(task);
-};

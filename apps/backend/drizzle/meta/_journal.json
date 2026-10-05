@@ -610,6 +610,13 @@
       "when": 1791156981426,
       "tag": "0086_a2a_task_state",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1791167532260,
+      "tag": "0087_a2a_task_canceled_at",
+      "breakpoints": true
     }
   ]
 }

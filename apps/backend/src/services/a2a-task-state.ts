@@ -87,8 +87,8 @@ export const currentTurnId = async (
 };
 
 /**
- * The Task's state. Once it has ended, the end recorded on it, read afresh.
- * Before that it comes from the Chat's run: `submitted` until the reply's first
+ * The Task's state. Once its run has ended, the end recorded on it. Before
+ * that it comes from the Chat's run: `submitted` until the reply's first
  * write and `working` after. An end read from this turn's own run that is
  * not yet recorded — a Task made just as its run ended — is recorded here,
  * so it stands once the Chat moves on.
@@ -98,14 +98,6 @@ const taskState = async (
   replyId: string | undefined,
 ): Promise<TaskState> => {
   if (task.state) return STATE_OF_END[task.state];
-  // An end recorded since `task` was read, as a cancel records it before its
-  // run has stopped: a follower holding the row sees it on its next read.
-  const [stored] = await db
-    .select({ state: a2aTaskTable.state })
-    .from(a2aTaskTable)
-    .where(eq(a2aTaskTable.id, task.id))
-    .limit(1);
-  if (stored?.state) return STATE_OF_END[stored.state];
   const [chat] = await db
     .select({ status: chatTable.status, leafId: chatTable.activeLeafId })
     .from(chatTable)
@@ -178,6 +170,21 @@ export const readTask = async (task: TaskRow): Promise<Task> => {
     history: [],
     metadata: undefined,
   };
+};
+
+/**
+ * `readTask`, from the Task's row as it is now. A caller following a Task
+ * reads it this way, so an end recorded since it last fetched the row — a
+ * cancel, which is recorded before its run has stopped, from any instance —
+ * is seen on the next read.
+ */
+export const readTaskAfresh = async (task: TaskRow): Promise<Task> => {
+  const [row] = await db
+    .select()
+    .from(a2aTaskTable)
+    .where(eq(a2aTaskTable.id, task.id))
+    .limit(1);
+  return readTask(row ?? task);
 };
 
 export const TERMINAL_TASK_STATES = new Set([

@@ -12,8 +12,8 @@ import {
   publicAgentCard,
 } from "../services/a2a-endpoint.ts";
 import { authenticateA2aCall } from "../services/a2a-token.ts";
+import { cancelA2aTask } from "../services/a2a-cancel.ts";
 import {
-  cancelA2aTask,
   getA2aTask,
   sendA2aMessage,
   type A2aCaller,
