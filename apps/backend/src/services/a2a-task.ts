@@ -179,6 +179,21 @@ export const startA2aTurn = async (
     throw new RequestMalformedError("A message needs at least one part");
   }
   const parts = message.parts.map(fromA2aPart);
+  // A Task is one turn and takes no more messages, so a message naming one
+  // never starts a run. It is refused with the spec's error for the case.
+  if (message.taskId) {
+    const task = await findA2aTask(caller, message.taskId);
+    if (message.contextId && message.contextId !== task.chatId) {
+      throw new RequestMalformedError("The contextId is not the Task's");
+    }
+    const { status } = await readTask(task);
+    if (!TERMINAL_TASK_STATES.has(status!.state)) {
+      throw new A2aChatBusyError(task.id);
+    }
+    throw new UnsupportedOperationError(
+      "The Task has ended. Send with its contextId, and no taskId, to continue",
+    );
+  }
   // Checked before the run starts, so a refused config starts nothing.
   const push =
     params.configuration?.taskPushNotificationConfig &&

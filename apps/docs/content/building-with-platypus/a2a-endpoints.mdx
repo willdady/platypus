@@ -115,7 +115,9 @@ curl https://platypus.example.com/a2a/<endpoint-id>/.well-known/agent-card.json
 The card carries the endpoint's **Name** and **Description**, says the client
 authenticates with an HTTP bearer token, names the address the client sends
 requests to, and says the endpoint offers streaming and push notifications. It
-never carries the Agent's own description, Tool sets or Skills.
+never carries the Agent's own description, Tool sets or Skills. A client may
+cache the card for up to five minutes, so a change to the Name or Description
+can take that long to reach it.
 
 An endpoint that is disabled or deleted, in a Workspace the Organization doesn't
 allow, or whose Workspace Owner has left the Organization answers
@@ -129,7 +131,9 @@ Description.
 
 A client talks to the Agent by sending JSON-RPC requests to the endpoint's
 address, with its token in an `Authorization: Bearer` header. A missing or
-wrong token gets **401 Unauthorized**.
+wrong token gets **401 Unauthorized**. The endpoint speaks A2A 1.0: a request
+whose `A2A-Version` header asks for another version is refused with a "version
+not supported" error, and a request without the header is answered as 1.0.
 
 Each conversation is an ordinary Chat in your Chat list, labelled with the
 token's name, so you can read what the client asked and what the Agent did. You
@@ -155,6 +159,9 @@ turns.
   including one you started in the Chat yourself, is refused with an
   "unsupported operation" error whose data carries the running Task's id as
   `taskId`. The client can follow that Task and send again once it ends.
+- **A Task takes no further messages.** A message that names a `taskId` is
+  refused, whether the Task is still running or has ended. To continue the
+  conversation, the client sends the Task's `contextId` and no `taskId`.
 - **A busy server says so.** Your Operator caps how many A2A runs can be going
   at once across the server. A message that would start one past the cap gets
   `429 Too Many Requests` with a `Retry-After` header, and nothing is written:
@@ -211,9 +218,9 @@ working and stops spending.
 - **A stream following the Task ends** with the `canceled` status.
 - **Anything the Agent wrote before the cancel stays in the Chat**, but the Task
   has no artifact.
-- **A Task that has already ended** is answered as it ended: a `completed` Task
-  stays `completed`, with its reply. Nothing is stopped, so a retried cancel is
-  safe.
+- **A Task that has already ended** keeps its state, and the cancel is refused
+  with a "task not cancelable" error that stops nothing. The client reads the
+  Task's final state with `GetTask`.
 - **The Chat takes the next message once the run has stopped.** A message sent
   in the moment before then is refused like any other sent while a run is
   going.

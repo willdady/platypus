@@ -1,8 +1,10 @@
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { etag } from "hono/etag";
 import {
   JsonRpcTransportHandler,
   ServerCallContext,
+  validateVersion,
   type A2ARequestHandler,
 } from "@a2a-js/sdk/server";
 import { A2AError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
@@ -78,8 +80,13 @@ const withCallLog = async (
   }
 };
 
-/** The public Agent Card. Needs no token: the URL is the secret. */
-a2a.get("/:endpointId/.well-known/agent-card.json", (c) => {
+/**
+ * The public Agent Card. Needs no token: the URL is the secret. Cacheable for
+ * a few minutes, so an edit to the endpoint's name or description can take
+ * that long to reach a client; a cached card opens nothing once the endpoint
+ * stops answering.
+ */
+a2a.get("/:endpointId/.well-known/agent-card.json", etag(), (c) => {
   const log: A2aCallLogEntry = {
     endpointId: c.req.param("endpointId"),
     method: AGENT_CARD_METHOD,
@@ -98,6 +105,7 @@ a2a.get("/:endpointId/.well-known/agent-card.json", (c) => {
       return c.json({ error: "Not Found" }, 404);
     }
     log.outcome = "ok";
+    c.header("Cache-Control", "private, max-age=300");
     return c.json(publicAgentCard(lookup.endpoint));
   });
 });
@@ -220,6 +228,15 @@ type JSONRPCResponse = Exclude<
   AsyncGenerator<unknown, void, undefined>
 >;
 
+/** The id a JSON-RPC body names, or `null` if it names none or isn't JSON. */
+const rpcIdOf = (body: string): string | number | null => {
+  try {
+    return (JSON.parse(body) as { id?: string | number | null }).id ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const encoder = new TextEncoder();
 const sseFrame = (event: JSONRPCResponse, name?: string) =>
   encoder.encode(
@@ -237,7 +254,7 @@ const eventStream = async (
   body: string,
   events: AsyncGenerator<JSONRPCResponse, void, undefined>,
 ): Promise<Response | JSONRPCResponse> => {
-  const id = (JSON.parse(body) as { id?: string | number | null }).id ?? null;
+  const id = rpcIdOf(body);
   const failure = (error: unknown): JSONRPCResponse => ({
     jsonrpc: "2.0",
     id,
@@ -275,6 +292,35 @@ const eventStream = async (
       "X-Accel-Buffering": "no",
     },
   });
+};
+
+/**
+ * The JSON-RPC error for an `A2A-Version` the card doesn't declare, or
+ * `undefined` to serve the call. A call with none is served: the spec reads a
+ * missing version as 0.3, but refusing it would shut out every client that
+ * never sends the header.
+ */
+const versionRefusal = (
+  body: string,
+  version: string | undefined,
+  endpoint: A2aCaller["endpoint"],
+): JSONRPCResponse | undefined => {
+  if (!version) return undefined;
+  try {
+    // The spec matches versions by `Major.Minor`.
+    validateVersion(
+      version.split(".").slice(0, 2).join("."),
+      AgentCard.fromJSON(publicAgentCard(endpoint)),
+      "JSONRPC",
+    );
+    return undefined;
+  } catch (error) {
+    return {
+      jsonrpc: "2.0",
+      id: rpcIdOf(body),
+      error: JsonRpcTransportHandler.mapToJSONRPCError(error),
+    };
+  }
 };
 
 /**
@@ -323,9 +369,10 @@ const capBody: MiddlewareHandler = (c, next) =>
  * JSON-RPC. A body past the cap is `413`. Every method then passes the token
  * check: a missing, wrong or expired token on a live endpoint is `401`, and
  * the token's last used or last rejected is stamped. A turn past the load cap
- * is `429`, having written nothing.
+ * is `429`, having written nothing. A trailing slash is accepted, since some
+ * clients join paths onto the URL as a base.
  */
-a2a.post("/:endpointId", capBody, (c) => {
+a2a.on("POST", ["/:endpointId", "/:endpointId/"], capBody, (c) => {
   const log: A2aCallLogEntry = {
     // Always present: the path names it. `capBody` widens the context type.
     endpointId: c.req.param("endpointId") ?? "",
@@ -366,7 +413,9 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
       guardedStreamFor(log),
     ),
   );
-  let response = await transport.handle(body, new ServerCallContext());
+  let response =
+    versionRefusal(body, c.req.header("A2A-Version"), endpoint) ??
+    (await transport.handle(body, new ServerCallContext()));
   if (Symbol.asyncIterator in response) {
     const answer = await eventStream(body, response);
     // A stream is logged once it opens; how it goes on is the Task's to say.
