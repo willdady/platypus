@@ -28,17 +28,19 @@ import { workspaceScopeForA2a } from "../scope.ts";
 import { startChatTurn } from "./chat-turn.ts";
 import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
 import {
+  currentTurnId,
   readTask,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
 import { checkPushConfig, storePushConfig } from "./a2a-push.ts";
+import { A2aAtCapacityError, acquireA2aRunSlot } from "./a2a-call.ts";
 
 /**
  * A2A conversations (ADR-0032): `SendMessage` starts a turn in a Chat and
  * answers with the turn's Task, which the client follows with `GetTask`. A
- * Task's state is read from the Chat's run on every call, so any backend
- * instance answers.
+ * running Task's state is read from the Chat's run on every call, and an
+ * ended one's from the Task, so any backend instance answers.
  */
 
 export type A2aCaller = {
@@ -116,26 +118,10 @@ const taskFor = async (
  * started in the UI gets a Task here, so it can be followed the same way.
  */
 const busyError = async (caller: A2aCaller, chatId: string) => {
-  const [chat] = await db
-    .select({ leafId: chatTable.activeLeafId })
-    .from(chatTable)
-    .where(eq(chatTable.id, chatId))
-    .limit(1);
-  const [leaf] = chat?.leafId
-    ? await db
-        .select({
-          id: chatMessage.id,
-          role: chatMessage.role,
-          parentId: chatMessage.parentId,
-        })
-        .from(chatMessage)
-        .where(
-          and(eq(chatMessage.chatId, chatId), eq(chatMessage.id, chat.leafId)),
-        )
-        .limit(1)
-    : [];
-  const turnId = leaf?.role === "assistant" ? leaf.parentId : leaf?.id;
+  const turnId = await currentTurnId(chatId);
   const task = turnId ? await taskFor(caller, chatId, turnId, null) : undefined;
+  // Reading it records its end, should its run have ended as it was made.
+  if (task) await readTask(task);
   return new UnsupportedOperationError({
     message: CHAT_BUSY_MESSAGE,
     metadata: task ? { taskId: task.id } : undefined,
@@ -248,6 +234,11 @@ export const startA2aTurn = async (
     organizationId: endpoint.organizationId,
     ownerUserId: endpoint.ownerId,
   });
+  // Asked only by a call that would start a run: a retry above answers with
+  // its Task at any load. Past the cap, nothing has been written. Taken just
+  // before the `try`, so every way out of it gives the slot back.
+  const release = acquireA2aRunSlot();
+  if (!release) throw new A2aAtCapacityError();
   let run: ReadableStream<Uint8Array> | undefined;
   try {
     const response = await startChatTurn({
@@ -266,9 +257,12 @@ export const startA2aTurn = async (
         a2aTokenId: token.id,
         a2aEndpointId: endpoint.id,
       },
+      onEnded: release,
     });
     run = response.body ?? undefined;
   } catch (error) {
+    // No run is left going, or the one that started has already ended.
+    release();
     if (error instanceof ConflictError) throw await busyError(caller, chatId);
     if (error instanceof ValidationError) {
       throw new RequestMalformedError(error.message);

@@ -11,6 +11,8 @@ const { model } = vi.hoisted(() => ({
     /** The reply's deltas, when a test streams it in pieces. */
     deltas: null as string[] | null,
     hold: null as Promise<void> | null,
+    /** Holds the stream after the reply's first words, until it settles. */
+    holdMidReply: null as Promise<void> | null,
     prompts: [] as unknown[],
   },
 }));
@@ -47,7 +49,27 @@ vi.mock("../services/provider.ts", async (importOriginal) => ({
               },
             },
           ];
-          return { stream: convertArrayToReadableStream(chunks) };
+          const midReply = model.holdMidReply;
+          if (!midReply) {
+            return { stream: convertArrayToReadableStream(chunks) };
+          }
+          const signal = options.abortSignal;
+          const aborted = new Promise<void>((resolve) =>
+            signal?.addEventListener("abort", () => resolve(), { once: true }),
+          );
+          return {
+            stream: new ReadableStream<LanguageModelV3StreamPart>({
+              async start(controller) {
+                chunks
+                  .slice(0, 3)
+                  .forEach((chunk) => controller.enqueue(chunk));
+                await Promise.race([midReply, aborted]);
+                if (signal?.aborted) return controller.error(signal.reason);
+                chunks.slice(3).forEach((chunk) => controller.enqueue(chunk));
+                controller.close();
+              },
+            }),
+          };
         },
         doGenerate: () => Promise.reject(new Error("no titling in tests")),
       }),
@@ -65,6 +87,8 @@ import app from "../server.ts";
 import { createNotification } from "../services/notification.ts";
 import { hashInboundToken } from "../services/inbound-trigger-token.ts";
 import { resetA2aTokenTouches } from "../services/a2a-token.ts";
+import { activeA2aRunCount, resetA2aRunSlots } from "../services/a2a-call.ts";
+import { mockLogger } from "../test-setup.ts";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
@@ -236,6 +260,7 @@ describe("POST /a2a/:endpointId — the token", () => {
     resetMockDb();
     vi.clearAllMocks();
     resetA2aTokenTouches();
+    resetA2aRunSlots();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
   });
@@ -483,14 +508,34 @@ const send = (
 
 const rows = (table: string) => tables[table] ?? [];
 
+/** A Task whose run has written its first words and is held there. */
+const startMidReply = async () => {
+  model.holdMidReply = new Promise(() => {});
+  const sent = await send({ messageId: "msg-a" }, { returnImmediately: true });
+  await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+  return sent.body.result.task;
+};
+
+/** The Chat moves on: the next turn is sent, and ends. */
+const moveOn = async (contextId: string) => {
+  model.holdMidReply = null;
+  const next = await send({ messageId: "msg-b", contextId });
+  expect(next.body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
+};
+
+const stateOf = async (taskId: string) =>
+  (await rpc("GetTask", { id: taskId })).body.result.status.state;
+
 describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
     model.reply = "Hello from Helper";
     model.hold = null;
+    model.holdMidReply = null;
     model.prompts = [];
     resetA2aTokenTouches();
+    resetA2aRunSlots();
   });
 
   it("stamps the token's last used on a SendMessage", async () => {
@@ -811,6 +856,155 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     expect(rows("chat")).toHaveLength(0);
   });
 
+  describe("a Task that ended after writing part of a reply", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("still reads canceled once the Chat has moved on", async () => {
+      seedConversation();
+      const task = await startMidReply();
+
+      await cancelRun(task.contextId);
+      await vi.waitFor(async () =>
+        expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED"),
+      );
+      expect(rows("chat_message").some((m) => m.role === "assistant")).toBe(
+        true,
+      );
+      await moveOn(task.contextId);
+
+      expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED");
+    });
+
+    it("still reads failed once the Chat has moved on", async () => {
+      // A run that outlives its bound ends failed.
+      vi.stubEnv("CHAT_PER_RUN_TIMEOUT_MS", "300");
+      seedConversation();
+      const task = await startMidReply();
+
+      await vi.waitFor(async () =>
+        expect(await stateOf(task.id)).toBe("TASK_STATE_FAILED"),
+      );
+      expect(rows("chat_message").some((m) => m.role === "assistant")).toBe(
+        true,
+      );
+      await moveOn(task.contextId);
+
+      expect(await stateOf(task.id)).toBe("TASK_STATE_FAILED");
+    });
+
+    it("keeps the end of a Task made just as its run ended", async () => {
+      // The run ended between the busy refusal and its Task being made, so
+      // the run's end found no Task to record on.
+      seedConversation({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId: "ws-1",
+            agentId: "agent-1",
+            title: "Ended",
+            status: "cancelled",
+            activeLeafId: "reply-a",
+          },
+        ],
+        chat_message: [
+          {
+            chatId: "chat-1",
+            id: "msg-a",
+            parentId: null,
+            role: "user",
+            parts: [{ type: "text", text: "Where is my order?" }],
+            deletedAt: null,
+            createdAt: new Date(Date.now() - 1000),
+          },
+          {
+            chatId: "chat-1",
+            id: "reply-a",
+            parentId: "msg-a",
+            role: "assistant",
+            parts: [{ type: "text", text: "Let me ch" }],
+            deletedAt: null,
+            createdAt: new Date(Date.now() - 1000),
+          },
+        ],
+        a2a_task: [
+          {
+            id: "task-1",
+            chatId: "chat-1",
+            messageId: "msg-a",
+            endpointId: "ep-1",
+            tokenId: "tok-1",
+            state: null,
+            createdAt: new Date(),
+          },
+        ],
+      });
+
+      expect(await stateOf("task-1")).toBe("TASK_STATE_CANCELED");
+      await moveOn("chat-1");
+
+      expect(await stateOf("task-1")).toBe("TASK_STATE_CANCELED");
+    });
+
+    it("reads failed after the stuck-Chat sweep, once the Chat has moved on", async () => {
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      seedConversation({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId: "ws-1",
+            agentId: "agent-1",
+            title: "Orphaned",
+            status: "running",
+            activeLeafId: "reply-a",
+            lastTurnAt: hourAgo,
+            updatedAt: hourAgo,
+          },
+        ],
+        chat_message: [
+          {
+            chatId: "chat-1",
+            id: "msg-a",
+            parentId: null,
+            role: "user",
+            parts: [{ type: "text", text: "Where is my order?" }],
+            deletedAt: null,
+            createdAt: hourAgo,
+          },
+          {
+            chatId: "chat-1",
+            id: "reply-a",
+            parentId: "msg-a",
+            role: "assistant",
+            parts: [{ type: "text", text: "Let me ch" }],
+            deletedAt: null,
+            createdAt: hourAgo,
+          },
+        ],
+        a2a_task: [
+          {
+            id: "task-1",
+            chatId: "chat-1",
+            messageId: "msg-a",
+            endpointId: "ep-1",
+            tokenId: "tok-1",
+            state: null,
+            createdAt: hourAgo,
+          },
+        ],
+      });
+      vi.stubEnv("CHAT_PER_RUN_TIMEOUT_MS", "1000");
+
+      await recoverStuckChats();
+      vi.unstubAllEnvs();
+      await vi.waitFor(() =>
+        expect(rows("a2a_task")[0]).toMatchObject({ state: "failed" }),
+      );
+      await moveOn("chat-1");
+
+      expect(await stateOf("task-1")).toBe("TASK_STATE_FAILED");
+    });
+  });
+
   it("does not read another endpoint's Task", async () => {
     seedConversation();
     const sent = await send({ messageId: "msg-a" });
@@ -864,8 +1058,10 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     vi.clearAllMocks();
     model.reply = "Hello from Helper";
     model.hold = null;
+    model.holdMidReply = null;
     model.prompts = [];
     resetA2aTokenTouches();
+    resetA2aRunSlots();
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
   });
@@ -980,6 +1176,27 @@ describe("POST /a2a/:endpointId — push notifications", () => {
 
     await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("pushes the stored end to a URL registered after the Chat moved on", async () => {
+    seedConversation();
+    const task = await startMidReply();
+    await cancelRun(task.contextId);
+    await vi.waitFor(async () =>
+      expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED"),
+    );
+    await moveOn(task.contextId);
+
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config(),
+    });
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(pushed()[0].body.task).toMatchObject({
+      id: task.id,
+      status: { state: "TASK_STATE_CANCELED" },
+    });
   });
 
   it("pushes once however often the same config is registered", async () => {
@@ -1182,6 +1399,500 @@ describe("POST /a2a/:endpointId — push notifications", () => {
 
     expect(res.body.error.code).toBe(-32001);
     expect(rows("a2a_push_config")).toHaveLength(0);
+  });
+});
+
+describe("POST /a2a/:endpointId — the load cap", () => {
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.hold = null;
+    model.prompts = [];
+    resetA2aTokenTouches();
+    resetA2aRunSlots();
+    process.env.A2A_MAX_CONCURRENT_RUNS = "1";
+  });
+
+  afterEach(() => {
+    delete process.env.A2A_MAX_CONCURRENT_RUNS;
+  });
+
+  it("answers 429 with Retry-After past the cap, writing no Chat or Task", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    await send({ messageId: "msg-a" }, { returnImmediately: true });
+
+    const res = await app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "SendMessage",
+        params: {
+          message: {
+            messageId: "msg-b",
+            role: "ROLE_USER",
+            parts: [text("Another question")],
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("30");
+    expect(await res.json()).toEqual({ error: "Too Many Requests" });
+    expect(rows("chat")).toHaveLength(1);
+    expect(rows("a2a_task")).toHaveLength(1);
+    expect(model.prompts).toHaveLength(1);
+    release();
+  });
+
+  it("still answers a retry, and GetTask, while at the cap", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const first = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+
+    const retry = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+    const got = await rpc("GetTask", { id: first.body.result.task.id });
+
+    expect(retry.status).toBe(200);
+    expect(retry.body.result.task.id).toBe(first.body.result.task.id);
+    expect(got.body.result.id).toBe(first.body.result.task.id);
+    release();
+  });
+
+  it("frees the slot when the run ends", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const first = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+    release();
+    await vi.waitFor(async () => {
+      const got = await rpc("GetTask", { id: first.body.result.task.id });
+      expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+    });
+
+    await vi.waitFor(() => expect(activeA2aRunCount()).toBe(0));
+    const next = await send({ messageId: "msg-b" });
+
+    expect(next.status).toBe(200);
+    expect(next.body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
+  });
+
+  it("frees the slot when the turn is refused before it runs", async () => {
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Busy",
+          status: "running",
+          activeLeafId: null,
+        },
+      ],
+    });
+
+    const busy = await send({ messageId: "msg-a", contextId: "chat-1" });
+    const next = await send({ messageId: "msg-b" });
+
+    expect(busy.body.error.code).toBe(-32004);
+    expect(next.status).toBe(200);
+    expect(next.body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
+  });
+
+  it("answers a SendStreamingMessage past the cap with 429, not a stream", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    await send({ messageId: "msg-a" }, { returnImmediately: true });
+
+    const res = await app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "SendStreamingMessage",
+        params: {
+          message: {
+            messageId: "msg-b",
+            role: "ROLE_USER",
+            parts: [text("Another question")],
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("30");
+    expect(rows("a2a_task")).toHaveLength(1);
+    release();
+  });
+});
+
+describe("the A2A call log", () => {
+  /** The call-log lines written so far, as their field objects. */
+  const callLogLines = () =>
+    mockLogger.info.mock.calls
+      .filter(([, message]) => message === "A2A call")
+      .map(([fields]) => fields as Record<string, unknown>);
+
+  /** Every field, `null` where the call did not reach it. */
+  const line = (fields: Record<string, unknown>) => ({
+    organizationId: null,
+    workspaceId: null,
+    endpointId: "ep-1",
+    tokenId: null,
+    method: null,
+    outcome: "ok",
+    reason: null,
+    taskId: null,
+    chatId: null,
+    ...fields,
+  });
+
+  const ids = { organizationId: "org-1", workspaceId: "ws-1" };
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.hold = null;
+    model.prompts = [];
+    resetA2aTokenTouches();
+    resetA2aRunSlots();
+  });
+
+  afterEach(() => {
+    delete process.env.A2A_MAX_CONCURRENT_RUNS;
+  });
+
+  it("logs a card fetch", async () => {
+    seedConversation();
+
+    await card();
+
+    expect(callLogLines()).toEqual([line({ ...ids, method: "GetAgentCard" })]);
+  });
+
+  it.each([
+    ["unknown_endpoint", "ep-nope", {}, {}],
+    ["disabled", "ep-1", { enabled: false }, ids],
+  ])(
+    "logs a card fetch from an endpoint that isn't live as %s",
+    async (reason, endpointId, endpoint, known) => {
+      seed({ endpoint });
+
+      await card(endpointId);
+
+      expect(callLogLines()).toEqual([
+        line({
+          ...known,
+          endpointId,
+          method: "GetAgentCard",
+          outcome: "rejected",
+          reason,
+        }),
+      ]);
+    },
+  );
+
+  it("logs a closed gate and an Owner who has left", async () => {
+    seed({ gate: "off" });
+    await card();
+    resetMockDb();
+    seed({ ownerIsMember: false });
+    await card();
+
+    expect(callLogLines().map((l) => l.reason)).toEqual(["gate", "owner_left"]);
+    expect(callLogLines()[0]).toMatchObject(ids);
+  });
+
+  it("logs a SendMessage with its token, Task and Chat, and no message content", async () => {
+    seedConversation();
+
+    const sent = await send({ messageId: "msg-a" });
+
+    const { id: taskId, contextId: chatId } = sent.body.result.task;
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "SendMessage",
+        taskId,
+        chatId,
+      }),
+    ]);
+    const everything = JSON.stringify(mockLogger.info.mock.calls);
+    expect(everything).not.toContain("Where is my order?");
+    expect(everything).not.toContain("Hello from Helper");
+  });
+
+  it("logs a GetTask with its Task and Chat", async () => {
+    seedConversation();
+    const sent = await send({ messageId: "msg-a" });
+    vi.clearAllMocks();
+
+    await rpc("GetTask", { id: sent.body.result.task.id });
+
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "GetTask",
+        taskId: sent.body.result.task.id,
+        chatId: sent.body.result.task.contextId,
+      }),
+    ]);
+  });
+
+  it.each([
+    ["missing_token", null],
+    ["bad_token", "pa2a_a-wrong-token"],
+  ])("logs a %s", async (reason, token) => {
+    seedConversation();
+
+    await rpc("GetTask", { id: "t" }, { token });
+
+    expect(callLogLines()).toEqual([
+      line({ ...ids, method: "GetTask", outcome: "rejected", reason }),
+    ]);
+  });
+
+  it("logs an expired token with the token it names", async () => {
+    seedConversation();
+    rows("a2a_token")[0].tokenExpiresAt = new Date(Date.now() - 1000);
+
+    await rpc("GetTask", { id: "t" });
+
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "GetTask",
+        outcome: "rejected",
+        reason: "expired_token",
+      }),
+    ]);
+  });
+
+  it("logs an A2A error by its kind", async () => {
+    seedConversation();
+
+    await rpc("GetTask", { id: "no-such-task" });
+    await rpc("NoSuchMethod", {});
+    await send({
+      messageId: "msg-a",
+      parts: [{ url: "https://x.test/a.png", mediaType: "image/png" }],
+    });
+
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "GetTask",
+        outcome: "rejected",
+        reason: "task_not_found",
+      }),
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "NoSuchMethod",
+        outcome: "rejected",
+        reason: "method_not_found",
+      }),
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "SendMessage",
+        outcome: "rejected",
+        reason: "content_type_not_supported",
+      }),
+    ]);
+  });
+
+  it("logs a body that isn't JSON", async () => {
+    seedConversation();
+
+    await app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN}` },
+      body: "not json",
+    });
+
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        outcome: "rejected",
+        reason: "invalid_params",
+      }),
+    ]);
+  });
+
+  it("logs a message refused while the Chat is busy, with the Task it names", async () => {
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Busy",
+          status: "running",
+          activeLeafId: "owner-msg",
+        },
+      ],
+      chat_message: [
+        {
+          chatId: "chat-1",
+          id: "owner-msg",
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "Owner asks" }],
+          deletedAt: null,
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    await send({ messageId: "msg-a", contextId: "chat-1" });
+
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "SendMessage",
+        outcome: "rejected",
+        reason: "busy",
+        taskId: rows("a2a_task")[0].id,
+      }),
+    ]);
+  });
+
+  it("logs a call past the load cap as rate limited", async () => {
+    process.env.A2A_MAX_CONCURRENT_RUNS = "1";
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    await send({ messageId: "msg-a" }, { returnImmediately: true });
+    vi.clearAllMocks();
+
+    await send({ messageId: "msg-b" }, { returnImmediately: true });
+
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "SendMessage",
+        outcome: "rate_limited",
+      }),
+    ]);
+    release();
+  });
+
+  it("logs a SendStreamingMessage once, with its Task and Chat", async () => {
+    seedConversation();
+
+    const res = await app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "SendStreamingMessage",
+        params: {
+          message: {
+            messageId: "msg-a",
+            role: "ROLE_USER",
+            parts: [text("Where is my order?")],
+          },
+        },
+      }),
+    });
+    await res.text();
+
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "SendStreamingMessage",
+        taskId: rows("a2a_task")[0].id,
+        chatId: rows("chat")[0].id,
+      }),
+    ]);
+  });
+
+  it("logs an internal error without its detail", async () => {
+    // A stored reply that doesn't read as parts fails inside the backend.
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Broken",
+          status: "succeeded",
+          activeLeafId: "reply-1",
+        },
+      ],
+      chat_message: [
+        {
+          chatId: "chat-1",
+          id: "reply-1",
+          parentId: "msg-a",
+          role: "assistant",
+          parts: "secret detail",
+          deletedAt: null,
+          createdAt: new Date(),
+        },
+      ],
+      a2a_task: [
+        {
+          id: "task-1",
+          chatId: "chat-1",
+          messageId: "msg-a",
+          endpointId: "ep-1",
+          tokenId: "tok-1",
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    const res = await rpc("GetTask", { id: "task-1" });
+
+    expect(res.body.error.code).toBe(-32603);
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "GetTask",
+        outcome: "rejected",
+        reason: "internal_error",
+      }),
+    ]);
   });
 });
 

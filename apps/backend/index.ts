@@ -17,6 +17,7 @@ import { setLoadedPlugins } from "./src/plugins/registry.ts";
 import { installProviderWarningLogger } from "./src/provider-warnings.ts";
 import { validateTriggerBreakerConfig } from "./src/services/trigger-breaker.ts";
 import { validateInboundTriggerSettings } from "./src/services/inbound-trigger.ts";
+import { validateA2aSettings } from "./src/services/a2a-call.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -53,6 +54,8 @@ const main = async () => {
     // Same rule for the Inbound Trigger caps (ADR-0030): the concurrency and
     // body caps are what bound what an outside caller can make this server do.
     validateInboundTriggerSettings();
+    // And for the A2A load cap (ADR-0032).
+    validateA2aSettings();
 
     await exponentialBackoff(async () => {
       // Enable pgvector extension for embedding storage (needed before drizzle-kit push in dev)

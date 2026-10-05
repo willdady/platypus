@@ -258,6 +258,83 @@ dropped it, and a _Suppressed_ run was recorded), `rate_limited` (answered
 `outcome` describes the call, not the run: an `accepted` call's run can still
 end _Failed_. Join the two on `runId` to follow a call to its result.
 
+### A2A endpoints
+
+An [A2A endpoint](/building-with-platypus/a2a-endpoints) makes an Agent
+reachable from outside Platypus under `/a2a/*`. Like `/hooks/*`, every route
+under it checks its own token and reads no session, so you can expose that
+prefix alone through a proxy or tunnel. This setting bounds how many runs those
+callers can have going. It applies to each backend instance separately: an A2A
+run executes on the instance that started it, so with three instances behind
+one address, up to three times `A2A_MAX_CONCURRENT_RUNS` A2A runs can be
+active across them.
+
+| Variable                  | Purpose                                                                                                                                                                                                                        | Default | Required |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | -------- |
+| `A2A_MAX_CONCURRENT_RUNS` | A2A runs allowed to be active at once. A message that would start another is answered `429` with `Retry-After`, and no Chat or Task is written. A retry of a message already sent, and every other call, is answered as usual. | `10`    | No       |
+
+The value must be a positive integer, and a malformed one fails the backend at
+startup. Runs a Workspace Owner starts in the Chat themselves don't count.
+Per-client rate limiting is your proxy's job: each endpoint has its own path,
+so you can limit one noisy client there.
+
+#### The A2A call log
+
+Every call to an A2A endpoint writes exactly one call-log line at `info`,
+whatever became of it, with the message `A2A call`. That includes fetches of
+the public Agent Card and calls refused before their token was checked. No
+message content is ever logged. Like the inbound call log, its message, fields
+and values are a stable format that Platypus keeps unchanged.
+
+Every field is on every line, `null` where it does not apply:
+
+| Field            | Value                                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `organizationId` | The endpoint's Organization, when the call named a real endpoint                                                      |
+| `workspaceId`    | The endpoint's Workspace, same                                                                                        |
+| `endpointId`     | The id the call named, real or not                                                                                    |
+| `tokenId`        | The token the call carried, when it named one: a live token, or an expired one                                        |
+| `method`         | The JSON-RPC method the call named, such as `SendMessage` or `GetTask`; `GetAgentCard` for a fetch of the public card |
+| `outcome`        | What happened — see below                                                                                             |
+| `reason`         | Why a `rejected` call was rejected — see below                                                                        |
+| `taskId`         | The Task the call answered with or acted on                                                                           |
+| `chatId`         | The Chat that Task belongs to, which is also the conversation's `contextId`                                           |
+
+`outcome` is one of `ok`, `rate_limited` (answered `429`) or `rejected`. A
+rejected call's `reason` is one of:
+
+| `reason`                          | The call                                                          | Answered           |
+| --------------------------------- | ----------------------------------------------------------------- | ------------------ |
+| `unknown_endpoint`                | named no endpoint                                                 | `404`              |
+| `disabled`                        | named a disabled endpoint                                         | `404`              |
+| `gate`                            | named an endpoint in a Workspace the Organization has not allowed | `404`              |
+| `owner_left`                      | named an endpoint whose Workspace Owner has left the Organization | `404`              |
+| `missing_token`                   | carried no `Authorization: Bearer` header                         | `401`              |
+| `bad_token`                       | carried a wrong or deleted token                                  | `401`              |
+| `expired_token`                   | carried a token after it expired                                  | `401`              |
+| `busy`                            | sent a message while the conversation's run was still going       | A2A error          |
+| `parse_error`                     | sent a body that couldn't be parsed                               | A2A error          |
+| `invalid_request`                 | sent a request that isn't valid JSON-RPC                          | A2A error          |
+| `method_not_found`                | named a method the endpoint doesn't have                          | A2A error          |
+| `invalid_params`                  | sent a body that isn't JSON, or parameters the method can't take  | A2A error          |
+| `task_not_found`                  | named a Task or conversation the endpoint doesn't have            | A2A error          |
+| `task_not_cancelable`             | asked to cancel a Task that can't be cancelled                    | A2A error          |
+| `push_notification_not_supported` | asked for a push notification the endpoint can't make             | A2A error          |
+| `unsupported_operation`           | asked for something the endpoint doesn't offer                    | A2A error          |
+| `content_type_not_supported`      | sent a part type the endpoint doesn't take, such as a file        | A2A error          |
+| `version_not_supported`           | asked for an A2A version the endpoint doesn't speak               | A2A error          |
+| `a2a_error`                       | was refused with any other A2A error                              | A2A error          |
+| `internal_error`                  | failed inside the backend                                         | A2A error or `500` |
+
+<Callout type="warning">
+  The line is written at `info`. Running the backend at `LOG_LEVEL=warn` or
+  above drops every one of them, and the audit trail with them.
+</Callout>
+
+`outcome` describes the call, not the run: an `ok` `SendMessage` starts a run
+that can still end `failed`. Follow it by `taskId`. A `SendStreamingMessage`
+or `SubscribeToTask` is logged once, when its stream opens.
+
 ## Chat
 
 Timeouts that bound an interactive Chat turn. The idle timeout measures silence
