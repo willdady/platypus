@@ -28,6 +28,7 @@ import { workspaceScopeForA2a } from "../scope.ts";
 import { startChatTurn } from "./chat-turn.ts";
 import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
 import {
+  currentTurnId,
   readTask,
   TERMINAL_TASK_STATES,
   type TaskRow,
@@ -38,8 +39,8 @@ import { A2aAtCapacityError, acquireA2aRunSlot } from "./a2a-call.ts";
 /**
  * A2A conversations (ADR-0032): `SendMessage` starts a turn in a Chat and
  * answers with the turn's Task, which the client follows with `GetTask`. A
- * Task's state is read from the Chat's run on every call, so any backend
- * instance answers.
+ * running Task's state is read from the Chat's run on every call, and an
+ * ended one's from the Task, so any backend instance answers.
  */
 
 export type A2aCaller = {
@@ -117,26 +118,10 @@ const taskFor = async (
  * started in the UI gets a Task here, so it can be followed the same way.
  */
 const busyError = async (caller: A2aCaller, chatId: string) => {
-  const [chat] = await db
-    .select({ leafId: chatTable.activeLeafId })
-    .from(chatTable)
-    .where(eq(chatTable.id, chatId))
-    .limit(1);
-  const [leaf] = chat?.leafId
-    ? await db
-        .select({
-          id: chatMessage.id,
-          role: chatMessage.role,
-          parentId: chatMessage.parentId,
-        })
-        .from(chatMessage)
-        .where(
-          and(eq(chatMessage.chatId, chatId), eq(chatMessage.id, chat.leafId)),
-        )
-        .limit(1)
-    : [];
-  const turnId = leaf?.role === "assistant" ? leaf.parentId : leaf?.id;
+  const turnId = await currentTurnId(chatId);
   const task = turnId ? await taskFor(caller, chatId, turnId, null) : undefined;
+  // Reading it records its end, should its run have ended as it was made.
+  if (task) await readTask(task);
   return new UnsupportedOperationError({
     message: CHAT_BUSY_MESSAGE,
     metadata: task ? { taskId: task.id } : undefined,
