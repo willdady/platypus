@@ -54,7 +54,10 @@ beforeEach(() => {
   resetFormHarness();
   asOwner(true);
   setDataFor("/agents", {
-    results: [{ id: "agent-1", name: "Helper", description: "Internal" }],
+    results: [
+      { id: "agent-1", name: "Helper", description: "Internal" },
+      { id: "agent-2", name: "Scout", description: "Finds things" },
+    ],
   });
 });
 
@@ -64,15 +67,48 @@ afterEach(() => {
 });
 
 describe("A2aEndpointForm", () => {
-  it("warns that runs act as the Owner with all of the agent's tools", () => {
+  it("leaves the runs-act-as-you warning to the endpoints list", () => {
     render(<A2aEndpointForm orgId="org1" workspaceId="ws1" />);
 
     expect(
-      screen.getByText("Runs act as you, with all of the agent's tools"),
-    ).toBeInTheDocument();
+      screen.queryByText("Runs act as you, with all of the agent's tools"),
+    ).not.toBeInTheDocument();
   });
 
-  it("creates an endpoint, leaving a blank name and description to the agent's, then opens it", async () => {
+  it("fills the name and description from the agent picked", async () => {
+    render(<A2aEndpointForm orgId="org1" workspaceId="ws1" />);
+
+    await selectOption("Select an agent", "Helper");
+    expect(screen.getByLabelText("Name")).toHaveValue("Helper");
+    expect(screen.getByLabelText("Description")).toHaveValue("Internal");
+
+    // A fill the Owner hasn't touched follows the next pick.
+    await selectOption("Helper", "Scout");
+    expect(screen.getByLabelText("Name")).toHaveValue("Scout");
+    expect(screen.getByLabelText("Description")).toHaveValue("Finds things");
+  });
+
+  it("keeps a name and description the Owner typed when an agent is picked", async () => {
+    render(<A2aEndpointForm orgId="org1" workspaceId="ws1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Acme helpdesk" },
+    });
+    await selectOption("Select an agent", "Helper");
+    expect(screen.getByLabelText("Name")).toHaveValue("Acme helpdesk");
+    expect(screen.getByLabelText("Description")).toHaveValue("Internal");
+
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "Ask about your order" },
+    });
+    await selectOption("Helper", "Scout");
+    expect(screen.getByLabelText("Name")).toHaveValue("Acme helpdesk");
+    expect(screen.getByLabelText("Description")).toHaveValue(
+      "Ask about your order",
+    );
+  });
+
+  it("creates an endpoint, then opens it at its URL and tokens", async () => {
     const fetchMock = stubAcceptedSave({ ...endpoint, tokens: undefined });
     render(<A2aEndpointForm orgId="org1" workspaceId="ws1" />);
 
@@ -81,15 +117,39 @@ describe("A2aEndpointForm", () => {
 
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith(
-        "/org1/workspace/ws1/settings/a2a-endpoints/ep-1",
+        "/org1/workspace/ws1/settings/a2a-endpoints/ep-1#access",
       ),
     );
     expect(savedBody(fetchMock)).toEqual({
       agentId: "agent-1",
+      name: "Helper",
+      description: "Internal",
       enabled: true,
       includeMemories: false,
       extractMemories: false,
     });
+  });
+
+  it("lands on the token name when opened just after create", async () => {
+    window.location.hash = "#access";
+    const original = Element.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      setDataFor("/a2a-endpoints/ep-1", endpoint);
+      render(
+        <A2aEndpointForm orgId="org1" workspaceId="ws1" endpointId="ep-1" />,
+      );
+
+      await waitFor(() =>
+        expect(screen.getByLabelText("Token name")).toHaveFocus(),
+      );
+      expect(scrollIntoView).toHaveBeenCalled();
+      expect(window.location.hash).toBe("");
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      window.location.hash = "";
+    }
   });
 
   it("turns on both memory settings", async () => {

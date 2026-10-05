@@ -48,23 +48,26 @@ Go to **Workspace settings → A2A endpoints** and click **Add endpoint**.
 
 - **Agent** — the Agent callers talk to. Any Agent in the Workspace, including
   an attached Shared Agent. You can't change it later.
-- **Name** — what callers see as the agent's name, up to 100 characters. Leave
-  it blank to use the Agent's name.
+- **Name** — what callers see as the agent's name, up to 100 characters.
+  Picking the Agent fills in its name, unless you've already typed one. Left
+  blank, the Agent's name is used.
 - **Description** — what callers see in place of the Agent's description, up to
-  1000 characters. Leave it blank to use the Agent's description, then
-  rewrite it for outsiders: the Agent's description is written for you and for
-  other Agents.
+  1000 characters. Picking the Agent fills in its description, unless you've
+  already typed one. Left blank, the Agent's description is used. Rewrite it
+  for outsiders: the Agent's description is written for you and for other
+  Agents.
 - **Enabled** — when off, the endpoint answers every call with **Not Found**.
 - **Include Memories** and **Extract Memories** — whether the endpoint's runs
   read your Memories and its Chats write to them. Both are off by default; see
   [Memories](#memories).
 
-Click **Save**. The new endpoint's page opens.
+Click **Save**. The new endpoint's page opens at its **Agent card URL** and
+**Tokens**.
 
 ### Add a token for each client
 
 Under **Tokens**, name the token after the client it's for, up to 100
-characters (for example `Hermes on Telegram`), pick how long it lasts — 30, 90,
+characters, pick how long it lasts — 30, 90,
 180 or 365 days, 90 by default — and click **Add token**. Copy the token from
 the dialog. It's shown once and Platypus keeps only a hash of it, so if you lose
 it, regenerate it.

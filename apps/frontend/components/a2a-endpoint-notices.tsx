@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, TriangleAlert } from "lucide-react";
+import { Ban } from "lucide-react";
 import {
   gateAdmits,
   type Organization,
@@ -11,9 +11,8 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { organizationEntity, workspaceEntity } from "@/lib/api-write";
 
 /**
- * What an Owner must know before handing out an A2A endpoint: its runs act
- * as them with every one of the Agent's tools, and, when the Organization's
- * gate excludes this Workspace, that its endpoints don't answer at all.
+ * Tells the Owner when the Organization's gate excludes this Workspace, so
+ * its A2A endpoints don't answer at all.
  */
 export const A2aEndpointNotices = ({
   orgId,
@@ -37,30 +36,17 @@ export const A2aEndpointNotices = ({
     (organization.a2aGate !== "selected" || workspace !== undefined) &&
     !gateAdmits(organization.a2aGate, workspace?.a2aAllowed);
 
+  if (!gateClosed) return null;
+
   return (
-    <div className="mb-6 flex flex-col gap-4">
-      <Alert>
-        <TriangleAlert />
-        <AlertTitle>
-          Runs act as you, with all of the agent&apos;s tools
-        </AlertTitle>
-        <AlertDescription>
-          Anyone holding a token can talk to the agent, and every run acts as
-          you with every tool the agent has. Only expose an agent whose tools
-          are safe for the people you give tokens to.
-        </AlertDescription>
-      </Alert>
-      {gateClosed && (
-        <Alert>
-          <Ban />
-          <AlertTitle>A2A endpoints are turned off here</AlertTitle>
-          <AlertDescription>
-            Your organization doesn&apos;t allow A2A endpoints in this
-            workspace, so they answer every call with Not Found. Ask an
-            organization admin to allow them.
-          </AlertDescription>
-        </Alert>
-      )}
-    </div>
+    <Alert className="mb-6">
+      <Ban />
+      <AlertTitle>A2A endpoints are turned off here</AlertTitle>
+      <AlertDescription>
+        Your organization doesn&apos;t allow A2A endpoints in this workspace, so
+        they answer every call with Not Found. Ask an organization admin to
+        allow them.
+      </AlertDescription>
+    </Alert>
   );
 };
