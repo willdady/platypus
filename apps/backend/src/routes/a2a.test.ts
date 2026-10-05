@@ -99,6 +99,8 @@ import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
 import { stopCanceledA2aRuns } from "../services/a2a-cancel.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
+import { A2aChatBusyError } from "../services/a2a-task.ts";
+import { toJsonRpcError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
 
 const CARD_PATH = "/.well-known/agent-card.json";
 
@@ -846,6 +848,21 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
 
     const got = await rpc("GetTask", { id: task.id });
     expect(got.body.result.status.state).toBe("TASK_STATE_SUBMITTED");
+  });
+
+  it("refuses a busy Chat with its own error type, answered as the spec's", () => {
+    const error = new A2aChatBusyError("task-1");
+
+    // Known by type, so the call log needn't read its wording.
+    expect(error).toBeInstanceOf(A2aChatBusyError);
+    expect(error).toBeInstanceOf(UnsupportedOperationError);
+    expect(error.taskId).toBe("task-1");
+    expect(toJsonRpcError(error)).toMatchObject({
+      code: -32004,
+      data: [
+        { reason: "UNSUPPORTED_OPERATION", metadata: { taskId: "task-1" } },
+      ],
+    });
   });
 
   it("refuses a file part with an error, not a dropped part", async () => {

@@ -14,6 +14,7 @@ import {
 import { authenticateA2aCall } from "../services/a2a-token.ts";
 import { cancelA2aTask } from "../services/a2a-cancel.ts";
 import {
+  A2aChatBusyError,
   getA2aTask,
   sendA2aMessage,
   type A2aCaller,
@@ -38,7 +39,6 @@ import {
   rpcMethodOf,
   type A2aCallLogEntry,
 } from "../services/a2a-call.ts";
-import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
 import { logger } from "../logger.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import type { Variables } from "../server.ts";
@@ -148,14 +148,13 @@ const refusal = (log: A2aCallLogEntry, error: unknown): unknown => {
     log.outcome = "rate_limited";
     return error;
   }
-  if (error instanceof A2AError) {
-    if (error.message === CHAT_BUSY_MESSAGE) {
-      // The running Task the refusal names, for the client to follow.
-      log.reason = "busy";
-      log.taskId = error.metadata?.taskId;
-    }
+  if (error instanceof A2aChatBusyError) {
+    // The running Task the refusal names, for the client to follow.
+    log.reason = "busy";
+    log.taskId = error.taskId;
     return error;
   }
+  if (error instanceof A2AError) return error;
   logger.error({ error }, "A2A call failed");
   log.reason = "internal_error";
   return new Error("Internal error", { cause: error });
