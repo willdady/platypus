@@ -146,8 +146,9 @@ expiry. It never shows a token.
 accept has lost its way in: an expired or revoked token, a **Disabled** badge,
 or this Organization setting no longer admitting its Workspace. A Trigger
 rejecting calls it never accepted may be someone guessing. It also moves when a
-caller sends inputs that don't match the Trigger's, or when the server turns
-calls away because it is already running as many inbound runs as it allows. The
+caller sends inputs that don't match the Trigger's, but not when the server
+turns calls away because it is already running as many inbound runs as it
+allows. The
 [inbound call log](/reference/backend-configuration#the-inbound-call-log) names
 the reason for each one. Both times update at most once a minute.
 

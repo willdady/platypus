@@ -1760,6 +1760,8 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     expect(rows("chat")).toHaveLength(1);
     expect(rows("a2a_task")).toHaveLength(1);
     expect(model.prompts).toHaveLength(1);
+    // The token was good: a full cap says nothing about it.
+    expect(rows("a2a_token")[0].lastRejectedAt).toBeNull();
     release();
   });
 

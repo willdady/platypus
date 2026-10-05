@@ -227,12 +227,21 @@ describe("/hooks/triggers", () => {
       });
     });
 
-    it("stamps last rejected on a real Inbound Trigger, not on an unknown id", async () => {
-      const fake = seed();
-      await fire("trig-1", { token: "pit_wrong" });
-      expect(fake.tables.trigger[0].lastRejectedAt).toBeInstanceOf(Date);
-      expect(fake.tables.trigger[0].lastUsedAt).toBeNull();
-    });
+    it.each([
+      ["a wrong token", "pit_wrong", {}],
+      ["no token", null, {}],
+      ["an expired token", TOKEN, { tokenExpiresAt: new Date(Date.now() - 1) }],
+    ])(
+      "stamps last rejected on a real Inbound Trigger called with %s",
+      async (_case, token, over) => {
+        const fake = seed({ triggers: [inbound(over)] });
+        await fire("trig-1", { token });
+        // The stamp is not awaited by the route; let it land.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(fake.tables.trigger[0].lastRejectedAt).toBeInstanceOf(Date);
+        expect(fake.tables.trigger[0].lastUsedAt).toBeNull();
+      },
+    );
 
     it("refuses a body over the cap with 413 before looking at the token", async () => {
       process.env.INBOUND_TRIGGER_MAX_BODY_BYTES = "64";
@@ -402,6 +411,8 @@ describe("/hooks/triggers", () => {
         outcome: "rate_limited",
         recordKey: "PLAT-7",
       });
+      // The token was good: a full cap says nothing about it.
+      expect(fake.tables.trigger[0].lastRejectedAt).toBeNull();
     });
   });
 
