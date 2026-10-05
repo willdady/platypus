@@ -11,8 +11,9 @@ import { createNotification } from "./notification.ts";
 import { NotFoundError } from "../errors.ts";
 import {
   A2A_TOKEN_PREFIX,
-  loadLiveA2aEndpoint,
+  lookupA2aEndpoint,
   toPublicToken,
+  type A2aEndpointLookup,
   type A2aEndpointRow,
   type LiveA2aEndpoint,
 } from "./a2a-endpoint.ts";
@@ -40,23 +41,35 @@ export type A2aTokenRow = typeof a2aTokenTable.$inferSelect;
 export type A2aAuthResult =
   | { ok: true; endpoint: LiveA2aEndpoint; token: A2aTokenRow }
   /** `404` is the card's answer for an endpoint that isn't live. */
-  | { ok: false; status: 401 | 404 };
+  | (Extract<A2aEndpointLookup, { live: false }> & { ok: false; status: 404 })
+  | {
+      ok: false;
+      status: 401;
+      reason: "missing_token" | "bad_token" | "expired_token";
+      endpoint: LiveA2aEndpoint;
+      /** The token an expired one names; a missing or wrong one names none. */
+      tokenId?: string;
+    };
 
 /**
  * Whether a call may reach `endpointId`. An endpoint that isn't live is the
  * card's uniform `404`; on a live one, a missing, wrong or expired token is
  * `401`. Only an expired token names a token, so only it stamps last rejected.
+ * Each refusal says why, for the call log.
  */
 export const authenticateA2aCall = async (
   endpointId: string,
   authorization: string | undefined,
   now: Date = new Date(),
 ): Promise<A2aAuthResult> => {
-  const endpoint = await loadLiveA2aEndpoint(endpointId);
-  if (!endpoint) return { ok: false, status: 404 };
+  const lookup = await lookupA2aEndpoint(endpointId);
+  if (!lookup.live) return { ...lookup, ok: false, status: 404 };
+  const { endpoint } = lookup;
 
   const presented = bearerToken(authorization);
-  if (!presented) return { ok: false, status: 401 };
+  if (!presented) {
+    return { ok: false, status: 401, reason: "missing_token", endpoint };
+  }
   // 256 random bits, so a lookup by hash leaks nothing a guess could use.
   const [token] = await db
     .select()
@@ -68,12 +81,18 @@ export const authenticateA2aCall = async (
       ),
     )
     .limit(1);
-  if (!token) return { ok: false, status: 401 };
+  if (!token) return { ok: false, status: 401, reason: "bad_token", endpoint };
 
   if (token.tokenExpiresAt <= now) {
     await touchA2aToken(token.id, "lastRejectedAt", now);
     await noticeExpiredUse(endpoint, token);
-    return { ok: false, status: 401 };
+    return {
+      ok: false,
+      status: 401,
+      reason: "expired_token",
+      endpoint,
+      tokenId: token.id,
+    };
   }
   await touchA2aToken(token.id, "lastUsedAt", now);
   return { ok: true, endpoint, token };

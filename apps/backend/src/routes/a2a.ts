@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   JsonRpcTransportHandler,
   ServerCallContext,
@@ -8,7 +8,7 @@ import { A2AError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
 import { AgentCard } from "@a2a-js/sdk";
 import {
   extendedAgentCard,
-  loadLiveA2aEndpoint,
+  lookupA2aEndpoint,
   publicAgentCard,
 } from "../services/a2a-endpoint.ts";
 import { authenticateA2aCall } from "../services/a2a-token.ts";
@@ -23,6 +23,16 @@ import {
   getA2aPushConfig,
   listA2aPushConfigs,
 } from "../services/a2a-push.ts";
+import {
+  A2A_RETRY_AFTER_SECONDS,
+  A2aAtCapacityError,
+  AGENT_CARD_METHOD,
+  logA2aCall,
+  reasonOfRpcCode,
+  rpcMethodOf,
+  type A2aCallLogEntry,
+} from "../services/a2a-call.ts";
+import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
 import { logger } from "../logger.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import type { Variables } from "../server.ts";
@@ -35,14 +45,52 @@ import type { Variables } from "../server.ts";
  * An endpoint that is unknown, disabled or deleted, whose Workspace the
  * Organization's A2A gate excludes, or whose Owner has left the Organization,
  * is the same `404` with the same body, for the card and every method.
+ *
+ * Every call, the card included, writes exactly one call-log line.
  */
 const a2a = new Hono<{ Variables: Variables }>();
 
+/**
+ * Answers a call and writes its log line, whatever became of it. Each path in
+ * `answer` fills `log` as it returns, so a throw means the backend failed.
+ */
+const withCallLog = async (
+  log: A2aCallLogEntry,
+  answer: () => Promise<Response>,
+): Promise<Response> => {
+  try {
+    return await answer();
+  } catch (error) {
+    log.outcome = "rejected";
+    log.reason = "internal_error";
+    throw error;
+  } finally {
+    logA2aCall(log);
+  }
+};
+
 /** The public Agent Card. Needs no token: the URL is the secret. */
-a2a.get("/:endpointId/.well-known/agent-card.json", async (c) => {
-  const endpoint = await loadLiveA2aEndpoint(c.req.param("endpointId"));
-  if (!endpoint) return c.json({ error: "Not Found" }, 404);
-  return c.json(publicAgentCard(endpoint));
+a2a.get("/:endpointId/.well-known/agent-card.json", (c) => {
+  const log: A2aCallLogEntry = {
+    endpointId: c.req.param("endpointId"),
+    method: AGENT_CARD_METHOD,
+    outcome: "rejected",
+  };
+  return withCallLog(log, async () => {
+    const lookup = await lookupA2aEndpoint(log.endpointId);
+    log.organizationId = lookup.live
+      ? lookup.endpoint.organizationId
+      : lookup.organizationId;
+    log.workspaceId = lookup.live
+      ? lookup.endpoint.workspaceId
+      : lookup.workspaceId;
+    if (!lookup.live) {
+      log.reason = lookup.reason;
+      return c.json({ error: "Not Found" }, 404);
+    }
+    log.outcome = "ok";
+    return c.json(publicAgentCard(lookup.endpoint));
+  });
 });
 
 const unsupported = (): never => {
@@ -50,27 +98,62 @@ const unsupported = (): never => {
 };
 
 /**
- * Our errors reach the caller as A2A errors; anything else is logged and
- * answered as a bare internal error, so no internal detail leaves the server.
+ * Wraps each method for one call. Our errors reach the caller as A2A errors;
+ * anything else is logged and answered as a bare internal error, so no
+ * internal detail leaves the server. What the method returned or refused is
+ * noted on the call's log line: its Task and Chat, or why it was refused.
  */
-const guarded =
+const guardedFor =
+  (log: A2aCallLogEntry) =>
   <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
   async (...args: A): Promise<R> => {
     try {
-      return await fn(...args);
+      const result = await fn(...args);
+      noteIds(log, args[0], result);
+      return result;
     } catch (error) {
-      if (error instanceof A2AError) throw error;
+      if (error instanceof A2aAtCapacityError) {
+        log.outcome = "rate_limited";
+        throw error;
+      }
+      if (error instanceof A2AError) {
+        if (error.message === CHAT_BUSY_MESSAGE) {
+          // The running Task the refusal names, for the client to follow.
+          log.reason = "busy";
+          log.taskId = error.metadata?.taskId;
+        }
+        throw error;
+      }
       logger.error({ error }, "A2A call failed");
+      log.reason = "internal_error";
       throw new Error("Internal error", { cause: error });
     }
   };
+
+/**
+ * The Task and Chat a method answered with: a Task names both, and a push
+ * config method names the Task its params named, which it found.
+ */
+const noteIds = (log: A2aCallLogEntry, params: unknown, result: unknown) => {
+  const task = result as { id?: unknown; contextId?: unknown } | undefined;
+  if (typeof task?.id === "string" && typeof task.contextId === "string") {
+    log.taskId = task.id;
+    log.chatId = task.contextId;
+    return;
+  }
+  const { taskId } = (params ?? {}) as { taskId?: unknown };
+  if (typeof taskId === "string") log.taskId = taskId;
+};
 
 /**
  * The JSON-RPC methods, answered from the database. Methods other tickets
  * add (streaming, cancel) are unsupported until then; an unknown method is
  * JSON-RPC "method not found".
  */
-const requestHandler = (caller: A2aCaller): A2ARequestHandler => ({
+const requestHandler = (
+  caller: A2aCaller,
+  guarded: ReturnType<typeof guardedFor>,
+): A2ARequestHandler => ({
   // Our cards are wire JSON; the transport serializes from the SDK's shape.
   getAgentCard: () =>
     Promise.resolve(AgentCard.fromJSON(publicAgentCard(caller.endpoint))),
@@ -99,28 +182,59 @@ const requestHandler = (caller: A2aCaller): A2ARequestHandler => ({
 /**
  * JSON-RPC. Every method passes the token check first: a missing, wrong or
  * expired token on a live endpoint is `401`, and the token's last used or
- * last rejected is stamped.
+ * last rejected is stamped. A turn past the load cap is `429`, having written
+ * nothing.
  */
-a2a.post("/:endpointId", async (c) => {
+a2a.post("/:endpointId", (c) => {
+  const log: A2aCallLogEntry = {
+    endpointId: c.req.param("endpointId"),
+    outcome: "rejected",
+  };
+  return withCallLog(log, () => answerRpc(c, log));
+});
+
+const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
+  const body = await c.req.text();
+  log.method = rpcMethodOf(body);
   const auth = await authenticateA2aCall(
-    c.req.param("endpointId"),
+    log.endpointId,
     c.req.header("Authorization"),
   );
   if (!auth.ok) {
-    if (auth.status === 404) return c.json({ error: "Not Found" }, 404);
+    log.reason = auth.reason;
+    if (auth.status === 404) {
+      log.organizationId = auth.organizationId;
+      log.workspaceId = auth.workspaceId;
+      return c.json({ error: "Not Found" }, 404);
+    }
+    log.organizationId = auth.endpoint.organizationId;
+    log.workspaceId = auth.endpoint.workspaceId;
+    log.tokenId = auth.tokenId;
     c.header("WWW-Authenticate", "Bearer");
     return c.json({ error: "Unauthorized" }, 401);
   }
 
   const { endpoint, token } = auth;
+  log.organizationId = endpoint.organizationId;
+  log.workspaceId = endpoint.workspaceId;
+  log.tokenId = token.id;
   const transport = new JsonRpcTransportHandler(
-    requestHandler({ endpoint, token, origin: getOrigin(c) }),
+    requestHandler({ endpoint, token, origin: getOrigin(c) }, guardedFor(log)),
   );
-  const response = await transport.handle(
-    await c.req.text(),
-    new ServerCallContext(),
-  );
+  const response = await transport.handle(body, new ServerCallContext());
+
+  if (log.outcome === "rate_limited") {
+    c.header("Retry-After", String(A2A_RETRY_AFTER_SECONDS));
+    return c.json({ error: "Too Many Requests" }, 429);
+  }
+  // The SDK types a JSON-RPC error loosely; its `code` is always a number.
+  const error = "error" in response ? response.error : undefined;
+  if (error) {
+    log.reason ??= reasonOfRpcCode((error as { code: number }).code);
+  } else {
+    log.outcome = "ok";
+  }
   return c.json(response);
-});
+};
 
 export { a2a };

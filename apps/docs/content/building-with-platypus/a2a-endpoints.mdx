@@ -152,6 +152,10 @@ turns.
   including one you started in the Chat yourself, is refused with an error
   carrying the running Task's id. The client can follow that Task and send
   again once it ends.
+- **A busy server says so.** Your Operator caps how many A2A runs can be going
+  at once across the server. A message that would start one past the cap gets
+  `429 Too Many Requests` with a `Retry-After` header, and nothing is written:
+  the client waits and sends it again.
 - **Text and data parts.** Data parts reach the Agent as labelled JSON. A
   message with a file part is refused with an error rather than sent without
   it.
