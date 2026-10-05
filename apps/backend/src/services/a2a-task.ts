@@ -1,6 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
 import {
+  and,
+  count,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+} from "drizzle-orm";
+import {
+  TaskState,
+  type ListTasksRequest,
+  type ListTasksResponse,
   type Message,
   type Part,
   type SendMessageRequest,
@@ -32,6 +46,7 @@ import {
   currentTurnId,
   readTask,
   readTaskAfresh,
+  endStateOf,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
@@ -96,6 +111,7 @@ const taskFor = async (
   );
   const existing = await findTask(where);
   if (existing) return existing;
+  const now = new Date();
   try {
     const [row] = await db
       .insert(a2aTaskTable)
@@ -105,7 +121,8 @@ const taskFor = async (
         messageId,
         endpointId: caller.endpoint.id,
         tokenId,
-        createdAt: new Date(),
+        statusAt: now,
+        createdAt: now,
       })
       .returning();
     return row;
@@ -359,3 +376,150 @@ export const getA2aTask = async (
   caller: A2aCaller,
   taskId: string,
 ): Promise<Task> => readTask(await findA2aTask(caller, taskId));
+
+/** How many Tasks a `ListTasks` page holds, unless the client asks. */
+const DEFAULT_PAGE_SIZE = 50;
+/** The most a client may ask for in one page. */
+const MAX_PAGE_SIZE = 100;
+
+/**
+ * A page token: the status timestamp and id of the page's last Task, and the
+ * token that listed it. Another token's page token is refused, not followed.
+ */
+const pageTokenOf = (caller: A2aCaller, task: TaskRow): string =>
+  Buffer.from(
+    JSON.stringify([caller.token.id, task.statusAt.toISOString(), task.id]),
+  ).toString("base64url");
+
+const readPageToken = (
+  caller: A2aCaller,
+  token: string,
+): { at: Date; id: string } => {
+  try {
+    const [tokenId, at, id] = JSON.parse(
+      Buffer.from(token, "base64url").toString(),
+    ) as unknown[];
+    if (
+      tokenId === caller.token.id &&
+      typeof at === "string" &&
+      typeof id === "string"
+    ) {
+      const date = new Date(at);
+      if (!Number.isNaN(date.getTime())) return { at: date, id };
+    }
+  } catch {
+    // Not one of ours; refused below.
+  }
+  throw new RequestMalformedError("pageToken is not a valid page token");
+};
+
+/**
+ * `ListTasks`: the Tasks the calling token started on this endpoint, newest
+ * status first. Narrower than `GetTask`, which reads any of the endpoint's
+ * Tasks by id: a Task's id is known only to the client that started it, and
+ * a list must not hand one client another's (ADR-0032). A deleted token's
+ * Tasks are listed to no one.
+ *
+ * Each running Task's state is read from its run first, recording any end
+ * not yet recorded, so the `status` filter and the order see where it is now.
+ *
+ * ponytail: every call reads all of the token's Tasks with no end recorded.
+ * Few, unless runs end unrecorded en masse; a sweep that records them is the
+ * upgrade.
+ */
+export const listA2aTasks = async (
+  caller: A2aCaller,
+  params: ListTasksRequest,
+): Promise<ListTasksResponse> => {
+  const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
+    throw new RequestMalformedError(
+      `pageSize must be between 1 and ${MAX_PAGE_SIZE}`,
+    );
+  }
+  if (params.status === TaskState.UNRECOGNIZED) {
+    throw new RequestMalformedError("status is not a Task state");
+  }
+  const after = params.statusTimestampAfter
+    ? new Date(params.statusTimestampAfter)
+    : undefined;
+  if (after && Number.isNaN(after.getTime())) {
+    throw new RequestMalformedError(
+      "statusTimestampAfter is not an ISO 8601 timestamp",
+    );
+  }
+  const cursor = params.pageToken
+    ? readPageToken(caller, params.pageToken)
+    : undefined;
+
+  const mine = and(
+    eq(a2aTaskTable.endpointId, caller.endpoint.id),
+    eq(a2aTaskTable.tokenId, caller.token.id),
+  );
+  const unended = await db
+    .select()
+    .from(a2aTaskTable)
+    .where(and(mine, isNull(a2aTaskTable.state)));
+  const running = new Map(
+    (await Promise.all(unended.map(readTask))).map((task) => [task.id, task]),
+  );
+
+  // A state no Task here is in — one we never use, or no run is in — is
+  // matched by nothing, rather than by everything an empty `or` would allow.
+  const live = [...running.values()]
+    .filter((task) => task.status!.state === params.status)
+    .map((task) => task.id);
+  const recorded = endStateOf(params.status);
+  if (params.status && !recorded && !live.length) {
+    return { tasks: [], nextPageToken: "", pageSize, totalSize: 0 };
+  }
+  const filters = and(
+    mine,
+    params.contextId ? eq(a2aTaskTable.chatId, params.contextId) : undefined,
+    params.status
+      ? or(
+          recorded ? eq(a2aTaskTable.state, recorded) : undefined,
+          live.length ? inArray(a2aTaskTable.id, live) : undefined,
+        )
+      : undefined,
+    after ? gt(a2aTaskTable.statusAt, after) : undefined,
+  );
+
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(a2aTaskTable)
+    .where(filters);
+  const rows = await db
+    .select()
+    .from(a2aTaskTable)
+    .where(
+      and(
+        filters,
+        cursor
+          ? or(
+              lt(a2aTaskTable.statusAt, cursor.at),
+              and(
+                lte(a2aTaskTable.statusAt, cursor.at),
+                lt(a2aTaskTable.id, cursor.id),
+              ),
+            )
+          : undefined,
+      ),
+    )
+    .orderBy(desc(a2aTaskTable.statusAt), desc(a2aTaskTable.id))
+    .limit(pageSize + 1);
+  const page = rows.slice(0, pageSize);
+
+  const tasks = await Promise.all(
+    page.map(async (row) => running.get(row.id) ?? readTask(row)),
+  );
+  return {
+    tasks: params.includeArtifacts
+      ? tasks
+      : tasks.map((task) => ({ ...task, artifacts: [] })),
+    nextPageToken:
+      rows.length > pageSize ? pageTokenOf(caller, page[page.length - 1]) : "",
+    pageSize,
+    totalSize: total,
+  };
+};

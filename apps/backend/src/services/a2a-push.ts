@@ -109,6 +109,7 @@ export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
         tokenId: a2aTaskTable.tokenId,
         state: a2aTaskTable.state,
         canceledAt: a2aTaskTable.canceledAt,
+        statusAt: a2aTaskTable.statusAt,
         createdAt: a2aTaskTable.createdAt,
       })
       .from(a2aTaskTable)

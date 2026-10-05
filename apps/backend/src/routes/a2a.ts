@@ -7,7 +7,7 @@ import {
   validateVersion,
   type A2ARequestHandler,
 } from "@a2a-js/sdk/server";
-import { A2AError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
+import { A2AError } from "@a2a-js/sdk/errors";
 import { AgentCard, type StreamResponse } from "@a2a-js/sdk";
 import {
   extendedAgentCard,
@@ -19,6 +19,7 @@ import { cancelA2aTask } from "../services/a2a-cancel.ts";
 import {
   A2aChatBusyError,
   getA2aTask,
+  listA2aTasks,
   sendA2aMessage,
   type A2aCaller,
 } from "../services/a2a-task.ts";
@@ -110,10 +111,6 @@ a2a.get("/:endpointId/.well-known/agent-card.json", etag(), (c) => {
   });
 });
 
-const unsupported = (): never => {
-  throw new UnsupportedOperationError();
-};
-
 /**
  * Wraps each method for one call. Our errors reach the caller as A2A errors;
  * anything else is logged and answered as a bare internal error, so no
@@ -187,8 +184,8 @@ const noteIds = (log: A2aCallLogEntry, params: unknown, result: unknown) => {
 };
 
 /**
- * The JSON-RPC methods, answered from the database. `ListTasks` is
- * unsupported; an unknown method is JSON-RPC "method not found".
+ * The JSON-RPC methods, answered from the database. An unknown method is
+ * JSON-RPC "method not found".
  */
 const requestHandler = (
   caller: A2aCaller,
@@ -219,7 +216,7 @@ const requestHandler = (
   deleteTaskPushNotificationConfig: guarded((params) =>
     deleteA2aPushConfig(caller.endpoint.id, params),
   ),
-  listTasks: unsupported,
+  listTasks: guarded((params) => listA2aTasks(caller, params)),
 });
 
 /** What the transport answers a call with; the SDK does not export it. */

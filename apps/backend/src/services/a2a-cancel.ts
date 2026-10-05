@@ -53,7 +53,7 @@ export const cancelA2aTask = async (
   // own end, and stops nothing.
   const [claimed] = await db
     .update(a2aTaskTable)
-    .set({ state: "canceled", canceledAt })
+    .set({ state: "canceled", canceledAt, statusAt: canceledAt })
     .where(and(eq(a2aTaskTable.id, task.id), isNull(a2aTaskTable.state)))
     .returning();
   if (!claimed) throw new TaskNotCancelableError();

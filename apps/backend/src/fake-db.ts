@@ -484,8 +484,11 @@ export const createFakeDb = (
 
         for (const { column, op } of [...order].reverse()) {
           matched = matched.slice().sort((a, b) => {
-            const left = resolverFor(a)(column) as number;
-            const right = resolverFor(b)(column) as number;
+            // Two Dates at the same moment tie, as in Postgres.
+            const valueOf = (v: unknown) =>
+              (v instanceof Date ? v.getTime() : v) as number;
+            const left = valueOf(resolverFor(a)(column));
+            const right = valueOf(resolverFor(b)(column));
             if (left === right) return 0;
             const ascending = left < right ? -1 : 1;
             return op === "asc" ? ascending : -ascending;
