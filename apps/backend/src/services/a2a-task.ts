@@ -37,7 +37,10 @@ import {
   isUniqueViolation,
   ValidationError,
 } from "../errors.ts";
-import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
+import {
+  CHAT_BUSY_MESSAGE,
+  type ChatClaimTx,
+} from "../runs/sinks/chat-sink.ts";
 import { workspaceScopeForA2a } from "../scope.ts";
 import { startChatTurn } from "./chat-turn.ts";
 import { callerDataBlock } from "./caller-data.ts";
@@ -99,7 +102,38 @@ const findTask = async (where: ReturnType<typeof and>) => {
   return row;
 };
 
-/** The Task for a turn's user message, made the first time it is asked for. */
+/** Where a Task is written: the database, or the claim's transaction. */
+type Executor = typeof db | ChatClaimTx;
+
+/** Makes the Task for a turn's user message, as the calling token's. */
+const insertTask = async (
+  executor: Executor,
+  caller: A2aCaller,
+  chatId: string,
+  messageId: string,
+): Promise<TaskRow> => {
+  const now = new Date();
+  const [row] = await executor
+    .insert(a2aTaskTable)
+    .values({
+      id: randomUUID(),
+      chatId,
+      messageId,
+      endpointId: caller.endpoint.id,
+      tokenId: caller.token.id,
+      statusAt: now,
+      createdAt: now,
+    })
+    .returning();
+  return row;
+};
+
+/**
+ * The Task for a retried turn's user message. The call that started the turn
+ * made it with the turn's claim, so it is read as it stands: its token and
+ * endpoint are never rewritten. Made here only for a message in the token's
+ * Chat that has none.
+ */
 const taskFor = async (
   caller: A2aCaller,
   chatId: string,
@@ -111,23 +145,10 @@ const taskFor = async (
   );
   const existing = await findTask(where);
   if (existing) return existing;
-  const now = new Date();
   try {
-    const [row] = await db
-      .insert(a2aTaskTable)
-      .values({
-        id: randomUUID(),
-        chatId,
-        messageId,
-        endpointId: caller.endpoint.id,
-        tokenId: caller.token.id,
-        statusAt: now,
-        createdAt: now,
-      })
-      .returning();
-    return row;
+    return await insertTask(db, caller, chatId, messageId);
   } catch (error) {
-    // Two calls raced to make it; the other one's is this turn's Task.
+    // Two retries raced to make it; the other one's is this turn's Task.
     if (!isUniqueViolation(error)) throw error;
     return findTask(where);
   }
@@ -156,9 +177,9 @@ export class A2aChatBusyError extends UnsupportedOperationError {
 /**
  * `A2aChatBusyError` for the Chat's running turn, naming its Task when this
  * token started that turn. Only ever asked of a Chat the token started, and
- * it mints no Task: a turn the Owner started in the UI is answered busy with
- * no Task, so the client cannot follow, or cancel, a run it did not start.
- * So is a turn of this token's whose Task its own call has yet to make.
+ * it only reads: a turn the Owner started in the UI is answered busy with no
+ * Task, so the client cannot follow, or cancel, a run it did not start. A
+ * turn this token started has its Task from the moment its claim commits.
  */
 const busyError = async (caller: A2aCaller, chatId: string) => {
   const turnId = await currentTurnId(chatId);
@@ -308,6 +329,10 @@ export const startA2aTurn = async (
   const release = acquireA2aRunSlot();
   if (!release) throw new A2aAtCapacityError();
   let run: ReadableStream<Uint8Array> | undefined;
+  // Made with the claim, so the Task is this call's from the moment any other
+  // call can see the Chat running, and a Task that cannot be made starts no
+  // run.
+  let task: TaskRow | undefined;
   try {
     const response = await startChatTurn({
       scope,
@@ -327,6 +352,9 @@ export const startA2aTurn = async (
         a2aEndpointId: endpoint.id,
       },
       onEnded: release,
+      onClaimed: async (tx) => {
+        task = await insertTask(tx, caller, chatId, message.messageId);
+      },
     });
     run = response.body ?? undefined;
   } catch (error) {
@@ -340,10 +368,8 @@ export const startA2aTurn = async (
   }
 
   try {
-    return {
-      task: await withPush(await taskFor(caller, chatId, message.messageId)),
-      run,
-    };
+    if (!task) throw new Error("The turn started without its Task");
+    return { task: await withPush(task), run };
   } catch (error) {
     await run?.cancel();
     throw error;
