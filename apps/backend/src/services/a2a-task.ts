@@ -139,6 +139,24 @@ const fromA2aPart = (part: Part) => {
   }
 };
 
+/**
+ * `params` with the parts at `nullDataParts` (see `readRpcEnvelope`) as data
+ * parts holding `null`. Only a part the SDK left without content is one.
+ */
+export const withNullDataParts = (
+  params: SendMessageRequest,
+  nullDataParts: ReadonlySet<number>,
+): SendMessageRequest => {
+  const { message } = params;
+  if (!message || nullDataParts.size === 0) return params;
+  const parts = message.parts.map((part, index) =>
+    !part.content && nullDataParts.has(index)
+      ? { ...part, content: { $case: "data" as const, value: null } }
+      : part,
+  );
+  return { ...params, message: { ...message, parts } };
+};
+
 const findTask = async (where: ReturnType<typeof and>) => {
   const [row] = await db.select().from(a2aTaskTable).where(where).limit(1);
   return row;

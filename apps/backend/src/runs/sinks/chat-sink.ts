@@ -84,6 +84,8 @@ export type ChatSinkParams = {
  *   instance, and the claim takes the Chat from it. Rows the turn owns
  *   (`onClaimed`) are written in the same transaction. Once claimed, the
  *   sink stamps the Chat's heartbeat until the run ends.
+ * - `onOutput`: upsert the reply at once, on the run's first output, so the
+ *   Chat holds it before the first step ends (#1337).
  * - `onProgress`: drive a FlushScheduler that periodically upserts the reply
  *   while keeping `status: "running"`.
  * - `onFinish`: write the terminal status (`succeeded`, `failed`,
@@ -265,6 +267,19 @@ export class ChatSink implements RunSink {
     this.latestMessages = ctx.messages;
     this.flusher?.bump();
     return Promise.resolve();
+  }
+
+  /**
+   * Saves the reply at once, so the Chat holds it from the run's first output
+   * rather than from its first step's end (#1337). Later progress keeps the
+   * scheduler's cadence.
+   */
+  async onOutput(ctx: {
+    runId: RunId;
+    messages: PlatypusUIMessage[];
+  }): Promise<void> {
+    this.latestMessages = ctx.messages;
+    await this.flusher?.flush();
   }
 
   async onFinish(ctx: {

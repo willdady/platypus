@@ -3,6 +3,7 @@ import { parseJsonEventStream, uiMessageChunkSchema } from "ai";
 import { TaskState, type Task } from "@a2a-js/sdk";
 import { logger } from "../logger.ts";
 import { notify, onNotification } from "../runs/notify-listener.ts";
+import { firstOutputLatch } from "../runs/first-output.ts";
 import {
   readTaskAfresh,
   TERMINAL_TASK_STATES,
@@ -376,7 +377,8 @@ export const produceA2aTaskEvents = (
 
 /**
  * Publishes the run's text as it is produced, a change of state `readTask`
- * reports while the Task is `submitted`, and, once the run's stream closes
+ * reports while the Task is `submitted` — read on the run's first output, and
+ * at most every `STATUS_READ_MS` otherwise — and, once the run's stream closes
  * and its end is recorded, the end.
  */
 const produce = async (
@@ -396,6 +398,7 @@ const produce = async (
     let offset = 0;
     // A text part after the first is set apart as `readTask` joins them.
     let separate = false;
+    const isFirstOutput = firstOutputLatch();
     for (;;) {
       // A cancel or a timeout aborts the run, breaking off its stream. How it
       // ended is the Task's to say.
@@ -406,20 +409,14 @@ const produce = async (
       if (chunk.type === "start" && chunk.messageId) {
         artifactId = chunk.messageId;
       }
-      if (chunk.type === "text-start" && offset > 0) separate = true;
-      if (chunk.type === "text-delta" && chunk.delta) {
-        const text = separate ? `\n\n${chunk.delta}` : chunk.delta;
-        separate = false;
-        for (const piece of pieces(text)) {
-          publisher.publish({ kind: "delta", artifactId, offset, text: piece });
-          offset += piece.length;
-        }
-      }
       // Past `submitted`, the only change left is the end, which follows
-      // the stream's close.
+      // the stream's close. The run's first output reaches here only once its
+      // reply is saved (`holdFirstOutput`), so it is read at once: the Task
+      // reads `working` before any of the reply is sent (#1337).
+      const firstOutput = isFirstOutput(chunk);
       if (
         state === TaskState.TASK_STATE_SUBMITTED &&
-        Date.now() - readAt >= STATUS_READ_MS
+        (firstOutput || Date.now() - readAt >= STATUS_READ_MS)
       ) {
         readAt = Date.now();
         const read = await readTaskAfresh(task);
@@ -428,6 +425,15 @@ const produce = async (
           if (!TERMINAL_TASK_STATES.has(state)) {
             publisher.publish({ kind: "status", status: read.status! });
           }
+        }
+      }
+      if (chunk.type === "text-start" && offset > 0) separate = true;
+      if (chunk.type === "text-delta" && chunk.delta) {
+        const text = separate ? `\n\n${chunk.delta}` : chunk.delta;
+        separate = false;
+        for (const piece of pieces(text)) {
+          publisher.publish({ kind: "delta", artifactId, offset, text: piece });
+          offset += piece.length;
         }
       }
     }

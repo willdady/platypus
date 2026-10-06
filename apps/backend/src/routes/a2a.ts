@@ -21,6 +21,7 @@ import {
   getA2aTask,
   listA2aTasks,
   sendA2aMessage,
+  withNullDataParts,
   type A2aCaller,
 } from "../services/a2a-task.ts";
 import {
@@ -191,6 +192,7 @@ const noteIds = (log: A2aCallLogEntry, params: unknown, result: unknown) => {
  */
 const requestHandler = (
   caller: A2aCaller,
+  nullDataParts: ReadonlySet<number>,
   guarded: ReturnType<typeof guardedFor>,
   guardedStream: ReturnType<typeof guardedStreamFor>,
 ): A2ARequestHandler => ({
@@ -199,10 +201,12 @@ const requestHandler = (
     Promise.resolve(AgentCard.fromJSON(publicAgentCard(caller.endpoint))),
   getAuthenticatedExtendedAgentCard: () =>
     Promise.resolve(AgentCard.fromJSON(extendedAgentCard(caller.endpoint))),
-  sendMessage: guarded((params) => sendA2aMessage(caller, params)),
+  sendMessage: guarded((params) =>
+    sendA2aMessage(caller, withNullDataParts(params, nullDataParts)),
+  ),
   getTask: guarded((params) => getA2aTask(caller, params)),
   sendMessageStream: guardedStream((params) =>
-    streamA2aMessage(caller, params),
+    streamA2aMessage(caller, withNullDataParts(params, nullDataParts)),
   ),
   resubscribe: guardedStream((params) => subscribeToA2aTask(caller, params.id)),
   cancelTask: guarded((params) => cancelA2aTask(caller, params.id)),
@@ -418,6 +422,7 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
   const transport = new JsonRpcTransportHandler(
     requestHandler(
       { endpoint, token, origin: getOrigin(c), signal: hangUp.signal },
+      envelope.nullDataParts,
       guardedFor(log),
       guardedStreamFor(log),
     ),
