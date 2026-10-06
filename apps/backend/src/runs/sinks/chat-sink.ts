@@ -23,7 +23,7 @@ import type {
 /** Why a Chat refuses a turn, a delete or a leaf switch while a run holds it. */
 export const CHAT_BUSY_MESSAGE = "A reply is still being written in this Chat";
 
-/** The transaction a Chat's claim is written in. */
+/** The transaction a Chat's claim, or its terminal write, is written in. */
 export type ChatClaimTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type ChatSinkParams = {
@@ -53,6 +53,14 @@ export type ChatSinkParams = {
    */
   onEnded?: (status: RunStatus) => void;
   /**
+   * Writes rows that record the turn's end in the terminal write's own
+   * transaction, with `status`: they commit with the Chat leaving `running`,
+   * so no claim of the Chat's next turn lands between them. An A2A turn's
+   * Task records its end here (ADR-0032). Anything that must follow the
+   * commit, such as a push, belongs in `onEnded`.
+   */
+  onEnding?: (tx: ChatClaimTx, status: RunStatus) => Promise<unknown>;
+  /**
    * Writes rows that belong to the turn in the claim's own transaction, after
    * its user message: they commit with the claim, so no other call sees the
    * Chat `running` without them, or fail it, so the turn never starts. An A2A
@@ -81,7 +89,9 @@ export type ChatSinkParams = {
  * - `onFinish`: write the terminal status (`succeeded`, `failed`,
  *   `cancelled`) and the final reply. A regenerate that wrote no reply puts
  *   back the leaf `onStart` moved, so the reply it meant to replace is not left
- *   off the Active path.
+ *   off the Active path. All of it, and the rows that record the turn's end
+ *   (`onEnding`), is one transaction (#1309): a claim of the next turn lands
+ *   wholly after it, never between its writes.
  *
  * The sink intentionally only persists what `prepareChatTurn` resolved
  * (agent vs direct provider/model nulling already done) — it does not
@@ -270,21 +280,16 @@ export class ChatSink implements RunSink {
     this.flusher = undefined;
 
     let status = ctx.status;
-    if (!this.plan) {
-      // Resolution failed before we had any plan to persist; just update
-      // the status on the row that onStart inserted.
-      await this.writeStatus(ctx.status);
-    } else {
+    let written = false;
+    if (this.plan) {
       this.latestMessages = ctx.messages;
-      const written = await this.writeRow({
+      written = await this.writeRow({
         status: ctx.status,
         messages: ctx.messages,
+        ending: true,
       });
       // A reply that could not be stored must not leave the Chat `running`.
-      if (!written) {
-        status = "failed";
-        await this.writeStatus(status);
-      }
+      if (!written) status = "failed";
 
       // Fire-and-forget authoritative titling. Runs for every terminal status
       // (succeeded / failed / cancelled) so a chat is titled even when the
@@ -294,23 +299,45 @@ export class ChatSink implements RunSink {
       // logged.
       this.generateMetadata();
     }
+    // Resolution failed before there was a plan to persist, or the reply
+    // could not be stored: only the status, on the row `onStart` claimed.
+    if (!written) await this.writeStatus(status);
 
-    await this.restoreLeaf();
     this.params.onEnded?.(status);
   }
 
-  /** Writes only the Chat row's status. */
+  /**
+   * Writes only the Chat row's terminal status, with the leaf put back and
+   * the turn's end recorded as `onFinish` does. Should recording the end
+   * fail, the status is still written without it: a Chat must not stay
+   * `running` on a run that has ended, and the end is recorded once the run
+   * has called `onEnded`.
+   */
   private async writeStatus(status: RunStatus): Promise<void> {
-    try {
-      await db
+    const write = async (tx: ChatClaimTx, recordEnd: boolean) => {
+      await tx
         .update(chatTable)
-        .set({ status, updatedAt: new Date() })
+        .set({ status, ...this.restoredLeaf(), updatedAt: new Date() })
         .where(
           and(
             eq(chatTable.id, this.runId),
             eq(chatTable.workspaceId, this.params.workspaceId),
           ),
         );
+      if (recordEnd) await this.params.onEnding?.(tx, status);
+    };
+    try {
+      await db.transaction((tx) => write(tx, true));
+      return;
+    } catch (error) {
+      logger.error(
+        { error, chatId: this.runId },
+        "Error writing terminal status",
+      );
+    }
+    if (!this.params.onEnding) return;
+    try {
+      await db.transaction((tx) => write(tx, false));
     } catch (error) {
       logger.error(
         { error, chatId: this.runId },
@@ -320,29 +347,15 @@ export class ChatSink implements RunSink {
   }
 
   /**
-   * Puts back the leaf a regenerate moved in `onStart`, when the turn ended
+   * The leaf a regenerate moved in `onStart`, to put back when the turn ended
    * without writing a reply: a resolution that failed, or a run stopped before
    * its first chunk. Left at the reply's parent, the reply it meant to replace
    * would be off the Active path with no arrows leading back to it.
    */
-  private async restoreLeaf(): Promise<void> {
-    if (this.replyWritten || !this.leafBefore) return;
-    try {
-      await db
-        .update(chatTable)
-        .set({ activeLeafId: this.leafBefore })
-        .where(
-          and(
-            eq(chatTable.id, this.runId),
-            eq(chatTable.workspaceId, this.params.workspaceId),
-          ),
-        );
-    } catch (error) {
-      logger.error(
-        { error, chatId: this.runId },
-        "Error restoring the leaf after a regenerate wrote no reply",
-      );
-    }
+  private restoredLeaf(): { activeLeafId?: string } {
+    return this.replyWritten || !this.leafBefore
+      ? {}
+      : { activeLeafId: this.leafBefore };
   }
 
   /**
@@ -397,6 +410,8 @@ export class ChatSink implements RunSink {
   private async writeRow(args: {
     status: RunStatus;
     messages: PlatypusUIMessage[];
+    /** The terminal write: puts the leaf back and records the turn's end. */
+    ending?: boolean;
   }): Promise<boolean> {
     if (!this.plan) return false;
 
@@ -429,7 +444,11 @@ export class ChatSink implements RunSink {
       // Every write points the leaf at the reply, so the first one moves it
       // there. Nothing else moves it mid-run: a delete is refused while the
       // run is in flight.
-      ...(reply ? { activeLeafId: reply.id } : {}),
+      ...(reply
+        ? { activeLeafId: reply.id }
+        : args.ending
+          ? this.restoredLeaf()
+          : {}),
       updatedAt: new Date(),
     };
 
@@ -472,6 +491,8 @@ export class ChatSink implements RunSink {
               eq(chatTable.workspaceId, workspaceId),
             ),
           );
+
+        if (args.ending) await this.params.onEnding?.(tx, args.status);
       });
       if (reply) this.replyWritten = true;
       return true;

@@ -19,7 +19,7 @@ import {
 import { seedUserInvokedSkill } from "./slash-command.ts";
 import { resolveTurn } from "./chat-messages.ts";
 import { onA2aTurnEnded } from "./a2a-push.ts";
-import { currentTurnId } from "./a2a-task-state.ts";
+import { currentTurnId, recordTaskEndIn } from "./a2a-task-state.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 
 /**
@@ -153,6 +153,8 @@ export const startChatTurn = async (params: {
     memoryTools: includeMemories,
   };
 
+  /** The user message this turn answers, naming its A2A Task. */
+  const turnId = turn.message?.id ?? turn.parentId;
   const sink = new ChatSink({
     orgId: scope.orgId,
     workspaceId: scope.workspaceId,
@@ -161,14 +163,15 @@ export const startChatTurn = async (params: {
     newChat,
     onClaimed,
     // Any turn in a Chat may be an A2A Task's, the Owner's own included: one
-    // a client was refused for as busy and is following (ADR-0032).
+    // a client was refused for as busy and is following (ADR-0032). Its end
+    // is recorded with the Chat's terminal status, and pushed once that has
+    // committed; one the terminal write missed is recorded then.
+    onEnding: async (tx, status) => {
+      if (turnId) await recordTaskEndIn(tx, request.id, turnId, status);
+    },
     onEnded: (status) => {
       onEnded?.();
-      void onA2aTurnEnded({
-        chatId: request.id,
-        messageId: turn.message?.id ?? turn.parentId,
-        status,
-      });
+      void onA2aTurnEnded({ chatId: request.id, messageId: turnId, status });
     },
   });
 
