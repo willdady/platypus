@@ -6,6 +6,7 @@ import { notify, onNotification } from "../runs/notify-listener.ts";
 import { firstOutputLatch } from "../runs/first-output.ts";
 import {
   readTaskAfresh,
+  isTerminal,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
@@ -367,10 +368,9 @@ const pieces = (text: string): string[] => {
 export const produceA2aTaskEvents = (
   task: TaskRow,
   run: ReadableStream<Uint8Array>,
-  bus: A2aTaskEventBus = a2aTaskEvents,
 ): A2aTaskSubscription => {
-  const publisher = bus.produce(task.id);
-  const starter = bus.subscribe(task.id);
+  const publisher = a2aTaskEvents.produce(task.id);
+  const starter = a2aTaskEvents.subscribe(task.id);
   void produce(task, run, publisher);
   return starter;
 };
@@ -439,7 +439,7 @@ const produce = async (
     }
     for (let reads = 0; reads < END_READS; reads++) {
       const read = await readTaskAfresh(task);
-      if (TERMINAL_TASK_STATES.has(read.status!.state)) {
+      if (isTerminal(read)) {
         publisher.publish({ kind: "end", task: read });
         ended = true;
         return;

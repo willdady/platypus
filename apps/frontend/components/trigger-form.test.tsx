@@ -425,7 +425,7 @@ describe("TriggerForm — Inbound Triggers", () => {
       },
       enabled: true,
       maxRunsToKeep: 10,
-      hasToken: true,
+      tokenStatus: "active",
       tokenExpiresAt: "2099-01-01T00:00:00.000Z",
     });
     const fetchMock = stubAcceptedSave({ id: "trigger-1" });
@@ -457,7 +457,7 @@ describe("TriggerForm — Inbound Triggers", () => {
       config: { inputs: [], tokenExpiryDays: 90 },
       enabled: true,
       maxRunsToKeep: 10,
-      hasToken: true,
+      tokenStatus: "active",
       tokenExpiresAt: "2099-01-01T00:00:00.000Z",
     });
     const fetchMock = stubAcceptedSave({

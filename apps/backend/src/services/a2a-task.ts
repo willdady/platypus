@@ -40,10 +40,7 @@ import {
   isUniqueViolation,
   ValidationError,
 } from "../errors.ts";
-import {
-  CHAT_BUSY_MESSAGE,
-  type ChatClaimTx,
-} from "../runs/sinks/chat-sink.ts";
+import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
 import { workspaceScopeForA2a } from "../scope.ts";
 import { startChatTurn } from "./chat-turn.ts";
 import { callerDataBlock } from "./caller-data.ts";
@@ -60,7 +57,8 @@ import {
   taskStatus,
   toTask,
   endStateOf,
-  TERMINAL_TASK_STATES,
+  isTerminal,
+  type Executor,
   type TaskRow,
 } from "./a2a-task-state.ts";
 import {
@@ -161,9 +159,6 @@ const findTask = async (where: ReturnType<typeof and>) => {
   const [row] = await db.select().from(a2aTaskTable).where(where).limit(1);
   return row;
 };
-
-/** Where a Task is written: the database, or the claim's transaction. */
-type Executor = typeof db | ChatClaimTx;
 
 /** Makes the Task for a turn's user message, as the calling token's. */
 const insertTask = async (
@@ -299,7 +294,7 @@ const waitForTask = async (
     if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
     const read =
       (event?.kind === "end" && event.task) || (await readTaskAfresh(task));
-    if (TERMINAL_TASK_STATES.has(read.status!.state)) return read;
+    if (isTerminal(read)) return read;
   }
   if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
   return readTaskAfresh(task);
@@ -338,8 +333,7 @@ const startTurn = async (
     if (message.contextId && message.contextId !== task.chatId) {
       throw new RequestMalformedError("The contextId is not the Task's");
     }
-    const { status } = await readTask(task);
-    if (!TERMINAL_TASK_STATES.has(status!.state)) {
+    if (!isTerminal(await readTask(task))) {
       throw new A2aChatBusyError(task.id);
     }
     throw new UnsupportedOperationError(
@@ -565,7 +559,7 @@ export const sendA2aMessage = async (
   try {
     if (started) return await waitForTask(caller, task, deadline, events);
     const read = await readTask(task);
-    if (TERMINAL_TASK_STATES.has(read.status!.state)) return read;
+    if (isTerminal(read)) return read;
     const release = takeFollowerSlot(caller);
     try {
       return await waitForTask(caller, task, deadline, events);

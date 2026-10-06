@@ -198,7 +198,6 @@ describe("TriggerList inbound triggers", () => {
         recordKey: "issueKey",
         tokenExpiryDays: 90,
       },
-      hasToken: true,
       tokenStatus: "active",
       tokenExpiresAt: new Date(Date.now() + 80 * 24 * 60 * 60 * 1000),
       ...over,
@@ -218,7 +217,6 @@ describe("TriggerList inbound triggers", () => {
       inboundTrigger({
         id: "t3",
         name: "Revoked",
-        hasToken: false,
         tokenStatus: "none",
       }),
       inboundTrigger({

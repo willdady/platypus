@@ -2376,7 +2376,6 @@ export const triggerSchema = z.object({
   nextRunAt: z.date().nullable().optional(),
   // Inbound Triggers only. The token itself is never returned after it is
   // issued; these describe it.
-  hasToken: z.boolean().optional(),
   tokenStatus: bearerTokenStatusSchema.optional(),
   tokenCreatedAt: z.date().nullable().optional(),
   tokenExpiresAt: z.date().nullable().optional(),

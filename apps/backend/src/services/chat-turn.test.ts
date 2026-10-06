@@ -98,9 +98,7 @@ describe("startChatTurn", () => {
   });
 
   it("serves the Memory tools with Memories in a Chat started in the UI", async () => {
-    mockExistingChat.mockResolvedValueOnce([
-      { a2aEndpointId: null, a2aClientName: null },
-    ]);
+    mockExistingChat.mockResolvedValueOnce([{ a2aEndpointId: null }]);
 
     await start(true);
 
@@ -113,7 +111,7 @@ describe("startChatTurn", () => {
   // Issue #1294: an A2A Chat follows its endpoint's Include Memories on every
   // turn, the Owner's own from the UI included.
   describe("in an A2A Chat", () => {
-    const a2aChat = { a2aEndpointId: "ep-1", a2aClientName: "Hermes" };
+    const a2aChat = { a2aEndpointId: "ep-1" };
 
     it("leaves Memories and the Memory tools out when the endpoint does", async () => {
       mockExistingChat
@@ -144,11 +142,10 @@ describe("startChatTurn", () => {
       });
     });
 
-    it.each([
-      ["whose endpoint was deleted", a2aChat],
-      ["known only by its client label", { ...a2aChat, a2aEndpointId: null }],
-    ])("leaves them out of a Chat %s", async (_case, chat) => {
-      mockExistingChat.mockResolvedValueOnce([chat]).mockResolvedValueOnce([]);
+    it("leaves them out of a Chat whose endpoint was deleted", async () => {
+      mockExistingChat
+        .mockResolvedValueOnce([a2aChat])
+        .mockResolvedValueOnce([]);
 
       await start(true);
 

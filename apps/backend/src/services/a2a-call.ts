@@ -23,12 +23,18 @@ export type A2aSettings = {
   maxBodyBytes: number;
 };
 
-export const a2aSettings = (
-  env: NodeJS.ProcessEnv = process.env,
-): A2aSettings => ({
-  maxConcurrentRuns: readPositiveInt("A2A_MAX_CONCURRENT_RUNS", 10, env),
-  maxConcurrentStreams: readPositiveInt("A2A_MAX_CONCURRENT_STREAMS", 100, env),
-  maxBodyBytes: readPositiveInt("A2A_MAX_BODY_BYTES", 1048576, env),
+export const a2aSettings = (): A2aSettings => ({
+  maxConcurrentRuns: readPositiveInt(
+    "A2A_MAX_CONCURRENT_RUNS",
+    10,
+    process.env,
+  ),
+  maxConcurrentStreams: readPositiveInt(
+    "A2A_MAX_CONCURRENT_STREAMS",
+    100,
+    process.env,
+  ),
+  maxBodyBytes: readPositiveInt("A2A_MAX_BODY_BYTES", 1048576, process.env),
 });
 
 /**
@@ -70,10 +76,8 @@ const heldSlots = new Set<symbol>();
  * it returns gives that slot back, once however often it is called, so the
  * run ending and the start failing can both call it.
  */
-export const acquireA2aRunSlot = (
-  max: number = a2aSettings().maxConcurrentRuns,
-): (() => void) | null => {
-  if (heldSlots.size >= max) return null;
+export const acquireA2aRunSlot = (): (() => void) | null => {
+  if (heldSlots.size >= a2aSettings().maxConcurrentRuns) return null;
   const slot = Symbol("a2a-run");
   heldSlots.add(slot);
   return () => void heldSlots.delete(slot);
@@ -109,8 +113,8 @@ const followersByToken = new Map<string, number>();
  */
 export const acquireA2aFollowerSlot = (
   tokenId: string,
-  max: number = a2aSettings().maxConcurrentStreams,
 ): (() => void) | null => {
+  const max = a2aSettings().maxConcurrentStreams;
   const held = followersByToken.get(tokenId) ?? 0;
   if (
     heldFollowers.size >= max ||

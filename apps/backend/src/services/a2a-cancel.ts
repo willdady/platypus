@@ -10,7 +10,7 @@ import { findA2aTask, type A2aCaller } from "./a2a-task.ts";
 import {
   currentTurnId,
   readTask,
-  TERMINAL_TASK_STATES,
+  isTerminal,
   type TaskRow,
 } from "./a2a-task-state.ts";
 import { pushEndedA2aTasks } from "./a2a-push.ts";
@@ -60,7 +60,7 @@ export const cancelA2aTask = async (
  */
 const cancelTask = async (task: TaskRow): Promise<TaskRow | undefined> => {
   const read = await readTask(task);
-  if (TERMINAL_TASK_STATES.has(read.status!.state)) return undefined;
+  if (isTerminal(read)) return undefined;
 
   const canceledAt = new Date();
   const claimed = await db.transaction(async (tx) => {

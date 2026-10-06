@@ -17,7 +17,7 @@ import {
 import {
   readTask,
   readTaskAfresh,
-  TERMINAL_TASK_STATES,
+  isTerminal,
   type TaskRow,
 } from "./a2a-task-state.ts";
 import {
@@ -36,8 +36,6 @@ import { replyArtifact } from "./a2a-parts.ts";
  * says. A follower of a run it did not start holds a follower slot until its
  * stream ends (`takeFollowerSlot`).
  */
-
-const isTerminal = (task: Task) => TERMINAL_TASK_STATES.has(task.status!.state);
 
 /**
  * Ends the stream with an error once the caller's access is cut off: it is

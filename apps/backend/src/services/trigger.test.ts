@@ -826,7 +826,6 @@ describe("trigger module", () => {
 
       expect(exposed).not.toHaveProperty("tokenHash");
       expect(exposed).not.toHaveProperty("tokenNotice");
-      expect(exposed.hasToken).toBe(true);
     });
   });
 });
