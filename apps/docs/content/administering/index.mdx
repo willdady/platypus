@@ -181,13 +181,15 @@ separately from Inbound Triggers:
 | **Selected workspaces**       | Only the Workspaces switched on under **Allowed workspaces** |
 
 It is checked on every call. A Workspace it doesn't allow answers every call
-with **Not Found**. Its endpoints and their tokens stay as they are, so allowing
-it again resumes them. Under **Selected workspaces**, the screen lists every
+with **Not Found**, and the Tasks its endpoints were running are canceled. Its
+endpoints and their tokens stay as they are, so allowing it again resumes
+them. Under **Selected workspaces**, the screen lists every
 Workspace with its Owner, how many A2A endpoints it holds and a switch, and
 names the Workspaces with endpoints that a save would cut off.
 
 An endpoint also stops answering once its Workspace Owner leaves the
-Organization.
+Organization or is banned. Its running Tasks are canceled within a few seconds,
+not at once.
 
 ### See and revoke endpoints
 
@@ -202,7 +204,9 @@ once a minute.
 
 **Revoke endpoint** deletes the endpoint with all of its tokens, so its URL
 stops answering at once. Its Chats are kept. **Revoke token** deletes one token
-and leaves the endpoint's other tokens working. Either sends the Owner a
+and leaves the endpoint's other tokens working. Either also stops the work
+already running: the revoked clients' running Tasks are canceled, their open
+streams end, and no push notification is sent for those Tasks. Either sends the Owner a
 notification. Revoking is the only thing you can do to another person's
 endpoint here. You cannot edit or disable one. **Revoke token** revokes only
 the token the list showed you: if the Owner regenerated it since you opened

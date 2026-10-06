@@ -93,9 +93,9 @@ the expired token is refused. Both times update at most once a minute.
   30-day token only gets the 7-day one), and the first time a client uses it
   after it expires.
 - **Regenerate** issues a new value for the token, with the same name and
-  lifetime, and stops the old value at once. The new value is shown once. Use it
-  when a token is about to expire, is lost, or may have leaked, then update the
-  client.
+  lifetime, and stops the old value at once, along with any Task it started
+  that is still running. The new value is shown once. Use it when a token is
+  about to expire, is lost, or may have leaked, then update the client.
 
 <Callout type="warning">
   Rotating a token usually means updating the client's configuration, so act on
@@ -120,7 +120,7 @@ cache the card for up to five minutes, so a change to the Name or Description
 can take that long to reach it.
 
 An endpoint that is disabled or deleted, in a Workspace the Organization doesn't
-allow, or whose Workspace Owner has left the Organization answers
+allow, or whose Workspace Owner has left the Organization or been banned answers
 **Not Found**, exactly like one that never existed.
 
 A client that authenticates can also fetch the **extended Agent Card**
@@ -340,9 +340,17 @@ A Chat started on an endpoint you later delete stays out of your Memories.
 
 - **Delete** on the endpoint's page removes it. Its URL and every one of its
   tokens stop working at once.
+- Deleting or regenerating a token, or deleting or disabling an endpoint, also
+  stops the work its clients already started. Their running Tasks are
+  canceled, an open `SendStreamingMessage` or `SubscribeToTask` stream ends
+  with an error, and no push notification is sent for those Tasks, however
+  they end. Other tokens' Tasks on the same endpoint keep running.
 - Deleting the Agent deletes its endpoints and their tokens.
 - Detaching a Shared Agent from the Workspace deletes the Workspace's endpoints
   for it, and their tokens.
+- Running Tasks on an endpoint deleted with its Agent, or whose Workspace
+  Owner leaves the Organization or is banned, are canceled within a few
+  seconds rather than at once.
 - A Chat stays when its endpoint or token is deleted, still labelled with the
   token's name. No client can reach it or its Tasks over A2A again, not even
   with another token on the same endpoint. Deleting a Chat ends its Tasks: `GetTask` answers that they
