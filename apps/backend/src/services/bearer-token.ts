@@ -167,6 +167,19 @@ export type TokenOwner = {
 };
 
 /**
+ * Where a notice about the token on `holder` — an A2A endpoint or an Inbound
+ * Trigger — goes.
+ */
+export const tokenOwner = (
+  orgId: string,
+  holder: { workspaceId: string; agentId: string },
+): TokenOwner => ({
+  orgId,
+  workspaceId: holder.workspaceId,
+  agentId: holder.agentId,
+});
+
+/**
  * Posts a Notification to the token's Workspace, from its Agent. `false` —
  * logged — when it could not be posted, so a notice claimed for it can be
  * handed back and sent again.
@@ -193,9 +206,9 @@ export const notifyTokenOwner = async (
  * `tokenNotice` stores the latest one sent, so "has X been sent" is "is the
  * stored notice at or past X".
  */
-export const TOKEN_NOTICES = ["expiring_30", "expiring_7", "expired"] as const;
+const TOKEN_NOTICES = ["expiring_30", "expiring_7", "expired"] as const;
 
-export type TokenNotice = (typeof TOKEN_NOTICES)[number];
+type TokenNotice = (typeof TOKEN_NOTICES)[number];
 
 export const tokenNoticeSent = (
   stored: string | null,

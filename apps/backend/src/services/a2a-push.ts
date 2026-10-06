@@ -318,7 +318,7 @@ const hasControlChar = (value: string) =>
   [...value].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
 
 /** A client's push config, checked and ready to store. */
-export type CheckedPushConfig = {
+type CheckedPushConfig = {
   id: string;
   url: string;
   token: string | null;

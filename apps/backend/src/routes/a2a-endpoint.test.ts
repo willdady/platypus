@@ -344,9 +344,16 @@ describe("A2A endpoint routes", () => {
         ],
       });
 
+      fake.queries.length = 0;
       const res = await send("/ep-1/tokens/tok-1/regenerate", "POST");
 
       expect(res.status).toBe(200);
+      // One write, with the endpoint's Workspace checked in it.
+      expect(
+        fake.queries.filter(
+          (q) => q.table === "a2a_token" || q.table === "a2a_endpoint",
+        ),
+      ).toEqual([{ kind: "update", table: "a2a_token" }]);
       const body = (await res.json()) as Row & { token: string };
       expect(body.token).toMatch(/^pa2a_/);
       expect(body).toMatchObject({ id: "tok-1", name: "Hermes" });

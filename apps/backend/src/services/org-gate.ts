@@ -1,5 +1,9 @@
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type { OrgGateAccessUpdate, OrgGate } from "@platypus/schemas";
+import type {
+  OrgGateAccess,
+  OrgGateAccessUpdate,
+  OrgGate,
+} from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
   organization as organizationTable,
@@ -26,17 +30,6 @@ type GateKind = {
   changedMessage: string;
 };
 
-export type GateAccess = {
-  gate: OrgGate;
-  workspaces: {
-    id: string;
-    name: string;
-    ownerName: string;
-    allowed: boolean;
-    count: number;
-  }[];
-};
-
 /**
  * The gate and every Workspace with its own switch and how many of the gated
  * resources it holds, so the Admin can see which ones a change would cut off.
@@ -44,7 +37,7 @@ export type GateAccess = {
 export const getGateAccess = async (
   kind: GateKind,
   orgId: string,
-): Promise<GateAccess> => {
+): Promise<OrgGateAccess> => {
   const [org] = await db
     .select({ gate: organizationTable[kind.gate] })
     .from(organizationTable)
@@ -88,7 +81,7 @@ export const setGateAccess = async (
   orgId: string,
   update: OrgGateAccessUpdate,
   actorUserId: string,
-): Promise<GateAccess> => {
+): Promise<OrgGateAccess> => {
   const allowedColumn = workspaceTable[kind.allowed];
   const allowedIds = update.allowedWorkspaceIds
     ? [...new Set(update.allowedWorkspaceIds)]

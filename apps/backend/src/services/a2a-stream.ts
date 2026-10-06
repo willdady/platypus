@@ -26,6 +26,7 @@ import {
   type A2aTaskSubscription,
 } from "./a2a-events.ts";
 import { callerIsLive } from "./a2a-liveness.ts";
+import { replyArtifact } from "./a2a-parts.ts";
 
 /**
  * A2A Tasks over SSE (ADR-0032): `SendStreamingMessage` and `SubscribeToTask`.
@@ -80,23 +81,6 @@ const artifactEvent = (
   },
 });
 
-/** A piece of the reply's text, as `readTask` names its artifact. */
-const replyDelta = (artifactId: string, text: string): Artifact => ({
-  artifactId,
-  name: "reply",
-  description: "",
-  parts: [
-    {
-      content: { $case: "text", value: text },
-      metadata: undefined,
-      filename: "",
-      mediaType: "text/plain",
-    },
-  ],
-  metadata: undefined,
-  extensions: [],
-});
-
 /**
  * From `seen` on: the reply so far when `events` has it, then each piece of
  * the reply and each change of state, then, once the Task ends, its
@@ -115,7 +99,7 @@ async function* followTask(
   let sent = events.replyFrom;
   if (events.catchUp && sent !== null) {
     const { artifactId, text } = events.catchUp;
-    yield artifactEvent(seen, replyDelta(artifactId, text), {
+    yield artifactEvent(seen, replyArtifact(artifactId, text), {
       append: false,
       lastChunk: false,
     });
@@ -131,7 +115,7 @@ async function* followTask(
         sent = null;
         continue;
       }
-      yield artifactEvent(seen, replyDelta(event.artifactId, event.text), {
+      yield artifactEvent(seen, replyArtifact(event.artifactId, event.text), {
         append: event.offset > 0,
         lastChunk: false,
       });

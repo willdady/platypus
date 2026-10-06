@@ -969,14 +969,14 @@ describe("inbound triggers", () => {
             name: "Billing",
             ownerName: "Owner",
             allowed: false,
-            inboundTriggerCount: 0,
+            count: 0,
           },
           {
             id: "ws-1",
             name: "Support",
             ownerName: "Owner",
             allowed: true,
-            inboundTriggerCount: 2,
+            count: 2,
           },
         ],
       });

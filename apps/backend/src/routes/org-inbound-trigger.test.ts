@@ -110,7 +110,7 @@ describe("Org Inbound Trigger Routes", () => {
         name: "Support",
         ownerName: "Dana Owner",
         allowed: true,
-        inboundTriggerCount: 2,
+        count: 2,
       },
     ],
   };
