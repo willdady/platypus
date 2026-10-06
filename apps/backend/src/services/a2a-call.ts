@@ -4,8 +4,8 @@ import { readPositiveInt } from "./trigger-breaker.ts";
 
 /**
  * What bounds and records outside calls to A2A endpoints (ADR-0032): the
- * server-wide cap on active A2A runs, the cap on a call's body, and the one
- * log line every call writes.
+ * server-wide caps on active A2A runs and on callers following them, the cap
+ * on a call's body, and the one log line every call writes.
  * The route maps these onto status codes; the turn path takes the slots.
  */
 
@@ -14,6 +14,11 @@ import { readPositiveInt } from "./trigger-breaker.ts";
 export type A2aSettings = {
   /** A2A runs this backend instance will have active at once. */
   maxConcurrentRuns: number;
+  /**
+   * Followers this backend instance will serve at once: streams, and
+   * blocking waits, on a run they did not start.
+   */
+  maxConcurrentStreams: number;
   /** The largest request body a JSON-RPC call may send, in bytes. */
   maxBodyBytes: number;
 };
@@ -22,6 +27,7 @@ export const a2aSettings = (
   env: NodeJS.ProcessEnv = process.env,
 ): A2aSettings => ({
   maxConcurrentRuns: readPositiveInt("A2A_MAX_CONCURRENT_RUNS", 10, env),
+  maxConcurrentStreams: readPositiveInt("A2A_MAX_CONCURRENT_STREAMS", 100, env),
   maxBodyBytes: readPositiveInt("A2A_MAX_BODY_BYTES", 1048576, env),
 });
 
@@ -40,10 +46,13 @@ export const A2A_RETRY_AFTER_SECONDS = 30;
 
 // ----------------------------------------------------------------- load cap
 
-/** A turn refused because the cap is reached. Nothing has been written. */
+/**
+ * A call refused because a cap is reached: a turn past the run cap, having
+ * written nothing, or a follower past the follower cap.
+ */
 export class A2aAtCapacityError extends Error {
-  constructor() {
-    super("Too many A2A runs are active");
+  constructor(message = "Too many A2A runs are active") {
+    super(message);
     this.name = "A2aAtCapacityError";
   }
 }
@@ -75,6 +84,59 @@ export const activeA2aRunCount = (): number => heldSlots.size;
 
 /** Test seam: forget every held slot. */
 export const resetA2aRunSlots = (): void => heldSlots.clear();
+
+// ------------------------------------------------------------- follower cap
+
+/**
+ * Followers one token may hold at once on this instance, so one client cannot
+ * take the whole pool. Never more than the pool itself.
+ */
+export const A2A_MAX_STREAMS_PER_TOKEN = 10;
+
+/**
+ * The slots of callers following a run they did not start, held in this
+ * process: each holds a connection and polls the database until its Task
+ * ends, which can be hours. Counted apart from the run slots: a follower
+ * never takes a run slot, nor a run a follower slot.
+ */
+const heldFollowers = new Map<symbol, string>();
+const followersByToken = new Map<string, number>();
+
+/**
+ * Takes a follower slot for `tokenId`, or `null` past the instance cap or
+ * the token's share of it. The release it returns gives that slot back, once
+ * however often it is called.
+ */
+export const acquireA2aFollowerSlot = (
+  tokenId: string,
+  max: number = a2aSettings().maxConcurrentStreams,
+): (() => void) | null => {
+  const held = followersByToken.get(tokenId) ?? 0;
+  if (
+    heldFollowers.size >= max ||
+    held >= Math.min(A2A_MAX_STREAMS_PER_TOKEN, max)
+  ) {
+    return null;
+  }
+  const slot = Symbol("a2a-follower");
+  heldFollowers.set(slot, tokenId);
+  followersByToken.set(tokenId, held + 1);
+  return () => {
+    if (!heldFollowers.delete(slot)) return;
+    const left = (followersByToken.get(tokenId) ?? 1) - 1;
+    if (left > 0) followersByToken.set(tokenId, left);
+    else followersByToken.delete(tokenId);
+  };
+};
+
+/** Test seam: the count of follower slots currently held. */
+export const activeA2aFollowerCount = (): number => heldFollowers.size;
+
+/** Test seam: forget every held follower slot. */
+export const resetA2aFollowerSlots = (): void => {
+  heldFollowers.clear();
+  followersByToken.clear();
+};
 
 // ----------------------------------------------------------------- call log
 

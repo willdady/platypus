@@ -247,11 +247,13 @@ const sseFrame = (event: JSONRPCResponse, name?: string) =>
  * refused message, an unknown or ended Task, the load cap) is answered with
  * its JSON-RPC error, as for any other method; after that, events go out as
  * SSE, kept alive while the run is silent. A client that hangs up stops the
- * stream, never the run.
+ * stream, never the run: `hangUp` tells a follower polling its Task to let go
+ * of its slot at once.
  */
 const eventStream = async (
   body: string,
   events: AsyncGenerator<JSONRPCResponse, void, undefined>,
+  hangUp: AbortController,
 ): Promise<Response | JSONRPCResponse> => {
   const id = rpcIdOf(body);
   const failure = (error: unknown): JSONRPCResponse => ({
@@ -281,6 +283,7 @@ const eventStream = async (
       }
     },
     cancel() {
+      hangUp.abort();
       void events.return();
     },
   });
@@ -367,8 +370,8 @@ const capBody: MiddlewareHandler = (c, next) =>
 /**
  * JSON-RPC. A body past the cap is `413`. Every method then passes the token
  * check: a missing, wrong or expired token on a live endpoint is `401`, and
- * the token's last used or last rejected is stamped. A turn past the load cap
- * is `429`, having written nothing. A trailing slash is accepted, since some
+ * the token's last used or last rejected is stamped. A turn past the run cap
+ * is `429`, having written nothing; so is a follower past the follower cap. A trailing slash is accepted, since some
  * clients join paths onto the URL as a base.
  */
 a2a.on("POST", ["/:endpointId", "/:endpointId/"], capBody, (c) => {
@@ -405,9 +408,15 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
   log.organizationId = endpoint.organizationId;
   log.workspaceId = endpoint.workspaceId;
   log.tokenId = token.id;
+  // Aborted when the client hangs up: on the request, or by canceling the
+  // stream it was answered with.
+  const hangUp = new AbortController();
+  c.req.raw.signal?.addEventListener("abort", () => hangUp.abort(), {
+    once: true,
+  });
   const transport = new JsonRpcTransportHandler(
     requestHandler(
-      { endpoint, token, origin: getOrigin(c) },
+      { endpoint, token, origin: getOrigin(c), signal: hangUp.signal },
       guardedFor(log),
       guardedStreamFor(log),
     ),
@@ -416,7 +425,7 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
     versionRefusal(body, c.req.header("A2A-Version"), endpoint) ??
     (await transport.handle(body, new ServerCallContext()));
   if (Symbol.asyncIterator in response) {
-    const answer = await eventStream(body, response);
+    const answer = await eventStream(body, response, hangUp);
     // A stream is logged once it opens; how it goes on is the Task's to say.
     if (answer instanceof Response) {
       log.outcome = "ok";
