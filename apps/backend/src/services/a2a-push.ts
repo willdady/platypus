@@ -1,5 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, eq, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   A2A_CONTENT_TYPE,
   StreamResponse,
@@ -11,6 +21,7 @@ import { db } from "../index.ts";
 import {
   a2aPushConfig as a2aPushConfigTable,
   a2aTask as a2aTaskTable,
+  chat as chatTable,
   type A2aPushAuthentication,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
@@ -164,7 +175,7 @@ const reservePushes = async (
  * throws: a push is fire-and-forget beside the run or call that noticed the
  * end.
  */
-const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
+export const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
   try {
     const task = await readTask(row);
     if (!TERMINAL_TASK_STATES.has(task.status!.state)) return;
@@ -220,6 +231,7 @@ export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
         canceledAt: a2aTaskTable.canceledAt,
         statusAt: a2aTaskTable.statusAt,
         pushCount: a2aTaskTable.pushCount,
+        replyId: a2aTaskTable.replyId,
         createdAt: a2aTaskTable.createdAt,
       })
       .from(a2aTaskTable)
@@ -243,8 +255,9 @@ export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
 /**
  * A turn in the Chat has ended with `status` — on its own, or marked failed by
  * the sweep after its instance died. Records the end on the turn's Task, if it
- * has one, then pushes. `messageId` names the turn; without it, the Chat's
- * current turn. Never throws.
+ * has one, which pushes it, then pushes any other of the Chat's Tasks that
+ * still owes one. `messageId` names the turn; without it, the Chat's current
+ * turn. Never throws.
  */
 export const onA2aTurnEnded = async ({
   chatId,
@@ -262,6 +275,42 @@ export const onA2aTurnEnded = async ({
     logger.error({ error, chatId }, "Recording an A2A Task's end failed");
   }
   await pushEndedA2aTasks(chatId);
+};
+
+/** How many pending configs one sweep for missed pushes takes up. */
+const MISSED_PUSH_SWEEP_LIMIT = 100;
+
+/**
+ * Pushes Tasks whose end no one pushed: the process died between its run's
+ * end and the push, or the end was first noticed by a read. A Task with a
+ * config not yet notified is swept up once it has an end recorded, or once
+ * its Chat is no longer `running` — reading it then records its end, from
+ * its own run or because the Chat has moved past it. Run by the scheduler,
+ * under its lock; the pushes are not awaited, so a slow client URL can't
+ * hold it. Never throws.
+ */
+export const pushMissedA2aEnds = async (): Promise<void> => {
+  try {
+    const rows = await db
+      .select()
+      .from(a2aTaskTable)
+      .innerJoin(
+        a2aPushConfigTable,
+        eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
+      )
+      .innerJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
+      .where(
+        and(
+          isNull(a2aPushConfigTable.notifiedAt),
+          or(isNotNull(a2aTaskTable.state), ne(chatTable.status, "running")),
+        ),
+      )
+      .limit(MISSED_PUSH_SWEEP_LIMIT);
+    const tasks = new Map(rows.map(({ a2a_task }) => [a2a_task.id, a2a_task]));
+    for (const task of tasks.values()) void pushTaskIfEnded(task);
+  } catch (error) {
+    logger.error({ error }, "Sweeping for missed A2A pushes failed");
+  }
 };
 
 // ------------------------------------------------------------ Client config

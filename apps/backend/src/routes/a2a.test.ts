@@ -148,7 +148,11 @@ import { regenerateA2aToken } from "../services/a2a-token.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { A2aChatBusyError, a2aChatId } from "../services/a2a-task.ts";
-import { MAX_CONCURRENT_PUSHES } from "../services/a2a-push.ts";
+import {
+  MAX_CONCURRENT_PUSHES,
+  pushMissedA2aEnds,
+} from "../services/a2a-push.ts";
+import { deleteMessage } from "../services/chat-messages.ts";
 import { toJsonRpcError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
 import {
   composeToolSet,
@@ -602,7 +606,7 @@ const seedConversation = (
 type RpcTask = {
   id: string;
   contextId: string;
-  status: { state: string };
+  status: { state: string; timestamp?: string };
   artifacts: { parts: { text: string; mediaType?: string }[] }[];
 };
 type RpcBody = {
@@ -677,6 +681,64 @@ const moveOn = async (contextId: string) => {
 
 const stateOf = async (taskId: string) =>
   (await rpc("GetTask", { id: taskId })).body.result.status.state;
+
+const HOUR_AGO = new Date(Date.now() - 60 * 60 * 1000);
+
+/** A message of chat-1, written an hour ago. */
+const message = (
+  id: string,
+  parentId: string | null,
+  role: "user" | "assistant",
+  text: string,
+): Row => ({
+  chatId: "chat-1",
+  id,
+  parentId,
+  role,
+  parts: [{ type: "text", text }],
+  deletedAt: null,
+  createdAt: HOUR_AGO,
+});
+
+/**
+ * Task-1, whose turn wrote `reply-a`, in a Chat that has since run a later
+ * turn to its end. No end is recorded on the Task: its run's end was lost.
+ */
+const seedMovedOn = (rows: Record<string, Row[]> = {}) =>
+  seedConversation({
+    chat: [
+      {
+        id: "chat-1",
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        title: "Moved on",
+        status: "succeeded",
+        activeLeafId: "reply-b",
+        a2aTokenId: "tok-1",
+        a2aEndpointId: "ep-1",
+      },
+    ],
+    chat_message: [
+      message("msg-a", null, "user", "Where is my order?"),
+      message("reply-a", "msg-a", "assistant", "On its way"),
+      message("msg-b", "reply-a", "user", "When?"),
+      message("reply-b", "msg-b", "assistant", "Tomorrow"),
+    ],
+    a2a_task: [
+      {
+        id: "task-1",
+        chatId: "chat-1",
+        messageId: "msg-a",
+        endpointId: "ep-1",
+        tokenId: "tok-1",
+        state: null,
+        replyId: null,
+        statusAt: HOUR_AGO,
+        createdAt: HOUR_AGO,
+      },
+    ],
+    ...rows,
+  });
 
 describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   beforeEach(() => {
@@ -1593,6 +1655,89 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     });
   });
 
+  describe("an ended Task's reply", () => {
+    /** The Task's artifact texts, as GetTask reads them. */
+    const artifactsOf = async (taskId: string) =>
+      // An empty list is left out of the wire form.
+      ((await rpc("GetTask", { id: taskId })).body.result.artifacts ?? []).map(
+        (artifact) => artifact.parts[0].text,
+      );
+
+    /** The completed Task of a first message, and the reply it ended with. */
+    const complete = async () => {
+      seedConversation();
+      const task = (await send({ messageId: "msg-a" })).body.result.task;
+      const reply = rows("chat_message").find((m) => m.role === "assistant")!;
+      return { task, reply };
+    };
+
+    it("leaves a completed Task completed, with no artifact, once the Owner deletes its reply", async () => {
+      const { task, reply } = await complete();
+      expect(await artifactsOf(task.id)).toEqual(["Hello from Helper"]);
+
+      await deleteMessage(task.contextId, reply.id as string);
+
+      expect(await stateOf(task.id)).toBe("TASK_STATE_COMPLETED");
+      expect(await artifactsOf(task.id)).toEqual([]);
+    });
+
+    it("keeps the reply it ended with when the Owner regenerates it", async () => {
+      const { task, reply } = await complete();
+      // A regenerate: another reply under the same message, made current.
+      rows("chat_message").push({
+        ...reply,
+        id: "reply-regenerated",
+        parts: [{ type: "text", text: "Regenerated" }],
+        createdAt: new Date(Date.now() + 1000),
+      });
+      rows("chat")[0].activeLeafId = "reply-regenerated";
+
+      expect(await artifactsOf(task.id)).toEqual(["Hello from Helper"]);
+
+      await deleteMessage(task.contextId, reply.id as string);
+      expect(await artifactsOf(task.id)).toEqual([]);
+    });
+
+    it("records the end of a Task whose Chat moved on without one, on its first read", async () => {
+      seedMovedOn();
+      const before = Date.now();
+
+      const read = (await rpc("GetTask", { id: "task-1" })).body.result;
+
+      expect(read.status.state).toBe("TASK_STATE_COMPLETED");
+      const at = new Date(read.status.timestamp!).getTime();
+      expect(at).toBeGreaterThanOrEqual(before);
+      // Recorded, so ListTasks' read of unended Tasks passes it by.
+      expect(rows("a2a_task")[0]).toMatchObject({
+        state: "completed",
+        replyId: "reply-a",
+        statusAt: new Date(at),
+      });
+      expect(await artifactsOf("task-1")).toEqual(["On its way"]);
+
+      // Its reply deleted later, it stays completed, at the same moment.
+      await deleteMessage("chat-1", "reply-a");
+      const again = (await rpc("GetTask", { id: "task-1" })).body.result;
+      expect(again.status).toMatchObject({
+        state: "TASK_STATE_COMPLETED",
+        timestamp: new Date(at).toISOString(),
+      });
+      expect(again.artifacts).toBeUndefined();
+    });
+
+    it("records a moved-on Task with no reply as failed", async () => {
+      seedMovedOn();
+      rows("chat_message").find((m) => m.id === "reply-a")!.deletedAt =
+        HOUR_AGO;
+
+      expect(await stateOf("task-1")).toBe("TASK_STATE_FAILED");
+      expect(rows("a2a_task")[0]).toMatchObject({
+        state: "failed",
+        replyId: null,
+      });
+    });
+  });
+
   it("does not read another endpoint's Task", async () => {
     seedConversation();
     const sent = await send({ messageId: "msg-a" });
@@ -1684,6 +1829,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
         endpointId: task.endpointId ?? "ep-1",
         tokenId: task.tokenId === undefined ? "tok-1" : task.tokenId,
         state: task.state ?? "completed",
+        replyId: `reply-${task.id}`,
         canceledAt: null,
         createdAt: new Date(T0),
         statusAt: new Date(T0 + task.minute * MINUTE),
@@ -2368,6 +2514,74 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     "http://192.168.1.1/push",
     "http://[fd00:ec2::254]/push",
   ];
+
+  describe("an end no one pushed", () => {
+    const pendingConfig = (): Row => ({
+      id: "cfg-1",
+      taskId: "task-1",
+      url: PUSH_URL,
+      token: null,
+      authentication: null,
+      notifiedAt: null,
+      createdAt: HOUR_AGO,
+    });
+
+    it("is pushed when GetTask records it, its run's end lost", async () => {
+      seedMovedOn({ a2a_push_config: [pendingConfig()] });
+
+      expect(await stateOf("task-1")).toBe("TASK_STATE_COMPLETED");
+
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+      expect(pushed()[0].body.task).toMatchObject({
+        id: "task-1",
+        status: { state: "TASK_STATE_COMPLETED" },
+      });
+      expect(pushed()[0].body.task.artifacts[0].parts[0].text).toBe(
+        "On its way",
+      );
+    });
+
+    it("is pushed by the sweep once the Chat is no longer running", async () => {
+      seedMovedOn({ a2a_push_config: [pendingConfig()] });
+
+      await pushMissedA2aEnds();
+
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+      expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_COMPLETED");
+      expect(rows("a2a_task")[0]).toMatchObject({ state: "completed" });
+      await pushMissedA2aEnds();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(push).toHaveBeenCalledTimes(1);
+    });
+
+    it("is pushed by the sweep when the end was recorded but its push was lost", async () => {
+      seedMovedOn({ a2a_push_config: [pendingConfig()] });
+      Object.assign(rows("a2a_task")[0], {
+        state: "failed",
+        statusAt: new Date(),
+      });
+      rows("chat")[0].status = "running";
+
+      await pushMissedA2aEnds();
+
+      await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+      expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_FAILED");
+    });
+
+    it("is not swept while its run is still going", async () => {
+      seedMovedOn({ a2a_push_config: [pendingConfig()] });
+      Object.assign(rows("chat")[0], {
+        status: "running",
+        activeLeafId: "msg-a",
+      });
+
+      await pushMissedA2aEnds();
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(push).not.toHaveBeenCalled();
+      expect(rows("a2a_task")[0]).toMatchObject({ state: null });
+    });
+  });
 
   it("never pushes to a private network, though Webhooks may reach one", async () => {
     vi.stubEnv("EGRESS_ALLOW_PRIVATE_NETWORKS", "true");

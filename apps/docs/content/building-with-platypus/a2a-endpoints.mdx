@@ -163,7 +163,9 @@ learns one out of your Chats.
   or `canceled`, [streams it](#streaming), or registers for a
   [push notification](#push-notifications) when it ends. The Agent's final
   reply is the Task's artifact. A Task that has ended keeps its state, even
-  after you or the client continue the Chat.
+  after you or the client continue the Chat. It also keeps the reply it ended
+  with: regenerating that reply in the Chat doesn't change the artifact, and
+  deleting it leaves the Task with its state and no artifact.
 - **A retry is safe.** The client's `messageId` becomes the message's id in the
   Chat, so sending the same `messageId` again answers with the Task it already
   started, never a second run. That holds even when the retry arrives while
@@ -289,7 +291,8 @@ registered.
   missed.
 - **A run lost to a server crash** ends `failed` within about a minute, once
   Platypus notices it has gone quiet, and that is pushed like any other end. A
-  run stopped by a server shutting down cleanly ends `canceled`.
+  run stopped by a server shutting down cleanly ends `canceled`. An end that
+  a crash kept from being pushed is pushed within about a minute.
 - **Your credentials come back to you.** A request carries the
   `authentication` the client registered as an `Authorization` header (for
   example `Authorization: Bearer <credentials>`), and its `token`, if any, as

@@ -1228,7 +1228,9 @@ export type A2aTaskEndState = "completed" | "failed" | "canceled";
 // message — the client's `messageId` — whose reply is the assistant message.
 // `canceledAt` is when a client's `CancelTask` claimed it: a run the cancel
 // message missed is found and stopped from it. `statusAt` is the Task's status
-// timestamp: when it was made, then when its end was recorded. Lives as long as
+// timestamp: when it was made, then when its end was recorded. `replyId` is the
+// reply recorded with its end, its artifact from then on: one the Owner deletes
+// or regenerates leaves the Task its state and no artifact. Lives as long as
 // its Chat; an endpoint or token deleted later leaves it with no way to be read.
 export const a2aTask = pgTable(
   "a2a_task",
@@ -1248,17 +1250,26 @@ export const a2aTask = pgTable(
     // Push notifications sent for this Task, over every config it has had, so
     // deleting a delivered config and registering another can't send more.
     pushCount: t.integer("push_count").notNull().default(0),
+    replyId: t.text("reply_id"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [
     uniqueIndex("idx_a2a_task_chat_id_message_id").on(t.chatId, t.messageId),
     index("idx_a2a_task_endpoint_id").on(t.endpointId),
     index("idx_a2a_task_token_id").on(t.tokenId),
+    index("idx_a2a_task_chat_id_reply_id").on(t.chatId, t.replyId),
     // Deleted with its Chat, and never names a message the Chat lacks.
     foreignKey({
       columns: [t.chatId, t.messageId],
       foreignColumns: [chatMessage.chatId, chatMessage.id],
     }).onDelete("cascade"),
+    // Its migration narrows the action to `SET NULL ("reply_id")`: the whole
+    // key would null `chat_id` too, which Drizzle can't express.
+    foreignKey({
+      name: "a2a_task_reply_fk",
+      columns: [t.chatId, t.replyId],
+      foreignColumns: [chatMessage.chatId, chatMessage.id],
+    }).onDelete("set null"),
   ],
 );
 
