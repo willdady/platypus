@@ -205,16 +205,16 @@ const requestHandler = (
   resubscribe: guardedStream((params) => subscribeToA2aTask(caller, params.id)),
   cancelTask: guarded((params) => cancelA2aTask(caller, params.id)),
   createTaskPushNotificationConfig: guarded((params) =>
-    createA2aPushConfig(caller.endpoint.id, params),
+    createA2aPushConfig(caller, params),
   ),
   getTaskPushNotificationConfig: guarded((params) =>
-    getA2aPushConfig(caller.endpoint.id, params),
+    getA2aPushConfig(caller, params),
   ),
   listTaskPushNotificationConfigs: guarded((params) =>
-    listA2aPushConfigs(caller.endpoint.id, params),
+    listA2aPushConfigs(caller, params),
   ),
   deleteTaskPushNotificationConfig: guarded((params) =>
-    deleteA2aPushConfig(caller.endpoint.id, params),
+    deleteA2aPushConfig(caller, params),
   ),
   listTasks: guarded((params) => listA2aTasks(caller, params)),
 });

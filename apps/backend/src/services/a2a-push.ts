@@ -16,8 +16,10 @@ import {
 import { logger } from "../logger.ts";
 import { checkEgress } from "../utils/egress-guard.ts";
 import type { RunStatus } from "../runs/types.ts";
+import type { A2aCaller } from "./a2a-task.ts";
 import {
   currentTurnId,
+  findTokenTask,
   readTask,
   recordTaskEnd,
   TERMINAL_TASK_STATES,
@@ -294,34 +296,28 @@ const toWire = (row: PushConfigRow): TaskPushNotificationConfig => ({
   authentication: row.authentication ?? undefined,
 });
 
-/** One of the endpoint's Tasks; another endpoint's is not found. */
-const endpointTask = async (endpointId: string, taskId: string) => {
-  const [task] = await db
-    .select()
-    .from(a2aTaskTable)
-    .where(
-      and(eq(a2aTaskTable.id, taskId), eq(a2aTaskTable.endpointId, endpointId)),
-    )
-    .limit(1);
-  if (!task) throw new TaskNotFoundError();
-  return task;
-};
+/** One of the calling token's Tasks; any other is not found. */
+const callerTask = (caller: A2aCaller, taskId: string) =>
+  findTokenTask(
+    { endpointId: caller.endpoint.id, tokenId: caller.token.id },
+    taskId,
+  );
 
 /** `CreateTaskPushNotificationConfig`. */
 export const createA2aPushConfig = async (
-  endpointId: string,
+  caller: A2aCaller,
   params: TaskPushNotificationConfig,
 ): Promise<TaskPushNotificationConfig> => {
-  const task = await endpointTask(endpointId, params.taskId);
+  const task = await callerTask(caller, params.taskId);
   return toWire(await storePushConfig(task, await checkPushConfig(params)));
 };
 
 /** `GetTaskPushNotificationConfig`. */
 export const getA2aPushConfig = async (
-  endpointId: string,
+  caller: A2aCaller,
   params: { taskId: string; id: string },
 ): Promise<TaskPushNotificationConfig> => {
-  const task = await endpointTask(endpointId, params.taskId);
+  const task = await callerTask(caller, params.taskId);
   const [row] = await db
     .select()
     .from(a2aPushConfigTable)
@@ -335,10 +331,10 @@ export const getA2aPushConfig = async (
 
 /** `ListTaskPushNotificationConfigs`: all of them, in one page. */
 export const listA2aPushConfigs = async (
-  endpointId: string,
+  caller: A2aCaller,
   params: { taskId: string },
 ) => {
-  const task = await endpointTask(endpointId, params.taskId);
+  const task = await callerTask(caller, params.taskId);
   const rows = await db
     .select()
     .from(a2aPushConfigTable)
@@ -349,9 +345,9 @@ export const listA2aPushConfigs = async (
 
 /** `DeleteTaskPushNotificationConfig`. */
 export const deleteA2aPushConfig = async (
-  endpointId: string,
+  caller: A2aCaller,
   params: { taskId: string; id: string },
 ): Promise<void> => {
-  const task = await endpointTask(endpointId, params.taskId);
+  const task = await callerTask(caller, params.taskId);
   await db.delete(a2aPushConfigTable).where(configKey(task.id, params.id));
 };

@@ -1,5 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { TaskState, type Part, type Task } from "@a2a-js/sdk";
+import { TaskNotFoundError } from "@a2a-js/sdk/errors";
 import { db } from "../index.ts";
 import {
   a2aTask as a2aTaskTable,
@@ -93,6 +94,31 @@ export const currentTurnId = async (
     .limit(1);
   if (!leaf) return undefined;
   return leaf.role === "assistant" ? (leaf.parentId ?? undefined) : chat.leafId;
+};
+
+/**
+ * One of the Tasks `tokenId` started on `endpointId` (ADR-0032). A token
+ * reaches only its own: another token's Task, on this endpoint or another,
+ * answers as an unknown id does, so the caller learns nothing. A deleted
+ * token's Tasks are reached by no one.
+ */
+export const findTokenTask = async (
+  owner: { endpointId: string; tokenId: string },
+  taskId: string,
+): Promise<TaskRow> => {
+  const [task] = await db
+    .select()
+    .from(a2aTaskTable)
+    .where(
+      and(
+        eq(a2aTaskTable.id, taskId),
+        eq(a2aTaskTable.endpointId, owner.endpointId),
+        eq(a2aTaskTable.tokenId, owner.tokenId),
+      ),
+    )
+    .limit(1);
+  if (!task) throw new TaskNotFoundError();
+  return task;
 };
 
 /** The Task's status timestamp as stored now. */
