@@ -111,3 +111,31 @@ is listed to no one.
   is in another client's Tasks.
 - A Task's status timestamp is when its end was recorded, or when it was made
   while it runs. The list is ordered by it, newest first.
+
+## Amendment — a token reaches only the Chats and Tasks it started (#1293)
+
+The decision above scopes `contextId` to the endpoint's Agent and every Task
+method to the endpoint, and the `ListTasks` amendment calls `GetTask`,
+`CancelTask` and push configs deliberately wider than the list. Both are
+replaced: **a token reaches only the Chats and Tasks it started.**
+
+- **`contextId`** names a Chat only when that Chat's token is the caller's.
+  The Owner's UI Chats, another token's Chats and Chats started through
+  another endpoint for the same Agent are unreachable. Chat ids are in UI
+  URLs, screenshots and the call log, so they are not secrets. Appending to
+  an Owner UI Chat also wrote the caller's text into the Owner's Memories,
+  since a Chat with no endpoint reads as the Owner's own, and appending to
+  another endpoint's Chat got around that endpoint's memory settings.
+- **`GetTask`, `CancelTask`, `SubscribeToTask`, a message naming a `taskId`
+  and the four push-config methods** reach only the caller token's Tasks. One
+  token could otherwise cancel another's run, or read the push credentials it
+  registered.
+- **Every reach outside that answers as an unknown id does**
+  (`TaskNotFoundError`), so a caller learns nothing about what it can't reach.
+- **"One run per context" no longer mints a Task for an Owner's turn.** A
+  token's Chat busy with a turn the Owner started in the UI answers busy with
+  no `taskId`. A busy answer names a Task only when the caller's token started
+  the running turn. The Owner continuing a client's Chat in the UI, and a
+  client's next message following those turns, is unchanged.
+- **A deleted token's Chats and Tasks are reachable by no one** over A2A. Its
+  calls are already `401`, and no other token reaches them.

@@ -44,6 +44,7 @@ import { callerDataBlock } from "./caller-data.ts";
 import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
 import {
   currentTurnId,
+  findTokenTask,
   readTask,
   readTaskAfresh,
   endStateOf,
@@ -103,7 +104,6 @@ const taskFor = async (
   caller: A2aCaller,
   chatId: string,
   messageId: string,
-  tokenId: string | null,
 ): Promise<TaskRow> => {
   const where = and(
     eq(a2aTaskTable.chatId, chatId),
@@ -120,7 +120,7 @@ const taskFor = async (
         chatId,
         messageId,
         endpointId: caller.endpoint.id,
-        tokenId,
+        tokenId: caller.token.id,
         statusAt: now,
         createdAt: now,
       })
@@ -154,13 +154,24 @@ export class A2aChatBusyError extends UnsupportedOperationError {
 }
 
 /**
- * `A2aChatBusyError` for the Chat's running turn. A run the Owner started in
- * the UI gets a Task here, so it can be followed the same way.
+ * `A2aChatBusyError` for the Chat's running turn, naming its Task when this
+ * token started that turn. Only ever asked of a Chat the token started, and
+ * it mints no Task: a turn the Owner started in the UI is answered busy with
+ * no Task, so the client cannot follow, or cancel, a run it did not start.
+ * So is a turn of this token's whose Task its own call has yet to make.
  */
 const busyError = async (caller: A2aCaller, chatId: string) => {
   const turnId = await currentTurnId(chatId);
-  const task = turnId ? await taskFor(caller, chatId, turnId, null) : undefined;
-  // Reading it records its end, should its run have ended as it was made.
+  const task = turnId
+    ? await findTask(
+        and(
+          eq(a2aTaskTable.chatId, chatId),
+          eq(a2aTaskTable.messageId, turnId),
+          eq(a2aTaskTable.tokenId, caller.token.id),
+        ),
+      )
+    : undefined;
+  // Reading it records its end, should its run have ended as it was found.
   if (task) await readTask(task);
   return new A2aChatBusyError(task?.id);
 };
@@ -223,6 +234,9 @@ export const startA2aTurn = async (
   const contextId = message.contextId || undefined;
   let parentId: string | null = null;
   if (contextId) {
+    // Only a Chat this token started (ADR-0032). The Owner's own Chats,
+    // another token's and another endpoint's are answered as an unknown id:
+    // a Chat id is no secret, so it is not a credential.
     const [chat] = await db
       .select({ leafId: chatTable.activeLeafId, status: chatTable.status })
       .from(chatTable)
@@ -231,6 +245,7 @@ export const startA2aTurn = async (
           eq(chatTable.id, contextId),
           eq(chatTable.workspaceId, endpoint.workspaceId),
           eq(chatTable.agentId, endpoint.agentId),
+          eq(chatTable.a2aTokenId, token.id),
         ),
       )
       .limit(1);
@@ -247,9 +262,7 @@ export const startA2aTurn = async (
       .limit(1);
     if (sent) {
       return {
-        task: await withPush(
-          await taskFor(caller, contextId, sent.id, token.id),
-        ),
+        task: await withPush(await taskFor(caller, contextId, sent.id)),
       };
     }
     // Before the slot is taken, so a busy Chat is answered with its Task at
@@ -274,7 +287,7 @@ export const startA2aTurn = async (
     if (opened) {
       return {
         task: await withPush(
-          await taskFor(caller, opened.chatId, message.messageId, token.id),
+          await taskFor(caller, opened.chatId, message.messageId),
         ),
       };
     }
@@ -328,9 +341,7 @@ export const startA2aTurn = async (
 
   try {
     return {
-      task: await withPush(
-        await taskFor(caller, chatId, message.messageId, token.id),
-      ),
+      task: await withPush(await taskFor(caller, chatId, message.messageId)),
       run,
     };
   } catch (error) {
@@ -356,22 +367,17 @@ export const sendA2aMessage = async (
     : waitForTask(task, deadline);
 };
 
-/** One of this endpoint's Tasks. */
-export const findA2aTask = async (
+/** One of the Tasks the calling token started; any other is not found. */
+export const findA2aTask = (
   caller: A2aCaller,
   taskId: string,
-): Promise<TaskRow> => {
-  const task = await findTask(
-    and(
-      eq(a2aTaskTable.id, taskId),
-      eq(a2aTaskTable.endpointId, caller.endpoint.id),
-    ),
+): Promise<TaskRow> =>
+  findTokenTask(
+    { endpointId: caller.endpoint.id, tokenId: caller.token.id },
+    taskId,
   );
-  if (!task) throw new TaskNotFoundError();
-  return task;
-};
 
-/** `GetTask`: one of this endpoint's Tasks, read from the database. */
+/** `GetTask`: one of the calling token's Tasks, read from the database. */
 export const getA2aTask = async (
   caller: A2aCaller,
   taskId: string,
@@ -415,10 +421,8 @@ const readPageToken = (
 
 /**
  * `ListTasks`: the Tasks the calling token started on this endpoint, newest
- * status first. Narrower than `GetTask`, which reads any of the endpoint's
- * Tasks by id: a Task's id is known only to the client that started it, and
- * a list must not hand one client another's (ADR-0032). A deleted token's
- * Tasks are listed to no one.
+ * status first. The same scope as every other Task method: a token reaches
+ * only its own Tasks (ADR-0032). A deleted token's Tasks are listed to no one.
  *
  * Each running Task's state is read from its run first, recording any end
  * not yet recorded, so the `status` filter and the order see where it is now.

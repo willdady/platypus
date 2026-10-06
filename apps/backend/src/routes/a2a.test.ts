@@ -967,7 +967,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     });
   });
 
-  it("refuses a message while the Owner's run is active, naming its Task", async () => {
+  it("refuses a message while the Owner's UI turn runs in the token's Chat, naming no Task", async () => {
     seedConversation({
       chat: [
         {
@@ -977,6 +977,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
           title: "Busy",
           status: "running",
           activeLeafId: "owner-msg",
+          a2aTokenId: "tok-1",
         },
       ],
       chat_message: [
@@ -995,13 +996,9 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     const res = await send({ messageId: "msg-a", contextId: "chat-1" });
 
     expect(res.body.error.code).toBe(-32004);
-    const [task] = rows("a2a_task");
-    expect(task).toMatchObject({ chatId: "chat-1", messageId: "owner-msg" });
-    expect(res.body.error.data[0].metadata).toEqual({ taskId: task.id });
+    expect(res.body.error.data[0].metadata).toBeUndefined();
+    expect(rows("a2a_task")).toHaveLength(0);
     expect(model.prompts).toHaveLength(0);
-
-    const got = await rpc("GetTask", { id: task.id });
-    expect(got.body.result.status.state).toBe("TASK_STATE_SUBMITTED");
   });
 
   it("refuses a busy Chat with its own error type, answered as the spec's", () => {
@@ -1082,6 +1079,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
             title: "Ended",
             status: "cancelled",
             activeLeafId: "reply-a",
+            a2aTokenId: "tok-1",
           },
         ],
         chat_message: [
@@ -1135,6 +1133,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
             title: "Orphaned",
             status: "running",
             activeLeafId: "reply-a",
+            a2aTokenId: "tok-1",
             lastTurnAt: hourAgo,
             updatedAt: hourAgo,
           },
@@ -2151,6 +2150,7 @@ describe("POST /a2a/:endpointId — the load cap", () => {
           title: "Busy",
           status: "running",
           activeLeafId: null,
+          a2aTokenId: "tok-1",
         },
       ],
     });
@@ -2534,18 +2534,32 @@ describe("the A2A call log", () => {
           agentId: "agent-1",
           title: "Busy",
           status: "running",
-          activeLeafId: "owner-msg",
+          activeLeafId: "client-msg",
+          a2aTokenId: "tok-1",
         },
       ],
       chat_message: [
         {
           chatId: "chat-1",
-          id: "owner-msg",
+          id: "client-msg",
           parentId: null,
           role: "user",
-          parts: [{ type: "text", text: "Owner asks" }],
+          parts: [{ type: "text", text: "Client asks" }],
           deletedAt: null,
           createdAt: new Date(),
+        },
+      ],
+      a2a_task: [
+        {
+          id: "task-1",
+          chatId: "chat-1",
+          messageId: "client-msg",
+          endpointId: "ep-1",
+          tokenId: "tok-1",
+          state: null,
+          canceledAt: null,
+          createdAt: new Date(),
+          statusAt: new Date(),
         },
       ],
     });
@@ -2559,7 +2573,7 @@ describe("the A2A call log", () => {
         method: "SendMessage",
         outcome: "rejected",
         reason: "busy",
-        taskId: rows("a2a_task")[0].id,
+        taskId: "task-1",
       }),
     ]);
   });
@@ -2983,5 +2997,215 @@ describe("POST /a2a/:endpointId — streaming", () => {
     release();
 
     expect(((await res.json()) as RpcBody).error.code).toBe(-32001);
+  });
+});
+
+describe("POST /a2a/:endpointId — a token reaches only what it started", () => {
+  const OTHER_TOKEN = "pa2a_other-client";
+
+  /** ep-1 with a second client's token, tok-3, and the given Chats. */
+  const seedTwoClients = (chats: Row[] = [], messages: Row[] = []) => {
+    seedConversation({ chat: chats, chat_message: messages });
+    tables.a2a_token.push({
+      id: "tok-3",
+      endpointId: "ep-1",
+      name: "Other client",
+      tokenHash: hashBearerToken(OTHER_TOKEN),
+      ...LIVE,
+    });
+  };
+
+  /** A Chat for agent-1 whose one turn has ended, its user message `msgId`. */
+  const chatOf = (id: string, over: Row = {}): Row => ({
+    id,
+    workspaceId: "ws-1",
+    agentId: "agent-1",
+    title: id,
+    status: "succeeded",
+    activeLeafId: `${id}-msg`,
+    a2aTokenId: null,
+    a2aEndpointId: null,
+    ...over,
+  });
+  const messageOf = (chatId: string): Row => ({
+    chatId,
+    id: `${chatId}-msg`,
+    parentId: null,
+    role: "user",
+    parts: [{ type: "text", text: "Someone else's question" }],
+    deletedAt: null,
+    createdAt: new Date(),
+  });
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.deltas = null;
+    model.hold = null;
+    model.holdMidReply = null;
+    model.prompts = [];
+    resetTokenTouches();
+    resetA2aRunSlots();
+  });
+
+  describe.each([
+    ["the Owner's UI Chat", {}],
+    ["the Owner's UI Chat, busy", { status: "running" }],
+    ["another token's Chat", { a2aTokenId: "tok-3", a2aEndpointId: "ep-1" }],
+    [
+      "another endpoint's Chat for the same Agent",
+      { a2aTokenId: "tok-2", a2aEndpointId: "ep-2" },
+    ],
+  ])("a contextId naming %s", (_case, over) => {
+    beforeEach(() =>
+      seedTwoClients([chatOf("chat-x", over)], [messageOf("chat-x")]),
+    );
+
+    // The Owner's UI Chat is never written to, so memory extraction never
+    // reads a caller's text as the Owner's own.
+    it("is not found, writing no message and starting no run", async () => {
+      const res = await send({ messageId: "msg-a", contextId: "chat-x" });
+
+      expect(res.body.error.code).toBe(-32001);
+      expect(res.body.error.data[0].metadata).toBeUndefined();
+      expect(rows("chat_message").map((m) => m.id)).toEqual(["chat-x-msg"]);
+      expect(rows("a2a_task")).toHaveLength(0);
+      expect(model.prompts).toHaveLength(0);
+    });
+
+    it("is not found for a messageId already in it, making no Task", async () => {
+      const res = await send({ messageId: "chat-x-msg", contextId: "chat-x" });
+
+      expect(res.body.error.code).toBe(-32001);
+      expect(rows("a2a_task")).toHaveLength(0);
+      expect(model.prompts).toHaveLength(0);
+    });
+  });
+
+  describe("another token's Task on the same endpoint", () => {
+    const asOther = { token: OTHER_TOKEN };
+    let taskId = "";
+
+    beforeEach(async () => {
+      seedTwoClients();
+      taskId = (await startMidReply()).id;
+      tables.a2a_push_config = [
+        {
+          id: "cfg-1",
+          taskId,
+          url: "https://203.0.113.10/push",
+          token: "client-verification-token",
+          authentication: { scheme: "Bearer", credentials: "client-secret" },
+          notifiedAt: null,
+          createdAt: new Date(),
+        },
+      ];
+    });
+
+    // Its own token stops the held run, so it doesn't outlive the test.
+    afterEach(async () => {
+      await rpc("CancelTask", { id: taskId });
+    });
+
+    it.each([
+      ["GetTask", () => ({ id: taskId })],
+      ["CancelTask", () => ({ id: taskId })],
+      [
+        "SendMessage naming it",
+        () => ({
+          message: {
+            role: "ROLE_USER",
+            messageId: "msg-b",
+            taskId,
+            parts: [text("hi")],
+          },
+        }),
+      ],
+      [
+        "CreateTaskPushNotificationConfig",
+        () => ({ taskId, id: "cfg-2", url: "https://203.0.113.10/theirs" }),
+      ],
+      ["GetTaskPushNotificationConfig", () => ({ taskId, id: "cfg-1" })],
+      ["ListTaskPushNotificationConfigs", () => ({ taskId })],
+      ["DeleteTaskPushNotificationConfig", () => ({ taskId, id: "cfg-1" })],
+    ])("is not found by %s", async (method, params) => {
+      const res = await rpc(method.split(" ")[0], params(), asOther);
+
+      expect(res.body.error.code).toBe(-32001);
+      expect(JSON.stringify(res.body)).not.toContain("client-secret");
+      expect(cancelRun).not.toHaveBeenCalled();
+      expect(rows("chat")[0]).toMatchObject({ status: "running" });
+      expect(rows("a2a_task")).toHaveLength(1);
+      expect(rows("a2a_task")[0].state ?? null).toBeNull();
+      expect(rows("a2a_task")[0].canceledAt ?? null).toBeNull();
+      expect(rows("a2a_push_config").map((c) => c.id)).toEqual(["cfg-1"]);
+      expect(model.prompts).toHaveLength(1);
+    });
+
+    it.each([
+      ["SubscribeToTask", () => ({ id: taskId })],
+      [
+        "SendStreamingMessage",
+        () => ({
+          message: {
+            role: "ROLE_USER",
+            messageId: "msg-b",
+            taskId,
+            parts: [text("hi")],
+          },
+        }),
+      ],
+    ])("is not found by %s", async (method, params) => {
+      const res = await app.request("/a2a/ep-1", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${OTHER_TOKEN}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: ++rpcId,
+          method,
+          params: params(),
+        }),
+      });
+
+      expect(res.headers.get("content-type")).toContain("application/json");
+      expect(((await res.json()) as RpcBody).error.code).toBe(-32001);
+      expect(model.prompts).toHaveLength(1);
+    });
+
+    it("is listed only to the token that started it", async () => {
+      const theirs = await rpc("ListTasks", {}, asOther);
+      const mine = await rpc("ListTasks", {});
+
+      expect(
+        (theirs.body.result as unknown as { tasks: RpcTask[] }).tasks,
+      ).toEqual([]);
+      expect(
+        (mine.body.result as unknown as { tasks: RpcTask[] }).tasks.map(
+          (task) => task.id,
+        ),
+      ).toEqual([taskId]);
+    });
+  });
+
+  it("reaches a deleted token's Chats and Tasks from no token", async () => {
+    seedTwoClients();
+    const sent = await send({ messageId: "msg-a" });
+    const { id, contextId } = sent.body.result.task;
+    tables.a2a_token = tables.a2a_token.filter((t) => t.id !== "tok-1");
+    rows("chat")[0].a2aTokenId = null;
+    rows("a2a_task")[0].tokenId = null;
+
+    expect((await rpc("GetTask", { id })).status).toBe(401);
+    expect(
+      (await rpc("GetTask", { id }, { token: OTHER_TOKEN })).body.error.code,
+    ).toBe(-32001);
+    expect(
+      (await send({ messageId: "msg-b", contextId }, { token: OTHER_TOKEN }))
+        .body.error.code,
+    ).toBe(-32001);
   });
 });

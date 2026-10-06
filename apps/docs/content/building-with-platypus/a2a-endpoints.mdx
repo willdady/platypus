@@ -140,6 +140,15 @@ token's name, so you can read what the client asked and what the Agent did. You
 can continue the Chat yourself, and the client's next message follows your
 turns.
 
+**Each token sees only the conversations it started.** A `contextId` naming
+any other Chat — one you started yourself, another client's, or one started on
+another endpoint for the same Agent — is answered with a "task not found"
+error, exactly as an id that doesn't exist, and nothing is written to it. The
+same goes for every Task method: a client can read, follow, cancel and register
+push URLs on its own Tasks only. A Chat id appears in your browser's address
+bar and in screenshots, so it is not a secret; this is what keeps a client that
+learns one out of your Chats.
+
 - **`SendMessage` without a `contextId`** starts a new Chat with the endpoint's
   Agent. The answer's `contextId` is that Chat; send it with later messages to
   continue the conversation.
@@ -157,8 +166,10 @@ turns.
   started, never a second run.
 - **One run at a time.** A message sent while the Chat still has a run going,
   including one you started in the Chat yourself, is refused with an
-  "unsupported operation" error whose data carries the running Task's id as
-  `taskId`. The client can follow that Task and send again once it ends.
+  "unsupported operation" error. When the client started that run, the error's
+  data carries its Task's id as `taskId`, and the client can follow that Task.
+  A run you started has no Task, so the error carries none. Either way, the
+  client sends again once the run ends.
 - **A Task takes no further messages.** A message that names a `taskId` is
   refused, whether the Task is still running or has ended. To continue the
   conversation, the client sends the Task's `contextId` and no `taskId`.
@@ -183,8 +194,9 @@ A client can stop a Task it no longer needs with
 ## Listing Tasks
 
 `ListTasks` answers with the Tasks **the calling token** started, newest first.
-A client never sees another client's Tasks in the list, even on the same
-endpoint, and Tasks started with a token you've deleted are listed to no one.
+A client never sees another client's Tasks, even on the same endpoint, and
+Tasks started with a token you've deleted are listed to no one. Turns you add
+to a client's Chat yourself aren't Tasks, so they aren't listed.
 
 - **Pages of up to 100.** A page holds **50** Tasks unless the client asks for
   a `pageSize` between 1 and 100; anything outside that is refused. Pass the
@@ -250,7 +262,9 @@ Platypus a URL to call when a Task ends. Register it with the message, in
 `SendMessage`'s `taskPushNotificationConfig`, or afterwards on the Task with
 `CreateTaskPushNotificationConfig`. `GetTaskPushNotificationConfig`,
 `ListTaskPushNotificationConfigs` and `DeleteTaskPushNotificationConfig` read
-and remove what a Task has.
+and remove what a Task has. A client reaches only the configs on its own
+Tasks, so another client on the same endpoint never sees the credentials it
+registered.
 
 - **Only the end is pushed.** When the Task becomes `completed`, `failed` or
   `canceled`, Platypus POSTs it to each URL registered on it, as
@@ -315,7 +329,8 @@ A Chat started on an endpoint you later delete stays out of your Memories.
 - Detaching a Shared Agent from the Workspace deletes the Workspace's endpoints
   for it, and their tokens.
 - A Chat stays when its endpoint or token is deleted, still labelled with the
-  token's name. Deleting a Chat ends its Tasks: `GetTask` answers that they
+  token's name. No client can reach it or its Tasks over A2A again, not even
+  with another token on the same endpoint. Deleting a Chat ends its Tasks: `GetTask` answers that they
   don't exist.
 
 ## Where to next
