@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import {
   A2A_CONTENT_TYPE,
   StreamResponse,
@@ -276,9 +276,18 @@ export const storePushConfig = async (
         `A Task takes at most ${MAX_PUSH_CONFIGS_PER_TASK} push notification configs`,
       );
     }
+    // An upsert: a registration of the same id that raced this one in since
+    // the check above is replaced, as it would have been had it landed first.
     const [inserted] = await tx
       .insert(a2aPushConfigTable)
       .values({ id: config.id || randomUUID(), taskId: task.id, ...values })
+      .onConflictDoUpdate({
+        target: [a2aPushConfigTable.taskId, a2aPushConfigTable.id],
+        set: {
+          ...values,
+          notifiedAt: sql`CASE WHEN ${a2aPushConfigTable.url} = excluded.url THEN ${a2aPushConfigTable.notifiedAt} END`,
+        },
+      })
       .returning();
     return inserted;
   });
