@@ -18,6 +18,9 @@ import type {
 /** Why a Chat refuses a turn, a delete or a leaf switch while a run holds it. */
 export const CHAT_BUSY_MESSAGE = "A reply is still being written in this Chat";
 
+/** The transaction a Chat's claim is written in. */
+export type ChatClaimTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export type ChatSinkParams = {
   orgId: string;
   workspaceId: string;
@@ -44,6 +47,13 @@ export type ChatSinkParams = {
    * awaited by the run: it must not delay or fail it.
    */
   onEnded?: (status: RunStatus) => void;
+  /**
+   * Writes rows that belong to the turn in the claim's own transaction, after
+   * its user message: they commit with the claim, so no other call sees the
+   * Chat `running` without them, or fail it, so the turn never starts. An A2A
+   * turn's Task is made here (ADR-0032).
+   */
+  onClaimed?: (tx: ChatClaimTx) => Promise<void>;
   /** Override the FlushScheduler interval. Defaults to 5 seconds. */
   flushIntervalMs?: number;
 };
@@ -57,6 +67,7 @@ export type ChatSinkParams = {
  *   the leaf at the message being answered, so a disconnected client can read
  *   the in-progress state. The claim is the one-run-per-Chat lock across every
  *   backend instance (#1237): a Chat already `running` is a `ConflictError`.
+ *   Rows the turn owns (`onClaimed`) are written in the same transaction.
  * - `onProgress`: drive a FlushScheduler that periodically upserts the reply
  *   while keeping `status: "running"`.
  * - `onFinish`: write the terminal status (`succeeded`, `failed`,
@@ -164,6 +175,8 @@ export class ChatSink implements RunSink {
         .update(chatTable)
         .set({ activeLeafId: this.answeredId })
         .where(eq(chatTable.id, ctx.runId));
+
+      await this.params.onClaimed?.(tx);
     });
     this.claimed = true;
   }

@@ -34,8 +34,18 @@ export const startChatTurn = async (params: {
   newChat?: ChatSinkParams["newChat"];
   /** Called once the run's terminal status is written (see `ChatSinkParams`). */
   onEnded?: () => void;
+  /** Writes the turn's own rows with its claim (see `ChatSinkParams`). */
+  onClaimed?: ChatSinkParams["onClaimed"];
 }): Promise<Response> => {
-  const { scope, request, includeMemories, origin, newChat, onEnded } = params;
+  const {
+    scope,
+    request,
+    includeMemories,
+    origin,
+    newChat,
+    onEnded,
+    onClaimed,
+  } = params;
 
   // ADR-0020: resolve the pinned Memories block OUTSIDE composition. This
   // service owns the chat row, so it does the arithmetic — compare the gap
@@ -130,6 +140,7 @@ export const startChatTurn = async (params: {
     message: turn.message,
     parentId: turn.parentId,
     newChat,
+    onClaimed,
     // Any turn in a Chat may be an A2A Task's, the Owner's own included: one
     // a client was refused for as busy and is following (ADR-0032).
     onEnded: (status) => {

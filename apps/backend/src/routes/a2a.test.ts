@@ -11,6 +11,8 @@ const { model } = vi.hoisted(() => ({
     /** The reply's deltas, when a test streams it in pieces. */
     deltas: null as string[] | null,
     hold: null as Promise<void> | null,
+    /** Holds a turn in preparation, after its claim and before the model. */
+    holdPrep: null as Promise<void> | null,
     /** Holds the stream after the reply's first words, until it settles. */
     holdMidReply: null as Promise<void> | null,
     prompts: [] as unknown[],
@@ -78,6 +80,21 @@ vi.mock("../services/provider.ts", async (importOriginal) => ({
     },
   }),
 }));
+
+// Real, but holdable: a test can keep a turn in preparation.
+vi.mock("../services/chat-execution.ts", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../services/chat-execution.ts")>();
+  return {
+    ...actual,
+    prepareChatTurn: async (
+      ...args: Parameters<typeof actual.prepareChatTurn>
+    ) => {
+      await model.holdPrep;
+      return actual.prepareChatTurn(...args);
+    },
+  };
+});
 
 // Real, but watchable: a test can see which run a cancel asked to stop.
 vi.mock("../runs/run-cancel.ts", async (importOriginal) => {
@@ -378,7 +395,10 @@ const LIVE = {
   lastRejectedAt: null,
 };
 
-const seedConversation = (rows: Record<string, Row[]> = {}) =>
+const seedConversation = (
+  rows: Record<string, Row[]> = {},
+  { onInsert }: { onInsert?: (table: string, values: Row) => void } = {},
+) =>
   ({ tables } = seedDb(
     {
       organization: [{ id: "org-1", name: "Acme", a2aGate: "all" }],
@@ -479,6 +499,7 @@ const seedConversation = (rows: Record<string, Row[]> = {}) =>
           },
         ],
       },
+      onInsert,
     },
   ));
 
@@ -567,6 +588,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     vi.clearAllMocks();
     model.reply = "Hello from Helper";
     model.hold = null;
+    model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
     resetTokenTouches();
@@ -1001,6 +1023,105 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     expect(model.prompts).toHaveLength(0);
   });
 
+  it("makes the Task as the turn starts, so a message sent during preparation is refused with it", async () => {
+    seedConversation();
+    const first = await send({ messageId: "msg-a" });
+    const { contextId } = first.body.result.task;
+    let releasePrep = () => {};
+    model.holdPrep = new Promise((resolve) => (releasePrep = resolve));
+    let releaseModel = () => {};
+    model.hold = new Promise((resolve) => (releaseModel = resolve));
+
+    const starting = send(
+      { messageId: "msg-b", contextId },
+      { returnImmediately: true },
+    );
+    await vi.waitFor(() =>
+      expect(rows("a2a_task").map((t) => t.messageId)).toContain("msg-b"),
+    );
+    const busy = await send({ messageId: "msg-c", contextId });
+    releasePrep();
+    const started = (await starting).body.result.task;
+
+    expect(busy.body.error.code).toBe(-32004);
+    expect(busy.body.error.data[0].metadata).toEqual({ taskId: started.id });
+    expect(rows("a2a_task").find((t) => t.id === started.id)).toMatchObject({
+      messageId: "msg-b",
+      tokenId: "tok-1",
+      endpointId: "ep-1",
+    });
+    const listed = await rpc("ListTasks", {});
+    expect(
+      (listed.body.result as unknown as { tasks: RpcTask[] }).tasks.map(
+        (t) => t.id,
+      ),
+    ).toContain(started.id);
+    expect((await rpc("GetTask", { id: started.id })).body.result.id).toBe(
+      started.id,
+    );
+    const canceled = await rpc("CancelTask", { id: started.id });
+    expect(canceled.body.result.status.state).toBe("TASK_STATE_CANCELED");
+    releaseModel();
+  });
+
+  it("refuses a message while a turn with no Task runs, making no Task", async () => {
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Busy",
+          status: "running",
+          activeLeafId: "msg-a",
+          a2aTokenId: "tok-1",
+          a2aEndpointId: "ep-1",
+        },
+      ],
+      chat_message: [
+        {
+          chatId: "chat-1",
+          id: "msg-a",
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "Where is my order?" }],
+          deletedAt: null,
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    const res = await send({ messageId: "msg-b", contextId: "chat-1" });
+
+    expect(res.body.error.code).toBe(-32004);
+    expect(res.body.error.data[0].metadata).toBeUndefined();
+    expect(rows("a2a_task")).toHaveLength(0);
+  });
+
+  it("starts no run, and frees the slot, when the Task cannot be made", async () => {
+    let failing = true;
+    seedConversation(
+      {},
+      {
+        onInsert: (table) => {
+          if (failing && table === "a2a_task") throw new Error("disk full");
+        },
+      },
+    );
+
+    const res = await send({ messageId: "msg-a" });
+
+    expect(res.body.error.code).toBe(-32603);
+    expect(activeA2aRunCount()).toBe(0);
+    expect(model.prompts).toHaveLength(0);
+    // Nothing of the turn is left, so the client's retry starts it afresh.
+    expect(rows("chat")).toHaveLength(0);
+    expect(rows("chat_message")).toHaveLength(0);
+    failing = false;
+    const retry = await send({ messageId: "msg-a" });
+    expect(retry.body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
+  });
+
   it("refuses a busy Chat with its own error type, answered as the spec's", () => {
     const error = new A2aChatBusyError("task-1");
 
@@ -1294,6 +1415,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
     vi.clearAllMocks();
     model.reply = "Hello from Helper";
     model.hold = null;
+    model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
     resetTokenTouches();
@@ -1491,6 +1613,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     model.reply = "Hello from Helper";
     model.deltas = null;
     model.hold = null;
+    model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
     resetTokenTouches();
@@ -1641,6 +1764,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     vi.clearAllMocks();
     model.reply = "Hello from Helper";
     model.hold = null;
+    model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
     resetTokenTouches();
@@ -2748,6 +2872,7 @@ describe("POST /a2a/:endpointId — streaming", () => {
     model.reply = "Hello from Helper";
     model.deltas = null;
     model.hold = null;
+    model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
     resetTokenTouches();
@@ -3043,6 +3168,7 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
     model.reply = "Hello from Helper";
     model.deltas = null;
     model.hold = null;
+    model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
     resetTokenTouches();
