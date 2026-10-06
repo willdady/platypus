@@ -39,6 +39,7 @@ import {
 import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
 import { ownerMayAct, ownerMembershipJoin } from "./owner-membership.ts";
 import type { A2aRejectReason } from "./a2a-call.ts";
+import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 
 /**
  * A2A endpoints (ADR-0032): one Agent made reachable over A2A from one
@@ -126,10 +127,15 @@ export const updateA2aEndpoint = async (
     { ...fields, updatedAt: new Date() },
   );
   if (!row) throw new NotFoundError("A2A endpoint not found");
+  // Disabling it stops its running Tasks too.
+  if (!row.enabled) await stopRevokedA2aWork([id]);
   return row;
 };
 
-/** Deletes the endpoint; its tokens go with it by the foreign key. */
+/**
+ * Deletes the endpoint; its tokens go with it by the foreign key, and its
+ * running Tasks are canceled.
+ */
 export const deleteA2aEndpoint = async (
   workspaceId: string,
   id: string,
@@ -137,6 +143,7 @@ export const deleteA2aEndpoint = async (
   if (!(await deleteOwned(db, "a2aEndpoint", { id, workspaceId }))) {
     throw new NotFoundError("A2A endpoint not found");
   }
+  await stopRevokedA2aWork([id]);
 };
 
 /**
@@ -180,6 +187,8 @@ export const deleteA2aToken = async (
     )
     .returning();
   if (deleted.length === 0) throw new NotFoundError("A2A token not found");
+  // Only this token's running Tasks: the endpoint's others are still live.
+  await stopRevokedA2aWork([endpointId]);
 };
 
 // ------------------------------------------------------------ public side
@@ -206,10 +215,14 @@ export type A2aEndpointLookup =
       workspaceId?: string;
     };
 
+/** Whether the user is banned now. A ban that has run out no longer counts. */
+const isBanned = (user: { banned: boolean | null; banExpires: Date | null }) =>
+  !!user.banned && (!user.banExpires || user.banExpires > new Date());
+
 /**
  * The endpoint a public call names, if it is live: it exists and is enabled,
  * the Organization's A2A gate admits its Workspace, and the Workspace Owner is
- * still a member of the Organization. Anything else says why, for the call
+ * still a member of the Organization and not banned. Anything else says why, for the call
  * log only: every public route answers it with the same `404`, so a caller
  * can't tell which endpoints exist.
  */
@@ -244,7 +257,10 @@ export const lookupA2aEndpoint = async (
   ) {
     return notLive("gate");
   }
-  if (!ownerMayAct(row.organization_member?.id, row.user.role)) {
+  if (
+    !ownerMayAct(row.organization_member?.id, row.user.role) ||
+    isBanned(row.user)
+  ) {
     return notLive("owner_left");
   }
   return {
@@ -403,7 +419,8 @@ const notifyOwnerOfRevoke = async (
 
 /**
  * Revokes an endpoint on an Org Admin's behalf by deleting it: its URL and
- * every token stop working at once, and its Chats stay. The Owner is told.
+ * every token stop working at once, its running Tasks are canceled, and its
+ * Chats stay. The Owner is told.
  * `false` when no endpoint by that id is in the Organization.
  */
 export const revokeOrgA2aEndpoint = async (
@@ -418,6 +435,7 @@ export const revokeOrgA2aEndpoint = async (
     .returning({ id: a2aEndpointTable.id });
   // The Owner deleted it in the meantime: nothing left to tell them about.
   if (deleted.length === 0) return false;
+  await stopRevokedA2aWork([endpointId]);
 
   await notifyOwnerOfRevoke(
     orgId,
@@ -436,8 +454,8 @@ const TOKEN_REPLACED_MESSAGE =
   "The token was replaced since you loaded the list. Refresh it and revoke the new one if it should stop too.";
 
 /**
- * Revokes one token on an Org Admin's behalf by deleting it; the endpoint's
- * other tokens keep working. The Owner is told. `false` when the token is not
+ * Revokes one token on an Org Admin's behalf by deleting it, canceling its
+ * running Tasks; the endpoint's other tokens keep working. The Owner is told. `false` when the token is not
  * on that endpoint, or the endpoint is not in the Organization.
  *
  * `seenTokenCreatedAt` is when the value the Admin was looking at was issued.
@@ -479,6 +497,7 @@ export const revokeOrgA2aToken = async (
     )
     .returning({ id: a2aTokenTable.id });
   if (deleted.length === 0) throw new ConflictError(TOKEN_REPLACED_MESSAGE);
+  await stopRevokedA2aWork([endpointId]);
 
   await notifyOwnerOfRevoke(
     orgId,
@@ -528,9 +547,24 @@ const toA2aAccess = ({ gate, workspaces }: GateAccess): A2aAccess => ({
 export const getA2aAccess = async (orgId: string): Promise<A2aAccess> =>
   toA2aAccess(await getGateAccess(A2A_GATE, orgId));
 
+/**
+ * Saves the gate and the Workspaces' switches. A Workspace it shuts out has
+ * its endpoints' running Tasks canceled.
+ */
 export const setA2aAccess = async (
   orgId: string,
   update: OrgGateAccessUpdate,
   actorUserId: string,
-): Promise<A2aAccess> =>
-  toA2aAccess(await setGateAccess(A2A_GATE, orgId, update, actorUserId));
+): Promise<A2aAccess> => {
+  const access = await setGateAccess(A2A_GATE, orgId, update, actorUserId);
+  const endpoints = await db
+    .select({ id: a2aEndpointTable.id })
+    .from(a2aEndpointTable)
+    .innerJoin(
+      workspaceTable,
+      eq(workspaceTable.id, a2aEndpointTable.workspaceId),
+    )
+    .where(eq(workspaceTable.organizationId, orgId));
+  await stopRevokedA2aWork(endpoints.map((endpoint) => endpoint.id));
+  return toA2aAccess(access);
+};

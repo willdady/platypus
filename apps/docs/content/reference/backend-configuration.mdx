@@ -306,29 +306,29 @@ Every field is on every line, `null` where it does not apply:
 `outcome` is one of `ok`, `rate_limited` (answered `429`) or `rejected`. A
 rejected call's `reason` is one of:
 
-| `reason`                          | The call                                                          | Answered           |
-| --------------------------------- | ----------------------------------------------------------------- | ------------------ |
-| `unknown_endpoint`                | named no endpoint                                                 | `404`              |
-| `disabled`                        | named a disabled endpoint                                         | `404`              |
-| `gate`                            | named an endpoint in a Workspace the Organization has not allowed | `404`              |
-| `owner_left`                      | named an endpoint whose Workspace Owner has left the Organization | `404`              |
-| `missing_token`                   | carried no `Authorization: Bearer` header                         | `401`              |
-| `bad_token`                       | carried a wrong or deleted token                                  | `401`              |
-| `expired_token`                   | carried a token after it expired                                  | `401`              |
-| `body_too_large`                  | sent a body past `A2A_MAX_BODY_BYTES`                             | `413`              |
-| `busy`                            | sent a message while the conversation's run was still going       | A2A error          |
-| `parse_error`                     | sent a body that couldn't be parsed                               | A2A error          |
-| `invalid_request`                 | sent a request that isn't valid JSON-RPC                          | A2A error          |
-| `method_not_found`                | named a method the endpoint doesn't have                          | A2A error          |
-| `invalid_params`                  | sent a body that isn't JSON, or parameters the method can't take  | A2A error          |
-| `task_not_found`                  | named a Task or conversation the endpoint doesn't have            | A2A error          |
-| `task_not_cancelable`             | asked to cancel a Task that can't be cancelled                    | A2A error          |
-| `push_notification_not_supported` | asked for a push notification the endpoint can't make             | A2A error          |
-| `unsupported_operation`           | asked for something the endpoint doesn't offer                    | A2A error          |
-| `content_type_not_supported`      | sent a part type the endpoint doesn't take, such as a file        | A2A error          |
-| `version_not_supported`           | asked for an A2A version the endpoint doesn't speak               | A2A error          |
-| `a2a_error`                       | was refused with any other A2A error                              | A2A error          |
-| `internal_error`                  | failed inside the backend                                         | A2A error or `500` |
+| `reason`                          | The call                                                                       | Answered           |
+| --------------------------------- | ------------------------------------------------------------------------------ | ------------------ |
+| `unknown_endpoint`                | named no endpoint                                                              | `404`              |
+| `disabled`                        | named a disabled endpoint                                                      | `404`              |
+| `gate`                            | named an endpoint in a Workspace the Organization has not allowed              | `404`              |
+| `owner_left`                      | named an endpoint whose Workspace Owner has left the Organization or is banned | `404`              |
+| `missing_token`                   | carried no `Authorization: Bearer` header                                      | `401`              |
+| `bad_token`                       | carried a wrong or deleted token                                               | `401`              |
+| `expired_token`                   | carried a token after it expired                                               | `401`              |
+| `body_too_large`                  | sent a body past `A2A_MAX_BODY_BYTES`                                          | `413`              |
+| `busy`                            | sent a message while the conversation's run was still going                    | A2A error          |
+| `parse_error`                     | sent a body that couldn't be parsed                                            | A2A error          |
+| `invalid_request`                 | sent a request that isn't valid JSON-RPC                                       | A2A error          |
+| `method_not_found`                | named a method the endpoint doesn't have                                       | A2A error          |
+| `invalid_params`                  | sent a body that isn't JSON, or parameters the method can't take               | A2A error          |
+| `task_not_found`                  | named a Task or conversation the endpoint doesn't have                         | A2A error          |
+| `task_not_cancelable`             | asked to cancel a Task that can't be cancelled                                 | A2A error          |
+| `push_notification_not_supported` | asked for a push notification the endpoint can't make                          | A2A error          |
+| `unsupported_operation`           | asked for something the endpoint doesn't offer                                 | A2A error          |
+| `content_type_not_supported`      | sent a part type the endpoint doesn't take, such as a file                     | A2A error          |
+| `version_not_supported`           | asked for an A2A version the endpoint doesn't speak                            | A2A error          |
+| `a2a_error`                       | was refused with any other A2A error                                           | A2A error          |
+| `internal_error`                  | failed inside the backend                                                      | A2A error or `500` |
 
 <Callout type="warning">
   The line is written at `info`. Running the backend at `LOG_LEVEL=warn` or

@@ -2,7 +2,7 @@ import { and, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { Task } from "@a2a-js/sdk";
 import { TaskNotCancelableError } from "@a2a-js/sdk/errors";
 import { db } from "../index.ts";
-import { a2aTask as a2aTaskTable } from "../db/schema.ts";
+import { a2aTask as a2aTaskTable, chat as chatTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
 import { runRegistry } from "../runs/run-registry.ts";
@@ -14,6 +14,7 @@ import {
   type TaskRow,
 } from "./a2a-task-state.ts";
 import { pushEndedA2aTasks } from "./a2a-push.ts";
+import { taskIsLive } from "./a2a-liveness.ts";
 
 /**
  * Cancelling A2A Tasks (ADR-0032). A cancel is recorded on its Task before
@@ -24,6 +25,11 @@ import { pushEndedA2aTasks } from "./a2a-push.ts";
  * A run is its Chat's, keyed by the Chat's id, so a cancel is narrowed to the
  * run of its Task's turn: never the Chat's next turn, nor a regenerate the
  * Owner started after it.
+ *
+ * Cutting off a client's access cancels its running Tasks the same way: at
+ * once for what an Org Admin or the Owner changes here, and at the next sweep
+ * for what happens elsewhere — the Owner leaving the Organization or being
+ * banned, or an endpoint deleted with its Agent.
  */
 
 /** How often each instance looks for canceled Tasks whose run it holds. */
@@ -42,11 +48,18 @@ export const cancelA2aTask = async (
   caller: A2aCaller,
   taskId: string,
 ): Promise<Task> => {
-  const task = await findA2aTask(caller, taskId);
+  const claimed = await cancelTask(await findA2aTask(caller, taskId));
+  if (!claimed) throw new TaskNotCancelableError();
+  return readTask(claimed);
+};
+
+/**
+ * Records `task` canceled and stops its run, on whichever instance holds it.
+ * `undefined`, stopping nothing, when the Task has already ended.
+ */
+const cancelTask = async (task: TaskRow): Promise<TaskRow | undefined> => {
   const read = await readTask(task);
-  if (TERMINAL_TASK_STATES.has(read.status!.state)) {
-    throw new TaskNotCancelableError();
-  }
+  if (TERMINAL_TASK_STATES.has(read.status!.state)) return undefined;
 
   const canceledAt = new Date();
   // Claimed only while no end is recorded: a run that ended first keeps its
@@ -56,17 +69,83 @@ export const cancelA2aTask = async (
     .set({ state: "canceled", canceledAt, statusAt: canceledAt })
     .where(and(eq(a2aTaskTable.id, task.id), isNull(a2aTaskTable.state)))
     .returning();
-  if (!claimed) throw new TaskNotCancelableError();
+  if (!claimed) return undefined;
 
   if (await isCurrentTurn(task)) {
     // A cancel that can't be sent is still recorded; the sweep stops the run.
     await cancelRun(task.chatId, { startedBefore: canceledAt }).catch(
       (error: unknown) =>
-        logger.error({ error, taskId }, "Sending an A2A cancel failed"),
+        logger.error(
+          { error, taskId: task.id },
+          "Sending an A2A cancel failed",
+        ),
     );
   }
   void pushEndedA2aTasks(task.chatId);
-  return readTask(claimed);
+  return claimed;
+};
+
+/** Cancels each of `tasks` whose token or endpoint is no longer live. */
+const cancelRevoked = async (tasks: TaskRow[]): Promise<void> => {
+  for (const task of tasks) {
+    if (!(await taskIsLive(task))) await cancelTask(task);
+  }
+};
+
+/**
+ * Cancels the running Tasks of Chats started on `endpointIds` whose token or
+ * endpoint is no longer live, after access to them was cut off: a token
+ * deleted or regenerated, an endpoint disabled, deleted or revoked, or the
+ * Org gate narrowed. Every other Task on them runs on. Found by Chat, whose
+ * endpoint id outlives the endpoint. Never throws: the cut-off has happened,
+ * and the sweep cancels anything missed here.
+ */
+export const stopRevokedA2aWork = async (
+  endpointIds: string[],
+): Promise<void> => {
+  if (endpointIds.length === 0) return;
+  try {
+    const running = await db
+      .select()
+      .from(a2aTaskTable)
+      .innerJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
+      .where(
+        and(
+          inArray(chatTable.a2aEndpointId, endpointIds),
+          isNull(a2aTaskTable.state),
+        ),
+      );
+    await cancelRevoked(running.map((row) => row.a2a_task));
+  } catch (error) {
+    logger.error(
+      { error, endpointIds },
+      "Stopping a revoked client's A2A Tasks failed",
+    );
+  }
+};
+
+/**
+ * Cancels each run held here whose Task's token or endpoint is no longer
+ * live. Catches what no change here announces: the Owner leaving the
+ * Organization or being banned, an endpoint deleted with its Agent, or a
+ * Task started just as its access was cut off.
+ */
+export const stopRevokedA2aRuns = async (): Promise<void> => {
+  const held = runRegistry.heldRuns();
+  if (held.length === 0) return;
+  const running = await db
+    .select()
+    .from(a2aTaskTable)
+    .where(
+      and(
+        inArray(
+          a2aTaskTable.chatId,
+          held.map((run) => run.runId),
+        ),
+        isNull(a2aTaskTable.state),
+      ),
+    );
+  await cancelRevoked(running);
 };
 
 /**
@@ -103,8 +182,8 @@ export const stopCanceledA2aRuns = async (): Promise<void> => {
 };
 
 /**
- * Sweeps for canceled Tasks' runs every few seconds, for as long as the
- * process runs.
+ * Sweeps for canceled Tasks' runs, and revoked clients' runs, every few
+ * seconds, for as long as the process runs.
  *
  * ponytail: a run's start and a cancel's moment come from different
  * instances' clocks. A regenerate of a canceled turn started within the skew
@@ -114,6 +193,9 @@ export const watchForCanceledA2aRuns = (): void => {
   setInterval(() => {
     stopCanceledA2aRuns().catch((error: unknown) =>
       logger.error({ error }, "Sweeping canceled A2A runs failed"),
+    );
+    stopRevokedA2aRuns().catch((error: unknown) =>
+      logger.error({ error }, "Sweeping revoked A2A runs failed"),
     );
   }, SWEEP_MS).unref();
 };

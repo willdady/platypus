@@ -15,6 +15,7 @@ import {
   type LiveA2aEndpoint,
 } from "./a2a-endpoint.ts";
 import { requireOwned } from "./workspace-resource.ts";
+import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 import {
   bearerToken,
   DAY_MS,
@@ -103,8 +104,9 @@ export const authenticateA2aCall = async (
 
 /**
  * Issues a new value for the token, with the lifetime it was issued with. The
- * old value stops working at once, and the reminder record is cleared. The
- * new value is in this return value and nowhere else.
+ * old value stops working at once, as do the Tasks it started, and the
+ * reminder record is cleared. The new value is in this return value and
+ * nowhere else.
  */
 export const regenerateA2aToken = async (
   workspaceId: string,
@@ -140,6 +142,7 @@ export const regenerateA2aToken = async (
     .returning();
   // Deleted between the read and the write.
   if (!row) throw new NotFoundError("A2A token not found");
+  await stopRevokedA2aWork([endpointId]);
   return { ...toPublicToken(row), token };
 };
 

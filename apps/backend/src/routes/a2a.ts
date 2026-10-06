@@ -55,8 +55,10 @@ import type { Variables } from "../server.ts";
  * expose this prefix alone, as with `/hooks/*`.
  *
  * An endpoint that is unknown, disabled or deleted, whose Workspace the
- * Organization's A2A gate excludes, or whose Owner has left the Organization,
- * is the same `404` with the same body, for the card and every method.
+ * Organization's A2A gate excludes, or whose Owner has left the Organization
+ * or is banned, is the same `404` with the same body, for the card and every
+ * method. Cutting any of these off also stops the work already running: see
+ * `a2a-liveness.ts`.
  *
  * Every call, the card included, writes exactly one call-log line.
  */
