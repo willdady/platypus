@@ -303,7 +303,7 @@ describe("Chat Routes", () => {
   });
 
   describe("A2A Chats", () => {
-    it("are labelled with the token's name in the list and on the Chat", async () => {
+    it("are labelled with the client's name in the list and on the Chat", async () => {
       mockSession();
       seedTenant({
         chat: [
@@ -312,11 +312,9 @@ describe("Chat Routes", () => {
             workspaceId,
             title: "From Telegram",
             a2aTokenId: "tok-1",
+            a2aClientName: "Telegram via Hermes",
           },
           { id: "chat-ui", workspaceId, title: "Mine", a2aTokenId: null },
-        ],
-        a2a_token: [
-          { id: "tok-1", endpointId: "ep-1", name: "Telegram via Hermes" },
         ],
       });
 
