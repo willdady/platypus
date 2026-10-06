@@ -20,7 +20,8 @@ const { pool, listeners } = vi.hoisted(() => {
 });
 vi.mock("../index.ts", () => ({ db: { $client: pool } }));
 
-const { cancelRun, listenForRunCancels } = await import("./run-cancel.ts");
+const { cancelRun } = await import("./run-cancel.ts");
+const { startNotificationListener } = await import("./notify-listener.ts");
 const { runRegistry } = await import("./run-registry.ts");
 
 /** A pooled connection: an emitter that can run `LISTEN`. */
@@ -81,11 +82,11 @@ describe("cancelRun at a moment", () => {
   });
 });
 
-describe("listenForRunCancels", () => {
+describe("the notification listener", () => {
   it("aborts a run held here when another instance cancels it", async () => {
     const client = fakeClient();
     pool.connect.mockResolvedValueOnce(client);
-    listenForRunCancels();
+    startNotificationListener();
     await vi.waitFor(() =>
       expect(client.query).toHaveBeenCalledWith("LISTEN run_cancel"),
     );
@@ -101,7 +102,7 @@ describe("listenForRunCancels", () => {
   it("spares a run held here that started after another instance's cancel", async () => {
     const client = fakeClient();
     pool.connect.mockResolvedValueOnce(client);
-    listenForRunCancels();
+    startNotificationListener();
     await vi.waitFor(() =>
       expect(client.query).toHaveBeenCalledWith("LISTEN run_cancel"),
     );
@@ -128,7 +129,7 @@ describe("listenForRunCancels", () => {
     const first = fakeClient();
     const second = fakeClient();
     pool.connect.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
-    listenForRunCancels();
+    startNotificationListener();
     await vi.waitFor(() => expect(first.query).toHaveBeenCalled());
 
     const lost = new Error("connection terminated");

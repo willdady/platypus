@@ -11,7 +11,10 @@ import {
 } from "./src/db/seed.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduler } from "./src/jobs/scheduler.ts";
-import { listenForRunCancels } from "./src/runs/run-cancel.ts";
+import { startNotificationListener } from "./src/runs/notify-listener.ts";
+// Register the channels the listener LISTENs on.
+import "./src/runs/run-cancel.ts";
+import "./src/services/a2a-events.ts";
 import { installShutdownHandlers } from "./src/runs/shutdown.ts";
 import { watchForCanceledA2aRuns } from "./src/services/a2a-cancel.ts";
 import { loadPlugins, type LoadPluginsResult } from "./src/plugins/loader.ts";
@@ -120,8 +123,9 @@ const main = async () => {
   // Start background jobs (safe for horizontal scaling)
   startMemoryScheduler();
   startScheduler();
-  // A cancel received by another instance reaches the runs held here.
-  listenForRunCancels();
+  // A cancel received by another instance reaches the runs held here, and an
+  // A2A Task's events reach the streams following it here.
+  startNotificationListener();
   // An A2A cancel that missed the run held here, as while listening resumed.
   watchForCanceledA2aRuns();
 };
