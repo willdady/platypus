@@ -57,6 +57,7 @@ import {
 } from "./a2a-task-state.ts";
 import { checkPushConfig, storePushConfig } from "./a2a-push.ts";
 import { A2aAtCapacityError, acquireA2aRunSlot } from "./a2a-call.ts";
+import { callerIsLive } from "./a2a-liveness.ts";
 
 /**
  * A2A conversations (ADR-0032): `SendMessage` starts a turn in a Chat and
@@ -67,7 +68,8 @@ import { A2aAtCapacityError, acquireA2aRunSlot } from "./a2a-call.ts";
 
 export type A2aCaller = {
   endpoint: LiveA2aEndpoint;
-  token: { id: string; name: string };
+  /** The token the call carried, as the value it carried was issued. */
+  token: { id: string; name: string; tokenCreatedAt: Date };
   origin: string;
 };
 
@@ -210,9 +212,17 @@ const busyError = async (caller: A2aCaller, chatId: string) => {
   return new A2aChatBusyError(task?.id);
 };
 
-/** The Task once it ends, or as it stands when `deadline` passes. */
-const waitForTask = async (task: TaskRow, deadline: number): Promise<Task> => {
+/**
+ * The Task once it ends, or as it stands when `deadline` passes. Refused as
+ * not found once the caller's access is cut off, as a new call would be.
+ */
+const waitForTask = async (
+  caller: A2aCaller,
+  task: TaskRow,
+  deadline: number,
+): Promise<Task> => {
   for (;;) {
+    if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
     const read = await readTaskAfresh(task);
     if (TERMINAL_TASK_STATES.has(read.status!.state) || Date.now() >= deadline)
       return read;
@@ -452,7 +462,7 @@ export const sendA2aMessage = async (
   await run?.cancel();
   return params.configuration?.returnImmediately
     ? readTask(task)
-    : waitForTask(task, deadline);
+    : waitForTask(caller, task, deadline);
 };
 
 /** One of the Tasks the calling token started; any other is not found. */

@@ -25,6 +25,7 @@ import {
   type TaskRow,
 } from "./a2a-task-state.ts";
 import { postWithRetries } from "./webhook-delivery.ts";
+import { taskIsLive } from "./a2a-liveness.ts";
 
 /**
  * A2A push notifications (ADR-0032): when a Task ends — `completed`, `failed`
@@ -42,6 +43,9 @@ import { postWithRetries } from "./webhook-delivery.ts";
  * allows Webhooks. The URL is checked when it is delivered, not when it is
  * registered: a refusal goes to the log, so a caller can't tell a host that
  * doesn't resolve from one that resolves somewhere internal.
+ *
+ * A Task whose token or endpoint was cut off before its push pushes nothing:
+ * its configs are marked delivered, so nothing retries them.
  *
  * ponytail: at most once. A process that dies between the claim and a landed
  * delivery loses that push; the client can still poll `GetTask`. Claim after
@@ -170,6 +174,19 @@ const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
       .where(pending(row.id))
       .returning();
     if (claimed.length === 0) return;
+    // Read afresh: a token or endpoint deleted since leaves the row's null.
+    const [current] = await db
+      .select()
+      .from(a2aTaskTable)
+      .where(eq(a2aTaskTable.id, row.id))
+      .limit(1);
+    if (!current || !(await taskIsLive(current))) {
+      logger.info(
+        { taskId: row.id, dropped: claimed.length },
+        "A2A Task's access was cut off; dropping its push notifications",
+      );
+      return;
+    }
     claimed.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     const granted = await reservePushes(row.id, claimed.length);
     if (granted < claimed.length) {

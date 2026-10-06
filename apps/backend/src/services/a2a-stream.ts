@@ -5,7 +5,10 @@ import type {
   StreamResponse,
   Task,
 } from "@a2a-js/sdk";
-import { UnsupportedOperationError } from "@a2a-js/sdk/errors";
+import {
+  TaskNotFoundError,
+  UnsupportedOperationError,
+} from "@a2a-js/sdk/errors";
 import { findA2aTask, startA2aTurn, type A2aCaller } from "./a2a-task.ts";
 import {
   readTask,
@@ -13,6 +16,7 @@ import {
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
+import { callerIsLive } from "./a2a-liveness.ts";
 
 /**
  * A2A Tasks over SSE (ADR-0032): `SendStreamingMessage` and `SubscribeToTask`.
@@ -26,6 +30,14 @@ import {
 const STREAM_POLL_MS = 1_000;
 
 const isTerminal = (task: Task) => TERMINAL_TASK_STATES.has(task.status!.state);
+
+/**
+ * Ends the stream with an error once the caller's access is cut off: it is
+ * told nothing more, as a new call would be told nothing.
+ */
+const assertCallerLive = async (caller: A2aCaller): Promise<void> => {
+  if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
+};
 
 const taskEvent = (task: Task): StreamResponse => ({
   payload: { $case: "task", value: task },
@@ -84,12 +96,14 @@ const replyDelta = (artifactId: string, text: string): Artifact => ({
  * stream.
  */
 async function* followTask(
+  caller: A2aCaller,
   task: TaskRow,
   seen: Task,
 ): AsyncGenerator<StreamResponse> {
   let last = seen;
   for (;;) {
     await new Promise((resolve) => setTimeout(resolve, STREAM_POLL_MS));
+    await assertCallerLive(caller);
     const read = await readTaskAfresh(task);
     if (isTerminal(read)) {
       for (const artifact of read.artifacts) {
@@ -117,6 +131,7 @@ type ChunkReader = ReturnType<typeof readChunks>;
  * last read once the run's stream ends.
  */
 async function* streamRun(
+  caller: A2aCaller,
   seen: Task,
   task: TaskRow,
   chunks: ChunkReader,
@@ -148,6 +163,7 @@ async function* streamRun(
     }
     if (Date.now() - readAt >= STREAM_POLL_MS) {
       readAt = Date.now();
+      await assertCallerLive(caller);
       const read = await readTaskAfresh(task);
       if (read.status!.state !== last.status!.state) yield statusEvent(read);
       last = read;
@@ -171,8 +187,9 @@ export async function* streamA2aMessage(
     yield taskEvent(read);
     if (isTerminal(read)) return;
     yield* followTask(
+      caller,
       task,
-      chunks ? yield* streamRun(read, task, chunks) : read,
+      chunks ? yield* streamRun(caller, read, task, chunks) : read,
     );
   } finally {
     // Stops reading the run, never the run: it goes on server-side.
@@ -196,5 +213,5 @@ export async function* subscribeToA2aTask(
     );
   }
   yield taskEvent(read);
-  yield* followTask(task, read);
+  yield* followTask(caller, task, read);
 }

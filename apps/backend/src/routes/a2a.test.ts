@@ -116,7 +116,19 @@ import { activeA2aRunCount, resetA2aRunSlots } from "../services/a2a-call.ts";
 import { mockLogger } from "../test-setup.ts";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
-import { stopCanceledA2aRuns } from "../services/a2a-cancel.ts";
+import {
+  stopCanceledA2aRuns,
+  stopRevokedA2aRuns,
+} from "../services/a2a-cancel.ts";
+import {
+  deleteA2aEndpoint,
+  deleteA2aToken,
+  revokeOrgA2aEndpoint,
+  revokeOrgA2aToken,
+  setA2aAccess,
+  updateA2aEndpoint,
+} from "../services/a2a-endpoint.ts";
+import { regenerateA2aToken } from "../services/a2a-token.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { A2aChatBusyError, a2aChatId } from "../services/a2a-task.ts";
@@ -398,9 +410,12 @@ describe("POST /a2a/:endpointId — the token", () => {
 const TOKEN = "pa2a_the-right-token";
 
 let tables: Record<string, Row[]> = {};
-/** A token's lifecycle columns, live for the next 90 days. */
+/**
+ * A token's lifecycle columns, live for the next 90 days. Issued a day ago,
+ * before any Task a test seeds, so none reads as started with an older value.
+ */
 const LIVE = {
-  tokenCreatedAt: new Date(),
+  tokenCreatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
   tokenExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
   tokenNotice: null,
   lastUsedAt: null,
@@ -3628,5 +3643,258 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
       (await send({ messageId: "msg-b", contextId }, { token: OTHER_TOKEN }))
         .body.error.code,
     ).toBe(-32001);
+  });
+});
+
+describe("POST /a2a/:endpointId — cutting off access stops running work", () => {
+  const OTHER_TOKEN = "pa2a_other-client";
+  const push = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.deltas = null;
+    model.hold = null;
+    model.holdPrep = null;
+    model.holdMidReply = null;
+    model.prompts = [];
+    resetTokenTouches();
+    resetA2aRunSlots();
+    push.mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", push);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** ep-1 with a second client's token, tok-3. */
+  const seedTwoClients = () => {
+    seedConversation();
+    tables.a2a_token.push({
+      id: "tok-3",
+      endpointId: "ep-1",
+      name: "Other client",
+      tokenHash: hashBearerToken(OTHER_TOKEN),
+      ...LIVE,
+    });
+  };
+
+  /** Opens `SubscribeToTask`; resolves once its first event is ready. */
+  const subscribe = (id: string) =>
+    app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: ++rpcId,
+        method: "SubscribeToTask",
+        params: { id },
+      }),
+    });
+
+  /** Every frame of a stream, read to its end. */
+  const framesOf = async (res: Response) =>
+    (await res.text())
+      .split("\n\n")
+      .filter((frame) => frame.includes("data: "))
+      .map(
+        (frame) =>
+          JSON.parse(frame.slice(frame.indexOf("data: ") + 6)) as {
+            result?: { task?: RpcTask; statusUpdate?: unknown };
+            error?: { code: number };
+          },
+      );
+
+  const taskRow = (id: string) => rows("a2a_task").find((t) => t.id === id)!;
+  const chatRow = (id: string) => rows("chat").find((c) => c.id === id)!;
+
+  describe.each([
+    [
+      "the Owner deletes its token",
+      () => deleteA2aToken("ws-1", "ep-1", "tok-1"),
+    ],
+    [
+      "the Owner regenerates its token",
+      () => regenerateA2aToken("ws-1", "ep-1", "tok-1"),
+    ],
+    [
+      "an Org Admin revokes its token",
+      () => revokeOrgA2aToken("org-1", "ep-1", "tok-1", LIVE.tokenCreatedAt),
+    ],
+    ["the Owner deletes the endpoint", () => deleteA2aEndpoint("ws-1", "ep-1")],
+    [
+      "the Owner disables the endpoint",
+      () => updateA2aEndpoint("ws-1", "ep-1", { enabled: false }),
+    ],
+    [
+      "an Org Admin revokes the endpoint",
+      () => revokeOrgA2aEndpoint("org-1", "ep-1"),
+    ],
+    [
+      "the Org A2A gate closes",
+      () => setA2aAccess("org-1", { gate: "off" }, "admin-1"),
+    ],
+    [
+      "the Workspace is deselected",
+      () =>
+        setA2aAccess(
+          "org-1",
+          { gate: "selected", allowedWorkspaceIds: [] },
+          "admin-1",
+        ),
+    ],
+  ])("when %s", (_case, cutOff: () => Promise<unknown>) => {
+    it("cancels the running Task's run and closes its SubscribeToTask stream", async () => {
+      seedConversation();
+      const task = await startMidReply();
+      const stream = await subscribe(task.id);
+
+      await cutOff();
+
+      expect(cancelRun).toHaveBeenCalledWith(task.contextId, {
+        startedBefore: expect.any(Date) as unknown,
+      });
+      expect(taskRow(task.id)).toMatchObject({ state: "canceled" });
+      await vi.waitFor(() =>
+        expect(chatRow(task.contextId)).toMatchObject({ status: "cancelled" }),
+      );
+      const frames = await framesOf(stream);
+      expect(frames[0].result!.task!.id).toBe(task.id);
+      expect(frames.at(-1)!.error!.code).toBe(-32001);
+    });
+  });
+
+  it("leaves another token's running Task on the endpoint alone", async () => {
+    seedTwoClients();
+    const mine = await startMidReply();
+    const theirs = (
+      await send(
+        { messageId: "msg-a" },
+        { returnImmediately: true, token: OTHER_TOKEN },
+      )
+    ).body.result.task;
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(2));
+
+    await deleteA2aToken("ws-1", "ep-1", "tok-1");
+
+    await vi.waitFor(() =>
+      expect(chatRow(mine.contextId)).toMatchObject({ status: "cancelled" }),
+    );
+    expect(cancelRun).toHaveBeenCalledTimes(1);
+    expect(chatRow(theirs.contextId)).toMatchObject({ status: "running" });
+    expect(taskRow(theirs.id).state ?? null).toBeNull();
+    expect(
+      (await rpc("GetTask", { id: theirs.id }, { token: OTHER_TOKEN })).body
+        .result.status.state,
+    ).toMatch(/SUBMITTED|WORKING/);
+  });
+
+  it("refuses a blocking SendMessage still waiting once its token is deleted", async () => {
+    seedConversation();
+    model.holdMidReply = new Promise(() => {});
+    const sending = send({ messageId: "msg-a" });
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+
+    await deleteA2aToken("ws-1", "ep-1", "tok-1");
+
+    expect((await sending).body.error.code).toBe(-32001);
+  });
+
+  it("sends no push for a Task that ends after its token was deleted", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const task = (
+      await send({ messageId: "msg-a" }, { returnImmediately: true })
+    ).body.result.task;
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      url: "https://203.0.113.10/push",
+    });
+    // Gone without a word to the run, as by a peer instance's delete.
+    tables.a2a_token = tables.a2a_token.filter((t) => t.id !== "tok-1");
+
+    release();
+
+    await vi.waitFor(() =>
+      expect(rows("a2a_push_config")[0].notifiedAt).toBeInstanceOf(Date),
+    );
+    expect(taskRow(task.id).state).toBe("completed");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("sends no push for a Task canceled by a deleted token", async () => {
+    seedConversation();
+    const task = await startMidReply();
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      url: "https://203.0.113.10/push",
+    });
+
+    await deleteA2aToken("ws-1", "ep-1", "tok-1");
+
+    await vi.waitFor(() =>
+      expect(chatRow(task.contextId)).toMatchObject({ status: "cancelled" }),
+    );
+    await vi.waitFor(() =>
+      expect(rows("a2a_push_config")[0].notifiedAt).toBeInstanceOf(Date),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  describe.each([
+    [
+      "leaves the Organization",
+      () => {
+        tables.organization_member = [];
+      },
+    ],
+    [
+      "is banned",
+      () => {
+        rows("user")[0].banned = true;
+      },
+    ],
+  ])("when the Owner %s", (_case, cutOff: () => void) => {
+    it("cancels the running Task at the next sweep", async () => {
+      seedConversation();
+      const task = await startMidReply();
+      cutOff();
+
+      await stopRevokedA2aRuns();
+
+      expect(taskRow(task.id)).toMatchObject({ state: "canceled" });
+      await vi.waitFor(() =>
+        expect(chatRow(task.contextId)).toMatchObject({ status: "cancelled" }),
+      );
+    });
+  });
+
+  it("leaves a live client's running Task alone at the sweep", async () => {
+    seedConversation();
+    const task = await startMidReply();
+
+    await stopRevokedA2aRuns();
+
+    expect(cancelRun).not.toHaveBeenCalled();
+    expect(taskRow(task.id).state ?? null).toBeNull();
+    expect(chatRow(task.contextId)).toMatchObject({ status: "running" });
+  });
+
+  it("answers no call for a banned Owner, until the ban runs out", async () => {
+    seedConversation();
+    rows("user")[0].banned = true;
+
+    expect((await send({ messageId: "msg-a" })).status).toBe(404);
+
+    rows("user")[0].banExpires = new Date(Date.now() - 1000);
+    expect((await send({ messageId: "msg-a" })).body.result.task).toBeDefined();
   });
 });
