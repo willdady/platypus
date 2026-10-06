@@ -1,5 +1,5 @@
 {
-  "id": "b9dfcbca-25bc-49c7-b21b-3b21f6c22027",
+  "id": "fe1776c8-9eeb-48c5-94d9-193b22f5b970",
   "prevId": "6d5fa9f1-c78b-498c-83af-78d181197aa6",
   "version": "7",
   "dialect": "postgresql",
@@ -44,6 +44,20 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "include_memories": {
+          "name": "include_memories",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "extract_memories": {
+          "name": "extract_memories",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -126,6 +140,324 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.a2a_push_config": {
+      "name": "a2a_push_config",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "authentication": {
+          "name": "authentication",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notified_at": {
+          "name": "notified_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "a2a_push_config_task_id_a2a_task_id_fk": {
+          "name": "a2a_push_config_task_id_a2a_task_id_fk",
+          "tableFrom": "a2a_push_config",
+          "tableTo": "a2a_task",
+          "columnsFrom": [
+            "task_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "a2a_push_config_task_id_id_pk": {
+          "name": "a2a_push_config_task_id_id_pk",
+          "columns": [
+            "task_id",
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.a2a_task": {
+      "name": "a2a_task",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "endpoint_id": {
+          "name": "endpoint_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_id": {
+          "name": "token_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "canceled_at": {
+          "name": "canceled_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_at": {
+          "name": "status_at",
+          "type": "timestamp (3)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "push_count": {
+          "name": "push_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "reply_id": {
+          "name": "reply_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_a2a_task_chat_id_message_id": {
+          "name": "idx_a2a_task_chat_id_message_id",
+          "columns": [
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "message_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_a2a_task_endpoint_id": {
+          "name": "idx_a2a_task_endpoint_id",
+          "columns": [
+            {
+              "expression": "endpoint_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_a2a_task_token_id_status_at_id": {
+          "name": "idx_a2a_task_token_id_status_at_id",
+          "columns": [
+            {
+              "expression": "token_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_a2a_task_token_id_unended": {
+          "name": "idx_a2a_task_token_id_unended",
+          "columns": [
+            {
+              "expression": "token_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"a2a_task\".\"state\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_a2a_task_chat_id_reply_id": {
+          "name": "idx_a2a_task_chat_id_reply_id",
+          "columns": [
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reply_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "a2a_task_endpoint_id_a2a_endpoint_id_fk": {
+          "name": "a2a_task_endpoint_id_a2a_endpoint_id_fk",
+          "tableFrom": "a2a_task",
+          "tableTo": "a2a_endpoint",
+          "columnsFrom": [
+            "endpoint_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "a2a_task_token_id_a2a_token_id_fk": {
+          "name": "a2a_task_token_id_a2a_token_id_fk",
+          "tableFrom": "a2a_task",
+          "tableTo": "a2a_token",
+          "columnsFrom": [
+            "token_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "a2a_task_chat_id_message_id_chat_message_chat_id_id_fk": {
+          "name": "a2a_task_chat_id_message_id_chat_message_chat_id_id_fk",
+          "tableFrom": "a2a_task",
+          "tableTo": "chat_message",
+          "columnsFrom": [
+            "chat_id",
+            "message_id"
+          ],
+          "columnsTo": [
+            "chat_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "a2a_task_reply_fk": {
+          "name": "a2a_task_reply_fk",
+          "tableFrom": "a2a_task",
+          "tableTo": "chat_message",
+          "columnsFrom": [
+            "chat_id",
+            "reply_id"
+          ],
+          "columnsTo": [
+            "chat_id",
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.a2a_token": {
       "name": "a2a_token",
       "schema": "",
@@ -153,6 +485,36 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "token_created_at": {
+          "name": "token_created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_expires_at": {
+          "name": "token_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_notice": {
+          "name": "token_notice",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_rejected_at": {
+          "name": "last_rejected_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1005,6 +1367,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "a2a_token_id": {
+          "name": "a2a_token_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "a2a_client_name": {
+          "name": "a2a_client_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "a2a_endpoint_id": {
+          "name": "a2a_endpoint_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1026,6 +1406,21 @@
           "columns": [
             {
               "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_chat_a2a_token_id": {
+          "name": "idx_chat_a2a_token_id",
+          "columns": [
+            {
+              "expression": "a2a_token_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1091,6 +1486,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chat_a2a_token_id_a2a_token_id_fk": {
+          "name": "chat_a2a_token_id_a2a_token_id_fk",
+          "tableFrom": "chat",
+          "tableTo": "a2a_token",
+          "columnsFrom": [
+            "a2a_token_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "chat_id_active_leaf_id_chat_message_chat_id_id_fk": {

@@ -21,23 +21,30 @@ export const cancelRun = async (
 ): Promise<void> => {
   const options = { startedBefore: startedBefore?.getTime() };
   if (runRegistry.cancel(runId, options)) return;
-  // A bare id, as every instance has always read one, unless narrowed.
-  const payload = startedBefore ? JSON.stringify({ runId, ...options }) : runId;
-  await notify(CHANNEL, payload);
+  await notify(CHANNEL, JSON.stringify({ runId, ...options }));
 };
 
-/** A cancel as `cancelRun` sends it. */
-const parseCancel = (
-  payload: string,
-): { runId: RunId; startedBefore?: number } =>
-  payload.startsWith("{")
-    ? (JSON.parse(payload) as { runId: RunId; startedBefore?: number })
-    : { runId: payload };
+type Cancel = { runId: RunId; startedBefore?: number };
+
+/**
+ * A cancel as `cancelRun` sends it, or undefined for anything else: the
+ * handler runs inside the listener's connection, so a payload it cannot read
+ * is dropped rather than thrown.
+ */
+const parseCancel = (payload: string): Cancel | undefined => {
+  try {
+    const cancel = JSON.parse(payload) as Partial<Cancel> | null;
+    return typeof cancel?.runId === "string" ? (cancel as Cancel) : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 // A cancel sent while this instance's listener is down is missed; the run's
 // own timeout still bounds it, and an A2A Task's cancel is also kept in the
 // database for a sweep to find (`a2a-cancel.ts`).
 onNotification(CHANNEL, (payload) => {
-  const { runId, startedBefore } = parseCancel(payload);
-  runRegistry.cancel(runId, { startedBefore });
+  const cancel = parseCancel(payload);
+  if (!cancel) return;
+  runRegistry.cancel(cancel.runId, { startedBefore: cancel.startedBefore });
 });

@@ -50,12 +50,12 @@ describe("cancelRun", () => {
     expect(pool.query).not.toHaveBeenCalled();
   });
 
-  it("broadcasts a run this instance does not hold", async () => {
+  it("broadcasts a run this instance does not hold, as JSON", async () => {
     await cancelRun("chat-1");
 
     expect(pool.query).toHaveBeenCalledWith("SELECT pg_notify($1, $2)", [
       "run_cancel",
-      "chat-1",
+      JSON.stringify({ runId: "chat-1" }),
     ]);
   });
 });
@@ -94,9 +94,29 @@ describe("the notification listener", () => {
     const handle = runRegistry.register("chat-1");
 
     // What the other instance's cancel route sends, having no run to abort.
-    await pool.query("SELECT pg_notify($1, $2)", ["run_cancel", "chat-1"]);
+    await pool.query("SELECT pg_notify($1, $2)", [
+      "run_cancel",
+      JSON.stringify({ runId: "chat-1" }),
+    ]);
 
     expect(handle.signal.aborted).toBe(true);
+  });
+
+  it("ignores a payload that is not a cancel as cancelRun sends it", async () => {
+    const client = fakeClient();
+    pool.connect.mockResolvedValueOnce(client);
+    startNotificationListener();
+    await vi.waitFor(() =>
+      expect(client.query).toHaveBeenCalledWith("LISTEN run_cancel"),
+    );
+    listeners.push(client);
+    const handle = runRegistry.register("chat-1");
+
+    for (const payload of ["chat-1", "{not json", "{}", "null"]) {
+      await pool.query("SELECT pg_notify($1, $2)", ["run_cancel", payload]);
+    }
+
+    expect(handle.signal.aborted).toBe(false);
   });
 
   it("spares a run held here that started after another instance's cancel", async () => {

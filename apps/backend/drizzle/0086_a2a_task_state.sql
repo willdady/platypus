@@ -1,1 +1,0 @@
-ALTER TABLE "a2a_task" ADD COLUMN "state" text;
