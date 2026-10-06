@@ -5,7 +5,9 @@ import {
   gateAdmits,
   type A2aAccess,
   type A2aEndpointCreate,
+  type A2aEndpointListItem,
   type A2aEndpointUpdate,
+  type OrgA2aEndpoint,
   type OrgGateAccessUpdate,
   type OrgGate,
 } from "@platypus/schemas";
@@ -26,7 +28,6 @@ import type { ScopeContext } from "../scope.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import {
   deleteOwned,
-  listOwned,
   requireOwned,
   updateOwned,
 } from "./workspace-resource.ts";
@@ -64,13 +65,21 @@ export const toPublicToken = (row: A2aTokenRow) => {
   return { ...rest, tokenStatus: bearerTokenStatus(row) };
 };
 
-export const listA2aEndpoints = (workspaceId: string) =>
-  listOwned(
-    db,
-    "a2aEndpoint",
-    { workspaceId },
-    asc(a2aEndpointTable.createdAt),
-  );
+/** The Workspace's endpoints, each with its Agent's name. */
+export const listA2aEndpoints = async (
+  workspaceId: string,
+): Promise<A2aEndpointListItem[]> => {
+  const rows = await db
+    .select()
+    .from(a2aEndpointTable)
+    .innerJoin(agentTable, eq(agentTable.id, a2aEndpointTable.agentId))
+    .where(eq(a2aEndpointTable.workspaceId, workspaceId))
+    .orderBy(asc(a2aEndpointTable.createdAt));
+  return rows.map(({ a2a_endpoint: endpoint, agent }) => ({
+    ...endpoint,
+    agentName: agent.name,
+  }));
+};
 
 /** The endpoint with its tokens. Throws `NotFoundError` outside the Workspace. */
 export const getA2aEndpoint = async (workspaceId: string, id: string) => {
@@ -334,7 +343,9 @@ export const extendedAgentCard = (endpoint: A2aEndpointRow) =>
  * where it is, whose it is and which Agent it reaches. Never a token's value
  * or hash.
  */
-export const listOrgA2aEndpoints = async (orgId: string) => {
+export const listOrgA2aEndpoints = async (
+  orgId: string,
+): Promise<OrgA2aEndpoint[]> => {
   const inOrg = eq(workspaceTable.organizationId, orgId);
   const [endpoints, tokens] = await Promise.all([
     db

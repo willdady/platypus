@@ -109,16 +109,29 @@ describe("A2A endpoint routes", () => {
   });
 
   describe("as the Owner", () => {
-    it("lists the Workspace's endpoints", async () => {
+    it("lists the Workspace's endpoints, each with its Agent's name", async () => {
       seed({
-        endpoints: [endpoint(), endpoint({ id: "ep-2", workspaceId: "ws-2" })],
+        endpoints: [
+          endpoint(),
+          endpoint({
+            id: "ep-shared",
+            agentId: "agent-shared",
+            createdAt: new Date(createdAt.getTime() + DAY),
+          }),
+          endpoint({ id: "ep-2", workspaceId: "ws-2" }),
+        ],
       });
 
       const res = await app.request(baseUrl);
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as { results: Row[] };
-      expect(body.results.map((e: Row) => e.id)).toEqual(["ep-1"]);
+      expect(body.results.map((e: Row) => [e.id, e.name, e.agentName])).toEqual(
+        [
+          ["ep-1", "Support", "Helper"],
+          ["ep-shared", "Support", "Shared helper"],
+        ],
+      );
     });
 
     it("creates an endpoint under a minted id, defaulting name and description to the Agent's", async () => {
