@@ -275,13 +275,8 @@ const REMOVED_VARS = new Set<string>([]);
  * `NODE_ENV` is set by the backend image, not in `.env`.
  * `PLATYPUS_PLUGIN_CONFIG` is deprecated, so the example files show the
  * per-plugin `PLATYPUS_PLUGIN_CONFIG_<NAME>` form instead.
- * `A2A_PUSH_ALLOW_PRIVATE_NETWORKS` (#1305) and `A2A_MAX_CONCURRENT_STREAMS`
- * (#1295) are waiting on their `apps/backend/.env.example` lines; drop them
- * from here once those land.
  */
 const VARS_WITHOUT_ENV_EXAMPLE_ENTRY = new Set([
-  "A2A_MAX_CONCURRENT_STREAMS",
-  "A2A_PUSH_ALLOW_PRIVATE_NETWORKS",
   "ALLOWED_DEV_ORIGINS",
   "NEXT_PUBLIC_APP_VERSION",
   "NODE_ENV",
