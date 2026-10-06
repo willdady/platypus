@@ -9,7 +9,13 @@ import {
   TaskNotFoundError,
   UnsupportedOperationError,
 } from "@a2a-js/sdk/errors";
-import { findA2aTask, startA2aTurn, type A2aCaller } from "./a2a-task.ts";
+import {
+  findA2aTask,
+  pause,
+  startA2aTurn,
+  takeFollowerSlot,
+  type A2aCaller,
+} from "./a2a-task.ts";
 import {
   readTask,
   readTaskAfresh,
@@ -23,7 +29,8 @@ import { callerIsLive } from "./a2a-liveness.ts";
  * Status always comes from `readTask`, read afresh, so it says what `GetTask`
  * says. Token deltas exist only on the connection that started the run, read
  * from the run's own stream; any other follower, on any instance, gets status
- * and artifact events read from the database.
+ * and artifact events read from the database. A follower of a run it did not
+ * start holds a follower slot until its stream ends (`takeFollowerSlot`).
  */
 
 /** How often a stream re-reads its Task's status. */
@@ -93,7 +100,7 @@ const replyDelta = (artifactId: string, text: string): Artifact => ({
 /**
  * From `seen` on: each change of state `readTask` reports, then, once the
  * Task ends, its artifacts whole and its terminal status, which ends the
- * stream.
+ * stream. Ends at once when the client hangs up.
  */
 async function* followTask(
   caller: A2aCaller,
@@ -102,7 +109,8 @@ async function* followTask(
 ): AsyncGenerator<StreamResponse> {
   let last = seen;
   for (;;) {
-    await new Promise((resolve) => setTimeout(resolve, STREAM_POLL_MS));
+    await pause(STREAM_POLL_MS, caller.signal);
+    if (caller.signal?.aborted) return;
     await assertCallerLive(caller);
     const read = await readTaskAfresh(task);
     if (isTerminal(read)) {
@@ -174,7 +182,8 @@ async function* streamRun(
 /**
  * `SendStreamingMessage`: the turn's Task, its reply as the run writes it,
  * then its artifact whole and its terminal status. A retry of a message
- * follows the Task it already started, without token deltas.
+ * follows the Task it already started, without token deltas, on a follower
+ * slot: past the follower cap it is refused before its first event.
  */
 export async function* streamA2aMessage(
   caller: A2aCaller,
@@ -182,8 +191,10 @@ export async function* streamA2aMessage(
 ): AsyncGenerator<StreamResponse> {
   const { task, run } = await startA2aTurn(caller, params);
   const chunks = run && readChunks(run);
+  let release: (() => void) | undefined;
   try {
     const read = await readTask(task);
+    if (!run && !isTerminal(read)) release = takeFollowerSlot(caller);
     yield taskEvent(read);
     if (isTerminal(read)) return;
     yield* followTask(
@@ -192,6 +203,7 @@ export async function* streamA2aMessage(
       chunks ? yield* streamRun(caller, read, task, chunks) : read,
     );
   } finally {
+    release?.();
     // Stops reading the run, never the run: it goes on server-side.
     await chunks?.cancel();
   }
@@ -199,7 +211,8 @@ export async function* streamA2aMessage(
 
 /**
  * `SubscribeToTask`: one of this endpoint's Tasks from its current state
- * onward. A Task that has ended has nothing more to say; `GetTask` reads it.
+ * onward, on a follower slot. A Task that has ended has nothing more to say;
+ * `GetTask` reads it.
  */
 export async function* subscribeToA2aTask(
   caller: A2aCaller,
@@ -212,6 +225,11 @@ export async function* subscribeToA2aTask(
       "The Task has ended; read it with GetTask",
     );
   }
-  yield taskEvent(read);
-  yield* followTask(caller, task, read);
+  const release = takeFollowerSlot(caller);
+  try {
+    yield taskEvent(read);
+    yield* followTask(caller, task, read);
+  } finally {
+    release();
+  }
 }

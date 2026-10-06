@@ -56,7 +56,11 @@ import {
   type TaskRow,
 } from "./a2a-task-state.ts";
 import { checkPushConfig, storePushConfig } from "./a2a-push.ts";
-import { A2aAtCapacityError, acquireA2aRunSlot } from "./a2a-call.ts";
+import {
+  A2aAtCapacityError,
+  acquireA2aFollowerSlot,
+  acquireA2aRunSlot,
+} from "./a2a-call.ts";
 import { callerIsLive } from "./a2a-liveness.ts";
 
 /**
@@ -71,6 +75,11 @@ export type A2aCaller = {
   /** The token the call carried, as the value it carried was issued. */
   token: { id: string; name: string; tokenCreatedAt: Date };
   origin: string;
+  /**
+   * Aborted once the client hangs up, so a caller following a Task lets go
+   * of its follower slot then, not when the Task next changes.
+   */
+  signal?: AbortSignal;
 };
 
 /** The namespace of the Chat ids `a2aChatId` derives. Fixed for good. */
@@ -213,8 +222,37 @@ const busyError = async (caller: A2aCaller, chatId: string) => {
 };
 
 /**
- * The Task once it ends, or as it stands when `deadline` passes. Refused as
- * not found once the caller's access is cut off, as a new call would be.
+ * Waits `ms`, or less once `signal` aborts: a follower's poll, cut short when
+ * its client hangs up.
+ */
+export const pause = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
+
+/**
+ * A follower slot for a caller about to follow a Task whose run it did not
+ * start, or `A2aAtCapacityError` past the follower cap. Returns its release.
+ */
+export const takeFollowerSlot = (caller: A2aCaller): (() => void) => {
+  const release = acquireA2aFollowerSlot(caller.token.id);
+  if (!release) {
+    throw new A2aAtCapacityError("Too many callers are following A2A Tasks");
+  }
+  return release;
+};
+
+/**
+ * The Task once it ends, as it stands when `deadline` passes, or as it stands
+ * when the client hangs up. Refused as not found once the caller's access is
+ * cut off, as a new call would be.
  */
 const waitForTask = async (
   caller: A2aCaller,
@@ -224,9 +262,13 @@ const waitForTask = async (
   for (;;) {
     if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
     const read = await readTaskAfresh(task);
-    if (TERMINAL_TASK_STATES.has(read.status!.state) || Date.now() >= deadline)
+    if (
+      TERMINAL_TASK_STATES.has(read.status!.state) ||
+      Date.now() >= deadline ||
+      caller.signal?.aborted
+    )
       return read;
-    await new Promise((resolve) => setTimeout(resolve, BLOCKING_POLL_MS));
+    await pause(BLOCKING_POLL_MS, caller.signal);
   }
 };
 
@@ -460,9 +502,19 @@ export const sendA2aMessage = async (
   const { task, run } = await startA2aTurn(caller, params);
   // The client follows the run by Task, not by this stream.
   await run?.cancel();
-  return params.configuration?.returnImmediately
-    ? readTask(task)
-    : waitForTask(caller, task, deadline);
+  if (params.configuration?.returnImmediately) return readTask(task);
+  // The call that started the run waits on its run slot. A retry waits on a
+  // follower slot, unless its Task has already ended and there is nothing to
+  // wait for.
+  if (run) return waitForTask(caller, task, deadline);
+  const read = await readTask(task);
+  if (TERMINAL_TASK_STATES.has(read.status!.state)) return read;
+  const release = takeFollowerSlot(caller);
+  try {
+    return await waitForTask(caller, task, deadline);
+  } finally {
+    release();
+  }
 };
 
 /** One of the Tasks the calling token started; any other is not found. */
