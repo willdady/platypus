@@ -96,6 +96,11 @@ the expired token is refused. Both times update at most once a minute.
   lifetime, and stops the old value at once, along with any Task it started
   that is still running. The new value is shown once. Use it when a token is
   about to expire, is lost, or may have leaked, then update the client.
+- **A regenerated token keeps its conversations.** The new value sees every
+  Chat and Task the old value started, and can continue them with their
+  `contextId` or list them with `ListTasks`. Handing it to a different client
+  hands over the old client's history. To give a different client a fresh
+  start, delete the token and add a new one.
 
 <Callout type="warning">
   Rotating a token usually means updating the client's configuration, so act on
@@ -186,7 +191,9 @@ learns one out of your Chats.
   refused, whether the Task is still running or has ended. To continue the
   conversation, the client sends the Task's `contextId` and no `taskId`.
 - **A busy server says so.** Your Operator caps how many A2A runs can be going
-  at once across the server. A message that would start one past the cap gets
+  at once on each backend instance. The cap applies to each instance
+  separately, so with three instances behind one address, up to three times
+  the cap can be going at once. A message that would start one past the cap gets
   `429 Too Many Requests` with a `Retry-After` header, and nothing is written:
   the client waits and sends it again.
 - **Calls have a size limit.** Your Operator sets the largest call a client
