@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockSession, resetMockDb, seedDb, type Row } from "../test-utils.ts";
+import { hashBearerToken } from "../services/bearer-token.ts";
 import app from "../server.ts";
 
 const baseUrl = "/organizations/org-1/a2a/endpoints";
@@ -167,6 +168,90 @@ describe("Org A2A endpoint oversight routes", () => {
         body: expect.stringContaining('"Telegram"') as unknown,
       }),
     ]);
+  });
+
+  describe("as the endpoint's clients find it", () => {
+    const TOKEN = "pa2a_telegram";
+    const OTHER = "pa2a_rovo";
+
+    /**
+     * org-1 admits ep-1's Workspace, whose Owner is a member, and ep-1 has a
+     * second client's token, tok-2: both clients' calls are answered.
+     */
+    const seedClients = () => {
+      const fake = seed();
+      fake.tables.organization[0].a2aGate = "all";
+      fake.tables.organization_member.push({
+        id: "m2",
+        userId: "user-2",
+        organizationId: "org-1",
+        role: "member",
+      });
+      fake.tables.a2a_token[0].tokenHash = hashBearerToken(TOKEN);
+      fake.tables.a2a_token.push({
+        ...fake.tables.a2a_token[0],
+        id: "tok-2",
+        name: "Rovo",
+        tokenHash: hashBearerToken(OTHER),
+      });
+      return fake;
+    };
+
+    /** A client's `GetTask` for a Task no one has: a live call's answer is -32001. */
+    const call = async (token: string) => {
+      const res = await app.request("/a2a/ep-1", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "GetTask",
+          params: { id: "task-x" },
+        }),
+      });
+      return { status: res.status, body: (await res.json()) as unknown };
+    };
+
+    const answered = {
+      status: 200,
+      body: expect.objectContaining({
+        error: expect.objectContaining({ code: -32001 }) as unknown,
+      }) as unknown,
+    };
+
+    it("answers a revoked token's client 401, and the endpoint's other clients as before", async () => {
+      seedClients();
+      expect(await call(TOKEN)).toEqual(answered);
+
+      const res = await app.request(tokenUrl("/ep-1/tokens/tok-1"), {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await call(TOKEN)).toEqual({
+        status: 401,
+        body: { error: "Unauthorized" },
+      });
+      expect(await call(OTHER)).toEqual(answered);
+    });
+
+    it("answers every client of a revoked endpoint with the unknown endpoint's 404", async () => {
+      seedClients();
+      expect(await call(TOKEN)).toEqual(answered);
+
+      const res = await app.request(`${baseUrl}/ep-1`, { method: "DELETE" });
+
+      expect(res.status).toBe(200);
+      for (const token of [TOKEN, OTHER]) {
+        expect(await call(token)).toEqual({
+          status: 404,
+          body: { error: "Not Found" },
+        });
+      }
+    });
   });
 
   it.each([
