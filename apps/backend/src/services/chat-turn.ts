@@ -1,6 +1,10 @@
 import type { ChatSubmitData } from "@platypus/schemas";
+import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
-import { chat as chatTable } from "../db/schema.ts";
+import {
+  a2aEndpoint as a2aEndpointTable,
+  chat as chatTable,
+} from "../db/schema.ts";
 import { ownedWhere } from "./workspace-resource.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { ChatSink, type ChatSinkParams } from "../runs/sinks/chat-sink.ts";
@@ -23,7 +27,9 @@ import { onA2aTurnEnded } from "./a2a-push.ts";
  *
  * `includeMemories` off skips the Memories pin and its retrieval altogether,
  * as a Trigger does (#645), rather than retrieving a block and throwing it
- * away. The Chat then carries no pin, so a later turn with Memories re-takes.
+ * away, and withholds the Agent's Memory tools. The Chat then carries no pin,
+ * so a later turn with Memories re-takes. An A2A Chat turns it off whatever
+ * the caller asked when its endpoint has (see {@link chatAllowsMemories}).
  */
 export const startChatTurn = async (params: {
   scope: WorkspaceScope;
@@ -40,7 +46,7 @@ export const startChatTurn = async (params: {
   const {
     scope,
     request,
-    includeMemories,
+    includeMemories: callerIncludesMemories,
     origin,
     newChat,
     onEnded,
@@ -61,6 +67,8 @@ export const startChatTurn = async (params: {
     .select({
       memorySnapshot: chatTable.memorySnapshot,
       lastTurnAt: chatTable.lastTurnAt,
+      a2aEndpointId: chatTable.a2aEndpointId,
+      a2aClientName: chatTable.a2aClientName,
     })
     .from(chatTable)
     .where(
@@ -76,6 +84,9 @@ export const startChatTurn = async (params: {
     owned: existingChat.length > 0,
     request,
   });
+
+  const includeMemories =
+    callerIncludesMemories && (await chatAllowsMemories(existingChat[0]));
 
   const now = new Date();
 
@@ -132,6 +143,7 @@ export const startChatTurn = async (params: {
     // retrieval window agree on "now" rather than reading the clock twice.
     memoriesReferenceDate: now,
     includeMemories,
+    memoryTools: includeMemories,
   };
 
   const sink = new ChatSink({
@@ -169,4 +181,25 @@ export const startChatTurn = async (params: {
       timeouts: chatTimeouts(),
     },
   });
+};
+
+/**
+ * Whether a Chat lets its turns read the Owner's Memories. An A2A Chat follows
+ * its endpoint's Include Memories, whoever's turn it is: the Owner's reply sits
+ * in the history the client reads next (ADR-0032). One whose endpoint is gone,
+ * or that predates the endpoint being stored on it, is known by its client
+ * label and reads as off. Any other Chat, and one not written yet, allows them.
+ */
+const chatAllowsMemories = async (
+  chat:
+    { a2aEndpointId: string | null; a2aClientName: string | null } | undefined,
+): Promise<boolean> => {
+  if (!chat?.a2aEndpointId && !chat?.a2aClientName) return true;
+  if (!chat.a2aEndpointId) return false;
+  const [endpoint] = await db
+    .select({ includeMemories: a2aEndpointTable.includeMemories })
+    .from(a2aEndpointTable)
+    .where(eq(a2aEndpointTable.id, chat.a2aEndpointId))
+    .limit(1);
+  return endpoint?.includeMemories ?? false;
 };

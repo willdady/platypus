@@ -1171,7 +1171,9 @@ export const a2aEndpoint = pgTable(
     description: t.text("description").notNull(),
     enabled: t.boolean("enabled").notNull().default(true),
     // Both off by default: the caller may not be the Owner. `includeMemories`
-    // puts the Owner's Memories in a turn's System prompt; `extractMemories`
+    // puts the Owner's Memories in a turn's System prompt and serves the
+    // Agent's Memory tools, on every turn in the endpoint's Chats, the Owner's
+    // own included; `extractMemories`
     // lets the endpoint's Chats feed memory extraction, UI turns included.
     includeMemories: t.boolean("include_memories").notNull().default(false),
     extractMemories: t.boolean("extract_memories").notNull().default(false),

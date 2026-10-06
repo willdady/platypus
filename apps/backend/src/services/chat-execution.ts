@@ -16,6 +16,7 @@ import {
   type ToolSessionQueries,
   type ToolSessionScope,
 } from "../tools/tool-session.ts";
+import { MEMORY_TOOLSET_ID } from "../tools/index.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
 import { LOAD_SKILL_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import {
@@ -582,7 +583,16 @@ export const prepareChatTurn = async (
   // Started before the `Promise.all` rather than inside it because the delegates
   // built alongside it nest their own sessions into this one — they take the
   // promise, not the session, and await it only if they are ever invoked.
-  const sessionPromise = openToolSession(scope, agent, queries, { signal });
+  //
+  // Absent means yes, so a Trigger keeps its Agent's Memory tools whatever its
+  // own Include Memories says; only a Chat turn withholds them (ADR-0032).
+  // Withheld from the session rather than dropped from its tools, so a
+  // delegate's session, which inherits the option, is withheld them too.
+  const memoryTools = input.memoryTools ?? true;
+  const sessionPromise = openToolSession(scope, agent, queries, {
+    signal,
+    withheldToolSetIds: memoryTools ? [] : [MEMORY_TOOLSET_ID],
+  });
   // From here down this function OWNS the session: `dispose` is the only
   // handle on it and it reaches the caller only on the successful return
   // below, so a throw in between leaves the session — its MCP clients, and
@@ -665,7 +675,17 @@ export const prepareChatTurn = async (
 
     const stable: SystemPromptStableContext = {
       workspace: { id: workspaceId, context: workspace.context ?? undefined },
-      agent: agent ?? null,
+      // The Agent as this turn serves it: with its Memory tools withheld, the
+      // prompt does not offer them.
+      agent:
+        agent && !memoryTools
+          ? {
+              ...agent,
+              toolSetIds: (agent.toolSetIds ?? []).filter(
+                (id) => id !== MEMORY_TOOLSET_ID,
+              ),
+            }
+          : (agent ?? null),
       user: {
         id: user.id,
         name: user.name,

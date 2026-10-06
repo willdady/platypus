@@ -143,10 +143,18 @@ export type TurnRequest = {
    * Beats `memorySnapshot` where a caller supplies both: this decides *whether*
    * a block is composed, the pin only decides *what* is in it.
    *
-   * Orthogonal to the `memory` tool set: an Agent holding `memorySearch` /
-   * `memoryGet` keeps them and can still retrieve deliberately.
+   * Orthogonal to the `memory` tool set, which {@link memoryTools} decides: a
+   * Trigger's Agent holding `memorySearch` / `memoryGet` keeps them and can
+   * still retrieve deliberately.
    */
   includeMemories?: boolean;
+  /**
+   * Whether the run serves the Agent's `memory` Tool set, to it and to its
+   * delegates. Absent means yes. A Chat turn sets it with `includeMemories`, so
+   * an A2A Chat with Include Memories off reaches the Owner's Memories by
+   * neither route (ADR-0032).
+   */
+  memoryTools?: boolean;
 };
 
 /**

@@ -196,7 +196,8 @@ chat.post(
   requireWorkspaceOwner,
   sValidator("json", chatSubmitSchema),
   async (c) => {
-    // An interactive turn always includes the Owner's Memories.
+    // An interactive turn includes the Owner's Memories, unless it is in an
+    // A2A Chat whose endpoint leaves them out (see `startChatTurn`).
     return await startChatTurn({
       scope: workspaceScopeOf(c),
       request: c.req.valid("json"),

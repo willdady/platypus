@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { MockLanguageModelV3, convertArrayToReadableStream } from "ai/test";
-import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
+import { tool } from "ai";
+import { z } from "zod";
+import {
+  makePluginContext,
+  resetMockDb,
+  seedDb,
+  type Row,
+} from "../test-utils.ts";
 
 // The model is the only thing mocked: everything from the JSON-RPC call to
 // the Chat rows runs for real against the in-memory database.
@@ -16,6 +23,8 @@ const { model } = vi.hoisted(() => ({
     /** Holds the stream after the reply's first words, until it settles. */
     holdMidReply: null as Promise<void> | null,
     prompts: [] as unknown[],
+    /** The names of the tools each model call was offered. */
+    toolNames: [] as string[][],
   },
 }));
 vi.mock("../services/provider.ts", async (importOriginal) => ({
@@ -25,6 +34,7 @@ vi.mock("../services/provider.ts", async (importOriginal) => ({
       new MockLanguageModelV3({
         doStream: async (options) => {
           model.prompts.push(options.prompt);
+          model.toolNames.push((options.tools ?? []).map((t) => t.name));
           await model.hold;
           const chunks: LanguageModelV3StreamPart[] = [
             { type: "stream-start", warnings: [] },
@@ -134,8 +144,42 @@ import { runRegistry } from "../runs/run-registry.ts";
 import { A2aChatBusyError, a2aChatId } from "../services/a2a-task.ts";
 import { MAX_CONCURRENT_PUSHES } from "../services/a2a-push.ts";
 import { toJsonRpcError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
+import {
+  composeToolSet,
+  hasToolSet,
+  MEMORY_TOOLSET_ID,
+  registerToolSet,
+} from "../tools/index.ts";
 
 const CARD_PATH = "/.well-known/agent-card.json";
+
+/** A stand-in Memory Tool set, registered once: the registry outlives a test. */
+const registerMemoryToolSet = () => {
+  if (hasToolSet(MEMORY_TOOLSET_ID)) return;
+  const memoryTool = (description: string) =>
+    tool({
+      description,
+      inputSchema: z.object({}),
+      execute: () => "none",
+    });
+  registerToolSet(
+    MEMORY_TOOLSET_ID,
+    composeToolSet({
+      id: MEMORY_TOOLSET_ID,
+      pluginName: "test-plugin",
+      isCore: true,
+      contribution: {
+        name: "Memory",
+        category: "Memory",
+        tools: () => ({
+          memorySearch: memoryTool("Search Memories"),
+          memoryGet: memoryTool("Get a Memory"),
+        }),
+      },
+      plugin: makePluginContext(),
+    }),
+  );
+};
 
 // A new Chat's id is its token's and first message's, so the same in every
 // test: a run a test leaves going is stopped before the next reuses its id.
@@ -618,6 +662,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
   });
@@ -777,6 +822,25 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       expect(JSON.stringify(model.prompts[0])).not.toContain("Lisbon");
       expect(rows("chat")[0].memorySnapshot ?? null).toBeNull();
     });
+
+    // Issue #1294: Include Memories governs the Agent's Memory tools too.
+    it.each([
+      ["withholds", false, []],
+      ["serves", true, ["memoryGet", "memorySearch"]],
+    ])(
+      "%s the Agent's Memory tools when includeMemories is %s",
+      async (_case, includeMemories, tools) => {
+        registerMemoryToolSet();
+        seedMemories({ includeMemories, extractMemories: false });
+        rows("agent")[0].toolSetIds = ["memory"];
+
+        await send({ messageId: "msg-a" });
+
+        expect(
+          model.toolNames[0].filter((t) => t.startsWith("memory")).sort(),
+        ).toEqual(tools);
+      },
+    );
 
     it("puts the Owner's Memories in the System prompt when includeMemories is on", async () => {
       seedMemories({ includeMemories: true, extractMemories: false });
@@ -1496,6 +1560,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
     model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
   });
@@ -1694,6 +1759,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
   });
@@ -1845,6 +1911,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
     push.mockResolvedValue(new Response(null, { status: 200 }));
@@ -2444,6 +2511,7 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     model.reply = "Hello from Helper";
     model.hold = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
     process.env.A2A_MAX_CONCURRENT_RUNS = "1";
@@ -2668,6 +2736,7 @@ describe("POST /a2a/:endpointId — the body cap", () => {
     model.reply = "Hello from Helper";
     model.hold = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
     process.env.A2A_MAX_BODY_BYTES = "64";
@@ -2788,6 +2857,7 @@ describe("the A2A call log", () => {
     model.reply = "Hello from Helper";
     model.hold = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
   });
@@ -3185,6 +3255,7 @@ describe("POST /a2a/:endpointId — streaming", () => {
     model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
   });
 
@@ -3481,6 +3552,7 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
     model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
   });
@@ -3521,9 +3593,14 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
 
   describe("another token's Task on the same endpoint", () => {
     const asOther = { token: OTHER_TOKEN };
+    const push = vi.fn<typeof fetch>();
     let taskId = "";
 
     beforeEach(async () => {
+      // The Task's push config would otherwise reach the network, and its
+      // retries a later test's stubbed fetch.
+      push.mockResolvedValue(new Response(null, { status: 200 }));
+      vi.stubGlobal("fetch", push);
       seedTwoClients();
       taskId = (await startMidReply()).id;
       tables.a2a_push_config = [
@@ -3539,9 +3616,18 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
       ];
     });
 
-    // Its own token stops the held run, so it doesn't outlive the test.
+    // Its own token stops the held run, so it doesn't outlive the test, nor
+    // does the push of its cancel.
     afterEach(async () => {
       await rpc("CancelTask", { id: taskId });
+      await vi.waitFor(() =>
+        expect(
+          push.mock.calls.some(([, init]) =>
+            (init?.body as string).includes(taskId),
+          ),
+        ).toBe(true),
+      );
+      vi.unstubAllGlobals();
     });
 
     it.each([
@@ -3659,6 +3745,7 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
     model.holdPrep = null;
     model.holdMidReply = null;
     model.prompts = [];
+    model.toolNames = [];
     resetTokenTouches();
     resetA2aRunSlots();
     push.mockResolvedValue(new Response(null, { status: 200 }));

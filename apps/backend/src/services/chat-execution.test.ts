@@ -113,7 +113,7 @@ import {
   registerWebBackend,
   type WebBackendContribution,
 } from "../web-backends/index.ts";
-import { composeToolSet, registerToolSet } from "../tools/index.ts";
+import { composeToolSet, hasToolSet, registerToolSet } from "../tools/index.ts";
 import { logger } from "../logger.ts";
 import { orgScope, workspaceScope } from "../scope.ts";
 import { FileValidationError } from "./file-gate.ts";
@@ -2030,8 +2030,12 @@ describe("chat-execution", () => {
     // Issue #1059: the Memory Tool set leaves memorySearch out when the
     // Workspace has no embedding Provider. The prompt reads the turn's tool
     // map, so it names memorySearch only on a turn that offers it.
-    it("names memorySearch in the prompt only when the turn offers it", async () => {
-      let offerSearch = true;
+    /** Whether the test Memory Tool set below offers `memorySearch`. */
+    let offerSearch = true;
+    /** Registers the test Memory Tool set once: the registry outlives a test. */
+    const registerMemoryToolSet = () => {
+      offerSearch = true;
+      if (hasToolSet("memory")) return;
       const stub = { description: "x" } as never;
       registerToolSet(
         "memory",
@@ -2050,6 +2054,10 @@ describe("chat-execution", () => {
           plugin: makePluginContext(),
         }),
       );
+    };
+
+    it("names memorySearch in the prompt only when the turn offers it", async () => {
+      registerMemoryToolSet();
       const agent = { ...baseAgent, toolSetIds: ["memory"] };
       const turn = () =>
         prepareChatTurn(
@@ -2071,6 +2079,56 @@ describe("chat-execution", () => {
       expect(withoutSearch.stream.tools).not.toHaveProperty("memorySearch");
       expect(withoutSearch.stream.system).toContain("the memoryGet tool");
       expect(withoutSearch.stream.system).not.toContain("memorySearch");
+    });
+
+    // Issue #1294: an A2A Chat with Include Memories off withholds the Memory
+    // Tool set, and the prompt does not offer what the turn lacks. A Trigger
+    // leaves `memoryTools` alone, so its own opt-out costs it no tools.
+    describe("memoryTools", () => {
+      const memoryTurn = (input: {
+        includeMemories?: boolean;
+        memoryTools?: boolean;
+      }) => {
+        registerMemoryToolSet();
+        const agent = { ...baseAgent, toolSetIds: ["memory"] };
+        return prepareChatTurn(
+          { ...baseInput, request: { agentId: agent.id }, ...input },
+          createInMemoryChatTurnQueries({
+            workspaces: [baseWorkspace],
+            agents: [agent],
+            providers: [baseProvider],
+          }),
+        );
+      };
+
+      it("off withholds memorySearch and memoryGet, and the prompt offers neither", async () => {
+        const turn = await memoryTurn({
+          includeMemories: false,
+          memoryTools: false,
+        });
+
+        expect(turn.stream.tools).not.toHaveProperty("memorySearch");
+        expect(turn.stream.tools).not.toHaveProperty("memoryGet");
+        expect(turn.stream.system).not.toContain("memorySearch");
+        expect(turn.stream.system).not.toContain("memoryGet");
+        await turn.dispose();
+      });
+
+      it("on serves the Memory tools", async () => {
+        const turn = await memoryTurn({ memoryTools: true });
+
+        expect(turn.stream.tools).toHaveProperty("memorySearch");
+        expect(turn.stream.tools).toHaveProperty("memoryGet");
+        await turn.dispose();
+      });
+
+      it("left alone, a run with Memories off (a Trigger) keeps the Memory tools", async () => {
+        const turn = await memoryTurn({ includeMemories: false });
+
+        expect(turn.stream.tools).toHaveProperty("memorySearch");
+        expect(turn.stream.tools).toHaveProperty("memoryGet");
+        await turn.dispose();
+      });
     });
   });
 

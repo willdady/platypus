@@ -710,6 +710,20 @@ describe("fireTrigger", () => {
       ]);
     });
 
+    // Issue #1294: only a Chat turn withholds the Memory Tool set with its
+    // Memories. An Inbound Trigger with Include Memories off keeps its
+    // Agent's Memory tools, as it always has.
+    it("keeps its Agent's Memory tools with Include Memories off", async () => {
+      const trigger = { ...inboundTrigger(), includeMemories: false };
+      world(trigger, [pendingRow()]);
+      drive("succeeded");
+
+      await fireTrigger(trigger, cause);
+
+      expect(generateArgs().input.includeMemories).toBe(false);
+      expect(generateArgs().input.memoryTools ?? true).toBe(true);
+    });
+
     it("puts the inputs in a labelled block above the Instruction", async () => {
       const trigger = inboundTrigger();
       world(trigger, [pendingRow()]);
