@@ -118,10 +118,21 @@ import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
 import { stopCanceledA2aRuns } from "../services/a2a-cancel.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
-import { A2aChatBusyError } from "../services/a2a-task.ts";
+import { runRegistry } from "../runs/run-registry.ts";
+import { A2aChatBusyError, a2aChatId } from "../services/a2a-task.ts";
 import { toJsonRpcError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
 
 const CARD_PATH = "/.well-known/agent-card.json";
+
+// A new Chat's id is its token's and first message's, so the same in every
+// test: a run a test leaves going is stopped before the next reuses its id.
+afterEach(async () => {
+  const held = runRegistry.heldRuns().map(({ runId }) => runId);
+  for (const runId of held) runRegistry.cancel(runId);
+  await vi.waitFor(() =>
+    expect(held.filter((runId) => runRegistry.has(runId))).toEqual([]),
+  );
+});
 
 const seed = ({
   endpoint = {},
@@ -1062,6 +1073,57 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     const canceled = await rpc("CancelTask", { id: started.id });
     expect(canceled.body.result.status.state).toBe("TASK_STATE_CANCELED");
     releaseModel();
+  });
+
+  /** The Task a send answers with, whether as itself or as busy with it. */
+  const answeredTask = (res: { body: RpcBody }) =>
+    res.body.result?.task?.id ?? res.body.error?.data[0].metadata?.taskId;
+
+  it("starts one conversation for a first message sent twice at once", async () => {
+    seedConversation();
+
+    const [a, b] = await Promise.all([
+      send({ messageId: "msg-a" }),
+      send({ messageId: "msg-a" }),
+    ]);
+
+    expect(rows("chat")).toHaveLength(1);
+    expect(rows("a2a_task")).toHaveLength(1);
+    expect(model.prompts).toHaveLength(1);
+    const [task] = rows("a2a_task");
+    expect(answeredTask(a)).toBe(task.id);
+    expect(answeredTask(b)).toBe(task.id);
+  });
+
+  it("starts one turn for a message sent twice at once to a Chat", async () => {
+    seedConversation();
+    const first = await send({ messageId: "msg-a" });
+    const { contextId } = first.body.result.task;
+
+    const [a, b] = await Promise.all([
+      send({ messageId: "msg-b", contextId }),
+      send({ messageId: "msg-b", contextId }),
+    ]);
+
+    expect(rows("chat")).toHaveLength(1);
+    const tasks = rows("a2a_task").filter((t) => t.messageId === "msg-b");
+    expect(tasks).toHaveLength(1);
+    expect(model.prompts).toHaveLength(2);
+    expect(answeredTask(a)).toBe(tasks[0].id);
+    expect(answeredTask(b)).toBe(tasks[0].id);
+  });
+
+  it("names a new Chat after the token and its first message, so another instance's copy conflicts", async () => {
+    seedConversation();
+
+    const sent = await send({ messageId: "msg-a" });
+    const other = await send(
+      { messageId: "msg-a" },
+      { token: "pa2a_second-token", endpointId: "ep-2" },
+    );
+
+    expect(sent.body.result.task.contextId).toBe(a2aChatId("tok-1", "msg-a"));
+    expect(other.body.result.task.contextId).toBe(a2aChatId("tok-2", "msg-a"));
   });
 
   it("refuses a message while a turn with no Task runs, making no Task", async () => {

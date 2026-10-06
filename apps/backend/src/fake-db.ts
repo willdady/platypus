@@ -616,7 +616,10 @@ export const createFakeDb = (
           // Written synchronously so a unique violation surfaces where the
           // caller's `try` is, the way the driver's rejection does.
           write(values);
-          return writeResult(inserted);
+          const result = writeResult(inserted);
+          // A clash has already thrown above: conflict targets are left to
+          // the tests that run on Postgres.
+          return Object.assign(result, { onConflictDoUpdate: () => result });
         },
       };
     };
