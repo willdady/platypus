@@ -399,6 +399,52 @@ describe("ChatSink", () => {
       });
     });
 
+    // #1337: a Task reads `working` from the reply's first write.
+    it("writes the reply at once on the run's first output", async () => {
+      const fake = seedChat();
+      const sink = submitSink({ flushIntervalMs: 5_000 });
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+
+      await sink.onOutput({
+        runId: "chat-1",
+        messages: [u0, a0, u1, reply("He")],
+      });
+
+      expect(rowOf(fake, "chat_message", "r1")).toMatchObject({
+        parentId: "u1",
+        role: "assistant",
+        parts: [{ type: "text", text: "He" }],
+      });
+      expect(rowOf(fake, "chat", "chat-1")).toMatchObject({
+        status: "running",
+        activeLeafId: "r1",
+      });
+    });
+
+    it("keeps the scheduler's cadence for progress after the first output", async () => {
+      const fake = seedChat();
+      const sink = submitSink({ flushIntervalMs: 100 });
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+      await sink.onOutput({
+        runId: "chat-1",
+        messages: [u0, a0, u1, reply("He")],
+      });
+
+      const update = vi.spyOn(
+        fake.handle as { transaction: () => unknown },
+        "transaction",
+      );
+      const messages = [u0, a0, u1, reply("Hello")];
+      await sink.onProgress({ runId: "chat-1", messages, stats: {} });
+      await sink.onProgress({ runId: "chat-1", messages, stats: {} });
+      expect(update).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(update).toHaveBeenCalledTimes(1);
+    });
+
     it("dispose cancels pending flush in onFinish (no extra writes)", async () => {
       const fake = seedChat();
       const sink = submitSink({ flushIntervalMs: 1000 });

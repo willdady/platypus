@@ -1510,6 +1510,53 @@ describe("AgentRunner.stream — success & interruption", () => {
     resetStreamHarness();
   });
 
+  // #1337: the reply is saved on the run's first output, once.
+  it("tells the sink of the run's first output once, with the reply so far", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeStreamText();
+
+    const outputs: unknown[][] = [];
+    const sink = new RecordingSink();
+    const withOutput: RunSink = Object.assign(sink, {
+      onOutput: (ctx: { messages: unknown[] }) => {
+        outputs.push(ctx.messages);
+        return Promise.resolve();
+      },
+    });
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-output" },
+      sink: withOutput,
+      options: { origin: "http://test" },
+    });
+
+    const text = (t: string) => ({
+      id: "m1",
+      role: "assistant",
+      parts: [{ type: "step-start" }, { type: "text", text: t }],
+    });
+    queue.push({
+      id: "m1",
+      role: "assistant",
+      parts: [{ type: "step-start" }],
+    });
+    await tick();
+    expect(outputs).toEqual([]);
+
+    queue.push(text("He"));
+    queue.push(text("Hel"));
+    queue.push(text("Hello"));
+    await tick();
+
+    expect(outputs).toEqual([[text("He")]]);
+    // Progress keeps its own cadence: no step has ended.
+    expect(sink.names()).not.toContain("onProgress");
+    runRegistry.cancel("s-output");
+    queue.end();
+  });
+
   it("runs the full lifecycle on success and persists the final messages", async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn({ dispose }));

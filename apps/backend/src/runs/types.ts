@@ -262,6 +262,17 @@ export interface RunSink {
     messages: PlatypusUIMessage[];
     stats: RunStats;
   }): Promise<void>;
+  /**
+   * The run's first output — text, reasoning or a tool call — has reached
+   * `messages` (#1337). Called once per streamed run, before its first step
+   * ends. A sink that saves the reply saves it here and resolves once it is
+   * saved: the client stream's first output waits on it. Headless runs never
+   * call it.
+   */
+  onOutput?(ctx: {
+    runId: RunId;
+    messages: PlatypusUIMessage[];
+  }): Promise<void>;
   onFinish(ctx: {
     runId: RunId;
     status: RunStatus;

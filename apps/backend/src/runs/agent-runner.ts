@@ -20,6 +20,7 @@ import { startRun, type RunLifecycle } from "./run-lifecycle.ts";
 import { driveChat, driveOnce } from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import { withStreamKeepalive } from "./stream-keepalive.ts";
+import { hasOutput, holdFirstOutput } from "./first-output.ts";
 import type {
   ResolvedRunPlan,
   RunInput,
@@ -416,6 +417,13 @@ export class AgentRunner {
         }),
     );
 
+    // Settles once the sink has saved the reply's first output (#1337), or
+    // once the drain below ends, however it ends. Never rejects: the client
+    // stream's first output waits on it.
+    const { promise: saved, resolve: outputSaved } =
+      Promise.withResolvers<void>();
+    let outputSeen = false;
+
     // Consume the snapshot branch server-side. The response body drives one
     // branch; we drain the other so a disconnected client (cancelling the
     // response branch) doesn't propagate back to the source — the run keeps
@@ -429,6 +437,18 @@ export class AgentRunner {
           // yielding after the final handover, so this never overwrites the
           // folded final with a duration-less snapshot.
           state.messages = foldSnapshot(input.messages, message);
+          if (!outputSeen && hasOutput(message)) {
+            outputSeen = true;
+            const messages = state.messages;
+            void Promise.resolve()
+              .then(() =>
+                params.sink.onOutput?.({ runId: input.runId, messages }),
+              )
+              .catch((err) =>
+                logger.error({ err, runId: input.runId }, "Error in onOutput"),
+              )
+              .finally(outputSaved);
+          }
         }
       } catch (err) {
         logger.error(
@@ -436,6 +456,7 @@ export class AgentRunner {
           "Server-side UI stream consumer error",
         );
       } finally {
+        outputSaved();
         await drive.done;
       }
     })().catch((err) =>
@@ -445,9 +466,13 @@ export class AgentRunner {
     // Wrapped past the tee, so the heartbeat reaches the client and not the
     // server-side drain above (issue #648). The no-buffering header a reverse
     // proxy needs is already on the response the SDK builds; `stream-keepalive`
-    // carries it through, and its test pins that it is still there.
+    // carries it through, and its test pins that it is still there. The first
+    // output is held until it is saved, so a reader of the stream — an A2A
+    // Task's producer — finds the Chat already holding the reply.
     return withStreamKeepalive(
-      createUIMessageStreamResponse({ stream: drive.response }),
+      createUIMessageStreamResponse({
+        stream: drive.response.pipeThrough(holdFirstOutput(saved)),
+      }),
     );
   }
 
