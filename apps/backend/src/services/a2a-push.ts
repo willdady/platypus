@@ -1,16 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  and,
-  asc,
-  count,
-  eq,
-  getTableColumns,
-  isNotNull,
-  isNull,
-  ne,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, count, eq, isNull, or, sql } from "drizzle-orm";
 import {
   A2A_CONTENT_TYPE,
   StreamResponse,
@@ -22,18 +11,14 @@ import { db } from "../index.ts";
 import {
   a2aPushConfig as a2aPushConfigTable,
   a2aTask as a2aTaskTable,
-  chat as chatTable,
   type A2aPushAuthentication,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
-import type { RunStatus } from "../runs/types.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 import {
-  currentTurnId,
   findTokenTask,
-  readTask,
-  recordTaskEnd,
-  TERMINAL_TASK_STATES,
+  readRecordedTask,
+  taskHasEnded,
   type TaskRow,
 } from "./a2a-task-state.ts";
 import { postWithRetries } from "./webhook-delivery.ts";
@@ -44,6 +29,10 @@ import { taskIsLive } from "./a2a-liveness.ts";
  * or `canceled` — it is POSTed to every URL its client registered, with the
  * credentials the client supplied, over the Webhook transport (its egress
  * guard and retries). Nothing is pushed for an intermediate state.
+ *
+ * This is delivery alone. Only an end already recorded is pushed: recording
+ * an end, and deciding a push is owed, are the Task lifecycle's
+ * (`a2a-task-lifecycle.ts`, ADR-0034), which calls here.
  *
  * Each config is delivered once. Its `notifiedAt` is claimed before sending,
  * so the run's end and a registration landing just after it can't both push,
@@ -174,15 +163,26 @@ const reservePushes = async (
   return 0;
 };
 
+/** The Task's row as it is now, if it is still there. */
+const taskRowNow = async (taskId: string): Promise<TaskRow | undefined> => {
+  const [row] = await db
+    .select()
+    .from(a2aTaskTable)
+    .where(eq(a2aTaskTable.id, taskId))
+    .limit(1);
+  return row;
+};
+
 /**
- * Pushes `task` to its configs not yet notified, if it has ended. Never
- * throws: a push is fire-and-forget beside the run or call that noticed the
- * end.
+ * Pushes `row` to its configs not yet notified, if its end is recorded: on
+ * `row`, or since it was read. Never throws: a push is fire-and-forget beside
+ * the run or call that noticed the end.
  */
-export const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
+export const pushRecordedEnd = async (row: TaskRow): Promise<void> => {
   try {
-    const task = await readTask(row);
-    if (!TERMINAL_TASK_STATES.has(task.status!.state)) return;
+    const recorded = row.state ? row : await taskRowNow(row.id);
+    if (!recorded?.state) return;
+    const task = await readRecordedTask({ ...recorded, state: recorded.state });
     const claimed = await db
       .update(a2aPushConfigTable)
       .set({ notifiedAt: new Date() })
@@ -190,11 +190,7 @@ export const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
       .returning();
     if (claimed.length === 0) return;
     // Read afresh: a token or endpoint deleted since leaves the row's null.
-    const [current] = await db
-      .select()
-      .from(a2aTaskTable)
-      .where(eq(a2aTaskTable.id, row.id))
-      .limit(1);
+    const current = await taskRowNow(row.id);
     if (!current || !(await taskIsLive(current))) {
       logger.info(
         { taskId: row.id, dropped: claimed.length },
@@ -215,94 +211,6 @@ export const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
     );
   } catch (error) {
     logger.error({ error, taskId: row.id }, "A2A push notification failed");
-  }
-};
-
-/**
- * A run in the Chat has ended, or a Task in it was canceled: push each of the
- * Chat's Tasks that has ended and still owes a push. Never throws.
- */
-export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
-  try {
-    // One row per Task, however many configs it still owes.
-    const tasks: TaskRow[] = await db
-      .selectDistinct(getTableColumns(a2aTaskTable))
-      .from(a2aTaskTable)
-      .innerJoin(
-        a2aPushConfigTable,
-        eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
-      )
-      .where(
-        and(
-          eq(a2aTaskTable.chatId, chatId),
-          isNull(a2aPushConfigTable.notifiedAt),
-        ),
-      );
-    await Promise.all(tasks.map(pushTaskIfEnded));
-  } catch (error) {
-    logger.error({ error, chatId }, "A2A push notification failed");
-  }
-};
-
-/**
- * A turn in the Chat has ended with `status` — on its own, or marked failed by
- * the sweep after its instance died. Records the end on the turn's Task, if it
- * has one, which pushes it, then pushes any other of the Chat's Tasks that
- * still owes one. `messageId` names the turn; without it, the Chat's current
- * turn. Never throws. Only an A2A Chat has Tasks: a caller that knows the
- * Chat is not one skips this altogether.
- */
-export const onA2aTurnEnded = async ({
-  chatId,
-  messageId,
-  status,
-}: {
-  chatId: string;
-  messageId?: string | null;
-  status: RunStatus;
-}): Promise<void> => {
-  try {
-    const turnId = messageId ?? (await currentTurnId(chatId));
-    if (turnId) await recordTaskEnd(chatId, turnId, status);
-  } catch (error) {
-    logger.error({ error, chatId }, "Recording an A2A Task's end failed");
-  }
-  await pushEndedA2aTasks(chatId);
-};
-
-/** How many pending configs one sweep for missed pushes takes up. */
-const MISSED_PUSH_SWEEP_LIMIT = 100;
-
-/**
- * Pushes Tasks whose end no one pushed: the process died between its run's
- * end and the push, or the end was first noticed by a read. A Task with a
- * config not yet notified is swept up once it has an end recorded, or once
- * its Chat is no longer `running` — reading it then records its end, from
- * its own run or because the Chat has moved past it. Run by the scheduler,
- * under its lock; the pushes are not awaited, so a slow client URL can't
- * hold it. Never throws.
- */
-export const pushMissedA2aEnds = async (): Promise<void> => {
-  try {
-    const rows = await db
-      .select()
-      .from(a2aTaskTable)
-      .innerJoin(
-        a2aPushConfigTable,
-        eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
-      )
-      .innerJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
-      .where(
-        and(
-          isNull(a2aPushConfigTable.notifiedAt),
-          or(isNotNull(a2aTaskTable.state), ne(chatTable.status, "running")),
-        ),
-      )
-      .limit(MISSED_PUSH_SWEEP_LIMIT);
-    const tasks = new Map(rows.map(({ a2a_task }) => [a2a_task.id, a2a_task]));
-    for (const task of tasks.values()) void pushTaskIfEnded(task);
-  } catch (error) {
-    logger.error({ error }, "Sweeping for missed A2A pushes failed");
   }
 };
 
@@ -388,7 +296,8 @@ export const checkPushConfig = (
  * re-registering never pushes a config twice; one that would move a config's
  * URL once its Task has ended is refused, so it can't be aimed somewhere new.
  * If the Task has already ended and the config is new, it is pushed now: a run
- * can end before its client registers.
+ * can end before its client registers. Its caller reads `task` through the
+ * lifecycle first, so an end it has reached is recorded, and pushed here.
  */
 export const storePushConfig = async (
   task: TaskRow,
@@ -399,7 +308,7 @@ export const storePushConfig = async (
     token: config.token,
     authentication: config.authentication,
   };
-  const ended = TERMINAL_TASK_STATES.has((await readTask(task)).status!.state);
+  const ended = await taskHasEnded(task);
   const urlLocked = () =>
     new RequestMalformedError(
       "A push notification config's url can't change once its Task has ended",
@@ -458,7 +367,7 @@ export const storePushConfig = async (
     if (!inserted) throw urlLocked();
     return inserted;
   });
-  if (!row.notifiedAt) void pushTaskIfEnded(task);
+  if (!row.notifiedAt) void pushRecordedEnd(task);
   return row;
 };
 

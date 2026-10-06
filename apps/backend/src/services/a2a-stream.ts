@@ -14,12 +14,8 @@ import {
   takeFollowerSlot,
   type A2aCaller,
 } from "./a2a-task.ts";
-import {
-  readTask,
-  readTaskAfresh,
-  TERMINAL_TASK_STATES,
-  type TaskRow,
-} from "./a2a-task-state.ts";
+import { TERMINAL_TASK_STATES, type TaskRow } from "./a2a-task-state.ts";
+import { readTask, readTaskAfresh } from "./a2a-task-lifecycle.ts";
 import {
   a2aFallbackPollMs,
   a2aTaskEvents,

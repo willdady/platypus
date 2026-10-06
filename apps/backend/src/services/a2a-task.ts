@@ -51,18 +51,20 @@ import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
 import {
   currentTurnId,
   findTokenTask,
-  readTask,
-  readTaskAfresh,
   readTaskRows,
-  readTokenTask,
   replyTexts,
-  statusOf,
-  taskStatus,
   toTask,
   endStateOf,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
+import {
+  readTask,
+  readTaskAfresh,
+  readTokenTask,
+  statusOf,
+  taskStatus,
+} from "./a2a-task-lifecycle.ts";
 import {
   a2aFallbackPollMs,
   a2aTaskEvents,
@@ -351,7 +353,11 @@ const startTurn = async (
     params.configuration?.taskPushNotificationConfig &&
     checkPushConfig(params.configuration.taskPushNotificationConfig);
   const withPush = async (task: TaskRow) => {
-    if (push) await storePushConfig(task, push);
+    if (!push) return task;
+    // Reading it records its end, should its run have ended as it was made,
+    // so the config's push goes out at once.
+    await taskStatus(task);
+    await storePushConfig(task, push);
     return task;
   };
 

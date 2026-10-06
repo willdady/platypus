@@ -4,11 +4,8 @@ import { TaskState, type Task } from "@a2a-js/sdk";
 import { logger } from "../logger.ts";
 import { notify, onNotification } from "../runs/notify-listener.ts";
 import { firstOutputLatch } from "../runs/first-output.ts";
-import {
-  readTaskAfresh,
-  TERMINAL_TASK_STATES,
-  type TaskRow,
-} from "./a2a-task-state.ts";
+import { TERMINAL_TASK_STATES, type TaskRow } from "./a2a-task-state.ts";
+import { readTaskAfresh } from "./a2a-task-lifecycle.ts";
 
 /**
  * Every stream on an A2A Task gets the same events, in the same order (A2A

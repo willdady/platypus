@@ -18,6 +18,7 @@ import { authenticateA2aCall } from "../services/a2a-token.ts";
 import { cancelA2aTask } from "../services/a2a-cancel.ts";
 import {
   A2aChatBusyError,
+  findA2aTask,
   getA2aTask,
   listA2aTasks,
   sendA2aMessage,
@@ -30,6 +31,7 @@ import {
   getA2aPushConfig,
   listA2aPushConfigs,
 } from "../services/a2a-push.ts";
+import { taskStatus } from "../services/a2a-task-lifecycle.ts";
 import {
   streamA2aMessage,
   subscribeToA2aTask,
@@ -210,9 +212,12 @@ const requestHandler = (
   ),
   resubscribe: guardedStream((params) => subscribeToA2aTask(caller, params.id)),
   cancelTask: guarded((params) => cancelA2aTask(caller, params.id)),
-  createTaskPushNotificationConfig: guarded((params) =>
-    createA2aPushConfig(caller, params),
-  ),
+  createTaskPushNotificationConfig: guarded(async (params) => {
+    // Reading the Task records its end, should it have ended unrecorded, so
+    // the config's push goes out at once.
+    await taskStatus(await findA2aTask(caller, params.taskId));
+    return createA2aPushConfig(caller, params);
+  }),
   getTaskPushNotificationConfig: guarded((params) =>
     getA2aPushConfig(caller, params),
   ),

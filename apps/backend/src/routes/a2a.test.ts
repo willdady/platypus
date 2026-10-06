@@ -188,10 +188,8 @@ import {
   setA2aFallbackPollMs,
   type SequencedA2aTaskEvent,
 } from "../services/a2a-events.ts";
-import {
-  MAX_CONCURRENT_PUSHES,
-  pushMissedA2aEnds,
-} from "../services/a2a-push.ts";
+import { MAX_CONCURRENT_PUSHES } from "../services/a2a-push.ts";
+import { sweepMissedEnds } from "../services/a2a-task-lifecycle.ts";
 import { deleteMessage } from "../services/chat-messages.ts";
 import { toJsonRpcError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
 import {
@@ -3377,12 +3375,12 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     it("is pushed by the sweep once the Chat is no longer running", async () => {
       seedMovedOn({ a2a_push_config: [pendingConfig()] });
 
-      await pushMissedA2aEnds();
+      await sweepMissedEnds();
 
       await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
       expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_COMPLETED");
       expect(rows("a2a_task")[0]).toMatchObject({ state: "completed" });
-      await pushMissedA2aEnds();
+      await sweepMissedEnds();
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(push).toHaveBeenCalledTimes(1);
     });
@@ -3395,7 +3393,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
       });
       rows("chat")[0].status = "running";
 
-      await pushMissedA2aEnds();
+      await sweepMissedEnds();
 
       await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
       expect(pushed()[0].body.task.status.state).toBe("TASK_STATE_FAILED");
@@ -3408,7 +3406,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
         activeLeafId: "msg-a",
       });
 
-      await pushMissedA2aEnds();
+      await sweepMissedEnds();
 
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(push).not.toHaveBeenCalled();
