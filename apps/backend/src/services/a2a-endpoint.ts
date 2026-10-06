@@ -36,7 +36,7 @@ import {
   bearerTokenStatus,
   issuedTokenFields,
   notifyTokenOwner,
-  tokenOwner,
+  TOKEN_REPLACED_MESSAGE,
 } from "./bearer-token.ts";
 import { getGateAccess, setGateAccess } from "./org-gate.ts";
 import {
@@ -219,15 +219,14 @@ type A2aEndpointNotLive = Extract<
   "unknown_endpoint" | "disabled" | "gate" | "owner_left"
 >;
 
-export type A2aEndpointLookup =
+export type A2aEndpointLookup = (
   | { live: true; endpoint: LiveA2aEndpoint }
-  | {
-      live: false;
-      reason: A2aEndpointNotLive;
-      /** Known unless the endpoint is unknown; for the call log. */
-      organizationId?: string;
-      workspaceId?: string;
-    };
+  | { live: false; reason: A2aEndpointNotLive }
+) & {
+  /** Known unless the endpoint is unknown; for the call log. */
+  organizationId?: string;
+  workspaceId?: string;
+};
 
 /**
  * The endpoint a public call names, if it is live: it exists and is enabled,
@@ -281,6 +280,8 @@ export const lookupA2aEndpoint = async (
       organizationId: row.organizationId,
       ownerId: row.ownerId,
     },
+    organizationId: row.organizationId,
+    workspaceId: row.endpoint.workspaceId,
   };
 };
 
@@ -333,13 +334,6 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   defaultOutputModes: ["text/plain"],
   skills: [endpointSkill(endpoint)],
 });
-
-/**
- * The authenticated extended card: the public card. It has nothing to add, as
- * the public card already carries the endpoint's skill.
- */
-export const extendedAgentCard = (endpoint: A2aEndpointRow) =>
-  publicAgentCard(endpoint);
 
 // ------------------------------------------------------------ Org Admin oversight
 
@@ -442,7 +436,8 @@ export const revokeOrgA2aEndpoint = async (
 
   // A failure is logged, not thrown: the revoke has already happened.
   await notifyTokenOwner(
-    tokenOwner(orgId, endpoint),
+    orgId,
+    endpoint,
     "A2A endpoint revoked",
     `An Organization Admin revoked the A2A endpoint "${endpoint.name}", so its URL and every one of its tokens are refused. Its Chats are kept. If clients should reach this agent again, create a new endpoint and give them its URL and new tokens.`,
   );
@@ -452,9 +447,6 @@ export const revokeOrgA2aEndpoint = async (
   );
   return true;
 };
-
-const TOKEN_REPLACED_MESSAGE =
-  "The token was replaced since you loaded the list. Refresh it and revoke the new one if it should stop too.";
 
 /**
  * Revokes one token on an Org Admin's behalf by deleting it, canceling its
@@ -504,7 +496,8 @@ export const revokeOrgA2aToken = async (
 
   // A failure is logged, not thrown: the revoke has already happened.
   await notifyTokenOwner(
-    tokenOwner(orgId, endpoint),
+    orgId,
+    endpoint,
     "A2A token revoked",
     `An Organization Admin revoked the token "${token.name}" on the A2A endpoint "${endpoint.name}", so calls with it are refused. If that client should keep working, issue it a new token on the endpoint's page.`,
   );

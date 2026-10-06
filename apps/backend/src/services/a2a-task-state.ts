@@ -33,7 +33,7 @@ import { replyArtifact } from "./a2a-parts.ts";
 export type TaskRow = typeof a2aTaskTable.$inferSelect;
 
 /** Where a Task's rows are read and written: the database, or a transaction. */
-type Executor = typeof db | ChatClaimTx;
+export type Executor = typeof db | ChatClaimTx;
 
 /** A finished run's Chat status as the end a Task records. */
 const END_OF_RUN: Partial<Record<RunStatus, A2aTaskEndState>> = {
@@ -154,18 +154,12 @@ export const recordTaskEndIn = async (
 
 /**
  * Whether a Chat is an A2A client's, and so may hold A2A Tasks: it names the
- * endpoint that started it, or, from before the endpoint was stored on it,
- * the client's label. `chat` is the Chat as read, or the columns a new one
- * starts with.
+ * endpoint that started it. `chat` is the Chat as read, or the columns a new
+ * one starts with.
  */
 export const isA2aChat = (
-  chat:
-    | {
-        a2aEndpointId?: string | null;
-        a2aClientName?: string | null;
-      }
-    | undefined,
-): boolean => !!(chat?.a2aEndpointId || chat?.a2aClientName);
+  chat: { a2aEndpointId?: string | null } | undefined,
+): boolean => !!chat?.a2aEndpointId;
 
 /**
  * The user message the Chat's current turn answers: its active leaf, or the
@@ -477,3 +471,7 @@ export const TERMINAL_TASK_STATES = new Set([
   TaskState.TASK_STATE_FAILED,
   TaskState.TASK_STATE_CANCELED,
 ]);
+
+/** Whether a Task has ended: completed, failed or canceled. */
+export const isTerminal = (task: Task): boolean =>
+  TERMINAL_TASK_STATES.has(task.status!.state);

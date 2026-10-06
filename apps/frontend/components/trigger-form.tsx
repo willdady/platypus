@@ -70,6 +70,7 @@ import {
 } from "@platypus/schemas";
 import {
   DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
+  gateAdmits,
   INBOUND_TRIGGER_INPUT_DESCRIPTION_MAX_LENGTH,
   INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH,
   INBOUND_TRIGGER_MAX_INPUTS,
@@ -92,7 +93,6 @@ import {
 } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
-import { inboundGateAdmits } from "@/lib/inbound-trigger";
 import { TRIGGER_TYPE_LABELS } from "@/components/trigger-list";
 
 const TIMEZONES = ["UTC", ...Intl.supportedValuesOf("timeZone")];
@@ -760,6 +760,7 @@ const TriggerForm = ({
     .map(([, message]) => message);
 
   const tokenStatus = trigger?.tokenStatus ?? "none";
+  const hasToken = tokenStatus !== "none";
   // Only once everything the answer depends on has loaded: under `selected`
   // that includes the Workspace's own flag, and a Workspace still loading (or
   // failed to load) is unknown, not disallowed.
@@ -767,7 +768,7 @@ const TriggerForm = ({
     organization !== undefined &&
     (organization.inboundTriggerGate !== "selected" ||
       workspace !== undefined) &&
-    !inboundGateAdmits(
+    !gateAdmits(
       organization.inboundTriggerGate,
       workspace?.inboundTriggersAllowed,
     );
@@ -1492,7 +1493,7 @@ const TriggerForm = ({
                             disabled={isSubmitting}
                           >
                             <RefreshCw className="h-4 w-4" />{" "}
-                            {trigger.hasToken ? "Regenerate" : "Issue token"}
+                            {hasToken ? "Regenerate" : "Issue token"}
                           </Button>
                         </div>
                         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-muted-foreground">
@@ -1531,7 +1532,7 @@ const TriggerForm = ({
                         )}
                       </div>
                       <FieldDescription>
-                        {trigger.hasToken
+                        {hasToken
                           ? "The token was shown once, when it was issued. Regenerating stops the current one working straight away."
                           : "This trigger has no token, so every call is refused. An Org Admin may have revoked it. Issue a new one and update the system that calls it."}
                       </FieldDescription>
@@ -1674,13 +1675,13 @@ const TriggerForm = ({
       <ConfirmDialog
         open={isRegenerateDialogOpen}
         onOpenChange={setIsRegenerateDialogOpen}
-        title={trigger?.hasToken ? "Regenerate token" : "Issue token"}
+        title={hasToken ? "Regenerate token" : "Issue token"}
         description={
-          trigger?.hasToken
+          hasToken
             ? "The current token stops working straight away. Update the system that calls this trigger with the new one."
             : "A new token is issued and shown once."
         }
-        confirmLabel={trigger?.hasToken ? "Regenerate" : "Issue token"}
+        confirmLabel={hasToken ? "Regenerate" : "Issue token"}
         onConfirm={() => void handleRegenerateToken()}
         loading={isRegenerating}
       />

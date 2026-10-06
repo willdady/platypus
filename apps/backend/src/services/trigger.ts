@@ -221,15 +221,14 @@ const INBOUND_ONLY_IN_UI =
 
 /**
  * A Trigger row as either surface returns it: without the token's hash or the
- * notice bookkeeping, and with whether a token is issued and how it stands. The one
+ * notice bookkeeping, and with how its token stands. The one
  * projection both surfaces use, so a hash cannot reach a response or a Tool
  * result by a caller forgetting to strip it.
  */
 export const toPublicTrigger = (row: TriggerRow) => {
-  const { tokenHash, tokenNotice: _tokenNotice, ...rest } = row;
+  const { tokenHash: _tokenHash, tokenNotice: _tokenNotice, ...rest } = row;
   return {
     ...rest,
-    hasToken: tokenHash != null,
     tokenStatus: bearerTokenStatus(row),
   };
 };

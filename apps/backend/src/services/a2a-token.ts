@@ -22,9 +22,7 @@ import {
   hashBearerToken,
   noticeDate,
   sendTokenNotice,
-  tokenNoticeSent,
   touchToken,
-  tokenOwner,
 } from "./bearer-token.ts";
 
 /**
@@ -59,8 +57,8 @@ type A2aAuthResult =
 export const authenticateA2aCall = async (
   endpointId: string,
   authorization: string | undefined,
-  now: Date = new Date(),
 ): Promise<A2aAuthResult> => {
+  const now = new Date();
   const lookup = await lookupA2aEndpoint(endpointId);
   if (!lookup.live) return { ...lookup, ok: false, status: 404 };
   const { endpoint } = lookup;
@@ -157,12 +155,12 @@ const noticeExpiredUse = async (
   endpoint: LiveA2aEndpoint,
   token: A2aTokenRow,
 ): Promise<void> => {
-  if (tokenNoticeSent(token.tokenNotice, "expired")) return;
   await sendTokenNotice(
     a2aTokenTable,
     token,
     "expired",
-    tokenOwner(endpoint.organizationId, endpoint),
+    endpoint.organizationId,
+    endpoint,
     "A2A token has expired",
     `A call to the A2A endpoint "${endpoint.name}" used the token "${token.name}" after it expired on ${noticeDate(token.tokenExpiresAt)}, and was refused. Regenerate the token on the endpoint's page and update the client that uses it.`,
   );
@@ -199,12 +197,13 @@ export const sendA2aTokenReminders = async (
 
   for (const { a2a_token: token, a2a_endpoint: endpoint, workspace } of rows) {
     const due = dueReminder(token, now);
-    if (!due || tokenNoticeSent(token.tokenNotice, due)) continue;
+    if (!due) continue;
     await sendTokenNotice(
       a2aTokenTable,
       token,
       due,
-      tokenOwner(workspace.organizationId, endpoint),
+      workspace.organizationId,
+      endpoint,
       "A2A token expires soon",
       `The token "${token.name}" for the A2A endpoint "${endpoint.name}" expires on ${noticeDate(token.tokenExpiresAt)}. Regenerate it on the endpoint's page and update the client that uses it; calls with the current token are refused once it expires.`,
     );

@@ -38,11 +38,10 @@ import {
   hashBearerToken,
   noticeDate,
   notifyTokenOwner,
+  TOKEN_REPLACED_MESSAGE,
   revokedTokenFields,
   sendTokenNotice,
-  tokenNoticeSent,
   touchToken,
-  tokenOwner,
 } from "./bearer-token.ts";
 
 /**
@@ -577,7 +576,7 @@ export const getInboundRunStatus = async (
 const noticeExpiredTokenUse = async (target: InboundTarget): Promise<void> => {
   const { trigger } = target;
   const { tokenHash } = trigger;
-  if (!tokenHash || tokenNoticeSent(trigger.tokenNotice, "expired")) return;
+  if (!tokenHash) return;
   const expired = trigger.tokenExpiresAt
     ? ` on ${noticeDate(trigger.tokenExpiresAt)}`
     : "";
@@ -585,7 +584,8 @@ const noticeExpiredTokenUse = async (target: InboundTarget): Promise<void> => {
     triggerTable,
     { ...trigger, tokenHash },
     "expired",
-    tokenOwner(target.organizationId, trigger),
+    target.organizationId,
+    trigger,
     "Inbound trigger token has expired",
     `A call to the inbound trigger "${trigger.name}" used its token after it expired${expired}, and was refused. Regenerate the token on the trigger's page and update the system that calls it.`,
   );
@@ -621,12 +621,13 @@ export const sendInboundTokenReminders = async (
       { tokenCreatedAt: trigger.tokenCreatedAt, tokenExpiresAt },
       now,
     );
-    if (!due || tokenNoticeSent(trigger.tokenNotice, due)) continue;
+    if (!due) continue;
     await sendTokenNotice(
       triggerTable,
       { ...trigger, tokenHash },
       due,
-      tokenOwner(row.workspace.organizationId, trigger),
+      row.workspace.organizationId,
+      trigger,
       "Inbound trigger token expires soon",
       `The token for the inbound trigger "${trigger.name}" expires on ${noticeDate(tokenExpiresAt)}. Regenerate it on the trigger's page and update the system that calls it; calls with the current token are refused once it expires.`,
     );
@@ -689,9 +690,6 @@ export const listOrgInboundTriggers = async (
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 };
 
-const TOKEN_REPLACED_MESSAGE =
-  "The token was replaced since you loaded the list. Refresh it and revoke the new one if it should stop too.";
-
 /**
  * Revokes an Inbound Trigger's token on an Org Admin's behalf — the one thing
  * an Admin does inside another person's Workspace. The token stops working at
@@ -747,7 +745,8 @@ export const revokeInboundTriggerToken = async (
   }
 
   await notifyTokenOwner(
-    tokenOwner(orgId, row.trigger),
+    orgId,
+    row.trigger,
     "Inbound trigger token revoked",
     `An Organization Admin revoked the token for the inbound trigger "${row.trigger.name}", so calls with it are refused. If the integration should keep working, regenerate the token on the trigger's page and update the system that calls it.`,
   );

@@ -87,6 +87,7 @@ describe("Trigger Routes", () => {
           type: "inbound",
           config: { inputs: [], tokenExpiryDays: 90 },
           tokenHash: "secret-hash",
+          tokenExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
           tokenNotice: "expiring_30",
         },
       ]);
@@ -97,8 +98,8 @@ describe("Trigger Routes", () => {
       expect(res.status).toBe(200);
       expect(text).not.toContain("secret-hash");
       expect(text).not.toContain("tokenNotice");
-      const body = JSON.parse(text) as { results: { hasToken: boolean }[] };
-      expect(body.results[0].hasToken).toBe(true);
+      const body = JSON.parse(text) as { results: { tokenStatus: string }[] };
+      expect(body.results[0].tokenStatus).toBe("active");
     });
 
     it("requires authentication", async () => {

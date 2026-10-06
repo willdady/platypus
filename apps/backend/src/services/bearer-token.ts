@@ -153,31 +153,24 @@ export const touchToken = async (
   }
 };
 
+/**
+ * Why an Org Admin's revoke is refused when the token was regenerated since
+ * they loaded it.
+ */
+export const TOKEN_REPLACED_MESSAGE =
+  "The token was replaced since you loaded the list. Refresh it and revoke the new one if it should stop too.";
+
 // ----------------------------------------------------------------- notices
 
 /** A date as a notice body shows it. */
 export const noticeDate = (date: Date): string =>
   date.toISOString().slice(0, 10);
 
-/** Where a notice about a token goes: its Workspace, from its Agent. */
-export type TokenOwner = {
-  orgId: string;
-  workspaceId: string;
-  agentId: string;
-};
-
 /**
- * Where a notice about the token on `holder` — an A2A endpoint or an Inbound
- * Trigger — goes.
+ * The holder of a token — an A2A endpoint or an Inbound Trigger — whose
+ * Workspace a notice about it goes to, from its Agent.
  */
-export const tokenOwner = (
-  orgId: string,
-  holder: { workspaceId: string; agentId: string },
-): TokenOwner => ({
-  orgId,
-  workspaceId: holder.workspaceId,
-  agentId: holder.agentId,
-});
+type TokenHolder = { workspaceId: string; agentId: string };
 
 /**
  * Posts a Notification to the token's Workspace, from its Agent. `false` —
@@ -185,10 +178,12 @@ export const tokenOwner = (
  * handed back and sent again.
  */
 export const notifyTokenOwner = async (
-  owner: TokenOwner,
+  orgId: string,
+  { workspaceId, agentId }: TokenHolder,
   title: string,
   body: string,
 ): Promise<boolean> => {
+  const owner = { orgId, workspaceId, agentId };
   try {
     await createNotification(db, owner, { title, body });
     return true;
@@ -210,10 +205,7 @@ const TOKEN_NOTICES = ["expiring_30", "expiring_7", "expired"] as const;
 
 type TokenNotice = (typeof TOKEN_NOTICES)[number];
 
-export const tokenNoticeSent = (
-  stored: string | null,
-  notice: TokenNotice,
-): boolean =>
+const tokenNoticeSent = (stored: string | null, notice: TokenNotice): boolean =>
   stored != null &&
   TOKEN_NOTICES.indexOf(stored as TokenNotice) >= TOKEN_NOTICES.indexOf(notice);
 
@@ -263,8 +255,9 @@ const moveNotice = async (
 };
 
 /**
- * Sends `notice` about a token, once: claims it on the token's row, posts it,
- * and hands the claim back if posting failed, so the next sweep — or the next
+ * Sends `notice` about a token, once: skips one already sent or passed,
+ * claims it on the token's row, posts it, and hands the claim back if posting
+ * failed, so the next sweep — or the next
  * call with an expired token — sends it after all. Deleting the Notification
  * never brings it back. Never throws.
  */
@@ -272,14 +265,16 @@ export const sendTokenNotice = async (
   table: TokenTable,
   token: { id: string; tokenHash: string; tokenNotice: string | null },
   notice: TokenNotice,
-  owner: TokenOwner,
+  orgId: string,
+  holder: TokenHolder,
   title: string,
   body: string,
 ): Promise<void> => {
   const previous = token.tokenNotice;
+  if (tokenNoticeSent(previous, notice)) return;
   try {
     if (!(await moveNotice(table, token, previous, notice))) return;
-    if (!(await notifyTokenOwner(owner, title, body))) {
+    if (!(await notifyTokenOwner(orgId, holder, title, body))) {
       await moveNotice(table, token, notice, previous);
     }
   } catch (error) {

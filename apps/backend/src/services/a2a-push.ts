@@ -27,13 +27,12 @@ import {
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import type { RunStatus } from "../runs/types.ts";
-import type { A2aCaller } from "./a2a-task.ts";
+import { findA2aTask, type A2aCaller } from "./a2a-task.ts";
 import {
   currentTurnId,
-  findTokenTask,
   readTask,
   recordTaskEnd,
-  TERMINAL_TASK_STATES,
+  isTerminal,
   type TaskRow,
 } from "./a2a-task-state.ts";
 import { postWithRetries } from "./webhook-delivery.ts";
@@ -182,7 +181,7 @@ const reservePushes = async (
 export const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
   try {
     const task = await readTask(row);
-    if (!TERMINAL_TASK_STATES.has(task.status!.state)) return;
+    if (!isTerminal(task)) return;
     const claimed = await db
       .update(a2aPushConfigTable)
       .set({ notifiedAt: new Date() })
@@ -399,7 +398,7 @@ export const storePushConfig = async (
     token: config.token,
     authentication: config.authentication,
   };
-  const ended = TERMINAL_TASK_STATES.has((await readTask(task)).status!.state);
+  const ended = isTerminal(await readTask(task));
   const urlLocked = () =>
     new RequestMalformedError(
       "A push notification config's url can't change once its Task has ended",
@@ -477,13 +476,6 @@ const toWire = (row: PushConfigRow): TaskPushNotificationConfig => ({
     : undefined,
 });
 
-/** One of the calling token's Tasks; any other is not found. */
-const callerTask = (caller: A2aCaller, taskId: string) =>
-  findTokenTask(
-    { endpointId: caller.endpoint.id, tokenId: caller.token.id },
-    taskId,
-  );
-
 /** Refuses a missing config id as invalid params, not an unknown config. */
 const requireConfigId = (id: string) => {
   if (!id) {
@@ -498,7 +490,7 @@ export const createA2aPushConfig = async (
   caller: A2aCaller,
   params: TaskPushNotificationConfig,
 ): Promise<TaskPushNotificationConfig> => {
-  const task = await callerTask(caller, params.taskId);
+  const task = await findA2aTask(caller, params.taskId);
   return toWire(await storePushConfig(task, checkPushConfig(params)));
 };
 
@@ -507,7 +499,7 @@ export const getA2aPushConfig = async (
   caller: A2aCaller,
   params: { taskId: string; id: string },
 ): Promise<TaskPushNotificationConfig> => {
-  const task = await callerTask(caller, params.taskId);
+  const task = await findA2aTask(caller, params.taskId);
   requireConfigId(params.id);
   const [row] = await db
     .select()
@@ -525,7 +517,7 @@ export const listA2aPushConfigs = async (
   caller: A2aCaller,
   params: { taskId: string },
 ) => {
-  const task = await callerTask(caller, params.taskId);
+  const task = await findA2aTask(caller, params.taskId);
   const rows = await db
     .select()
     .from(a2aPushConfigTable)
@@ -539,7 +531,7 @@ export const deleteA2aPushConfig = async (
   caller: A2aCaller,
   params: { taskId: string; id: string },
 ): Promise<void> => {
-  const task = await callerTask(caller, params.taskId);
+  const task = await findA2aTask(caller, params.taskId);
   requireConfigId(params.id);
   await db.delete(a2aPushConfigTable).where(configKey(task.id, params.id));
 };
