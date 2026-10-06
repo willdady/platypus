@@ -3,11 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { TriangleAlert } from "lucide-react";
-import type {
-  A2aAccess,
-  InboundTriggerAccess,
-  OrgGate,
-} from "@platypus/schemas";
+import type { OrgGate, OrgGateAccess as Access } from "@platypus/schemas";
 import {
   Table,
   TableBody,
@@ -41,20 +37,10 @@ const sameSet = (a: Set<string>, b: Set<string>) =>
   a.size === b.size && [...a].every((id) => b.has(id));
 
 /** One Workspace as a gate's access screen lists it. */
-type GateWorkspace = {
-  id: string;
-  name: string;
-  ownerName: string;
-  allowed: boolean;
-};
-
-type Access<W extends GateWorkspace> = {
-  gate: OrgGate;
-  workspaces: W[];
-};
+type GateWorkspace = Access["workspaces"][number];
 
 /** What differs between the Organization's gates: where, and the words. */
-type GateCopy<W extends GateWorkspace> = {
+type GateCopy = {
   /** The API path under the Organization the access is read and saved at. */
   entity: string;
   /** Lower case, for "Loading …" and the load error. */
@@ -66,9 +52,8 @@ type GateCopy<W extends GateWorkspace> = {
   allowedDescription: string;
   /** The column header for how many gated resources a Workspace holds. */
   countHeader: string;
-  countOf: (workspace: W) => number;
   /** The warning for Workspaces with resources the save would cut off. */
-  cutOffMessage: (cutOff: W[]) => string;
+  cutOffMessage: (cutOff: GateWorkspace[]) => string;
 };
 
 /**
@@ -77,16 +62,16 @@ type GateCopy<W extends GateWorkspace> = {
  * switching to Selected never refuses calls for the Workspaces that should
  * keep them while the Admin ticks them one by one.
  */
-export const OrgGateAccess = <W extends GateWorkspace>({
+export const OrgGateAccess = ({
   orgId,
   copy,
 }: {
   orgId: string;
-  copy: GateCopy<W>;
+  copy: GateCopy;
 }) => {
   const backendUrl = useBackendUrl();
   const scope = { orgId };
-  const { data, error, isLoading, mutate } = useScopedSWR<Access<W>>(
+  const { data, error, isLoading, mutate } = useScopedSWR<Access>(
     copy.entity,
     scope,
   );
@@ -118,9 +103,7 @@ export const OrgGateAccess = <W extends GateWorkspace>({
     (gate === "selected" && !sameSet(allowed, savedAllowed));
   const cutOff =
     gate === "selected"
-      ? data.workspaces.filter(
-          (ws) => copy.countOf(ws) > 0 && !allowed.has(ws.id),
-        )
+      ? data.workspaces.filter((ws) => ws.count > 0 && !allowed.has(ws.id))
       : [];
 
   const setGate = (next: OrgGate) => setDraft({ gate: next, allowed });
@@ -134,7 +117,7 @@ export const OrgGateAccess = <W extends GateWorkspace>({
   const handleSave = async () => {
     if (!backendUrl) return;
     setIsSaving(true);
-    const outcome = await writeAt<Access<W>>(
+    const outcome = await writeAt<Access>(
       scopedUrl(backendUrl, copy.entity, scope),
       {
         method: "PUT",
@@ -196,7 +179,7 @@ export const OrgGateAccess = <W extends GateWorkspace>({
                       <TableRow key={ws.id}>
                         <TableCell className="font-medium">{ws.name}</TableCell>
                         <TableCell>{ws.ownerName}</TableCell>
-                        <TableCell>{copy.countOf(ws)}</TableCell>
+                        <TableCell>{ws.count}</TableCell>
                         <TableCell className="text-right">
                           <Switch
                             aria-label={`Allow ${ws.name}`}
@@ -237,9 +220,7 @@ export const OrgGateAccess = <W extends GateWorkspace>({
   );
 };
 
-const INBOUND_TRIGGER_GATE: GateCopy<
-  InboundTriggerAccess["workspaces"][number]
-> = {
+const INBOUND_TRIGGER_GATE: GateCopy = {
   entity: "inbound-triggers/access",
   subject: "inbound trigger access",
   savedMessage: "Inbound Trigger access saved",
@@ -250,7 +231,6 @@ const INBOUND_TRIGGER_GATE: GateCopy<
   allowedDescription:
     "Only the workspaces switched on here take calls. Saved together with the setting above. A workspace's own settings show the same switch.",
   countHeader: "Inbound Triggers",
-  countOf: (ws) => ws.inboundTriggerCount,
   cutOffMessage: (cutOff) =>
     cutOff.length === 1
       ? `${cutOff[0].name} has Inbound Triggers but isn't allowed, so its calls will be refused.`
@@ -262,7 +242,7 @@ export const OrgInboundTriggerAccess = ({ orgId }: { orgId: string }) => (
   <OrgGateAccess orgId={orgId} copy={INBOUND_TRIGGER_GATE} />
 );
 
-const A2A_GATE: GateCopy<A2aAccess["workspaces"][number]> = {
+const A2A_GATE: GateCopy = {
   entity: "a2a/access",
   subject: "A2A access",
   savedMessage: "A2A access saved",
@@ -273,7 +253,6 @@ const A2A_GATE: GateCopy<A2aAccess["workspaces"][number]> = {
   allowedDescription:
     "Only the workspaces switched on here answer A2A calls. Saved together with the setting above.",
   countHeader: "A2A endpoints",
-  countOf: (ws) => ws.a2aEndpointCount,
   cutOffMessage: (cutOff) =>
     cutOff.length === 1
       ? `${cutOff[0].name} has A2A endpoints but isn't allowed, so they will stop answering.`

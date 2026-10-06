@@ -205,6 +205,31 @@ const matchesSql = (
 };
 
 /**
+ * Evaluates the raw-SQL values the code under test writes in an `update`'s
+ * `set`, against the row as it stood. Anything else throws, as
+ * {@link matchesSql} does.
+ */
+const sqlValue = (
+  marker: Marker & { op: "sql" },
+  resolve: Resolve,
+): unknown => {
+  const shape = marker.strings.join("?").replace(/\s+/g, "");
+  if (shape === "?::timestamp+(?-?)") {
+    // A timestamp plus the interval between two of the row's own: a
+    // regenerated token's new expiry, keeping the lifetime it had.
+    const [start, later, earlier] = marker.values;
+    const end = resolve(refOf(later)) as Date;
+    const begin = resolve(refOf(earlier)) as Date;
+    return new Date(
+      Date.parse(start as string) + end.getTime() - begin.getTime(),
+    );
+  }
+  throw new Error(
+    `fake db cannot compute this SQL value: \`${marker.strings.join("?")}\``,
+  );
+};
+
+/**
  * Marks a `select` builder so a condition can run it as a subquery. It stays
  * off the builder's enumerable surface, which is what the code under test sees.
  */
@@ -722,18 +747,47 @@ export const createFakeDb = (
     const update = (table: unknown) => {
       let patch: Row = {};
       let updated: Row[] = [];
+      // `update(a).set(…).from(b)`: a row is updated when some row of `b`
+      // satisfies the condition beside it.
+      let joined: unknown;
+
+      const matches = (row: Row, condition: Condition) => {
+        if (joined === undefined) {
+          return satisfies(flatResolver(row), condition);
+        }
+        return rowsFor(joined).some((other) =>
+          satisfies(
+            joinedResolver({ [nameOf(table)]: row, [nameOf(joined)]: other }),
+            condition,
+          ),
+        );
+      };
 
       const apply = (condition: Condition) => {
         queries.push({ kind: "update", table: nameOf(table) });
-        updated = rowsFor(table).filter((row) =>
-          satisfies(flatResolver(row), condition),
-        );
-        for (const row of updated) Object.assign(row, patch);
+        updated = rowsFor(table).filter((row) => matches(row, condition));
+        for (const row of updated) {
+          // Every value is read off the row as it stood, as Postgres does.
+          const resolve = flatResolver(row);
+          const values = Object.fromEntries(
+            Object.entries(patch).map(([key, value]) => [
+              key,
+              isMarker(value) && value.op === "sql"
+                ? sqlValue(value, resolve)
+                : value,
+            ]),
+          );
+          Object.assign(row, values);
+        }
       };
 
       const builder = {
         set(values: Row) {
           patch = values;
+          return builder;
+        },
+        from(other: unknown) {
+          joined = other;
           return builder;
         },
         where(condition: Condition) {

@@ -67,14 +67,14 @@ describe("Org A2A gate routes", () => {
           name: "Billing",
           ownerName: "Dana Owner",
           allowed: true,
-          a2aEndpointCount: 0,
+          count: 0,
         },
         {
           id: "ws-1",
           name: "Support",
           ownerName: "Dana Owner",
           allowed: false,
-          a2aEndpointCount: 2,
+          count: 2,
         },
       ],
     });

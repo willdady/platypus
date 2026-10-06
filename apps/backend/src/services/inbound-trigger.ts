@@ -2,7 +2,7 @@ import { and, count, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   gateAdmits,
-  type InboundTriggerAccess,
+  type OrgGateAccess,
   type OrgGateAccessUpdate,
   type InboundTriggerConfig,
   type OrgGate,
@@ -21,7 +21,7 @@ import {
 import { ConflictError } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
-import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
+import { getGateAccess, setGateAccess } from "./org-gate.ts";
 import {
   readPositiveInt,
   retainTriggerRuns,
@@ -42,7 +42,7 @@ import {
   sendTokenNotice,
   tokenNoticeSent,
   touchToken,
-  type TokenOwner,
+  tokenOwner,
 } from "./bearer-token.ts";
 
 /**
@@ -569,17 +569,6 @@ export const getInboundRunStatus = async (
 
 // ----------------------------------------------------------------- notices
 
-/** Where a notice about the Trigger's token goes. */
-const tokenOwner = (
-  target: Pick<InboundTarget, "organizationId" | "workspaceId"> & {
-    trigger: Pick<TriggerRow, "agentId">;
-  },
-): TokenOwner => ({
-  orgId: target.organizationId,
-  workspaceId: target.workspaceId,
-  agentId: target.trigger.agentId,
-});
-
 /**
  * The first call with an expired token tells the Owner, once per token: the
  * caller only sees the uniform `404`, and many callers do not retry, so
@@ -596,7 +585,7 @@ const noticeExpiredTokenUse = async (target: InboundTarget): Promise<void> => {
     triggerTable,
     { ...trigger, tokenHash },
     "expired",
-    tokenOwner(target),
+    tokenOwner(target.organizationId, trigger),
     "Inbound trigger token has expired",
     `A call to the inbound trigger "${trigger.name}" used its token after it expired${expired}, and was refused. Regenerate the token on the trigger's page and update the system that calls it.`,
   );
@@ -637,11 +626,7 @@ export const sendInboundTokenReminders = async (
       triggerTable,
       { ...trigger, tokenHash },
       due,
-      tokenOwner({
-        organizationId: row.workspace.organizationId,
-        workspaceId: row.workspace.id,
-        trigger,
-      }),
+      tokenOwner(row.workspace.organizationId, trigger),
       "Inbound trigger token expires soon",
       `The token for the inbound trigger "${trigger.name}" expires on ${noticeDate(tokenExpiresAt)}. Regenerate it on the trigger's page and update the system that calls it; calls with the current token are refused once it expires.`,
     );
@@ -762,11 +747,7 @@ export const revokeInboundTriggerToken = async (
   }
 
   await notifyTokenOwner(
-    tokenOwner({
-      organizationId: orgId,
-      workspaceId: row.workspace.id,
-      trigger: row.trigger,
-    }),
+    tokenOwner(orgId, row.trigger),
     "Inbound trigger token revoked",
     `An Organization Admin revoked the token for the inbound trigger "${row.trigger.name}", so calls with it are refused. If the integration should keep working, regenerate the token on the trigger's page and update the system that calls it.`,
   );
@@ -798,33 +779,19 @@ const INBOUND_GATE = {
   changedMessage: "Inbound trigger access changed by an Org Admin",
 } as const;
 
-const toInboundAccess = ({
-  gate,
-  workspaces,
-}: GateAccess): InboundTriggerAccess => ({
-  gate,
-  workspaces: workspaces.map(({ count, ...workspace }) => ({
-    ...workspace,
-    inboundTriggerCount: count,
-  })),
-});
-
 /**
  * Who may take Inbound Trigger calls, for the Org Admin's Inbound Triggers
  * screen: the Organization gate, and every Workspace with its own switch and
  * how many Inbound Triggers it holds.
  */
-export const getInboundTriggerAccess = async (
+export const getInboundTriggerAccess = (
   orgId: string,
-): Promise<InboundTriggerAccess> =>
-  toInboundAccess(await getGateAccess(INBOUND_GATE, orgId));
+): Promise<OrgGateAccess> => getGateAccess(INBOUND_GATE, orgId);
 
 /** Saves the Inbound Trigger gate; see {@link setGateAccess}. */
-export const setInboundTriggerAccess = async (
+export const setInboundTriggerAccess = (
   orgId: string,
   update: OrgGateAccessUpdate,
   actorUserId: string,
-): Promise<InboundTriggerAccess> =>
-  toInboundAccess(
-    await setGateAccess(INBOUND_GATE, orgId, update, actorUserId),
-  );
+): Promise<OrgGateAccess> =>
+  setGateAccess(INBOUND_GATE, orgId, update, actorUserId);

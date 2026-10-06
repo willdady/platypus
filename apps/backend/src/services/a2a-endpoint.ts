@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import {
   a2aInterfaceUrl as interfaceUrl,
   gateAdmits,
-  type A2aAccess,
+  type OrgGateAccess,
   type A2aEndpointCreate,
   type A2aEndpointListItem,
   type A2aEndpointUpdate,
@@ -36,8 +36,9 @@ import {
   bearerTokenStatus,
   issuedTokenFields,
   notifyTokenOwner,
+  tokenOwner,
 } from "./bearer-token.ts";
-import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
+import { getGateAccess, setGateAccess } from "./org-gate.ts";
 import {
   ownerMayAct,
   ownerMembershipJoin,
@@ -213,7 +214,7 @@ export type LiveA2aEndpoint = A2aEndpointRow & {
 };
 
 /** Why an endpoint a public call names isn't live. */
-export type A2aEndpointNotLive = Extract<
+type A2aEndpointNotLive = Extract<
   A2aRejectReason,
   "unknown_endpoint" | "disabled" | "gate" | "owner_left"
 >;
@@ -420,23 +421,6 @@ const findOrgEndpoint = async (orgId: string, endpointId: string) => {
 };
 
 /**
- * Tells the Workspace Owner an Org Admin revoked something of theirs. A
- * failure is logged, not thrown: the revoke has already happened.
- */
-const notifyOwnerOfRevoke = async (
-  orgId: string,
-  endpoint: A2aEndpointRow,
-  title: string,
-  body: string,
-): Promise<void> => {
-  await notifyTokenOwner(
-    { orgId, workspaceId: endpoint.workspaceId, agentId: endpoint.agentId },
-    title,
-    body,
-  );
-};
-
-/**
  * Revokes an endpoint on an Org Admin's behalf by deleting it: its URL and
  * every token stop working at once, its running Tasks are canceled, and its
  * Chats stay. The Owner is told.
@@ -456,9 +440,9 @@ export const revokeOrgA2aEndpoint = async (
   if (deleted.length === 0) return false;
   await stopRevokedA2aWork([endpointId]);
 
-  await notifyOwnerOfRevoke(
-    orgId,
-    endpoint,
+  // A failure is logged, not thrown: the revoke has already happened.
+  await notifyTokenOwner(
+    tokenOwner(orgId, endpoint),
     "A2A endpoint revoked",
     `An Organization Admin revoked the A2A endpoint "${endpoint.name}", so its URL and every one of its tokens are refused. Its Chats are kept. If clients should reach this agent again, create a new endpoint and give them its URL and new tokens.`,
   );
@@ -518,9 +502,9 @@ export const revokeOrgA2aToken = async (
   if (deleted.length === 0) throw new ConflictError(TOKEN_REPLACED_MESSAGE);
   await stopRevokedA2aWork([endpointId]);
 
-  await notifyOwnerOfRevoke(
-    orgId,
-    endpoint,
+  // A failure is logged, not thrown: the revoke has already happened.
+  await notifyTokenOwner(
+    tokenOwner(orgId, endpoint),
     "A2A token revoked",
     `An Organization Admin revoked the token "${token.name}" on the A2A endpoint "${endpoint.name}", so calls with it are refused. If that client should keep working, issue it a new token on the endpoint's page.`,
   );
@@ -554,16 +538,8 @@ const A2A_GATE = {
   changedMessage: "A2A access changed by an Org Admin",
 } as const;
 
-const toA2aAccess = ({ gate, workspaces }: GateAccess): A2aAccess => ({
-  gate,
-  workspaces: workspaces.map(({ count, ...workspace }) => ({
-    ...workspace,
-    a2aEndpointCount: count,
-  })),
-});
-
-export const getA2aAccess = async (orgId: string): Promise<A2aAccess> =>
-  toA2aAccess(await getGateAccess(A2A_GATE, orgId));
+export const getA2aAccess = (orgId: string): Promise<OrgGateAccess> =>
+  getGateAccess(A2A_GATE, orgId);
 
 /**
  * Saves the gate and the Workspaces' switches. A Workspace it shuts out has
@@ -573,7 +549,7 @@ export const setA2aAccess = async (
   orgId: string,
   update: OrgGateAccessUpdate,
   actorUserId: string,
-): Promise<A2aAccess> => {
+): Promise<OrgGateAccess> => {
   const access = await setGateAccess(A2A_GATE, orgId, update, actorUserId);
   const endpoints = await db
     .select({ id: a2aEndpointTable.id })
@@ -584,5 +560,5 @@ export const setA2aAccess = async (
     )
     .where(eq(workspaceTable.organizationId, orgId));
   await stopRevokedA2aWork(endpoints.map((endpoint) => endpoint.id));
-  return toA2aAccess(access);
+  return access;
 };

@@ -8,7 +8,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
-import { TaskState, type Part, type Task } from "@a2a-js/sdk";
+import { TaskState, type Task } from "@a2a-js/sdk";
 import { RequestMalformedError, TaskNotFoundError } from "@a2a-js/sdk/errors";
 import { db } from "../index.ts";
 import {
@@ -20,6 +20,7 @@ import {
 import type { RunStatus } from "../runs/types.ts";
 import type { ChatClaimTx } from "../runs/sinks/chat-sink.ts";
 import { pushTaskIfEnded } from "./a2a-push.ts";
+import { replyArtifact } from "./a2a-parts.ts";
 
 /**
  * An A2A Task as a client reads it (ADR-0032). While its run is going, its
@@ -33,14 +34,6 @@ export type TaskRow = typeof a2aTaskTable.$inferSelect;
 
 /** Where a Task's rows are read and written: the database, or a transaction. */
 type Executor = typeof db | ChatClaimTx;
-
-/** A text part of an outbound A2A message or artifact. */
-const a2aTextPart = (text: string): Part => ({
-  content: { $case: "text", value: text },
-  metadata: undefined,
-  filename: "",
-  mediaType: "text/plain",
-});
 
 /** A finished run's Chat status as the end a Task records. */
 const END_OF_RUN: Partial<Record<RunStatus, A2aTaskEndState>> = {
@@ -400,19 +393,7 @@ export const toTask = (
     message: undefined,
     timestamp: statusAt.toISOString(),
   },
-  artifacts:
-    text && replyId
-      ? [
-          {
-            artifactId: replyId,
-            name: "reply",
-            description: "",
-            parts: [a2aTextPart(text)],
-            metadata: undefined,
-            extensions: [],
-          },
-        ]
-      : [],
+  artifacts: text && replyId ? [replyArtifact(replyId, text)] : [],
   history: [],
   metadata: undefined,
 });
