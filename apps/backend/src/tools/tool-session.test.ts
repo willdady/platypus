@@ -1212,6 +1212,27 @@ describe("openToolSession", () => {
       );
     });
 
+    // Issue #1294: an A2A Chat with Include Memories off withholds the Memory
+    // Tool set, and a delegate must not reach it either.
+    it("withholds a withheld Tool set from the Agent and from its delegates", async () => {
+      register("set.memory", () => ({ memoryGet: toolNamed("memoryGet") }));
+      register("set.other", () => ({ other: toolNamed("other") }));
+
+      const parent = await openToolSession(
+        scope,
+        grantedAgent("set.memory", "set.other"),
+        noMcps(),
+        { withheldToolSetIds: ["set.memory"] },
+      );
+      const child = await parent.nest({
+        id: "sub-agent-1",
+        toolSetIds: ["set.memory", "set.other"],
+      });
+
+      expect(Object.keys(parent.tools)).toEqual(["other"]);
+      expect(Object.keys(child.tools)).toEqual(["other"]);
+    });
+
     it("closes a session opened after the parent was already disposed", async () => {
       const parent = await openToolSession(
         scope,

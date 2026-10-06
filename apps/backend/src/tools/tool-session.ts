@@ -302,6 +302,13 @@ export type ToolSessionOptions = {
    * run that holds the parent session is still live.
    */
   signal?: AbortSignal;
+  /**
+   * Tool set ids this session serves to no Agent, even one that holds them:
+   * an A2A Chat with Include Memories off withholds the `memory` Tool set
+   * (ADR-0032). A nested session inherits it, so a delegate cannot reach what
+   * its parent was withheld.
+   */
+  withheldToolSetIds?: readonly string[];
 };
 
 /**
@@ -323,7 +330,7 @@ export const openToolSession = async (
   queries: ToolSessionQueries,
   options: ToolSessionOptions = {},
 ): Promise<ToolSession> => {
-  const { signal } = options;
+  const { signal, withheldToolSetIds = [] } = options;
   const tools: Record<string, Tool> = {};
   // Tool name -> where it came from. Read by the merge below to report the
   // names an arriving Tool set is about to take, and the reason this is a Map
@@ -742,9 +749,9 @@ export const openToolSession = async (
     // `tools(context, plugin)` and is never shown the accumulated map — so only
     // the merge below stays ordered.
     const resolutions = await Promise.all(
-      (agent.toolSetIds ?? []).map((toolSetId) =>
-        resolveSafely(toolSetId, context),
-      ),
+      (agent.toolSetIds ?? [])
+        .filter((toolSetId) => !withheldToolSetIds.includes(toolSetId))
+        .map((toolSetId) => resolveSafely(toolSetId, context)),
     );
     try {
       for (const resolution of resolutions) merge(resolution);

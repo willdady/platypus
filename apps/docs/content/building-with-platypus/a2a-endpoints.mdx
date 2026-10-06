@@ -319,7 +319,11 @@ Two switches on the endpoint decide how its conversations touch your Memories.
 Both are **off** by default, because whoever holds a token may not be you.
 
 - **Include Memories** adds your recent Memory summaries to the Agent's system
-  prompt on the endpoint's runs. Off, the runs carry none.
+  prompt on the endpoint's runs, and lets an Agent with the **Memory** Tool set
+  use its memory tools there. Off, the runs carry no summaries and the Agent
+  gets no memory tools, so a client can't ask it to look your Memories up. It
+  covers your own turns in the endpoint's Chats too: a reply you get there sits
+  in the history the client reads next.
 - **Extract Memories** lets the endpoint's Chats feed your Memories. Off,
   Platypus never reads them for Memories — including any turns you add to them
   yourself in the Chat.
@@ -332,9 +336,11 @@ Both are **off** by default, because whoever holds a token may not be you.
   are held by you alone.
 </Callout>
 
-**Include Memories** applies from the endpoint's next run. Turning **Extract
-Memories** on applies to the endpoint's existing Chats too, not only new ones.
-A Chat started on an endpoint you later delete stays out of your Memories.
+**Include Memories** applies from the endpoint's next run, in its existing
+Chats as well as new ones. Turning **Extract Memories** on applies to the
+endpoint's existing Chats too, not only new ones. A Chat started on an endpoint
+you later delete stays out of your Memories, and its turns read as **Include
+Memories** off.
 
 ## Deleting
 
