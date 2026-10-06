@@ -19,6 +19,8 @@ import {
 import { seedUserInvokedSkill } from "./slash-command.ts";
 import { resolveTurn } from "./chat-messages.ts";
 import { onA2aTurnEnded } from "./a2a-push.ts";
+import { currentTurnId } from "./a2a-task-state.ts";
+import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 
 /**
  * Starts one Chat turn and returns its streaming response — the one path every
@@ -67,6 +69,9 @@ export const startChatTurn = async (params: {
     .select({
       memorySnapshot: chatTable.memorySnapshot,
       lastTurnAt: chatTable.lastTurnAt,
+      status: chatTable.status,
+      runHeartbeatAt: chatTable.runHeartbeatAt,
+      updatedAt: chatTable.updatedAt,
       a2aEndpointId: chatTable.a2aEndpointId,
       a2aClientName: chatTable.a2aClientName,
     })
@@ -84,6 +89,8 @@ export const startChatTurn = async (params: {
     owned: existingChat.length > 0,
     request,
   });
+
+  await endDeadRun(request.id, existingChat[0]);
 
   const includeMemories =
     callerIncludesMemories && (await chatAllowsMemories(existingChat[0]));
@@ -202,4 +209,21 @@ const chatAllowsMemories = async (
     .where(eq(a2aEndpointTable.id, chat.a2aEndpointId))
     .limit(1);
   return endpoint?.includeMemories ?? false;
+};
+
+/**
+ * Ends the turn a dead run left a Chat `running` on (#1297), as the recovery
+ * sweep would have, had it reached the Chat first: this turn's claim is about
+ * to take the Chat from it, and nothing else will record its end. Its turn is
+ * read now, before the claim moves the leaf onto this turn's message; the end
+ * is recorded and pushed in the background.
+ */
+const endDeadRun = async (
+  chatId: string,
+  chat: Parameters<typeof chatRunIsLive>[0] | undefined,
+): Promise<void> => {
+  if (chat?.status !== "running" || chatRunIsLive(chat)) return;
+  const turnId = await currentTurnId(chatId);
+  if (!turnId) return;
+  void onA2aTurnEnded({ chatId, messageId: turnId, status: "failed" });
 };

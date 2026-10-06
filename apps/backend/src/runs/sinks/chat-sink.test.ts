@@ -278,6 +278,76 @@ describe("ChatSink", () => {
     );
   });
 
+  // Issue #1297: a peer tells a live run from one lost with its instance by
+  // the Chat's heartbeat.
+  describe("run heartbeat", () => {
+    const t0 = new Date("2026-08-30T12:00:00.000Z");
+    const at = (seconds: number) => new Date(t0.getTime() + seconds * 1000);
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(t0);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("stamps the claim, then every 15 seconds until the run ends", async () => {
+      const fake = seedChat();
+      const sink = submitSink();
+
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      expect(rowOf(fake, "chat", "chat-1")?.runHeartbeatAt).toEqual(t0);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(rowOf(fake, "chat", "chat-1")?.runHeartbeatAt).toEqual(at(15));
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(rowOf(fake, "chat", "chat-1")?.runHeartbeatAt).toEqual(at(30));
+
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "succeeded",
+        messages: [u0, a0, u1],
+        stats: {},
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(rowOf(fake, "chat", "chat-1")?.runHeartbeatAt).toEqual(at(30));
+    });
+
+    it("takes a Chat whose run's heartbeat is a minute old", async () => {
+      const fake = seedChat();
+      Object.assign(rowOf(fake, "chat", "chat-1")!, {
+        status: "running",
+        runHeartbeatAt: t0,
+      });
+      vi.setSystemTime(at(61));
+
+      await submitSink().onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+
+      expect(rowOf(fake, "chat", "chat-1")).toMatchObject({
+        status: "running",
+        activeLeafId: "u1",
+        runHeartbeatAt: at(61),
+      });
+    });
+
+    it("refuses a Chat whose run's heartbeat is fresh", async () => {
+      const fake = seedChat();
+      Object.assign(rowOf(fake, "chat", "chat-1")!, {
+        status: "running",
+        runHeartbeatAt: t0,
+      });
+      vi.setSystemTime(at(59));
+
+      await expect(
+        submitSink().onStart({ runId: "chat-1", messages: [u0, a0, u1] }),
+      ).rejects.toThrow(ConflictError);
+      expect(fake.tables.chat_message).toHaveLength(2);
+    });
+  });
+
   describe("onProgress + FlushScheduler", () => {
     beforeEach(() => {
       vi.useFakeTimers();

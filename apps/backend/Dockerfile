@@ -87,5 +87,7 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
 # and take on making /data writable by that uid themselves.
 ENTRYPOINT ["docker-entrypoint.sh"]
 
-# Run migrations and start the server
-CMD ["sh", "-c", "node ./apps/backend/scripts/migrate.ts && node --env-file-if-exists=./apps/backend/.env ./apps/backend/index.ts"]
+# Run migrations and start the server. `exec` puts the server in the shell's
+# place, so a `docker stop` or a rolling deploy's SIGTERM reaches it and its
+# runs end cleanly instead of being killed mid-turn.
+CMD ["sh", "-c", "node ./apps/backend/scripts/migrate.ts && exec node --env-file-if-exists=./apps/backend/.env ./apps/backend/index.ts"]

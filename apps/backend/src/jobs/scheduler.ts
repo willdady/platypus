@@ -29,7 +29,10 @@ import {
 } from "../services/trigger.ts";
 import { logger } from "../logger.ts";
 import { ADVISORY_LOCK_IDS } from "../db/advisory-lock.ts";
-import { chatPerRunTimeoutMs } from "../runs/chat-timeouts.ts";
+import {
+  chatRunStale,
+  runHeartbeatCutoff,
+} from "../runs/chat-run-heartbeat.ts";
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
 import { onA2aTurnEnded } from "../services/a2a-push.ts";
 
@@ -457,25 +460,6 @@ export async function recoverStuckTriggers(): Promise<void> {
 }
 
 /**
- * The moment before which a `running` Chat is considered abandoned.
- *
- * Derived from `CHAT_PER_RUN_TIMEOUT_MS` — the ceiling a Chat turn actually
- * runs under (`runs/chat-timeouts.ts`) — the same way {@link stuckTriggerCutoff}
- * derives the Trigger sweep's from `TRIGGER_PER_RUN_TIMEOUT_MS`. Each sweep
- * reads its own kind of run's timeout; a live instance aborts any turn older
- * than its own per-run timeout, so a row past this cutoff has no live owner
- * on any instance.
- *
- * Horizontal scaling: this env var is read per process, as the Trigger one
- * is. Instances sharing a database must be configured with the same value;
- * one given a shorter value computes an earlier cutoff and could fail a
- * peer's live turn.
- */
-export function stuckChatCutoff(): Date {
-  return staleCutoff(chatPerRunTimeoutMs());
-}
-
-/**
  * Periodic recovery for Chats left `running` by a server crash mid-turn.
  *
  * `ChatSink.onStart` sets the Chat's status to `running`, and the sink is the
@@ -486,11 +470,11 @@ export function stuckChatCutoff(): Date {
  * disabled, and (since #761) a Chat-list poll every 3s for as long as a tab
  * is open. Issue #762.
  *
- * Age is measured on `lastTurnAt`, the run sink's own turn-boundary signal,
- * never on `updatedAt` — auto-titling and memory extraction bump `updatedAt`
- * at their own cadence, so a background write on a dead Chat would keep the
- * row looking recent and the sweep would never fire (see `db/schema.ts`).
- * Rows predating the column fall back to `updatedAt`.
+ * A Chat is orphaned when its run heartbeat has gone stale
+ * (`runs/chat-run-heartbeat.ts`, #1297): the instance holding a run stamps it
+ * every few seconds, so one not stamped for a minute has no live owner on any
+ * instance, whatever the Chat per-run timeout. A row with no stamp yet is
+ * judged on `lastTurnAt`, then `updatedAt`.
  *
  * Same horizontal-scaling reasoning as `recoverStuckTriggers`: the age cutoff
  * is what makes this safe against a peer's live work; the advisory lock only
@@ -500,27 +484,19 @@ export function stuckChatCutoff(): Date {
  * cancellation, and reporting one would misdescribe the event.
  */
 export async function recoverStuckChats(): Promise<void> {
-  const cutoff = stuckChatCutoff();
+  const cutoff = runHeartbeatCutoff();
 
   const orphaned = await db
     .update(chatTable)
     .set({ status: "failed", updatedAt: new Date() })
-    .where(
-      and(
-        eq(chatTable.status, "running"),
-        or(
-          lt(chatTable.lastTurnAt, cutoff),
-          and(isNull(chatTable.lastTurnAt), lt(chatTable.updatedAt, cutoff)),
-        ),
-      ),
-    )
+    .where(and(eq(chatTable.status, "running"), chatRunStale(cutoff)))
     .returning({ id: chatTable.id });
 
   if (orphaned.length === 0) return;
 
   logger.warn(
     { count: orphaned.length, cutoff: cutoff.toISOString() },
-    "Marked orphaned Chats as failed (older than the Chat per-run timeout)",
+    "Marked orphaned Chats as failed (their run's heartbeat went stale)",
   );
   // Their runs died with an instance, so no run's end records or pushes their
   // Tasks. Not awaited: this runs under the scheduler's lock, and a slow

@@ -43,7 +43,6 @@ import {
   runWithLock,
   scheduleAligned,
   startScheduler,
-  stuckChatCutoff,
   stuckTriggerCutoff,
   sweepTokenRemindersIfDue,
 } from "./scheduler.ts";
@@ -166,34 +165,6 @@ const fakePg = ({ roundTripMs = 0 }: { roundTripMs?: number } = {}) => {
   return { held, checkedOut };
 };
 
-describe("stuckChatCutoff", () => {
-  beforeEach(() => {
-    delete process.env.CHAT_PER_RUN_TIMEOUT_MS;
-  });
-
-  afterEach(() => {
-    delete process.env.CHAT_PER_RUN_TIMEOUT_MS;
-    vi.useRealTimers();
-  });
-
-  it("sits one stale buffer past the default Chat per-run timeout", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
-
-    // 30 min per-run timeout + 5 min buffer = 35 min.
-    expect(stuckChatCutoff().toISOString()).toBe("2026-08-30T11:25:00.000Z");
-  });
-
-  it("tracks CHAT_PER_RUN_TIMEOUT_MS, not the Trigger per-run timeout", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
-    process.env.CHAT_PER_RUN_TIMEOUT_MS = String(60 * 60 * 1000);
-
-    // 60 min per-run timeout + 5 min buffer = 65 min.
-    expect(stuckChatCutoff().toISOString()).toBe("2026-08-30T10:55:00.000Z");
-  });
-});
-
 describe("stuckTriggerCutoff", () => {
   beforeEach(() => {
     delete process.env.TRIGGER_PER_RUN_TIMEOUT_MS;
@@ -226,17 +197,15 @@ describe("stuckTriggerCutoff", () => {
 describe("recoverStuckChats", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.CHAT_PER_RUN_TIMEOUT_MS;
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
   });
 
   afterEach(() => {
-    delete process.env.CHAT_PER_RUN_TIMEOUT_MS;
     vi.useRealTimers();
   });
 
-  it("fails `running` Chats whose turn started before the cutoff", async () => {
+  it("fails `running` Chats whose run heartbeat has gone stale", async () => {
     const { updates } = captureUpdates([{ id: "chat-1" }]);
 
     await recoverStuckChats();
@@ -248,23 +217,34 @@ describe("recoverStuckChats", () => {
     // The whole predicate, pinned exactly. Asserting the rendered string
     // rather than fragments of it is what makes this a real test: it fails
     // if the comparison flips direction (a `>` would sweep every live turn
-    // and spare every dead one), if the anchor moves to `updated_at`, or if
-    // the `running` guard is dropped. The `updated_at` fallback is a second
-    // disjunct rather than a COALESCE, reached only when `last_turn_at` is
-    // NULL, so a row with a turn timestamp is never judged on the timestamp
-    // auto-titling and memory extraction bump.
+    // and spare every dead one), if the anchor moves off the heartbeat, or if
+    // the `running` guard is dropped. A row with no heartbeat yet falls back
+    // to `last_turn_at`, then `updated_at`, each reached only when the one
+    // before it is NULL.
     const { sql: text, params } = render(captured.where);
     expect(text).toBe(
-      `("chat"."status" = $1 and ("chat"."last_turn_at" < $2 or ` +
-        `("chat"."last_turn_at" is null and "chat"."updated_at" < $3)))`,
+      `("chat"."status" = $1 and ("chat"."run_heartbeat_at" < $2 or ` +
+        `("chat"."run_heartbeat_at" is null and ("chat"."last_turn_at" < $3 or ` +
+        `("chat"."last_turn_at" is null and "chat"."updated_at" < $4)))))`,
     );
-    // 12:00 − (30 min + 5 min buffer): the peer-safety window, bound as a
-    // UTC `timestamp` parameter exactly as the Trigger sweep binds its own.
+    // 12:00 − one minute: four missed 15-second heartbeats, whatever the
+    // Chat per-run timeout.
     expect(params).toEqual([
       "running",
-      "2026-08-30T11:25:00.000Z",
-      "2026-08-30T11:25:00.000Z",
+      "2026-08-30T11:59:00.000Z",
+      "2026-08-30T11:59:00.000Z",
+      "2026-08-30T11:59:00.000Z",
     ]);
+  });
+
+  it("does not wait out a long Chat per-run timeout", async () => {
+    vi.stubEnv("CHAT_PER_RUN_TIMEOUT_MS", String(2 * 60 * 60 * 1000));
+    const { updates } = captureUpdates([]);
+
+    await recoverStuckChats();
+    vi.unstubAllEnvs();
+
+    expect(render(updates[0].where).params[1]).toBe("2026-08-30T11:59:00.000Z");
   });
 
   it("logs the sweep at warn with the row count and cutoff", async () => {
@@ -275,7 +255,7 @@ describe("recoverStuckChats", () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         count: 2,
-        cutoff: "2026-08-30T11:25:00.000Z",
+        cutoff: "2026-08-30T11:59:00.000Z",
       }),
       expect.stringContaining("Chat"),
     );

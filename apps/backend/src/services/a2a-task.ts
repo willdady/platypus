@@ -62,6 +62,7 @@ import {
   acquireA2aRunSlot,
 } from "./a2a-call.ts";
 import { callerIsLive } from "./a2a-liveness.ts";
+import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 
 /**
  * A2A conversations (ADR-0032): `SendMessage` starts a turn in a Chat and
@@ -324,7 +325,13 @@ const startTurn = async (
     // another token's and another endpoint's are answered as an unknown id:
     // a Chat id is no secret, so it is not a credential.
     const [chat] = await db
-      .select({ leafId: chatTable.activeLeafId, status: chatTable.status })
+      .select({
+        leafId: chatTable.activeLeafId,
+        status: chatTable.status,
+        runHeartbeatAt: chatTable.runHeartbeatAt,
+        lastTurnAt: chatTable.lastTurnAt,
+        updatedAt: chatTable.updatedAt,
+      })
       .from(chatTable)
       .where(
         and(
@@ -353,7 +360,9 @@ const startTurn = async (
     }
     // Before the slot is taken, so a busy Chat is answered with its Task at
     // any load. The claim in the run still refuses one that turns busy after.
-    if (chat.status === "running") throw await busyError(caller, contextId);
+    // A Chat whose run died (stale heartbeat, #1297) is not busy: the claim
+    // takes it.
+    if (chatRunIsLive(chat)) throw await busyError(caller, contextId);
     parentId = chat.leafId;
   } else {
     // A retry of the message that opened a Chat names no context yet: find

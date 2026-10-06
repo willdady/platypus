@@ -1287,6 +1287,108 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     expect(rows("a2a_task")).toHaveLength(0);
   });
 
+  // Issue #1297: a run lost to a crash or a deploy stops stamping its Chat's
+  // heartbeat, and the Chat is free a minute later.
+  describe("a run lost with its instance", () => {
+    let t0: Date;
+    const at = (seconds: number) => new Date(t0.getTime() + seconds * 1000);
+
+    beforeEach(() => {
+      t0 = new Date();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(t0);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Task-1's run last beat at t0, and no process is left to beat. */
+    const seedOrphan = () =>
+      seedConversation({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId: "ws-1",
+            agentId: "agent-1",
+            title: "Orphaned",
+            status: "running",
+            activeLeafId: "msg-a",
+            a2aTokenId: "tok-1",
+            a2aEndpointId: "ep-1",
+            lastTurnAt: t0,
+            runHeartbeatAt: t0,
+            updatedAt: t0,
+          },
+        ],
+        chat_message: [
+          {
+            chatId: "chat-1",
+            id: "msg-a",
+            parentId: null,
+            role: "user",
+            parts: [{ type: "text", text: "Where is my order?" }],
+            deletedAt: null,
+            createdAt: t0,
+          },
+        ],
+        a2a_task: [
+          {
+            id: "task-1",
+            chatId: "chat-1",
+            messageId: "msg-a",
+            endpointId: "ep-1",
+            tokenId: "tok-1",
+            state: null,
+            statusAt: t0,
+            createdAt: t0,
+          },
+        ],
+      });
+
+    it("refuses a message as busy while the heartbeat is fresh", async () => {
+      seedOrphan();
+      vi.setSystemTime(at(45));
+
+      const res = await send({ messageId: "msg-b", contextId: "chat-1" });
+
+      expect(res.body.error.code).toBe(-32004);
+      expect(res.body.error.data[0].metadata).toEqual({ taskId: "task-1" });
+      expect(model.prompts).toHaveLength(0);
+    });
+
+    it("runs a message once the heartbeat is a minute old, failing the dead run's Task", async () => {
+      seedOrphan();
+      vi.setSystemTime(at(61));
+
+      const res = await send({ messageId: "msg-b", contextId: "chat-1" });
+
+      expect(res.body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
+      await vi.waitFor(() =>
+        expect(rows("a2a_task").find((t) => t.id === "task-1")).toMatchObject({
+          state: "failed",
+        }),
+      );
+      expect(await stateOf("task-1")).toBe("TASK_STATE_FAILED");
+    });
+
+    it("is failed by the sweep a minute after the heartbeat stopped", async () => {
+      seedOrphan();
+      vi.setSystemTime(at(45));
+      await recoverStuckChats();
+      expect(rows("chat")[0]).toMatchObject({ status: "running" });
+
+      vi.setSystemTime(at(61));
+      await recoverStuckChats();
+
+      expect(rows("chat")[0]).toMatchObject({ status: "failed" });
+      await vi.waitFor(() =>
+        expect(rows("a2a_task")[0]).toMatchObject({ state: "failed" }),
+      );
+      expect(await stateOf("task-1")).toBe("TASK_STATE_FAILED");
+    });
+  });
+
   it("starts no run, and frees the slot, when the Task cannot be made", async () => {
     let failing = true;
     seedConversation(
@@ -1481,10 +1583,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
           },
         ],
       });
-      vi.stubEnv("CHAT_PER_RUN_TIMEOUT_MS", "1000");
-
       await recoverStuckChats();
-      vi.unstubAllEnvs();
       await vi.waitFor(() =>
         expect(rows("a2a_task")[0]).toMatchObject({ state: "failed" }),
       );
