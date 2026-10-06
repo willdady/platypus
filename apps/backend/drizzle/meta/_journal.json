@@ -638,6 +638,13 @@
       "when": 1791253217916,
       "tag": "0090_a2a_task_push_count",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1791256911550,
+      "tag": "0091_chat_run_heartbeat",
+      "breakpoints": true
     }
   ]
 }

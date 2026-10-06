@@ -247,6 +247,13 @@ export const chat = pgTable(
     // dedicated signal is the only writer-free answer.
     lastTurnAt: t.timestamp("last_turn_at"),
 
+    // When the instance running this Chat's turn last said it is still alive
+    // (`runs/chat-run-heartbeat.ts`). A `running` Chat whose heartbeat has
+    // gone stale lost its run to a crash or a deploy: the next claim takes it,
+    // and the recovery sweep marks it failed. Null on a Chat that has never
+    // run since the column was added.
+    runHeartbeatAt: t.timestamp("run_heartbeat_at"),
+
     // The A2A token whose client started this Chat (ADR-0032), so a retried
     // message finds its Chat. Null for a Chat started in the UI.
     a2aTokenId: t

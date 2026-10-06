@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 import { db } from "../../index.ts";
 import { chat as chatTable, chatMessage } from "../../db/schema.ts";
 import { ConflictError, isUniqueViolation } from "../../errors.ts";
@@ -7,6 +7,11 @@ import { generateChatMetadata } from "../../services/chat-metadata.ts";
 import { extractFiles } from "../../storage/utils.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 import { FlushScheduler } from "../flush-scheduler.ts";
+import {
+  chatRunStale,
+  RUN_HEARTBEAT_INTERVAL_MS,
+  runHeartbeatCutoff,
+} from "../chat-run-heartbeat.ts";
 import type {
   ResolvedRunPlan,
   RunId,
@@ -66,8 +71,11 @@ export type ChatSinkParams = {
  *   (creating it for a new Chat), insert the submitted user message and point
  *   the leaf at the message being answered, so a disconnected client can read
  *   the in-progress state. The claim is the one-run-per-Chat lock across every
- *   backend instance (#1237): a Chat already `running` is a `ConflictError`.
- *   Rows the turn owns (`onClaimed`) are written in the same transaction.
+ *   backend instance (#1237): a Chat already `running` is a `ConflictError`,
+ *   unless its run's heartbeat has gone stale (#1297) — that run died with its
+ *   instance, and the claim takes the Chat from it. Rows the turn owns
+ *   (`onClaimed`) are written in the same transaction. Once claimed, the
+ *   sink stamps the Chat's heartbeat until the run ends.
  * - `onProgress`: drive a FlushScheduler that periodically upserts the reply
  *   while keeping `status: "running"`.
  * - `onFinish`: write the terminal status (`succeeded`, `failed`,
@@ -93,6 +101,8 @@ export class ChatSink implements RunSink {
   /** Whether `onStart` claimed the Chat. A sink that lost the claim writes
    *  nothing, since the row belongs to the run that holds it. */
   private claimed = false;
+  /** Stamps the Chat's run heartbeat while the run holds it. */
+  private heartbeat?: ReturnType<typeof setInterval>;
 
   constructor(params: ChatSinkParams) {
     this.params = params;
@@ -114,14 +124,17 @@ export class ChatSink implements RunSink {
     // runner fails the run and the request with it. The pinned Memories block
     // (ADR-0020) is written so a re-take on this turn survives for the next.
     await db.transaction(async (tx) => {
+      const now = new Date();
       const running = {
         status: "running",
         memorySnapshot: ctx.memorySnapshot ?? null,
-        lastTurnAt: new Date(),
-        updatedAt: new Date(),
+        lastTurnAt: now,
+        runHeartbeatAt: now,
+        updatedAt: now,
       };
       // The claim. Conditional, so of two instances racing for one Chat the
-      // second waits on the first's row lock and then matches nothing.
+      // second waits on the first's row lock and then matches nothing. A Chat
+      // still `running` whose heartbeat is stale is claimable: its run died.
       const updated = await tx
         .update(chatTable)
         .set(running)
@@ -129,7 +142,10 @@ export class ChatSink implements RunSink {
           and(
             eq(chatTable.id, ctx.runId),
             eq(chatTable.workspaceId, workspaceId),
-            ne(chatTable.status, "running"),
+            or(
+              ne(chatTable.status, "running"),
+              chatRunStale(runHeartbeatCutoff(now.getTime())),
+            ),
           ),
         )
         .returning({
@@ -179,6 +195,41 @@ export class ChatSink implements RunSink {
       await this.params.onClaimed?.(tx);
     });
     this.claimed = true;
+    this.startHeartbeat();
+  }
+
+  /**
+   * Stamps the Chat's heartbeat every {@link RUN_HEARTBEAT_INTERVAL_MS} until
+   * `onFinish`, so a peer can tell this run from one that died (#1297).
+   * Unref'd: a heartbeat never keeps the process alive.
+   */
+  private startHeartbeat(): void {
+    this.heartbeat = setInterval(
+      () => void this.beat(),
+      RUN_HEARTBEAT_INTERVAL_MS,
+    );
+    this.heartbeat.unref?.();
+  }
+
+  /** One heartbeat. A missed one is logged; the next interval tries again. */
+  private async beat(): Promise<void> {
+    try {
+      await db
+        .update(chatTable)
+        .set({ runHeartbeatAt: new Date() })
+        .where(
+          and(
+            eq(chatTable.id, this.runId),
+            eq(chatTable.workspaceId, this.params.workspaceId),
+            eq(chatTable.status, "running"),
+          ),
+        );
+    } catch (error) {
+      logger.error(
+        { error, chatId: this.runId },
+        "Error writing the run heartbeat",
+      );
+    }
   }
 
   // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
@@ -214,6 +265,7 @@ export class ChatSink implements RunSink {
     error?: Error;
   }): Promise<void> {
     if (!this.claimed) return;
+    clearInterval(this.heartbeat);
     await this.flusher?.dispose();
     this.flusher = undefined;
 

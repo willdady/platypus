@@ -12,6 +12,7 @@ import {
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduler } from "./src/jobs/scheduler.ts";
 import { listenForRunCancels } from "./src/runs/run-cancel.ts";
+import { installShutdownHandlers } from "./src/runs/shutdown.ts";
 import { watchForCanceledA2aRuns } from "./src/services/a2a-cancel.ts";
 import { loadPlugins, type LoadPluginsResult } from "./src/plugins/loader.ts";
 import { setLoadedPlugins } from "./src/plugins/registry.ts";
@@ -107,10 +108,14 @@ const main = async () => {
   setLoadedPlugins(loadedPlugins);
   logger.info(`Loaded ${loadedPlugins.plugins.length} plugin(s)`);
 
-  serve({
+  const server = serve({
     fetch: app.fetch,
     port: parseInt(PORT),
   });
+  // A deploy or `docker stop` ends this process's runs as cancelled before it
+  // exits, so their Chats are free at once rather than once their heartbeat
+  // goes stale (#1297).
+  installShutdownHandlers({ stopAccepting: () => server.close() });
 
   // Start background jobs (safe for horizontal scaling)
   startMemoryScheduler();

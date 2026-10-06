@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   mockDb,
   mockNoSession,
@@ -34,6 +34,7 @@ import { createUIMessageStreamResponse, streamText } from "ai";
 import { sql } from "drizzle-orm";
 import app from "../server.ts";
 import { runRegistry } from "../runs/run-registry.ts";
+import { recoverStuckChats } from "../jobs/scheduler.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { FileValidationError } from "../services/file-gate.ts";
 import {
@@ -1116,6 +1117,89 @@ describe("Chat Routes", () => {
 
     const rowOf = (fake: ReturnType<typeof seedDb>, id: string) =>
       fake.tables.chat_message.find((row) => row.id === id);
+
+    // Issue #1297: the instance running a turn stamps the Chat's heartbeat.
+    // One that crashed or was redeployed mid-turn stops stamping, and its
+    // Chat is free again a minute later, not once the per-run timeout passes.
+    describe("a run lost with its instance", () => {
+      const t0 = new Date("2026-08-30T12:00:00.000Z");
+      const at = (seconds: number) => new Date(t0.getTime() + seconds * 1000);
+
+      beforeEach(() => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(t0);
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      /** A Chat whose run last beat at t0, and no process is left to beat. */
+      const seedOrphan = () => {
+        const fake = seedChat();
+        Object.assign(fake.tables.chat[0], {
+          status: "running",
+          lastTurnAt: t0,
+          runHeartbeatAt: t0,
+          updatedAt: t0,
+        });
+        return fake;
+      };
+
+      it("409s a turn while the run's heartbeat is fresh", async () => {
+        mockSession();
+        const fake = seedOrphan();
+        vi.setSystemTime(at(45));
+
+        const res = await post({ message: message("u3"), parentId: "a2" });
+
+        expect(res.status).toBe(409);
+        expect(fake.tables.chat_message).toHaveLength(4);
+        expect(mockPrepareChatTurn).not.toHaveBeenCalled();
+      });
+
+      it("takes the Chat once the heartbeat is a minute old", async () => {
+        mockSession();
+        const fake = seedOrphan();
+        vi.setSystemTime(at(61));
+        startsTurn();
+
+        const res = await post({ message: message("u3"), parentId: "a2" });
+
+        expect(res.status).toBe(200);
+        expect(rowOf(fake, "u3")).toMatchObject({ parentId: "a2" });
+        expect(fake.tables.chat[0].runHeartbeatAt).toEqual(at(61));
+      });
+
+      it("refuses a delete or a switch while the heartbeat is fresh, and not after", async () => {
+        mockSession();
+        const fake = seedOrphan();
+        vi.setSystemTime(at(45));
+
+        expect((await deleteMessage("u2")).status).toBe(409);
+
+        vi.setSystemTime(at(61));
+        expect((await deleteMessage("u2")).status).toBe(200);
+        expect(rowOf(fake, "u2")?.deletedAt).not.toBeNull();
+      });
+
+      it("ends on Stop: the cancel reaches no run, and the sweep fails the Chat", async () => {
+        mockSession();
+        const fake = seedOrphan();
+
+        const stop = await app.request(`${baseUrl}/chat-1/cancel`, {
+          method: "POST",
+        });
+        expect(stop.status).toBe(200);
+        await recoverStuckChats();
+        expect(fake.tables.chat[0].status).toBe("running");
+
+        vi.setSystemTime(at(61));
+        await recoverStuckChats();
+
+        expect(fake.tables.chat[0].status).toBe("failed");
+      });
+    });
 
     describe("POST /", () => {
       // Issue #1294: the Owner's turn in an A2A Chat follows the endpoint's

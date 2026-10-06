@@ -27,6 +27,7 @@ import { rewriteStorageUrls, deleteStoredPrefix } from "../storage/utils.ts";
 import { chatStorageKeyPrefix } from "../storage/keys.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
+import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
 import { startChatTurn } from "../services/chat-turn.ts";
 import { normalizeWebToolParts } from "../runs/web-tool-normalize.ts";
@@ -57,6 +58,7 @@ const servedMessages = (messages: PlatypusUIMessage[], origin: string) =>
 const chatResponse = ({
   memorySnapshot: _memorySnapshot,
   lastTurnAt: _lastTurnAt,
+  runHeartbeatAt: _runHeartbeatAt,
   memoryCursorId: _memoryCursorId,
   activeLeafId: _activeLeafId,
   a2aTokenId: _a2aTokenId,
@@ -68,10 +70,11 @@ const chatResponse = ({
 /**
  * A run moves the leaf onto its own reply as it goes, and a delete or a switch
  * landing mid-run would race it (ADR-0026). Read from the row the run claimed,
- * since the run may be another instance's (#1237).
+ * since the run may be another instance's (#1237). A `running` Chat whose
+ * heartbeat is stale holds no run (#1297), so nothing is refused on it.
  */
-const refuseWhileRunning = (chat: { status: string }) => {
-  if (chat.status === "running") {
+const refuseWhileRunning = (chat: Parameters<typeof chatRunIsLive>[0]) => {
+  if (chatRunIsLive(chat)) {
     throw new ConflictError(CHAT_BUSY_MESSAGE);
   }
 };

@@ -137,6 +137,8 @@ export type CancelOptions = {
 
 export class RunRegistry {
   private readonly entries = new Map<RunId, Entry>();
+  /** Waiting on {@link RunRegistry.whenIdle}; called when the last run goes. */
+  private readonly idleWaiters = new Set<() => void>();
 
   /**
    * Claims `runId` and returns its handle.
@@ -276,6 +278,28 @@ export class RunRegistry {
     if (entry.stepTimer) clearTimeout(entry.stepTimer);
     if (entry.runTimer) clearTimeout(entry.runTimer);
     this.entries.delete(runId);
+    if (this.entries.size === 0) {
+      for (const wake of [...this.idleWaiters]) wake();
+    }
+  }
+
+  /**
+   * Resolves once no run is registered — every run has finished and written
+   * its end, since a run unregisters only after its terminal callback — or
+   * once `timeoutMs` has passed. `true` when it went idle.
+   */
+  whenIdle(timeoutMs: number): Promise<boolean> {
+    if (this.entries.size === 0) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const done = (idle: boolean) => {
+        clearTimeout(timer);
+        this.idleWaiters.delete(wake);
+        resolve(idle);
+      };
+      const wake = () => done(true);
+      const timer = setTimeout(() => done(false), timeoutMs);
+      this.idleWaiters.add(wake);
+    });
   }
 
   /** The runs going here, with when each was claimed. */
