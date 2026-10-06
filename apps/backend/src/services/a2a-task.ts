@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { v5 as uuidv5 } from "uuid";
 import {
   and,
   count,
@@ -69,6 +70,18 @@ export type A2aCaller = {
   token: { id: string; name: string };
   origin: string;
 };
+
+/** The namespace of the Chat ids `a2aChatId` derives. Fixed for good. */
+const A2A_CHAT_NAMESPACE = "0b6f4d2e-6a43-4d8e-9c1a-3f0e2b7d5a91";
+
+/**
+ * The id of the Chat a token's message opens when it names no context: a
+ * UUIDv5 of the token and the client's `messageId`. Two copies of the message
+ * sent at once, to any instances, then race for one Chat, and its claim lets
+ * only one of them start the turn.
+ */
+export const a2aChatId = (tokenId: string, messageId: string): string =>
+  uuidv5(JSON.stringify([tokenId, messageId]), A2A_CHAT_NAMESPACE);
 
 /** How long a blocking `SendMessage` waits for its run to end. */
 const A2A_BLOCKING_WAIT_MS = 30_000;
@@ -215,7 +228,7 @@ const waitForTask = async (task: TaskRow, deadline: number): Promise<Task> => {
  * the run goes on server-side whether or not the caller reads it, and a
  * caller that does not must cancel it.
  */
-export const startA2aTurn = async (
+const startTurn = async (
   caller: A2aCaller,
   params: SendMessageRequest,
 ): Promise<{ task: TaskRow; run?: ReadableStream<Uint8Array> }> => {
@@ -314,7 +327,7 @@ export const startA2aTurn = async (
     }
   }
 
-  const chatId = contextId ?? randomUUID();
+  const chatId = contextId ?? a2aChatId(token.id, message.messageId);
   const scope = workspaceScopeForA2a({
     endpointId: endpoint.id,
     tokenId: token.id,
@@ -360,7 +373,18 @@ export const startA2aTurn = async (
   } catch (error) {
     // No run is left going, or the one that started has already ended.
     release();
-    if (error instanceof ConflictError) throw await busyError(caller, chatId);
+    if (error instanceof ConflictError) {
+      // A copy of this message at another instance started the turn first.
+      const started = await findTask(
+        and(
+          eq(a2aTaskTable.chatId, chatId),
+          eq(a2aTaskTable.messageId, message.messageId),
+          eq(a2aTaskTable.tokenId, token.id),
+        ),
+      );
+      if (started) return { task: await withPush(started) };
+      throw await busyError(caller, chatId);
+    }
     if (error instanceof ValidationError) {
       throw new RequestMalformedError(error.message);
     }
@@ -373,6 +397,44 @@ export const startA2aTurn = async (
   } catch (error) {
     await run?.cancel();
     throw error;
+  }
+};
+
+/**
+ * The turns this instance is starting, by token, context and message. A copy
+ * of a message that arrives while its first copy is still starting here waits
+ * for that start to settle, then finds its Task as a retry does. A copy at
+ * another instance is refused by the claim instead.
+ */
+const startingTurns = new Map<string, Promise<unknown>>();
+
+/**
+ * A turn in a new Chat bound to the endpoint's Agent, or in the Chat
+ * `contextId` names, and its Task (see `startTurn`), started once however
+ * many copies of the message arrive at once.
+ */
+export const startA2aTurn = async (
+  caller: A2aCaller,
+  params: SendMessageRequest,
+): Promise<{ task: TaskRow; run?: ReadableStream<Uint8Array> }> => {
+  const key = JSON.stringify([
+    caller.token.id,
+    params.message?.contextId || null,
+    params.message?.messageId ?? null,
+  ]);
+  for (
+    let starting = startingTurns.get(key);
+    starting;
+    starting = startingTurns.get(key)
+  ) {
+    await starting.catch(() => undefined);
+  }
+  const started = startTurn(caller, params);
+  startingTurns.set(key, started);
+  try {
+    return await started;
+  } finally {
+    if (startingTurns.get(key) === started) startingTurns.delete(key);
   }
 };
 
