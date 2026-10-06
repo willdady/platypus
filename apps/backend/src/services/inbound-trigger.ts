@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   gateAdmits,
@@ -780,22 +780,21 @@ export const revokeInboundTriggerToken = async (
 const INBOUND_GATE = {
   gate: "inboundTriggerGate",
   allowed: "inboundTriggersAllowed",
-  resourceWorkspaceIds: async (orgId: string) =>
-    (
-      await db
-        .select({ workspaceId: triggerTable.workspaceId })
-        .from(triggerTable)
-        .innerJoin(
-          workspaceTable,
-          eq(workspaceTable.id, triggerTable.workspaceId),
-        )
-        .where(
-          and(
-            eq(workspaceTable.organizationId, orgId),
-            eq(triggerTable.type, "inbound"),
-          ),
-        )
-    ).map((row) => row.workspaceId),
+  resourceCounts: (orgId: string) =>
+    db
+      .select({ workspaceId: triggerTable.workspaceId, count: count() })
+      .from(triggerTable)
+      .innerJoin(
+        workspaceTable,
+        eq(workspaceTable.id, triggerTable.workspaceId),
+      )
+      .where(
+        and(
+          eq(workspaceTable.organizationId, orgId),
+          eq(triggerTable.type, "inbound"),
+        ),
+      )
+      .groupBy(triggerTable.workspaceId),
   changedMessage: "Inbound trigger access changed by an Org Admin",
 } as const;
 

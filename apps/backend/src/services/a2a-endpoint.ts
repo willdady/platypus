@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   a2aInterfaceUrl as interfaceUrl,
@@ -37,7 +37,11 @@ import {
   notifyTokenOwner,
 } from "./bearer-token.ts";
 import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
-import { ownerMayAct, ownerMembershipJoin } from "./owner-membership.ts";
+import {
+  ownerMayAct,
+  ownerMembershipJoin,
+  ownerStandingColumns,
+} from "./owner-membership.ts";
 import type { A2aRejectReason } from "./a2a-call.ts";
 import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 
@@ -225,8 +229,16 @@ export type A2aEndpointLookup =
 export const lookupA2aEndpoint = async (
   endpointId: string,
 ): Promise<A2aEndpointLookup> => {
+  // Every call starts here, so it reads only the columns it decides on.
   const [row] = await db
-    .select()
+    .select({
+      endpoint: getTableColumns(a2aEndpointTable),
+      organizationId: workspaceTable.organizationId,
+      ownerId: workspaceTable.ownerId,
+      a2aAllowed: workspaceTable.a2aAllowed,
+      a2aGate: organizationTable.a2aGate,
+      owner: ownerStandingColumns,
+    })
     .from(a2aEndpointTable)
     .innerJoin(
       workspaceTable,
@@ -244,34 +256,26 @@ export const lookupA2aEndpoint = async (
   const notLive = (reason: A2aEndpointNotLive): A2aEndpointLookup => ({
     live: false,
     reason,
-    organizationId: row.workspace.organizationId,
-    workspaceId: row.workspace.id,
+    organizationId: row.organizationId,
+    workspaceId: row.endpoint.workspaceId,
   });
-  if (!row.a2a_endpoint.enabled) return notLive("disabled");
-  if (
-    !gateAdmits(row.organization.a2aGate as OrgGate, row.workspace.a2aAllowed)
-  ) {
+  if (!row.endpoint.enabled) return notLive("disabled");
+  if (!gateAdmits(row.a2aGate as OrgGate, row.a2aAllowed)) {
     return notLive("gate");
   }
-  if (
-    !ownerMayAct({
-      membershipId: row.organization_member?.id,
-      role: row.user.role,
-      banned: row.user.banned,
-      banExpires: row.user.banExpires,
-    })
-  ) {
-    return notLive("owner_left");
-  }
+  if (!ownerMayAct(row.owner)) return notLive("owner_left");
   return {
     live: true,
     endpoint: {
-      ...row.a2a_endpoint,
-      organizationId: row.workspace.organizationId,
-      ownerId: row.workspace.ownerId,
+      ...row.endpoint,
+      organizationId: row.organizationId,
+      ownerId: row.ownerId,
     },
   };
 };
+
+/** The A2A protocol version, as `Major.Minor`, every card's interface serves. */
+export const A2A_PROTOCOL_VERSION = "1.0";
 
 /** The JSON-RPC interface URL an endpoint's card names. */
 export const a2aInterfaceUrl = (endpointId: string) =>
@@ -302,7 +306,7 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
     {
       url: a2aInterfaceUrl(endpoint.id),
       protocolBinding: "JSONRPC",
-      protocolVersion: "1.0",
+      protocolVersion: A2A_PROTOCOL_VERSION,
     },
   ],
   version: "1.0.0",
@@ -338,7 +342,18 @@ export const listOrgA2aEndpoints = async (orgId: string) => {
   const inOrg = eq(workspaceTable.organizationId, orgId);
   const [endpoints, tokens] = await Promise.all([
     db
-      .select()
+      .select({
+        id: a2aEndpointTable.id,
+        name: a2aEndpointTable.name,
+        enabled: a2aEndpointTable.enabled,
+        agentId: agentTable.id,
+        agentName: agentTable.name,
+        workspaceId: workspaceTable.id,
+        workspaceName: workspaceTable.name,
+        ownerId: userTable.id,
+        ownerName: userTable.name,
+        createdAt: a2aEndpointTable.createdAt,
+      })
       .from(a2aEndpointTable)
       .innerJoin(
         workspaceTable,
@@ -349,7 +364,7 @@ export const listOrgA2aEndpoints = async (orgId: string) => {
       .where(inOrg)
       .orderBy(desc(a2aEndpointTable.createdAt)),
     db
-      .select()
+      .select(getTableColumns(a2aTokenTable))
       .from(a2aTokenTable)
       .innerJoin(
         a2aEndpointTable,
@@ -362,23 +377,16 @@ export const listOrgA2aEndpoints = async (orgId: string) => {
       .where(inOrg)
       .orderBy(asc(a2aTokenTable.createdAt)),
   ]);
-  return endpoints.map(
-    ({ a2a_endpoint: endpoint, workspace, user, agent }) => ({
-      id: endpoint.id,
-      name: endpoint.name,
-      enabled: endpoint.enabled,
-      agentId: agent.id,
-      agentName: agent.name,
-      workspaceId: workspace.id,
-      workspaceName: workspace.name,
-      ownerId: user.id,
-      ownerName: user.name,
-      createdAt: endpoint.createdAt,
-      tokens: tokens
-        .filter((row) => row.a2a_token.endpointId === endpoint.id)
-        .map((row) => toPublicToken(row.a2a_token)),
-    }),
-  );
+  const byEndpoint = new Map<string, ReturnType<typeof toPublicToken>[]>();
+  for (const token of tokens) {
+    const listed = byEndpoint.get(token.endpointId) ?? [];
+    listed.push(toPublicToken(token));
+    byEndpoint.set(token.endpointId, listed);
+  }
+  return endpoints.map((endpoint) => ({
+    ...endpoint,
+    tokens: byEndpoint.get(endpoint.id) ?? [],
+  }));
 };
 
 /** The endpoint, if it is in the Organization, with its Workspace. */
@@ -522,17 +530,16 @@ export const revokeOrgA2aToken = async (
 const A2A_GATE = {
   gate: "a2aGate",
   allowed: "a2aAllowed",
-  resourceWorkspaceIds: async (orgId: string) =>
-    (
-      await db
-        .select({ workspaceId: a2aEndpointTable.workspaceId })
-        .from(a2aEndpointTable)
-        .innerJoin(
-          workspaceTable,
-          eq(workspaceTable.id, a2aEndpointTable.workspaceId),
-        )
-        .where(eq(workspaceTable.organizationId, orgId))
-    ).map((row) => row.workspaceId),
+  resourceCounts: (orgId: string) =>
+    db
+      .select({ workspaceId: a2aEndpointTable.workspaceId, count: count() })
+      .from(a2aEndpointTable)
+      .innerJoin(
+        workspaceTable,
+        eq(workspaceTable.id, a2aEndpointTable.workspaceId),
+      )
+      .where(eq(workspaceTable.organizationId, orgId))
+      .groupBy(a2aEndpointTable.workspaceId),
   changedMessage: "A2A access changed by an Org Admin",
 } as const;
 

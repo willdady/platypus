@@ -4,12 +4,12 @@ import { etag } from "hono/etag";
 import {
   JsonRpcTransportHandler,
   ServerCallContext,
-  validateVersion,
   type A2ARequestHandler,
 } from "@a2a-js/sdk/server";
-import { A2AError } from "@a2a-js/sdk/errors";
+import { A2AError, VersionNotSupportedError } from "@a2a-js/sdk/errors";
 import { AgentCard, type StreamResponse } from "@a2a-js/sdk";
 import {
+  A2A_PROTOCOL_VERSION,
   extendedAgentCard,
   lookupA2aEndpoint,
   publicAgentCard,
@@ -295,24 +295,21 @@ const eventStream = async (
 const versionRefusal = (
   id: string | number,
   version: string | undefined,
-  endpoint: A2aCaller["endpoint"],
 ): JSONRPCResponse | undefined => {
   if (!version) return undefined;
-  try {
-    // The spec matches versions by `Major.Minor`.
-    validateVersion(
-      version.split(".").slice(0, 2).join("."),
-      AgentCard.fromJSON(publicAgentCard(endpoint)),
-      "JSONRPC",
-    );
-    return undefined;
-  } catch (error) {
-    return {
-      jsonrpc: "2.0",
-      id,
-      error: JsonRpcTransportHandler.mapToJSONRPCError(error),
-    };
-  }
+  // The spec matches versions by `Major.Minor`. Every card declares the one,
+  // so no card is built to read it from.
+  const requested = version.split(".").slice(0, 2).join(".");
+  if (requested === A2A_PROTOCOL_VERSION) return undefined;
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: JsonRpcTransportHandler.mapToJSONRPCError(
+      new VersionNotSupportedError(
+        `The requested A2A protocol version '${requested}' is not supported. Supported versions: ${A2A_PROTOCOL_VERSION}`,
+      ),
+    ),
+  };
 };
 
 /**
@@ -426,7 +423,7 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
     ),
   );
   let response =
-    versionRefusal(envelope.id, c.req.header("A2A-Version"), endpoint) ??
+    versionRefusal(envelope.id, c.req.header("A2A-Version")) ??
     (await transport.handle(envelope.request, new ServerCallContext()));
   if (Symbol.asyncIterator in response) {
     const answer = await eventStream(envelope.id, response, hangUp);

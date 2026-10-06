@@ -158,6 +158,13 @@ const isCountMarker = (value: unknown): value is CountMarker =>
 const isMaxMarker = (value: unknown): value is MaxMarker =>
   !!value && typeof value === "object" && (value as MaxMarker).isMax === true;
 
+/** Whether a projection value is a plain object of further selections. */
+const isNested = (value: unknown): value is Record<string, unknown> =>
+  !!value &&
+  Object.getPrototypeOf(value) === Object.prototype &&
+  !isMarker(value) &&
+  !isAggregate(value);
+
 /** Whether a projection value folds many rows into one. */
 const isAggregate = (value: unknown): boolean =>
   isCountMarker(value) || isMaxMarker(value);
@@ -184,6 +191,10 @@ const matchesSql = (
     const value = resolve(refOf(left));
     return value != null && (value as string) >= (right as string);
   }
+  if (shape === "true") {
+    // A lateral join's `ON true`: its subquery already chose the rows.
+    return true;
+  }
   if (shape === "?ISDISTINCTFROM?") {
     // Null-safe: two nulls are not distinct, a null and a value are.
     return (resolve(refOf(left)) ?? null) !== (resolve(refOf(right)) ?? null);
@@ -198,6 +209,12 @@ const matchesSql = (
  * off the builder's enumerable surface, which is what the code under test sees.
  */
 const SUBQUERY = Symbol("fake-db:subquery");
+
+/**
+ * Marks a `select(…).as(alias)` subquery so a lateral join can run it once
+ * per outer row, with that row's columns in scope.
+ */
+const LATERAL = Symbol("fake-db:lateral");
 
 /**
  * The list an `inArray`/`notInArray` tests against: a literal array, or a
@@ -291,6 +308,8 @@ const joinedResolver =
     if (part && typeof part === "object") {
       return flatResolver(part as Row)(ref);
     }
+    // A left join's unmatched table: its columns read as null.
+    if (part === null) return null;
     return flatResolver(row)(ref);
   };
 
@@ -332,9 +351,21 @@ export type FakeDbOptions = {
 /** The rows the fake holds, keyed by Postgres table name. */
 export type Store = Record<string, Row[]>;
 
+/** A query the fake ran: what it did, and to which table. */
+export type QueryRecord = {
+  kind: "select" | "insert" | "update" | "delete";
+  table: string;
+};
+
 export type FakeDb = {
   /** The Drizzle stand-in to hand the code under test. */
   handle: unknown;
+  /**
+   * Every query run so far, in order, inside transactions too. A subquery is
+   * part of the query that runs it. Clear it (`queries.length = 0`) to count
+   * from a point.
+   */
+  queries: QueryRecord[];
   /** The seeded rows, live — assert on these to see what a write did. */
   tables: Store;
   /** `db.execute()`, a spy resolving to `{ rowCount: 0 }` unless restubbed. */
@@ -362,7 +393,8 @@ const uniqueViolation = (constraint: string) => {
  * empty rather than an error, so a query for a resource a test never created
  * simply finds nothing.
  *
- * Covers `select`/`from`/`innerJoin`/`leftJoin`/`where`/`orderBy`/`groupBy`/`limit`/`offset`,
+ * Covers `select`/`selectDistinct`/`from`/`innerJoin`/`leftJoin`/`where`/`orderBy`/`groupBy`/`limit`/`offset`,
+ * a `select(…).as(alias)` subquery joined by `leftJoinLateral` on `true`,
  * `insert`/`values`/`returning`, `update`/`set`/`where`/`returning`,
  * `delete`/`where`/`returning`, `execute`, and a `transaction` that really
  * rolls back: the callback gets a handle bound to a staging copy merged back
@@ -374,6 +406,7 @@ export const createFakeDb = (
   options: FakeDbOptions = {},
 ): FakeDb => {
   const committed = normaliseStore(initialRows);
+  const queries: QueryRecord[] = [];
   const execute = vi.fn((..._args: unknown[]) =>
     Promise.resolve({ rowCount: 0, rows: [] }),
   );
@@ -411,6 +444,9 @@ export const createFakeDb = (
           out[key] = values.length ? Math.max(...values) : null;
         } else if (isColumn(value)) {
           out[key] = resolve(refOf(value));
+        } else if (isNested(value)) {
+          // A nested object of columns, as Drizzle returns it nested.
+          out[key] = project(row, resolve, value, group);
         } else {
           // Silently projecting `undefined` would let a query select something
           // this fake cannot compute and still pass.
@@ -448,16 +484,26 @@ export const createFakeDb = (
       },
     });
 
-    const select = (selection?: Record<string, unknown>) => {
+    const select = (selection?: Record<string, unknown>, distinct = false) => {
       let table: unknown;
       let condition: Condition;
       let take = Infinity;
       let skip = 0;
       let order: OrderMarker[] = [];
       let grouping: ColumnRef[] = [];
-      const joins: { table: unknown; on: Condition; left?: boolean }[] = [];
+      const joins: {
+        table: unknown;
+        on: Condition;
+        left?: boolean;
+        lateral?: boolean;
+      }[] = [];
 
-      const rows = (): Row[] => {
+      /**
+       * The query's rows. `outer` is the row of the query a lateral subquery
+       * runs inside: a column of a table this query does not read is read
+       * from it.
+       */
+      const rows = (outer?: Resolve): Row[] => {
         const base = rowsFor(table);
         // A join yields rows keyed by table name, the shape Drizzle returns.
         let combined: Row[] = joins.length
@@ -467,7 +513,12 @@ export const createFakeDb = (
         for (const join of joins) {
           const next: Row[] = [];
           for (const row of combined) {
-            const partners = rowsFor(join.table).filter((partner) =>
+            const candidates = join.lateral
+              ? (join.table as Record<symbol, (outer: Resolve) => Row[]>)[
+                  LATERAL
+                ](joinedResolver(row))
+              : rowsFor(join.table);
+            const partners = candidates.filter((partner) =>
               satisfies(
                 joinedResolver({ ...row, [nameOf(join.table)]: partner }),
                 join.on,
@@ -484,7 +535,12 @@ export const createFakeDb = (
           combined = next;
         }
 
-        const resolverFor = joins.length ? joinedResolver : flatResolver;
+        const own = joins.length ? joinedResolver : flatResolver;
+        const read = new Set([table, ...joins.map((j) => j.table)].map(nameOf));
+        const resolverFor = (row: Row): Resolve =>
+          outer
+            ? (ref) => (read.has(ref.table) ? own(row)(ref) : outer(ref))
+            : own(row);
         let matched = combined.filter((row) =>
           satisfies(resolverFor(row), condition),
         );
@@ -533,10 +589,20 @@ export const createFakeDb = (
           ];
         }
 
-        const page = matched.slice(skip, skip + take);
-        return page.map((row) =>
-          project(row, resolverFor(row), selection, [resolverFor(row)]),
-        );
+        const page = matched
+          .slice(skip, skip + take)
+          .map((row) =>
+            project(row, resolverFor(row), selection, [resolverFor(row)]),
+          );
+        if (!distinct) return page;
+        // `SELECT DISTINCT`: one of each projected row.
+        const seen = new Set<string>();
+        return page.filter((row) => {
+          const key = JSON.stringify(row);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
       };
 
       const builder = {
@@ -551,6 +617,24 @@ export const createFakeDb = (
         leftJoin(t: unknown, on: Condition) {
           joins.push({ table: t, on, left: true });
           return builder;
+        },
+        leftJoinLateral(t: unknown, on: Condition) {
+          joins.push({ table: t, on, left: true, lateral: true });
+          return builder;
+        },
+        /**
+         * The query as a subquery named `alias`, for a lateral join. Each
+         * selected key is a column of it, read from the subquery's rows.
+         */
+        as(alias: string) {
+          const subquery: Record<string | symbol, unknown> = {
+            [TABLE_NAME]: alias,
+            [LATERAL]: (outer: Resolve) => rows(outer),
+          };
+          for (const key of Object.keys(selection ?? {})) {
+            subquery[key] = { name: key, table: subquery };
+          }
+          return subquery;
         },
         where(c: Condition) {
           condition = c;
@@ -581,7 +665,10 @@ export const createFakeDb = (
           onRejected?: (error: unknown) => unknown,
         ) {
           return Promise.resolve()
-            .then(() => rows())
+            .then(() => {
+              queries.push({ kind: "select", table: nameOf(table) });
+              return rows();
+            })
             .then(onFulfilled, onRejected);
         },
       };
@@ -594,6 +681,7 @@ export const createFakeDb = (
       let inserted: Row[] = [];
 
       const write = (values: Row | Row[]) => {
+        queries.push({ kind: "insert", table: name });
         inserted = (Array.isArray(values) ? values : [values]).map((row) => ({
           ...row,
         }));
@@ -636,6 +724,7 @@ export const createFakeDb = (
       let updated: Row[] = [];
 
       const apply = (condition: Condition) => {
+        queries.push({ kind: "update", table: nameOf(table) });
         updated = rowsFor(table).filter((row) =>
           satisfies(flatResolver(row), condition),
         );
@@ -657,6 +746,7 @@ export const createFakeDb = (
 
     const remove = (table: unknown) => ({
       where(condition: Condition) {
+        queries.push({ kind: "delete", table: nameOf(table) });
         const rows = rowsFor(table);
         const deleted = rows.filter((row) =>
           satisfies(flatResolver(row), condition),
@@ -669,7 +759,9 @@ export const createFakeDb = (
     });
 
     return {
-      select,
+      select: (selection?: Record<string, unknown>) => select(selection),
+      selectDistinct: (selection?: Record<string, unknown>) =>
+        select(selection, true),
       insert,
       update,
       delete: remove,
@@ -690,6 +782,7 @@ export const createFakeDb = (
   return {
     handle: makeHandle(committed),
     tables: committed,
+    queries,
     execute,
   };
 };

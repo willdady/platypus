@@ -196,4 +196,52 @@ describe("the seeded fake beside the chainable mock", () => {
       );
     expect(onBoard).toEqual([{ id: "k1" }]);
   });
+
+  it("runs a lateral subquery once per outer row, with that row in scope", async () => {
+    seedDb({
+      ...rows,
+      agent: [
+        { id: "a2", workspaceId: "ws-1", name: "Zed" },
+        { id: "a1", workspaceId: "ws-1", name: "Ada" },
+        { id: "a3", workspaceId: "ws-9", name: "Elsewhere" },
+      ],
+    });
+    const { agent } = await import("./db/schema.ts");
+    const { asc, sql } = await import("drizzle-orm");
+
+    const first = db
+      .select({ name: agent.name })
+      .from(agent)
+      .where(eq(agent.workspaceId, workspaceTable.id))
+      .orderBy(asc(agent.name))
+      .limit(1)
+      .as("first_agent");
+    const found = await db
+      .select({ id: workspaceTable.id, firstAgent: first.name })
+      .from(workspaceTable)
+      .leftJoinLateral(first, sql`true`)
+      .orderBy(asc(workspaceTable.id));
+
+    expect(found).toEqual([
+      { id: "ws-1", firstAgent: "Ada" },
+      { id: "ws-2", firstAgent: null },
+    ]);
+  });
+
+  it("returns one of each row from `selectDistinct`, and nests a nested selection", async () => {
+    const seeded = seedDb(rows);
+    seeded.queries.length = 0;
+
+    const orgs = await db
+      .selectDistinct({ org: { id: workspaceTable.organizationId } })
+      .from(workspaceTable)
+      .where(ne(workspaceTable.id, "nope"));
+    await db.select().from(workspaceTable);
+
+    expect(orgs).toEqual([{ org: { id: "org-1" } }, { org: { id: "org-2" } }]);
+    expect(seeded.queries).toEqual([
+      { kind: "select", table: "workspace" },
+      { kind: "select", table: "workspace" },
+    ]);
+  });
 });
