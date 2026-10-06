@@ -91,3 +91,23 @@ configuration reference says so.
 - This does not contradict A2A working whichever instance a call lands on.
   `GetTask`, `CancelTask` and the busy check reach any instance's runs; only
   the admission count is local.
+
+## Amendment — `ListTasks` lists the calling token's Tasks (#1281)
+
+The decision above lists the methods an endpoint answers and leaves out
+`ListTasks`, which A2A 1.0 defines and its TCK requires.
+
+**`ListTasks` is supported, and lists only the Tasks the calling token
+started** on its endpoint. That is narrower than `GetTask`, `CancelTask` and
+push configs, which reach any of the endpoint's Tasks by id. A Task's id is a
+random UUID that only the client that started it is told, so it works as that
+client's key to the Task. A list scoped to the endpoint would hand every token
+the others' ids, and with them their replies, undoing "tokens belong to an
+endpoint, one per client". A Task whose token was deleted has no token, so it
+is listed to no one.
+
+- Listing by endpoint, to match `GetTask`, was the alternative. It is the
+  literal reading of "Tasks the caller may see", but nothing a client needs
+  is in another client's Tasks.
+- A Task's status timestamp is when its end was recorded, or when it was made
+  while it runs. The list is ordered by it, newest first.

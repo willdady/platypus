@@ -803,6 +803,37 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     );
   });
 
+  it("stamps a Task's status when it is made, and again when it ends", async () => {
+    seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const sent = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+    const task = sent.body.result.task as RpcTask & {
+      status: { timestamp: string };
+    };
+    expect(task.status.timestamp).toBe(
+      (rows("a2a_task")[0].createdAt as Date).toISOString(),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    release();
+    await vi.waitFor(async () =>
+      expect(await stateOf(task.id)).toBe("TASK_STATE_COMPLETED"),
+    );
+    const ended = (await rpc("GetTask", { id: task.id })).body
+      .result as unknown as {
+      status: { timestamp: string };
+    };
+
+    expect(ended.status.timestamp > task.status.timestamp).toBe(true);
+    expect(ended.status.timestamp).toBe(
+      (rows("a2a_task")[0].statusAt as Date).toISOString(),
+    );
+  });
+
   it("answers a retried messageId with the Task it already started", async () => {
     seedConversation();
 
@@ -1081,6 +1112,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
             endpointId: "ep-1",
             tokenId: "tok-1",
             state: null,
+            statusAt: new Date(),
             createdAt: new Date(),
           },
         ],
@@ -1135,6 +1167,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
             endpointId: "ep-1",
             tokenId: "tok-1",
             state: null,
+            statusAt: hourAgo,
             createdAt: hourAgo,
           },
         ],
@@ -1163,6 +1196,254 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     );
 
     expect(res.body.error.code).toBe(-32001);
+  });
+});
+
+describe("POST /a2a/:endpointId — ListTasks", () => {
+  const OTHER_TOKEN = "pa2a_other-client";
+  const T0 = new Date("2026-10-01T00:00:00.000Z").getTime();
+  const MINUTE = 60_000;
+
+  /**
+   * A finished Task per entry, each in a Chat of its own, its status changed
+   * `minute` minutes after T0.
+   */
+  const seedTasks = (
+    tasks: {
+      id: string;
+      minute: number;
+      tokenId?: string | null;
+      endpointId?: string;
+      state?: string;
+    }[],
+  ) =>
+    seedConversation({
+      a2a_token: [
+        {
+          id: "tok-1",
+          endpointId: "ep-1",
+          name: "Telegram via Hermes",
+          tokenHash: hashBearerToken(TOKEN),
+          ...LIVE,
+        },
+        {
+          id: "tok-2",
+          endpointId: "ep-2",
+          name: "Rovo",
+          tokenHash: hashBearerToken("pa2a_second-token"),
+          ...LIVE,
+        },
+        {
+          id: "tok-3",
+          endpointId: "ep-1",
+          name: "Other client",
+          tokenHash: hashBearerToken(OTHER_TOKEN),
+          ...LIVE,
+        },
+      ],
+      chat: tasks.map((task) => ({
+        id: `chat-${task.id}`,
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        title: task.id,
+        status: "idle",
+        activeLeafId: `reply-${task.id}`,
+      })),
+      chat_message: tasks.flatMap((task) => [
+        {
+          chatId: `chat-${task.id}`,
+          id: `msg-${task.id}`,
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "Where is my order?" }],
+          deletedAt: null,
+          createdAt: new Date(T0),
+        },
+        {
+          chatId: `chat-${task.id}`,
+          id: `reply-${task.id}`,
+          parentId: `msg-${task.id}`,
+          role: "assistant",
+          parts: [{ type: "text", text: `Reply ${task.id}` }],
+          deletedAt: null,
+          createdAt: new Date(T0),
+        },
+      ]),
+      a2a_task: tasks.map((task) => ({
+        id: task.id,
+        chatId: `chat-${task.id}`,
+        messageId: `msg-${task.id}`,
+        endpointId: task.endpointId ?? "ep-1",
+        tokenId: task.tokenId === undefined ? "tok-1" : task.tokenId,
+        state: task.state ?? "completed",
+        canceledAt: null,
+        createdAt: new Date(T0),
+        statusAt: new Date(T0 + task.minute * MINUTE),
+      })),
+    });
+
+  const list = (params: Record<string, unknown> = {}, token = TOKEN) =>
+    rpc("ListTasks", params, { token });
+
+  const idsOf = (body: RpcBody) =>
+    ((body.result as unknown as { tasks?: RpcTask[] }).tasks ?? []).map(
+      (task) => task.id,
+    );
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.hold = null;
+    model.holdMidReply = null;
+    model.prompts = [];
+    resetTokenTouches();
+    resetA2aRunSlots();
+  });
+
+  it("lists only the Tasks the calling token started", async () => {
+    seedTasks([
+      { id: "mine", minute: 1 },
+      { id: "theirs", minute: 2, tokenId: "tok-3" },
+      { id: "other-endpoint", minute: 3, endpointId: "ep-2", tokenId: "tok-2" },
+      { id: "revoked", minute: 4, tokenId: null },
+    ]);
+
+    expect(idsOf((await list()).body)).toEqual(["mine"]);
+    expect(idsOf((await list({}, OTHER_TOKEN)).body)).toEqual(["theirs"]);
+  });
+
+  it("pages newest status first, every Task exactly once", async () => {
+    seedTasks([
+      { id: "a", minute: 1 },
+      { id: "b", minute: 3 },
+      { id: "c", minute: 3 },
+      { id: "d", minute: 2 },
+      { id: "e", minute: 5 },
+    ]);
+
+    const first = (await list({ pageSize: 2 })).body.result as unknown as {
+      nextPageToken: string;
+      pageSize: number;
+      totalSize: number;
+    };
+    expect(idsOf({ result: first } as unknown as RpcBody)).toEqual(["e", "c"]);
+    expect(first).toMatchObject({ pageSize: 2, totalSize: 5 });
+    expect(first.nextPageToken).not.toBe("");
+
+    const second = await list({ pageSize: 2, pageToken: first.nextPageToken });
+    expect(idsOf(second.body)).toEqual(["b", "d"]);
+    const third = await list({
+      pageSize: 2,
+      pageToken: (second.body.result as unknown as { nextPageToken: string })
+        .nextPageToken,
+    });
+    expect(idsOf(third.body)).toEqual(["a"]);
+    expect(third.body.result).toMatchObject({
+      nextPageToken: "",
+      totalSize: 5,
+    });
+  });
+
+  it("carries each Task's status timestamp", async () => {
+    seedTasks([{ id: "a", minute: 7 }]);
+
+    const [task] = (
+      (await list()).body.result as unknown as {
+        tasks: { status: { timestamp: string } }[];
+      }
+    ).tasks;
+
+    expect(task.status.timestamp).toBe("2026-10-01T00:07:00.000Z");
+  });
+
+  it("leaves artifacts out unless includeArtifacts is true", async () => {
+    seedTasks([{ id: "a", minute: 1 }]);
+
+    const [without] = (
+      (await list()).body.result as unknown as { tasks: RpcTask[] }
+    ).tasks;
+    const [withThem] = (
+      (await list({ includeArtifacts: true })).body.result as unknown as {
+        tasks: RpcTask[];
+      }
+    ).tasks;
+
+    expect(without.artifacts).toBeUndefined();
+    expect(withThem.artifacts[0].parts[0].text).toBe("Reply a");
+  });
+
+  it("filters by contextId, status and statusTimestampAfter", async () => {
+    seedTasks([
+      { id: "a", minute: 1 },
+      { id: "b", minute: 2, state: "failed" },
+      { id: "c", minute: 3, state: "canceled" },
+    ]);
+
+    expect(idsOf((await list({ contextId: "chat-b" })).body)).toEqual(["b"]);
+    expect(idsOf((await list({ status: "TASK_STATE_CANCELED" })).body)).toEqual(
+      ["c"],
+    );
+    expect(
+      idsOf((await list({ status: "TASK_STATE_INPUT_REQUIRED" })).body),
+    ).toEqual([]);
+    expect(
+      idsOf(
+        (await list({ statusTimestampAfter: "2026-10-01T00:01:30.000Z" })).body,
+      ),
+    ).toEqual(["c", "b"]);
+  });
+
+  it("filters a running Task by the state its run is in", async () => {
+    seedConversation();
+    const task = await startMidReply();
+
+    expect(
+      idsOf((await list({ status: "TASK_STATE_SUBMITTED" })).body),
+    ).toEqual([task.id]);
+    expect(
+      idsOf((await list({ status: "TASK_STATE_COMPLETED" })).body),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ["a pageSize of 0", { pageSize: 0 }],
+    ["a pageSize over the cap", { pageSize: 101 }],
+    ["a pageToken that isn't one", { pageToken: "garbage" }],
+    ["a timestamp that isn't one", { statusTimestampAfter: "yesterday" }],
+    ["a status that isn't one", { status: "TASK_STATE_BORED" }],
+  ])("refuses %s as invalid params", async (_, params) => {
+    seedTasks([{ id: "a", minute: 1 }]);
+
+    expect((await list(params)).body.error.code).toBe(-32602);
+  });
+
+  it("refuses another token's page token", async () => {
+    seedTasks([
+      { id: "a", minute: 1 },
+      { id: "b", minute: 2 },
+    ]);
+    const { nextPageToken } = (await list({ pageSize: 1 })).body
+      .result as unknown as { nextPageToken: string };
+
+    const res = await list({ pageToken: nextPageToken }, OTHER_TOKEN);
+
+    expect(res.body.error.code).toBe(-32602);
+  });
+
+  it("logs a ListTasks call with no Task", async () => {
+    seedTasks([{ id: "a", minute: 1 }]);
+
+    await list();
+
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "ListTasks", outcome: "ok" }),
+      expect.any(String),
+    );
+    expect(mockLogger.info).not.toHaveBeenCalledWith(
+      expect.objectContaining({ method: "ListTasks", taskId: "a" }),
+      expect.any(String),
+    );
   });
 });
 
@@ -1198,6 +1479,7 @@ const seedRunElsewhere = () =>
         endpointId: "ep-1",
         tokenId: "tok-1",
         state: null,
+        statusAt: new Date(),
         createdAt: new Date(),
       },
     ],
@@ -1572,6 +1854,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
           messageId: "msg-a",
           endpointId: "ep-1",
           tokenId: "tok-1",
+          statusAt: hourAgo,
           createdAt: hourAgo,
         },
       ],
@@ -2368,6 +2651,7 @@ describe("the A2A call log", () => {
           messageId: "msg-a",
           endpointId: "ep-1",
           tokenId: "tok-1",
+          statusAt: new Date(),
           createdAt: new Date(),
         },
       ],
@@ -2602,6 +2886,7 @@ describe("POST /a2a/:endpointId — streaming", () => {
           messageId: "msg-a",
           endpointId: "ep-1",
           tokenId: "tok-1",
+          statusAt: new Date(),
           createdAt: new Date(),
         },
       ],

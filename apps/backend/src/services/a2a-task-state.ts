@@ -40,28 +40,37 @@ const STATE_OF_END: Record<A2aTaskEndState, TaskState> = {
   canceled: TaskState.TASK_STATE_CANCELED,
 };
 
+/** The recorded end a Task state is, if it is one. */
+export const endStateOf = (state: TaskState): A2aTaskEndState | undefined =>
+  (Object.keys(STATE_OF_END) as A2aTaskEndState[]).find(
+    (end) => STATE_OF_END[end] === state,
+  );
+
 /**
  * Records how the turn answering `messageId` ended on its Task, if it has
- * one. The first end recorded stands: a later regenerate of the same turn
- * writes a reply the Task does not read.
+ * one, and when. The first end recorded stands: a later regenerate of the
+ * same turn writes a reply the Task does not read. Answers with the status
+ * timestamp it recorded, if it recorded one.
  */
 export const recordTaskEnd = async (
   chatId: string,
   messageId: string,
   status: RunStatus,
-): Promise<void> => {
+): Promise<Date | undefined> => {
   const state = END_OF_RUN[status];
-  if (!state) return;
-  await db
+  if (!state) return undefined;
+  const [recorded] = await db
     .update(a2aTaskTable)
-    .set({ state })
+    .set({ state, statusAt: new Date() })
     .where(
       and(
         eq(a2aTaskTable.chatId, chatId),
         eq(a2aTaskTable.messageId, messageId),
         isNull(a2aTaskTable.state),
       ),
-    );
+    )
+    .returning({ statusAt: a2aTaskTable.statusAt });
+  return recorded?.statusAt;
 };
 
 /**
@@ -86,6 +95,16 @@ export const currentTurnId = async (
   return leaf.role === "assistant" ? (leaf.parentId ?? undefined) : chat.leafId;
 };
 
+/** The Task's status timestamp as stored now. */
+const statusAtOf = async (taskId: string): Promise<Date> => {
+  const [row] = await db
+    .select({ statusAt: a2aTaskTable.statusAt })
+    .from(a2aTaskTable)
+    .where(eq(a2aTaskTable.id, taskId))
+    .limit(1);
+  return row.statusAt;
+};
+
 /**
  * The Task's state. Once its run has ended, the end recorded on it. Before
  * that it comes from the Chat's run: `submitted` until the reply's first
@@ -96,8 +115,12 @@ export const currentTurnId = async (
 const taskState = async (
   task: TaskRow,
   replyId: string | undefined,
-): Promise<TaskState> => {
-  if (task.state) return STATE_OF_END[task.state];
+): Promise<{ state: TaskState; statusAt: Date }> => {
+  const status = (state: TaskState, statusAt = task.statusAt) => ({
+    state,
+    statusAt,
+  });
+  if (task.state) return status(STATE_OF_END[task.state]);
   const [chat] = await db
     .select({ status: chatTable.status, leafId: chatTable.activeLeafId })
     .from(chatTable)
@@ -109,18 +132,21 @@ const taskState = async (
   // Moved past with no end recorded, which the end of its run and its first
   // read both missed. Its reply, if any, is the best evidence of how it ended.
   if (!isThisTurn) {
-    return replyId
-      ? TaskState.TASK_STATE_COMPLETED
-      : TaskState.TASK_STATE_FAILED;
+    return status(
+      replyId ? TaskState.TASK_STATE_COMPLETED : TaskState.TASK_STATE_FAILED,
+    );
   }
   if (chat.status === "running") {
-    return replyId
-      ? TaskState.TASK_STATE_WORKING
-      : TaskState.TASK_STATE_SUBMITTED;
+    return status(
+      replyId ? TaskState.TASK_STATE_WORKING : TaskState.TASK_STATE_SUBMITTED,
+    );
   }
-  const status = chat.status as RunStatus;
-  await recordTaskEnd(task.chatId, task.messageId, status);
-  return STATE_OF_END[END_OF_RUN[status] ?? "failed"];
+  const runStatus = chat.status as RunStatus;
+  const recordedAt =
+    (await recordTaskEnd(task.chatId, task.messageId, runStatus)) ??
+    // Lost to an end recorded at the same moment: that one's time stands.
+    (await statusAtOf(task.id));
+  return status(STATE_OF_END[END_OF_RUN[runStatus] ?? "failed"], recordedAt);
 };
 
 /** The Task as the client reads it. The final assistant text is its artifact. */
@@ -140,7 +166,7 @@ export const readTask = async (task: TaskRow): Promise<Task> => {
     )
     .orderBy(asc(chatMessage.createdAt))
     .limit(1);
-  const state = await taskState(task, reply?.id);
+  const { state, statusAt } = await taskState(task, reply?.id);
 
   const text =
     state === TaskState.TASK_STATE_COMPLETED && reply
@@ -153,7 +179,11 @@ export const readTask = async (task: TaskRow): Promise<Task> => {
   return {
     id: task.id,
     contextId: task.chatId,
-    status: { state, message: undefined, timestamp: undefined },
+    status: {
+      state,
+      message: undefined,
+      timestamp: statusAt.toISOString(),
+    },
     artifacts:
       text && reply
         ? [

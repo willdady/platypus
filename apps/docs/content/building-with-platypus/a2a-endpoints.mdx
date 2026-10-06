@@ -180,6 +180,24 @@ is named after, and that the caller may not be you.
 A client can stop a Task it no longer needs with
 [`CancelTask`](#cancelling-a-task).
 
+## Listing Tasks
+
+`ListTasks` answers with the Tasks **the calling token** started, newest first.
+A client never sees another client's Tasks in the list, even on the same
+endpoint, and Tasks started with a token you've deleted are listed to no one.
+
+- **Pages of up to 100.** A page holds **50** Tasks unless the client asks for
+  a `pageSize` between 1 and 100; anything outside that is refused. Pass the
+  answer's `nextPageToken` back as `pageToken` for the next page. It is empty on
+  the last page, and `totalSize` counts every match.
+- **Newest first** means the Task's status timestamp: when it ended, or when it
+  started if it is still running.
+- **Filters.** `contextId` lists one Chat's Tasks, `status` the Tasks in one
+  state, and `statusTimestampAfter` the Tasks whose status changed after that
+  time.
+- **Replies are left out** unless the client sets `includeArtifacts`. With it,
+  each Task carries the same artifact `GetTask` answers with.
+
 ## Streaming
 
 A client with someone waiting on the reply can watch it arrive over
