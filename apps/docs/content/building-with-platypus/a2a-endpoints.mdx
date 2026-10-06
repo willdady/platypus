@@ -233,11 +233,17 @@ server-sent events instead of polling.
   reply as one artifact and the Task's final status. The stream ends with the
   Task.
 - **`SubscribeToTask`** rejoins a Task that is still running, for example
-  after the client's connection dropped. It sends the Task as it stands, any
-  change of status, and once the Task ends its finished reply and final
-  status. It doesn't send the reply word by word: only the connection that
-  started the run does. A Task that has already ended is refused with an
-  "unsupported operation" error; read it with `GetTask` instead.
+  after the client's connection dropped. It sends the Task as it stands, the
+  reply so far, then the rest of the reply as it is written, any change of
+  status, and once the Task ends its finished reply and final status. A Task
+  that has already ended is refused with an "unsupported operation" error;
+  read it with `GetTask` instead.
+- **Every stream on a Task sees the reply as it's written**, in the same
+  order, whichever of your backend's instances it reaches: the stream that
+  started the run, any `SubscribeToTask`, and a retried
+  `SendStreamingMessage`. The same holds for a Task started with
+  `SendMessage`. If a stream misses part of the reply in transit, it waits
+  for the finished reply at the end instead.
 - **A dropped connection doesn't stop the run.** It goes on, and the client
   can rejoin with `SubscribeToTask` or read the result with `GetTask`.
 - **A retried `SendStreamingMessage`**, with a `messageId` already sent,

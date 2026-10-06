@@ -149,6 +149,11 @@ import { recoverStuckChats } from "../jobs/scheduler.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { A2aChatBusyError, a2aChatId } from "../services/a2a-task.ts";
 import {
+  A2aTaskEventBus,
+  setA2aFallbackPollMs,
+  type SequencedA2aTaskEvent,
+} from "../services/a2a-events.ts";
+import {
   MAX_CONCURRENT_PUSHES,
   pushMissedA2aEnds,
 } from "../services/a2a-push.ts";
@@ -200,6 +205,11 @@ afterEach(async () => {
     expect(held.filter((runId) => runRegistry.has(runId))).toEqual([]),
   );
 });
+
+// A run no process here holds is followed by reading the database, as a
+// follower whose notifications were lost does: read it often.
+beforeEach(() => setA2aFallbackPollMs(50));
+afterEach(() => setA2aFallbackPollMs());
 
 const seed = ({
   endpoint = {},
@@ -4072,33 +4082,131 @@ describe("POST /a2a/:endpointId — streaming", () => {
     expect(model.prompts).toHaveLength(1);
   });
 
-  it("follows a running Task on SubscribeToTask, with no token deltas", async () => {
+  it("sends every stream on a Task the same events, the reply's pieces too", async () => {
     seedConversation();
     model.deltas = ["Hello ", "from ", "Helper"];
     let release = () => {};
     model.hold = new Promise((resolve) => (release = resolve));
+
+    const starter = await streamSend({ messageId: "msg-a" });
+    const taskId = rows("a2a_task")[0].id as string;
+    const first = await open("SubscribeToTask", { id: taskId });
+    const second = await open("SubscribeToTask", { id: taskId });
+    release();
+    const [started, followed, alsoFollowed] = await Promise.all(
+      [starter, first, second].map(eventsOf),
+    );
+
+    expect(
+      artifactUpdates(started).map((u) => u.artifact.parts[0].text),
+    ).toEqual(["Hello ", "from ", "Helper", "Hello from Helper"]);
+    expect(followed).toEqual(started);
+    expect(alsoFollowed).toEqual(started);
+  });
+
+  it("sends a stream that joins mid-reply the reply so far, then the rest", async () => {
+    seedConversation();
+    model.deltas = ["Hello ", "from ", "Helper"];
+    let release = () => {};
+    model.holdMidReply = new Promise((resolve) => (release = resolve));
+    const starter = await streamSend({ messageId: "msg-a" });
+    const taskId = rows("a2a_task")[0].id as string;
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+    // The first piece is out once the starter has it.
+    const reader = starter.body!.getReader();
+    const decoder = new TextDecoder();
+    let seen = "";
+    while (!seen.includes("artifactUpdate")) {
+      seen += decoder.decode((await reader.read()).value);
+    }
+
+    const late = await open("SubscribeToTask", { id: taskId });
+    release();
+    const updates = artifactUpdates(await eventsOf(late));
+    await reader.cancel();
+
+    expect(
+      updates.map((u) => [u.artifact.parts[0].text, u.append ?? false]),
+    ).toEqual([
+      ["Hello ", false],
+      ["from ", true],
+      ["Helper", true],
+      ["Hello from Helper", false],
+    ]);
+  });
+
+  it("publishes the reply's pieces to the other instances", async () => {
+    const fake = seedConversation();
+    model.deltas = ["Hello ", "from ", "Helper"];
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    // Another instance, with its own registry, hearing this one's NOTIFYs.
+    const elsewhere = new A2aTaskEventBus({
+      instanceId: "elsewhere",
+      send: () => Promise.resolve(),
+    });
+    Object.assign(fake.handle as object, {
+      $client: {
+        query: (_sql: string, [channel, payload]: string[]) => {
+          if (channel === "a2a_task_event") elsewhere.receive(payload);
+          return Promise.resolve({ rows: [] });
+        },
+      },
+    });
     const sent = await send(
       { messageId: "msg-a" },
       { returnImmediately: true },
     );
-    const taskId = sent.body.result.task.id;
+    const following = elsewhere.subscribe(sent.body.result.task.id);
 
-    const res = await open("SubscribeToTask", { id: taskId });
     release();
-    const events = await eventsOf(res);
+    const heard: SequencedA2aTaskEvent[] = [];
+    for (;;) {
+      const event = await following.next(2_000);
+      expect(event).toBeDefined();
+      heard.push(event!);
+      if (event!.kind === "end") break;
+    }
 
-    expect(events[0].task!.id).toBe(taskId);
-    const updates = artifactUpdates(events);
-    expect(updates).toHaveLength(1);
-    expect(updates[0]).toMatchObject({ taskId, lastChunk: true });
-    expect(updates[0].artifact.parts[0].text).toBe("Hello from Helper");
-    expect(events.at(-1)!.statusUpdate!.status.state).toBe(
-      "TASK_STATE_COMPLETED",
-    );
+    expect(
+      heard.flatMap((e) => (e.kind === "delta" ? [[e.offset, e.text]] : [])),
+    ).toEqual([
+      [0, "Hello "],
+      [6, "from "],
+      [11, "Helper"],
+    ]);
+    // The end itself is read from the database there.
+    expect(heard.at(-1)).toEqual({ kind: "end", seq: heard.length });
+    expect(following.replyFrom).toBe(0);
   });
 
-  it("follows a Task from the database alone, as another instance would", async () => {
-    // A run no process here holds: only its rows say how it goes.
+  it("waits out a blocking SendMessage on its run's events, not by polling", async () => {
+    const fake = seedConversation();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+    const reads = vi.spyOn(
+      fake.handle as { select: (...args: unknown[]) => unknown },
+      "select",
+    );
+    const sending = send({ messageId: "msg-a" });
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+    const started = reads.mock.calls.length;
+
+    // Longer than a poll of the database ever waited.
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    expect(reads.mock.calls.length).toBe(started);
+
+    release();
+    const { body } = await sending;
+    expect(body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
+    // What the run reads to write its end, the Task read as it ends, and the
+    // caller's access checked once: however long the run took.
+    expect(reads.mock.calls.length - started).toBeLessThanOrEqual(20);
+  });
+
+  it("follows a Task from the database alone, with no notification of it", async () => {
+    // A run no process here holds, whose notifications never arrive: only
+    // its rows say how it goes, read by the fallback poll.
     seedConversation({
       chat: [
         {
