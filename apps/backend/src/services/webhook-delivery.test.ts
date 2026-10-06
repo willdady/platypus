@@ -306,7 +306,11 @@ describe("Webhook Delivery Service", () => {
 
     await vi.advanceTimersByTimeAsync(8000);
 
-    expect(mockCheckEgress).toHaveBeenCalledWith("https://example.com/webhook");
+    // A Webhook takes the guard's own private-network setting.
+    expect(mockCheckEgress).toHaveBeenCalledWith(
+      "https://example.com/webhook",
+      { allowPrivateNetworks: undefined },
+    );
     expect(mockFetch).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ url: "https://example.com/webhook" }),

@@ -120,6 +120,7 @@ import { stopCanceledA2aRuns } from "../services/a2a-cancel.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { A2aChatBusyError, a2aChatId } from "../services/a2a-task.ts";
+import { MAX_CONCURRENT_PUSHES } from "../services/a2a-push.ts";
 import { toJsonRpcError, UnsupportedOperationError } from "@a2a-js/sdk/errors";
 
 const CARD_PATH = "/.well-known/agent-card.json";
@@ -2091,22 +2092,247 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     });
   });
 
-  it("refuses a URL the network policy blocks, and never calls it", async () => {
+  /** Waits until a push to `url` has been refused by the egress guard. */
+  const blocked = (url: string) =>
+    vi.waitFor(() =>
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ url }),
+        "A2A push notification delivery blocked by network policy",
+      ),
+    );
+
+  /** A Task that has already ended. */
+  const ended = async () => {
     seedConversation();
-    const { task, release } = await startHeld();
+    return (await send({ messageId: "msg-a" })).body.result.task;
+  };
+
+  it("accepts a URL the network policy blocks, and never calls it", async () => {
+    const task = await ended();
+    const url = "http://169.254.169.254/latest/meta-data";
 
     const res = await rpc("CreateTaskPushNotificationConfig", {
       taskId: task.id,
-      ...config({ url: "http://169.254.169.254/latest/meta-data" }),
+      ...config({ url }),
     });
 
-    expect(res.body.error.code).toBe(-32602);
+    expect(res.body.result).toMatchObject({ url });
+    await blocked(url);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("refuses a URL that is not http or https", async () => {
+    const task = await ended();
+
+    for (const url of ["ftp://client.example/push", "not a url"]) {
+      const res = await rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        ...config({ url }),
+      });
+      expect(res.body.error.code).toBe(-32602);
+    }
     expect(rows("a2a_push_config")).toHaveLength(0);
-    release();
-    await vi.waitFor(async () => {
-      const got = await rpc("GetTask", { id: task.id });
-      expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+  });
+
+  const PRIVATE_URLS = [
+    "http://10.1.2.3/push",
+    "http://172.16.5.4/push",
+    "http://192.168.1.1/push",
+    "http://[fd00:ec2::254]/push",
+  ];
+
+  it("never pushes to a private network, though Webhooks may reach one", async () => {
+    vi.stubEnv("EGRESS_ALLOW_PRIVATE_NETWORKS", "true");
+    const task = await ended();
+
+    for (const url of PRIVATE_URLS) {
+      await rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        ...config({ url }),
+      });
+    }
+
+    for (const url of PRIVATE_URLS) await blocked(url);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("pushes to a private network when the Operator allows A2A pushes there", async () => {
+    vi.stubEnv("A2A_PUSH_ALLOW_PRIVATE_NETWORKS", "true");
+    const task = await ended();
+
+    for (const url of PRIVATE_URLS) {
+      await rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        ...config({ url }),
+      });
+    }
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(4));
+    expect(pushed().map((call) => call.url)).toEqual(
+      expect.arrayContaining(PRIVATE_URLS),
+    );
+  });
+
+  it("answers a host that doesn't resolve as it answers one that resolves internally", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+
+    const register = (id: string, url: string) =>
+      rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        id,
+        ...config({ url }),
+      });
+    const unresolvable = await register(
+      "cfg",
+      "http://no-such-host.invalid/push",
+    );
+    await rpc("DeleteTaskPushNotificationConfig", {
+      taskId: task.id,
+      id: "cfg",
     });
+    const internal = await register("cfg", "http://10.0.0.7/push");
+    await rpc("DeleteTaskPushNotificationConfig", {
+      taskId: task.id,
+      id: "cfg",
+    });
+
+    const answer = (res: typeof unresolvable) => ({
+      status: res.status,
+      error: res.body.error,
+      result: { ...res.body.result, url: undefined },
+    });
+    expect(unresolvable.body.error).toBeUndefined();
+    expect(answer(unresolvable)).toEqual(answer(internal));
+    release();
+  });
+
+  it("never re-arms a delivered config by moving its URL", async () => {
+    const task = await ended();
+    await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      id: "cfg-1",
+      ...config(),
+    });
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+    const moved = await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      id: "cfg-1",
+      ...config({ url: "https://203.0.113.11/push" }),
+    });
+
+    expect(moved.body.error.code).toBe(-32602);
+    expect(rows("a2a_push_config")).toEqual([
+      expect.objectContaining({ id: "cfg-1", url: PUSH_URL }),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a Task at most 5 pushes, however its configs are churned", async () => {
+    const task = await ended();
+
+    for (let i = 0; i < 8; i++) {
+      await rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        id: `cfg-${i}`,
+        ...config({ url: `${PUSH_URL}/${i}` }),
+      });
+      await rpc("DeleteTaskPushNotificationConfig", {
+        taskId: task.id,
+        id: `cfg-${i}`,
+      });
+    }
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(5));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).toHaveBeenCalledTimes(5);
+  });
+
+  it("refuses a 6th config on one Task", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+
+    for (let i = 0; i < 5; i++) {
+      const res = await rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        ...config({ url: `${PUSH_URL}/${i}` }),
+      });
+      expect(res.body.result).toBeDefined();
+    }
+    const sixth = await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config({ url: `${PUSH_URL}/6` }),
+    });
+
+    expect(sixth.body.error.code).toBe(-32602);
+    expect(rows("a2a_push_config")).toHaveLength(5);
+    release();
+  });
+
+  it(`sends at most ${MAX_CONCURRENT_PUSHES} pushes at once from an instance`, async () => {
+    const answers: (() => void)[] = [];
+    push.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          answers.push(() => resolve(new Response(null, { status: 200 }))),
+        ),
+    );
+    const first = await ended();
+    const second = (
+      await send({ messageId: "msg-b", contextId: first.contextId })
+    ).body.result.task;
+
+    // Two ended Tasks, five configs each: ten pushes due at once.
+    for (const task of [first, second]) {
+      for (let i = 0; i < 5; i++) {
+        await rpc("CreateTaskPushNotificationConfig", {
+          taskId: task.id,
+          ...config({ url: `${PUSH_URL}/${i}` }),
+        });
+      }
+    }
+
+    await vi.waitFor(() =>
+      expect(push).toHaveBeenCalledTimes(MAX_CONCURRENT_PUSHES),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(push).toHaveBeenCalledTimes(MAX_CONCURRENT_PUSHES);
+
+    // One answers: the next waiting push takes its place.
+    answers[0]();
+    await vi.waitFor(() =>
+      expect(push).toHaveBeenCalledTimes(MAX_CONCURRENT_PUSHES + 1),
+    );
+    answers.slice(1).forEach((answer) => answer());
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(10));
+    answers.forEach((answer) => answer());
+  });
+
+  it("refuses credentials that would break a header, storing and sending nothing", async () => {
+    const task = await ended();
+
+    for (const over of [
+      { authentication: { scheme: "Bear er", credentials: "client-secret" } },
+      { authentication: { scheme: "Bearer\u0001", credentials: "x" } },
+      {
+        authentication: {
+          scheme: "Bearer",
+          credentials: "client-secret\r\nX-Injected: 1",
+        },
+      },
+      { token: "client\u0007token" },
+    ]) {
+      const res = await rpc("CreateTaskPushNotificationConfig", {
+        taskId: task.id,
+        ...config(over),
+      });
+      expect(res.body.error.code).toBe(-32602);
+    }
+
+    expect(rows("a2a_push_config")).toHaveLength(0);
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -2147,6 +2373,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
       id: "cfg-1",
       taskId: task.id,
       url: PUSH_URL,
+      authentication: { scheme: "Bearer" },
     });
     const listed = await rpc("ListTaskPushNotificationConfigs", {
       taskId: task.id,
@@ -2154,6 +2381,12 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     expect(listed.body.result).toMatchObject({
       configs: [expect.objectContaining({ id: "cfg-1" })],
     });
+    // The secrets the client registered are never read back.
+    for (const read of [created, got, listed]) {
+      const body = JSON.stringify(read.body.result);
+      expect(body).not.toContain("client-secret");
+      expect(body).not.toContain("client-verification-token");
+    }
 
     await rpc("DeleteTaskPushNotificationConfig", {
       taskId: task.id,
