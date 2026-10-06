@@ -156,6 +156,8 @@ export type A2aRejectReason =
   | "body_too_large"
   /** The Chat already has a run going. */
   | "busy"
+  /** A JSON-RPC Notification (no `id`): not run, and not answered. */
+  | "notification"
   | "parse_error"
   | "invalid_request"
   | "method_not_found"
@@ -194,18 +196,96 @@ export const reasonOfRpcCode = (code: number): A2aRejectReason =>
 export const AGENT_CARD_METHOD = "GetAgentCard";
 
 /**
- * The method a JSON-RPC body names, or `null`. The caller chose it, so only a
- * plain name is logged.
+ * The method a parsed JSON-RPC body names, or `null`. The caller chose it, so
+ * only a plain name is logged.
  */
-export const rpcMethodOf = (body: string): string | null => {
+export const rpcMethodOf = (request: unknown): string | null => {
+  const method =
+    typeof request === "object" && request !== null && !Array.isArray(request)
+      ? (request as { method?: unknown }).method
+      : undefined;
+  return typeof method === "string" && /^[A-Za-z]{1,64}$/.test(method)
+    ? method
+    : null;
+};
+
+/** A JSON-RPC id the spec allows a Request to carry. */
+const isRpcId = (id: unknown): id is string | number =>
+  typeof id === "string" || (typeof id === "number" && Number.isInteger(id));
+
+/**
+ * A JSON-RPC body, read once (JSON-RPC 2.0 §4–§5, A2A §9.5):
+ *
+ * - `request`: a valid Request, to be served;
+ * - `notification`: a valid Request with no `id`, which the server must not
+ *   answer, and so is never run;
+ * - `malformed`: not JSON (`-32700`) or not a valid Request (`-32600`), with
+ *   the error to answer it with and its `id` when that is valid.
+ */
+export type RpcEnvelope =
+  | {
+      kind: "request";
+      request: Record<string, unknown>;
+      id: string | number;
+      method: string | null;
+    }
+  | { kind: "notification"; method: string | null }
+  | {
+      kind: "malformed";
+      id: string | number | null;
+      method: string | null;
+      error: { code: number; message: string };
+    };
+
+/** Parses and checks a JSON-RPC body's envelope. The one parse of the body. */
+export const readRpcEnvelope = (body: string): RpcEnvelope => {
+  let request: unknown;
   try {
-    const method: unknown = (JSON.parse(body) as { method?: unknown })?.method;
-    return typeof method === "string" && /^[A-Za-z]{1,64}$/.test(method)
-      ? method
-      : null;
+    request = JSON.parse(body);
   } catch {
-    return null;
+    return {
+      kind: "malformed",
+      id: null,
+      method: null,
+      error: { code: A2A_ERROR_CODE.PARSE_ERROR, message: "Parse error" },
+    };
   }
+  if (Array.isArray(request)) {
+    return {
+      kind: "malformed",
+      id: null,
+      method: null,
+      error: {
+        code: A2A_ERROR_CODE.INVALID_REQUEST,
+        message: "Batch requests are not supported",
+      },
+    };
+  }
+  const method = rpcMethodOf(request);
+  const fields =
+    typeof request === "object" && request !== null
+      ? (request as Record<string, unknown>)
+      : undefined;
+  const id = fields && isRpcId(fields.id) ? fields.id : null;
+  if (
+    !fields ||
+    fields.jsonrpc !== "2.0" ||
+    typeof fields.method !== "string" ||
+    ("id" in fields && !isRpcId(fields.id))
+  ) {
+    return {
+      kind: "malformed",
+      id,
+      method,
+      error: {
+        code: A2A_ERROR_CODE.INVALID_REQUEST,
+        message: "Invalid Request",
+      },
+    };
+  }
+  // A present `id` was checked above, so only an absent one is `null` here.
+  if (id === null) return { kind: "notification", method };
+  return { kind: "request", request: fields, id, method };
 };
 
 export type A2aCallLogEntry = {

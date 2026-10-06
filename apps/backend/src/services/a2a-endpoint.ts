@@ -1,11 +1,13 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   a2aInterfaceUrl as interfaceUrl,
   gateAdmits,
-  type A2aAccess,
+  type OrgGateAccess,
   type A2aEndpointCreate,
+  type A2aEndpointListItem,
   type A2aEndpointUpdate,
+  type OrgA2aEndpoint,
   type OrgGateAccessUpdate,
   type OrgGate,
 } from "@platypus/schemas";
@@ -26,7 +28,6 @@ import type { ScopeContext } from "../scope.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import {
   deleteOwned,
-  listOwned,
   requireOwned,
   updateOwned,
 } from "./workspace-resource.ts";
@@ -35,9 +36,14 @@ import {
   bearerTokenStatus,
   issuedTokenFields,
   notifyTokenOwner,
+  tokenOwner,
 } from "./bearer-token.ts";
-import { getGateAccess, setGateAccess, type GateAccess } from "./org-gate.ts";
-import { ownerMayAct, ownerMembershipJoin } from "./owner-membership.ts";
+import { getGateAccess, setGateAccess } from "./org-gate.ts";
+import {
+  ownerMayAct,
+  ownerMembershipJoin,
+  ownerStandingColumns,
+} from "./owner-membership.ts";
 import type { A2aRejectReason } from "./a2a-call.ts";
 import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 
@@ -64,13 +70,21 @@ export const toPublicToken = (row: A2aTokenRow) => {
   return { ...rest, tokenStatus: bearerTokenStatus(row) };
 };
 
-export const listA2aEndpoints = (workspaceId: string) =>
-  listOwned(
-    db,
-    "a2aEndpoint",
-    { workspaceId },
-    asc(a2aEndpointTable.createdAt),
-  );
+/** The Workspace's endpoints, each with its Agent's name. */
+export const listA2aEndpoints = async (
+  workspaceId: string,
+): Promise<A2aEndpointListItem[]> => {
+  const rows = await db
+    .select()
+    .from(a2aEndpointTable)
+    .innerJoin(agentTable, eq(agentTable.id, a2aEndpointTable.agentId))
+    .where(eq(a2aEndpointTable.workspaceId, workspaceId))
+    .orderBy(asc(a2aEndpointTable.createdAt));
+  return rows.map(({ a2a_endpoint: endpoint, agent }) => ({
+    ...endpoint,
+    agentName: agent.name,
+  }));
+};
 
 /** The endpoint with its tokens. Throws `NotFoundError` outside the Workspace. */
 export const getA2aEndpoint = async (workspaceId: string, id: string) => {
@@ -200,7 +214,7 @@ export type LiveA2aEndpoint = A2aEndpointRow & {
 };
 
 /** Why an endpoint a public call names isn't live. */
-export type A2aEndpointNotLive = Extract<
+type A2aEndpointNotLive = Extract<
   A2aRejectReason,
   "unknown_endpoint" | "disabled" | "gate" | "owner_left"
 >;
@@ -225,8 +239,16 @@ export type A2aEndpointLookup =
 export const lookupA2aEndpoint = async (
   endpointId: string,
 ): Promise<A2aEndpointLookup> => {
+  // Every call starts here, so it reads only the columns it decides on.
   const [row] = await db
-    .select()
+    .select({
+      endpoint: getTableColumns(a2aEndpointTable),
+      organizationId: workspaceTable.organizationId,
+      ownerId: workspaceTable.ownerId,
+      a2aAllowed: workspaceTable.a2aAllowed,
+      a2aGate: organizationTable.a2aGate,
+      owner: ownerStandingColumns,
+    })
     .from(a2aEndpointTable)
     .innerJoin(
       workspaceTable,
@@ -244,43 +266,48 @@ export const lookupA2aEndpoint = async (
   const notLive = (reason: A2aEndpointNotLive): A2aEndpointLookup => ({
     live: false,
     reason,
-    organizationId: row.workspace.organizationId,
-    workspaceId: row.workspace.id,
+    organizationId: row.organizationId,
+    workspaceId: row.endpoint.workspaceId,
   });
-  if (!row.a2a_endpoint.enabled) return notLive("disabled");
-  if (
-    !gateAdmits(row.organization.a2aGate as OrgGate, row.workspace.a2aAllowed)
-  ) {
+  if (!row.endpoint.enabled) return notLive("disabled");
+  if (!gateAdmits(row.a2aGate as OrgGate, row.a2aAllowed)) {
     return notLive("gate");
   }
-  if (
-    !ownerMayAct({
-      membershipId: row.organization_member?.id,
-      role: row.user.role,
-      banned: row.user.banned,
-      banExpires: row.user.banExpires,
-    })
-  ) {
-    return notLive("owner_left");
-  }
+  if (!ownerMayAct(row.owner)) return notLive("owner_left");
   return {
     live: true,
     endpoint: {
-      ...row.a2a_endpoint,
-      organizationId: row.workspace.organizationId,
-      ownerId: row.workspace.ownerId,
+      ...row.endpoint,
+      organizationId: row.organizationId,
+      ownerId: row.ownerId,
     },
   };
 };
+
+/** The A2A protocol version, as `Major.Minor`, every card's interface serves. */
+export const A2A_PROTOCOL_VERSION = "1.0";
 
 /** The JSON-RPC interface URL an endpoint's card names. */
 export const a2aInterfaceUrl = (endpointId: string) =>
   interfaceUrl(backendBaseUrl(), endpointId);
 
 /**
+ * The endpoint's one skill, built from its public name and description, so it
+ * reveals nothing the card does not. A2A 1.0 §5.7: a required array holds at
+ * least one element, so it has a tag and the card has the skill.
+ */
+const endpointSkill = (endpoint: A2aEndpointRow) => ({
+  id: endpoint.id,
+  name: endpoint.name,
+  description: endpoint.description,
+  tags: ["chat"],
+});
+
+/**
  * The public Agent Card (A2A 1.0): the endpoint's public name and description,
- * the bearer scheme and the interface URL. Never the Agent's own description,
- * Tool sets or Skills. Capabilities say only what this server answers today.
+ * the bearer scheme, the interface URL and the endpoint's one skill. Never the
+ * Agent's own description, Tool sets or Skills. Capabilities say only what
+ * this server answers today.
  */
 export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   name: endpoint.name,
@@ -289,7 +316,7 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
     {
       url: a2aInterfaceUrl(endpoint.id),
       protocolBinding: "JSONRPC",
-      protocolVersion: "1.0",
+      protocolVersion: A2A_PROTOCOL_VERSION,
     },
   ],
   version: "1.0.0",
@@ -304,28 +331,15 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   securityRequirements: [{ schemes: { bearer: { list: [] } } }],
   defaultInputModes: ["text/plain", "application/json"],
   defaultOutputModes: ["text/plain"],
-  skills: [],
+  skills: [endpointSkill(endpoint)],
 });
 
 /**
- * The authenticated extended card: the public card plus one skill, built from
- * the same public name and description.
+ * The authenticated extended card: the public card. It has nothing to add, as
+ * the public card already carries the endpoint's skill.
  */
-export const extendedAgentCard = (endpoint: A2aEndpointRow) => ({
-  ...publicAgentCard(endpoint),
-  skills: [
-    {
-      id: endpoint.id,
-      name: endpoint.name,
-      description: endpoint.description,
-      tags: [],
-      examples: [],
-      inputModes: [],
-      outputModes: [],
-      securityRequirements: [],
-    },
-  ],
-});
+export const extendedAgentCard = (endpoint: A2aEndpointRow) =>
+  publicAgentCard(endpoint);
 
 // ------------------------------------------------------------ Org Admin oversight
 
@@ -334,11 +348,24 @@ export const extendedAgentCard = (endpoint: A2aEndpointRow) => ({
  * where it is, whose it is and which Agent it reaches. Never a token's value
  * or hash.
  */
-export const listOrgA2aEndpoints = async (orgId: string) => {
+export const listOrgA2aEndpoints = async (
+  orgId: string,
+): Promise<OrgA2aEndpoint[]> => {
   const inOrg = eq(workspaceTable.organizationId, orgId);
   const [endpoints, tokens] = await Promise.all([
     db
-      .select()
+      .select({
+        id: a2aEndpointTable.id,
+        name: a2aEndpointTable.name,
+        enabled: a2aEndpointTable.enabled,
+        agentId: agentTable.id,
+        agentName: agentTable.name,
+        workspaceId: workspaceTable.id,
+        workspaceName: workspaceTable.name,
+        ownerId: userTable.id,
+        ownerName: userTable.name,
+        createdAt: a2aEndpointTable.createdAt,
+      })
       .from(a2aEndpointTable)
       .innerJoin(
         workspaceTable,
@@ -349,7 +376,7 @@ export const listOrgA2aEndpoints = async (orgId: string) => {
       .where(inOrg)
       .orderBy(desc(a2aEndpointTable.createdAt)),
     db
-      .select()
+      .select(getTableColumns(a2aTokenTable))
       .from(a2aTokenTable)
       .innerJoin(
         a2aEndpointTable,
@@ -362,23 +389,16 @@ export const listOrgA2aEndpoints = async (orgId: string) => {
       .where(inOrg)
       .orderBy(asc(a2aTokenTable.createdAt)),
   ]);
-  return endpoints.map(
-    ({ a2a_endpoint: endpoint, workspace, user, agent }) => ({
-      id: endpoint.id,
-      name: endpoint.name,
-      enabled: endpoint.enabled,
-      agentId: agent.id,
-      agentName: agent.name,
-      workspaceId: workspace.id,
-      workspaceName: workspace.name,
-      ownerId: user.id,
-      ownerName: user.name,
-      createdAt: endpoint.createdAt,
-      tokens: tokens
-        .filter((row) => row.a2a_token.endpointId === endpoint.id)
-        .map((row) => toPublicToken(row.a2a_token)),
-    }),
-  );
+  const byEndpoint = new Map<string, ReturnType<typeof toPublicToken>[]>();
+  for (const token of tokens) {
+    const listed = byEndpoint.get(token.endpointId) ?? [];
+    listed.push(toPublicToken(token));
+    byEndpoint.set(token.endpointId, listed);
+  }
+  return endpoints.map((endpoint) => ({
+    ...endpoint,
+    tokens: byEndpoint.get(endpoint.id) ?? [],
+  }));
 };
 
 /** The endpoint, if it is in the Organization, with its Workspace. */
@@ -401,23 +421,6 @@ const findOrgEndpoint = async (orgId: string, endpointId: string) => {
 };
 
 /**
- * Tells the Workspace Owner an Org Admin revoked something of theirs. A
- * failure is logged, not thrown: the revoke has already happened.
- */
-const notifyOwnerOfRevoke = async (
-  orgId: string,
-  endpoint: A2aEndpointRow,
-  title: string,
-  body: string,
-): Promise<void> => {
-  await notifyTokenOwner(
-    { orgId, workspaceId: endpoint.workspaceId, agentId: endpoint.agentId },
-    title,
-    body,
-  );
-};
-
-/**
  * Revokes an endpoint on an Org Admin's behalf by deleting it: its URL and
  * every token stop working at once, its running Tasks are canceled, and its
  * Chats stay. The Owner is told.
@@ -437,9 +440,9 @@ export const revokeOrgA2aEndpoint = async (
   if (deleted.length === 0) return false;
   await stopRevokedA2aWork([endpointId]);
 
-  await notifyOwnerOfRevoke(
-    orgId,
-    endpoint,
+  // A failure is logged, not thrown: the revoke has already happened.
+  await notifyTokenOwner(
+    tokenOwner(orgId, endpoint),
     "A2A endpoint revoked",
     `An Organization Admin revoked the A2A endpoint "${endpoint.name}", so its URL and every one of its tokens are refused. Its Chats are kept. If clients should reach this agent again, create a new endpoint and give them its URL and new tokens.`,
   );
@@ -499,9 +502,9 @@ export const revokeOrgA2aToken = async (
   if (deleted.length === 0) throw new ConflictError(TOKEN_REPLACED_MESSAGE);
   await stopRevokedA2aWork([endpointId]);
 
-  await notifyOwnerOfRevoke(
-    orgId,
-    endpoint,
+  // A failure is logged, not thrown: the revoke has already happened.
+  await notifyTokenOwner(
+    tokenOwner(orgId, endpoint),
     "A2A token revoked",
     `An Organization Admin revoked the token "${token.name}" on the A2A endpoint "${endpoint.name}", so calls with it are refused. If that client should keep working, issue it a new token on the endpoint's page.`,
   );
@@ -522,30 +525,21 @@ export const revokeOrgA2aToken = async (
 const A2A_GATE = {
   gate: "a2aGate",
   allowed: "a2aAllowed",
-  resourceWorkspaceIds: async (orgId: string) =>
-    (
-      await db
-        .select({ workspaceId: a2aEndpointTable.workspaceId })
-        .from(a2aEndpointTable)
-        .innerJoin(
-          workspaceTable,
-          eq(workspaceTable.id, a2aEndpointTable.workspaceId),
-        )
-        .where(eq(workspaceTable.organizationId, orgId))
-    ).map((row) => row.workspaceId),
+  resourceCounts: (orgId: string) =>
+    db
+      .select({ workspaceId: a2aEndpointTable.workspaceId, count: count() })
+      .from(a2aEndpointTable)
+      .innerJoin(
+        workspaceTable,
+        eq(workspaceTable.id, a2aEndpointTable.workspaceId),
+      )
+      .where(eq(workspaceTable.organizationId, orgId))
+      .groupBy(a2aEndpointTable.workspaceId),
   changedMessage: "A2A access changed by an Org Admin",
 } as const;
 
-const toA2aAccess = ({ gate, workspaces }: GateAccess): A2aAccess => ({
-  gate,
-  workspaces: workspaces.map(({ count, ...workspace }) => ({
-    ...workspace,
-    a2aEndpointCount: count,
-  })),
-});
-
-export const getA2aAccess = async (orgId: string): Promise<A2aAccess> =>
-  toA2aAccess(await getGateAccess(A2A_GATE, orgId));
+export const getA2aAccess = (orgId: string): Promise<OrgGateAccess> =>
+  getGateAccess(A2A_GATE, orgId);
 
 /**
  * Saves the gate and the Workspaces' switches. A Workspace it shuts out has
@@ -555,7 +549,7 @@ export const setA2aAccess = async (
   orgId: string,
   update: OrgGateAccessUpdate,
   actorUserId: string,
-): Promise<A2aAccess> => {
+): Promise<OrgGateAccess> => {
   const access = await setGateAccess(A2A_GATE, orgId, update, actorUserId);
   const endpoints = await db
     .select({ id: a2aEndpointTable.id })
@@ -566,5 +560,5 @@ export const setA2aAccess = async (
     )
     .where(eq(workspaceTable.organizationId, orgId));
   await stopRevokedA2aWork(endpoints.map((endpoint) => endpoint.id));
-  return toA2aAccess(access);
+  return access;
 };

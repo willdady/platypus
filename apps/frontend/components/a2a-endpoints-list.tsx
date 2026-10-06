@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { Pencil, Plus } from "lucide-react";
-import type { A2aEndpoint, Agent } from "@platypus/schemas";
+import type { A2aEndpointListItem } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { Button } from "./ui/button";
 import { useAuth } from "./auth-provider";
+import { ListError, ListState } from "./list-state";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { workspaceRoutes } from "@/lib/routes";
 import {
@@ -24,16 +25,10 @@ const A2aEndpointsList = ({
 }) => {
   const routes = workspaceRoutes(orgId, workspaceId);
   const { ownsWorkspace } = useAuth();
-  const scope = { orgId, workspaceId };
 
-  const { data, error, isLoading } = useScopedSWR<{ results: A2aEndpoint[] }>(
-    "a2a-endpoints",
-    scope,
-  );
-  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
-    "agents",
-    scope,
-  );
+  const { data, error, isLoading, mutate } = useScopedSWR<{
+    results: A2aEndpointListItem[];
+  }>("a2a-endpoints", { orgId, workspaceId });
 
   if (isLoading) {
     return (
@@ -43,11 +38,17 @@ const A2aEndpointsList = ({
       </LoadingRegion>
     );
   }
-  if (error) return <div>Failed to load A2A endpoints.</div>;
+  if (error && !data) {
+    return (
+      <ListError
+        error={error}
+        subject="A2A endpoints"
+        onRetry={() => void mutate()}
+      />
+    );
+  }
 
   const endpoints = data?.results ?? [];
-  const agentName = (agentId: string) =>
-    agentsData?.results.find((agent) => agent.id === agentId)?.name;
 
   const addButton = ownsWorkspace && (
     <Button asChild>
@@ -59,12 +60,9 @@ const A2aEndpointsList = ({
 
   if (!endpoints.length) {
     return (
-      <div>
-        <p className="text-muted-foreground mb-4">
-          No A2A endpoints in this workspace.
-        </p>
-        {addButton}
-      </div>
+      <ListState variant="empty" action={addButton}>
+        No A2A endpoints in this workspace.
+      </ListState>
     );
   }
 
@@ -85,7 +83,7 @@ const A2aEndpointsList = ({
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground truncate">
-                    {agentName(endpoint.agentId) ?? "Agent"}
+                    {endpoint.agentName}
                   </p>
                 </ItemContent>
                 <ItemActions>

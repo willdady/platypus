@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
@@ -13,13 +14,20 @@ import {
   savedBody,
 } from "@/lib/form-test-harness";
 import { selectOption } from "@/lib/test-utils";
+import { formatDateTime } from "@/lib/format-date";
 
 vi.mock("next/navigation", () => navigationMock);
-vi.mock("@/components/auth-provider", () => authMock);
+// The backend URL a test may blank, to stand for one not configured yet.
+const backend = vi.hoisted(() => ({ url: "http://test" }));
+vi.mock("@/components/auth-provider", () => ({
+  ...authMock,
+  useBackendUrl: () => backend.url,
+}));
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { A2aEndpointForm } from "./a2a-endpoint-form";
+import { A2aTokens } from "./a2a-tokens";
 
 const endpoint = {
   id: "ep-1",
@@ -53,6 +61,7 @@ const asOwner = (owns: boolean) =>
 beforeEach(() => {
   resetFormHarness();
   asOwner(true);
+  backend.url = "http://test";
   setDataFor("/agents", {
     results: [
       { id: "agent-1", name: "Helper", description: "Internal" },
@@ -221,9 +230,69 @@ describe("A2aEndpointForm", () => {
     );
 
     expect(screen.getByText("Expiring soon")).toBeInTheDocument();
-    expect(screen.getByText(/Expires .*2026/)).toBeInTheDocument();
-    expect(screen.getByText(/Last used never/)).toBeInTheDocument();
-    expect(screen.getByText(/Last rejected .*2026/)).toBeInTheDocument();
+    const row = screen.getByText("Hermes").closest("li");
+    expect(row).toHaveTextContent(/Expires: .*2026/);
+    expect(row).toHaveTextContent(/Last used: Never/);
+    expect(row).toHaveTextContent(/Last rejected: .*2026/);
+    // The same format the Org Admin's table shows.
+    expect(row).toHaveTextContent(formatDateTime("2026-10-02T00:00:00.000Z"));
+    expect(row).toHaveTextContent(formatDateTime("2026-09-02T00:00:00.000Z"));
+  });
+
+  // Rendered on their own: with no backend URL the form can't read the
+  // endpoint, but a token issued as the URL goes must still be shown.
+  it("shows a token issued with no backend URL, saying where the card URL will be", async () => {
+    backend.url = "";
+    const fetchMock = stubAcceptedSave({
+      ...endpoint.tokens[0],
+      id: "tok-2",
+      name: "Rovo",
+      token: "pa2a_secret",
+    });
+    render(
+      <A2aTokens
+        orgId="org1"
+        endpoint={
+          endpoint as unknown as ComponentProps<typeof A2aTokens>["endpoint"]
+        }
+        mutate={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Agent card URL")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Token name"), {
+      target: { value: "Rovo" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add token" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Token")).toHaveValue("pa2a_secret"),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/organizations/org1/workspaces/ws1/a2a-endpoints/ep-1/tokens",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(
+      screen.getByText(/agent card URL appears on this page once the backend/),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Agent card URL")).not.toBeInTheDocument();
+  });
+
+  it("tells screen readers the token dialog closes only from its button", async () => {
+    setDataFor("/a2a-endpoints/ep-1", endpoint);
+    stubAcceptedSave({ ...endpoint.tokens[0], token: "pa2a_secret" });
+    render(
+      <A2aEndpointForm orgId="org1" workspaceId="ws1" endpointId="ep-1" />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Token name"), {
+      target: { value: "Rovo" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add token" }));
+
+    expect(await screen.findByRole("dialog")).toHaveAccessibleDescription(
+      /closes only with the “I've copied it” button/,
+    );
   });
 
   it("issues a token with the lifetime picked", async () => {

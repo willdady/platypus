@@ -14,6 +14,7 @@ import {
 import type { CronTriggerConfig } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
+  a2aTask as a2aTaskTable,
   chat as chatTable,
   trigger as triggerTable,
   triggerRun as triggerRunTable,
@@ -499,10 +500,20 @@ export async function recoverStuckChats(): Promise<void> {
     "Marked orphaned Chats as failed (their run's heartbeat went stale)",
   );
   // Their runs died with an instance, so no run's end records or pushes their
-  // Tasks. Not awaited: this runs under the scheduler's lock, and a slow
-  // client URL must not hold up due Triggers.
-  for (const { id } of orphaned) {
-    void onA2aTurnEnded({ chatId: id, status: "failed" });
+  // A2A Tasks; only a Chat with one has an end to record. Not awaited: this
+  // runs under the scheduler's lock, and a slow client URL must not hold up
+  // due Triggers.
+  const tasks = await db
+    .select({ chatId: a2aTaskTable.chatId })
+    .from(a2aTaskTable)
+    .where(
+      inArray(
+        a2aTaskTable.chatId,
+        orphaned.map(({ id }) => id),
+      ),
+    );
+  for (const chatId of new Set(tasks.map((task) => task.chatId))) {
+    void onA2aTurnEnded({ chatId, status: "failed" });
   }
 }
 

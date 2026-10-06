@@ -27,7 +27,18 @@ vi.mock("../../services/chat-metadata.ts", () => ({
   generateChatMetadata: mockGenerateChatMetadata,
 }));
 
-import { ChatSink, type ChatSinkParams } from "./chat-sink.ts";
+import { TaskState } from "@a2a-js/sdk";
+import {
+  ChatSink,
+  type ChatClaimTx,
+  type ChatSinkParams,
+} from "./chat-sink.ts";
+import { a2aTask } from "../../db/schema.ts";
+import {
+  readTask,
+  recordTaskEndIn,
+  type TaskRow,
+} from "../../services/a2a-task-state.ts";
 import { extractFiles } from "../../storage/utils.ts";
 import { ConflictError } from "../../errors.ts";
 import type { ResolvedRunPlan } from "../types.ts";
@@ -801,6 +812,161 @@ describe("ChatSink", () => {
         }),
       ).resolves.toBeUndefined();
       expect(mockGenerateChatMetadata).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // A turn's end and the claim of the next can come from two instances. Here
+  // the claim lands after the sink's first commit at its end, which is where
+  // it can land against a sink that writes its end in more than one step.
+  describe("a turn's end, against a claim of the next turn", () => {
+    /** The A2A Task of the turn answering `messageId`, as the claim makes it. */
+    const insertTask =
+      (id: string, messageId: string) => async (tx: ChatClaimTx) => {
+        await tx.insert(a2aTask).values({
+          id,
+          chatId: "chat-1",
+          messageId,
+          endpointId: "ep-1",
+          tokenId: "tok-1",
+          state: null,
+          replyId: null,
+          statusAt: new Date(),
+          createdAt: new Date(),
+        });
+      };
+
+    /** Records the A2A Task's end for the turn answering `messageId`. */
+    const endTask =
+      (messageId: string): ChatSinkParams["onEnding"] =>
+      (tx, status) =>
+        recordTaskEndIn(tx, "chat-1", messageId, status);
+
+    /** Runs `claim` once, right after the next transaction commits. */
+    const claimAfterCommit = (
+      fake: ReturnType<typeof seedDb>,
+      claim: () => Promise<void>,
+    ) => {
+      const handle = fake.handle as {
+        transaction: (callback: (tx: unknown) => Promise<unknown>) => unknown;
+      };
+      const transaction = handle.transaction;
+      handle.transaction = async (callback) => {
+        handle.transaction = transaction;
+        const result = await transaction(callback);
+        await claim();
+        return result;
+      };
+    };
+
+    const readTaskRow = (fake: ReturnType<typeof seedDb>, id: string) =>
+      readTask(rowOf(fake, "a2a_task", id) as TaskRow);
+
+    const u2: PlatypusUIMessage = {
+      id: "u2",
+      role: "user",
+      parts: [{ type: "text", text: "u2" }],
+    };
+
+    it("never reads the next turn's Task failed when a regenerate that wrote no reply ends", async () => {
+      const fake = seedChat();
+      const regenerate = submitSink({
+        message: undefined,
+        parentId: "u0",
+        onEnding: endTask("u0"),
+      });
+      await regenerate.onStart({ runId: "chat-1", messages: [u0] });
+      await regenerate.onResolved({ runId: "chat-1", plan: planWithAgent });
+      const next = submitSink({
+        message: u2,
+        parentId: "a0",
+        onClaimed: insertTask("task-2", "u2"),
+      });
+      claimAfterCommit(fake, () =>
+        next.onStart({ runId: "chat-1", messages: [u0, a0, u2] }),
+      );
+
+      await regenerate.onFinish({
+        runId: "chat-1",
+        status: "cancelled",
+        messages: [u0],
+        stats: {},
+      });
+
+      expect(rowOf(fake, "chat", "chat-1")).toMatchObject({
+        status: "running",
+        activeLeafId: "u2",
+      });
+      expect((await readTaskRow(fake, "task-2")).status!.state).toBe(
+        TaskState.TASK_STATE_SUBMITTED,
+      );
+      await next.onFinish({
+        runId: "chat-1",
+        status: "cancelled",
+        messages: [u0, a0, u2],
+        stats: {},
+      });
+    });
+
+    it("never reads a canceled turn's Task completed for the reply it began", async () => {
+      const fake = seedChat();
+      fake.tables.a2a_task = [];
+      const canceled = submitSink({
+        onClaimed: insertTask("task-1", "u1"),
+        onEnding: endTask("u1"),
+      });
+      await canceled.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await canceled.onResolved({ runId: "chat-1", plan: planWithAgent });
+      const next = submitSink({
+        message: u2,
+        parentId: "r1",
+        onClaimed: insertTask("task-2", "u2"),
+      });
+      claimAfterCommit(fake, () =>
+        next.onStart({
+          runId: "chat-1",
+          messages: [u0, a0, u1, reply("Let me ch"), u2],
+        }),
+      );
+
+      await canceled.onFinish({
+        runId: "chat-1",
+        status: "cancelled",
+        messages: [u0, a0, u1, reply("Let me ch")],
+        stats: {},
+      });
+
+      expect(rowOf(fake, "chat", "chat-1")?.activeLeafId).toBe("u2");
+      expect((await readTaskRow(fake, "task-1")).status!.state).toBe(
+        TaskState.TASK_STATE_CANCELED,
+      );
+      expect(rowOf(fake, "a2a_task", "task-1")).toMatchObject({
+        state: "canceled",
+        replyId: "r1",
+      });
+      await next.onFinish({
+        runId: "chat-1",
+        status: "cancelled",
+        messages: [u0, a0, u1, reply("Let me ch"), u2],
+        stats: {},
+      });
+    });
+
+    it("still ends the Chat when the turn's end cannot be recorded", async () => {
+      const fake = seedChat();
+      const sink = submitSink({
+        onEnding: () => Promise.reject(new Error("db down")),
+      });
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "succeeded",
+        messages: [u0, a0, u1, reply("r1")],
+        stats: {},
+      });
+
+      expect(rowOf(fake, "chat", "chat-1")?.status).toBe("failed");
     });
   });
 });

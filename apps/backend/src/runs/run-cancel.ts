@@ -1,17 +1,14 @@
-import type { PoolClient } from "pg";
-import { db } from "../index.ts";
-import { logger } from "../logger.ts";
+import { notify, onNotification } from "./notify-listener.ts";
 import { runRegistry } from "./run-registry.ts";
 import type { RunId } from "./types.ts";
 
 /**
  * Cancel across backend instances (#1237). A run's AbortController lives in
  * the one process running it, so a cancel received anywhere else is passed on
- * through Postgres: every instance LISTENs, and the one holding the run aborts
- * it.
+ * through Postgres: every instance LISTENs (`notify-listener.ts`), and the one
+ * holding the run aborts it.
  */
 const CHANNEL = "run_cancel";
-const RECONNECT_MS = 5_000;
 
 /**
  * Aborts `runId` here if this instance holds it, else asks the others to.
@@ -24,53 +21,30 @@ export const cancelRun = async (
 ): Promise<void> => {
   const options = { startedBefore: startedBefore?.getTime() };
   if (runRegistry.cancel(runId, options)) return;
-  // A bare id, as every instance has always read one, unless narrowed.
-  const payload = startedBefore ? JSON.stringify({ runId, ...options }) : runId;
-  await db.$client.query("SELECT pg_notify($1, $2)", [CHANNEL, payload]);
+  await notify(CHANNEL, JSON.stringify({ runId, ...options }));
 };
 
-/** A cancel as `cancelRun` sends it. */
-const parseCancel = (
-  payload: string,
-): { runId: RunId; startedBefore?: number } =>
-  payload.startsWith("{")
-    ? (JSON.parse(payload) as { runId: RunId; startedBefore?: number })
-    : { runId: payload };
+type Cancel = { runId: RunId; startedBefore?: number };
 
 /**
- * Holds one connection LISTENing for cancels, reconnecting when it drops. A
- * cancel sent while it is down is missed; the run's own timeout still bounds
- * it, and an A2A Task's cancel is also kept in the database for a sweep to
- * find (`a2a-cancel.ts`).
- *
- * ponytail: reconnects only on a connection `error`; a silently half-open
- * socket stays deaf until the run times out. Add a periodic heartbeat query if
- * that bites.
+ * A cancel as `cancelRun` sends it, or undefined for anything else: the
+ * handler runs inside the listener's connection, so a payload it cannot read
+ * is dropped rather than thrown.
  */
-export const listenForRunCancels = (): void => {
-  void listen();
-};
-
-const listen = async (): Promise<void> => {
-  let client: PoolClient | undefined;
-  let lost = false;
-  const reconnect = (err: unknown) => {
-    if (lost) return;
-    lost = true;
-    logger.error({ err }, "Run cancel listener lost its connection");
-    client?.release(err instanceof Error ? err : true);
-    setTimeout(() => void listen(), RECONNECT_MS);
-  };
+const parseCancel = (payload: string): Cancel | undefined => {
   try {
-    client = await db.$client.connect();
-    client.on("error", reconnect);
-    client.on("notification", ({ channel, payload }) => {
-      if (channel !== CHANNEL || !payload) return;
-      const { runId, startedBefore } = parseCancel(payload);
-      runRegistry.cancel(runId, { startedBefore });
-    });
-    await client.query(`LISTEN ${CHANNEL}`);
-  } catch (err) {
-    reconnect(err);
+    const cancel = JSON.parse(payload) as Partial<Cancel> | null;
+    return typeof cancel?.runId === "string" ? (cancel as Cancel) : undefined;
+  } catch {
+    return undefined;
   }
 };
+
+// A cancel sent while this instance's listener is down is missed; the run's
+// own timeout still bounds it, and an A2A Task's cancel is also kept in the
+// database for a sweep to find (`a2a-cancel.ts`).
+onNotification(CHANNEL, (payload) => {
+  const cancel = parseCancel(payload);
+  if (!cancel) return;
+  runRegistry.cancel(cancel.runId, { startedBefore: cancel.startedBefore });
+});

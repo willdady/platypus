@@ -1256,7 +1256,19 @@ export const a2aTask = pgTable(
   (t) => [
     uniqueIndex("idx_a2a_task_chat_id_message_id").on(t.chatId, t.messageId),
     index("idx_a2a_task_endpoint_id").on(t.endpointId),
-    index("idx_a2a_task_token_id").on(t.tokenId),
+    // A token's ListTasks page, newest status first; its leading column
+    // serves the token's foreign key too. `NULLS FIRST` is what `DESC` sorts
+    // by, so the page's `ORDER BY` reads straight off it.
+    index("idx_a2a_task_token_id_status_at_id").on(
+      t.tokenId,
+      t.statusAt.desc().nullsFirst(),
+      t.id.desc().nullsFirst(),
+    ),
+    // A token's Tasks with no end recorded, which ListTasks reads from their
+    // runs on every call.
+    index("idx_a2a_task_token_id_unended")
+      .on(t.tokenId)
+      .where(sql`${t.state} IS NULL`),
     index("idx_a2a_task_chat_id_reply_id").on(t.chatId, t.replyId),
     // Deleted with its Chat, and never names a message the Chat lacks.
     foreignKey({
@@ -1273,8 +1285,11 @@ export const a2aTask = pgTable(
   ],
 );
 
-/** How an A2A client asked its push notifications to authenticate. */
-export type A2aPushAuthentication = { scheme: string; credentials: string };
+/**
+ * How an A2A client asked its push notifications to authenticate. Credentials
+ * are optional, as in A2A 1.0's `AuthenticationInfo`.
+ */
+export type A2aPushAuthentication = { scheme: string; credentials?: string };
 
 // Where an A2A client asked to be called when a Task ends (ADR-0032). The id
 // is the client's own, unique within its Task. The credentials are the

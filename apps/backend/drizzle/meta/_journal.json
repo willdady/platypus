@@ -572,85 +572,15 @@
     {
       "idx": 81,
       "version": "7",
-      "when": 1791097766763,
-      "tag": "0081_a2a_endpoints",
+      "when": 1791262412039,
+      "tag": "0081_a2a",
       "breakpoints": true
     },
     {
       "idx": 82,
       "version": "7",
-      "when": 1791107800950,
-      "tag": "0082_a2a_token_expiry",
-      "breakpoints": true
-    },
-    {
-      "idx": 83,
-      "version": "7",
-      "when": 1791108727214,
-      "tag": "0083_a2a_tasks",
-      "breakpoints": true
-    },
-    {
-      "idx": 84,
-      "version": "7",
-      "when": 1791151108137,
-      "tag": "0084_a2a_endpoint_memory_settings",
-      "breakpoints": true
-    },
-    {
-      "idx": 85,
-      "version": "7",
-      "when": 1791152826587,
-      "tag": "0085_a2a_push_config",
-      "breakpoints": true
-    },
-    {
-      "idx": 86,
-      "version": "7",
-      "when": 1791156981426,
-      "tag": "0086_a2a_task_state",
-      "breakpoints": true
-    },
-    {
-      "idx": 87,
-      "version": "7",
-      "when": 1791167532260,
-      "tag": "0087_a2a_task_canceled_at",
-      "breakpoints": true
-    },
-    {
-      "idx": 88,
-      "version": "7",
-      "when": 1791193825918,
-      "tag": "0088_a2a_chat_client_name",
-      "breakpoints": true
-    },
-    {
-      "idx": 89,
-      "version": "7",
-      "when": 1791236081259,
-      "tag": "0089_a2a_task_status_at",
-      "breakpoints": true
-    },
-    {
-      "idx": 90,
-      "version": "7",
-      "when": 1791253217916,
-      "tag": "0090_a2a_task_push_count",
-      "breakpoints": true
-    },
-    {
-      "idx": 91,
-      "version": "7",
-      "when": 1791256911550,
-      "tag": "0091_chat_run_heartbeat",
-      "breakpoints": true
-    },
-    {
-      "idx": 92,
-      "version": "7",
-      "when": 1791257594001,
-      "tag": "0092_a2a_task_reply_id",
+      "when": 1791262421704,
+      "tag": "0082_chat_run_heartbeat",
       "breakpoints": true
     }
   ]

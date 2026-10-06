@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
 import { db } from "../index.ts";
-import { a2aToken as a2aTokenTable, chat as chatTable } from "../db/schema.ts";
+import { chat as chatTable } from "../db/schema.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 import {
   chatActiveLeafSchema,
@@ -133,13 +133,10 @@ chat.get(
         providerId: chatTable.providerId,
         modelId: chatTable.modelId,
         a2aClientName: chatTable.a2aClientName,
-        // A Chat started before its client's name was stored on it.
-        a2aTokenName: a2aTokenTable.name,
         createdAt: chatTable.createdAt,
         updatedAt: chatTable.updatedAt,
       })
       .from(chatTable)
-      .leftJoin(a2aTokenTable, eq(a2aTokenTable.id, chatTable.a2aTokenId))
       .where(whereClause)
       .orderBy(desc(chatTable.isPinned), desc(chatTable.createdAt))
       .limit(limit)
@@ -151,10 +148,10 @@ chat.get(
       .where(whereClause);
 
     return c.json({
-      results: records.map(({ a2aClientName, a2aTokenName, ...record }) => {
-        const name = a2aClientName ?? a2aTokenName;
-        return { ...record, ...(name ? { a2aClientName: name } : {}) };
-      }),
+      results: records.map(({ a2aClientName, ...record }) => ({
+        ...record,
+        ...(a2aClientName ? { a2aClientName } : {}),
+      })),
       totalCount,
     });
   },
@@ -171,20 +168,9 @@ chat.get(
 
     const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
     const { messages, tree } = await loadActivePath(chatId, chat.activeLeafId);
-    // A Chat started before its client's name was stored on it reads the
-    // name from its token.
-    const [a2aToken] =
-      !chat.a2aClientName && chat.a2aTokenId
-        ? await db
-            .select({ name: a2aTokenTable.name })
-            .from(a2aTokenTable)
-            .where(eq(a2aTokenTable.id, chat.a2aTokenId))
-        : [];
-    const a2aClientName = chat.a2aClientName ?? a2aToken?.name;
-
     return c.json({
       ...chatResponse(chat),
-      ...(a2aClientName ? { a2aClientName } : {}),
+      ...(chat.a2aClientName ? { a2aClientName: chat.a2aClientName } : {}),
       messages: servedMessages(messages, getOrigin(c)),
       tree,
     });

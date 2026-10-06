@@ -41,8 +41,9 @@ const isCurrentTurn = async (task: Pick<TaskRow, "chatId" | "messageId">) =>
 
 /**
  * `CancelTask`: one of this endpoint's Tasks, `canceled`, its run stopped on
- * whichever instance holds it. A Task that has already ended is refused as
- * not cancelable, and nothing is stopped.
+ * whichever instance holds it. A Task whose run has already ended, though
+ * its end was written a moment ago, is refused as not cancelable, keeps that
+ * end, and nothing is stopped.
  */
 export const cancelA2aTask = async (
   caller: A2aCaller,
@@ -62,25 +63,35 @@ const cancelTask = async (task: TaskRow): Promise<TaskRow | undefined> => {
   if (TERMINAL_TASK_STATES.has(read.status!.state)) return undefined;
 
   const canceledAt = new Date();
-  // Claimed only while no end is recorded: a run that ended first keeps its
-  // own end, and stops nothing.
-  const [claimed] = await db
-    .update(a2aTaskTable)
-    .set({ state: "canceled", canceledAt, statusAt: canceledAt })
-    .where(and(eq(a2aTaskTable.id, task.id), isNull(a2aTaskTable.state)))
-    .returning();
+  const claimed = await db.transaction(async (tx) => {
+    // Claimed only while the Task's turn is still running: its Chat
+    // `running`, on its turn, and no end recorded. The Chat's row is locked
+    // first, so a run's terminal write, which records its Task's end in the
+    // same transaction, lands wholly before the claim or wholly after it
+    // (#1309): a run that ended first keeps its own end, and stops nothing.
+    const [chat] = await tx
+      .select({ status: chatTable.status })
+      .from(chatTable)
+      .where(eq(chatTable.id, task.chatId))
+      .for("update");
+    if (chat?.status !== "running") return undefined;
+    if ((await currentTurnId(task.chatId, tx)) !== task.messageId) {
+      return undefined;
+    }
+    const [row] = await tx
+      .update(a2aTaskTable)
+      .set({ state: "canceled", canceledAt, statusAt: canceledAt })
+      .where(and(eq(a2aTaskTable.id, task.id), isNull(a2aTaskTable.state)))
+      .returning();
+    return row;
+  });
   if (!claimed) return undefined;
 
-  if (await isCurrentTurn(task)) {
-    // A cancel that can't be sent is still recorded; the sweep stops the run.
-    await cancelRun(task.chatId, { startedBefore: canceledAt }).catch(
-      (error: unknown) =>
-        logger.error(
-          { error, taskId: task.id },
-          "Sending an A2A cancel failed",
-        ),
-    );
-  }
+  // A cancel that can't be sent is still recorded; the sweep stops the run.
+  await cancelRun(task.chatId, { startedBefore: canceledAt }).catch(
+    (error: unknown) =>
+      logger.error({ error, taskId: task.id }, "Sending an A2A cancel failed"),
+  );
   void pushEndedA2aTasks(task.chatId);
   return claimed;
 };

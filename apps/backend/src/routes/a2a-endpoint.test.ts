@@ -109,16 +109,29 @@ describe("A2A endpoint routes", () => {
   });
 
   describe("as the Owner", () => {
-    it("lists the Workspace's endpoints", async () => {
+    it("lists the Workspace's endpoints, each with its Agent's name", async () => {
       seed({
-        endpoints: [endpoint(), endpoint({ id: "ep-2", workspaceId: "ws-2" })],
+        endpoints: [
+          endpoint(),
+          endpoint({
+            id: "ep-shared",
+            agentId: "agent-shared",
+            createdAt: new Date(createdAt.getTime() + DAY),
+          }),
+          endpoint({ id: "ep-2", workspaceId: "ws-2" }),
+        ],
       });
 
       const res = await app.request(baseUrl);
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as { results: Row[] };
-      expect(body.results.map((e: Row) => e.id)).toEqual(["ep-1"]);
+      expect(body.results.map((e: Row) => [e.id, e.name, e.agentName])).toEqual(
+        [
+          ["ep-1", "Support", "Helper"],
+          ["ep-shared", "Support", "Shared helper"],
+        ],
+      );
     });
 
     it("creates an endpoint under a minted id, defaulting name and description to the Agent's", async () => {
@@ -344,9 +357,16 @@ describe("A2A endpoint routes", () => {
         ],
       });
 
+      fake.queries.length = 0;
       const res = await send("/ep-1/tokens/tok-1/regenerate", "POST");
 
       expect(res.status).toBe(200);
+      // One write, with the endpoint's Workspace checked in it.
+      expect(
+        fake.queries.filter(
+          (q) => q.table === "a2a_token" || q.table === "a2a_endpoint",
+        ),
+      ).toEqual([{ kind: "update", table: "a2a_token" }]);
       const body = (await res.json()) as Row & { token: string };
       expect(body.token).toMatch(/^pa2a_/);
       expect(body).toMatchObject({ id: "tok-1", name: "Hermes" });
@@ -462,6 +482,131 @@ describe("A2A endpoint routes", () => {
       expect(fake.tables.a2a_endpoint).toEqual([endpoint()]);
       expect(fake.tables.a2a_token[0].tokenHash).toBe("h");
       expect(fake.tables.a2a_token).toHaveLength(1);
+    });
+  });
+
+  // #1239 stories 11, 13, 18 and 19: what the Owner does here, as the
+  // endpoint's clients then find it at `/a2a`.
+  describe("as the endpoint's clients find it", () => {
+    const HERMES = "pa2a_hermes";
+    const ROVO = "pa2a_rovo";
+    const DESK = "pa2a_desk";
+
+    /**
+     * Two endpoints on `agent-1`: ep-1 with two clients' tokens, ep-2 with
+     * one. Org-1 admits every Workspace, so all three answer.
+     */
+    const seedClients = () => {
+      const fake = seed({
+        endpoints: [endpoint(), endpoint({ id: "ep-2", name: "Front desk" })],
+        tokens: [
+          liveToken({ tokenHash: hashBearerToken(HERMES) }),
+          liveToken({
+            id: "tok-2",
+            name: "Rovo",
+            tokenHash: hashBearerToken(ROVO),
+          }),
+          liveToken({
+            id: "tok-3",
+            endpointId: "ep-2",
+            name: "Desk",
+            tokenHash: hashBearerToken(DESK),
+          }),
+        ],
+      });
+      fake.tables.organization = [
+        { id: "org-1", name: "Acme", a2aGate: "all" },
+      ];
+      fake.tables.user = [{ id: "user-1", name: "Olive Owner" }];
+      return fake;
+    };
+
+    /** A client's `GetTask` for a Task no one has: a live call's answer is -32001. */
+    const call = async (endpointId: string, token: string) => {
+      const res = await app.request(`/a2a/${endpointId}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "GetTask",
+          params: { id: "task-x" },
+        }),
+      });
+      const body = (await res.json()) as { error?: { code: number } };
+      return { status: res.status, body };
+    };
+
+    const answered = {
+      status: 200,
+      body: expect.objectContaining({
+        error: expect.objectContaining({ code: -32001 }) as unknown,
+      }) as unknown,
+    };
+    const unauthorized = { status: 401, body: { error: "Unauthorized" } };
+    const notFound = { status: 404, body: { error: "Not Found" } };
+
+    it("serves every client of every endpoint on one Agent, each on its own token", async () => {
+      seedClients();
+
+      expect(await call("ep-1", HERMES)).toEqual(answered);
+      expect(await call("ep-1", ROVO)).toEqual(answered);
+      expect(await call("ep-2", DESK)).toEqual(answered);
+      // A token opens only its own endpoint.
+      expect(await call("ep-2", HERMES)).toEqual(unauthorized);
+    });
+
+    it("shuts out a deleted token's client while the others keep working", async () => {
+      seedClients();
+
+      expect((await send("/ep-1/tokens/tok-1", "DELETE")).status).toBe(200);
+
+      expect(await call("ep-1", HERMES)).toEqual(unauthorized);
+      expect(await call("ep-1", ROVO)).toEqual(answered);
+      expect(await call("ep-2", DESK)).toEqual(answered);
+    });
+
+    it("refuses a regenerated token's old value, and serves its new one", async () => {
+      seedClients();
+
+      const res = await send("/ep-1/tokens/tok-1/regenerate", "POST");
+      const { token } = (await res.json()) as { token: string };
+
+      expect(await call("ep-1", HERMES)).toEqual(unauthorized);
+      expect(await call("ep-1", token)).toEqual(answered);
+      expect(await call("ep-1", ROVO)).toEqual(answered);
+    });
+
+    it("answers a deleted endpoint's URL as an unknown one, keeping its Chats", async () => {
+      const fake = seedClients();
+      fake.tables.chat = [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Where is my order?",
+          status: "succeeded",
+          a2aTokenId: "tok-1",
+          a2aEndpointId: "ep-1",
+          a2aClientName: "Hermes",
+        },
+      ];
+
+      expect((await send("/ep-1", "DELETE")).status).toBe(200);
+
+      expect(await call("ep-1", HERMES)).toEqual(notFound);
+      expect(await call("ep-unknown", HERMES)).toEqual(notFound);
+      expect(
+        (await app.request("/a2a/ep-1/.well-known/agent-card.json")).status,
+      ).toBe(404);
+      expect(fake.tables.chat).toEqual([
+        expect.objectContaining({ id: "chat-1", a2aEndpointId: "ep-1" }),
+      ]);
+      // The Agent's other endpoint answers on.
+      expect(await call("ep-2", DESK)).toEqual(answered);
     });
   });
 });

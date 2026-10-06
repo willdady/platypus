@@ -23,7 +23,7 @@ const workspace = (over: Record<string, unknown> = {}) => ({
   name: "Support",
   ownerName: "Dana Owner",
   allowed: false,
-  inboundTriggerCount: 0,
+  count: 0,
   ...over,
 });
 
@@ -31,7 +31,7 @@ const access = (over: Record<string, unknown> = {}) => ({
   data: {
     gate: "all",
     workspaces: [
-      workspace({ inboundTriggerCount: 2 }),
+      workspace({ count: 2 }),
       workspace({ id: "ws-2", name: "Billing" }),
     ],
     ...over,
@@ -121,7 +121,7 @@ describe("OrgA2aAccess", () => {
         name: "Support",
         ownerName: "Dana Owner",
         allowed: false,
-        a2aEndpointCount: 1,
+        count: 1,
       },
     ],
   };

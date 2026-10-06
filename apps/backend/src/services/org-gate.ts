@@ -1,5 +1,9 @@
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type { OrgGateAccessUpdate, OrgGate } from "@platypus/schemas";
+import type {
+  OrgGateAccess,
+  OrgGateAccessUpdate,
+  OrgGate,
+} from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
   organization as organizationTable,
@@ -18,21 +22,12 @@ import { logger } from "../logger.ts";
 type GateKind = {
   gate: "inboundTriggerGate" | "a2aGate";
   allowed: "inboundTriggersAllowed" | "a2aAllowed";
-  /** The Workspace id of every resource the gate admits, one per resource. */
-  resourceWorkspaceIds: (orgId: string) => Promise<string[]>;
+  /** How many resources the gate admits each Workspace holds, if any. */
+  resourceCounts: (
+    orgId: string,
+  ) => Promise<{ workspaceId: string; count: number }[]>;
   /** The info line an Org Admin's change writes. */
   changedMessage: string;
-};
-
-export type GateAccess = {
-  gate: OrgGate;
-  workspaces: {
-    id: string;
-    name: string;
-    ownerName: string;
-    allowed: boolean;
-    count: number;
-  }[];
 };
 
 /**
@@ -42,7 +37,7 @@ export type GateAccess = {
 export const getGateAccess = async (
   kind: GateKind,
   orgId: string,
-): Promise<GateAccess> => {
+): Promise<OrgGateAccess> => {
   const [org] = await db
     .select({ gate: organizationTable[kind.gate] })
     .from(organizationTable)
@@ -58,10 +53,12 @@ export const getGateAccess = async (
     .from(workspaceTable)
     .innerJoin(userTable, eq(userTable.id, workspaceTable.ownerId))
     .where(eq(workspaceTable.organizationId, orgId));
-  const counts = new Map<string, number>();
-  for (const workspaceId of await kind.resourceWorkspaceIds(orgId)) {
-    counts.set(workspaceId, (counts.get(workspaceId) ?? 0) + 1);
-  }
+  const counts = new Map(
+    (await kind.resourceCounts(orgId)).map((row) => [
+      row.workspaceId,
+      row.count,
+    ]),
+  );
   return {
     gate: (org?.gate ?? "off") as OrgGate,
     workspaces: workspaces
@@ -84,7 +81,7 @@ export const setGateAccess = async (
   orgId: string,
   update: OrgGateAccessUpdate,
   actorUserId: string,
-): Promise<GateAccess> => {
+): Promise<OrgGateAccess> => {
   const allowedColumn = workspaceTable[kind.allowed];
   const allowedIds = update.allowedWorkspaceIds
     ? [...new Set(update.allowedWorkspaceIds)]

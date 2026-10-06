@@ -96,6 +96,11 @@ the expired token is refused. Both times update at most once a minute.
   lifetime, and stops the old value at once, along with any Task it started
   that is still running. The new value is shown once. Use it when a token is
   about to expire, is lost, or may have leaked, then update the client.
+- **A regenerated token keeps its conversations.** The new value sees every
+  Chat and Task the old value started, and can continue them with their
+  `contextId` or list them with `ListTasks`. Handing it to a different client
+  hands over the old client's history. To give a different client a fresh
+  start, delete the token and add a new one.
 
 <Callout type="warning">
   Rotating a token usually means updating the client's configuration, so act on
@@ -114,7 +119,8 @@ curl https://platypus.example.com/a2a/<endpoint-id>/.well-known/agent-card.json
 
 The card carries the endpoint's **Name** and **Description**, says the client
 authenticates with an HTTP bearer token, names the address the client sends
-requests to, and says the endpoint offers streaming and push notifications. It
+requests to, says the endpoint offers streaming and push notifications, and
+lists one skill built from the same Name and Description, tagged `chat`. It
 never carries the Agent's own description, Tool sets or Skills. A client may
 cache the card for up to five minutes, so a change to the Name or Description
 can take that long to reach it.
@@ -127,8 +133,7 @@ Organization, but not while banned. A ban with an expiry stops counting once it
 runs out, and the endpoints answer again.
 
 A client that authenticates can also fetch the **extended Agent Card**
-(`GetExtendedAgentCard`). It adds one skill, built from the same Name and
-Description.
+(`GetExtendedAgentCard`). It is the same as the public card.
 
 ## Conversations
 
@@ -137,6 +142,11 @@ address, with its token in an `Authorization: Bearer` header. A missing or
 wrong token gets **401 Unauthorized**. The endpoint speaks A2A 1.0: a request
 whose `A2A-Version` header asks for another version is refused with a "version
 not supported" error, and a request without the header is answered as 1.0.
+
+Give every request an `id`. A request without one is a JSON-RPC notification,
+which gets no answer: it is acknowledged with **204 No Content** and nothing
+runs, so a `SendMessage` sent that way starts no run. Batches (a JSON array of
+requests) are refused.
 
 Each conversation is an ordinary Chat in your Chat list, labelled with the
 token's name, so you can read what the client asked and what the Agent did. You
@@ -181,7 +191,9 @@ learns one out of your Chats.
   refused, whether the Task is still running or has ended. To continue the
   conversation, the client sends the Task's `contextId` and no `taskId`.
 - **A busy server says so.** Your Operator caps how many A2A runs can be going
-  at once across the server. A message that would start one past the cap gets
+  at once on each backend instance. The cap applies to each instance
+  separately, so with three instances behind one address, up to three times
+  the cap can be going at once. A message that would start one past the cap gets
   `429 Too Many Requests` with a `Retry-After` header, and nothing is written:
   the client waits and sends it again.
 - **Calls have a size limit.** Your Operator sets the largest call a client
@@ -212,8 +224,8 @@ to a client's Chat yourself aren't Tasks, so they aren't listed.
 - **Newest first** means the Task's status timestamp: when it ended, or when it
   started if it is still running.
 - **Filters.** `contextId` lists one Chat's Tasks, `status` the Tasks in one
-  state, and `statusTimestampAfter` the Tasks whose status changed after that
-  time.
+  state, and `statusTimestampAfter` the Tasks whose status changed at or after
+  that time, so a client polling from the last timestamp it saw misses none.
 - **Replies are left out** unless the client sets `includeArtifacts`. With it,
   each Task carries the same artifact `GetTask` answers with.
 
@@ -228,11 +240,17 @@ server-sent events instead of polling.
   reply as one artifact and the Task's final status. The stream ends with the
   Task.
 - **`SubscribeToTask`** rejoins a Task that is still running, for example
-  after the client's connection dropped. It sends the Task as it stands, any
-  change of status, and once the Task ends its finished reply and final
-  status. It doesn't send the reply word by word: only the connection that
-  started the run does. A Task that has already ended is refused with an
-  "unsupported operation" error; read it with `GetTask` instead.
+  after the client's connection dropped. It sends the Task as it stands, the
+  reply so far, then the rest of the reply as it is written, any change of
+  status, and once the Task ends its finished reply and final status. A Task
+  that has already ended is refused with an "unsupported operation" error;
+  read it with `GetTask` instead.
+- **Every stream on a Task sees the reply as it's written**, in the same
+  order, whichever of your backend's instances it reaches: the stream that
+  started the run, any `SubscribeToTask`, and a retried
+  `SendStreamingMessage`. The same holds for a Task started with
+  `SendMessage`. If a stream misses part of the reply in transit, it waits
+  for the finished reply at the end instead.
 - **A dropped connection doesn't stop the run.** It goes on, and the client
   can rejoin with `SubscribeToTask` or read the result with `GetTask`.
 - **A retried `SendStreamingMessage`**, with a `messageId` already sent,
@@ -297,8 +315,9 @@ registered.
   `authentication` the client registered as an `Authorization` header (for
   example `Authorization: Bearer <credentials>`), and its `token`, if any, as
   `X-A2A-Notification-Token`. Check them on the receiving side to know the
-  request came from this endpoint. An `authentication` without both a scheme
-  and credentials is refused when it is registered.
+  request came from this endpoint. An `authentication` with a scheme but no
+  credentials sends no `Authorization` header; one with credentials but no
+  scheme is refused when it is registered.
 - **Delivery works like a [Webhook](/building-with-platypus/webhooks#delivery-and-retries)'s**,
   with the same timeout and retries.
 - **Push URLs must be public.** Platypus never pushes to a loopback,

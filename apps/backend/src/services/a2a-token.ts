@@ -1,4 +1,4 @@
-import { and, eq, gt, lte } from "drizzle-orm";
+import { and, eq, getTableColumns, gt, lte, sql } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   a2aEndpoint as a2aEndpointTable,
@@ -11,10 +11,8 @@ import {
   lookupA2aEndpoint,
   toPublicToken,
   type A2aEndpointLookup,
-  type A2aEndpointRow,
   type LiveA2aEndpoint,
 } from "./a2a-endpoint.ts";
-import { requireOwned } from "./workspace-resource.ts";
 import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 import {
   bearerToken,
@@ -22,12 +20,11 @@ import {
   dueReminder,
   generateBearerToken,
   hashBearerToken,
-  issuedTokenFields,
   noticeDate,
   sendTokenNotice,
   tokenNoticeSent,
   touchToken,
-  type TokenOwner,
+  tokenOwner,
 } from "./bearer-token.ts";
 
 /**
@@ -40,7 +37,7 @@ import {
 
 export type A2aTokenRow = typeof a2aTokenTable.$inferSelect;
 
-export type A2aAuthResult =
+type A2aAuthResult =
   | { ok: true; endpoint: LiveA2aEndpoint; token: A2aTokenRow }
   /** `404` is the card's answer for an endpoint that isn't live. */
   | (Extract<A2aEndpointLookup, { live: false }> & { ok: false; status: 404 })
@@ -86,7 +83,7 @@ export const authenticateA2aCall = async (
   if (!token) return { ok: false, status: 401, reason: "bad_token", endpoint };
 
   if (token.tokenExpiresAt <= now) {
-    await touchA2aToken(token.id, "lastRejectedAt", now);
+    void touchA2aToken(token.id, "lastRejectedAt", now);
     await noticeExpiredUse(endpoint, token);
     return {
       ok: false,
@@ -96,7 +93,8 @@ export const authenticateA2aCall = async (
       tokenId: token.id,
     };
   }
-  await touchA2aToken(token.id, "lastUsedAt", now);
+  // Off the response path: a stamp's failure is logged, never the caller's.
+  void touchA2aToken(token.id, "lastUsedAt", now);
   return { ok: true, endpoint, token };
 };
 
@@ -113,34 +111,28 @@ export const regenerateA2aToken = async (
   endpointId: string,
   tokenId: string,
 ) => {
-  await requireOwned(db, "a2aEndpoint", { id: endpointId, workspaceId });
-  const [current] = await db
-    .select()
-    .from(a2aTokenTable)
-    .where(
-      and(
-        eq(a2aTokenTable.id, tokenId),
-        eq(a2aTokenTable.endpointId, endpointId),
-      ),
-    )
-    .limit(1);
-  if (!current) throw new NotFoundError("A2A token not found");
-  const lifetimeDays = Math.round(
-    (current.tokenExpiresAt.getTime() - current.tokenCreatedAt.getTime()) /
-      DAY_MS,
-  );
+  const now = new Date();
   const { token, hash } = generateBearerToken(A2A_TOKEN_PREFIX);
+  // One write: the endpoint's Workspace is checked in the WHERE, and the
+  // lifetime is read off the row being replaced.
   const [row] = await db
     .update(a2aTokenTable)
-    .set(issuedTokenFields(hash, lifetimeDays))
+    .set({
+      tokenHash: hash,
+      tokenCreatedAt: now,
+      tokenExpiresAt: sql`${now.toISOString()}::timestamp + (${a2aTokenTable.tokenExpiresAt} - ${a2aTokenTable.tokenCreatedAt})`,
+      tokenNotice: null,
+    })
+    .from(a2aEndpointTable)
     .where(
       and(
         eq(a2aTokenTable.id, tokenId),
         eq(a2aTokenTable.endpointId, endpointId),
+        eq(a2aEndpointTable.id, a2aTokenTable.endpointId),
+        eq(a2aEndpointTable.workspaceId, workspaceId),
       ),
     )
-    .returning();
-  // Deleted between the read and the write.
+    .returning(getTableColumns(a2aTokenTable));
   if (!row) throw new NotFoundError("A2A token not found");
   await stopRevokedA2aWork([endpointId]);
   return { ...toPublicToken(row), token };
@@ -170,20 +162,11 @@ const noticeExpiredUse = async (
     a2aTokenTable,
     token,
     "expired",
-    tokenOwner(endpoint, endpoint.organizationId),
+    tokenOwner(endpoint.organizationId, endpoint),
     "A2A token has expired",
     `A call to the A2A endpoint "${endpoint.name}" used the token "${token.name}" after it expired on ${noticeDate(token.tokenExpiresAt)}, and was refused. Regenerate the token on the endpoint's page and update the client that uses it.`,
   );
 };
-
-const tokenOwner = (
-  endpoint: Pick<A2aEndpointRow, "workspaceId" | "agentId">,
-  orgId: string,
-): TokenOwner => ({
-  orgId,
-  workspaceId: endpoint.workspaceId,
-  agentId: endpoint.agentId,
-});
 
 /**
  * Sends each A2A token's expiry reminders as they fall due. Run from the
@@ -221,7 +204,7 @@ export const sendA2aTokenReminders = async (
       a2aTokenTable,
       token,
       due,
-      tokenOwner(endpoint, workspace.organizationId),
+      tokenOwner(workspace.organizationId, endpoint),
       "A2A token expires soon",
       `The token "${token.name}" for the A2A endpoint "${endpoint.name}" expires on ${noticeDate(token.tokenExpiresAt)}. Regenerate it on the endpoint's page and update the client that uses it; calls with the current token are refused once it expires.`,
     );

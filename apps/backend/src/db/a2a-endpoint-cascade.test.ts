@@ -3,8 +3,9 @@ import type { PGlite } from "@electric-sql/pglite";
 import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 
 /**
- * An A2A endpoint goes with its Agent, and its tokens go with it (ADR-0032),
- * by the foreign keys the shipped migrations create.
+ * An A2A endpoint goes with its Agent, and its tokens go with it, while its
+ * Chats and Tasks stay (ADR-0032), by the foreign keys the shipped migrations
+ * create.
  */
 let pg: PGlite;
 beforeAll(async () => {
@@ -37,6 +38,35 @@ describe("A2A endpoint foreign keys", () => {
       `SELECT o."a2a_gate", w."a2a_allowed" FROM "organization" o JOIN "workspace" w ON w."organization_id" = o."id"`,
     );
     expect(rows).toEqual([{ a2a_gate: "off", a2a_allowed: false }]);
+  });
+
+  // #1239 story 19: deleting an endpoint leaves the Owner its conversations.
+  it("keep a deleted endpoint's Chats and Tasks", async () => {
+    await pg.exec(`
+      INSERT INTO "a2a_endpoint" ("id", "workspace_id", "agent_id", "name", "description")
+        VALUES ('ep-2', 'ws-1', 'agent-1', 'Desk', 'Desk');
+      INSERT INTO "a2a_token" ("id", "endpoint_id", "name", "token_hash", "token_created_at", "token_expires_at")
+        VALUES ('tok-2', 'ep-2', 'Rovo', 'h2', now(), now() + interval '90 days');
+      INSERT INTO "chat" ("id", "workspace_id", "agent_id", "title", "a2a_token_id", "a2a_client_name", "a2a_endpoint_id")
+        VALUES ('chat-2', 'ws-1', 'agent-1', 'Where is my order?', 'tok-2', 'Rovo', 'ep-2');
+      INSERT INTO "chat_message" ("chat_id", "id", "role", "parts")
+        VALUES ('chat-2', 'msg-a', 'user', '[]');
+      INSERT INTO "a2a_task" ("id", "chat_id", "message_id", "endpoint_id", "token_id", "state")
+        VALUES ('task-2', 'chat-2', 'msg-a', 'ep-2', 'tok-2', 'completed');
+    `);
+    await pg.exec(`DELETE FROM "a2a_endpoint" WHERE "id" = 'ep-2'`);
+
+    const chats = await pg.query(
+      `SELECT "a2a_endpoint_id", "a2a_token_id", "a2a_client_name" FROM "chat" WHERE "id" = 'chat-2'`,
+    );
+    expect(chats.rows).toEqual([
+      { a2a_endpoint_id: "ep-2", a2a_token_id: null, a2a_client_name: "Rovo" },
+    ]);
+    const tasks = await pg.query(
+      `SELECT "chat_id", "state" FROM "a2a_task" WHERE "id" = 'task-2'`,
+    );
+    expect(tasks.rows).toEqual([{ chat_id: "chat-2", state: "completed" }]);
+    expect(await count("chat_message")).toBe(1);
   });
 
   it("delete an Agent's endpoints and their tokens with the Agent", async () => {

@@ -29,7 +29,7 @@ Platypus will not build the messaging Gateway that ADR-0015 decided on. Instead,
 - **An A2A endpoint** makes one Agent reachable from one Workspace, at `/a2a/:endpointId` with its Agent Card beside it. The endpoint id is minted for the endpoint and unguessable, not the Agent id. An Agent can have several endpoints, so the Owner can give clients that need different settings their own, or retire one client's URL without touching the others. Shared Agents are supported. The path lives outside `/organizations/...` so an Operator can expose `/a2a/*` alone, as with `/hooks/*` (ADR-0030). JSON-RPC binding only. gRPC and HTTP+JSON are deferred until a client needs them.
 - **The Owner manages endpoints on a Workspace-level "A2A endpoints" screen**, like Triggers and Webhooks, not on the Agent's settings, where Shared Agents are locked against Workspace edits. Only the Owner creates, edits or deletes an endpoint, and only in the UI.
 - **Each endpoint has a public name and description**, set by the Owner and defaulting to the Agent's own. The Agent's description is written for the Owner and for other Agents, which read it when delegating, so it is not necessarily fit for outside callers.
-- **Agent Card.** The public card carries the endpoint's name and description, the auth scheme (HTTP bearer) and the A2A features the endpoint supports. The authenticated extended card adds one skill, built from the same name and description. OAuth is deferred until a client needs it.
+- **Agent Card.** The public card carries the endpoint's name and description, the auth scheme (HTTP bearer) and the A2A features the endpoint supports. It also carries one skill, built from the same name and description and tagged `chat`, since A2A 1.0 requires a non-empty `skills` array; the authenticated extended card is the same card. OAuth is deferred until a client needs it.
 - **Tokens belong to an endpoint, one per client.** Revoking one leaves the others working, and logs and Chats show which client acted. Token handling copies ADR-0030:
   - shown once and stored as a hash;
   - expiry of 30, 90, 180 or 365 days, default 90;
@@ -43,7 +43,7 @@ Platypus will not build the messaging Gateway that ADR-0015 decided on. Instead,
 - **A Task is a row of its own** with a uuid id, referencing the Chat, the turn's assistant message, the token, and any push configuration. A message id alone cannot be the Task id, since message ids are only unique within a Chat. Task state comes from the run: `submitted` → `working` → `completed` / `failed` / `canceled`. `input-required` and `auth-required` are unused, because no run can pause for a human. Task rows live as long as their Chat. Deleting the Chat deletes them, and `GetTask` returns `404` once the endpoint is gone.
 - **Long-running first.** `SendMessage` always returns the Task once the run has started, never the finished result. A client asking to block gets the finished Task only if the run ends within a short server-side cap; otherwise it gets the Task still `working`. Clients then follow the run in one of three ways:
   - `GetTask`, polling. It is read from the database, so any backend instance answers.
-  - `SendStreamingMessage` / `SubscribeToTask`, over SSE. Token-level events stream only on the connection that started the run. A resubscribe, or a subscription served by another instance, gets status and artifact events, not token deltas. Resumable token streams are #686's concern, not this ADR's.
+  - `SendStreamingMessage` / `SubscribeToTask`, over SSE. Every stream on a Task, on any instance, gets the same events, the reply's pieces included (see the #1308 amendment).
   - **Push notifications** (`TaskPushNotificationConfig`). When the Task ends (`completed`, `failed` or `canceled`), the backend POSTs it to the URL the client registered, with the credentials the client supplied. Nothing is pushed for intermediate states: a run of hours would mean many deliveries for little value, and a client that wants progress can stream. Delivery reuses the Webhook transport, including its SSRF guard and retries. Unlike a Webhook's, a push URL comes from an outside caller, so private networks are refused unless the Operator sets `A2A_PUSH_ALLOW_PRIVATE_NETWORKS`; the URL is checked at delivery only, so registration is no DNS oracle. Each config delivers once, a Task at most five times, and stored credentials are never read back.
 - **`CancelTask` cancels the run** on whichever instance holds it. That depends on #1237 (cross-instance run lock and cancel), which is a hard prerequisite, as are the busy check and `GetTask` consistency.
 - **One run per context.** A message to a context whose run is still active is rejected with an A2A error carrying the active Task's id. The caller can follow that Task and send again when it ends. Queueing and steering are deferred (see Considered Options).
@@ -139,3 +139,53 @@ replaced: **a token reaches only the Chats and Tasks it started.**
   client's next message following those turns, is unchanged.
 - **A deleted token's Chats and Tasks are reachable by no one** over A2A. Its
   calls are already `401`, and no other token reaches them.
+
+## Amendment — every stream on a Task gets the same events (#1308)
+
+The decision above streamed reply deltas only on the connection that started
+the run; a `SubscribeToTask` follower, or a retried `SendStreamingMessage`,
+got status changes and then the whole artifact at the end, and every follower
+polled the database once a second. A2A 1.0 §3.5.2 says events "MUST be
+broadcast to all active streams for that task" in the same order. **Every
+stream on a Task now gets the same events, including the reply's pieces.**
+
+- **The instance running a Task's run is its one producer.** It reads the
+  run's own stream, whether or not the call that started it is streaming, and
+  publishes numbered events: a change of status, each piece of the reply, and
+  the end. Streams on that instance get them in-process.
+- **Other instances get them through Postgres `NOTIFY`**, on the LISTEN
+  connection the cross-instance cancel already held (#1237), now shared by
+  both. Each event carries its piece of the reply, split to fit `NOTIFY`'s
+  8000-byte payload, with its character offset into the reply. That is the
+  simplest design that gives every follower the same ordered events: no
+  delta store, no migration, and no instance reads another's memory. An
+  in-memory ring on the producer with a database fallback, or the reply's text
+  read from the database at an offset, were the alternatives. The first needs
+  a second store for the instances that can't reach the ring; the second
+  trails the run by the partial-write interval and so cannot give followers
+  the pieces the starter got.
+- **Each instance keeps the reply so far of every Task it hears of**, so a
+  stream joining mid-reply is sent it as one artifact first, then the pieces
+  after it. A2A runs are capped per instance, so this is small.
+- **A lost notification leaves a gap in the numbers.** A stream on the
+  instance that missed it sends no more pieces; the end still comes with the
+  whole artifact. Status and the end come from the database too: a follower
+  with no producer on its instance reads its Task every 15 seconds while it
+  hears nothing, which also covers a producer lost with its instance.
+- **A blocking `SendMessage` on the instance that started the run** waits on
+  the run's events until it ends or the deadline passes, then reads the Task
+  once. It does not poll.
+- **The 30-second cap on a blocking `SendMessage` stays**, a deliberate
+  deviation from §3.2.2, which waits for the Task to end. Runs last minutes to
+  hours, and proxies, load balancers and clients time out an idle request
+  long before that. Past the cap the client gets the Task still running and
+  follows it as the decision above describes.
+
+## Amendment — a call with no `A2A-Version` is served as 1.0
+
+A2A 1.0 §3.6.2 reads a request with no `A2A-Version` header as version 0.3.
+**Platypus serves it as 1.0**, the only version its card declares. A2A is new
+in Platypus and no 0.3 client was ever served, so there is nothing to stay
+compatible with, and refusing a request without the header would shut out
+every client that never sends it. A header naming another version is refused,
+as the spec says.

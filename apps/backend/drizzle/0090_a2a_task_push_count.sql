@@ -1,1 +1,0 @@
-ALTER TABLE "a2a_task" ADD COLUMN "push_count" integer DEFAULT 0 NOT NULL;

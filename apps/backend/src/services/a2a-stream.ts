@@ -1,4 +1,3 @@
-import { parseJsonEventStream, uiMessageChunkSchema } from "ai";
 import type {
   Artifact,
   SendMessageRequest,
@@ -11,7 +10,6 @@ import {
 } from "@a2a-js/sdk/errors";
 import {
   findA2aTask,
-  pause,
   startA2aTurn,
   takeFollowerSlot,
   type A2aCaller,
@@ -22,19 +20,22 @@ import {
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
+import {
+  a2aFallbackPollMs,
+  a2aTaskEvents,
+  type A2aTaskSubscription,
+} from "./a2a-events.ts";
 import { callerIsLive } from "./a2a-liveness.ts";
+import { replyArtifact } from "./a2a-parts.ts";
 
 /**
  * A2A Tasks over SSE (ADR-0032): `SendStreamingMessage` and `SubscribeToTask`.
- * Status always comes from `readTask`, read afresh, so it says what `GetTask`
- * says. Token deltas exist only on the connection that started the run, read
- * from the run's own stream; any other follower, on any instance, gets status
- * and artifact events read from the database. A follower of a run it did not
- * start holds a follower slot until its stream ends (`takeFollowerSlot`).
+ * Every stream on a Task, on any instance, follows the same events
+ * (`a2a-events.ts`): the reply as it is written, each change of status, and
+ * the end, when it reads the Task, so its last events say what `GetTask`
+ * says. A follower of a run it did not start holds a follower slot until its
+ * stream ends (`takeFollowerSlot`).
  */
-
-/** How often a stream re-reads its Task's status. */
-const STREAM_POLL_MS = 1_000;
 
 const isTerminal = (task: Task) => TERMINAL_TASK_STATES.has(task.status!.state);
 
@@ -80,39 +81,52 @@ const artifactEvent = (
   },
 });
 
-/** A piece of the reply's text, as `readTask` names its artifact. */
-const replyDelta = (artifactId: string, text: string): Artifact => ({
-  artifactId,
-  name: "reply",
-  description: "",
-  parts: [
-    {
-      content: { $case: "text", value: text },
-      metadata: undefined,
-      filename: "",
-      mediaType: "text/plain",
-    },
-  ],
-  metadata: undefined,
-  extensions: [],
-});
-
 /**
- * From `seen` on: each change of state `readTask` reports, then, once the
- * Task ends, its artifacts whole and its terminal status, which ends the
- * stream. Ends at once when the client hangs up.
+ * From `seen` on: the reply so far when `events` has it, then each piece of
+ * the reply and each change of state, then, once the Task ends, its
+ * artifacts whole and its terminal status, which ends the stream. Ends at
+ * once when the client hangs up. With no producer on this instance to say
+ * the Task ended, it is also read every `a2aFallbackPollMs`.
  */
 async function* followTask(
   caller: A2aCaller,
   task: TaskRow,
   seen: Task,
+  events: A2aTaskSubscription,
 ): AsyncGenerator<StreamResponse> {
-  let last = seen;
+  let state = seen.status!.state;
+  // How much of the reply this stream has sent; `null` once it missed some.
+  let sent = events.replyFrom;
+  if (events.catchUp && sent !== null) {
+    const { artifactId, text } = events.catchUp;
+    yield artifactEvent(seen, replyArtifact(artifactId, text), {
+      append: false,
+      lastChunk: false,
+    });
+  }
   for (;;) {
-    await pause(STREAM_POLL_MS, caller.signal);
+    const event = await events.next(
+      events.produced ? undefined : a2aFallbackPollMs(),
+      caller.signal,
+    );
     if (caller.signal?.aborted) return;
+    if (event?.kind === "delta") {
+      if (sent !== event.offset) {
+        sent = null;
+        continue;
+      }
+      yield artifactEvent(seen, replyArtifact(event.artifactId, event.text), {
+        append: event.offset > 0,
+        lastChunk: false,
+      });
+      sent += event.text.length;
+      continue;
+    }
     await assertCallerLive(caller);
-    const read = await readTaskAfresh(task);
+    const read =
+      event?.kind === "status"
+        ? { ...seen, status: event.status }
+        : (event?.kind === "end" && event.task) || (await readTaskAfresh(task));
     if (isTerminal(read)) {
       for (const artifact of read.artifacts) {
         yield artifactEvent(read, artifact, { append: false, lastChunk: true });
@@ -120,92 +134,35 @@ async function* followTask(
       yield statusEvent(read);
       return;
     }
-    if (read.status!.state !== last.status!.state) yield statusEvent(read);
-    last = read;
-  }
-}
-
-/** The run's response body, read as UI message chunks. */
-const readChunks = (run: ReadableStream<Uint8Array>) =>
-  parseJsonEventStream({
-    stream: run,
-    schema: uiMessageChunkSchema,
-  }).getReader();
-type ChunkReader = ReturnType<typeof readChunks>;
-
-/**
- * The run's text as it is produced, as appends to the reply artifact, with
- * any change of state `readTask` reports along the way. Returns the Task as
- * last read once the run's stream ends.
- */
-async function* streamRun(
-  caller: A2aCaller,
-  seen: Task,
-  task: TaskRow,
-  chunks: ChunkReader,
-): AsyncGenerator<StreamResponse, Task> {
-  let last = seen;
-  let readAt = Date.now();
-  let replyId = task.id;
-  let sent = false;
-  // A text part after the first is set apart as `readTask` joins them.
-  let separate = false;
-  for (;;) {
-    // A cancel or a timeout aborts the run, breaking off its stream. How it
-    // ended is the Task's to say.
-    const next = await chunks.read().catch(() => null);
-    if (!next || next.done) return last;
-    const { value } = next;
-    if (!value.success) continue;
-    const chunk = value.value;
-    if (chunk.type === "start" && chunk.messageId) replyId = chunk.messageId;
-    if (chunk.type === "text-start" && sent) separate = true;
-    if (chunk.type === "text-delta" && chunk.delta) {
-      const text = separate ? `\n\n${chunk.delta}` : chunk.delta;
-      yield artifactEvent(seen, replyDelta(replyId, text), {
-        append: sent,
-        lastChunk: false,
-      });
-      sent = true;
-      separate = false;
-    }
-    if (Date.now() - readAt >= STREAM_POLL_MS) {
-      readAt = Date.now();
-      await assertCallerLive(caller);
-      const read = await readTaskAfresh(task);
-      if (read.status!.state !== last.status!.state) yield statusEvent(read);
-      last = read;
-    }
+    if (read.status!.state !== state) yield statusEvent(read);
+    state = read.status!.state;
   }
 }
 
 /**
  * `SendStreamingMessage`: the turn's Task, its reply as the run writes it,
  * then its artifact whole and its terminal status. A retry of a message
- * follows the Task it already started, without token deltas, on a follower
- * slot: past the follower cap it is refused before its first event.
+ * follows the Task it already started, as `SubscribeToTask` does, on a
+ * follower slot: past the follower cap it is refused before its first event.
  */
 export async function* streamA2aMessage(
   caller: A2aCaller,
   params: SendMessageRequest,
 ): AsyncGenerator<StreamResponse> {
-  const { task, run } = await startA2aTurn(caller, params);
-  const chunks = run && readChunks(run);
+  const { task, events: started } = await startA2aTurn(caller, params);
+  // Taken before the Task is read, so nothing published meanwhile is missed.
+  const events = started ?? a2aTaskEvents.subscribe(task.id);
   let release: (() => void) | undefined;
   try {
     const read = await readTask(task);
-    if (!run && !isTerminal(read)) release = takeFollowerSlot(caller);
+    if (!started && !isTerminal(read)) release = takeFollowerSlot(caller);
     yield taskEvent(read);
     if (isTerminal(read)) return;
-    yield* followTask(
-      caller,
-      task,
-      chunks ? yield* streamRun(caller, read, task, chunks) : read,
-    );
+    yield* followTask(caller, task, read, events);
   } finally {
     release?.();
-    // Stops reading the run, never the run: it goes on server-side.
-    await chunks?.cancel();
+    // Stops following the run, never the run: it goes on server-side.
+    events.close();
   }
 }
 
@@ -219,17 +176,22 @@ export async function* subscribeToA2aTask(
   taskId: string,
 ): AsyncGenerator<StreamResponse> {
   const task = await findA2aTask(caller, taskId);
-  const read = await readTask(task);
-  if (isTerminal(read)) {
-    throw new UnsupportedOperationError(
-      "The Task has ended; read it with GetTask",
-    );
-  }
-  const release = takeFollowerSlot(caller);
+  const events = a2aTaskEvents.subscribe(task.id);
   try {
-    yield taskEvent(read);
-    yield* followTask(caller, task, read);
+    const read = await readTask(task);
+    if (isTerminal(read)) {
+      throw new UnsupportedOperationError(
+        "The Task has ended; read it with GetTask",
+      );
+    }
+    const release = takeFollowerSlot(caller);
+    try {
+      yield taskEvent(read);
+      yield* followTask(caller, task, read, events);
+    } finally {
+      release();
+    }
   } finally {
-    release();
+    events.close();
   }
 }

@@ -5,7 +5,7 @@ import {
   count,
   desc,
   eq,
-  gt,
+  gte,
   inArray,
   isNull,
   lt,
@@ -13,7 +13,9 @@ import {
   or,
 } from "drizzle-orm";
 import {
+  Role,
   TaskState,
+  type GetTaskRequest,
   type ListTasksRequest,
   type ListTasksResponse,
   type Message,
@@ -51,10 +53,22 @@ import {
   findTokenTask,
   readTask,
   readTaskAfresh,
+  readTaskRows,
+  readTokenTask,
+  replyTexts,
+  statusOf,
+  taskStatus,
+  toTask,
   endStateOf,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
+import {
+  a2aFallbackPollMs,
+  a2aTaskEvents,
+  produceA2aTaskEvents,
+  type A2aTaskSubscription,
+} from "./a2a-events.ts";
 import { checkPushConfig, storePushConfig } from "./a2a-push.ts";
 import {
   A2aAtCapacityError,
@@ -95,9 +109,12 @@ const A2A_CHAT_NAMESPACE = "0b6f4d2e-6a43-4d8e-9c1a-3f0e2b7d5a91";
 export const a2aChatId = (tokenId: string, messageId: string): string =>
   uuidv5(JSON.stringify([tokenId, messageId]), A2A_CHAT_NAMESPACE);
 
-/** How long a blocking `SendMessage` waits for its run to end. */
+/**
+ * How long a blocking `SendMessage` waits for its run to end: short of the
+ * HTTP timeouts in front of most deployments, a deliberate deviation from
+ * A2A 1.0 §3.2.2, which waits for the end (ADR-0032).
+ */
 const A2A_BLOCKING_WAIT_MS = 30_000;
-const BLOCKING_POLL_MS = 500;
 
 /**
  * An inbound A2A part as a UI message part. Data parts reach the Agent as
@@ -223,22 +240,6 @@ const busyError = async (caller: A2aCaller, chatId: string) => {
 };
 
 /**
- * Waits `ms`, or less once `signal` aborts: a follower's poll, cut short when
- * its client hangs up.
- */
-export const pause = (ms: number, signal?: AbortSignal): Promise<void> =>
-  new Promise((resolve) => {
-    if (signal?.aborted) return resolve();
-    const done = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", done);
-      resolve();
-    };
-    const timer = setTimeout(done, ms);
-    signal?.addEventListener("abort", done, { once: true });
-  });
-
-/**
  * A follower slot for a caller about to follow a Task whose run it did not
  * start, or `A2aAtCapacityError` past the follower cap. Returns its release.
  */
@@ -254,42 +255,60 @@ export const takeFollowerSlot = (caller: A2aCaller): (() => void) => {
  * The Task once it ends, as it stands when `deadline` passes, or as it stands
  * when the client hangs up. Refused as not found once the caller's access is
  * cut off, as a new call would be.
+ *
+ * Waits on the Task's `events` (`a2a-events.ts`), not the database: on the
+ * instance running the Task, for its end alone, then reads it once. Where no
+ * producer here will say the Task ended, it reads the Task every
+ * `a2aFallbackPollMs` as well.
  */
 const waitForTask = async (
   caller: A2aCaller,
   task: TaskRow,
   deadline: number,
+  events: A2aTaskSubscription,
 ): Promise<Task> => {
   for (;;) {
+    const left = deadline - Date.now();
+    if (left <= 0 || caller.signal?.aborted) break;
+    const event = await events.next(
+      events.produced ? left : Math.min(left, a2aFallbackPollMs()),
+      caller.signal,
+    );
+    if (event?.kind === "delta" || event?.kind === "status") continue;
+    if (event?.kind !== "end") {
+      if (Date.now() >= deadline || caller.signal?.aborted) break;
+    }
     if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
-    const read = await readTaskAfresh(task);
-    if (
-      TERMINAL_TASK_STATES.has(read.status!.state) ||
-      Date.now() >= deadline ||
-      caller.signal?.aborted
-    )
-      return read;
-    await pause(BLOCKING_POLL_MS, caller.signal);
+    const read =
+      (event?.kind === "end" && event.task) || (await readTaskAfresh(task));
+    if (TERMINAL_TASK_STATES.has(read.status!.state)) return read;
   }
+  if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
+  return readTaskAfresh(task);
 };
 
 /**
  * A turn in a new Chat bound to the endpoint's Agent, or in the Chat
  * `contextId` names, and its Task. The client's `messageId` is the user
  * message's id, so a retry finds the Task it already started and starts
- * nothing. `run` is the run's response body when this call started the run;
- * the run goes on server-side whether or not the caller reads it, and a
- * caller that does not must cancel it.
+ * nothing. `events` is the call's place in the Task's events
+ * (`a2a-events.ts`) when this call started the run, taken before any of them
+ * was published; the caller closes it. The run goes on server-side, its
+ * events published, whoever follows it.
  */
 const startTurn = async (
   caller: A2aCaller,
   params: SendMessageRequest,
-): Promise<{ task: TaskRow; run?: ReadableStream<Uint8Array> }> => {
+): Promise<StartedTurn> => {
   const { endpoint, token } = caller;
   const message: Message | undefined = params.message;
   if (!message?.messageId) {
     throw new RequestMalformedError("A message with a messageId is required");
   }
+  if (message.role !== Role.ROLE_USER) {
+    throw new RequestMalformedError("A message's role must be ROLE_USER");
+  }
+  checkHistoryLength(params.configuration?.historyLength);
   if (message.parts.length === 0) {
     throw new RequestMalformedError("A message needs at least one part");
   }
@@ -454,12 +473,19 @@ const startTurn = async (
 
   try {
     if (!task) throw new Error("The turn started without its Task");
-    return { task: await withPush(task), run };
+    const started = await withPush(task);
+    return {
+      task: started,
+      events: run && produceA2aTaskEvents(started, run),
+    };
   } catch (error) {
     await run?.cancel();
     throw error;
   }
 };
+
+/** A turn's Task, and the call's events when it started the run. */
+type StartedTurn = { task: TaskRow; events?: A2aTaskSubscription };
 
 /**
  * The turns this instance is starting, by token, context and message. A copy
@@ -477,7 +503,7 @@ const startingTurns = new Map<string, Promise<unknown>>();
 export const startA2aTurn = async (
   caller: A2aCaller,
   params: SendMessageRequest,
-): Promise<{ task: TaskRow; run?: ReadableStream<Uint8Array> }> => {
+): Promise<StartedTurn> => {
   const key = JSON.stringify([
     caller.token.id,
     params.message?.contextId || null,
@@ -508,21 +534,28 @@ export const sendA2aMessage = async (
   params: SendMessageRequest,
 ): Promise<Task> => {
   const deadline = Date.now() + A2A_BLOCKING_WAIT_MS;
-  const { task, run } = await startA2aTurn(caller, params);
-  // The client follows the run by Task, not by this stream.
-  await run?.cancel();
-  if (params.configuration?.returnImmediately) return readTask(task);
+  const { task, events: started } = await startA2aTurn(caller, params);
+  if (params.configuration?.returnImmediately) {
+    started?.close();
+    return readTask(task);
+  }
   // The call that started the run waits on its run slot. A retry waits on a
   // follower slot, unless its Task has already ended and there is nothing to
-  // wait for.
-  if (run) return waitForTask(caller, task, deadline);
-  const read = await readTask(task);
-  if (TERMINAL_TASK_STATES.has(read.status!.state)) return read;
-  const release = takeFollowerSlot(caller);
+  // wait for; it takes its place in the Task's events first, so an end
+  // published as it reads is not missed.
+  const events = started ?? a2aTaskEvents.subscribe(task.id);
   try {
-    return await waitForTask(caller, task, deadline);
+    if (started) return await waitForTask(caller, task, deadline, events);
+    const read = await readTask(task);
+    if (TERMINAL_TASK_STATES.has(read.status!.state)) return read;
+    const release = takeFollowerSlot(caller);
+    try {
+      return await waitForTask(caller, task, deadline, events);
+    } finally {
+      release();
+    }
   } finally {
-    release();
+    events.close();
   }
 };
 
@@ -536,11 +569,32 @@ export const findA2aTask = (
     taskId,
   );
 
+/**
+ * Refuses a negative `historyLength`. Any other is served: a Task's history
+ * is never returned, so no limit can be exceeded.
+ */
+const checkHistoryLength = (historyLength: number | undefined) => {
+  if (
+    historyLength !== undefined &&
+    !(Number.isInteger(historyLength) && historyLength >= 0)
+  ) {
+    throw new RequestMalformedError(
+      "historyLength must be a non-negative integer",
+    );
+  }
+};
+
 /** `GetTask`: one of the calling token's Tasks, read from the database. */
 export const getA2aTask = async (
   caller: A2aCaller,
-  taskId: string,
-): Promise<Task> => readTask(await findA2aTask(caller, taskId));
+  params: GetTaskRequest,
+): Promise<Task> => {
+  checkHistoryLength(params.historyLength);
+  return readTokenTask(
+    { endpointId: caller.endpoint.id, tokenId: caller.token.id },
+    params.id,
+  );
+};
 
 /** How many Tasks a `ListTasks` page holds, unless the client asks. */
 const DEFAULT_PAGE_SIZE = 50;
@@ -585,6 +639,8 @@ const readPageToken = (
  *
  * Each running Task's state is read from its run first, recording any end
  * not yet recorded, so the `status` filter and the order see where it is now.
+ * That is one query for them all; then the count, the page, and the page's
+ * replies only when `includeArtifacts` asks for them.
  *
  * ponytail: every call reads all of the token's Tasks with no end recorded.
  * Few, unless runs end unrecorded en masse; a sweep that records them is the
@@ -600,6 +656,7 @@ export const listA2aTasks = async (
       `pageSize must be between 1 and ${MAX_PAGE_SIZE}`,
     );
   }
+  checkHistoryLength(params.historyLength);
   if (params.status === TaskState.UNRECOGNIZED) {
     throw new RequestMalformedError("status is not a Task state");
   }
@@ -615,23 +672,20 @@ export const listA2aTasks = async (
     ? readPageToken(caller, params.pageToken)
     : undefined;
 
-  const mine = and(
-    eq(a2aTaskTable.endpointId, caller.endpoint.id),
-    eq(a2aTaskTable.tokenId, caller.token.id),
-  );
-  const unended = await db
-    .select()
-    .from(a2aTaskTable)
-    .where(and(mine, isNull(a2aTaskTable.state)));
+  // The token names its endpoint, so it alone scopes the Tasks.
+  const mine = eq(a2aTaskTable.tokenId, caller.token.id);
+  const unended = await readTaskRows(and(mine, isNull(a2aTaskTable.state)));
   const running = new Map(
-    (await Promise.all(unended.map(readTask))).map((task) => [task.id, task]),
+    await Promise.all(
+      unended.map(async (task) => [task.id, await statusOf(task)] as const),
+    ),
   );
 
   // A state no Task here is in — one we never use, or no run is in — is
   // matched by nothing, rather than by everything an empty `or` would allow.
-  const live = [...running.values()]
-    .filter((task) => task.status!.state === params.status)
-    .map((task) => task.id);
+  const live = [...running]
+    .filter(([, status]) => status.state === params.status)
+    .map(([id]) => id);
   const recorded = endStateOf(params.status);
   if (params.status && !recorded && !live.length) {
     return { tasks: [], nextPageToken: "", pageSize, totalSize: 0 };
@@ -645,7 +699,9 @@ export const listA2aTasks = async (
           live.length ? inArray(a2aTaskTable.id, live) : undefined,
         )
       : undefined,
-    after ? gt(a2aTaskTable.statusAt, after) : undefined,
+    // Inclusive, as the spec says: a client polling from the last timestamp
+    // it saw still gets the Tasks that share it.
+    after ? gte(a2aTaskTable.statusAt, after) : undefined,
   );
 
   const [{ total }] = await db
@@ -671,15 +727,23 @@ export const listA2aTasks = async (
     )
     .orderBy(desc(a2aTaskTable.statusAt), desc(a2aTaskTable.id))
     .limit(pageSize + 1);
-  const page = rows.slice(0, pageSize);
-
-  const tasks = await Promise.all(
-    page.map(async (row) => running.get(row.id) ?? readTask(row)),
+  const page = await Promise.all(
+    rows.slice(0, pageSize).map(async (row) => ({
+      ...row,
+      // One made since the read above is read now.
+      status: running.get(row.id) ?? (await taskStatus(row)),
+    })),
   );
+  // Read only for the page's completed Tasks, and only when asked for.
+  const texts = params.includeArtifacts
+    ? await replyTexts(page)
+    : new Map<string, string>();
+
   return {
-    tasks: params.includeArtifacts
-      ? tasks
-      : tasks.map((task) => ({ ...task, artifacts: [] })),
+    tasks: page.map((task) => {
+      const read = toTask(task, task.status, texts.get(task.id));
+      return params.includeArtifacts ? read : { ...read, artifacts: [] };
+    }),
     nextPageToken:
       rows.length > pageSize ? pageTokenOf(caller, page[page.length - 1]) : "",
     pageSize,

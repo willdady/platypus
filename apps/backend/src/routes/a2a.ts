@@ -4,12 +4,12 @@ import { etag } from "hono/etag";
 import {
   JsonRpcTransportHandler,
   ServerCallContext,
-  validateVersion,
   type A2ARequestHandler,
 } from "@a2a-js/sdk/server";
-import { A2AError } from "@a2a-js/sdk/errors";
+import { A2AError, VersionNotSupportedError } from "@a2a-js/sdk/errors";
 import { AgentCard, type StreamResponse } from "@a2a-js/sdk";
 import {
+  A2A_PROTOCOL_VERSION,
   extendedAgentCard,
   lookupA2aEndpoint,
   publicAgentCard,
@@ -40,8 +40,8 @@ import {
   AGENT_CARD_METHOD,
   a2aSettings,
   logA2aCall,
+  readRpcEnvelope,
   reasonOfRpcCode,
-  rpcMethodOf,
   type A2aCallLogEntry,
 } from "../services/a2a-call.ts";
 import { logger } from "../logger.ts";
@@ -200,7 +200,7 @@ const requestHandler = (
   getAuthenticatedExtendedAgentCard: () =>
     Promise.resolve(AgentCard.fromJSON(extendedAgentCard(caller.endpoint))),
   sendMessage: guarded((params) => sendA2aMessage(caller, params)),
-  getTask: guarded((params) => getA2aTask(caller, params.id)),
+  getTask: guarded((params) => getA2aTask(caller, params)),
   sendMessageStream: guardedStream((params) =>
     streamA2aMessage(caller, params),
   ),
@@ -227,15 +227,6 @@ type JSONRPCResponse = Exclude<
   AsyncGenerator<unknown, void, undefined>
 >;
 
-/** The id a JSON-RPC body names, or `null` if it names none or isn't JSON. */
-const rpcIdOf = (body: string): string | number | null => {
-  try {
-    return (JSON.parse(body) as { id?: string | number | null }).id ?? null;
-  } catch {
-    return null;
-  }
-};
-
 const encoder = new TextEncoder();
 const sseFrame = (event: JSONRPCResponse, name?: string) =>
   encoder.encode(
@@ -251,11 +242,10 @@ const sseFrame = (event: JSONRPCResponse, name?: string) =>
  * of its slot at once.
  */
 const eventStream = async (
-  body: string,
+  id: string | number,
   events: AsyncGenerator<JSONRPCResponse, void, undefined>,
   hangUp: AbortController,
 ): Promise<Response | JSONRPCResponse> => {
-  const id = rpcIdOf(body);
   const failure = (error: unknown): JSONRPCResponse => ({
     jsonrpc: "2.0",
     id,
@@ -303,26 +293,23 @@ const eventStream = async (
  * never sends the header.
  */
 const versionRefusal = (
-  body: string,
+  id: string | number,
   version: string | undefined,
-  endpoint: A2aCaller["endpoint"],
 ): JSONRPCResponse | undefined => {
   if (!version) return undefined;
-  try {
-    // The spec matches versions by `Major.Minor`.
-    validateVersion(
-      version.split(".").slice(0, 2).join("."),
-      AgentCard.fromJSON(publicAgentCard(endpoint)),
-      "JSONRPC",
-    );
-    return undefined;
-  } catch (error) {
-    return {
-      jsonrpc: "2.0",
-      id: rpcIdOf(body),
-      error: JsonRpcTransportHandler.mapToJSONRPCError(error),
-    };
-  }
+  // The spec matches versions by `Major.Minor`. Every card declares the one,
+  // so no card is built to read it from.
+  const requested = version.split(".").slice(0, 2).join(".");
+  if (requested === A2A_PROTOCOL_VERSION) return undefined;
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: JsonRpcTransportHandler.mapToJSONRPCError(
+      new VersionNotSupportedError(
+        `The requested A2A protocol version '${requested}' is not supported. Supported versions: ${A2A_PROTOCOL_VERSION}`,
+      ),
+    ),
+  };
 };
 
 /**
@@ -371,8 +358,10 @@ const capBody: MiddlewareHandler = (c, next) =>
  * JSON-RPC. A body past the cap is `413`. Every method then passes the token
  * check: a missing, wrong or expired token on a live endpoint is `401`, and
  * the token's last used or last rejected is stamped. A turn past the run cap
- * is `429`, having written nothing; so is a follower past the follower cap. A trailing slash is accepted, since some
- * clients join paths onto the URL as a base.
+ * is `429`, having written nothing; so is a follower past the follower cap.
+ * A body that isn't JSON is `-32700` and one that isn't a JSON-RPC Request is
+ * `-32600`; a Notification (no `id`) is `204` and is not run. A trailing slash
+ * is accepted, since some clients join paths onto the URL as a base.
  */
 a2a.on("POST", ["/:endpointId", "/:endpointId/"], capBody, (c) => {
   const log: A2aCallLogEntry = {
@@ -384,8 +373,9 @@ a2a.on("POST", ["/:endpointId", "/:endpointId/"], capBody, (c) => {
 });
 
 const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
-  const body = await c.req.text();
-  log.method = rpcMethodOf(body);
+  // The body's one parse: everything after reads the envelope.
+  const envelope = readRpcEnvelope(await c.req.text());
+  log.method = envelope.method;
   const auth = await authenticateA2aCall(
     log.endpointId,
     c.req.header("Authorization"),
@@ -408,6 +398,17 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
   log.organizationId = endpoint.organizationId;
   log.workspaceId = endpoint.workspaceId;
   log.tokenId = token.id;
+  // Checked here, not by the transport, which answers all of these -32602.
+  if (envelope.kind === "malformed") {
+    log.reason = reasonOfRpcCode(envelope.error.code);
+    return c.json({ jsonrpc: "2.0", id: envelope.id, error: envelope.error });
+  }
+  // JSON-RPC 2.0 §4.1: a Notification is never answered, so it is never run:
+  // a fire-and-forget SendMessage would start a run no one can follow.
+  if (envelope.kind === "notification") {
+    log.reason = "notification";
+    return c.body(null, 204);
+  }
   // Aborted when the client hangs up: on the request, or by canceling the
   // stream it was answered with.
   const hangUp = new AbortController();
@@ -422,10 +423,10 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
     ),
   );
   let response =
-    versionRefusal(body, c.req.header("A2A-Version"), endpoint) ??
-    (await transport.handle(body, new ServerCallContext()));
+    versionRefusal(envelope.id, c.req.header("A2A-Version")) ??
+    (await transport.handle(envelope.request, new ServerCallContext()));
   if (Symbol.asyncIterator in response) {
-    const answer = await eventStream(body, response, hangUp);
+    const answer = await eventStream(envelope.id, response, hangUp);
     // A stream is logged once it opens; how it goes on is the Task's to say.
     if (answer instanceof Response) {
       log.outcome = "ok";
