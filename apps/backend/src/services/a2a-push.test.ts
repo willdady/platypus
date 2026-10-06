@@ -45,6 +45,7 @@ const TASK: TaskRow = {
   canceledAt: null,
   statusAt: new Date(),
   pushCount: 0,
+  replyId: null,
   createdAt: new Date(),
 };
 
