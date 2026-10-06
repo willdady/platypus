@@ -1236,6 +1236,9 @@ export const a2aTask = pgTable(
     state: t.text("state").$type<A2aTaskEndState>(),
     canceledAt: t.timestamp("canceled_at"),
     statusAt: t.timestamp("status_at", { precision: 3 }).notNull().defaultNow(),
+    // Push notifications sent for this Task, over every config it has had, so
+    // deleting a delivered config and registering another can't send more.
+    pushCount: t.integer("push_count").notNull().default(0),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [

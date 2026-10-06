@@ -259,7 +259,7 @@ const startTurn = async (
   // Checked before the run starts, so a refused config starts nothing.
   const push =
     params.configuration?.taskPushNotificationConfig &&
-    (await checkPushConfig(params.configuration.taskPushNotificationConfig));
+    checkPushConfig(params.configuration.taskPushNotificationConfig);
   const withPush = async (task: TaskRow) => {
     if (push) await storePushConfig(task, push);
     return task;

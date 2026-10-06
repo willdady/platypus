@@ -41,8 +41,13 @@ export async function postWithRetries(params: {
   headers: Record<string, string>;
   /** What is delivered, as the log lines name it. */
   label: string;
+  /**
+   * Whether the URL may reach private networks. Defaults to the egress
+   * guard's own setting, `EGRESS_ALLOW_PRIVATE_NETWORKS`.
+   */
+  allowPrivateNetworks?: boolean;
 }): Promise<void> {
-  const { url, body, headers, label } = params;
+  const { url, body, headers, label, allowPrivateNetworks } = params;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
       await new Promise((resolve) =>
@@ -57,7 +62,7 @@ export async function postWithRetries(params: {
       // Checked on every attempt: the URL's DNS records can change between
       // retries, and the URL is user-supplied, so it gets the same egress
       // policy as a model-chosen one.
-      const egress = await checkEgress(url);
+      const egress = await checkEgress(url, { allowPrivateNetworks });
       if (!egress.allowed) {
         logger.warn(
           { url, reason: egress.reason },
