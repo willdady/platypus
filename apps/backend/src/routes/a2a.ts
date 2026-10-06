@@ -200,7 +200,7 @@ const requestHandler = (
   getAuthenticatedExtendedAgentCard: () =>
     Promise.resolve(AgentCard.fromJSON(extendedAgentCard(caller.endpoint))),
   sendMessage: guarded((params) => sendA2aMessage(caller, params)),
-  getTask: guarded((params) => getA2aTask(caller, params.id)),
+  getTask: guarded((params) => getA2aTask(caller, params)),
   sendMessageStream: guardedStream((params) =>
     streamA2aMessage(caller, params),
   ),

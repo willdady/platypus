@@ -32,7 +32,7 @@ export type ColumnRef = { table: string; name: string };
 /** A comparison marker standing in for a Drizzle operator's `SQL` fragment. */
 export type Marker =
   | {
-      op: "eq" | "ne" | "gt" | "lt" | "lte";
+      op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte";
       column: ColumnRef;
       value: unknown;
     }
@@ -107,6 +107,8 @@ export const markerOperators = () => ({
     ({ op: "ne", column: refOf(column), value }) as Marker,
   gt: (column: unknown, value: unknown) =>
     ({ op: "gt", column: refOf(column), value }) as Marker,
+  gte: (column: unknown, value: unknown) =>
+    ({ op: "gte", column: refOf(column), value }) as Marker,
   lt: (column: unknown, value: unknown) =>
     ({ op: "lt", column: refOf(column), value }) as Marker,
   lte: (column: unknown, value: unknown) =>
@@ -241,6 +243,11 @@ const satisfies = (resolve: Resolve, condition: Condition): boolean => {
     case "gt":
       return (
         (resolve(condition.column) as number) >
+        (operandOf(condition.value, resolve) as number)
+      );
+    case "gte":
+      return (
+        (resolve(condition.column) as number) >=
         (operandOf(condition.value, resolve) as number)
       );
     case "lt":
