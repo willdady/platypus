@@ -275,8 +275,11 @@ const REMOVED_VARS = new Set<string>([]);
  * `NODE_ENV` is set by the backend image, not in `.env`.
  * `PLATYPUS_PLUGIN_CONFIG` is deprecated, so the example files show the
  * per-plugin `PLATYPUS_PLUGIN_CONFIG_<NAME>` form instead.
+ * `A2A_PUSH_ALLOW_PRIVATE_NETWORKS` is waiting on its `apps/backend/.env.example`
+ * line (#1305); drop it from here once that lands.
  */
 const VARS_WITHOUT_ENV_EXAMPLE_ENTRY = new Set([
+  "A2A_PUSH_ALLOW_PRIVATE_NETWORKS",
   "ALLOWED_DEV_ORIGINS",
   "NEXT_PUBLIC_APP_VERSION",
   "NODE_ENV",
@@ -1807,6 +1810,13 @@ const BACKEND_CONSTANTS = [
     phrase: (count: number) => `**Up to ${count} URLs per Task.**`,
     files: ["building-with-platypus/a2a-endpoints.mdx"],
     cost: "A client is refused a push URL at a count the page never warned of.",
+  },
+  {
+    source: "apps/backend/src/services/a2a-push.ts",
+    name: "MAX_PUSHES_PER_TASK",
+    phrase: (count: number) => `**At most ${count} pushes per Task**`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A client waits for a push the Task has no pushes left to send.",
   },
 ] as const;
 

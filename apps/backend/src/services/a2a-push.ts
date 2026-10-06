@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, or, sql } from "drizzle-orm";
 import {
   A2A_CONTENT_TYPE,
   StreamResponse,
@@ -14,7 +14,6 @@ import {
   type A2aPushAuthentication,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
-import { checkEgress } from "../utils/egress-guard.ts";
 import type { RunStatus } from "../runs/types.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 import {
@@ -34,7 +33,15 @@ import { postWithRetries } from "./webhook-delivery.ts";
  * guard and retries). Nothing is pushed for an intermediate state.
  *
  * Each config is delivered once. Its `notifiedAt` is claimed before sending,
- * so the run's end and a registration landing just after it can't both push.
+ * so the run's end and a registration landing just after it can't both push,
+ * and a Task sends at most `MAX_PUSHES_PER_TASK` however its configs churn.
+ *
+ * The URL and credentials come from an outside caller, so a push reaches
+ * private networks only when the Operator opts in with
+ * `A2A_PUSH_ALLOW_PRIVATE_NETWORKS`, whatever `EGRESS_ALLOW_PRIVATE_NETWORKS`
+ * allows Webhooks. The URL is checked when it is delivered, not when it is
+ * registered: a refusal goes to the log, so a caller can't tell a host that
+ * doesn't resolve from one that resolves somewhere internal.
  *
  * ponytail: at most once. A process that dies between the claim and a landed
  * delivery loses that push; the client can still poll `GetTask`. Claim after
@@ -64,16 +71,88 @@ const credentialHeaders = (config: PushConfigRow): Record<string, string> => ({
   ...(config.token ? { "X-A2A-Notification-Token": config.token } : {}),
 });
 
-const deliver = async (config: PushConfigRow, task: Task) => {
-  const body = JSON.stringify(
-    StreamResponse.toJSON({ payload: { $case: "task", value: task } }),
+/** Whether the Operator lets A2A pushes reach private networks. */
+const privateNetworksAllowed = () =>
+  ["true", "1"].includes(
+    process.env.A2A_PUSH_ALLOW_PRIVATE_NETWORKS?.trim().toLowerCase() ?? "",
   );
-  await postWithRetries({
-    url: config.url,
-    body,
-    headers: { "Content-Type": A2A_CONTENT_TYPE, ...credentialHeaders(config) },
-    label: "A2A push notification",
-  });
+
+/**
+ * How many pushes this instance sends at once, retries included. More wait
+ * their turn, so a burst of ended Tasks can't fan out unbounded requests.
+ */
+export const MAX_CONCURRENT_PUSHES = 8;
+let pushesInFlight = 0;
+const waitingForSlot: (() => void)[] = [];
+
+/** Runs `send` once one of the instance's push slots is free. */
+const withPushSlot = async (send: () => Promise<void>): Promise<void> => {
+  if (pushesInFlight < MAX_CONCURRENT_PUSHES) pushesInFlight++;
+  else await new Promise<void>((resolve) => waitingForSlot.push(resolve));
+  try {
+    await send();
+  } finally {
+    // The slot passes straight to the next in line, if any.
+    const next = waitingForSlot.shift();
+    if (next) next();
+    else pushesInFlight--;
+  }
+};
+
+const deliver = (config: PushConfigRow, task: Task) =>
+  withPushSlot(() =>
+    postWithRetries({
+      url: config.url,
+      body: JSON.stringify(
+        StreamResponse.toJSON({ payload: { $case: "task", value: task } }),
+      ),
+      headers: {
+        "Content-Type": A2A_CONTENT_TYPE,
+        ...credentialHeaders(config),
+      },
+      label: "A2A push notification",
+      allowPrivateNetworks: privateNetworksAllowed(),
+    }),
+  );
+
+/** How many pushes one Task sends, over every config it has had. */
+const MAX_PUSHES_PER_TASK = 5;
+
+/**
+ * Takes up to `wanted` of the Task's remaining pushes and returns how many it
+ * got. A compare-and-set on the Task's count, so two instances pushing the
+ * same Task can't both take the last one.
+ */
+const reservePushes = async (
+  taskId: string,
+  wanted: number,
+): Promise<number> => {
+  // A lost compare-and-set means another caller took at least one push, so
+  // this many attempts always reach an answer.
+  for (let attempt = 0; attempt <= MAX_PUSHES_PER_TASK; attempt++) {
+    const [task] = await db
+      .select({ pushCount: a2aTaskTable.pushCount })
+      .from(a2aTaskTable)
+      .where(eq(a2aTaskTable.id, taskId))
+      .limit(1);
+    if (!task) return 0;
+    // Never null in Postgres; the tests' in-memory db skips column defaults.
+    const sent = task.pushCount ?? 0;
+    const granted = Math.min(wanted, MAX_PUSHES_PER_TASK - sent);
+    if (granted <= 0) return 0;
+    const reserved = await db
+      .update(a2aTaskTable)
+      .set({ pushCount: sent + granted })
+      .where(
+        and(
+          eq(a2aTaskTable.id, taskId),
+          eq(a2aTaskTable.pushCount, task.pushCount),
+        ),
+      )
+      .returning({ id: a2aTaskTable.id });
+    if (reserved.length > 0) return granted;
+  }
+  return 0;
 };
 
 /**
@@ -90,7 +169,18 @@ const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
       .set({ notifiedAt: new Date() })
       .where(pending(row.id))
       .returning();
-    await Promise.all(claimed.map((config) => deliver(config, task)));
+    if (claimed.length === 0) return;
+    claimed.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const granted = await reservePushes(row.id, claimed.length);
+    if (granted < claimed.length) {
+      logger.warn(
+        { taskId: row.id, dropped: claimed.length - granted },
+        "A2A Task has sent all its push notifications; dropping the rest",
+      );
+    }
+    await Promise.all(
+      claimed.slice(0, granted).map((config) => deliver(config, task)),
+    );
   } catch (error) {
     logger.error({ error, taskId: row.id }, "A2A push notification failed");
   }
@@ -112,6 +202,7 @@ export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
         state: a2aTaskTable.state,
         canceledAt: a2aTaskTable.canceledAt,
         statusAt: a2aTaskTable.statusAt,
+        pushCount: a2aTaskTable.pushCount,
         createdAt: a2aTaskTable.createdAt,
       })
       .from(a2aTaskTable)
@@ -175,26 +266,30 @@ export type CheckedPushConfig = {
   authentication: A2aPushAuthentication | null;
 };
 
+/** Whether `value` parses as an http(s) URL with a host. */
+const isHttpUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") && !!url.hostname
+    );
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Refuses a push config that could never be delivered: a URL that is not
- * http(s), one the egress guard blocks, or credentials that are not a valid
- * header. Delivery re-checks the URL regardless, since DNS can change. As with
- * a Webhook URL, the reason a URL is refused goes to the log, not the caller.
+ * http(s), or credentials that are not a valid header. Where the URL leads is
+ * not looked at here: delivery checks it against the egress guard and logs a
+ * refusal, so every host the caller names gets the same answer.
  */
-export const checkPushConfig = async (
+export const checkPushConfig = (
   config: TaskPushNotificationConfig,
-): Promise<CheckedPushConfig> => {
-  if (!config.url) {
-    throw new RequestMalformedError("A push notification config needs a url");
-  }
-  const egress = await checkEgress(config.url);
-  if (!egress.allowed) {
-    logger.warn(
-      { url: config.url, reason: egress.reason },
-      "Rejected an A2A push notification URL by network policy",
-    );
+): CheckedPushConfig => {
+  if (!config.url || !isHttpUrl(config.url)) {
     throw new RequestMalformedError(
-      "This URL is not permitted by this deployment's network policy.",
+      "A push notification config needs an http or https url",
     );
   }
   const auth = config.authentication;
@@ -226,10 +321,11 @@ export const checkPushConfig = async (
 /**
  * Stores a checked config on `task`, replacing one with the same id. A config
  * without an id replaces one with the same URL, so a `SendMessage` retried
- * with its config registers it once. A replacement to the same URL keeps its
- * delivery, so re-registering never pushes an ended Task twice. If the Task
- * has already ended and the config is new, it is pushed now: a run can end
- * before its client registers.
+ * with its config registers it once. A replacement keeps its delivery, so
+ * re-registering never pushes a config twice; one that would move a config's
+ * URL once its Task has ended is refused, so it can't be aimed somewhere new.
+ * If the Task has already ended and the config is new, it is pushed now: a run
+ * can end before its client registers.
  */
 export const storePushConfig = async (
   task: TaskRow,
@@ -240,6 +336,11 @@ export const storePushConfig = async (
     token: config.token,
     authentication: config.authentication,
   };
+  const ended = TERMINAL_TASK_STATES.has((await readTask(task)).status!.state);
+  const urlLocked = () =>
+    new RequestMalformedError(
+      "A push notification config's url can't change once its Task has ended",
+    );
   const row = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select()
@@ -254,12 +355,12 @@ export const storePushConfig = async (
       )
       .limit(1);
     if (existing) {
+      if (existing.url !== config.url && (ended || existing.notifiedAt)) {
+        throw urlLocked();
+      }
       const [updated] = await tx
         .update(a2aPushConfigTable)
-        .set({
-          ...values,
-          notifiedAt: existing.url === config.url ? existing.notifiedAt : null,
-        })
+        .set(values)
         .where(configKey(task.id, existing.id))
         .returning();
       return updated;
@@ -277,32 +378,40 @@ export const storePushConfig = async (
       );
     }
     // An upsert: a registration of the same id that raced this one in since
-    // the check above is replaced, as it would have been had it landed first.
+    // the check above is replaced, as it would have been had it landed first —
+    // unless it has been delivered and this moves its URL, refused as above.
     const [inserted] = await tx
       .insert(a2aPushConfigTable)
       .values({ id: config.id || randomUUID(), taskId: task.id, ...values })
       .onConflictDoUpdate({
         target: [a2aPushConfigTable.taskId, a2aPushConfigTable.id],
-        set: {
-          ...values,
-          notifiedAt: sql`CASE WHEN ${a2aPushConfigTable.url} = excluded.url THEN ${a2aPushConfigTable.notifiedAt} END`,
-        },
+        set: values,
+        setWhere: or(
+          isNull(a2aPushConfigTable.notifiedAt),
+          sql`${a2aPushConfigTable.url} = excluded.url`,
+        ),
       })
       .returning();
+    if (!inserted) throw urlLocked();
     return inserted;
   });
   if (!row.notifiedAt) void pushTaskIfEnded(task);
   return row;
 };
 
-/** A stored config as the client reads it back. */
+/**
+ * A stored config as the client reads it back. The secrets it registered —
+ * the token and the credentials — are never returned: only the scheme.
+ */
 const toWire = (row: PushConfigRow): TaskPushNotificationConfig => ({
   tenant: "",
   id: row.id,
   taskId: row.taskId,
   url: row.url,
-  token: row.token ?? "",
-  authentication: row.authentication ?? undefined,
+  token: "",
+  authentication: row.authentication
+    ? { scheme: row.authentication.scheme, credentials: "" }
+    : undefined,
 });
 
 /** One of the calling token's Tasks; any other is not found. */
@@ -318,7 +427,7 @@ export const createA2aPushConfig = async (
   params: TaskPushNotificationConfig,
 ): Promise<TaskPushNotificationConfig> => {
   const task = await callerTask(caller, params.taskId);
-  return toWire(await storePushConfig(task, await checkPushConfig(params)));
+  return toWire(await storePushConfig(task, checkPushConfig(params)));
 };
 
 /** `GetTaskPushNotificationConfig`. */

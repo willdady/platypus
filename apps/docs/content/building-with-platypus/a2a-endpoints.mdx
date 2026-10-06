@@ -285,13 +285,24 @@ registered.
   request came from this endpoint. An `authentication` without both a scheme
   and credentials is refused when it is registered.
 - **Delivery works like a [Webhook](/building-with-platypus/webhooks#delivery-and-retries)'s**,
-  with the same timeout, retries and network policy. A URL the policy blocks,
-  such as a loopback or cloud-metadata address, is refused when it is
-  registered.
+  with the same timeout and retries.
+- **Push URLs must be public.** Platypus never pushes to a loopback,
+  cloud-metadata or private-network address, unless your server administrator
+  allows private networks for clients on their own network. Any `http` or
+  `https` URL is accepted when it is registered; one that leads somewhere not
+  allowed is skipped when the Task ends, so check your URL is reachable from
+  the internet.
+- **Each URL is pushed once.** Once a Task has ended, a config can't be pointed
+  at a different URL: registering its `id` with a new `url` is refused.
 - **Up to 5 URLs per Task.** Registering a URL that is already on the Task,
   without naming its `id`, replaces it rather than adding a second. So does
   registering an `id` the Task already has, even when two registrations of it
   arrive at once.
+- **At most 5 pushes per Task**, counting pushes to URLs you have since
+  deleted.
+- **Credentials aren't read back.** `GetTaskPushNotificationConfig` and
+  `ListTaskPushNotificationConfigs` return the `authentication` scheme, but
+  never its credentials or the `token`. Keep your own copy.
 
 <Callout type="warning">
   The push carries the Agent's reply, so the receiving URL sees the
