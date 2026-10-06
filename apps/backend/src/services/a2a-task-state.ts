@@ -9,6 +9,7 @@ import {
   type A2aTaskEndState,
 } from "../db/schema.ts";
 import type { RunStatus } from "../runs/types.ts";
+import type { ChatClaimTx } from "../runs/sinks/chat-sink.ts";
 import { pushTaskIfEnded } from "./a2a-push.ts";
 
 /**
@@ -20,6 +21,9 @@ import { pushTaskIfEnded } from "./a2a-push.ts";
  */
 
 export type TaskRow = typeof a2aTaskTable.$inferSelect;
+
+/** Where a Task's rows are read and written: the database, or a transaction. */
+type Executor = typeof db | ChatClaimTx;
 
 /** A text part of an outbound A2A message or artifact. */
 const a2aTextPart = (text: string): Part => ({
@@ -57,8 +61,9 @@ export const endStateOf = (state: TaskState): A2aTaskEndState | undefined =>
 const firstReply = async (
   chatId: string,
   messageId: string,
+  executor: Executor = db,
 ): Promise<string | undefined> => {
-  const [reply] = await db
+  const [reply] = await executor
     .select({ id: chatMessage.id })
     .from(chatMessage)
     .where(
@@ -78,16 +83,17 @@ const firstReply = async (
  * Records `state` as how the turn answering `messageId` ended, on its Task if
  * it has one, with the reply it wrote and the time. The first end recorded
  * stands, and with it its reply: a later regenerate or delete of that reply
- * changes nothing the Task reads. An end it records is pushed, whoever
- * noticed it. Answers with the Task as recorded, if it recorded.
+ * changes nothing the Task reads. Answers with the Task as recorded, if it
+ * recorded. Pushes nothing: in a transaction, the end is not yet committed.
  */
-const recordEnd = async (
+const writeEnd = async (
+  executor: Executor,
   chatId: string,
   messageId: string,
   state: A2aTaskEndState,
 ): Promise<TaskRow | undefined> => {
-  const replyId = (await firstReply(chatId, messageId)) ?? null;
-  const [recorded] = await db
+  const replyId = (await firstReply(chatId, messageId, executor)) ?? null;
+  const [recorded] = await executor
     .update(a2aTaskTable)
     .set({ state, replyId, statusAt: new Date() })
     .where(
@@ -98,6 +104,19 @@ const recordEnd = async (
       ),
     )
     .returning();
+  return recorded;
+};
+
+/**
+ * `writeEnd`, committed at once. An end it records is pushed, whoever
+ * noticed it.
+ */
+const recordEnd = async (
+  chatId: string,
+  messageId: string,
+  state: A2aTaskEndState,
+): Promise<TaskRow | undefined> => {
+  const recorded = await writeEnd(db, chatId, messageId, state);
   if (recorded) void pushTaskIfEnded(recorded);
   return recorded;
 };
@@ -116,19 +135,36 @@ export const recordTaskEnd = async (
 };
 
 /**
+ * Records how the turn answering `messageId` ended with `status`, in `tx`:
+ * the transaction its Chat's terminal status is written in, so no claim of
+ * the next turn reads the Chat ended and the Task not (#1309). Pushes
+ * nothing; its caller pushes once `tx` has committed.
+ */
+export const recordTaskEndIn = async (
+  tx: ChatClaimTx,
+  chatId: string,
+  messageId: string,
+  status: RunStatus,
+): Promise<TaskRow | undefined> => {
+  const state = END_OF_RUN[status];
+  return state ? writeEnd(tx, chatId, messageId, state) : undefined;
+};
+
+/**
  * The user message the Chat's current turn answers: its active leaf, or the
  * leaf's parent when the leaf is the reply.
  */
 export const currentTurnId = async (
   chatId: string,
+  executor: Executor = db,
 ): Promise<string | undefined> => {
-  const [chat] = await db
+  const [chat] = await executor
     .select({ leafId: chatTable.activeLeafId })
     .from(chatTable)
     .where(eq(chatTable.id, chatId))
     .limit(1);
   if (!chat?.leafId) return undefined;
-  const [leaf] = await db
+  const [leaf] = await executor
     .select({ role: chatMessage.role, parentId: chatMessage.parentId })
     .from(chatMessage)
     .where(and(eq(chatMessage.chatId, chatId), eq(chatMessage.id, chat.leafId)))

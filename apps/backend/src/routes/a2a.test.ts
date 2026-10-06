@@ -2143,6 +2143,43 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     expect(await stateOf(taskId)).toBe("TASK_STATE_COMPLETED");
   });
 
+  it("refuses a cancel its run's terminal write beat, keeping the run's end", async () => {
+    const fake = seedConversation();
+    let finish = () => {};
+    model.holdMidReply = new Promise((resolve) => (finish = resolve));
+    const sent = await send(
+      { messageId: "msg-a" },
+      { returnImmediately: true },
+    );
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+    const task = sent.body.result.task;
+    // The run ends after the cancel has read its Task running, and before the
+    // cancel's claim: the first transaction from here on.
+    const handle = fake.handle as {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => unknown;
+    };
+    const transaction = handle.transaction;
+    handle.transaction = async (callback) => {
+      handle.transaction = transaction;
+      finish();
+      await vi.waitFor(() =>
+        expect(rows("chat")[0]).toMatchObject({ status: "succeeded" }),
+      );
+      return transaction(callback);
+    };
+
+    const res = await rpc("CancelTask", { id: task.id });
+
+    expect(res.body.error.code).toBe(-32002);
+    expect(cancelRun).not.toHaveBeenCalled();
+    expect(rows("a2a_task")[0]).toMatchObject({ state: "completed" });
+    const got = await rpc("GetTask", { id: task.id });
+    expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(got.body.result.artifacts[0].parts[0].text).toBe(
+      "Hello from Helper",
+    );
+  });
+
   it("does not cancel another endpoint's Task", async () => {
     seedConversation();
     const task = await startMidReply();
