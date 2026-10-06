@@ -333,8 +333,9 @@ already had into a wait.
 
 A `404` does not say why. An unknown Trigger, a missing, wrong, revoked or
 expired token, a disabled Trigger, a Workspace the Organization hasn't allowed,
-and a Trigger of another type all get the same answer, so a caller without the
-token learns nothing about what exists. Look at **Last rejected** on the
+a Workspace Owner who has left the Organization or is banned, and a Trigger of
+another type all get the same answer, so a caller without the token learns
+nothing about what exists. Look at **Last rejected** on the
 Trigger to see that calls are being refused.
 
 A caller that builds the body from free text — an issue description, a
@@ -444,8 +445,9 @@ while the run is under way, and ends as `success`, `failed`, `cancelled` or
 
 Polling is for short-term checks. It goes through the same check as a call, so
 it answers `404` once the run is pruned from run history, and also as soon as
-the token is regenerated, revoked or expired, the Trigger is disabled, or the
-Organization stops allowing the Workspace. A refused poll is not logged and
+the token is regenerated, revoked or expired, the Trigger is disabled, the
+Organization stops allowing the Workspace, or the Workspace Owner leaves the
+Organization or is banned. A refused poll is not logged and
 does not move **Last rejected**.
 
 ## Review run history
@@ -574,6 +576,16 @@ An Inbound call that was refused writes none of these lines either. Its trace
 is **Last rejected** on the Trigger, and the `Inbound trigger call` line your
 Operator can search, whose `reason` says why — see [the inbound call
 log](/reference/backend-configuration#the-inbound-call-log).
+
+A Trigger runs as its Workspace Owner, so none of the Workspace's Triggers runs
+once the Owner can no longer act: they have left the Organization, or a Super
+Admin has banned them. A scheduled or event Trigger whose time comes then
+records no run, and its schedule moves on as if it had run. An Inbound call is
+refused with a `404`, and a call accepted just before the ban ends its run
+_Failed_. A ban with an expiry stops counting once it runs out, and the
+Triggers act again without being switched back on. A Super Admin who owns a
+Workspace keeps its Triggers running without being a member of the
+Organization, but not while banned.
 
 ## When a run stops early
 

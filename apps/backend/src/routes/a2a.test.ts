@@ -197,6 +197,7 @@ const seed = ({
   allowed = false,
   ownerIsMember = true,
   ownerRole = "user",
+  owner = {},
   tokens = [],
 }: {
   endpoint?: Row;
@@ -204,6 +205,7 @@ const seed = ({
   allowed?: boolean;
   ownerIsMember?: boolean;
   ownerRole?: string;
+  owner?: Row;
   tokens?: Row[];
 } = {}) =>
   seedDb({
@@ -217,7 +219,7 @@ const seed = ({
         a2aAllowed: allowed,
       },
     ],
-    user: [{ id: "owner-1", name: "Owner", role: ownerRole }],
+    user: [{ id: "owner-1", name: "Owner", role: ownerRole, ...owner }],
     organization_member: ownerIsMember
       ? [
           {
@@ -330,12 +332,29 @@ describe("GET /a2a/:endpointId/.well-known/agent-card.json", () => {
     expect((await card()).status).toBe(200);
   });
 
+  it("is served once the Owner's ban has expired", async () => {
+    seed({ owner: { banned: true, banExpires: new Date(Date.now() - 1000) } });
+
+    expect((await card()).status).toBe(200);
+  });
+
   it.each([
     ["the endpoint is unknown", {}, "ep-unknown"],
     ["the endpoint is disabled", { endpoint: { enabled: false } }, "ep-1"],
     ["the gate is off", { gate: "off" }, "ep-1"],
     ["the gate excludes the Workspace", { gate: "selected" }, "ep-1"],
     ["the Owner has left the Organization", { ownerIsMember: false }, "ep-1"],
+    ["the Owner is banned", { owner: { banned: true } }, "ep-1"],
+    [
+      "the Owner is a banned super admin",
+      { ownerIsMember: false, ownerRole: "admin", owner: { banned: true } },
+      "ep-1",
+    ],
+    [
+      "the Owner's ban has yet to expire",
+      { owner: { banned: true, banExpires: new Date(Date.now() + 60_000) } },
+      "ep-1",
+    ],
   ] as const)("is the same 404 when %s", async (_case, options, id) => {
     seed(options);
 
@@ -718,6 +737,28 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "Not Found" });
   });
+
+  it.each([
+    [
+      "a member",
+      [{ id: "m-1", organizationId: "org-1", userId: "owner-1" }],
+      "user",
+    ],
+    ["a super admin", [], "admin"],
+  ])(
+    "is the card's 404 when the Owner is %s who is banned",
+    async (_case, organization_member, role) => {
+      seedConversation({
+        organization_member,
+        user: [{ id: "owner-1", name: "Olive Owner", role, banned: true }],
+      });
+
+      const res = await rpc("GetTask", { id: "x" });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: "Not Found" });
+    },
+  );
 
   it("answers an unknown method with method not found", async () => {
     seedConversation();
