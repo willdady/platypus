@@ -76,9 +76,12 @@ const pending = (taskId: string) =>
     isNull(a2aPushConfigTable.notifiedAt),
   );
 
-/** The headers carrying the client's own credentials back to it. */
+/**
+ * The headers carrying the client's own credentials back to it. A scheme
+ * registered without credentials sends no `Authorization` header.
+ */
 const credentialHeaders = (config: PushConfigRow): Record<string, string> => ({
-  ...(config.authentication
+  ...(config.authentication?.credentials
     ? {
         Authorization: `${config.authentication.scheme} ${config.authentication.credentials}`,
       }
@@ -346,7 +349,9 @@ const isHttpUrl = (value: string) => {
 
 /**
  * Refuses a push config that could never be delivered: a URL that is not
- * http(s), or credentials that are not a valid header. Where the URL leads is
+ * http(s), credentials with no scheme, or credentials that are not a valid
+ * header. A scheme with no credentials is accepted, as the spec makes
+ * credentials optional; it sends no `Authorization` header. Where the URL leads is
  * not looked at here: delivery checks it against the egress guard and logs a
  * refusal, so every host the caller names gets the same answer.
  */
@@ -359,9 +364,9 @@ export const checkPushConfig = (
     );
   }
   const auth = config.authentication;
-  if (!auth?.scheme !== !auth?.credentials) {
+  if (auth?.credentials && !auth.scheme) {
     throw new RequestMalformedError(
-      "Push notification authentication needs both a scheme and credentials",
+      "Push notification credentials need a scheme",
     );
   }
   if (
@@ -377,10 +382,12 @@ export const checkPushConfig = (
     id: config.id,
     url: config.url,
     token: config.token || null,
-    authentication:
-      auth?.scheme && auth.credentials
-        ? { scheme: auth.scheme, credentials: auth.credentials }
-        : null,
+    authentication: auth?.scheme
+      ? {
+          scheme: auth.scheme,
+          ...(auth.credentials ? { credentials: auth.credentials } : {}),
+        }
+      : null,
   };
 };
 
@@ -487,6 +494,15 @@ const callerTask = (caller: A2aCaller, taskId: string) =>
     taskId,
   );
 
+/** Refuses a missing config id as invalid params, not an unknown config. */
+const requireConfigId = (id: string) => {
+  if (!id) {
+    throw new RequestMalformedError(
+      "A push notification config id is required",
+    );
+  }
+};
+
 /** `CreateTaskPushNotificationConfig`. */
 export const createA2aPushConfig = async (
   caller: A2aCaller,
@@ -502,6 +518,7 @@ export const getA2aPushConfig = async (
   params: { taskId: string; id: string },
 ): Promise<TaskPushNotificationConfig> => {
   const task = await callerTask(caller, params.taskId);
+  requireConfigId(params.id);
   const [row] = await db
     .select()
     .from(a2aPushConfigTable)
@@ -533,5 +550,6 @@ export const deleteA2aPushConfig = async (
   params: { taskId: string; id: string },
 ): Promise<void> => {
   const task = await callerTask(caller, params.taskId);
+  requireConfigId(params.id);
   await db.delete(a2aPushConfigTable).where(configKey(task.id, params.id));
 };

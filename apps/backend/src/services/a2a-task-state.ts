@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { TaskState, type Part, type Task } from "@a2a-js/sdk";
-import { TaskNotFoundError } from "@a2a-js/sdk/errors";
+import { RequestMalformedError, TaskNotFoundError } from "@a2a-js/sdk/errors";
 import { db } from "../index.ts";
 import {
   a2aTask as a2aTaskTable,
@@ -177,12 +177,14 @@ export const currentTurnId = async (
  * One of the Tasks `tokenId` started on `endpointId` (ADR-0032). A token
  * reaches only its own: another token's Task, on this endpoint or another,
  * answers as an unknown id does, so the caller learns nothing. A deleted
- * token's Tasks are reached by no one.
+ * token's Tasks are reached by no one. A missing id is invalid params, not
+ * an unknown Task.
  */
 export const findTokenTask = async (
   owner: { endpointId: string; tokenId: string },
   taskId: string,
 ): Promise<TaskRow> => {
+  if (!taskId) throw new RequestMalformedError("A Task id is required");
   const [task] = await db
     .select()
     .from(a2aTaskTable)

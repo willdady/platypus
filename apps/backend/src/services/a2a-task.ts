@@ -5,7 +5,7 @@ import {
   count,
   desc,
   eq,
-  gt,
+  gte,
   inArray,
   isNull,
   lt,
@@ -13,7 +13,9 @@ import {
   or,
 } from "drizzle-orm";
 import {
+  Role,
   TaskState,
+  type GetTaskRequest,
   type ListTasksRequest,
   type ListTasksResponse,
   type Message,
@@ -290,6 +292,10 @@ const startTurn = async (
   if (!message?.messageId) {
     throw new RequestMalformedError("A message with a messageId is required");
   }
+  if (message.role !== Role.ROLE_USER) {
+    throw new RequestMalformedError("A message's role must be ROLE_USER");
+  }
+  checkHistoryLength(params.configuration?.historyLength);
   if (message.parts.length === 0) {
     throw new RequestMalformedError("A message needs at least one part");
   }
@@ -536,11 +542,29 @@ export const findA2aTask = (
     taskId,
   );
 
+/**
+ * Refuses a negative `historyLength`. Any other is served: a Task's history
+ * is never returned, so no limit can be exceeded.
+ */
+const checkHistoryLength = (historyLength: number | undefined) => {
+  if (
+    historyLength !== undefined &&
+    !(Number.isInteger(historyLength) && historyLength >= 0)
+  ) {
+    throw new RequestMalformedError(
+      "historyLength must be a non-negative integer",
+    );
+  }
+};
+
 /** `GetTask`: one of the calling token's Tasks, read from the database. */
 export const getA2aTask = async (
   caller: A2aCaller,
-  taskId: string,
-): Promise<Task> => readTask(await findA2aTask(caller, taskId));
+  params: GetTaskRequest,
+): Promise<Task> => {
+  checkHistoryLength(params.historyLength);
+  return readTask(await findA2aTask(caller, params.id));
+};
 
 /** How many Tasks a `ListTasks` page holds, unless the client asks. */
 const DEFAULT_PAGE_SIZE = 50;
@@ -600,6 +624,7 @@ export const listA2aTasks = async (
       `pageSize must be between 1 and ${MAX_PAGE_SIZE}`,
     );
   }
+  checkHistoryLength(params.historyLength);
   if (params.status === TaskState.UNRECOGNIZED) {
     throw new RequestMalformedError("status is not a Task state");
   }
@@ -645,7 +670,9 @@ export const listA2aTasks = async (
           live.length ? inArray(a2aTaskTable.id, live) : undefined,
         )
       : undefined,
-    after ? gt(a2aTaskTable.statusAt, after) : undefined,
+    // Inclusive, as the spec says: a client polling from the last timestamp
+    // it saw still gets the Tasks that share it.
+    after ? gte(a2aTaskTable.statusAt, after) : undefined,
   );
 
   const [{ total }] = await db

@@ -278,9 +278,22 @@ export const a2aInterfaceUrl = (endpointId: string) =>
   interfaceUrl(backendBaseUrl(), endpointId);
 
 /**
+ * The endpoint's one skill, built from its public name and description, so it
+ * reveals nothing the card does not. A2A 1.0 §5.7: a required array holds at
+ * least one element, so it has a tag and the card has the skill.
+ */
+const endpointSkill = (endpoint: A2aEndpointRow) => ({
+  id: endpoint.id,
+  name: endpoint.name,
+  description: endpoint.description,
+  tags: ["chat"],
+});
+
+/**
  * The public Agent Card (A2A 1.0): the endpoint's public name and description,
- * the bearer scheme and the interface URL. Never the Agent's own description,
- * Tool sets or Skills. Capabilities say only what this server answers today.
+ * the bearer scheme, the interface URL and the endpoint's one skill. Never the
+ * Agent's own description, Tool sets or Skills. Capabilities say only what
+ * this server answers today.
  */
 export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   name: endpoint.name,
@@ -304,28 +317,15 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   securityRequirements: [{ schemes: { bearer: { list: [] } } }],
   defaultInputModes: ["text/plain", "application/json"],
   defaultOutputModes: ["text/plain"],
-  skills: [],
+  skills: [endpointSkill(endpoint)],
 });
 
 /**
- * The authenticated extended card: the public card plus one skill, built from
- * the same public name and description.
+ * The authenticated extended card: the public card. It has nothing to add, as
+ * the public card already carries the endpoint's skill.
  */
-export const extendedAgentCard = (endpoint: A2aEndpointRow) => ({
-  ...publicAgentCard(endpoint),
-  skills: [
-    {
-      id: endpoint.id,
-      name: endpoint.name,
-      description: endpoint.description,
-      tags: [],
-      examples: [],
-      inputModes: [],
-      outputModes: [],
-      securityRequirements: [],
-    },
-  ],
-});
+export const extendedAgentCard = (endpoint: A2aEndpointRow) =>
+  publicAgentCard(endpoint);
 
 // ------------------------------------------------------------ Org Admin oversight
 

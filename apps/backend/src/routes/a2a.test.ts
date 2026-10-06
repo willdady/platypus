@@ -301,7 +301,15 @@ describe("GET /a2a/:endpointId/.well-known/agent-card.json", () => {
       securityRequirements: [{ schemes: { bearer: { list: [] } } }],
       defaultInputModes: ["text/plain", "application/json"],
       defaultOutputModes: ["text/plain"],
-      skills: [],
+      // A2A 1.0 §5.7: a required array holds at least one element.
+      skills: [
+        {
+          id: "ep-1",
+          name: "Acme helpdesk",
+          description: "Ask about your Acme order",
+          tags: ["chat"],
+        },
+      ],
     });
   });
 
@@ -844,19 +852,105 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     expect(res.body.result.name).toBe("Acme helpdesk");
   });
 
-  it("adds one skill on the authenticated extended card", async () => {
+  it("carries the endpoint's one skill, tagged, on the authenticated extended card", async () => {
     seedConversation();
 
     const res = await rpc("GetExtendedAgentCard", {});
 
     expect(res.body.result.name).toBe("Acme helpdesk");
+    // A2A 1.0 §5.7: required arrays are never empty, so they serialize.
     expect(res.body.result.skills).toEqual([
       expect.objectContaining({
         id: "ep-1",
         name: "Acme helpdesk",
         description: "Ask about your Acme order",
+        tags: ["chat"],
       }),
     ]);
+  });
+
+  it.each([
+    ["no role", {}],
+    ["ROLE_UNSPECIFIED", { role: "ROLE_UNSPECIFIED" }],
+    ["ROLE_AGENT", { role: "ROLE_AGENT" }],
+    ["an unknown role", { role: "ROLE_BOSS" }],
+  ])(
+    "refuses a message with %s as invalid params, starting nothing",
+    async (_case, role) => {
+      seedConversation();
+
+      const res = await rpc("SendMessage", {
+        message: {
+          messageId: "msg-a",
+          parts: [text("Where is my order?")],
+          ...role,
+        },
+      });
+
+      expect(res.body.error.code).toBe(-32602);
+      expect(rows("chat")).toHaveLength(0);
+      expect(rows("a2a_task")).toHaveLength(0);
+      expect(model.prompts).toHaveLength(0);
+    },
+  );
+
+  it("refuses a negative historyLength as invalid params", async () => {
+    seedConversation();
+
+    const sent = await rpc("SendMessage", {
+      message: {
+        role: "ROLE_USER",
+        messageId: "msg-a",
+        parts: [text("Where is my order?")],
+      },
+      configuration: { historyLength: -1 },
+    });
+    expect(sent.body.error.code).toBe(-32602);
+    expect(rows("chat")).toHaveLength(0);
+
+    const task = (await send({ messageId: "msg-b" })).body.result.task;
+    const got = await rpc("GetTask", { id: task.id, historyLength: -1 });
+    expect(got.body.error.code).toBe(-32602);
+    expect(
+      (await rpc("GetTask", { id: task.id, historyLength: 0 })).body.result.id,
+    ).toBe(task.id);
+    const listed = await rpc("ListTasks", { historyLength: -1 });
+    expect(listed.body.error.code).toBe(-32602);
+  });
+
+  it.each([
+    ["GetTask", { id: "" }],
+    ["GetTask", {}],
+    ["CancelTask", { id: "" }],
+    ["SubscribeToTask", { id: "" }],
+    [
+      "CreateTaskPushNotificationConfig",
+      { taskId: "", url: "https://203.0.113.10/push" },
+    ],
+    ["GetTaskPushNotificationConfig", { taskId: "", id: "cfg-1" }],
+    ["ListTaskPushNotificationConfigs", { taskId: "" }],
+    ["DeleteTaskPushNotificationConfig", { taskId: "", id: "cfg-1" }],
+  ])(
+    "refuses %s with no Task id as invalid params, not an unknown Task",
+    async (method, params) => {
+      seedConversation();
+
+      const res = await rpc(method, params);
+
+      expect(res.body.error.code).toBe(-32602);
+    },
+  );
+
+  it.each([
+    "GetTaskPushNotificationConfig",
+    "DeleteTaskPushNotificationConfig",
+  ])("refuses %s with no config id as invalid params", async (method) => {
+    seedConversation();
+    const task = (await send({ messageId: "msg-a" })).body.result.task;
+
+    const res = await rpc(method, { taskId: task.id, id: "" });
+
+    expect(res.body.error.code).toBe(-32602);
   });
 
   it("starts a new Chat bound to the endpoint's Agent and answers with its Task", async () => {
@@ -1950,6 +2044,19 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
     ).toEqual(["c", "b"]);
   });
 
+  it("includes a Task whose status timestamp equals statusTimestampAfter", async () => {
+    seedTasks([
+      { id: "a", minute: 1 },
+      { id: "b", minute: 2 },
+    ]);
+
+    expect(
+      idsOf(
+        (await list({ statusTimestampAfter: "2026-10-01T00:02:00.000Z" })).body,
+      ),
+    ).toEqual(["b"]);
+  });
+
   it("filters a running Task by the state its run is in", async () => {
     seedConversation();
     const task = await startMidReply();
@@ -2815,23 +2922,42 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("refuses authentication missing its scheme or its credentials", async () => {
+  it("refuses credentials without a scheme", async () => {
     seedConversation();
     const { task, release } = await startHeld();
 
-    for (const authentication of [
-      { scheme: "Bearer", credentials: "" },
-      { scheme: "", credentials: "client-secret" },
-    ]) {
-      const res = await rpc("CreateTaskPushNotificationConfig", {
-        taskId: task.id,
-        ...config({ authentication }),
-      });
-      expect(res.body.error.code).toBe(-32602);
-    }
+    const res = await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config({
+        authentication: { scheme: "", credentials: "client-secret" },
+      }),
+    });
 
+    expect(res.body.error.code).toBe(-32602);
     expect(rows("a2a_push_config")).toHaveLength(0);
     release();
+  });
+
+  it("accepts a scheme without credentials, and pushes with no Authorization header", async () => {
+    seedConversation();
+    const { task, release } = await startHeld();
+
+    const created = await rpc("CreateTaskPushNotificationConfig", {
+      taskId: task.id,
+      ...config({ authentication: { scheme: "Bearer" } }),
+    });
+    expect(created.body.result).toMatchObject({
+      taskId: task.id,
+      authentication: { scheme: "Bearer" },
+    });
+
+    release();
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    const [call] = pushed();
+    expect(call.headers).not.toHaveProperty("Authorization");
+    expect(call.headers).toMatchObject({
+      "X-A2A-Notification-Token": "client-verification-token",
+    });
   });
 
   it("gets, lists and deletes a Task's configs; a deleted one is not pushed", async () => {

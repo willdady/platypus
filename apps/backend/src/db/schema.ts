@@ -1273,8 +1273,11 @@ export const a2aTask = pgTable(
   ],
 );
 
-/** How an A2A client asked its push notifications to authenticate. */
-export type A2aPushAuthentication = { scheme: string; credentials: string };
+/**
+ * How an A2A client asked its push notifications to authenticate. Credentials
+ * are optional, as in A2A 1.0's `AuthenticationInfo`.
+ */
+export type A2aPushAuthentication = { scheme: string; credentials?: string };
 
 // Where an A2A client asked to be called when a Task ends (ADR-0032). The id
 // is the client's own, unique within its Task. The credentials are the
