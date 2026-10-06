@@ -34,7 +34,7 @@ import {
   runHeartbeatCutoff,
 } from "../runs/chat-run-heartbeat.ts";
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
-import { onA2aTurnEnded } from "../services/a2a-push.ts";
+import { onA2aTurnEnded, pushMissedA2aEnds } from "../services/a2a-push.ts";
 
 // Check interval: 60 seconds (1 minute)
 const SCHEDULER_INTERVAL_MS = parseInt(
@@ -570,6 +570,8 @@ export function startScheduler(): void {
       } catch (error) {
         logger.error({ error }, "Chat recovery sweep failed");
       }
+      // Never throws; after the Chat sweep, so a Task it just failed is seen.
+      await pushMissedA2aEnds();
       try {
         await sweepTokenRemindersIfDue();
       } catch (error) {
