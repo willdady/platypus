@@ -147,7 +147,16 @@ import {
 import { regenerateA2aToken } from "../services/a2a-token.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
 import { runRegistry } from "../runs/run-registry.ts";
-import { A2aChatBusyError, a2aChatId } from "../services/a2a-task.ts";
+import {
+  A2aChatBusyError,
+  a2aChatId,
+  getA2aTask,
+  listA2aTasks,
+  type A2aCaller,
+} from "../services/a2a-task.ts";
+import { startChatTurn } from "../services/chat-turn.ts";
+import { TaskState } from "@a2a-js/sdk";
+import type { QueryRecord } from "../fake-db.ts";
 import {
   A2aTaskEventBus,
   setA2aFallbackPollMs,
@@ -2102,6 +2111,82 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
     const res = await list({ pageToken: nextPageToken }, OTHER_TOKEN);
 
     expect(res.body.error.code).toBe(-32602);
+  });
+
+  // #1310: the read paths' queries, counted on the fake, from the service
+  // down: the call's authentication is not theirs.
+  describe("queries", () => {
+    const caller = {
+      endpoint: { id: "ep-1" },
+      token: { id: "tok-1", name: "Telegram via Hermes" },
+      origin: "http://localhost",
+    } as A2aCaller;
+
+    /** The queries `run` makes on the fake `seeded` installed. */
+    const queriesOf = async (
+      seeded: { queries: QueryRecord[] },
+      run: () => Promise<unknown>,
+    ) => {
+      seeded.queries.length = 0;
+      await run();
+      return [...seeded.queries];
+    };
+
+    it("reads a completed Task for GetTask in two", async () => {
+      const seeded = seedTasks([{ id: "a", minute: 1 }]);
+
+      const queries = await queriesOf(seeded, async () => {
+        const task = await getA2aTask(caller, { id: "a" } as never);
+        expect(task.artifacts[0].parts[0].content).toMatchObject({
+          value: "Reply a",
+        });
+      });
+
+      expect(queries.length).toBeLessThanOrEqual(2);
+    });
+
+    it("reads a running Task for GetTask in two", async () => {
+      const seeded = seedRunElsewhere();
+
+      const queries = await queriesOf(seeded, async () => {
+        const task = await getA2aTask(caller, { id: "task-1" } as never);
+        expect(task.status!.state).toBe(TaskState.TASK_STATE_SUBMITTED);
+      });
+
+      expect(queries.length).toBeLessThanOrEqual(2);
+    });
+
+    it("lists a page of 100 Tasks without artifacts in three", async () => {
+      const seeded = seedTasks(
+        Array.from({ length: 100 }, (_, i) => ({ id: `t${i}`, minute: i })),
+      );
+
+      const queries = await queriesOf(seeded, async () => {
+        const page = await listA2aTasks(caller, { pageSize: 100 } as never);
+        expect(page.tasks).toHaveLength(100);
+      });
+
+      expect(queries.length).toBeLessThanOrEqual(3);
+      expect(queries.map((q) => q.table)).not.toContain("chat_message");
+    });
+
+    it("reads the page's replies in one more when artifacts are asked for", async () => {
+      const seeded = seedTasks(
+        Array.from({ length: 100 }, (_, i) => ({ id: `t${i}`, minute: i })),
+      );
+
+      const queries = await queriesOf(seeded, async () => {
+        const page = await listA2aTasks(caller, {
+          pageSize: 100,
+          includeArtifacts: true,
+        } as never);
+        expect(page.tasks.every((task) => task.artifacts.length === 1)).toBe(
+          true,
+        );
+      });
+
+      expect(queries.length).toBeLessThanOrEqual(4);
+    });
   });
 
   it("logs a ListTasks call with no Task", async () => {
@@ -5115,5 +5200,58 @@ describe("POST /a2a/:endpointId — the follower cap", () => {
     release();
     await started.text();
     await next.body!.cancel();
+  });
+});
+
+// #1310: a turn's end is an A2A Task's to record only in an A2A Chat.
+describe("a Chat turn outside A2A", () => {
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.hold = null;
+    model.holdPrep = null;
+    model.holdMidReply = null;
+    model.prompts = [];
+    model.toolNames = [];
+  });
+
+  it("makes no A2A query from its start to its end", async () => {
+    const seeded = seedConversation();
+    seeded.queries.length = 0;
+
+    const response = await startChatTurn({
+      scope: {
+        principal: { kind: "user", userId: "owner-1", name: "Olive Owner" },
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        isWorkspaceOwner: true,
+      },
+      request: {
+        id: "ui-chat",
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        message: {
+          id: "ui-msg",
+          role: "user",
+          parts: [{ type: "text", text: "Hi" }],
+        },
+        parentId: null,
+      },
+      includeMemories: false,
+      origin: "http://localhost",
+    });
+    await response.text();
+    await vi.waitFor(() =>
+      expect(rows("chat").find((chat) => chat.id === "ui-chat")?.status).toBe(
+        "succeeded",
+      ),
+    );
+    // The turn's end is followed by work it does not await.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(
+      seeded.queries.filter((query) => query.table.startsWith("a2a_")),
+    ).toEqual([]);
   });
 });

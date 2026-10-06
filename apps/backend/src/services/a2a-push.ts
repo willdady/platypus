@@ -4,6 +4,7 @@ import {
   asc,
   count,
   eq,
+  getTableColumns,
   isNotNull,
   isNull,
   ne,
@@ -223,20 +224,9 @@ export const pushTaskIfEnded = async (row: TaskRow): Promise<void> => {
  */
 export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
   try {
+    // One row per Task, however many configs it still owes.
     const tasks: TaskRow[] = await db
-      .select({
-        id: a2aTaskTable.id,
-        chatId: a2aTaskTable.chatId,
-        messageId: a2aTaskTable.messageId,
-        endpointId: a2aTaskTable.endpointId,
-        tokenId: a2aTaskTable.tokenId,
-        state: a2aTaskTable.state,
-        canceledAt: a2aTaskTable.canceledAt,
-        statusAt: a2aTaskTable.statusAt,
-        pushCount: a2aTaskTable.pushCount,
-        replyId: a2aTaskTable.replyId,
-        createdAt: a2aTaskTable.createdAt,
-      })
+      .selectDistinct(getTableColumns(a2aTaskTable))
       .from(a2aTaskTable)
       .innerJoin(
         a2aPushConfigTable,
@@ -248,8 +238,7 @@ export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
           isNull(a2aPushConfigTable.notifiedAt),
         ),
       );
-    const unique = new Map(tasks.map((task) => [task.id, task]));
-    await Promise.all([...unique.values()].map(pushTaskIfEnded));
+    await Promise.all(tasks.map(pushTaskIfEnded));
   } catch (error) {
     logger.error({ error, chatId }, "A2A push notification failed");
   }
@@ -260,7 +249,8 @@ export const pushEndedA2aTasks = async (chatId: string): Promise<void> => {
  * the sweep after its instance died. Records the end on the turn's Task, if it
  * has one, which pushes it, then pushes any other of the Chat's Tasks that
  * still owes one. `messageId` names the turn; without it, the Chat's current
- * turn. Never throws.
+ * turn. Never throws. Only an A2A Chat has Tasks: a caller that knows the
+ * Chat is not one skips this altogether.
  */
 export const onA2aTurnEnded = async ({
   chatId,

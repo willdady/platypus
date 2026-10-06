@@ -53,6 +53,12 @@ import {
   findTokenTask,
   readTask,
   readTaskAfresh,
+  readTaskRows,
+  readTokenTask,
+  replyTexts,
+  statusOf,
+  taskStatus,
+  toTask,
   endStateOf,
   TERMINAL_TASK_STATES,
   type TaskRow,
@@ -584,7 +590,10 @@ export const getA2aTask = async (
   params: GetTaskRequest,
 ): Promise<Task> => {
   checkHistoryLength(params.historyLength);
-  return readTask(await findA2aTask(caller, params.id));
+  return readTokenTask(
+    { endpointId: caller.endpoint.id, tokenId: caller.token.id },
+    params.id,
+  );
 };
 
 /** How many Tasks a `ListTasks` page holds, unless the client asks. */
@@ -630,6 +639,8 @@ const readPageToken = (
  *
  * Each running Task's state is read from its run first, recording any end
  * not yet recorded, so the `status` filter and the order see where it is now.
+ * That is one query for them all; then the count, the page, and the page's
+ * replies only when `includeArtifacts` asks for them.
  *
  * ponytail: every call reads all of the token's Tasks with no end recorded.
  * Few, unless runs end unrecorded en masse; a sweep that records them is the
@@ -661,23 +672,20 @@ export const listA2aTasks = async (
     ? readPageToken(caller, params.pageToken)
     : undefined;
 
-  const mine = and(
-    eq(a2aTaskTable.endpointId, caller.endpoint.id),
-    eq(a2aTaskTable.tokenId, caller.token.id),
-  );
-  const unended = await db
-    .select()
-    .from(a2aTaskTable)
-    .where(and(mine, isNull(a2aTaskTable.state)));
+  // The token names its endpoint, so it alone scopes the Tasks.
+  const mine = eq(a2aTaskTable.tokenId, caller.token.id);
+  const unended = await readTaskRows(and(mine, isNull(a2aTaskTable.state)));
   const running = new Map(
-    (await Promise.all(unended.map(readTask))).map((task) => [task.id, task]),
+    await Promise.all(
+      unended.map(async (task) => [task.id, await statusOf(task)] as const),
+    ),
   );
 
   // A state no Task here is in — one we never use, or no run is in — is
   // matched by nothing, rather than by everything an empty `or` would allow.
-  const live = [...running.values()]
-    .filter((task) => task.status!.state === params.status)
-    .map((task) => task.id);
+  const live = [...running]
+    .filter(([, status]) => status.state === params.status)
+    .map(([id]) => id);
   const recorded = endStateOf(params.status);
   if (params.status && !recorded && !live.length) {
     return { tasks: [], nextPageToken: "", pageSize, totalSize: 0 };
@@ -719,15 +727,23 @@ export const listA2aTasks = async (
     )
     .orderBy(desc(a2aTaskTable.statusAt), desc(a2aTaskTable.id))
     .limit(pageSize + 1);
-  const page = rows.slice(0, pageSize);
-
-  const tasks = await Promise.all(
-    page.map(async (row) => running.get(row.id) ?? readTask(row)),
+  const page = await Promise.all(
+    rows.slice(0, pageSize).map(async (row) => ({
+      ...row,
+      // One made since the read above is read now.
+      status: running.get(row.id) ?? (await taskStatus(row)),
+    })),
   );
+  // Read only for the page's completed Tasks, and only when asked for.
+  const texts = params.includeArtifacts
+    ? await replyTexts(page)
+    : new Map<string, string>();
+
   return {
-    tasks: params.includeArtifacts
-      ? tasks
-      : tasks.map((task) => ({ ...task, artifacts: [] })),
+    tasks: page.map((task) => {
+      const read = toTask(task, task.status, texts.get(task.id));
+      return params.includeArtifacts ? read : { ...read, artifacts: [] };
+    }),
     nextPageToken:
       rows.length > pageSize ? pageTokenOf(caller, page[page.length - 1]) : "",
     pageSize,

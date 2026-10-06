@@ -86,7 +86,7 @@ export const authenticateA2aCall = async (
   if (!token) return { ok: false, status: 401, reason: "bad_token", endpoint };
 
   if (token.tokenExpiresAt <= now) {
-    await touchA2aToken(token.id, "lastRejectedAt", now);
+    void touchA2aToken(token.id, "lastRejectedAt", now);
     await noticeExpiredUse(endpoint, token);
     return {
       ok: false,
@@ -96,7 +96,8 @@ export const authenticateA2aCall = async (
       tokenId: token.id,
     };
   }
-  await touchA2aToken(token.id, "lastUsedAt", now);
+  // Off the response path: a stamp's failure is logged, never the caller's.
+  void touchA2aToken(token.id, "lastUsedAt", now);
   return { ok: true, endpoint, token };
 };
 
