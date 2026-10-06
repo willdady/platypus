@@ -1118,6 +1118,77 @@ describe("Chat Routes", () => {
       fake.tables.chat_message.find((row) => row.id === id);
 
     describe("POST /", () => {
+      // Issue #1294: the Owner's turn in an A2A Chat follows the endpoint's
+      // Include Memories, for the Memories block and the Memory tools alike.
+      describe("the Owner's turn and the Owner's Memories", () => {
+        /** What the turn was handed about Memories. */
+        const memoryInput = () =>
+          mockPrepareChatTurn.mock.calls.at(-1)![0] as {
+            includeMemories?: boolean;
+            memoryTools?: boolean;
+          };
+
+        const seedA2aChat = (chat: Row, endpoints: Row[]) => {
+          const fake = seedChat();
+          Object.assign(fake.tables.chat[0], chat);
+          fake.tables.a2a_endpoint = endpoints;
+        };
+
+        it.each([
+          [
+            "whose endpoint leaves them out",
+            { a2aEndpointId: "ep-1", a2aClientName: "Hermes" },
+            [{ id: "ep-1", workspaceId, includeMemories: false }],
+          ],
+          [
+            "whose endpoint was deleted",
+            { a2aEndpointId: "ep-1", a2aClientName: "Hermes" },
+            [],
+          ],
+        ])(
+          "leaves them out in an A2A Chat %s",
+          async (_case, chat, endpoints) => {
+            mockSession();
+            seedA2aChat(chat, endpoints);
+            startsTurn();
+
+            const res = await post({
+              message: message("u3"),
+              parentId: "a2",
+            });
+
+            expect(res.status).toBe(200);
+            expect(retrieveRecentSummaries).not.toHaveBeenCalled();
+            expect(memoryInput()).toMatchObject({
+              includeMemories: false,
+              memoryTools: false,
+            });
+          },
+        );
+
+        it.each([
+          [
+            "an A2A Chat whose endpoint includes them",
+            { a2aEndpointId: "ep-1", a2aClientName: "Hermes" },
+            [{ id: "ep-1", workspaceId, includeMemories: true }],
+          ],
+          ["a Chat started in the UI", {}, []],
+        ])("includes them in %s", async (_case, chat, endpoints) => {
+          mockSession();
+          seedA2aChat(chat, endpoints);
+          startsTurn();
+
+          const res = await post({ message: message("u3"), parentId: "a2" });
+
+          expect(res.status).toBe(200);
+          expect(retrieveRecentSummaries).toHaveBeenCalled();
+          expect(memoryInput()).toMatchObject({
+            includeMemories: true,
+            memoryTools: true,
+          });
+        });
+      });
+
       it.each([
         [
           "an assistant message",
