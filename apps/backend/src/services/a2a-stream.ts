@@ -8,18 +8,9 @@ import {
   TaskNotFoundError,
   UnsupportedOperationError,
 } from "@a2a-js/sdk/errors";
-import {
-  findA2aTask,
-  startA2aTurn,
-  takeFollowerSlot,
-  type A2aCaller,
-} from "./a2a-task.ts";
-import {
-  readTask,
-  readTaskAfresh,
-  isTerminal,
-  type TaskRow,
-} from "./a2a-task-state.ts";
+import { startA2aTurn, takeFollowerSlot, type A2aCaller } from "./a2a-task.ts";
+import { findA2aTask, isTerminal, type TaskRow } from "./a2a-task-state.ts";
+import { readTask, readTaskAfresh } from "./a2a-task-lifecycle.ts";
 import {
   a2aFallbackPollMs,
   a2aTaskEvents,

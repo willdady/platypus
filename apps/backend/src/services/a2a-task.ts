@@ -47,20 +47,22 @@ import { callerDataBlock } from "./caller-data.ts";
 import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
 import {
   currentTurnId,
-  findTokenTask,
-  readTask,
-  readTaskAfresh,
+  findA2aTask,
   readTaskRows,
-  readTokenTask,
   replyTexts,
-  statusOf,
-  taskStatus,
   toTask,
   endStateOf,
   isTerminal,
   type Executor,
   type TaskRow,
 } from "./a2a-task-state.ts";
+import {
+  readTask,
+  readTaskAfresh,
+  readTokenTask,
+  statusOf,
+  taskStatus,
+} from "./a2a-task-lifecycle.ts";
 import {
   a2aFallbackPollMs,
   a2aTaskEvents,
@@ -345,7 +347,11 @@ const startTurn = async (
     params.configuration?.taskPushNotificationConfig &&
     checkPushConfig(params.configuration.taskPushNotificationConfig);
   const withPush = async (task: TaskRow) => {
-    if (push) await storePushConfig(task, push);
+    if (!push) return task;
+    // Reading it records its end, should its run have ended as it was made,
+    // so the config's push goes out at once.
+    await taskStatus(task);
+    await storePushConfig(task, push);
     return task;
   };
 
@@ -570,16 +576,6 @@ export const sendA2aMessage = async (
     events.close();
   }
 };
-
-/** One of the Tasks the calling token started; any other is not found. */
-export const findA2aTask = (
-  caller: A2aCaller,
-  taskId: string,
-): Promise<TaskRow> =>
-  findTokenTask(
-    { endpointId: caller.endpoint.id, tokenId: caller.token.id },
-    taskId,
-  );
 
 /**
  * Refuses a negative `historyLength`. Any other is served: a Task's history

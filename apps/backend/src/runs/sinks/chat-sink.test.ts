@@ -34,11 +34,8 @@ import {
   type ChatSinkParams,
 } from "./chat-sink.ts";
 import { a2aTask } from "../../db/schema.ts";
-import {
-  readTask,
-  recordTaskEndIn,
-  type TaskRow,
-} from "../../services/a2a-task-state.ts";
+import type { TaskRow } from "../../services/a2a-task-state.ts";
+import { endTurnIn, readTask } from "../../services/a2a-task-lifecycle.ts";
 import { extractFiles } from "../../storage/utils.ts";
 import { ConflictError } from "../../errors.ts";
 import type { ResolvedRunPlan } from "../types.ts";
@@ -885,7 +882,7 @@ describe("ChatSink", () => {
     const endTask =
       (messageId: string): ChatSinkParams["onEnding"] =>
       (tx, status) =>
-        recordTaskEndIn(tx, "chat-1", messageId, status);
+        endTurnIn(tx, "chat-1", messageId, status);
 
     /** Runs `claim` once, right after the next transaction commits. */
     const claimAfterCommit = (

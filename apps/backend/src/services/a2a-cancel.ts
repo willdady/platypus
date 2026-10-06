@@ -4,21 +4,16 @@ import { TaskNotCancelableError } from "@a2a-js/sdk/errors";
 import { db } from "../index.ts";
 import { a2aTask as a2aTaskTable, chat as chatTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
-import { cancelRun } from "../runs/run-cancel.ts";
 import { runRegistry } from "../runs/run-registry.ts";
-import { findA2aTask, type A2aCaller } from "./a2a-task.ts";
-import {
-  currentTurnId,
-  readTask,
-  isTerminal,
-  type TaskRow,
-} from "./a2a-task-state.ts";
-import { pushEndedA2aTasks } from "./a2a-push.ts";
+import type { A2aCaller } from "./a2a-task.ts";
+import { currentTurnId, findA2aTask, type TaskRow } from "./a2a-task-state.ts";
+import { cancelTask, readTask } from "./a2a-task-lifecycle.ts";
 import { taskIsLive } from "./a2a-liveness.ts";
 
 /**
- * Cancelling A2A Tasks (ADR-0032). A cancel is recorded on its Task before
- * its run is stopped, so every reader sees `canceled` at once, and the record
+ * Cancelling A2A Tasks (ADR-0032). A cancel is recorded on its Task, by the
+ * lifecycle's `cancelTask` (`a2a-task-lifecycle.ts`), before its run is
+ * stopped, so every reader sees `canceled` at once, and the record
  * outlives the cancel message: a run the message missed, while its instance's
  * listener was reconnecting, is found from it by that instance's sweep.
  *
@@ -52,48 +47,6 @@ export const cancelA2aTask = async (
   const claimed = await cancelTask(await findA2aTask(caller, taskId));
   if (!claimed) throw new TaskNotCancelableError();
   return readTask(claimed);
-};
-
-/**
- * Records `task` canceled and stops its run, on whichever instance holds it.
- * `undefined`, stopping nothing, when the Task has already ended.
- */
-const cancelTask = async (task: TaskRow): Promise<TaskRow | undefined> => {
-  const read = await readTask(task);
-  if (isTerminal(read)) return undefined;
-
-  const canceledAt = new Date();
-  const claimed = await db.transaction(async (tx) => {
-    // Claimed only while the Task's turn is still running: its Chat
-    // `running`, on its turn, and no end recorded. The Chat's row is locked
-    // first, so a run's terminal write, which records its Task's end in the
-    // same transaction, lands wholly before the claim or wholly after it
-    // (#1309): a run that ended first keeps its own end, and stops nothing.
-    const [chat] = await tx
-      .select({ status: chatTable.status })
-      .from(chatTable)
-      .where(eq(chatTable.id, task.chatId))
-      .for("update");
-    if (chat?.status !== "running") return undefined;
-    if ((await currentTurnId(task.chatId, tx)) !== task.messageId) {
-      return undefined;
-    }
-    const [row] = await tx
-      .update(a2aTaskTable)
-      .set({ state: "canceled", canceledAt, statusAt: canceledAt })
-      .where(and(eq(a2aTaskTable.id, task.id), isNull(a2aTaskTable.state)))
-      .returning();
-    return row;
-  });
-  if (!claimed) return undefined;
-
-  // A cancel that can't be sent is still recorded; the sweep stops the run.
-  await cancelRun(task.chatId, { startedBefore: canceledAt }).catch(
-    (error: unknown) =>
-      logger.error({ error, taskId: task.id }, "Sending an A2A cancel failed"),
-  );
-  void pushEndedA2aTasks(task.chatId);
-  return claimed;
 };
 
 /** Cancels each of `tasks` whose token or endpoint is no longer live. */

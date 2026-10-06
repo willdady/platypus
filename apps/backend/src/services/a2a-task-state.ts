@@ -19,15 +19,18 @@ import {
 } from "../db/schema.ts";
 import type { RunStatus } from "../runs/types.ts";
 import type { ChatClaimTx } from "../runs/sinks/chat-sink.ts";
-import { pushTaskIfEnded } from "./a2a-push.ts";
 import { replyArtifact } from "./a2a-parts.ts";
+import type { A2aCaller } from "./a2a-task.ts";
 
 /**
- * An A2A Task as a client reads it (ADR-0032). While its run is going, its
- * state is read from its Chat's run every time, so any backend instance
- * answers alike. When the run ends, how it ended is recorded on the Task,
- * with the reply it wrote: the Chat can move on to another turn, and its
- * Owner can regenerate or delete that reply, and the Task keeps what it was.
+ * An A2A Task as a client reads it (ADR-0032): the read model, which derives
+ * a Task's status and records nothing. While its run is going, its state is
+ * read from its Chat's run every time, so any backend instance answers alike.
+ * When the run ends, how it ended is recorded on the Task, with the reply it
+ * wrote: the Chat can move on to another turn, and its Owner can regenerate
+ * or delete that reply, and the Task keeps what it was. Recording is the
+ * lifecycle's (`a2a-task-lifecycle.ts`, ADR-0034), as is every read that
+ * would record an end derived here.
  */
 
 export type TaskRow = typeof a2aTaskTable.$inferSelect;
@@ -36,7 +39,7 @@ export type TaskRow = typeof a2aTaskTable.$inferSelect;
 export type Executor = typeof db | ChatClaimTx;
 
 /** A finished run's Chat status as the end a Task records. */
-const END_OF_RUN: Partial<Record<RunStatus, A2aTaskEndState>> = {
+export const END_OF_RUN: Partial<Record<RunStatus, A2aTaskEndState>> = {
   succeeded: "completed",
   failed: "failed",
   cancelled: "canceled",
@@ -60,7 +63,7 @@ export const endStateOf = (state: TaskState): A2aTaskEndState | undefined =>
  * under it still in the Chat. A later one is a regenerate the Owner ran in
  * the UI.
  */
-const firstReply = async (
+export const firstReply = async (
   chatId: string,
   messageId: string,
   executor: Executor = db,
@@ -79,77 +82,6 @@ const firstReply = async (
     .orderBy(asc(chatMessage.createdAt))
     .limit(1);
   return reply?.id;
-};
-
-/**
- * Records `state` as how the turn answering `messageId` ended, on its Task if
- * it has one, with the reply it wrote and the time. The first end recorded
- * stands, and with it its reply: a later regenerate or delete of that reply
- * changes nothing the Task reads. Answers with the Task as recorded, if it
- * recorded. Pushes nothing: in a transaction, the end is not yet committed.
- */
-const writeEnd = async (
-  executor: Executor,
-  chatId: string,
-  messageId: string,
-  state: A2aTaskEndState,
-): Promise<TaskRow | undefined> => {
-  const replyId = (await firstReply(chatId, messageId, executor)) ?? null;
-  const [recorded] = await executor
-    .update(a2aTaskTable)
-    .set({ state, replyId, statusAt: new Date() })
-    .where(
-      and(
-        eq(a2aTaskTable.chatId, chatId),
-        eq(a2aTaskTable.messageId, messageId),
-        isNull(a2aTaskTable.state),
-      ),
-    )
-    .returning();
-  return recorded;
-};
-
-/**
- * `writeEnd`, committed at once. An end it records is pushed, whoever
- * noticed it.
- */
-const recordEnd = async (
-  chatId: string,
-  messageId: string,
-  state: A2aTaskEndState,
-): Promise<TaskRow | undefined> => {
-  const recorded = await writeEnd(db, chatId, messageId, state);
-  if (recorded) void pushTaskIfEnded(recorded);
-  return recorded;
-};
-
-/**
- * Records how the turn answering `messageId` ended with `status`, as
- * `recordEnd` does. A status that is no end records nothing.
- */
-export const recordTaskEnd = async (
-  chatId: string,
-  messageId: string,
-  status: RunStatus,
-): Promise<TaskRow | undefined> => {
-  const state = END_OF_RUN[status];
-  return state ? recordEnd(chatId, messageId, state) : undefined;
-};
-
-/**
- * Records how the turn answering `messageId` ended with `status`, in `tx`:
- * the transaction its Chat's terminal status is written in, so no claim of
- * the next turn reads the Chat ended and the Task not (#1309). Pushes
- * nothing; its caller pushes once `tx` has committed.
- */
-export const recordTaskEndIn = async (
-  tx: ChatClaimTx,
-  chatId: string,
-  messageId: string,
-  status: RunStatus,
-): Promise<TaskRow | undefined> => {
-  const state = END_OF_RUN[status];
-  return state ? writeEnd(tx, chatId, messageId, state) : undefined;
 };
 
 /**
@@ -211,6 +143,16 @@ export const findTokenTask = async (
   return task;
 };
 
+/** One of the Tasks the calling token started; any other is not found. */
+export const findA2aTask = (
+  caller: A2aCaller,
+  taskId: string,
+): Promise<TaskRow> =>
+  findTokenTask(
+    { endpointId: caller.endpoint.id, tokenId: caller.token.id },
+    taskId,
+  );
+
 /** A Task's state, status timestamp and recorded reply, as `readTask` reads them. */
 export type TaskStatus = {
   state: TaskState;
@@ -265,56 +207,49 @@ export const readTaskRows = async (
 };
 
 /** A Task with an end recorded, as its status. */
-const recordedStatus = (task: TaskRow & { state: A2aTaskEndState }) => ({
+export const recordedStatus = (task: TaskRow & { state: A2aTaskEndState }) => ({
   state: STATE_OF_END[task.state],
   statusAt: task.statusAt,
   replyId: task.replyId,
 });
 
-/**
- * Records `state` on `task`, and answers with the end that stands: this one,
- * or one recorded first.
- */
-const settle = async (
-  task: TaskRow,
-  state: A2aTaskEndState,
-): Promise<TaskStatus> => {
-  const recorded = await recordEnd(task.chatId, task.messageId, state);
-  if (recorded) return recordedStatus({ ...recorded, state });
-  const [row] = await db
-    .select()
-    .from(a2aTaskTable)
-    .where(eq(a2aTaskTable.id, task.id))
-    .limit(1);
-  return recordedStatus({ ...(row ?? task), state: row?.state ?? state });
-};
+/** A Task's status as `deriveStatus` reads it. */
+export type DerivedStatus =
+  { status: TaskStatus } | { unrecordedEnd: A2aTaskEndState };
 
 /**
- * The Task's state. Once its run has ended, the end recorded on it. Before
- * that it comes from the Chat's run: `submitted` until the reply's first
- * write and `working` after. An end read from the Chat that is not yet
+ * A Task's status as its reading derives it, recording nothing: the end
+ * recorded on it, or, while its turn's run is going, `submitted` until the
+ * reply's first write and `working` after. A turn that has ended with no end
  * recorded — a Task made just as its run ended, or one whose run's end was
- * lost — is recorded here, so it stands once the Chat moves on.
+ * lost — derives the end it reached instead, for the lifecycle to record: until
+ * it is, a regenerate or delete of its reply could change it.
  */
-export const statusOf = async (task: TaskReading): Promise<TaskStatus> => {
-  if (task.state) return recordedStatus({ ...task, state: task.state });
+export const deriveStatus = (task: TaskReading): DerivedStatus => {
+  if (task.state) {
+    return { status: recordedStatus({ ...task, state: task.state }) };
+  }
   const replyId = task.firstReplyId ?? undefined;
   const isThisTurn =
     task.leafId === task.messageId ||
     (replyId !== undefined && task.leafId === replyId);
   // Moved past with no end recorded, which the end of its run and its first
   // read both missed. Its reply, if any, is the best evidence of how it ended.
-  if (!isThisTurn) return settle(task, replyId ? "completed" : "failed");
+  if (!isThisTurn) return { unrecordedEnd: replyId ? "completed" : "failed" };
   if (task.chatStatus === "running") {
     return {
-      state: replyId
-        ? TaskState.TASK_STATE_WORKING
-        : TaskState.TASK_STATE_SUBMITTED,
-      statusAt: task.statusAt,
-      replyId: null,
+      status: {
+        state: replyId
+          ? TaskState.TASK_STATE_WORKING
+          : TaskState.TASK_STATE_SUBMITTED,
+        statusAt: task.statusAt,
+        replyId: null,
+      },
     };
   }
-  return settle(task, END_OF_RUN[task.chatStatus as RunStatus] ?? "failed");
+  return {
+    unrecordedEnd: END_OF_RUN[task.chatStatus as RunStatus] ?? "failed",
+  };
 };
 
 /** A reply's parts, as stored. */
@@ -393,20 +328,22 @@ export const toTask = (
 });
 
 /**
- * A Task, read: its status, then its reply's text if it completed. One query
- * for the status — none for an end already in hand — and one for the text.
+ * A Task, read with `status`: then its reply's text if it completed. One
+ * query for the text.
  */
-const readReading = async (task: TaskReading): Promise<Task> => {
-  const status = await statusOf(task);
+export const readWithStatus = async (
+  task: TaskRow,
+  status: TaskStatus,
+): Promise<Task> => {
   const texts = await replyTexts([{ ...task, status }]);
   return toTask(task, status, texts.get(task.id));
 };
 
 /**
- * `readTaskAfresh`'s reading of the Task's row as it is now. A Task gone
- * since, deleted with its Chat, is read from `task` with no Chat.
+ * The reading of the Task's row as it is now. A Task gone since, deleted with
+ * its Chat, is read from `task` with no Chat.
  */
-const readingOf = async (task: TaskRow): Promise<TaskReading> => {
+export const readingOf = async (task: TaskRow): Promise<TaskReading> => {
   const [reading] = await readTaskRows(eq(a2aTaskTable.id, task.id));
   return reading ?? bareReading(task);
 };
@@ -415,7 +352,7 @@ const readingOf = async (task: TaskRow): Promise<TaskReading> => {
  * A Task's row as a reading with nothing read beside it: all a Task with an
  * end recorded needs, and all one whose Chat is gone has.
  */
-const bareReading = (task: TaskRow): TaskReading => ({
+export const bareReading = (task: TaskRow): TaskReading => ({
   ...task,
   chatStatus: null,
   leafId: null,
@@ -423,37 +360,33 @@ const bareReading = (task: TaskRow): TaskReading => ({
 });
 
 /**
- * The Task's status: one with an end recorded from `task`, with no query;
- * any other afresh, as `readTaskAfresh` reads it.
+ * A Task whose end is recorded, as the client reads it, from its row alone
+ * and one query for its reply's text.
  */
-export const taskStatus = async (task: TaskRow): Promise<TaskStatus> =>
-  statusOf(task.state ? bareReading(task) : await readingOf(task));
+export const readRecordedTask = (
+  task: TaskRow & { state: A2aTaskEndState },
+): Promise<Task> => readWithStatus(task, recordedStatus(task));
 
 /**
- * The Task as the client reads it. A completed Task's artifact is the text of
- * the reply recorded with its end; if the Owner has deleted it, it has none.
- * A Task with an end recorded is read from `task`; any other, afresh.
+ * Whether the Task has ended: an end recorded on it, or one its reading
+ * derives. One with an end recorded is read from `task`; any other, afresh.
  */
-export const readTask = async (task: TaskRow): Promise<Task> =>
-  task.state ? readReading(bareReading(task)) : readTaskAfresh(task);
+export const taskHasEnded = async (task: TaskRow): Promise<boolean> => {
+  if (task.state) return true;
+  const derived = deriveStatus(await readingOf(task));
+  return (
+    "unrecordedEnd" in derived || TERMINAL_TASK_STATES.has(derived.status.state)
+  );
+};
 
 /**
- * `readTask`, from the Task's row as it is now. A caller following a Task
- * reads it this way, so an end recorded since it last fetched the row — a
- * cancel, which is recorded before its run has stopped, from any instance —
- * is seen on the next read.
+ * One of the Tasks `tokenId` started on `endpointId`, as `findTokenTask` finds
+ * it, read with its Chat and its turn's first reply in one query.
  */
-export const readTaskAfresh = async (task: TaskRow): Promise<Task> =>
-  readReading(await readingOf(task));
-
-/**
- * One of the Tasks `tokenId` started on `endpointId`, read, as `findTokenTask`
- * finds it and `readTask` reads it, in one query and one for its reply's text.
- */
-export const readTokenTask = async (
+export const findTokenTaskReading = async (
   owner: { endpointId: string; tokenId: string },
   taskId: string,
-): Promise<Task> => {
+): Promise<TaskReading> => {
   if (!taskId) throw new RequestMalformedError("A Task id is required");
   const [task] = await readTaskRows(
     and(
@@ -463,7 +396,7 @@ export const readTokenTask = async (
     ),
   );
   if (!task) throw new TaskNotFoundError();
-  return readReading(task);
+  return task;
 };
 
 export const TERMINAL_TASK_STATES = new Set([

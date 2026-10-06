@@ -18,8 +18,8 @@ import {
 } from "./memory-retrieval.ts";
 import { seedUserInvokedSkill } from "./slash-command.ts";
 import { resolveTurn } from "./chat-messages.ts";
-import { onA2aTurnEnded } from "./a2a-push.ts";
-import { currentTurnId, isA2aChat, recordTaskEndIn } from "./a2a-task-state.ts";
+import { currentTurnId, isA2aChat } from "./a2a-task-state.ts";
+import { endTurnIn, turnEnded } from "./a2a-task-lifecycle.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 
 /**
@@ -171,13 +171,13 @@ export const startChatTurn = async (params: {
     // committed; one the terminal write missed is recorded then.
     onEnding: a2a
       ? async (tx, status) => {
-          if (turnId) await recordTaskEndIn(tx, request.id, turnId, status);
+          if (turnId) await endTurnIn(tx, request.id, turnId, status);
         }
       : undefined,
     onEnded: (status) => {
       onEnded?.();
       if (a2a) {
-        void onA2aTurnEnded({ chatId: request.id, messageId: turnId, status });
+        void turnEnded({ chatId: request.id, turnId, status });
       }
     },
   });
@@ -232,5 +232,5 @@ const endDeadRun = async (
   if (chat?.status !== "running" || chatRunIsLive(chat)) return;
   const turnId = await currentTurnId(chatId);
   if (!turnId) return;
-  void onA2aTurnEnded({ chatId, messageId: turnId, status: "failed" });
+  void turnEnded({ chatId, turnId, status: "failed" });
 };
