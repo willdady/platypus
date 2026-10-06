@@ -48,7 +48,8 @@ const seed = ({
   triggers = [inbound()],
   gate = "all",
   runs = [],
-}: { triggers?: Row[]; gate?: string; runs?: Row[] } = {}) =>
+  owner = {},
+}: { triggers?: Row[]; gate?: string; runs?: Row[]; owner?: Row } = {}) =>
   seedDb({
     trigger: triggers,
     workspace: [
@@ -61,7 +62,10 @@ const seed = ({
       },
     ],
     organization: [{ id: "org-1", name: "Acme", inboundTriggerGate: gate }],
-    user: [{ id: "user-1", name: "Owner" }],
+    user: [{ id: "user-1", name: "Owner", role: "user", ...owner }],
+    organization_member: [
+      { id: "member-1", organizationId: "org-1", userId: "user-1" },
+    ],
     trigger_run: runs,
   });
 
@@ -166,8 +170,9 @@ describe("/hooks/triggers", () => {
     });
 
     it("answers every refusal that could reveal what exists with the same 404", async () => {
-      const cases: Array<[string, () => Response | Promise<Response>, string]> =
-        [];
+      const cases: Array<
+        [string, () => Response | Promise<Response>, string, Row?]
+      > = [];
       const expired = inbound({
         id: "trig-expired",
         tokenExpiresAt: new Date(Date.now() - 1),
@@ -195,17 +200,19 @@ describe("/hooks/triggers", () => {
       cases.push(["disabled", () => fire("trig-disabled"), "all"]);
       cases.push(["not_inbound", () => fire("trig-cron"), "all"]);
       cases.push(["gate", () => fire("trig-1"), "off"]);
+      cases.push(["owner_left", () => fire("trig-1"), "all", { banned: true }]);
 
       const responses: Array<{
         status: number;
         body: string;
         type: string | null;
       }> = [];
-      for (const [reason, call, gate] of cases) {
+      for (const [reason, call, gate, owner] of cases) {
         vi.clearAllMocks();
         const fake = seed({
           triggers: [inbound(), expired, disabled, cron],
           gate,
+          owner,
         });
         const res = await call();
         responses.push({
@@ -459,6 +466,15 @@ describe("/hooks/triggers", () => {
       expect((await poll("trig-1", "run-gone")).status).toBe(404);
       expect((await poll("trig-2", "run-2", "pit_wrong")).status).toBe(404);
       expect((await poll("trig-2", "run-2")).status).toBe(200);
+    });
+
+    it("is 404 once the Workspace Owner is banned", async () => {
+      seed({ runs: [run()], owner: { banned: true } });
+
+      const res = await poll("trig-1", "run-1");
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Not Found" });
     });
   });
 });

@@ -236,19 +236,20 @@ Every field is on every line, `null` where it does not apply:
 dropped it, and a _Suppressed_ run was recorded), `rate_limited` (answered
 `429`) or `rejected`. A rejected call's `reason` is one of:
 
-| `reason`          | The call                                                              | Answered |
-| ----------------- | --------------------------------------------------------------------- | -------- |
-| `unknown_trigger` | named no Trigger                                                      | `404`    |
-| `not_inbound`     | named a Trigger of another type                                       | `404`    |
-| `missing_token`   | carried no `Authorization: Bearer` header                             | `404`    |
-| `bad_token`       | carried a wrong or revoked token                                      | `404`    |
-| `expired_token`   | carried the right token after it expired                              | `404`    |
-| `disabled`        | named a disabled Trigger                                              | `404`    |
-| `gate`            | named a Trigger in a Workspace the Organization has not allowed       | `404`    |
-| `misconfigured`   | named a Trigger whose stored configuration no longer reads            | `404`    |
-| `invalid_inputs`  | sent a body that isn't JSON, or inputs that don't match the Trigger's | `400`    |
-| `body_too_large`  | sent a body past `INBOUND_TRIGGER_MAX_BODY_BYTES`                     | `413`    |
-| `internal_error`  | failed inside the backend                                             | `500`    |
+| `reason`          | The call                                                                     | Answered |
+| ----------------- | ---------------------------------------------------------------------------- | -------- |
+| `unknown_trigger` | named no Trigger                                                             | `404`    |
+| `not_inbound`     | named a Trigger of another type                                              | `404`    |
+| `missing_token`   | carried no `Authorization: Bearer` header                                    | `404`    |
+| `bad_token`       | carried a wrong or revoked token                                             | `404`    |
+| `expired_token`   | carried the right token after it expired                                     | `404`    |
+| `disabled`        | named a disabled Trigger                                                     | `404`    |
+| `gate`            | named a Trigger in a Workspace the Organization has not allowed              | `404`    |
+| `owner_left`      | named a Trigger whose Workspace Owner has left the Organization or is banned | `404`    |
+| `misconfigured`   | named a Trigger whose stored configuration no longer reads                   | `404`    |
+| `invalid_inputs`  | sent a body that isn't JSON, or inputs that don't match the Trigger's        | `400`    |
+| `body_too_large`  | sent a body past `INBOUND_TRIGGER_MAX_BODY_BYTES`                            | `413`    |
+| `internal_error`  | failed inside the backend                                                    | `500`    |
 
 <Callout type="warning">
   The line is written at `info`. Running the backend at `LOG_LEVEL=warn` or

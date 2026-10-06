@@ -215,16 +215,12 @@ export type A2aEndpointLookup =
       workspaceId?: string;
     };
 
-/** Whether the user is banned now. A ban that has run out no longer counts. */
-const isBanned = (user: { banned: boolean | null; banExpires: Date | null }) =>
-  !!user.banned && (!user.banExpires || user.banExpires > new Date());
-
 /**
  * The endpoint a public call names, if it is live: it exists and is enabled,
- * the Organization's A2A gate admits its Workspace, and the Workspace Owner is
- * still a member of the Organization and not banned. Anything else says why, for the call
- * log only: every public route answers it with the same `404`, so a caller
- * can't tell which endpoints exist.
+ * the Organization's A2A gate admits its Workspace, and its Workspace Owner
+ * may still act (`ownerMayAct`: a member or super admin, and not banned).
+ * Anything else says why, for the call log only: every public route answers
+ * it with the same `404`, so a caller can't tell which endpoints exist.
  */
 export const lookupA2aEndpoint = async (
   endpointId: string,
@@ -258,8 +254,12 @@ export const lookupA2aEndpoint = async (
     return notLive("gate");
   }
   if (
-    !ownerMayAct(row.organization_member?.id, row.user.role) ||
-    isBanned(row.user)
+    !ownerMayAct({
+      membershipId: row.organization_member?.id,
+      role: row.user.role,
+      banned: row.user.banned,
+      banExpires: row.user.banExpires,
+    })
   ) {
     return notLive("owner_left");
   }

@@ -102,13 +102,19 @@ const world = (
     workspace = true,
     member = true,
     ownerRole = "user",
-  }: { workspace?: boolean; member?: boolean; ownerRole?: string } = {},
+    owner = {},
+  }: {
+    workspace?: boolean;
+    member?: boolean;
+    ownerRole?: string;
+    owner?: Row;
+  } = {},
 ): FakeDb =>
   seedDb({
     workspace: workspace
       ? [{ id: "ws-1", organizationId: "org-1", ownerId: "user-1" }]
       : [],
-    user: [{ id: "user-1", name: "Ada Lovelace", role: ownerRole }],
+    user: [{ id: "user-1", name: "Ada Lovelace", role: ownerRole, ...owner }],
     organization_member: member
       ? [{ id: "member-1", organizationId: "org-1", userId: "user-1" }]
       : [],
@@ -268,6 +274,53 @@ describe("fireTrigger", () => {
     it("runs for a super admin owner who holds no Organization membership", async () => {
       const trigger = makeTrigger();
       world(trigger, [], { member: false, ownerRole: "admin" });
+      drive("succeeded");
+
+      await expect(fireTrigger(trigger, { kind: "cron" })).resolves.toBe("ran");
+
+      expect(mockGenerate).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ["a member", { member: true, ownerRole: "user" }],
+      ["a super admin", { member: false, ownerRole: "admin" }],
+    ])("refuses to run while %s owner is banned", async (_case, standing) => {
+      const trigger = makeTrigger({ nextRunAt: CLAIMED_NEXT });
+      const fake = world(trigger, [], {
+        ...standing,
+        owner: { banned: true, banExpires: null },
+      });
+
+      await expect(fireTrigger(trigger, { kind: "cron" })).resolves.toBe(
+        "failed",
+      );
+
+      expect(mockGenerate).not.toHaveBeenCalled();
+      expect(fake.tables.trigger_run).toEqual([]);
+      expect(triggerRow(fake)).toMatchObject({
+        lastRunAt: NOW,
+        nextRunAt: CLAIMED_NEXT,
+      });
+    });
+
+    it("refuses to run while the owner's ban has yet to expire", async () => {
+      const trigger = makeTrigger();
+      world(trigger, [], {
+        owner: { banned: true, banExpires: new Date(NOW.getTime() + 60_000) },
+      });
+
+      await expect(fireTrigger(trigger, { kind: "cron" })).resolves.toBe(
+        "failed",
+      );
+
+      expect(mockGenerate).not.toHaveBeenCalled();
+    });
+
+    it("runs once the owner's ban has expired", async () => {
+      const trigger = makeTrigger();
+      world(trigger, [], {
+        owner: { banned: true, banExpires: new Date(NOW.getTime() - 60_000) },
+      });
       drive("succeeded");
 
       await expect(fireTrigger(trigger, { kind: "cron" })).resolves.toBe("ran");
@@ -777,6 +830,18 @@ describe("fireTrigger", () => {
           errorMessage: "Workspace 'ws-1' not found for trigger 'trigger-1'",
           completedAt: NOW,
         }),
+      ]);
+    });
+
+    it("fails the pending row when the Owner was banned after the call was accepted", async () => {
+      const trigger = inboundTrigger();
+      const fake = world(trigger, [pendingRow()], { owner: { banned: true } });
+
+      await expect(fireTrigger(trigger, cause)).resolves.toBe("failed");
+
+      expect(mockGenerate).not.toHaveBeenCalled();
+      expect(fake.tables.trigger_run).toEqual([
+        expect.objectContaining({ id: "run-accepted", status: "failed" }),
       ]);
     });
 

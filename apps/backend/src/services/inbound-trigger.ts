@@ -12,6 +12,7 @@ import {
 import { db } from "../index.ts";
 import {
   organization as organizationTable,
+  organizationMember,
   trigger as triggerTable,
   triggerRun as triggerRunTable,
   user as userTable,
@@ -26,6 +27,7 @@ import {
   retainTriggerRuns,
   shouldSuppressTriggerRun,
 } from "./trigger-breaker.ts";
+import { ownerMayAct, ownerMembershipJoin } from "./owner-membership.ts";
 import { fireTrigger } from "./trigger-firing.ts";
 import { narrowTriggerConfig, type TriggerRow } from "./trigger.ts";
 import {
@@ -50,10 +52,11 @@ import {
  * path.
  *
  * This module owns everything between the HTTP route and `fireTrigger`: which
- * calls are let in (token, expiry, enabled, the Organization gate), what a
- * body may carry, the per-record dedup and the breaker verdict, the pending
- * run row whose id the caller gets back, the server-wide cap on active inbound
- * runs, and the one log line every call writes. The route only maps these
+ * calls are let in (token, expiry, enabled, the Organization gate, the
+ * Owner's standing), what a body may carry, the per-record dedup and the
+ * breaker verdict, the pending run row whose id the caller gets back, the
+ * server-wide cap on active inbound runs, and the one log line every call
+ * writes. The route only maps these
  * verdicts onto status codes.
  */
 
@@ -106,6 +109,8 @@ export type InboundRejectReason =
   | "expired_token"
   | "disabled"
   | "gate"
+  /** The Workspace Owner has left the Organization or is banned. */
+  | "owner_left"
   | "misconfigured"
   | "invalid_inputs"
   | "body_too_large"
@@ -159,9 +164,14 @@ export type InboundTarget = {
   workspaceId: string;
   gate: OrgGate;
   workspaceAllowed: boolean;
+  /** Whether the Workspace Owner may still act in it (`ownerMayAct`). */
+  ownerMayAct: boolean;
 };
 
-/** The Trigger a call names, joined to its Workspace and Organization. */
+/**
+ * The Trigger a call names, joined to its Workspace, Organization and the
+ * Workspace Owner's standing.
+ */
 export const loadInboundTarget = async (
   triggerId: string,
 ): Promise<InboundTarget | null> => {
@@ -173,6 +183,8 @@ export const loadInboundTarget = async (
       organizationTable,
       eq(organizationTable.id, workspaceTable.organizationId),
     )
+    .innerJoin(userTable, eq(userTable.id, workspaceTable.ownerId))
+    .leftJoin(organizationMember, ownerMembershipJoin())
     .where(eq(triggerTable.id, triggerId))
     .limit(1);
   if (!row) return null;
@@ -182,6 +194,12 @@ export const loadInboundTarget = async (
     workspaceId: row.workspace.id,
     gate: row.organization.inboundTriggerGate as OrgGate,
     workspaceAllowed: row.workspace.inboundTriggersAllowed,
+    ownerMayAct: ownerMayAct({
+      membershipId: row.organization_member?.id,
+      role: row.user.role,
+      banned: row.user.banned,
+      banExpires: row.user.banExpires,
+    }),
   };
 };
 
@@ -223,6 +241,9 @@ export const authenticateInboundCall = async (
   if (!trigger.enabled) return { ok: false, reason: "disabled", target };
   if (!gateAdmits(target.gate, target.workspaceAllowed)) {
     return { ok: false, reason: "gate", target };
+  }
+  if (!target.ownerMayAct) {
+    return { ok: false, reason: "owner_left", target };
   }
 
   try {
