@@ -138,6 +138,11 @@ wrong token gets **401 Unauthorized**. The endpoint speaks A2A 1.0: a request
 whose `A2A-Version` header asks for another version is refused with a "version
 not supported" error, and a request without the header is answered as 1.0.
 
+Give every request an `id`. A request without one is a JSON-RPC notification,
+which gets no answer: it is acknowledged with **204 No Content** and nothing
+runs, so a `SendMessage` sent that way starts no run. Batches (a JSON array of
+requests) are refused.
+
 Each conversation is an ordinary Chat in your Chat list, labelled with the
 token's name, so you can read what the client asked and what the Agent did. You
 can continue the Chat yourself, and the client's next message follows your

@@ -319,10 +319,11 @@ rejected call's `reason` is one of:
 | `expired_token`                   | carried a token after it expired                                               | `401`              |
 | `body_too_large`                  | sent a body past `A2A_MAX_BODY_BYTES`                                          | `413`              |
 | `busy`                            | sent a message while the conversation's run was still going                    | A2A error          |
-| `parse_error`                     | sent a body that couldn't be parsed                                            | A2A error          |
-| `invalid_request`                 | sent a request that isn't valid JSON-RPC                                       | A2A error          |
+| `notification`                    | sent a request with no `id`, which is never run                                | `204`              |
+| `parse_error`                     | sent a body that isn't JSON                                                    | A2A error          |
+| `invalid_request`                 | sent a request that isn't valid JSON-RPC, or a batch                           | A2A error          |
 | `method_not_found`                | named a method the endpoint doesn't have                                       | A2A error          |
-| `invalid_params`                  | sent a body that isn't JSON, or parameters the method can't take               | A2A error          |
+| `invalid_params`                  | sent parameters the method can't take                                          | A2A error          |
 | `task_not_found`                  | named a Task or conversation the endpoint doesn't have                         | A2A error          |
 | `task_not_cancelable`             | asked to cancel a Task that can't be cancelled                                 | A2A error          |
 | `push_notification_not_supported` | asked for a push notification the endpoint can't make                          | A2A error          |

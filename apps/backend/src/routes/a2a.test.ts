@@ -3407,23 +3407,222 @@ describe("the A2A call log", () => {
     ]);
   });
 
+  /** Posts a raw body with the token. */
+  const post = (body: string) =>
+    app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body,
+    });
+
+  const sendParams = {
+    message: {
+      messageId: "msg-a",
+      role: "ROLE_USER",
+      parts: [text("Where is my order?")],
+    },
+  };
+
   it("logs a body that isn't JSON", async () => {
     seedConversation();
 
-    await app.request("/a2a/ep-1", {
-      method: "POST",
-      headers: { authorization: `Bearer ${TOKEN}` },
-      body: "not json",
-    });
+    const res = await post("not json");
 
+    expect(await res.json()).toEqual({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32700, message: "Parse error" },
+    });
     expect(callLogLines()).toEqual([
       line({
         ...ids,
         tokenId: "tok-1",
         outcome: "rejected",
-        reason: "invalid_params",
+        reason: "parse_error",
       }),
     ]);
+  });
+
+  it("refuses a batch, and runs none of it", async () => {
+    seedConversation();
+
+    const res = await post(
+      JSON.stringify([
+        { jsonrpc: "2.0", id: 1, method: "SendMessage", params: sendParams },
+      ]),
+    );
+
+    expect(await res.json()).toEqual({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32600, message: "Batch requests are not supported" },
+    });
+    expect(model.prompts).toHaveLength(0);
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        outcome: "rejected",
+        reason: "invalid_request",
+      }),
+    ]);
+  });
+
+  it.each([
+    ["not an object", 42, null, null],
+    ["a null body", null, null, null],
+    [
+      "no jsonrpc",
+      { id: 7, method: "SendMessage", params: sendParams },
+      7,
+      "SendMessage",
+    ],
+    [
+      "a wrong jsonrpc",
+      {
+        jsonrpc: "1.0",
+        id: "req-7",
+        method: "SendMessage",
+        params: sendParams,
+      },
+      "req-7",
+      "SendMessage",
+    ],
+    [
+      "a method that isn't a string",
+      { jsonrpc: "2.0", id: 7, method: 3 },
+      7,
+      null,
+    ],
+    [
+      "a fractional id",
+      { jsonrpc: "2.0", id: 1.5, method: "SendMessage", params: sendParams },
+      null,
+      "SendMessage",
+    ],
+    [
+      "a null id",
+      { jsonrpc: "2.0", id: null, method: "SendMessage", params: sendParams },
+      null,
+      "SendMessage",
+    ],
+    [
+      "an object id",
+      { jsonrpc: "2.0", id: {}, method: "GetTask", params: { id: "t" } },
+      null,
+      "GetTask",
+    ],
+    [
+      "a streaming method with a wrong jsonrpc",
+      {
+        jsonrpc: "1.0",
+        id: 7,
+        method: "SendStreamingMessage",
+        params: sendParams,
+      },
+      7,
+      "SendStreamingMessage",
+    ],
+    [
+      "a subscribe with a fractional id",
+      {
+        jsonrpc: "2.0",
+        id: 0.5,
+        method: "SubscribeToTask",
+        params: { id: "t" },
+      },
+      null,
+      "SubscribeToTask",
+    ],
+  ])(
+    "refuses %s as an invalid Request, and runs nothing",
+    async (_case, body, id, method) => {
+      seedConversation();
+
+      const res = await post(JSON.stringify(body));
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        jsonrpc: "2.0",
+        id,
+        error: { code: -32600, message: "Invalid Request" },
+      });
+      expect(model.prompts).toHaveLength(0);
+      expect(rows("chat")).toHaveLength(0);
+      expect(callLogLines()).toEqual([
+        line({
+          ...ids,
+          tokenId: "tok-1",
+          method,
+          outcome: "rejected",
+          reason: "invalid_request",
+        }),
+      ]);
+    },
+  );
+
+  it.each(["SendMessage", "SendStreamingMessage"])(
+    "neither runs nor answers a %s Notification",
+    async (method) => {
+      seedConversation();
+
+      const res = await post(
+        JSON.stringify({ jsonrpc: "2.0", method, params: sendParams }),
+      );
+
+      expect(res.status).toBe(204);
+      expect(await res.text()).toBe("");
+      expect(model.prompts).toHaveLength(0);
+      expect(rows("chat")).toHaveLength(0);
+      expect(rows("a2a_task")).toHaveLength(0);
+      expect(callLogLines()).toEqual([
+        line({
+          ...ids,
+          tokenId: "tok-1",
+          method,
+          outcome: "rejected",
+          reason: "notification",
+        }),
+      ]);
+    },
+  );
+
+  it("still checks the token on a Notification", async () => {
+    seedConversation();
+
+    const res = await app.request("/a2a/ep-1", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "GetTask" }),
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("parses each body once", async () => {
+    seedConversation();
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "SendMessage",
+      params: sendParams,
+    });
+    const parse = vi.spyOn(JSON, "parse");
+
+    try {
+      const res = await post(body);
+      expect(((await res.json()) as RpcBody).result.task.status.state).toBe(
+        "TASK_STATE_COMPLETED",
+      );
+      expect(parse.mock.calls.filter(([text]) => text === body)).toHaveLength(
+        1,
+      );
+    } finally {
+      parse.mockRestore();
+    }
   });
 
   it("logs a message refused while the Chat is busy, with the Task it names", async () => {
