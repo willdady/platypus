@@ -360,21 +360,18 @@ warning.
 When either bound stops a turn, the reason is shown in the chat rather than the
 answer simply ending.
 
-If the backend is killed mid-turn, neither bound gets the chance to run, so the
-Chat would otherwise stay marked as running for ever — the sidebar keeps
-spinning and the composer stays disabled. A background sweep marks those Chats
-failed once they are older than `CHAT_PER_RUN_TIMEOUT_MS` plus a five-minute
-grace period, and it runs on each scheduler pass, so a Chat abandoned by a
-crash frees itself roughly 35 minutes later on the defaults.
+When the backend is stopped — `docker compose down`, a rolling deploy, Ctrl+C —
+it cancels the turns it is running before it exits, waiting up to 8 seconds for
+them to save their partial replies. Their Chats end as cancelled and are free for
+the next message at once. Give the backend at least that long between the stop
+signal and a forced kill; Docker's default of 10 seconds is enough.
 
-<Callout type="warning">
-  Running several backends against one database looks like it needs no
-  co-ordination, because each turn belongs to the instance serving it. The sweep
-  is the exception: it decides which Chats are old enough to have no live owner,
-  and it decides that from its own `CHAT_PER_RUN_TIMEOUT_MS`. Give an instance a
-  shorter value than its peers and it will mark their live turns as failed
-  mid-answer. Set the same value on every instance.
-</Callout>
+If the backend is killed outright — a crash, an out-of-memory kill — neither
+bound gets the chance to run. While a turn runs, its backend marks the Chat as
+alive every 15 seconds; a Chat that goes a minute without one has lost its run.
+Its next message starts a new turn straight away, and a background sweep, run on
+each scheduler pass, marks it failed. Either way, a Chat abandoned by a crash
+frees itself within about a minute, whatever `CHAT_PER_RUN_TIMEOUT_MS` is.
 
 ## Tools
 

@@ -287,8 +287,9 @@ registered.
 - **A Task that has already ended** when a URL is registered on it is pushed
   straight away, so a run that finishes before the client registers is not
   missed.
-- **A run lost to a server restart** ends `failed` once Platypus notices it
-  has gone quiet, and that is pushed like any other end.
+- **A run lost to a server crash** ends `failed` within about a minute, once
+  Platypus notices it has gone quiet, and that is pushed like any other end. A
+  run stopped by a server shutting down cleanly ends `canceled`.
 - **Your credentials come back to you.** A request carries the
   `authentication` the client registered as an `Authorization` header (for
   example `Authorization: Bearer <credentials>`), and its `token`, if any, as

@@ -1,0 +1,1 @@
+ALTER TABLE "chat" ADD COLUMN "run_heartbeat_at" timestamp;
