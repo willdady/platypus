@@ -8,13 +8,8 @@ import {
   TaskNotFoundError,
   UnsupportedOperationError,
 } from "@a2a-js/sdk/errors";
-import {
-  findA2aTask,
-  startA2aTurn,
-  takeFollowerSlot,
-  type A2aCaller,
-} from "./a2a-task.ts";
-import { TERMINAL_TASK_STATES, type TaskRow } from "./a2a-task-state.ts";
+import { startA2aTurn, takeFollowerSlot, type A2aCaller } from "./a2a-task.ts";
+import { findA2aTask, isTerminal, type TaskRow } from "./a2a-task-state.ts";
 import { readTask, readTaskAfresh } from "./a2a-task-lifecycle.ts";
 import {
   a2aFallbackPollMs,
@@ -32,8 +27,6 @@ import { replyArtifact } from "./a2a-parts.ts";
  * says. A follower of a run it did not start holds a follower slot until its
  * stream ends (`takeFollowerSlot`).
  */
-
-const isTerminal = (task: Task) => TERMINAL_TASK_STATES.has(task.status!.state);
 
 /**
  * Ends the stream with an error once the caller's access is cut off: it is

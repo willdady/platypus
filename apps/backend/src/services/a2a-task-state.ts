@@ -20,6 +20,7 @@ import {
 import type { RunStatus } from "../runs/types.ts";
 import type { ChatClaimTx } from "../runs/sinks/chat-sink.ts";
 import { replyArtifact } from "./a2a-parts.ts";
+import type { A2aCaller } from "./a2a-task.ts";
 
 /**
  * An A2A Task as a client reads it (ADR-0032): the read model, which derives
@@ -85,18 +86,12 @@ export const firstReply = async (
 
 /**
  * Whether a Chat is an A2A client's, and so may hold A2A Tasks: it names the
- * endpoint that started it, or, from before the endpoint was stored on it,
- * the client's label. `chat` is the Chat as read, or the columns a new one
- * starts with.
+ * endpoint that started it. `chat` is the Chat as read, or the columns a new
+ * one starts with.
  */
 export const isA2aChat = (
-  chat:
-    | {
-        a2aEndpointId?: string | null;
-        a2aClientName?: string | null;
-      }
-    | undefined,
-): boolean => !!(chat?.a2aEndpointId || chat?.a2aClientName);
+  chat: { a2aEndpointId?: string | null } | undefined,
+): boolean => !!chat?.a2aEndpointId;
 
 /**
  * The user message the Chat's current turn answers: its active leaf, or the
@@ -147,6 +142,16 @@ export const findTokenTask = async (
   if (!task) throw new TaskNotFoundError();
   return task;
 };
+
+/** One of the Tasks the calling token started; any other is not found. */
+export const findA2aTask = (
+  caller: A2aCaller,
+  taskId: string,
+): Promise<TaskRow> =>
+  findTokenTask(
+    { endpointId: caller.endpoint.id, tokenId: caller.token.id },
+    taskId,
+  );
 
 /** A Task's state, status timestamp and recorded reply, as `readTask` reads them. */
 export type TaskStatus = {
@@ -399,3 +404,7 @@ export const TERMINAL_TASK_STATES = new Set([
   TaskState.TASK_STATE_FAILED,
   TaskState.TASK_STATE_CANCELED,
 ]);
+
+/** Whether a Task has ended: completed, failed or canceled. */
+export const isTerminal = (task: Task): boolean =>
+  TERMINAL_TASK_STATES.has(task.status!.state);

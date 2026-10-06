@@ -73,7 +73,6 @@ export const startChatTurn = async (params: {
       runHeartbeatAt: chatTable.runHeartbeatAt,
       updatedAt: chatTable.updatedAt,
       a2aEndpointId: chatTable.a2aEndpointId,
-      a2aClientName: chatTable.a2aClientName,
     })
     .from(chatTable)
     .where(
@@ -204,16 +203,13 @@ export const startChatTurn = async (params: {
 /**
  * Whether a Chat lets its turns read the Owner's Memories. An A2A Chat follows
  * its endpoint's Include Memories, whoever's turn it is: the Owner's reply sits
- * in the history the client reads next (ADR-0032). One whose endpoint is gone,
- * or that predates the endpoint being stored on it, is known by its client
- * label and reads as off. Any other Chat, and one not written yet, allows them.
+ * in the history the client reads next (ADR-0032). One whose endpoint is gone
+ * reads as off. Any other Chat, and one not written yet, allows them.
  */
 const chatAllowsMemories = async (
-  chat:
-    { a2aEndpointId: string | null; a2aClientName: string | null } | undefined,
+  chat: { a2aEndpointId: string | null } | undefined,
 ): Promise<boolean> => {
-  if (!chat?.a2aEndpointId && !chat?.a2aClientName) return true;
-  if (!chat.a2aEndpointId) return false;
+  if (!chat?.a2aEndpointId) return true;
   const [endpoint] = await db
     .select({ includeMemories: a2aEndpointTable.includeMemories })
     .from(a2aEndpointTable)

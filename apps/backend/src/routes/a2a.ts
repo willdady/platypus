@@ -10,7 +10,6 @@ import { A2AError, VersionNotSupportedError } from "@a2a-js/sdk/errors";
 import { AgentCard, type StreamResponse } from "@a2a-js/sdk";
 import {
   A2A_PROTOCOL_VERSION,
-  extendedAgentCard,
   lookupA2aEndpoint,
   publicAgentCard,
 } from "../services/a2a-endpoint.ts";
@@ -18,7 +17,6 @@ import { authenticateA2aCall } from "../services/a2a-token.ts";
 import { cancelA2aTask } from "../services/a2a-cancel.ts";
 import {
   A2aChatBusyError,
-  findA2aTask,
   getA2aTask,
   listA2aTasks,
   sendA2aMessage,
@@ -32,6 +30,7 @@ import {
   getA2aPushConfig,
   listA2aPushConfigs,
 } from "../services/a2a-push.ts";
+import { findA2aTask } from "../services/a2a-task-state.ts";
 import { taskStatus } from "../services/a2a-task-lifecycle.ts";
 import {
   streamA2aMessage,
@@ -101,12 +100,8 @@ a2a.get("/:endpointId/.well-known/agent-card.json", etag(), (c) => {
   };
   return withCallLog(log, async () => {
     const lookup = await lookupA2aEndpoint(log.endpointId);
-    log.organizationId = lookup.live
-      ? lookup.endpoint.organizationId
-      : lookup.organizationId;
-    log.workspaceId = lookup.live
-      ? lookup.endpoint.workspaceId
-      : lookup.workspaceId;
+    log.organizationId = lookup.organizationId;
+    log.workspaceId = lookup.workspaceId;
     if (!lookup.live) {
       log.reason = lookup.reason;
       return c.json({ error: "Not Found" }, 404);
@@ -202,8 +197,9 @@ const requestHandler = (
   // Our cards are wire JSON; the transport serializes from the SDK's shape.
   getAgentCard: () =>
     Promise.resolve(AgentCard.fromJSON(publicAgentCard(caller.endpoint))),
+  // The extended card has nothing to add: the public one carries the skill.
   getAuthenticatedExtendedAgentCard: () =>
-    Promise.resolve(AgentCard.fromJSON(extendedAgentCard(caller.endpoint))),
+    Promise.resolve(AgentCard.fromJSON(publicAgentCard(caller.endpoint))),
   sendMessage: guarded((params) =>
     sendA2aMessage(caller, withNullDataParts(params, nullDataParts)),
   ),
@@ -340,12 +336,8 @@ const bodyTooLarge = (c: Context) => {
   return withCallLog(log, async () => {
     try {
       const lookup = await lookupA2aEndpoint(log.endpointId);
-      log.organizationId = lookup.live
-        ? lookup.endpoint.organizationId
-        : lookup.organizationId;
-      log.workspaceId = lookup.live
-        ? lookup.endpoint.workspaceId
-        : lookup.workspaceId;
+      log.organizationId = lookup.organizationId;
+      log.workspaceId = lookup.workspaceId;
     } catch (error) {
       logger.error(
         { endpointId: log.endpointId, error: errorMessage(error) },

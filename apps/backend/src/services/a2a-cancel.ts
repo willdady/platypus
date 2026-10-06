@@ -5,8 +5,8 @@ import { db } from "../index.ts";
 import { a2aTask as a2aTaskTable, chat as chatTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { runRegistry } from "../runs/run-registry.ts";
-import { findA2aTask, type A2aCaller } from "./a2a-task.ts";
-import { currentTurnId, type TaskRow } from "./a2a-task-state.ts";
+import type { A2aCaller } from "./a2a-task.ts";
+import { currentTurnId, findA2aTask, type TaskRow } from "./a2a-task-state.ts";
 import { cancelTask, readTask } from "./a2a-task-lifecycle.ts";
 import { taskIsLive } from "./a2a-liveness.ts";
 

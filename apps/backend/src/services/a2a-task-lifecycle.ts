@@ -29,7 +29,7 @@ import {
   readingOf,
   readWithStatus,
   recordedStatus,
-  TERMINAL_TASK_STATES,
+  isTerminal,
   type Executor,
   type TaskReading,
   type TaskRow,
@@ -304,7 +304,7 @@ export const cancelTask = async (
   task: TaskRow,
 ): Promise<TaskRow | undefined> => {
   const read = await readTask(task);
-  if (TERMINAL_TASK_STATES.has(read.status!.state)) return undefined;
+  if (isTerminal(read)) return undefined;
 
   const canceledAt = new Date();
   const claimed = await db.transaction(async (tx) => {
