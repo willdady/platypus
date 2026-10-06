@@ -3593,9 +3593,14 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
 
   describe("another token's Task on the same endpoint", () => {
     const asOther = { token: OTHER_TOKEN };
+    const push = vi.fn<typeof fetch>();
     let taskId = "";
 
     beforeEach(async () => {
+      // The Task's push config would otherwise reach the network, and its
+      // retries a later test's stubbed fetch.
+      push.mockResolvedValue(new Response(null, { status: 200 }));
+      vi.stubGlobal("fetch", push);
       seedTwoClients();
       taskId = (await startMidReply()).id;
       tables.a2a_push_config = [
@@ -3611,9 +3616,18 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
       ];
     });
 
-    // Its own token stops the held run, so it doesn't outlive the test.
+    // Its own token stops the held run, so it doesn't outlive the test, nor
+    // does the push of its cancel.
     afterEach(async () => {
       await rpc("CancelTask", { id: taskId });
+      await vi.waitFor(() =>
+        expect(
+          push.mock.calls.some(([, init]) =>
+            (init?.body as string).includes(taskId),
+          ),
+        ).toBe(true),
+      );
+      vi.unstubAllGlobals();
     });
 
     it.each([
