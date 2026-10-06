@@ -75,11 +75,15 @@ const seed = ({
   gate = "all",
   allowed = false,
   runs = [],
+  owner = {},
+  ownerIsMember = true,
 }: {
   trigger?: Row[];
   gate?: string;
   allowed?: boolean;
   runs?: Row[];
+  owner?: Row;
+  ownerIsMember?: boolean;
 } = {}) =>
   seedDb({
     trigger,
@@ -93,7 +97,10 @@ const seed = ({
       },
     ],
     organization: [{ id: "org-1", name: "Acme", inboundTriggerGate: gate }],
-    user: [{ id: "user-1", name: "Owner" }],
+    user: [{ id: "user-1", name: "Owner", role: "user", ...owner }],
+    organization_member: ownerIsMember
+      ? [{ id: "member-1", organizationId: "org-1", userId: "user-1" }]
+      : [],
     trigger_run: runs,
   });
 
@@ -103,6 +110,7 @@ const target = (over: Row = {}): InboundTarget => ({
   workspaceId: "ws-1",
   gate: "all",
   workspaceAllowed: false,
+  ownerMayAct: true,
 });
 
 const settings = { maxConcurrentRuns: 5, maxBodyBytes: 65536 };
@@ -181,6 +189,49 @@ describe("inbound triggers", () => {
 
       seed({ gate: "selected", allowed: true });
       expect(await reasonFor(`Bearer ${TOKEN}`)).toBe("ok");
+    });
+
+    it("refuses every call once the Owner leaves the Organization", async () => {
+      seed({ ownerIsMember: false });
+      expect(await reasonFor(`Bearer ${TOKEN}`)).toBe("owner_left");
+    });
+
+    it("admits a super admin Owner who holds no membership", async () => {
+      seed({ ownerIsMember: false, owner: { role: "admin" } });
+      expect(await reasonFor(`Bearer ${TOKEN}`)).toBe("ok");
+    });
+
+    it.each([
+      ["a member", { role: "user" }, true],
+      ["a super admin", { role: "admin" }, false],
+    ])(
+      "refuses every call while %s Owner is banned",
+      async (_case, owner, ownerIsMember) => {
+        seed({ owner: { ...owner, banned: true }, ownerIsMember });
+        expect(await reasonFor(`Bearer ${TOKEN}`)).toBe("owner_left");
+
+        seed({
+          owner: {
+            ...owner,
+            banned: true,
+            banExpires: new Date(NOW.getTime() + DAY),
+          },
+          ownerIsMember,
+        });
+        expect(await reasonFor(`Bearer ${TOKEN}`)).toBe("owner_left");
+      },
+    );
+
+    it("admits calls again once the Owner's ban has run out", async () => {
+      seed({
+        owner: { banned: true, banExpires: new Date(NOW.getTime() - 1) },
+      });
+      expect(await reasonFor(`Bearer ${TOKEN}`)).toBe("ok");
+    });
+
+    it("checks the token before the Owner, so only its holder learns of the ban", async () => {
+      seed({ owner: { banned: true } });
+      expect(await reasonFor("Bearer pit_wrong")).toBe("bad_token");
     });
 
     it("tells the Owner the first time an expired token is used, and only then", async () => {

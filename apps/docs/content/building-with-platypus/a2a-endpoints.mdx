@@ -121,7 +121,10 @@ can take that long to reach it.
 
 An endpoint that is disabled or deleted, in a Workspace the Organization doesn't
 allow, or whose Workspace Owner has left the Organization or been banned answers
-**Not Found**, exactly like one that never existed.
+**Not Found**, exactly like one that never existed. A Super Admin who owns the
+Workspace keeps its endpoints answering without being a member of the
+Organization, but not while banned. A ban with an expiry stops counting once it
+runs out, and the endpoints answer again.
 
 A client that authenticates can also fetch the **extended Agent Card**
 (`GetExtendedAgentCard`). It adds one skill, built from the same Name and
