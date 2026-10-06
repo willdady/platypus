@@ -53,8 +53,8 @@ describe("A2A endpoint foreign keys", () => {
         VALUES ('chat-2', 'msg-a', 'user', '[]');
       INSERT INTO "a2a_task" ("id", "chat_id", "message_id", "endpoint_id", "token_id", "state")
         VALUES ('task-2', 'chat-2', 'msg-a', 'ep-2', 'tok-2', 'completed');
-      DELETE FROM "a2a_endpoint" WHERE "id" = 'ep-2';
     `);
+    await pg.exec(`DELETE FROM "a2a_endpoint" WHERE "id" = 'ep-2'`);
 
     const chats = await pg.query(
       `SELECT "a2a_endpoint_id", "a2a_token_id", "a2a_client_name" FROM "chat" WHERE "id" = 'chat-2'`,
