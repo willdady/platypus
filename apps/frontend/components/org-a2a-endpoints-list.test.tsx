@@ -15,6 +15,7 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
+import { formatDateTime } from "@/lib/format-date";
 import { OrgA2aEndpointsList } from "./org-a2a-endpoints-list";
 
 const endpoint = (over: Record<string, unknown> = {}) => ({
@@ -71,6 +72,23 @@ describe("OrgA2aEndpointsList", () => {
     expect(within(tokenRow).getByText("Telegram")).toBeInTheDocument();
     expect(within(tokenRow).getByText("Expiring soon")).toBeInTheDocument();
     expect(within(tokenRow).getByText("Never")).toBeInTheDocument();
+  });
+
+  it("shows each token time with its time of day, as the endpoint's own page does", () => {
+    mockScopedSWR({ "/a2a/endpoints": [endpoint()] });
+    renderList(<OrgA2aEndpointsList orgId="org1" />);
+
+    const [, , tokenRow] = screen.getAllByRole("row");
+    for (const at of [
+      "2026-09-02T10:00:00.000Z",
+      "2026-10-15T10:00:00.000Z",
+      "2026-09-28T10:00:00.000Z",
+    ]) {
+      expect(within(tokenRow).getByText(formatDateTime(at))).toHaveAttribute(
+        "datetime",
+        at,
+      );
+    }
   });
 
   it("badges only a token that needs attention, not an active one", () => {

@@ -3148,6 +3148,37 @@ export const a2aTokenSchema = z.object({
 
 export type A2aToken = z.infer<typeof a2aTokenSchema>;
 
+/** A row of a Workspace's endpoint list: the endpoint and its Agent's name. */
+export const a2aEndpointListItemSchema = a2aEndpointSchema.extend({
+  agentName: z.string(),
+});
+
+export type A2aEndpointListItem = z.infer<typeof a2aEndpointListItemSchema>;
+
+/**
+ * A row of an Org Admin's oversight list: where the endpoint is, whose it is,
+ * which Agent it reaches and how each of its tokens stands. Never a token's
+ * value.
+ */
+export const orgA2aEndpointSchema = a2aEndpointSchema
+  .pick({
+    id: true,
+    name: true,
+    enabled: true,
+    agentId: true,
+    workspaceId: true,
+    createdAt: true,
+  })
+  .extend({
+    agentName: z.string(),
+    workspaceName: z.string(),
+    ownerId: z.string(),
+    ownerName: z.string(),
+    tokens: z.array(a2aTokenSchema),
+  });
+
+export type OrgA2aEndpoint = z.infer<typeof orgA2aEndpointSchema>;
+
 export const a2aTokenCreateSchema = a2aTokenSchema.pick({ name: true }).extend({
   expiryDays: z
     .literal(BEARER_TOKEN_EXPIRY_DAYS)

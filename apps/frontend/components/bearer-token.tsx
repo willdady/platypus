@@ -15,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell } from "@/components/ui/table";
-import { formatDate, formatDateTime } from "@/lib/format-date";
+import { formatDateTime } from "@/lib/format-date";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 
 /**
@@ -47,7 +47,16 @@ export const TokenDialog = ({
     >
       <DialogHeader>
         <DialogTitle>Copy the token now</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
+        <DialogDescription>
+          {description}
+          {/* Escape and outside clicks are blocked, so tell someone who
+              can't see the footer what does close it. */}
+          <span className="sr-only">
+            {" "}
+            This dialog closes only with the &ldquo;I&apos;ve copied it&rdquo;
+            button, so copy the token before you press it.
+          </span>
+        </DialogDescription>
       </DialogHeader>
 
       <Alert>
@@ -68,6 +77,20 @@ export const TokenDialog = ({
 );
 
 /**
+ * One of a token's times — created, expires, last used or last rejected — in
+ * the one format every token list shows, or "Never" for one that hasn't
+ * happened yet.
+ */
+export const TokenTime = ({ value }: { value: Date | string | null }) =>
+  value ? (
+    <time dateTime={new Date(value).toISOString()}>
+      {formatDateTime(value)}
+    </time>
+  ) : (
+    <>Never</>
+  );
+
+/**
  * The Expires, Last used and Last rejected cells of an Org Admin's oversight
  * row for one token. Never the token.
  */
@@ -76,9 +99,9 @@ export const TokenCells = ({
 }: {
   token: {
     tokenStatus: BearerTokenStatus;
-    tokenExpiresAt: string | null;
-    lastUsedAt: string | null;
-    lastRejectedAt: string | null;
+    tokenExpiresAt: Date | string | null;
+    lastUsedAt: Date | string | null;
+    lastRejectedAt: Date | string | null;
   };
 }) => (
   <>
@@ -87,7 +110,7 @@ export const TokenCells = ({
           gets a badge under it. */}
       {token.tokenExpiresAt ? (
         <div className="flex flex-col gap-1">
-          <span>{formatDate(token.tokenExpiresAt)}</span>
+          <TokenTime value={token.tokenExpiresAt} />
           {(token.tokenStatus === "expiring" ||
             token.tokenStatus === "expired") && (
             <Badge
@@ -103,10 +126,10 @@ export const TokenCells = ({
       )}
     </TableCell>
     <TableCell>
-      {token.lastUsedAt ? formatDateTime(token.lastUsedAt) : "Never"}
+      <TokenTime value={token.lastUsedAt} />
     </TableCell>
     <TableCell>
-      {token.lastRejectedAt ? formatDateTime(token.lastRejectedAt) : "Never"}
+      <TokenTime value={token.lastRejectedAt} />
     </TableCell>
   </>
 );

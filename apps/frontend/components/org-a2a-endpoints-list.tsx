@@ -24,35 +24,9 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
-import type { BearerTokenStatus } from "@platypus/schemas";
+import type { OrgA2aEndpoint } from "@platypus/schemas";
 import { formatDate } from "@/lib/format-date";
-import { TokenCells } from "@/components/bearer-token";
-
-/**
- * One row of `GET /organizations/:orgId/a2a/endpoints` (ADR-0032): where the
- * endpoint is, whose it is, which Agent it reaches, and how each of its tokens
- * stands. Never a token's value.
- */
-interface OrgA2aEndpoint {
-  id: string;
-  name: string;
-  enabled: boolean;
-  agentName: string;
-  workspaceName: string;
-  ownerName: string;
-  createdAt: string;
-  tokens: {
-    id: string;
-    name: string;
-    createdAt: string;
-    tokenStatus: BearerTokenStatus;
-    // When the current value was issued: the marker a revoke names.
-    tokenCreatedAt: string;
-    tokenExpiresAt: string;
-    lastUsedAt: string | null;
-    lastRejectedAt: string | null;
-  }[];
-}
+import { TokenCells, TokenTime } from "@/components/bearer-token";
 
 /** What a revoke stops: the endpoint, or just one of its tokens. */
 interface RevokeTarget {
@@ -94,7 +68,7 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
         // Names the value this row showed, so a token the Owner regenerated
         // since the list loaded is refused rather than revoked unseen.
         token
-          ? `/${endpoint.id}/tokens/${token.id}?${new URLSearchParams({ tokenCreatedAt: token.tokenCreatedAt })}`
+          ? `/${endpoint.id}/tokens/${token.id}?${new URLSearchParams({ tokenCreatedAt: new Date(token.tokenCreatedAt).toISOString() })}`
           : `/${endpoint.id}`,
       ),
       { method: "DELETE" },
@@ -213,7 +187,9 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
                         {token.name}
                       </TableCell>
                       <TableCell />
-                      <TableCell>{formatDate(token.createdAt)}</TableCell>
+                      <TableCell>
+                        <TokenTime value={token.createdAt} />
+                      </TableCell>
                       <TokenCells token={token} />
                       <TableCell className="text-right">
                         <Button
