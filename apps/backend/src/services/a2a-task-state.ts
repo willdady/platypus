@@ -208,6 +208,10 @@ export const recordedStatus = (task: TaskRow & { state: A2aTaskEndState }) => ({
   replyId: task.replyId,
 });
 
+/** A Task's status as `deriveStatus` reads it. */
+export type DerivedStatus =
+  { status: TaskStatus } | { unrecordedEnd: A2aTaskEndState };
+
 /**
  * A Task's status as its reading derives it, recording nothing: the end
  * recorded on it, or, while its turn's run is going, `submitted` until the
@@ -216,9 +220,6 @@ export const recordedStatus = (task: TaskRow & { state: A2aTaskEndState }) => ({
  * lost — derives the end it reached instead, for the lifecycle to record: until
  * it is, a regenerate or delete of its reply could change it.
  */
-export type DerivedStatus =
-  { status: TaskStatus } | { unrecordedEnd: A2aTaskEndState };
-
 export const deriveStatus = (task: TaskReading): DerivedStatus => {
   if (task.state) {
     return { status: recordedStatus({ ...task, state: task.state }) };

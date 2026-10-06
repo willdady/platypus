@@ -10,7 +10,7 @@ import {
 } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { TaskState } from "@a2a-js/sdk";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import {
@@ -103,7 +103,7 @@ const taskRow = async () => {
 const endRun = (status: "succeeded" | "failed" | "cancelled") =>
   db().transaction(async (tx) => {
     await tx.execute(
-      `UPDATE "chat" SET "status" = '${status}' WHERE "id" = 'chat-1'` as never,
+      sql`UPDATE "chat" SET "status" = ${status} WHERE "id" = 'chat-1'`,
     );
     return endTurnIn(tx as unknown as ChatClaimTx, "chat-1", "msg-1", status);
   });

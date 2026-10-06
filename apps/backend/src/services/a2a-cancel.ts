@@ -12,7 +12,8 @@ import { taskIsLive } from "./a2a-liveness.ts";
 
 /**
  * Cancelling A2A Tasks (ADR-0032). A cancel is recorded on its Task, by the
- * lifecycle's `cancelTask` (`a2a-task-lifecycle.ts`), before its run is stopped, so every reader sees `canceled` at once, and the record
+ * lifecycle's `cancelTask` (`a2a-task-lifecycle.ts`), before its run is
+ * stopped, so every reader sees `canceled` at once, and the record
  * outlives the cancel message: a run the message missed, while its instance's
  * listener was reconnecting, is found from it by that instance's sweep.
  *

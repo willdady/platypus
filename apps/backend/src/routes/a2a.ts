@@ -26,6 +26,7 @@ import {
   type A2aCaller,
 } from "../services/a2a-task.ts";
 import {
+  checkPushConfig,
   createA2aPushConfig,
   deleteA2aPushConfig,
   getA2aPushConfig,
@@ -213,9 +214,12 @@ const requestHandler = (
   resubscribe: guardedStream((params) => subscribeToA2aTask(caller, params.id)),
   cancelTask: guarded((params) => cancelA2aTask(caller, params.id)),
   createTaskPushNotificationConfig: guarded(async (params) => {
-    // Reading the Task records its end, should it have ended unrecorded, so
-    // the config's push goes out at once.
-    await taskStatus(await findA2aTask(caller, params.taskId));
+    // Found and checked as `createA2aPushConfig` does, so a refused config
+    // records nothing. Reading the Task then records its end, should it have
+    // ended unrecorded, so the config's push goes out at once.
+    const task = await findA2aTask(caller, params.taskId);
+    checkPushConfig(params);
+    await taskStatus(task);
     return createA2aPushConfig(caller, params);
   }),
   getTaskPushNotificationConfig: guarded((params) =>
