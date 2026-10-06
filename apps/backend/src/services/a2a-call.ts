@@ -228,6 +228,8 @@ export type RpcEnvelope =
       request: Record<string, unknown>;
       id: string | number;
       method: string | null;
+      /** See `nullDataPartsOf`. */
+      nullDataParts: ReadonlySet<number>;
     }
   | { kind: "notification"; method: string | null }
   | {
@@ -236,6 +238,29 @@ export type RpcEnvelope =
       method: string | null;
       error: { code: number; message: string };
     };
+
+/**
+ * The indexes of a message's parts whose `data` key holds JSON `null`. A2A
+ * 1.0 types `data` as a `google.protobuf.Value`, which `null` is, but the SDK
+ * parses such a part as one with no content, so it is read from the body.
+ */
+const nullDataPartsOf = (request: Record<string, unknown>): Set<number> => {
+  const params = request.params as { message?: { parts?: unknown } } | null;
+  const parts = params?.message?.parts;
+  const indexes = new Set<number>();
+  if (!Array.isArray(parts)) return indexes;
+  parts.forEach((part: unknown, index) => {
+    if (
+      typeof part === "object" &&
+      part !== null &&
+      "data" in part &&
+      part.data === null
+    ) {
+      indexes.add(index);
+    }
+  });
+  return indexes;
+};
 
 /** Parses and checks a JSON-RPC body's envelope. The one parse of the body. */
 export const readRpcEnvelope = (body: string): RpcEnvelope => {
@@ -285,7 +310,13 @@ export const readRpcEnvelope = (body: string): RpcEnvelope => {
   }
   // A present `id` was checked above, so only an absent one is `null` here.
   if (id === null) return { kind: "notification", method };
-  return { kind: "request", request: fields, id, method };
+  return {
+    kind: "request",
+    request: fields,
+    id,
+    method,
+    nullDataParts: nullDataPartsOf(fields),
+  };
 };
 
 export type A2aCallLogEntry = {
