@@ -122,7 +122,13 @@ import {
   hashBearerToken,
   resetTokenTouches,
 } from "../services/bearer-token.ts";
-import { activeA2aRunCount, resetA2aRunSlots } from "../services/a2a-call.ts";
+import {
+  A2A_MAX_STREAMS_PER_TOKEN,
+  activeA2aFollowerCount,
+  activeA2aRunCount,
+  resetA2aFollowerSlots,
+  resetA2aRunSlots,
+} from "../services/a2a-call.ts";
 import { mockLogger } from "../test-setup.ts";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
@@ -4024,5 +4030,307 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
 
     rows("user")[0].banExpires = new Date(Date.now() - 1000);
     expect((await send({ messageId: "msg-a" })).body.result.task).toBeDefined();
+  });
+});
+
+describe("POST /a2a/:endpointId — the follower cap", () => {
+  const SECOND_TOKEN = "pa2a_second-token";
+
+  /**
+   * A running Task for each token, its run held by another instance: only
+   * its rows say how it goes, and no run slot here is taken.
+   */
+  const seedFollowable = () =>
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Elsewhere",
+          status: "running",
+          activeLeafId: "msg-a",
+          a2aTokenId: "tok-1",
+          a2aEndpointId: "ep-1",
+        },
+        {
+          id: "chat-2",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Elsewhere too",
+          status: "running",
+          activeLeafId: "msg-z",
+          a2aTokenId: "tok-2",
+          a2aEndpointId: "ep-2",
+        },
+      ],
+      chat_message: [
+        {
+          chatId: "chat-1",
+          id: "msg-a",
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "Where is my order?" }],
+          deletedAt: null,
+          createdAt: new Date(),
+        },
+        {
+          chatId: "chat-2",
+          id: "msg-z",
+          parentId: null,
+          role: "user",
+          parts: [{ type: "text", text: "And mine?" }],
+          deletedAt: null,
+          createdAt: new Date(),
+        },
+      ],
+      a2a_task: [
+        {
+          id: "task-1",
+          chatId: "chat-1",
+          messageId: "msg-a",
+          endpointId: "ep-1",
+          tokenId: "tok-1",
+          statusAt: new Date(),
+          createdAt: new Date(),
+        },
+        {
+          id: "task-2",
+          chatId: "chat-2",
+          messageId: "msg-z",
+          endpointId: "ep-2",
+          tokenId: "tok-2",
+          statusAt: new Date(),
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+  /** Task-1's run ends, as the instance holding it would record. */
+  const endTask1 = () => {
+    rows("chat_message").push({
+      chatId: "chat-1",
+      id: "reply-1",
+      parentId: "msg-a",
+      role: "assistant",
+      parts: [{ type: "text", text: "On its way" }],
+      deletedAt: null,
+      createdAt: new Date(),
+    });
+    Object.assign(
+      rows("chat").find((c) => c.id === "chat-1")!,
+      { status: "succeeded", activeLeafId: "reply-1" },
+    );
+  };
+
+  const post = (
+    method: string,
+    params: unknown,
+    {
+      token = TOKEN,
+      endpointId = "ep-1",
+      signal,
+    }: { token?: string; endpointId?: string; signal?: AbortSignal } = {},
+  ) =>
+    app.request(`/a2a/${endpointId}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
+      signal,
+    });
+
+  const subscribe = (id = "task-1", token = TOKEN, endpointId = "ep-1") =>
+    post("SubscribeToTask", { id }, { token, endpointId });
+
+  const message = (messageId: string) => ({
+    message: {
+      messageId,
+      role: "ROLE_USER",
+      parts: [text("Where is my order?")],
+    },
+  });
+
+  const expectTooMany = (res: Response) => {
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("30");
+  };
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    model.reply = "Hello from Helper";
+    model.deltas = null;
+    model.hold = null;
+    model.holdPrep = null;
+    model.holdMidReply = null;
+    model.prompts = [];
+    model.toolNames = [];
+    resetTokenTouches();
+    resetA2aRunSlots();
+    resetA2aFollowerSlots();
+    process.env.A2A_MAX_CONCURRENT_STREAMS = "1";
+  });
+
+  afterEach(() => {
+    delete process.env.A2A_MAX_CONCURRENT_STREAMS;
+    delete process.env.A2A_MAX_CONCURRENT_RUNS;
+  });
+
+  it("answers a SubscribeToTask past the cap with 429 and Retry-After", async () => {
+    seedFollowable();
+    const held = await subscribe();
+    expect(held.headers.get("content-type")).toContain("text/event-stream");
+
+    const res = await subscribe();
+
+    expectTooMany(res);
+    expect(await res.json()).toEqual({ error: "Too Many Requests" });
+    expect(activeA2aFollowerCount()).toBe(1);
+    // A follower never takes a run slot.
+    expect(activeA2aRunCount()).toBe(0);
+    await held.body!.cancel();
+  });
+
+  it("frees the slot when the client hangs up", async () => {
+    seedFollowable();
+    const held = await subscribe();
+
+    await held.body!.cancel();
+
+    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(0));
+    const next = await subscribe();
+    expect(next.headers.get("content-type")).toContain("text/event-stream");
+    await next.body!.cancel();
+  });
+
+  it("frees the slot when the Task ends", async () => {
+    seedFollowable();
+    const held = await subscribe();
+
+    endTask1();
+    await held.text();
+
+    expect(activeA2aFollowerCount()).toBe(0);
+  });
+
+  it("frees the slot when the stream ends in an error", async () => {
+    seedFollowable();
+    const held = await subscribe();
+
+    // The token is deleted: the stream ends refused, as a new call would be.
+    tables.a2a_token = rows("a2a_token").filter((t) => t.id !== "tok-1");
+    expect(await held.text()).toContain("event: error");
+
+    expect(activeA2aFollowerCount()).toBe(0);
+  });
+
+  it("holds each token to its share of the pool", async () => {
+    process.env.A2A_MAX_CONCURRENT_STREAMS = "100";
+    seedFollowable();
+    const held: Response[] = [];
+    for (let i = 0; i < A2A_MAX_STREAMS_PER_TOKEN; i++) {
+      const res = await subscribe();
+      expect(res.headers.get("content-type")).toContain("text/event-stream");
+      held.push(res);
+    }
+
+    const over = await subscribe();
+    const other = await subscribe("task-2", SECOND_TOKEN, "ep-2");
+
+    expectTooMany(over);
+    expect(other.headers.get("content-type")).toContain("text/event-stream");
+    for (const res of [...held, other]) await res.body!.cancel();
+  });
+
+  it("answers a retried SendStreamingMessage past the cap with 429", async () => {
+    seedFollowable();
+    const held = await subscribe();
+
+    const res = await post("SendStreamingMessage", message("msg-a"));
+
+    expectTooMany(res);
+    expect(model.prompts).toHaveLength(0);
+    await held.body!.cancel();
+  });
+
+  it("answers a retried blocking SendMessage past the cap with 429", async () => {
+    seedFollowable();
+    const held = await subscribe();
+
+    const res = await post("SendMessage", message("msg-a"));
+
+    expectTooMany(res);
+    await held.body!.cancel();
+  });
+
+  it("frees a blocking SendMessage's slot when its Task ends", async () => {
+    seedFollowable();
+    const waiting = post("SendMessage", message("msg-a"));
+    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(1));
+
+    endTask1();
+    const res = await waiting;
+
+    expect(((await res.json()) as RpcBody).result.task.status.state).toBe(
+      "TASK_STATE_COMPLETED",
+    );
+    expect(activeA2aFollowerCount()).toBe(0);
+  });
+
+  it("frees a blocking SendMessage's slot when the client hangs up", async () => {
+    seedFollowable();
+    const hangUp = new AbortController();
+    const waiting = Promise.resolve(
+      post("SendMessage", message("msg-a"), { signal: hangUp.signal }),
+    ).catch(() => undefined);
+    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(1));
+
+    hangUp.abort();
+    await waiting;
+
+    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(0));
+  });
+
+  it("still answers a retry of a Task that has ended at the cap", async () => {
+    seedFollowable();
+    const held = await subscribe();
+    endTask1();
+    await held.text();
+    const again = await subscribe("task-2", SECOND_TOKEN, "ep-2");
+
+    const res = await post("SendMessage", message("msg-a"));
+
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as RpcBody).result.task.status.state).toBe(
+      "TASK_STATE_COMPLETED",
+    );
+    await again.body!.cancel();
+  });
+
+  it("counts runs and followers apart", async () => {
+    process.env.A2A_MAX_CONCURRENT_RUNS = "1";
+    seedFollowable();
+    const held = await subscribe();
+    let release = () => {};
+    model.hold = new Promise((resolve) => (release = resolve));
+
+    // A full follower pool starts runs, and the stream that starts one takes
+    // no follower slot.
+    const started = await post("SendStreamingMessage", message("msg-b"));
+
+    expect(started.headers.get("content-type")).toContain("text/event-stream");
+    expect(activeA2aRunCount()).toBe(1);
+    expect(activeA2aFollowerCount()).toBe(1);
+    // A full run pool still serves followers.
+    await held.body!.cancel();
+    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(0));
+    const next = await subscribe();
+    expect(next.headers.get("content-type")).toContain("text/event-stream");
+    release();
+    await started.text();
+    await next.body!.cancel();
   });
 });

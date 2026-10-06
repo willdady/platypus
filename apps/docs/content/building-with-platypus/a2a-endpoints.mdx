@@ -238,6 +238,14 @@ server-sent events instead of polling.
   starting a second run.
 - A message the endpoint refuses (a file part, a Chat with a run still going)
   is answered with a plain JSON-RPC error, not a stream.
+- **Following has a limit.** Your Operator caps how many streams can follow
+  Tasks at once, 100 unless they change it, and each token can hold at most 10
+  of them. The stream that started a run doesn't count, but `SubscribeToTask`,
+  a retried `SendStreamingMessage`, and a retried `SendMessage` that waits for
+  its Task do. One past the cap gets `429 Too Many Requests` with a
+  `Retry-After` header. The client closes a stream it no longer needs, or
+  waits and tries again. A stream frees its place when the Task ends or the
+  client disconnects.
 
 A stream sends a comment line every 15 seconds while the Agent is quiet, so a
 proxy with an idle timeout doesn't cut it off.
