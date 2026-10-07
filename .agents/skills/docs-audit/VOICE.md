@@ -22,7 +22,7 @@ The reader cannot see the repository and will never open it.
 - No maintainer rationale unless it changes what the reader should do.
 
 The exception is a page whose subject genuinely is the source: the reference
-pages cite `.env.example` as their source of truth, and `extending/` shows the
+pages cite `.example.env` as their source of truth, and `extending/` shows the
 SDK surface a plugin author writes against.
 
 ## Voice

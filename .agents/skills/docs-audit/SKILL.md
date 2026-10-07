@@ -64,7 +64,7 @@ Where to look:
 - endpoints, status codes, errors → `apps/backend/src/routes/**`
 - run behaviour, steps, timeouts → `apps/backend/src/runs/**`
 - plugins, Sandboxes, tool sets → `apps/backend/src/plugins/**`
-- deployment, env, first boot → `.env.example`, `compose*.yaml`, `apps/backend/index.ts`
+- deployment, env, first boot → `.example.env`, `compose*.yaml`, `apps/backend/index.ts`
 
 Check exhaustive lists **in both directions**: everything the code has appears
 in the doc, and everything the doc lists exists in the code. A missing row is

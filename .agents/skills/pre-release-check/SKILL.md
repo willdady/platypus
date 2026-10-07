@@ -131,7 +131,7 @@ The gate Step 1 confirmed is a floor. These four hold the release and none of th
   rest of its file, so CI went green over tests that never ran. Any hit introduced in
   this range is a hold until it's removed or justified.
 - **Docs that ship with the code.** `CLAUDE.md` maps changed paths to the docs page that
-  must change with them — `.env.example`, `packages/schemas` limits, `apps/backend/src/plugins/**`,
+  must change with them — `.example.env`, `packages/schemas` limits, `apps/backend/src/plugins/**`,
   and visible frontend labels. Apply that table to the range's paths: if a mapped path
   changed and `apps/docs/content` didn't, the release ships a docs lie. `docs-contract.test.ts`
   already passed in CI and cannot see UI labels; for those, ask the user to run

@@ -6,8 +6,8 @@ Platypus is a full-stack app for building and managing AI agents with tool suppo
 
 ```bash
 pnpm install
-cp apps/frontend/.env.example apps/frontend/.env
-cp apps/backend/.env.example apps/backend/.env
+cp apps/frontend/.example.env apps/frontend/.env
+cp apps/backend/.example.env apps/backend/.env
 
 pnpm dev               # frontend + backend + local Postgres
 pnpm drizzle-kit-push  # apply schema changes (requires `pnpm dev` running)
@@ -58,7 +58,7 @@ the docs edit is part of this change:
 
 | You changed                                              | Update                                                               |
 | -------------------------------------------------------- | -------------------------------------------------------------------- |
-| any `.env.example`                                       | `reference/backend-configuration.mdx` / `frontend-configuration.mdx` |
+| any `.example.env`                                       | `reference/backend-configuration.mdx` / `frontend-configuration.mdx` |
 | a user-facing `min`/`max`/`z.enum` in `packages/schemas` | the matching `building-with-platypus/*.mdx` page                     |
 | `apps/backend/src/plugins/**`                            | `extending/index.mdx`, `self-hosting/configuration.mdx`              |
 | a visible label, field, or nav item in `apps/frontend`   | the `building-with-platypus/*.mdx` page for that feature             |

@@ -7,7 +7,7 @@ import { Callout } from "nextra/components";
 # Backend configuration
 
 The exhaustive list of backend environment variables. Source of truth:
-[`apps/backend/.env.example`](https://github.com/willdady/platypus/blob/main/apps/backend/.env.example).
+[`apps/backend/.example.env`](https://github.com/willdady/platypus/blob/main/apps/backend/.example.env).
 For a guided walkthrough of configuring a deployment, see
 [Self-Hosting](/self-hosting); this page is the flat enumeration.
 
@@ -30,12 +30,12 @@ For a guided walkthrough of configuring a deployment, see
 | Variable          | Purpose                                                                                                                                                                                              | Default   | Required |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
 | `PORT`            | Port the backend HTTP server listens on.                                                                                                                                                             | `4001`    | No       |
-| `ALLOWED_ORIGINS` | Comma-separated origins allowed by CORS and better-auth's trusted origins. **No default in code** — an unset value stops the backend before it starts. `.env.example` ships `http://localhost:3001`. | _(none)_  | **Yes**  |
-| `DATABASE_URL`    | Postgres 17 connection string (with pgvector). **No default in code.** `.env.example` ships `postgres://postgres:mypassword@localhost:5432/postgres`.                                                | _(none)_  | **Yes**  |
+| `ALLOWED_ORIGINS` | Comma-separated origins allowed by CORS and better-auth's trusted origins. **No default in code** — an unset value stops the backend before it starts. `.example.env` ships `http://localhost:3001`. | _(none)_  | **Yes**  |
+| `DATABASE_URL`    | Postgres 17 connection string (with pgvector). **No default in code.** `.example.env` ships `postgres://postgres:mypassword@localhost:5432/postgres`.                                                | _(none)_  | **Yes**  |
 | `LOG_LEVEL`       | Logging verbosity (`trace`, `debug`, `info`, `warn`, `error`, `fatal`).                                                                                                                              | `info`    | No       |
 | `NODE_ENV`        | `production` writes logs as JSON lines to stdout and turns on better-auth's production checks; anything else pretty-prints logs for a terminal. The published image sets `production`.               | _(unset)_ | No       |
 | `TIMEZONE`        | IANA timezone (e.g. `America/New_York`, `Europe/London`) used by the **time Tools only** — see the note below.                                                                                       | `UTC`     | No       |
-| `NODE_OPTIONS`    | Node runtime flags. `.env.example` and `compose.yaml` ship `--disable-warning=ExperimentalWarning` to silence the experimental-feature warning.                                                      | _(none)_  | No       |
+| `NODE_OPTIONS`    | Node runtime flags. `.example.env` and `compose.yaml` ship `--disable-warning=ExperimentalWarning` to silence the experimental-feature warning.                                                      | _(none)_  | No       |
 
 <Callout type="warning">
   `TIMEZONE` is read in exactly one place: the `getCurrentTime` tool.
@@ -51,7 +51,7 @@ For a guided walkthrough of configuring a deployment, see
 
 | Variable                        | Purpose                                                                                                                                                                                                                                                                       | Default                                                                          | Required |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------- |
-| `PLATYPUS_PLUGINS`              | Comma-separated list of the **gate-able** Plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, plus any third-party ones.                                                                                                          | _(unset ⇒ no gate-able Plugins;_ `.env.example` _ships_ `@platypus/web-fetch`_)_ | No       |
+| `PLATYPUS_PLUGINS`              | Comma-separated list of the **gate-able** Plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, plus any third-party ones.                                                                                                          | _(unset ⇒ no gate-able Plugins;_ `.example.env` _ships_ `@platypus/web-fetch`_)_ | No       |
 | `PLATYPUS_PLUGIN_CONFIG_<NAME>` | One Plugin's deploy-time config and credentials as a JSON object, `{ "config": {…}, "credentials": {…} }`. `<NAME>` is the Plugin's manifest name without `@platypus/`, uppercased, with `-` as `_`: `PLATYPUS_PLUGIN_CONFIG_DOCKER`, `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX`. | _(unset)_                                                                        | No       |
 | `PLATYPUS_PLUGIN_CONFIG`        | **Deprecated; removed in the next major release.** Every Plugin's config in one JSON object keyed by manifest name. Migrate by moving each key's value into that Plugin's `PLATYPUS_PLUGIN_CONFIG_<NAME>`.                                                                    | _(unset)_                                                                        | No       |
 
@@ -98,7 +98,7 @@ for the seeding rule and the recovery path.
   Neither has a default **in code**. Against an empty database with either
   unset, the backend logs a fatal error and exits without starting the HTTP
   server — it does not retry. The `admin@example.com` / `admin123` pair you may
-  have seen is a value the shipped `.env.example` writes; a deployment that
+  have seen is a value the shipped `.example.env` writes; a deployment that
   builds its environment another way must set both explicitly. Change
   `ADMIN_PASSWORD` from the default on any network-reachable deployment.
 </Callout>

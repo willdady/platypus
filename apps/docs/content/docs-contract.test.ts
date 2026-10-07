@@ -250,9 +250,9 @@ const ENV_REFERENCE_PAGES = [BACKEND_REFERENCE_PAGE, FRONTEND_REFERENCE_PAGE];
  * containers, so either page discharges it.
  */
 const ENV_EXAMPLE_FILES: Record<string, string[]> = {
-  ".env.example": ENV_REFERENCE_PAGES,
-  "apps/backend/.env.example": [BACKEND_REFERENCE_PAGE],
-  "apps/frontend/.env.example": [FRONTEND_REFERENCE_PAGE],
+  ".example.env": ENV_REFERENCE_PAGES,
+  "apps/backend/.example.env": [BACKEND_REFERENCE_PAGE],
+  "apps/frontend/.example.env": [FRONTEND_REFERENCE_PAGE],
 };
 
 const ENV_EXAMPLE_NAMES = Object.keys(ENV_EXAMPLE_FILES);
@@ -264,12 +264,12 @@ const ENV_EXAMPLE_NAMES = Object.keys(ENV_EXAMPLE_FILES);
  * is told on the upgrade page instead, which no check here reads.
  *
  * An entry earns its place back only if a reference table itself needs to name a
- * variable that no `.env.example` ships any more.
+ * variable that no `.example.env` ships any more.
  */
 const REMOVED_VARS = new Set<string>([]);
 
 /**
- * Real variables that no `.env.example` ships, so the reference page is their
+ * Real variables that no `.example.env` ships, so the reference page is their
  * only home. The first two are read by the frontend (`next.config.ts` and the
  * About page) and neither is something a deployment normally sets.
  * `NODE_ENV` is set by the backend image, not in `.env`.
@@ -284,7 +284,7 @@ const VARS_WITHOUT_ENV_EXAMPLE_ENTRY = new Set([
 ]);
 
 /**
- * Assignments in a `.env.example`, including commented-out ones — a `# VAR=`
+ * Assignments in a `.example.env`, including commented-out ones — a `# VAR=`
  * line is how the file documents an optional setting, so it is still a variable
  * the reference page owes the reader a row for.
  */
@@ -320,7 +320,7 @@ const variableRows = (content: string): Map<string, number> => {
  * Whether a table row documents `name`. A row spelled `PREFIX_<NAME>` stands for
  * a family of variables, one per `<NAME>` — `PLATYPUS_PLUGIN_CONFIG_<NAME>` is
  * one variable per plugin — so it covers every assignment of `PREFIX_` followed
- * by a name, and a `.env.example` shows the family through one example member.
+ * by a name, and a `.example.env` shows the family through one example member.
  */
 const rowCovers = (row: string, name: string): boolean => {
   const family = row.match(/^([A-Z][A-Z0-9_]*_)<[A-Z]+>$/);
@@ -382,7 +382,7 @@ describe("environment variables", () => {
     ).toBeGreaterThan(20);
   });
 
-  it("gives every variable the .env.example files ship a row on its own page", () => {
+  it("gives every variable the .example.env files ship a row on its own page", () => {
     const violations: string[] = [];
     for (const [name, { origin, pages }] of declared) {
       const onOwedPage = pages.some((page) =>
@@ -407,7 +407,7 @@ describe("environment variables", () => {
     expectNoViolations(violations);
   });
 
-  it("names no variable the .env.example files do not ship", () => {
+  it("names no variable the .example.env files do not ship", () => {
     const violations: string[] = [];
     for (const [page, rows] of rowsByPage) {
       for (const [name, line] of rows) {
@@ -421,7 +421,7 @@ describe("environment variables", () => {
         if (REMOVED_VARS.has(name)) continue;
         if (VARS_WITHOUT_ENV_EXAMPLE_ENTRY.has(name)) continue;
         violations.push(
-          `apps/docs/content/${page}:${line} has a row for \`${name}\`, which no .env.example assigns.\n` +
+          `apps/docs/content/${page}:${line} has a row for \`${name}\`, which no .example.env assigns.\n` +
             `Source of truth: ${ENV_EXAMPLE_NAMES.join(", ")}.\n` +
             `If the variable was deliberately removed, add it to REMOVED_VARS in this file; ` +
             `if it is real but no example file ships it, add it to VARS_WITHOUT_ENV_EXAMPLE_ENTRY.`,
