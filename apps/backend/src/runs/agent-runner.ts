@@ -211,7 +211,7 @@ export class AgentRunner {
     modelMessages: ModelMessage[];
     /** What this setup decided, in the shape the drive and the metadata
      *  extractor both take. `prepDurationMs` is how long Turn resolution
-     *  (`CONTEXT.md`) took, in whole milliseconds — surfaced to Users as
+     *  (`GLOSSARY.md`) took, in whole milliseconds — surfaced to Users as
      *  "Preparation" once stamped onto the streamed message (issue #354). */
     facts: TurnFacts;
   }> {

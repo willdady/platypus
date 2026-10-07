@@ -114,4 +114,4 @@ the change: the body is for humans, the title is for the release machinery.
 
 - **Issue tracker** — GitHub issues on `willdady/platypus` via `gh`. See `docs/agents/issue-tracker.md`.
 - **Triage labels** — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-- **Domain docs** — `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+- **Domain docs** — `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

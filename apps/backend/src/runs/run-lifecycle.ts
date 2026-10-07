@@ -106,7 +106,7 @@ export const startRun = (params: {
   /** The Tool session this run must close, once it has one — see
    *  {@link RunLifecycle.adoptOrDispose}. One, not a list: a run resolves one
    *  turn, and a turn has exactly one session to dispose however many tool
-   *  sources it reached (`CONTEXT.md`, **Tool session**). */
+   *  sources it reached (`GLOSSARY.md`, **Tool session**). */
   let disposer: (() => Promise<void>) | undefined;
 
   /** Run the disposer without letting it break the path it is on — the guard

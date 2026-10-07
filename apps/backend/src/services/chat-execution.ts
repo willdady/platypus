@@ -113,7 +113,7 @@ export type ChatTurn = {
   resolved: ResolvedGeneration;
   /**
    * Search was requested and resolution served no search tools, so the turn
-   * runs without it — an **Unavailable capability** (`CONTEXT.md`), issue #522.
+   * runs without it — an **Unavailable capability** (`GLOSSARY.md`), issue #522.
    *
    * A sibling of `stream` and not a field on `resolved`, which describes the
    * turn's plan and is mirrored into run records: this is an outcome of

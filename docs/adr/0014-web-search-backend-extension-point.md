@@ -125,7 +125,7 @@ Platypus gains a fourth core-owned Extension point — a **Web-search backend** 
 The **Selection** consequence above ends "a stale id degrades to no search tools
 plus a warn-log rather than blocking the form". That outcome is now
 **reported to the User** as well as logged. It is the **Unavailable capability**
-of `CONTEXT.md`: a turn that asked for search and was served none carries a flag
+of `GLOSSARY.md`: a turn that asked for search and was served none carries a flag
 on its reply's metadata, and the Chat renders a notice under the answer. The
 model is never told, so nothing about the prompt or the tool set changes — a turn
 where search was unavailable is indistinguishable, to the model, from one that

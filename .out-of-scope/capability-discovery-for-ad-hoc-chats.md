@@ -16,7 +16,7 @@ generically stays open — see "What remains open" below.
 
 ### It inverts what an Agent is
 
-`CONTEXT.md` defines an Agent as "a configurable preset that pins a Provider,
+`GLOSSARY.md` defines an Agent as "a configurable preset that pins a Provider,
 model, Instructions, generation parameters, Tools, Skills, and Sub-Agents.
 Selecting an Agent on a Chat turn replaces direct Provider/model selection."
 Today that yields one teachable rule: **an Agent grants capability, and a bare

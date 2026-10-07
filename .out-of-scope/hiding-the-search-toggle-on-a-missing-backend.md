@@ -71,7 +71,7 @@ cheap read of one row.
 Report the turn. When a User requests search and Turn resolution builds no
 search tools, the turn's message metadata carries a flag and the Chat renders a
 one-line notice under the reply saying that search was unavailable. This is the
-**Unavailable capability** concept in `CONTEXT.md`.
+**Unavailable capability** concept in `GLOSSARY.md`.
 
 The reporting path beats the gate on every axis that matters here. It covers all
 three causes rather than one, because it tests the outcome ("no search tools were

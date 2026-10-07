@@ -15,7 +15,7 @@ the answer in Platypus is a second Agent, and that is the intended shape.
 
 ### The rule it breaks is load-bearing, not descriptive
 
-`CONTEXT.md` defines an Agent as "a configurable preset that pins a Provider,
+`GLOSSARY.md` defines an Agent as "a configurable preset that pins a Provider,
 model, Instructions, generation parameters, Tools, Skills, and Sub-Agents.
 Selecting an Agent on a Chat turn replaces direct Provider/model selection."
 

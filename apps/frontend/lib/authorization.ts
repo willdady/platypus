@@ -10,7 +10,7 @@
 export type OrgRole = "admin" | "member";
 
 /**
- * The three actors named in CONTEXT.md, ranked by the authority tier they
+ * The three actors named in GLOSSARY.md, ranked by the authority tier they
  * hold: Operator > Org Admin > Workspace Owner > plain Org member. A caller
  * cleared for a higher tier is always cleared for what a lower tier can do.
  */

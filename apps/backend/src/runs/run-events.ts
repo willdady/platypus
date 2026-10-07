@@ -14,7 +14,7 @@ import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 /**
  * A **Run timeline**'s in-memory half: the ordered **Run events** of one
  * headless run, recorded as they happen and drained by the sink in batches
- * (`CONTEXT.md`; ADR-0023).
+ * (`GLOSSARY.md`; ADR-0023).
  *
  * Everything about an event's shape is decided here — what is captured, which
  * clock each field reads, how an error is capped, when the ceiling cuts the

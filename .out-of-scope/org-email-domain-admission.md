@@ -17,7 +17,7 @@ spending the Organization row, or an env allowlist, to buy it.
 
 ### It inverts the authority tiering
 
-`CONTEXT.md` states the tiering plainly: authority over configuration runs
+`GLOSSARY.md` states the tiering plainly: authority over configuration runs
 **Operator → Org Admin → Workspace Owner**, each tier bounded by the tier above
 it. Holding an account sits _above_ the top of that chain — only a Super Admin
 creates an Organization, and an Org Admin's entire authority is scoped to the

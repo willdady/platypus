@@ -9,7 +9,7 @@ import { z } from "zod";
  * and every omission failed quietly.
  *
  * The sharp end of that was `agentWritable`. The rule "an Agent updates Widget
- * data only, and never an Embed's URL" (CONTEXT.md, **Dashboard** and
+ * data only, and never an Embed's URL" (GLOSSARY.md, **Dashboard** and
  * **Widget**) used to hold because the agent tool's list of writable types was
  * never edited to include Embed — an omission, not a decision. A contributor
  * adding a type and dutifully updating every list they found would have

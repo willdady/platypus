@@ -123,7 +123,7 @@ reports no usage, occupancy is unknown and Platypus computes nothing.
   wherever those resolve a model; only the measurement is scoped.
 - **"Context" now carries a third meaning.** The glossary already distinguished
   User Context from the composed System prompt; a model's Context window is a
-  third. `CONTEXT.md` defines Context window and Context occupancy and disclaims
+  third. `GLOSSARY.md` defines Context window and Context occupancy and disclaims
   the collision on the existing Context entry, and the user-facing docs extend
   their own "two different things are called Context" section to three.
 
@@ -170,7 +170,7 @@ renders.
   against 340 actually queued up.
 - **Nothing new is measured.** The figure is the last reading's input plus its
   output, both vendor-reported. The derivation now has a name (**Projected
-  occupancy**, `CONTEXT.md`) and one implementation (`nextTurnOccupancy` in
+  occupancy**, `GLOSSARY.md`) and one implementation (`nextTurnOccupancy` in
   `packages/schemas`) rather than being open-coded where each consumer needed it.
 - **"Derivable exactly" above is too strong, and measurement says so.** Three
   consecutive turns on a reasoning model projected 275 against an actual 260, and

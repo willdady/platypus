@@ -55,7 +55,7 @@ Platypus will not build the messaging Gateway that ADR-0015 decided on. Instead,
 - **Every call writes one structured log line** at `info`, in a documented and stable format, as the Inbound Trigger call log does. It records Organization, Workspace, endpoint, token, method, outcome, reason, Task and Chat, never message content.
 - **Parts.** Inbound: text and data parts. Data parts are rendered as labelled JSON, like Inbound Trigger inputs. Outbound: the final assistant text as a Task artifact. File parts in either direction are deferred until a client needs them. Inbound would reuse the composer upload path (ADR-0028), and outbound would offer sandbox downloads as signed URLs.
 - **Deleting an endpoint, its Agent, or a Shared Agent's Attachment** deletes the endpoint and its tokens. Its Chats stay, as Chats do when their Agent is deleted.
-- **Supersedes ADR-0015** in full. ADR-0030's reference to the Gateway as the interactive path is replaced by this ADR. CONTEXT.md's Gateway vocabulary and the ROADMAP Messaging Gateway section are withdrawn with it.
+- **Supersedes ADR-0015** in full. ADR-0030's reference to the Gateway as the interactive path is replaced by this ADR. GLOSSARY.md's Gateway vocabulary and the ROADMAP Messaging Gateway section are withdrawn with it.
 
 ## Amendment — only an expired token stamps last rejected (#1243)
 

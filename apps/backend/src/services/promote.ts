@@ -12,7 +12,7 @@ import {
 } from "./scoped-resource.ts";
 
 /**
- * Promote (CONTEXT.md): the Org-Admin action that re-scopes a Workspace-private
+ * Promote (GLOSSARY.md): the Org-Admin action that re-scopes a Workspace-private
  * Scoped resource to Organization scope, turning it into a **Shared resource**
  * and auto-attaching its origin Workspace so it stays visible and usable there
  * (ADR-0007). Editing thereafter happens on the Organization surface.
