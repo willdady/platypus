@@ -1,5 +1,69 @@
 # Changelog
 
+## [3.16.0](https://github.com/willdady/platypus/compare/v3.15.2...v3.16.0) (2026-10-07)
+
+
+### Features
+
+* A2A load cap and call log ([#1268](https://github.com/willdady/platypus/issues/1268)) ([ea3b349](https://github.com/willdady/platypus/commit/ea3b3490a4804f66872b992efc5eebfaf17ce898))
+* A2A push notifications when a Task ends ([#1265](https://github.com/willdady/platypus/issues/1265)) ([9bb1e0c](https://github.com/willdady/platypus/commit/9bb1e0c5b9cf3f6b1c89e74cd1bbf66d0efb555f))
+* A2A token expiry, reminders and regeneration ([#1260](https://github.com/willdady/platypus/issues/1260)) ([a7cab86](https://github.com/willdady/platypus/commit/a7cab86b4773338fbf1faf4742dc1978c1eb7e69))
+* add a test curl command to the Inbound Trigger token dialog and stop flagging new tokens as expiring ([#1227](https://github.com/willdady/platypus/issues/1227)) ([a7a692f](https://github.com/willdady/platypus/commit/a7a692fd3b6380f21aec77eb6f35053b3b47b585))
+* add A2A endpoints, the Organization A2A gate and the public Agent Card ([#1252](https://github.com/willdady/platypus/issues/1252)) ([8e32e26](https://github.com/willdady/platypus/commit/8e32e260b665d4e14837c712fda026c8ba7bb9e7))
+* add Inbound Triggers to fire an Agent from an authenticated HTTP call ([#1182](https://github.com/willdady/platypus/issues/1182)) ([ad64f5e](https://github.com/willdady/platypus/commit/ad64f5e268917b94aa6de21ff33e550e8801f5a0))
+* **backend:** cancel A2A Tasks with CancelTask ([#1270](https://github.com/willdady/platypus/issues/1270)) ([7b9725b](https://github.com/willdady/platypus/commit/7b9725bef29006878e622706b15422c37ae655ed))
+* **backend:** every stream on an A2A Task gets the same events ([a247852](https://github.com/willdady/platypus/commit/a2478527c8fcec1b1af1c569f76753f443cf90a2))
+* **backend:** list an A2A token's Tasks with ListTasks ([#1292](https://github.com/willdady/platypus/issues/1292)) ([7aeaff8](https://github.com/willdady/platypus/commit/7aeaff866d9b27510ca15642df19124bffb0ccc6))
+* **backend:** stream A2A Tasks with SendStreamingMessage and SubscribeToTask ([#1269](https://github.com/willdady/platypus/issues/1269)) ([21a1843](https://github.com/willdady/platypus/commit/21a184394acafaa15920b319756297f9cb11bec1))
+* hold an A2A conversation with SendMessage and GetTask ([#1262](https://github.com/willdady/platypus/issues/1262)) ([90e1feb](https://github.com/willdady/platypus/commit/90e1feb7ac6560f9b401e9d19b36de0abc19b831))
+* installer reports progress, checks ports first, and writes a README ([#1221](https://github.com/willdady/platypus/issues/1221)) ([3193ae3](https://github.com/willdady/platypus/commit/3193ae35b09ff8673a06b1d639909d555399c922))
+* let Org Admins see and revoke every A2A endpoint and token ([#1261](https://github.com/willdady/platypus/issues/1261)) ([e93d79a](https://github.com/willdady/platypus/commit/e93d79a0bc8fa5f83fc07b0d2428f9fa4bc185e2))
+* memory settings on A2A endpoints ([#1264](https://github.com/willdady/platypus/issues/1264)) ([6bcdc93](https://github.com/willdady/platypus/commit/6bcdc9330cf1d44f7b3da39e73ba53caa9dc1787))
+
+
+### Bug Fixes
+
+* A2A docs say the run cap is per instance and what regenerating a token keeps ([65f0d40](https://github.com/willdady/platypus/commit/65f0d403fe90586f85fbfc1e2c978f1037ea5480))
+* an A2A Task keeps its final state after its Chat moves on ([#1267](https://github.com/willdady/platypus/issues/1267)) ([fbd360d](https://github.com/willdady/platypus/commit/fbd360d74b4bf30e63ba4279c27b42be1e5c6160))
+* **backend:** a banned Owner's Triggers and A2A endpoints stop acting as them ([#1322](https://github.com/willdady/platypus/issues/1322)) ([64115d8](https://github.com/willdady/platypus/commit/64115d890a69a666c08cdea579d091ee66108d02))
+* **backend:** a run lost to a crash or deploy frees its Chat within a minute ([#1324](https://github.com/willdady/platypus/issues/1324)) ([b165730](https://github.com/willdady/platypus/commit/b165730f8c65aaac0be692c73db59f04e7be603c))
+* **backend:** accept an A2A data part holding null ([ea006e9](https://github.com/willdady/platypus/commit/ea006e9d069cef4d09a1225d7fe134a5fe10368d)), closes [#1338](https://github.com/willdady/platypus/issues/1338)
+* **backend:** an A2A Chat honours its endpoint's Include Memories for Memory tools and Owner turns ([#1321](https://github.com/willdady/platypus/issues/1321)) ([7b7e2d1](https://github.com/willdady/platypus/commit/7b7e2d13bae0b79a6d091f2e17aaf747574bd02a))
+* **backend:** an A2A message sent twice at once starts one conversation ([#1318](https://github.com/willdady/platypus/issues/1318)) ([ed51f97](https://github.com/willdady/platypus/commit/ed51f973d89364300c31b79ac9b59a2b98d6932d))
+* **backend:** an A2A Task reads working from its first output, and a null data part is accepted ([#1342](https://github.com/willdady/platypus/issues/1342)) ([e00c9fc](https://github.com/willdady/platypus/commit/e00c9fcbf1f07055c37f0d9c181149469abf6f3d))
+* **backend:** an A2A Task reads working while its run's first step streams ([82b1486](https://github.com/willdady/platypus/commit/82b1486181a562902eaa8f218314c3d29999f32a)), closes [#1337](https://github.com/willdady/platypus/issues/1337)
+* **backend:** an A2A token reaches only the Chats and Tasks it started ([#1316](https://github.com/willdady/platypus/issues/1316)) ([cc422b7](https://github.com/willdady/platypus/commit/cc422b7c282864fd62f16e67e1bf017e9fdf3430))
+* **backend:** an ended A2A Task keeps its reply and state, and every end is pushed ([#1325](https://github.com/willdady/platypus/issues/1325)) ([44d17b5](https://github.com/willdady/platypus/commit/44d17b51a1e461fec35bd627b9243e8a13ddc429))
+* **backend:** answer malformed A2A JSON-RPC with the spec's error codes ([367fdb6](https://github.com/willdady/platypus/commit/367fdb6c749eb4012094f115ac1f15a90d6843e5))
+* **backend:** bound the last-used throttle maps for A2A tokens and Inbound Triggers ([#1287](https://github.com/willdady/platypus/issues/1287)) ([7fe6295](https://github.com/willdady/platypus/commit/7fe6295b0d166de5c7bb683a72d33bc5941729d2))
+* **backend:** cap concurrent A2A streams and blocking waits ([#1323](https://github.com/willdady/platypus/issues/1323)) ([59c8a21](https://github.com/willdady/platypus/commit/59c8a21659e0d326c5d9e4528e753bc77d1865bd))
+* **backend:** cap the A2A JSON-RPC request body ([#1280](https://github.com/willdady/platypus/issues/1280)) ([b55d547](https://github.com/willdady/platypus/commit/b55d54710950b4637f6cb13d6c3df78b05b1a57a))
+* **backend:** close A2A TCK gaps and accept ADR-0032 ([#1283](https://github.com/willdady/platypus/issues/1283)) ([446ad69](https://github.com/willdady/platypus/commit/446ad691cf0fe5342ff400b763dac9c1ce232536))
+* **backend:** close small A2A 1.0 conformance gaps in the Agent Card and request params ([93d6bee](https://github.com/willdady/platypus/commit/93d6bee93d7d836f6141b2639547bb9b6a29c8f9))
+* **backend:** frame A2A data parts as data, not instructions ([#1279](https://github.com/willdady/platypus/issues/1279)) ([825b09d](https://github.com/willdady/platypus/commit/825b09d0ea0549cda0f8a3afdac7dde8c7a2d76b))
+* **backend:** harden A2A push notifications against internal requests and replay ([#1319](https://github.com/willdady/platypus/issues/1319)) ([9a08dff](https://github.com/willdady/platypus/commit/9a08dffcf7c84e5a3630af9ee6894924fe21924e))
+* **backend:** hold the one-run-per-Chat lock and cancel across backend instances ([#1253](https://github.com/willdady/platypus/issues/1253)) ([249d415](https://github.com/willdady/platypus/commit/249d415a6e423af2b21cfc2093057f314c55a41c))
+* **backend:** keep an A2A Chat's client label after its token is deleted ([#1286](https://github.com/willdady/platypus/issues/1286)) ([58f6ebe](https://github.com/willdady/platypus/commit/58f6ebe23764f03f0380ac0ec65a8e71396e2b8d))
+* **backend:** leave an Inbound Trigger's Last rejected alone on a 429 at capacity ([#1288](https://github.com/willdady/platypus/issues/1288)) ([92e8cef](https://github.com/willdady/platypus/commit/92e8cefafa6914e94b4e5988671a3f5589d8a33b))
+* **backend:** let a super admin's Workspace Triggers and A2A endpoints run without Org membership ([#1291](https://github.com/willdady/platypus/issues/1291)) ([1fbd8ff](https://github.com/willdady/platypus/commit/1fbd8ff91113a1b6dd82be0c84082a85fc1a3667))
+* **backend:** make provider memory_extraction_model_id NOT NULL in migrations ([#1353](https://github.com/willdady/platypus/issues/1353)) ([36102da](https://github.com/willdady/platypus/commit/36102daabc1712ddb47f4dd2865dc206a645acc5))
+* **backend:** only the call that starts an A2A turn creates its Task ([#1317](https://github.com/willdady/platypus/issues/1317)) ([c81acef](https://github.com/willdady/platypus/commit/c81aceff320207f4a87807236b4a7ccf5744cc5e))
+* **backend:** record an A2A Task's end before its Chat is released ([92e6506](https://github.com/willdady/platypus/commit/92e6506bf5b43bdb67a867f197474ea0e9166962))
+* **backend:** refuse a busy A2A Chat with a typed error ([#1278](https://github.com/willdady/platypus/issues/1278)) ([820b07d](https://github.com/willdady/platypus/commit/820b07da4aa24daada776e00576250876092cd34))
+* **backend:** refuse a busy A2A Chat with its Task before taking a run slot ([#1285](https://github.com/willdady/platypus/issues/1285)) ([bd245ac](https://github.com/willdady/platypus/commit/bd245ac19a9fe16932b05b6bda61e5c920623d31))
+* **backend:** revoking A2A access stops the work already running ([#1320](https://github.com/willdady/platypus/issues/1320)) ([dd89994](https://github.com/willdady/platypus/commit/dd899943e13861e6ec46bc3263b543d5b9c68888))
+* **docs:** correct backend configuration, Workspace settings and Trigger claims ([#1224](https://github.com/willdady/platypus/issues/1224)) ([a6c2372](https://github.com/willdady/platypus/commit/a6c23726c2baf63d02cbd7a3a542d007752d27cd))
+* **docs:** correct Inbound Trigger gate and Last rejected claims ([#1230](https://github.com/willdady/platypus/issues/1230)) ([b7cce3c](https://github.com/willdady/platypus/commit/b7cce3cbc4159f653472510e8b98ad8598711572))
+* **docs:** say queueing Inbound Trigger calls for a busy record is the caller's job ([#1235](https://github.com/willdady/platypus/issues/1235)) ([60a123c](https://github.com/willdady/platypus/commit/60a123c103a6951052fcdd20026842dbf6d389d4))
+* **frontend:** always show an issued A2A token, and tidy the A2A endpoint screens ([ad3876f](https://github.com/willdady/platypus/commit/ad3876f11585720bba7dd222df718cb47414f2fd))
+* **frontend:** give every Alert an icon and title, and use Alert for form notices ([#1232](https://github.com/willdady/platypus/issues/1232)) ([e64a1f7](https://github.com/willdady/platypus/commit/e64a1f7b9533bd77e09b1a8ebc915fcb16691ae6))
+* **frontend:** hide Inbound Trigger fields when the Organization disallows them ([#1225](https://github.com/willdady/platypus/issues/1225)) ([1e5c305](https://github.com/willdady/platypus/commit/1e5c3053b235db509a454a12e32a2328933c5255))
+* **frontend:** lock the Workspace Inbound Trigger switch unless the Organization allows Selected workspaces ([#1226](https://github.com/willdady/platypus/issues/1226)) ([0acbce3](https://github.com/willdady/platypus/commit/0acbce3f7f39973ebfdec63a4680c0562856d8f9))
+* **frontend:** make copy buttons work when Platypus is served over plain HTTP ([#1234](https://github.com/willdady/platypus/issues/1234)) ([cf1d6de](https://github.com/willdady/platypus/commit/cf1d6de8b453820c9736fb5ff5d582db71d91287))
+* **frontend:** open the workspace wizard's Provider step on Shared providers ([#1222](https://github.com/willdady/platypus/issues/1222)) ([955bc28](https://github.com/willdady/platypus/commit/955bc28183b149459e29a2aa08e739fbc7ded247))
+* **frontend:** show the focus border on outline buttons in dark mode ([#1236](https://github.com/willdady/platypus/issues/1236)) ([5d447e5](https://github.com/willdady/platypus/commit/5d447e503dba42adf64dcc07f53c02710e22e3b8))
+* **frontend:** smooth the A2A endpoint create flow ([#1282](https://github.com/willdady/platypus/issues/1282)) ([1dfd537](https://github.com/willdady/platypus/commit/1dfd537bfec6cb8502316e53c4cc478fc1199af7))
+
 ## [3.15.2](https://github.com/willdady/platypus/compare/v3.15.1...v3.15.2) (2026-10-03)
 
 
