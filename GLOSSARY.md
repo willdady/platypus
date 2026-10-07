@@ -8,7 +8,7 @@ Shared vocabulary for the Platypus codebase. Use these terms exactly when discus
 The top-level tenant. Owns Workspaces, organization-scoped Providers, and member roles.
 
 **Workspace**:
-A scoped environment inside an Organization that contains Chats, Agents, MCPs, Skills, and workspace-scoped Providers. Owned by exactly one User within the Organization; not shared between Users.
+A scoped environment inside an Organization that contains Chats, Agents, MCPs, Skills, and workspace-scoped Providers. Owned by exactly one User within the Organization at a time; not shared between Users. The Organization, not the Owner, holds it: an Org Admin can read its Chats and can hand it on through a **Workspace transfer**.
 
 **Chat**:
 A persisted conversation in a Workspace. Composed of its messages, which may hold **Alternatives**, and the configuration used to produce the assistant's replies.
@@ -248,8 +248,12 @@ A User with the `admin` role in an Organization. Configures credential- and reac
 _Avoid_: organization owner.
 
 **Workspace Owner**:
-The single User who owns a Workspace. Always manages composition (Agents, Skills, Chats); manages credential- and reach-bearing resources only where an Org Admin has delegated it.
+The single User who owns a Workspace. Always manages composition (Agents, Skills, Chats); manages credential- and reach-bearing resources only where an Org Admin has delegated it. Assigned by an Org Admin at creation and changed only by a **Workspace transfer**.
 _Avoid_: workspace user, member.
+
+**Workspace transfer**:
+The Org-Admin action that makes another member of the Organization the **Workspace Owner**, with or without the Workspace's history. Nothing that acts as the Owner carries across: Triggers are switched off and tokens revoked.
+_Avoid_: handover, reassignment, ownership change.
 
 **Scoped resource**:
 An Agent, Skill, MCP, or Provider whose row lives at exactly one scope — a Workspace _or_ the Organization, mutually exclusive (the dual-scope shape). Resolved relative to a Workspace it yields a `(row, scope)` pair: Workspace-scoped rows are visible directly; Organization-scoped rows are visible only where an **Attachment** exists, and are locked against Workspace-surface mutation. The **Shared resource** is the Organization-scoped case of a Scoped resource.
