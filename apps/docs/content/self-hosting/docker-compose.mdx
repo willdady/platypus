@@ -213,7 +213,7 @@ clone of the repository.
 ```bash
 git clone https://github.com/willdady/platypus.git
 cd platypus
-cp .env.example .env
+cp .example.env .env
 ```
 
 Edit `.env`. At minimum set:
@@ -229,7 +229,7 @@ Edit `.env`. At minimum set:
 - `FRONTEND_URL` — the URL the backend uses to build links back into the web
   app (resource links in tool output, MCP OAuth redirects).
 
-The shipped `.env.example` sets all four URL-shaped values for `localhost`, so
+The shipped `.example.env` sets all four URL-shaped values for `localhost`, so
 a laptop deployment works unedited.
 
 If you serve the frontend and backend as two subdomains of one parent domain,
@@ -307,7 +307,7 @@ nothing. Manage users from the app after first boot.
   default in code**. With either unset the backend logs `... environment
   variable is required to seed the initial admin user` and exits non-zero
   without starting the HTTP server — it does not retry, because a missing
-  variable fails the same way every time. The shipped `.env.example` supplies
+  variable fails the same way every time. The shipped `.example.env` supplies
   `admin@example.com` / `admin123`, but a deployment that doesn't start from
   that file (Kubernetes, a hand-rolled env) gets nothing.
 </Callout>
@@ -350,7 +350,7 @@ docker compose up -d
 
 The installer generates a random password for `admin@example.com` unless you
 set `ADMIN_EMAIL` / `ADMIN_PASSWORD`. A manual install starts from the shipped
-`.env.example`, which supplies `admin@example.com` / `admin123`: **override
+`.example.env`, which supplies `admin@example.com` / `admin123`: **override
 these** by editing `.env` before first boot. Either way, the values in place at
 seed time are the ones that stick. Change the password from the in-app account
 settings after you first sign in.

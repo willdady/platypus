@@ -42,15 +42,15 @@ This is the from-source workflow for contributors. (To simply run Platypus, use 
 2. **Configure environment** — create `.env` files for both apps:
 
    ```bash
-   cp apps/frontend/.env.example apps/frontend/.env
-   cp apps/backend/.env.example apps/backend/.env
+   cp apps/frontend/.example.env apps/frontend/.env
+   cp apps/backend/.example.env apps/backend/.env
    ```
 
    In `apps/backend/.env`, set at least:
    - `BETTER_AUTH_SECRET` — a secure random string (minimum 32 characters).
    - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — credentials for the initial admin user.
 
-   See the comments in each `.env.example` and the [configuration reference](https://docs.platypus.chat/reference) for all options.
+   See the comments in each `.example.env` and the [configuration reference](https://docs.platypus.chat/reference) for all options.
 
 3. **Start the development server** (frontend, backend, and a local Postgres container):
 
@@ -138,7 +138,7 @@ chore(tests): add missing test coverage
 1. Ensure your code passes all tests (`pnpm test`) and is formatted (`pnpm format`; CI runs `pnpm format:check`).
 2. Write clear, descriptive commit messages in English, following the conventions above.
 3. Update the docs in `apps/docs/content` in the same PR, not a follow-up one.
-   If you changed an `.env.example`, a user-facing limit or enum in
+   If you changed an `.example.env`, a user-facing limit or enum in
    `packages/schemas`, anything under `apps/backend/src/plugins`, or a visible
    label or field in the frontend, a page needs editing. `pnpm test` fails when
    the reference tables, webhook events, core plugin names, field limits, or

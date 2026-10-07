@@ -142,7 +142,7 @@ need installing — see [Installing Plugins](/extending/installing-plugins).
 **The default:** `PLATYPUS_PLUGINS` has **no default in code**. Unset or empty
 means _no gate-able plugins_ — you get the always-on core Tool sets and nothing
 else, including no web-fetch. The `@platypus/web-fetch` you may have seen quoted
-as "the default" is a value the shipped `.env.example` writes, not a fallback the
+as "the default" is a value the shipped `.example.env` writes, not a fallback the
 backend applies:
 
 ```
@@ -150,7 +150,7 @@ PLATYPUS_PLUGINS=@platypus/web-fetch
 ```
 
 Since `compose.yaml` reads the backend's `env_file: .env`, a deployment seeded
-from `.env.example` gets that list. A deployment that builds its environment
+from `.example.env` gets that list. A deployment that builds its environment
 some other way — Kubernetes, a secret manager, a hand-written `.env` — gets an
 empty list unless it says otherwise, and silently runs without web-fetch.
 

@@ -105,8 +105,10 @@ This install would reuse it, and the admin password printed at the end wouldn't 
   local raw="https://raw.githubusercontent.com/$REPO/v$version"
   curl -fsSL "$raw/compose.yaml" -o "$dir/compose.yaml" ||
     fail "could not download compose.yaml for v$version. Check that the release exists."
-  curl -fsSL "$raw/.env.example" -o "$dir/.env.example" ||
-    fail "could not download .env.example for v$version."
+  # Releases up to 3.15.x ship the template as .env.example.
+  curl -fsSL "$raw/.example.env" -o "$dir/.example.env" 2>/dev/null ||
+    curl -fsSL "$raw/.env.example" -o "$dir/.example.env" ||
+    fail "could not download .example.env for v$version."
 
   cat >"$dir/compose.override.yaml" <<EOF
 services:
@@ -116,7 +118,7 @@ services:
     image: willdady/platypus-frontend:$version
 EOF
 
-  # --- Write .env: the release's .env.example with our values substituted. ---
+  # --- Write .env: the release's .example.env with our values substituted. ---
   (
     umask 077
     V_BETTER_AUTH_SECRET="$secret" \
@@ -131,13 +133,13 @@ EOF
           if (("V_" key) in ENVIRON) $0 = key "='\''" ENVIRON["V_" key] "'\''"
         }
         { print }
-      ' "$dir/.env.example" >"$dir/.env.tmp"
+      ' "$dir/.example.env" >"$dir/.env.tmp"
   )
   local key
   for key in BETTER_AUTH_SECRET ADMIN_EMAIL ADMIN_PASSWORD FRONTEND_URL BACKEND_URL ALLOWED_ORIGINS; do
     grep -q "^$key='" "$dir/.env.tmp" || {
       rm -f "$dir/.env.tmp"
-      fail "the v$version .env.example has no $key line, so this installer can't configure it."
+      fail "the v$version .example.env has no $key line, so this installer can't configure it."
     }
   done
   chmod 600 "$dir/.env.tmp"

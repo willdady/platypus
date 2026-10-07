@@ -5,11 +5,11 @@
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/.env.example",
+        "$TURBO_ROOT$/.example.env",
         "$TURBO_ROOT$/compose.yaml",
         "$TURBO_ROOT$/apps/backend/Dockerfile",
-        "$TURBO_ROOT$/apps/backend/.env.example",
-        "$TURBO_ROOT$/apps/frontend/.env.example",
+        "$TURBO_ROOT$/apps/backend/.example.env",
+        "$TURBO_ROOT$/apps/frontend/.example.env",
         "$TURBO_ROOT$/apps/backend/src/plugins/builtin.ts",
         "$TURBO_ROOT$/apps/backend/src/tools/closers.ts",
         "$TURBO_ROOT$/apps/backend/src/services/trigger-firing.ts",

@@ -44,7 +44,7 @@ You need Docker, Node.js 26 and pnpm. Run every command from the repository root
    [Deploy with Docker Compose](https://docs.platypus.chat/self-hosting/docker-compose):
 
    ```bash
-   cp .env.example .env
+   cp .example.env .env
    ```
 
 4. Build the image and start the stack with the override:

@@ -18,5 +18,5 @@
 
 - [ ] The **PR title** is a Conventional Commit subject (`feat:`, `fix:` or `chore:`, optional scope). This is squash-merged as the commit on `main` and is what the changelog and version bump are built from — a title without one means the change ships with neither.
 - [ ] **The change is covered by tests.** New behaviour gets tests; a bug fix gets a test that fails without the fix. A change with no test is one nothing stops from coming back — say so in the description if you believe this one genuinely cannot be tested.
-- [ ] Docs in `apps/docs/content` are updated **in this PR** if it touched an `.env.example`, a user-facing limit or enum in `packages/schemas`, anything under `apps/backend/src/plugins`, or a visible label or field in the frontend.
+- [ ] Docs in `apps/docs/content` are updated **in this PR** if it touched an `.example.env`, a user-facing limit or enum in `packages/schemas`, anything under `apps/backend/src/plugins`, or a visible label or field in the frontend.
 - [ ] `pnpm test`, `pnpm typecheck` and `pnpm format` pass locally.
