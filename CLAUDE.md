@@ -93,22 +93,7 @@ chore: update dependencies
 
 ## Git PR Standards
 
-**The PR title MUST be a Conventional Commit subject** — same strict types as above.
-`main` squash-merges with the PR title as the commit subject, so the title is what
-ends up in history; the individual commit subjects on the branch are discarded.
-
-Titling the PR correctly is the whole of it, and it matters more than it looks:
-
-- release-please builds the changelog and the version bump **only** from Conventional
-  Commit subjects on `main`. A PR titled `Add web search` merges as a commit release-please
-  cannot read, so the feature ships with no changelog entry and no minor bump.
-- `main` is protected, so a subject that lands wrong can only be corrected by rewriting
-  published history. Getting the title right costs nothing; fixing it later costs a
-  force-push.
-
-Set the title when you open the PR, and re-check it before requesting a merge — `gh pr
-edit <n> --title "..."` if it drifted. This applies to a PR whose body already explains
-the change: the body is for humans, the title is for the release machinery.
+PR title = Conventional Commit subject (`feat`/`fix`/`chore`); CI enforces it.
 
 ## Agent Skills
 
