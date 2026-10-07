@@ -9,7 +9,7 @@ Platypus ships user- and contributor-facing docs as a **Nextra 4** app at `apps/
 rather than adopting a separately-styled framework like Docusaurus. The site is the
 **single source of truth for narrative content** (setup, concepts, guides, extension
 points); `README.md` keeps a short quick-start and links in, while the internal
-`CONTEXT.md` glossary and `docs/adr/` are **not published** — the public "Concepts" pages
+`GLOSSARY.md` glossary and `docs/adr/` are **not published** — the public "Concepts" pages
 are written independently for end users. It is **excluded from the self-hosted app
 runtime**: no Docker image, absent from `compose.yaml` and `build-and-push.yml`. It
 deploys independently as its own Cloudflare Worker via OpenNext
@@ -39,7 +39,7 @@ snapshot/version-switcher.
   dropdown on the public site.
 - `apps/docs` carries Turbo `build`/`dev`/`lint` tasks but no `build-docker`; it is kept
   out of the default `pnpm dev` loop (opt-in via `pnpm --filter docs dev`).
-- The public site and `CONTEXT.md` cover overlapping subjects for different readers; they
+- The public site and `GLOSSARY.md` cover overlapping subjects for different readers; they
   must be maintained independently and may legitimately diverge in voice and depth.
 - Top-level information architecture follows audience/journey (Getting Started,
   Self-Hosting, Concepts, Building with Platypus, Extending, Reference).
@@ -65,7 +65,7 @@ for serving from a CDN, leaving the host deliberately deferred. We now deploy th
   _where the public docs site is hosted_, not the self-hosted-from-git-tag model.
 
 This supersedes "built to a static export … served from a CDN" and the deferred-host note;
-the rest of the ADR (Nextra choice, latest-only, IA, independence from `CONTEXT.md`) stands.
+the rest of the ADR (Nextra choice, latest-only, IA, independence from `GLOSSARY.md`) stands.
 
 ## Update (2026-07-27)
 

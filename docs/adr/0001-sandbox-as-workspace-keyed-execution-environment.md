@@ -10,7 +10,7 @@ A Sandbox is a configured, isolated execution environment registered on a Worksp
 
 - **Provider variant.** Rejected: Provider carries credentials for an AI vendor and is referenced by an Agent's model selection; conflating it with a stateful execution environment muddles the glossary.
 - **MCP server.** Rejected: MCP is the open-ended "expose arbitrary tools" surface. Sandbox is the _opposite_ — a fixed contract every backend implements. Keeping them separate preserves both stories.
-- **Ephemeral per Chat turn.** Rejected: kills the filesystem-state-across-turns workflow that is the entire point of the feature. Workspaces are single-user (see `CONTEXT.md`), so persistent shared fs state inside a Workspace has no cross-tenant risk.
+- **Ephemeral per Chat turn.** Rejected: kills the filesystem-state-across-turns workflow that is the entire point of the feature. Workspaces are single-user (see `GLOSSARY.md`), so persistent shared fs state inside a Workspace has no cross-tenant risk.
 - **Many Sandboxes per Workspace.** Rejected: requires an additional disambiguator in the tool context and a UX for picking between them. Defer until there's evidence of demand.
 - **Org-scoped Sandboxes.** Rejected for v1: filesystem state doesn't generalise across Workspaces, so sharing would only share credentials — minor benefit, extra config layer. Revisit if multi-Workspace credential reuse becomes painful.
 

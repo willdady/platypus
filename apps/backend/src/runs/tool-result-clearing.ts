@@ -11,7 +11,7 @@ import {
  * Replaces the content of an older, allowlisted tool result in what one model
  * call receives, leaving the tool call and the tool-result part themselves in
  * place — only `output` changes. Send-time only: this never touches what is
- * persisted or what a User sees (`CONTEXT.md` — Tool-result clearing).
+ * persisted or what a User sees (`GLOSSARY.md` — Tool-result clearing).
  *
  * A pure function over `ModelMessage[]` plus occupancy and the declared
  * window, exactly the shape `runs/tool-result-clearing.test.ts` exercises

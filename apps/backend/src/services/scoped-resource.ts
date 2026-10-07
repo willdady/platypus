@@ -12,7 +12,7 @@ import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 import { isResourceListedInBlueprint } from "./blueprint-guard.ts";
 
 /**
- * The **Scoped resource** (CONTEXT.md): an Agent, Skill, MCP, or Provider whose
+ * The **Scoped resource** (GLOSSARY.md): an Agent, Skill, MCP, or Provider whose
  * row lives at exactly one scope — a Workspace or the Organization, mutually
  * exclusive (ADR-0007). Resolved relative to a Workspace it yields a
  * `(row, scope)` pair: Workspace-scoped rows are visible directly;

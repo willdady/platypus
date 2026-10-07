@@ -20,7 +20,7 @@ capabilities** without maintaining a fork. Its extension points are, by design,
 - a **messaging gateway** — planned as a third
 
 The extension-point set is intentionally **fixed** — "The set is fixed — Plugins
-cannot define new ones" (CONTEXT.md). A plugin fills a core-owned slot; it does
+cannot define new ones" (GLOSSARY.md). A plugin fills a core-owned slot; it does
 not open a new _category_ of slot, and human-facing rendering is a category core
 deliberately never opened. ADR-0013 draws the boundary the other way too:
 plugins run **in-process with no isolation**, on the premise that everything a

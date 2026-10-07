@@ -2628,7 +2628,7 @@ export type RunEventError = z.infer<typeof runEventErrorSchema>;
 
 /**
  * A durable, timestamped record of one thing that happened during a Trigger
- * run — see **Run event** in `CONTEXT.md`. Carries what it was, when it
+ * run — see **Run event** in `GLOSSARY.md`. Carries what it was, when it
  * started, how long it took and how it ended; never what it said (ADR-0023).
  *
  * `startedAt` is an absolute wall-clock instant in epoch milliseconds, so it

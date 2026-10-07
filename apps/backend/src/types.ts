@@ -39,7 +39,7 @@ export type ChatMessageMetadata = {
   /**
    * Search was requested for this turn and Turn resolution served no search
    * tools, so the reply was written without it — the **Unavailable capability**
-   * of `CONTEXT.md`. The model was not told; the Chat renders a notice under the
+   * of `GLOSSARY.md`. The model was not told; the Chat renders a notice under the
    * reply.
    *
    * Outcome-based, not cause-based: it covers an unregistered backend id, and a
@@ -102,7 +102,7 @@ export type ChatMessageMetadata = {
     outputTokens: number | null;
   } | null;
   /**
-   * The turn's billed Token usage (`CONTEXT.md`): the vendor's reported input
+   * The turn's billed Token usage (`GLOSSARY.md`): the vendor's reported input
    * and output counts folded across every model call the turn made. A sum,
    * legitimately, because each call is billed separately — distinct from
    * `contextOccupancy`, which is a last value and means something else
@@ -118,7 +118,7 @@ export type ChatMessageMetadata = {
   } & CachedInputTokens;
   /**
    * How long Turn resolution took, in whole milliseconds, before the model
-   * request was sent. Surfaced to Users as **Preparation** (`CONTEXT.md`).
+   * request was sent. Surfaced to Users as **Preparation** (`GLOSSARY.md`).
    *
    * Known before the stream exists — Turn resolution has already finished by
    * the time this message starts — so it rides `start` the same way `agentId`
@@ -128,7 +128,7 @@ export type ChatMessageMetadata = {
   /**
    * How long the Drive ran, in whole milliseconds, from the model request
    * being sent to the moment this reading was taken. Surfaced to Users as
-   * **Model** (`CONTEXT.md`); tool execution happens inside this phase and is
+   * **Model** (`GLOSSARY.md`); tool execution happens inside this phase and is
    * reported separately, nested, from `toolDurations`.
    *
    * Emitted per step, last one standing, for the same reason `contextOccupancy`
