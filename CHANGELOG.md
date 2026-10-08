@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.16.1](https://github.com/willdady/platypus/compare/v3.16.0...v3.16.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **backend:** answer an unknown A2A contextId with invalid params and a hint ([#1354](https://github.com/willdady/platypus/issues/1354)) ([f737168](https://github.com/willdady/platypus/commit/f737168745dd5db58792329ea92014c69e52cdc9))
+
 ## [3.16.0](https://github.com/willdady/platypus/compare/v3.15.2...v3.16.0) (2026-10-07)
 
 
