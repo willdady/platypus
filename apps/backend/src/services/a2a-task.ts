@@ -360,7 +360,10 @@ const startTurn = async (
   if (contextId) {
     // Only a Chat this token started (ADR-0032). The Owner's own Chats,
     // another token's and another endpoint's are answered as an unknown id:
-    // a Chat id is no secret, so it is not a credential.
+    // a Chat id is no secret, so it is not a credential. Invalid params, not
+    // task not found: A2A names no error for a context, and that one is for
+    // a taskId. The message says how to start one, since a client-made
+    // contextId is the usual cause (A2A 1.0 §3.4.1).
     const [chat] = await db
       .select({
         leafId: chatTable.activeLeafId,
@@ -379,7 +382,11 @@ const startTurn = async (
         ),
       )
       .limit(1);
-    if (!chat) throw new TaskNotFoundError("Context not found");
+    if (!chat) {
+      throw new RequestMalformedError(
+        `Unknown contextId ${contextId}: omit contextId to start a context, and the server assigns one`,
+      );
+    }
     const [sent] = await db
       .select({ id: chatMessage.id })
       .from(chatMessage)
