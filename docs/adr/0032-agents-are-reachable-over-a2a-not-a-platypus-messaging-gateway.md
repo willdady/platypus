@@ -189,3 +189,14 @@ in Platypus and no 0.3 client was ever served, so there is nothing to stay
 compatible with, and refusing a request without the header would shut out
 every client that never sends it. A header naming another version is refused,
 as the spec says.
+
+## Amendment — an unknown `contextId` is invalid params
+
+The #1293 amendment answers a `contextId` the caller can't reach with
+`TaskNotFoundError`. **It is now invalid params (`-32602`)**, with a message saying
+to omit `contextId` and let the server assign one. A2A 1.0 names no error for
+a context, and `TaskNotFoundError` is for a `taskId`. A client that makes up
+its own `contextId` (§3.4.1 says it SHOULD NOT) was told only "Context not
+found", which gave no hint of the fix. Every unreachable context still gets
+the same answer as one that doesn't exist, and Task methods still answer
+`TaskNotFoundError`.

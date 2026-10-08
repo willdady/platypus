@@ -155,10 +155,12 @@ turns.
 
 **Each token sees only the conversations it started.** A `contextId` naming
 any other Chat — one you started yourself, another client's, or one started on
-another endpoint for the same Agent — is answered with a "task not found"
-error, exactly as an id that doesn't exist, and nothing is written to it. The
-same goes for every Task method: a client can read, follow, cancel and register
-push URLs on its own Tasks only. A Chat id appears in your browser's address
+another endpoint for the same Agent — is answered with an "invalid params"
+error, exactly as an id that doesn't exist, and nothing is written to it. A
+client can't choose its own `contextId`: it leaves `contextId` out of its first
+message and uses the one Platypus answers with. Every Task method is scoped the
+same way, answering "task not found" for another client's Task: a client can
+read, follow, cancel and register push URLs on its own Tasks only. A Chat id appears in your browser's address
 bar and in screenshots, so it is not a secret; this is what keeps a client that
 learns one out of your Chats.
 

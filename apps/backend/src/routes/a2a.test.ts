@@ -1581,7 +1581,20 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
 
     const res = await send({ messageId: "msg-a", contextId: "chat-x" });
 
-    expect(res.body.error.code).toBe(-32001);
+    expect(res.body.error.code).toBe(-32602);
+    expect(model.prompts).toHaveLength(0);
+  });
+
+  it("refuses a contextId it never assigned, saying to omit it", async () => {
+    seedConversation();
+
+    const res = await send({ messageId: "msg-a", contextId: "client-made" });
+
+    expect(res.body.error).toMatchObject({
+      code: -32602,
+      message:
+        "Unknown contextId client-made: omit contextId to start a context, and the server assigns one",
+    });
     expect(model.prompts).toHaveLength(0);
   });
 
@@ -5224,20 +5237,20 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
 
     // The Owner's UI Chat is never written to, so memory extraction never
     // reads a caller's text as the Owner's own.
-    it("is not found, writing no message and starting no run", async () => {
+    it("is unknown, writing no message and starting no run", async () => {
       const res = await send({ messageId: "msg-a", contextId: "chat-x" });
 
-      expect(res.body.error.code).toBe(-32001);
+      expect(res.body.error.code).toBe(-32602);
       expect(res.body.error.data[0].metadata).toBeUndefined();
       expect(rows("chat_message").map((m) => m.id)).toEqual(["chat-x-msg"]);
       expect(rows("a2a_task")).toHaveLength(0);
       expect(model.prompts).toHaveLength(0);
     });
 
-    it("is not found for a messageId already in it, making no Task", async () => {
+    it("is unknown for a messageId already in it, making no Task", async () => {
       const res = await send({ messageId: "chat-x-msg", contextId: "chat-x" });
 
-      expect(res.body.error.code).toBe(-32001);
+      expect(res.body.error.code).toBe(-32602);
       expect(rows("a2a_task")).toHaveLength(0);
       expect(model.prompts).toHaveLength(0);
     });
@@ -5380,7 +5393,7 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
     expect(
       (await send({ messageId: "msg-b", contextId }, { token: OTHER_TOKEN }))
         .body.error.code,
-    ).toBe(-32001);
+    ).toBe(-32602);
   });
 });
 
