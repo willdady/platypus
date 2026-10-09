@@ -18,8 +18,7 @@ are three types:
   a CI pipeline, calls it over HTTP with the Trigger's token. See
   [Inbound Triggers](#inbound-triggers).
 
-You'll find Triggers in the **Triggers** section of your Workspace —
-_"Automated agent runs configured for this workspace."_
+You'll find Triggers in the **Triggers** section of your Workspace.
 
 ## Create a Trigger
 
@@ -97,8 +96,9 @@ both events back to back, so a Trigger on both receives `card.updated` (with
   A write made by an Agent never fires an Event Trigger that runs that same
   Agent, wherever the Agent was working: in this Trigger's run, as a Sub-Agent,
   or in a Chat. Asking Agent X in a Chat to create a card does not fire a
-  Trigger that runs X; the log records `skipped_self_actor`. A change made by a
-  person directly, or by a different Agent, still fires it.
+  Trigger that runs X; the log records `skipped_self_actor`. The same holds for
+  a write by any Sub-Agent X delegated to, at any depth. A change made by a
+  person directly, or by an Agent outside that delegation, still fires it.
 </Callout>
 
 ### Or declare inputs (Inbound)
@@ -110,7 +110,8 @@ Each input has:
   underscore, up to 64 characters. The caller's JSON uses it as the key, and
   your Instruction uses it to refer to the value.
 - a description — up to 500 characters, shown to the Agent beside the value.
-- **Required** — a call without a required input is refused.
+- **Required** — on for a new input; a call without a required input is
+  refused.
 
 Pick a **Record key** — the required input that says which record a call is
 about, such as an issue key — and a **Token lifetime** of 30, 90, 180 or 365
@@ -139,7 +140,9 @@ now**. Copy both, then click **I've copied it**, the only way to close it.
   switching to **Advanced** shows it for you to fine-tune. The conversion runs
   one way: switching back to **Simple** restores your earlier Simple choices and
   discards the Advanced edit. Save from **Advanced** once you have changed the
-  expression there.
+  expression there. A Trigger saved with an expression Simple can't show opens
+  in **Advanced**; switching it to **Simple** shows the default Daily 09:00, and
+  saving then replaces your expression.
 </Callout>
 
 ## What a run does
@@ -323,6 +326,9 @@ The call is answered before the Agent starts:
 | `413`                                           | The body is larger than your Operator allows (64 KB unless they changed it).                                                                |
 | `429`                                           | The server is running as many inbound runs as it allows, and this call would start another. Retry after the seconds in `Retry-After`.       |
 
+An empty body, or one with no `inputs`, is a call with no inputs: accepted when
+the Trigger declares no required input.
+
 A call past the [run limit](#run-limits) also gets `202` with
 `"deduplicated": false`, but its run is _Suppressed_ and no Agent starts. A
 caller that needs to know the work began has to [check on the
@@ -356,8 +362,8 @@ one marked:
   running gets that run's id back with `"deduplicated": true`. Its inputs are
   dropped and no second Agent starts on the same issue. A run that was
   _Running_ when its server restarted keeps the record until the crash sweep
-  marks it _Failed_, about an hour and five minutes on the default [Trigger run
-  timeout](/reference/backend-configuration#triggers). Until then, calls for
+  marks it _Failed_, five minutes after the [Trigger run
+  timeout](/reference/backend-configuration#triggers) has passed. Until then, calls for
   that record get the stalled run's id back and no new run starts.
 - **A run limit per record.** The [run limit](#run-limits) counts each record
   separately, so a caller stuck re-firing on one issue is cut off for that issue
@@ -475,9 +481,8 @@ filtered view survives a refresh and can be sent to a colleague as a link:
 - **Status** — all, or one of Pending, Running, Success, Failed, Cancelled,
   Suppressed.
 
-The list loads 50 runs at a time; **Load more** fetches the next 50, and goes
-away once a batch comes back short of 50 — the end of the list. It refreshes
-about every ten seconds while the tab is in front of you, so a run can be
+**Load more** fetches the next batch of runs, and goes away at the end of the
+list. The list refreshes while the tab is in front of you, so a run can be
 watched moving from _Running_ to its final status without reloading.
 
 Each row carries the run's status, when it started and how long it took, the
@@ -520,7 +525,7 @@ reasoning or message text. The timeline records the shape and duration of a
 run, and only that. Debugging _what_ a tool was asked, as opposed to _how long
 it took_ and _whether it failed_, still means reproducing the call in a Chat.
 
-While a run is _Running_ the page refreshes every five seconds, and any
+While a run is _Pending_ or _Running_ the page refreshes itself, and any
 line still in progress is drawn out to the present moment. Once a run has
 ended, a line that was never seen to finish — typically because the server
 restarted mid-run — reads **Unknown duration** instead of a bar, since nobody
@@ -562,8 +567,9 @@ the event, the Trigger, the Trigger's Agent, the Agents that were running when
 the write happened, and one of four outcomes:
 
 - `fired` — the run is scheduled, and starts once the debounce window closes.
-- `skipped_self_actor` — the Trigger's own Agent made the write, in a Trigger
-  run, as a Sub-Agent, or in a Chat, so the Trigger does not run.
+- `skipped_self_actor` — the Trigger's own Agent, or a Sub-Agent it delegated
+  to, made the write — in a Trigger run, as a Sub-Agent, or in a Chat — so the
+  Trigger does not run.
 - `debounced` — a run was already pending for the same Trigger and record, and
   this event folded into it. A separate line reports how many events a burst
   coalesced.
@@ -589,8 +595,11 @@ once the Owner can no longer act: they have left the Organization, or a Super
 Admin has banned them. A scheduled or event Trigger whose time comes then
 records no run, and its schedule moves on as if it had run. An Inbound call is
 refused with a `404`, and a call accepted just before the ban ends its run
-_Failed_. A ban with an expiry stops counting once it runs out, and the
-Triggers act again without being switched back on. A Super Admin who owns a
+_Failed_. Removing the Owner from the Organization also switches every one of
+their Triggers off, and inviting them back does not switch them on again —
+the Owner has to. A ban switches nothing off: a ban with an expiry stops
+counting once it runs out, and the Triggers act again without being switched
+back on. A Super Admin who owns a
 Workspace keeps its Triggers running without being a member of the
 Organization, but not while banned.
 

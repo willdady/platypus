@@ -27,9 +27,8 @@ points at, including after an Org Admin repoints it.
 
 With an Agent selected, an info button — tooltip **Agent info** — opens
 **Agent Information**, which shows what that Agent is bringing to the
-conversation: its **Provider** and **Model**, **Instructions**, **Max Steps**,
-**Tools**, **Skills** and **Sub-Agents**, and under **Advanced settings** its
-sampling parameters.
+conversation: its Provider and model, Instructions, tools, Skills and
+Sub-Agents, and its sampling parameters.
 
 ## Invoking a Skill yourself
 
@@ -91,7 +90,9 @@ than pasted into it. Attach the PDF; don't paste its contents into the prompt.
 What the model receives depends on what it can read. A type it ingests natively
 goes through byte-for-byte. A text or code file is inlined and labelled with its
 filename. A PDF or DOCX the model can't take natively has its text extracted and
-sent in the file's place. Anything else is refused before the turn runs.
+sent in the file's place. Anything else gets an amber notice naming the file as
+soon as you attach it — remove it or switch to a model that accepts it, or the
+turn is refused.
 
 <Callout type="warning">
   A warning appears above the input when the model you have selected can't read
@@ -208,9 +209,9 @@ going quiet.
   **A browser only grants a microphone over a secure connection.** Reach your
   instance at a plain `http://` address — a LAN IP such as
   `http://192.168.1.20:3000` — and the microphone is refused before a word is
-  heard, whatever permission you granted. Everything else on the page keeps
-  working, which is what makes it look like a broken button. Serve the frontend
-  over HTTPS, or open it at `http://localhost`, which browsers treat as secure.
+  heard, whatever permission you granted, and pressing the button says _"Voice
+  input needs a secure connection."_ Serve the frontend over HTTPS, or open it
+  at `http://localhost`, which browsers treat as secure.
 </Callout>
 
 ## How long a Tool took
@@ -369,7 +370,7 @@ switch to a model with a bigger window. Nothing happens automatically.
 
 **No meter at all** is normal, and means one of three things: the Chat has no
 reply yet, nobody has declared a **Context window** for this model, or the
-Provider does not report token usage. Either way the capacity or the reading is unknown, and Platypus
+Provider does not report token usage. In each case the capacity or the reading is unknown, and Platypus
 would rather show nothing than a number you cannot interpret. An Org Admin
 declares the window on the Provider's model entry — see [Declaring a Context
 window](/self-hosting/providers-and-auth#declaring-a-context-window). Switching
@@ -504,8 +505,8 @@ filing system rather than decoration.
 
 Beneath it, Chats are grouped by when they were **created**: **Pinned** first,
 then **Last 7 days**, then **Other**. Nothing created in the last week and the
-whole list sits under **Chats** instead. Note that grouping is by creation date,
-not last activity — a Chat you added to this morning stays under **Other** if you
+whole list sits under **Chats** instead. Grouping is by creation date, not last
+activity — a Chat you added to this morning stays under **Other** if you
 started it a fortnight ago.
 
 Each Chat's menu offers:
@@ -627,7 +628,8 @@ read-only: the input is replaced with a note saying only the Workspace Owner can
 send messages, and the per-message **Edit**, **Delete** and **Regenerate**
 actions and the arrows between Alternatives are not offered. They can read the
 whole conversation, including tool calls, and copy from it; they cannot change
-it or continue it.
+it or continue it. The sidebar offers them no **Pin**, **Edit** or **Delete** on
+it either.
 
 <Callout type="info">
   This includes an Org Admin and an Operator. Reaching a Workspace's Chats and

@@ -55,9 +55,7 @@ Agent follows whatever model that alias points at, so an Org Admin can upgrade
 the Agent later without you editing it.
 
 If the model you pick doesn't natively accept file attachments, the form warns
-you right there — the same capability check the Chat composer runs once
-someone actually attaches a file, surfaced earlier, before anyone sends this
-Agent something it can't read.
+you, before anyone sends this Agent something it can't read.
 
 ### Save it
 
@@ -102,9 +100,9 @@ Two levels of control over how the model generates:
 | Parameter             | Range    | What it does                                  |
 | --------------------- | -------- | --------------------------------------------- |
 | **Temperature**       | from `0` | Randomness — higher is more varied            |
+| **Seed**              | integer  | Fixes sampling for reproducible output        |
 | **Top-p**             | `0`–`1`  | Nucleus sampling cutoff                       |
 | **Top-k**             | from `1` | Limits sampling to the _k_ most likely tokens |
-| **Seed**              | integer  | Fixes sampling for reproducible output        |
 | **Presence Penalty**  | `-2`–`2` | Discourages repeating topics already present  |
 | **Frequency Penalty** | `-2`–`2` | Discourages repeating the same tokens         |
 
@@ -133,9 +131,8 @@ Two cards on the form decide what the Agent can do beyond answering:
   instructions on demand at run time.
 
 <Callout type="info">
-  The **Skills** and **Sub-Agents** cards only appear when there is something to
-  grant: a Skill, or at least one other Agent. A brand-new Workspace shows
-  neither.
+  The **Tools**, **Skills** and **Sub-Agents** cards only appear when there is
+  something to grant: a tool set, a Skill, or at least one other Agent.
 </Callout>
 
 <Callout type="warning">
@@ -267,7 +264,9 @@ rather than presenting it as the finding.
 Open the Agent and click **Delete**. Deleting an Agent that a Trigger still runs
 is refused, naming each Trigger — delete those Triggers or switch them to
 another Agent first. A deleted Agent is also removed from every other Agent's
-**Sub-Agents** card.
+**Sub-Agents** card, and its [A2A endpoints](/building-with-platypus/a2a-endpoints#deleting)
+are deleted with it, tokens included — any outside client calling them stops
+working, with no warning.
 
 ## Where to next
 

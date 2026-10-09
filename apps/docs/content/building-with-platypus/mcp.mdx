@@ -20,6 +20,13 @@ set** you can grant to any Agent. For the concept, see
 
 ## Register an MCP server
 
+<Callout type="warning">
+  By default only an Org Admin can add, edit, test or authorize a Workspace MCP.
+  A Workspace Owner can do it only after an Org Admin switches on
+  **Owner-managed MCP servers** in that Workspace's settings. Otherwise ask an
+  Org Admin to register or attach one.
+</Callout>
+
 <Steps>
 
 ### Open the MCP form
@@ -54,7 +61,7 @@ Under **Custom Headers**, add any extra HTTP headers to send with every request
 ### Authorize and test
 
 - For **OAuth** servers, an authorization panel shows the status (**Not
-  Authorized** / **Authorized**). Click **Authorize** to complete the OAuth flow;
+  authorized** / **Authorized**). Click **Authorize** to complete the OAuth flow;
   use **Re-authorize** or **Revoke** later as needed. Changing an OAuth MCP's
   **URL** also clears its **Client ID**, **Client Secret** and authorization —
   re-enter them and click **Authorize** again.
@@ -157,13 +164,6 @@ re-scoped after the fact. An Org Admin creates it at Organization scope in the
 first place, under **Organization settings → MCP → Add MCP**. If you already
 registered one in your Workspace and now want it shared, it has to be created
 again at the Organization level.
-
-<Callout type="warning">
-  By default only an Org Admin can add, edit, test or authorize a Workspace MCP.
-  A Workspace Owner can do it only after an Org Admin switches on
-  **Owner-managed MCP servers** in that Workspace's settings. Otherwise ask an
-  Org Admin to register or attach one.
-</Callout>
 
 A registered MCP's bearer token and custom headers are readable only by someone
 who can manage it. Everyone else still sees the server and can grant its tool

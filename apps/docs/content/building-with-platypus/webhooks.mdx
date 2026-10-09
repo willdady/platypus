@@ -41,7 +41,7 @@ A Webhook subscribes to one or more events. The available events are:
 
 The form groups them under **Notifications**, **Cards** and **Trigger runs**.
 Every event starts selected on a new Webhook; turn off the ones you don't want.
-A Webhook needs at least one.
+A Webhook needs at least one, so the last switch won't turn off.
 
 ## Create a Webhook
 
@@ -57,7 +57,8 @@ Go to **Workspace settings → Webhooks** and click **Add webhook**.
 - **URL** — where the `POST` is sent. **Must be HTTPS**, and must pass the
   deployment's [egress guard](/self-hosting/configuration#the-egress-guard):
   loopback and cloud-metadata addresses are refused, and so are private
-  networks if your Operator has turned them off. A refused URL fails on save.
+  networks if your Operator has turned them off. A refused URL fails on save, and
+  so does a hostname that doesn't resolve yet.
 - **Enabled** — leave on to start delivering immediately.
 - **Events** — which events to subscribe to (all start selected).
 - **Custom Headers** — optional headers sent with every delivery (e.g. an
@@ -277,7 +278,7 @@ the singular form:
 }
 ```
 
-"Mark all as read" sends one bulk event instead of one event per notification —
+**Mark all as read** sends one bulk event instead of one event per notification —
 `notificationIds` (plural, an array), plus `bulk: true`:
 
 ```json
@@ -295,7 +296,7 @@ the singular form:
   `data.notificationId` alone reads `undefined` on every bulk event and drops
   the whole batch silently. Branch on `data.bulk`, or normalise with
   `data.notificationIds ?? [data.notificationId]`. Nothing is emitted at all
-  when "mark all as read" finds nothing unread.
+  when **Mark all as read** finds nothing unread.
 </Callout>
 
 <Callout type="info">
@@ -328,7 +329,7 @@ use:
     "status": "failed",
     "startedAt": "2026-06-26T09:30:00.000Z",
     "completedAt": "2026-06-26T09:41:00.000Z",
-    "errorMessage": "Run timed out",
+    "errorMessage": "Run 'Qm7tR2xLp9wN4vB8dYsK1' exceeded per-step timeout of 600000ms",
     "triggerId": "Tz4nW8sVdB1kx6Ym2Qp9L",
     "triggerName": "Triage new cards",
     "triggerType": "event",
@@ -406,7 +407,7 @@ A `trigger_run.suppressed` never ran, so it has no `completedAt`:
 | `status`       | `success`, `failed`, `cancelled` or `suppressed`.                                             |
 | `startedAt`    | When the run started — for `suppressed`, when the firing was dropped.                         |
 | `completedAt`  | When the run ended. `null` for `suppressed`, since nothing ran.                               |
-| `errorMessage` | Why a `failed` run failed; `null` otherwise.                                                  |
+| `errorMessage` | Why a `failed` run failed, for a person to read — don't match on it; `null` otherwise.        |
 | `triggerId`    | The Trigger that fired.                                                                       |
 | `triggerName`  | The Trigger's name when the run ended.                                                        |
 | `triggerType`  | `cron`, `event` or `inbound`.                                                                 |
@@ -417,9 +418,10 @@ A `trigger_run.suppressed` never ran, so it has no `completedAt`:
 The Agent's output is never sent — no final answer, no stats, no event data.
 Read those in [run history](/building-with-platypus/triggers#review-run-history).
 
-A run that was still going when the server restarted is failed once the
-backend notices, with `errorMessage` set to `Server restarted during execution`,
-and sends `trigger_run.failed` then. A run whose Trigger is deleted while it is
+A run that was still going when the server restarted is failed once it has
+been running for longer than the run timeout, with `errorMessage` set to
+`Server restarted during execution`, and sends `trigger_run.failed` then — not
+when the server comes back up. A run whose Trigger is deleted while it is
 running sends nothing.
 
 <Callout type="warning">
