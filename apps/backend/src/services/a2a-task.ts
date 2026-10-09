@@ -50,6 +50,8 @@ import {
   findA2aTask,
   readTaskRows,
   replyTexts,
+  taskContextId,
+  isTaskContext,
   toTask,
   endStateOf,
   isTerminal,
@@ -110,6 +112,19 @@ export const a2aChatId = (tokenId: string, messageId: string): string =>
   uuidv5(JSON.stringify([tokenId, messageId]), A2A_CHAT_NAMESPACE);
 
 /**
+ * The id of the Chat a token's client-minted `contextId` names: a UUIDv5 of
+ * the token and the client's string. Never the string itself, which is the
+ * client's to choose and so could be any Chat's id. Two tokens minting the
+ * same string get two Chats, and two copies of a context's first message race
+ * for one Chat, as `a2aChatId`'s do.
+ */
+export const a2aContextChatId = (tokenId: string, contextId: string): string =>
+  uuidv5(JSON.stringify([tokenId, "context", contextId]), A2A_CHAT_NAMESPACE);
+
+/** The longest `contextId` a client may mint. */
+export const MAX_CONTEXT_ID_LENGTH = 128;
+
+/**
  * How long a blocking `SendMessage` waits for its run to end: short of the
  * HTTP timeouts in front of most deployments, a deliberate deviation from
  * A2A 1.0 §3.2.2, which waits for the end (ADR-0032).
@@ -162,11 +177,17 @@ const findTask = async (where: ReturnType<typeof and>) => {
   return row;
 };
 
+/**
+ * Where a turn goes: its Chat, and the client-minted `contextId` its Task
+ * carries, null where the context is the Chat id.
+ */
+type TurnContext = { chatId: string; contextId: string | null };
+
 /** Makes the Task for a turn's user message, as the calling token's. */
 const insertTask = async (
   executor: Executor,
   caller: A2aCaller,
-  chatId: string,
+  { chatId, contextId }: TurnContext,
   messageId: string,
 ): Promise<TaskRow> => {
   const now = new Date();
@@ -175,6 +196,7 @@ const insertTask = async (
     .values({
       id: randomUUID(),
       chatId,
+      contextId,
       messageId,
       endpointId: caller.endpoint.id,
       tokenId: caller.token.id,
@@ -193,17 +215,17 @@ const insertTask = async (
  */
 const taskFor = async (
   caller: A2aCaller,
-  chatId: string,
+  context: TurnContext,
   messageId: string,
 ): Promise<TaskRow> => {
   const where = and(
-    eq(a2aTaskTable.chatId, chatId),
+    eq(a2aTaskTable.chatId, context.chatId),
     eq(a2aTaskTable.messageId, messageId),
   );
   const existing = await findTask(where);
   if (existing) return existing;
   try {
-    return await insertTask(db, caller, chatId, messageId);
+    return await insertTask(db, caller, context, messageId);
   } catch (error) {
     // Two retries raced to make it; the other one's is this turn's Task.
     if (!isUniqueViolation(error)) throw error;
@@ -304,7 +326,9 @@ const waitForTask = async (
 
 /**
  * A turn in a new Chat bound to the endpoint's Agent, or in the Chat
- * `contextId` names, and its Task. The client's `messageId` is the user
+ * `contextId` names, and its Task. A `contextId` the client minted opens a
+ * new Chat with its first message, and its Tasks carry it back unchanged
+ * (A2A 1.0 §3.4.1). The client's `messageId` is the user
  * message's id, so a retry finds the Task it already started and starts
  * nothing. `events` is the call's place in the Task's events
  * (`a2a-events.ts`) when this call started the run, taken before any of them
@@ -328,11 +352,19 @@ const startTurn = async (
     throw new RequestMalformedError("A message needs at least one part");
   }
   const parts = message.parts.map(fromA2aPart);
+  const contextId = message.contextId || undefined;
+  // Refused rather than replaced: A2A 1.0 §3.4.1 forbids answering a
+  // client's contextId with another.
+  if (contextId && contextId.length > MAX_CONTEXT_ID_LENGTH) {
+    throw new RequestMalformedError(
+      `A contextId may be at most ${MAX_CONTEXT_ID_LENGTH} characters`,
+    );
+  }
   // A Task is one turn and takes no more messages, so a message naming one
   // never starts a run. It is refused with the spec's error for the case.
   if (message.taskId) {
     const task = await findA2aTask(caller, message.taskId);
-    if (message.contextId && message.contextId !== task.chatId) {
+    if (contextId && contextId !== taskContextId(task)) {
       throw new RequestMalformedError("The contextId is not the Task's");
     }
     if (!isTerminal(await readTask(task))) {
@@ -355,17 +387,19 @@ const startTurn = async (
     return task;
   };
 
-  const contextId = message.contextId || undefined;
+  let context: TurnContext;
   let parentId: string | null = null;
   if (contextId) {
-    // Only a Chat this token started (ADR-0032). The Owner's own Chats,
-    // another token's and another endpoint's are answered as an unknown id:
-    // a Chat id is no secret, so it is not a credential. Invalid params, not
-    // task not found: A2A names no error for a context, and that one is for
-    // a taskId. The message says how to start one, since a client-made
-    // contextId is the usual cause (A2A 1.0 §3.4.1).
-    const [chat] = await db
+    // A context Platypus issued is its Chat's id. Any other the client
+    // minted, and it names the Chat `a2aContextChatId` derives, opened by its
+    // first message. Only a Chat this token started is either (ADR-0032): a
+    // contextId naming the Owner's own Chat, another token's or another
+    // endpoint's is the client's own string, so it opens a Chat of its own.
+    // A Chat id is no secret, so it is not a credential.
+    const mintedChatId = a2aContextChatId(token.id, contextId);
+    const chats = await db
       .select({
+        id: chatTable.id,
         leafId: chatTable.activeLeafId,
         status: chatTable.status,
         runHeartbeatAt: chatTable.runHeartbeatAt,
@@ -375,39 +409,40 @@ const startTurn = async (
       .from(chatTable)
       .where(
         and(
-          eq(chatTable.id, contextId),
+          inArray(chatTable.id, [contextId, mintedChatId]),
           eq(chatTable.workspaceId, endpoint.workspaceId),
           eq(chatTable.agentId, endpoint.agentId),
           eq(chatTable.a2aTokenId, token.id),
         ),
-      )
-      .limit(1);
-    if (!chat) {
-      throw new RequestMalformedError(
-        `Unknown contextId ${contextId}: omit contextId to start a context, and the server assigns one`,
       );
+    const chat = chats.find((row) => row.id === contextId) ?? chats[0];
+    context =
+      chat?.id === contextId
+        ? { chatId: contextId, contextId: null }
+        : { chatId: mintedChatId, contextId };
+    if (chat) {
+      const [sent] = await db
+        .select({ id: chatMessage.id })
+        .from(chatMessage)
+        .where(
+          and(
+            eq(chatMessage.chatId, chat.id),
+            eq(chatMessage.id, message.messageId),
+          ),
+        )
+        .limit(1);
+      if (sent) {
+        return {
+          task: await withPush(await taskFor(caller, context, sent.id)),
+        };
+      }
+      // Before the slot is taken, so a busy Chat is answered with its Task at
+      // any load. The claim in the run still refuses one that turns busy
+      // after. A Chat whose run died (stale heartbeat, #1297) is not busy:
+      // the claim takes it.
+      if (chatRunIsLive(chat)) throw await busyError(caller, chat.id);
+      parentId = chat.leafId;
     }
-    const [sent] = await db
-      .select({ id: chatMessage.id })
-      .from(chatMessage)
-      .where(
-        and(
-          eq(chatMessage.chatId, contextId),
-          eq(chatMessage.id, message.messageId),
-        ),
-      )
-      .limit(1);
-    if (sent) {
-      return {
-        task: await withPush(await taskFor(caller, contextId, sent.id)),
-      };
-    }
-    // Before the slot is taken, so a busy Chat is answered with its Task at
-    // any load. The claim in the run still refuses one that turns busy after.
-    // A Chat whose run died (stale heartbeat, #1297) is not busy: the claim
-    // takes it.
-    if (chatRunIsLive(chat)) throw await busyError(caller, contextId);
-    parentId = chat.leafId;
   } else {
     // A retry of the message that opened a Chat names no context yet: find
     // it in a Chat this token started. Read from the message, which the run
@@ -426,13 +461,21 @@ const startTurn = async (
     if (opened) {
       return {
         task: await withPush(
-          await taskFor(caller, opened.chatId, message.messageId),
+          await taskFor(
+            caller,
+            { chatId: opened.chatId, contextId: null },
+            message.messageId,
+          ),
         ),
       };
     }
+    context = {
+      chatId: a2aChatId(token.id, message.messageId),
+      contextId: null,
+    };
   }
 
-  const chatId = contextId ?? a2aChatId(token.id, message.messageId);
+  const { chatId } = context;
   const scope = workspaceScopeForA2a({
     endpointId: endpoint.id,
     tokenId: token.id,
@@ -471,7 +514,7 @@ const startTurn = async (
       },
       onEnded: release,
       onClaimed: async (tx) => {
-        task = await insertTask(tx, caller, chatId, message.messageId);
+        task = await insertTask(tx, caller, context, message.messageId);
       },
     });
     run = response.body ?? undefined;
@@ -707,7 +750,7 @@ export const listA2aTasks = async (
   }
   const filters = and(
     mine,
-    params.contextId ? eq(a2aTaskTable.chatId, params.contextId) : undefined,
+    params.contextId ? isTaskContext(params.contextId) : undefined,
     params.status
       ? or(
           recorded ? eq(a2aTaskTable.state, recorded) : undefined,

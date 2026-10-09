@@ -200,3 +200,37 @@ its own `contextId` (§3.4.1 says it SHOULD NOT) was told only "Context not
 found", which gave no hint of the fix. Every unreachable context still gets
 the same answer as one that doesn't exist, and Task methods still answer
 `TaskNotFoundError`.
+
+## Amendment — a client may mint its own `contextId` (#1359)
+
+This supersedes the amendment above (#1354, shipped in 3.16.1). The original decision
+makes a `contextId` a Chat id, and #1293 and #1354 refused any other, as
+not found and then as invalid params with a hint to omit it. A2A 1.0 §3.4.1
+lets an agent accept or refuse a client-minted `contextId`, and Hermes Agent
+mints one for a conversation's first message, so Platypus refused it every
+time. **Platypus accepts a `contextId` it did not issue.**
+
+- **A `contextId` that is not one of the token's Chats opens a new Chat**
+  with its first message, and later messages with it continue that Chat. A
+  message with no `contextId` is unchanged.
+- **The Chat's id is never the client's string.** It is a UUIDv5 of the token
+  and the string, as a context-less first message's is of the token and the
+  `messageId`. A Chat id is a global key, and the string is the client's to
+  choose. Two tokens minting the same string get two Chats, and two copies of
+  a first message race for one Chat, as before.
+- **Its Tasks carry the client's string back unchanged**, stored on each Task.
+  §3.4.1 forbids answering with a substitute. `ListTasks` filters by it, and
+  the call log still records the Chat id.
+- **A `contextId` naming a Chat the token did not start opens a Chat of the
+  token's own**, where #1354 refused it as invalid params. That Chat is untouched,
+  so the #1293 scope holds: a token still reaches only its own Chats, and
+  learns nothing about anyone else's. A stale or deleted Chat's id now opens
+  an empty Chat rather than an error.
+- **A `contextId` longer than 128 characters is refused** as invalid params,
+  never replaced.
+- Refusing a client-minted id, as before, was the alternative. It is
+  compliant, but every A2A SDK and framework server surveyed accepts one, and
+  the clients that mint one (Hermes, the A2A samples, Agent Stack) could not
+  talk to Platypus at all. Keeping the error for Platypus's own UUIDv5 ids was
+  also considered; it would leak whether an id is a Chat id somewhere, and a
+  fresh Chat costs a client nothing it could not already get.

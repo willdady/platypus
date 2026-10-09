@@ -303,7 +303,7 @@ Every field is on every line, `null` where it does not apply:
 | `outcome`        | What happened — see below                                                                                             |
 | `reason`         | Why a `rejected` call was rejected — see below                                                                        |
 | `taskId`         | The Task the call answered with or acted on                                                                           |
-| `chatId`         | The Chat that Task belongs to, which is also the conversation's `contextId`                                           |
+| `chatId`         | The Chat that Task belongs to. It is the conversation's `contextId` unless the client chose its own                   |
 
 `outcome` is one of `ok`, `rate_limited` (answered `429`) or `rejected`. A
 rejected call's `reason` is one of:

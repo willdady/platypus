@@ -155,18 +155,25 @@ turns.
 
 **Each token sees only the conversations it started.** A `contextId` naming
 any other Chat — one you started yourself, another client's, or one started on
-another endpoint for the same Agent — is answered with an "invalid params"
-error, exactly as an id that doesn't exist, and nothing is written to it. A
-client can't choose its own `contextId`: it leaves `contextId` out of its first
-message and uses the one Platypus answers with. Every Task method is scoped the
-same way, answering "task not found" for another client's Task: a client can
-read, follow, cancel and register push URLs on its own Tasks only. A Chat id appears in your browser's address
+another endpoint for the same Agent — is treated as a new id the client chose,
+as below: it opens a new Chat for that client, and nothing is written to the
+Chat it names. Every Task method works the same way: a client can read,
+follow, cancel and register push URLs on its own Tasks only. A Chat id appears in your browser's address
 bar and in screenshots, so it is not a secret; this is what keeps a client that
 learns one out of your Chats.
 
 - **`SendMessage` without a `contextId`** starts a new Chat with the endpoint's
   Agent. The answer's `contextId` is that Chat; send it with later messages to
   continue the conversation.
+- **A client can choose its own `contextId`.** Some clients, Hermes Agent
+  among them, make up a `contextId` for a conversation's first message. A
+  `contextId` Platypus doesn't recognise starts a new Chat, and every Task in
+  it carries the client's `contextId` back unchanged. Later messages with the
+  same `contextId` continue that Chat. Two clients that happen to choose the
+  same `contextId` get separate Chats. A deleted Chat's id is one Platypus
+  doesn't recognise, so a client that sends it gets a new, empty Chat, not an
+  error. A `contextId` can be at most **128 characters**; a longer one is
+  refused with an "invalid params" error.
 - **Each message is a Task.** `SendMessage` answers with the Task once the run
   has started. A client that sets `returnImmediately` gets it at once;
   otherwise the request waits up to **30 seconds** for the run to end, then
@@ -225,7 +232,8 @@ to a client's Chat yourself aren't Tasks, so they aren't listed.
   the last page, and `totalSize` counts every match.
 - **Newest first** means the Task's status timestamp: when it ended, or when it
   started if it is still running.
-- **Filters.** `contextId` lists one Chat's Tasks, `status` the Tasks in one
+- **Filters.** `contextId` lists one Chat's Tasks, whether Platypus or the
+  client chose it, `status` the Tasks in one
   state, and `statusTimestampAfter` the Tasks whose status changed at or after
   that time, so a client polling from the last timestamp it saw misses none.
 - **Replies are left out** unless the client sets `includeArtifacts`. With it,

@@ -1237,6 +1237,9 @@ export const a2aTask = pgTable(
   (t) => ({
     id: t.text("id").primaryKey(),
     chatId: t.text("chat_id").notNull(),
+    // The `contextId` the client minted for the Task's Chat, which the Task
+    // carries in place of the Chat id. Null where the context is the Chat id.
+    contextId: t.text("context_id"),
     messageId: t.text("message_id").notNull(),
     endpointId: t
       .text("endpoint_id")
