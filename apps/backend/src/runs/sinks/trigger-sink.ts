@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../index.ts";
 import {
   triggerRun as triggerRunTable,
@@ -7,9 +7,13 @@ import {
 import type {
   TriggerRunStats,
   TriggerRunStatus,
-  WebhookEvent,
+  EventTriggerEvent,
 } from "@platypus/schemas";
 import { FlushScheduler } from "../flush-scheduler.ts";
+import {
+  announceTriggerRunsEnded,
+  endedTriggerRunColumns,
+} from "../../services/trigger-run-announce.ts";
 import { eventStatusForRun, type RunEventRecorder } from "../run-events.ts";
 import type {
   ResolvedRunPlan,
@@ -28,7 +32,7 @@ export type TriggerSinkParams = {
    * for Cron runs and for events that name a set rather than one thing.
    */
   entityId?: string;
-  eventType?: WebhookEvent;
+  eventType?: EventTriggerEvent;
   eventData?: unknown;
   /**
    * The run's row already exists as `pending` — an Inbound Trigger call wrote
@@ -103,9 +107,11 @@ const toTriggerRunStatus = (status: RunStatus): TriggerRunStatus => {
  *   the last flush, plus a patch per event that has since closed. The write
  *   *rate* is bounded exactly as the stats flushing bounds it.
  * - `onFinish`: closes every still-open event with the run's terminal status
- *   and writes them, then UPDATEs the row with terminal status, final stats,
- *   error message and final text. Events first, so no reader ever sees a
- *   terminal run with a running event.
+ *   and writes them, then UPDATEs the row — only while it is still `pending`
+ *   or `running` — with terminal status, final stats, error message and final
+ *   text, and announces the run as a `trigger_run.*` Webhook event when that
+ *   write landed. Events first, so no reader ever sees a terminal run with a
+ *   running event.
  *
  * `suppressed` rows are written by the run-rate breaker instead of a run, and
  * never pass through this sink.
@@ -211,7 +217,10 @@ export class TriggerSink implements RunSink {
 
     const triggerStats = toTriggerRunStats(ctx.stats);
 
-    await db
+    // Only a row still live is finished: one the recovery sweep already failed
+    // keeps that outcome, and announces nothing a second time. The instance
+    // whose write lands is the one that announces the run.
+    const ended = await db
       .update(triggerRunTable)
       .set({
         status: toTriggerRunStatus(ctx.status),
@@ -221,7 +230,14 @@ export class TriggerSink implements RunSink {
         finalText: ctx.finalText ?? null,
         eventsTruncated: this.events?.eventsTruncated ?? false,
       })
-      .where(eq(triggerRunTable.id, ctx.runId));
+      .where(
+        and(
+          eq(triggerRunTable.id, ctx.runId),
+          inArray(triggerRunTable.status, ["pending", "running"]),
+        ),
+      )
+      .returning(endedTriggerRunColumns);
+    if (ended.length > 0) void announceTriggerRunsEnded(ended);
   }
 
   /**

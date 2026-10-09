@@ -15,7 +15,7 @@ import type {
   KanbanCardHistoryChange,
   KanbanCardHistoryRef,
   KanbanCardPriority,
-  WebhookEventPayload,
+  EventTriggerEventPayload,
 } from "@platypus/schemas";
 import { KANBAN_CARD_HISTORY_LIMIT } from "@platypus/schemas";
 import { db } from "../index.ts";
@@ -149,7 +149,7 @@ const lastEditedBy = (actor: KanbanActor) =>
  * volunteered here — whether this write re-fires an Event Trigger is decided by
  * the chain of Agents the run established, not by this helper.
  */
-const dispatch = (ctx: KanbanContext, payload: WebhookEventPayload) =>
+const dispatch = (ctx: KanbanContext, payload: EventTriggerEventPayload) =>
   dispatchEvent(ctx.orgId, ctx.workspaceId, payload);
 
 /**

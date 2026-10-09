@@ -18,10 +18,19 @@ import type { RunInput, RunSink } from "../runs/types.ts";
 /** Shape of the argument object passed to agentRunner.generate in these tests. */
 type GenerateArgs = { scope: WorkspaceScope; input: RunInput; sink: RunSink };
 
-const { mockGenerate } = vi.hoisted(() => ({ mockGenerate: vi.fn() }));
+const { mockGenerate, mockDeliverWebhook } = vi.hoisted(() => ({
+  mockGenerate: vi.fn(),
+  mockDeliverWebhook: vi.fn(),
+}));
 
 vi.mock("../runs/agent-runner.ts", () => ({
   agentRunner: { generate: mockGenerate },
+}));
+
+// The outbound HTTP call is the only part of a `trigger_run.*` delivery
+// mocked; which Webhook it reaches and what it carries are read from the fake.
+vi.mock("./webhook-delivery.ts", () => ({
+  deliverWebhook: mockDeliverWebhook,
 }));
 
 import { mockLogger, mockNanoid } from "../test-setup.ts";
@@ -127,7 +136,7 @@ const world = (
  * with `status` — and, like `driveOnce`, rethrows when the run failed by
  * throwing. Time moves to COMPLETED while it runs.
  */
-const drive = (status: "succeeded" | "failed", error?: Error) => {
+const drive = (status: "succeeded" | "failed" | "cancelled", error?: Error) => {
   mockGenerate.mockImplementationOnce(async ({ input, sink }: GenerateArgs) => {
     await sink.onStart({ runId: input.runId, messages: input.messages });
     vi.setSystemTime(COMPLETED);
@@ -159,6 +168,34 @@ const startLine = (): Record<string, unknown> | undefined =>
 
 const triggerRow = (fake: FakeDb) => fake.tables.trigger[0];
 const runIds = (fake: FakeDb) => fake.tables.trigger_run.map((r) => r.id);
+
+/** Subscribes a Webhook in the Workspace to every `trigger_run.*` event. */
+const subscribeWebhook = (fake: FakeDb) => {
+  fake.tables.webhook = [
+    {
+      id: "wh-1",
+      workspaceId: "ws-1",
+      url: "https://example.com/hook",
+      enabled: true,
+      events: [
+        "trigger_run.succeeded",
+        "trigger_run.failed",
+        "trigger_run.cancelled",
+        "trigger_run.suppressed",
+      ],
+      signingSecret: "secret",
+      headers: null,
+    },
+  ];
+};
+
+/** The envelopes delivered so far, once the fire-and-forget chain settles. */
+const deliveries = async () => {
+  for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+  return mockDeliverWebhook.mock.calls.map(
+    (call) => JSON.parse(call[1] as string) as Record<string, unknown>,
+  );
+};
 
 describe("fireTrigger", () => {
   beforeEach(() => {
@@ -876,6 +913,215 @@ describe("fireTrigger", () => {
       ]);
       expect(block).toContain("(none)");
       expect(block).not.toContain("constructor");
+    });
+  });
+
+  describe("announcing the run's end", () => {
+    it("delivers one trigger_run.failed when a cron run fails, carrying no Agent output", async () => {
+      const trigger = makeTrigger();
+      subscribeWebhook(world(trigger));
+      drive("failed", new Error("Model error"));
+
+      await fireTrigger(trigger, { kind: "cron" });
+
+      const delivered = await deliveries();
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0]).toMatchObject({
+        event: "trigger_run.failed",
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        data: {
+          runId: "run-new",
+          status: "failed",
+          startedAt: NOW.toISOString(),
+          completedAt: COMPLETED.toISOString(),
+          errorMessage: "Model error",
+          triggerId: "trigger-1",
+          triggerName: "Test Trigger",
+          triggerType: "cron",
+          agentId: "agent-1",
+          eventType: null,
+          entityId: null,
+        },
+      });
+      const data = delivered[0].data as Record<string, unknown>;
+      expect(Object.keys(data)).not.toContain("finalText");
+      expect(Object.keys(data)).not.toContain("stats");
+    });
+
+    it("delivers one trigger_run.succeeded when an event run succeeds", async () => {
+      const trigger = eventTrigger();
+      subscribeWebhook(world(trigger));
+      drive("succeeded");
+
+      await fireTrigger(trigger, {
+        kind: "event",
+        payload: cardEvent("card.created", { id: "c1" }),
+        entityId: "c1",
+      });
+
+      const delivered = await deliveries();
+      expect(delivered).toEqual([
+        expect.objectContaining({
+          event: "trigger_run.succeeded",
+          data: expect.objectContaining({
+            status: "success",
+            triggerType: "event",
+            eventType: "card.created",
+            entityId: "c1",
+          }) as unknown,
+        }),
+      ]);
+    });
+
+    it("delivers one trigger_run.cancelled when an Owner stops a run", async () => {
+      const trigger = makeTrigger();
+      subscribeWebhook(world(trigger));
+      drive("cancelled");
+
+      await fireTrigger(trigger, { kind: "cron" });
+
+      const delivered = await deliveries();
+      expect(delivered).toEqual([
+        expect.objectContaining({
+          event: "trigger_run.cancelled",
+          data: expect.objectContaining({ status: "cancelled" }) as unknown,
+        }),
+      ]);
+    });
+
+    it("delivers trigger_run.failed for a run that timed out", async () => {
+      const trigger = makeTrigger();
+      subscribeWebhook(world(trigger));
+      drive("failed", new Error("Run timed out"));
+
+      await fireTrigger(trigger, { kind: "cron" });
+
+      const delivered = await deliveries();
+      expect(delivered).toEqual([
+        expect.objectContaining({
+          event: "trigger_run.failed",
+          data: expect.objectContaining({
+            errorMessage: "Run timed out",
+          }) as unknown,
+        }),
+      ]);
+    });
+
+    it("delivers one trigger_run.suppressed when the breaker drops an event firing", async () => {
+      process.env.TRIGGER_BREAKER_MAX_RUNS = "1";
+      try {
+        const trigger = eventTrigger();
+        const fake = world(trigger, [
+          oldRun("recent", 0, {
+            status: "success",
+            entityId: "c1",
+            startedAt: new Date(NOW.getTime() - 60_000),
+          }),
+        ]);
+        subscribeWebhook(fake);
+
+        await expect(
+          fireTrigger(trigger, {
+            kind: "event",
+            payload: cardEvent("card.updated", { id: "c1" }),
+            entityId: "c1",
+          }),
+        ).resolves.toBe("suppressed");
+
+        const delivered = await deliveries();
+        expect(delivered).toEqual([
+          expect.objectContaining({
+            event: "trigger_run.suppressed",
+            data: expect.objectContaining({
+              status: "suppressed",
+              eventType: "card.updated",
+              entityId: "c1",
+              completedAt: null,
+            }) as unknown,
+          }),
+        ]);
+      } finally {
+        delete process.env.TRIGGER_BREAKER_MAX_RUNS;
+      }
+    });
+
+    const inboundTrigger = () =>
+      makeTrigger({
+        type: "inbound",
+        config: { inputs: [], tokenExpiryDays: 90 },
+      });
+    const inboundCause = {
+      kind: "inbound" as const,
+      runId: "run-accepted",
+      inputs: {},
+      declared: [],
+      entityId: "trigger-1",
+    };
+    const pendingInbound = (status = "pending"): Row => ({
+      id: "run-accepted",
+      triggerId: "trigger-1",
+      status,
+      entityId: "trigger-1",
+      startedAt: LONG_AGO(0),
+      createdAt: LONG_AGO(0),
+    });
+
+    it("delivers one trigger_run.failed when an inbound firing fails before its run starts", async () => {
+      const trigger = inboundTrigger();
+      const fake = world(trigger, [pendingInbound()], {
+        owner: { banned: true },
+      });
+      subscribeWebhook(fake);
+
+      await expect(fireTrigger(trigger, inboundCause)).resolves.toBe("failed");
+
+      const delivered = await deliveries();
+      expect(delivered).toEqual([
+        expect.objectContaining({
+          event: "trigger_run.failed",
+          data: expect.objectContaining({
+            runId: "run-accepted",
+            triggerType: "inbound",
+          }) as unknown,
+        }),
+      ]);
+    });
+
+    it("delivers nothing for an inbound run something else already ended", async () => {
+      const trigger = inboundTrigger();
+      subscribeWebhook(world(trigger, [pendingInbound("failed")]));
+      drive("succeeded");
+
+      await expect(fireTrigger(trigger, inboundCause)).resolves.toBe("failed");
+
+      expect(await deliveries()).toEqual([]);
+    });
+
+    it("delivers nothing, and does not fail, when the Trigger is deleted mid-run", async () => {
+      const trigger = makeTrigger();
+      const fake = world(trigger);
+      subscribeWebhook(fake);
+      mockGenerate.mockImplementationOnce(
+        async ({ input, sink }: GenerateArgs) => {
+          await sink.onStart({ runId: input.runId, messages: input.messages });
+          // The cascade takes the Trigger and its runs with it.
+          fake.tables.trigger = [];
+          fake.tables.trigger_run = [];
+          await sink.onFinish({
+            runId: input.runId,
+            status: "succeeded",
+            messages: input.messages,
+            stats: {},
+          });
+          return { text: "ok", stats: {} };
+        },
+      );
+
+      await expect(fireTrigger(trigger, { kind: "cron" })).resolves.toBe("ran");
+
+      expect(await deliveries()).toEqual([]);
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
   });
 });

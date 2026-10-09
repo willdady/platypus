@@ -1,6 +1,6 @@
 ---
 title: Webhooks
-description: Receive Workspace events in an external system with Webhooks — the events you can subscribe to, the JSON payload Platypus sends, how to verify the signature, and the delivery and retry behaviour.
+description: Receive Workspace events and Trigger run outcomes in an external system with Webhooks — the events you can subscribe to, the JSON payload Platypus sends, how to verify the signature, and the delivery and retry behaviour.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -14,7 +14,9 @@ external system can react to it.
 
 Where a [Trigger](/building-with-platypus/triggers) runs an Agent _inside_
 Platypus in response to an event, a Webhook sends that same event _out_ to your
-own service. Both subscribe to the same set of events.
+own service. Both subscribe to the same `card.*` and `notification.*` events.
+Only a Webhook can subscribe to the `trigger_run.*` events, which report a
+Trigger run ending.
 
 You'll find Webhooks under **Workspace settings → Webhooks**.
 
@@ -32,7 +34,12 @@ A Webhook subscribes to one or more events. The available events are:
 | `notification.updated`   | A notification is edited.                                     |
 | `notification.read`      | A notification is marked read.                                |
 | `notification.dismissed` | A notification is dismissed.                                  |
+| `trigger_run.succeeded`  | A Trigger run ends `success`.                                 |
+| `trigger_run.failed`     | A Trigger run ends `failed`, including a run that timed out.  |
+| `trigger_run.cancelled`  | A Trigger run ends `cancelled` — someone stopped it.          |
+| `trigger_run.suppressed` | The run-rate breaker drops a firing, so no Agent ran.         |
 
+The form groups them under **Notifications**, **Cards** and **Trigger runs**.
 Every event starts selected on a new Webhook; turn off the ones you don't want.
 A Webhook needs at least one.
 
@@ -296,6 +303,134 @@ the singular form:
   assuming a fixed set, since the underlying records can gain fields over time.
 </Callout>
 
+### Trigger run events
+
+A `trigger_run.*` event is sent once when a run of any Trigger type — Cron,
+Event or Inbound — reaches its final status. The event name says how it ended,
+and `data.status` carries the same word the run history and the Inbound poll
+use:
+
+| `data.status` | Event                    |
+| ------------- | ------------------------ |
+| `success`     | `trigger_run.succeeded`  |
+| `failed`      | `trigger_run.failed`     |
+| `cancelled`   | `trigger_run.cancelled`  |
+| `suppressed`  | `trigger_run.suppressed` |
+
+```json
+{
+  "event": "trigger_run.failed",
+  "timestamp": "2026-06-26T09:41:00.000Z",
+  "orgId": "g7Qw3pLm9xRt2nK5vB8dY",
+  "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+  "data": {
+    "runId": "Qm7tR2xLp9wN4vB8dYsK1",
+    "status": "failed",
+    "startedAt": "2026-06-26T09:30:00.000Z",
+    "completedAt": "2026-06-26T09:41:00.000Z",
+    "errorMessage": "Run timed out",
+    "triggerId": "Tz4nW8sVdB1kx6Ym2Qp9L",
+    "triggerName": "Triage new cards",
+    "triggerType": "event",
+    "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
+    "eventType": "card.created",
+    "entityId": "V1StGXR8_Z5jdHi6B-myT"
+  }
+}
+```
+
+The other three carry the same fields. A `trigger_run.succeeded` from a Cron
+Trigger:
+
+```json
+{
+  "data": {
+    "runId": "Wd2kP8xT4mLqR7nV9sYbZ",
+    "status": "success",
+    "startedAt": "2026-06-26T09:00:00.000Z",
+    "completedAt": "2026-06-26T09:02:10.000Z",
+    "errorMessage": null,
+    "triggerId": "Nb6vC3xZ9qLm2wT8rYpK4",
+    "triggerName": "Daily summary",
+    "triggerType": "cron",
+    "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
+    "eventType": null,
+    "entityId": null
+  }
+}
+```
+
+A `trigger_run.cancelled` from an Inbound Trigger someone stopped:
+
+```json
+{
+  "data": {
+    "runId": "Lr5tY1wQ8nK3mV7bX2cZd",
+    "status": "cancelled",
+    "startedAt": "2026-06-26T10:00:00.000Z",
+    "completedAt": "2026-06-26T10:03:00.000Z",
+    "errorMessage": null,
+    "triggerId": "Hp9sD4fG7jK2lZ5xC8vBn",
+    "triggerName": "Investigate CI failure",
+    "triggerType": "inbound",
+    "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
+    "eventType": null,
+    "entityId": "PLAT-42"
+  }
+}
+```
+
+A `trigger_run.suppressed` never ran, so it has no `completedAt`:
+
+```json
+{
+  "data": {
+    "runId": "Ux3hJ6kL9pQ2rS5tV8wYa",
+    "status": "suppressed",
+    "startedAt": "2026-06-26T11:00:00.000Z",
+    "completedAt": null,
+    "errorMessage": null,
+    "triggerId": "Tz4nW8sVdB1kx6Ym2Qp9L",
+    "triggerName": "Triage new cards",
+    "triggerType": "event",
+    "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
+    "eventType": "card.updated",
+    "entityId": "V1StGXR8_Z5jdHi6B-myT"
+  }
+}
+```
+
+| Field          | Description                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `runId`        | The run. For an Inbound Trigger, the same id the call returned.                               |
+| `status`       | `success`, `failed`, `cancelled` or `suppressed`.                                             |
+| `startedAt`    | When the run started — for `suppressed`, when the firing was dropped.                         |
+| `completedAt`  | When the run ended. `null` for `suppressed`, since nothing ran.                               |
+| `errorMessage` | Why a `failed` run failed; `null` otherwise.                                                  |
+| `triggerId`    | The Trigger that fired.                                                                       |
+| `triggerName`  | The Trigger's name when the run ended.                                                        |
+| `triggerType`  | `cron`, `event` or `inbound`.                                                                 |
+| `agentId`      | The Agent the Trigger runs.                                                                   |
+| `eventType`    | For an Event Trigger, the event that fired it; `null` otherwise.                              |
+| `entityId`     | The card or notification an Event Trigger ran for, or an Inbound Trigger's record; or `null`. |
+
+The Agent's output is never sent — no final answer, no stats, no event data.
+Read those in [run history](/building-with-platypus/triggers#review-run-history).
+
+A run that was still going when the server restarted is failed once the
+backend notices, with `errorMessage` set to `Server restarted during execution`,
+and sends `trigger_run.failed` then. A run whose Trigger is deleted while it is
+running sends nothing.
+
+<Callout type="warning">
+  A `trigger_run.*` event is best-effort, like every delivery. A server restart
+  at the wrong moment can lose one, and nothing resends it. Cron and Event runs
+  have no fallback, so don't build anything that waits forever on the event. An
+  Inbound caller can [poll the
+  run](/building-with-platypus/triggers#check-on-a-run) with its token until
+  **Max Runs to Keep** prunes it.
+</Callout>
+
 ## Headers
 
 Every delivery includes:
@@ -361,7 +496,8 @@ const ok = verify(rawBody, req.headers["x-webhook-signature"], signingSecret);
 <Callout type="info">
   Your endpoint should be idempotent. A retry sends the identical body, with the
   same `timestamp` and signature, so processing the same body twice must be
-  safe.
+  safe. For `trigger_run.*`, deduplicate on `data.runId` plus `event`: a run
+  ends once, so a second delivery with the same pair is a retry.
 </Callout>
 
 ## Where to next
@@ -369,3 +505,5 @@ const ok = verify(rawBody, req.headers["x-webhook-signature"], signingSecret);
 - **[Triggers](/building-with-platypus/triggers)** — react to the same events by
   running an Agent inside Platypus.
 - **[Boards](/building-with-platypus/boards)** — the source of `card.*` events.
+- **[Triggers: Review run history](/building-with-platypus/triggers#review-run-history)**
+  — the runs `trigger_run.*` events report on.

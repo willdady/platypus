@@ -70,6 +70,7 @@ import {
 } from "@platypus/schemas";
 import {
   DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
+  eventTriggerEventSchema,
   gateAdmits,
   INBOUND_TRIGGER_INPUT_DESCRIPTION_MAX_LENGTH,
   INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH,
@@ -141,16 +142,9 @@ const DAY_OF_MONTH_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   label: (i + 1).toString(),
 }));
 
-const AVAILABLE_EVENTS = [
-  "notification.created",
-  "notification.updated",
-  "notification.read",
-  "notification.dismissed",
-  "card.created",
-  "card.updated",
-  "card.moved",
-  "card.deleted",
-] as const;
+// The events an Event Trigger can subscribe to. Webhook-only events
+// (`trigger_run.*`) are not among them.
+const AVAILABLE_EVENTS = eventTriggerEventSchema.options;
 
 // Mirrors the fields kanban.ts's changedCardFields diffs (updatedAt,
 // lastEditedBy*, and position are bookkeeping and never appear there).

@@ -13,7 +13,10 @@ import {
   currentCausingAgents,
   currentOriginatingTrigger,
 } from "../event-causation.ts";
-import type { WebhookEventPayload } from "@platypus/schemas";
+import type {
+  EventTriggerEventPayload,
+  WebhookEventPayload,
+} from "@platypus/schemas";
 import { webhookEventEntity, webhookEventScope } from "@platypus/schemas";
 
 /**
@@ -23,12 +26,74 @@ import { webhookEventEntity, webhookEventScope } from "@platypus/schemas";
  */
 const SHARED_BUCKET = "unknown";
 
-export function dispatchEvent(
+/**
+ * Sends one event to every enabled Webhook in the Workspace subscribed to it.
+ * Each delivery is fire-and-forget; this resolves once they are started.
+ */
+const deliverToWebhooks = async (
+  orgId: string,
+  workspaceId: string,
+  payload: WebhookEventPayload,
+): Promise<void> => {
+  const { event, data } = payload;
+  const webhooks = await db
+    .select()
+    .from(webhookTable)
+    .where(eq(webhookTable.workspaceId, workspaceId));
+  if (webhooks.length === 0) return;
+
+  const timestamp = new Date().toISOString();
+  const body = JSON.stringify({ event, timestamp, orgId, workspaceId, data });
+
+  for (const webhook of webhooks) {
+    if (!webhook.enabled) continue;
+    if (!webhook.events.includes(event)) continue;
+
+    void deliverWebhook(
+      webhook.url,
+      body,
+      webhook.signingSecret,
+      timestamp,
+      webhook.headers,
+    );
+  }
+};
+
+/**
+ * Delivers an event to Webhooks only — the path for Webhook-only events
+ * (`trigger_run.*`), which no Event Trigger may fire on. Fire-and-forget, like
+ * {@link dispatchEvent}. In-process only: the instance that produced the event
+ * delivers it, so it is never fanned out to peers.
+ */
+export function dispatchWebhookEvent(
   orgId: string,
   workspaceId: string,
   payload: WebhookEventPayload,
 ): void {
-  const { event, data } = payload;
+  void deliverToWebhooks(orgId, workspaceId, payload).catch(
+    (error: unknown) => {
+      logger.error(
+        {
+          workspaceId,
+          event: payload.event,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "Webhook event dispatch failed unexpectedly",
+      );
+    },
+  );
+}
+
+/**
+ * Delivers an event to both consumers of the stream: Webhooks, then the
+ * Workspace's Event Triggers.
+ */
+export function dispatchEvent(
+  orgId: string,
+  workspaceId: string,
+  payload: EventTriggerEventPayload,
+): void {
+  const { event } = payload;
   // Causation is ambient run context (ADR-0022): the chain of Agents acting
   // when the write happened, read once here so the fire-and-forget body below
   // keeps a stable view of it. A human write establishes no chain, so it reads
@@ -81,34 +146,7 @@ export function dispatchEvent(
   void (async () => {
     try {
       // 1. Deliver to webhooks
-      const webhooks = await db
-        .select()
-        .from(webhookTable)
-        .where(eq(webhookTable.workspaceId, workspaceId));
-
-      if (webhooks.length > 0) {
-        const timestamp = new Date().toISOString();
-        const body = JSON.stringify({
-          event,
-          timestamp,
-          orgId,
-          workspaceId,
-          data,
-        });
-
-        for (const webhook of webhooks) {
-          if (!webhook.enabled) continue;
-          if (!webhook.events.includes(event)) continue;
-
-          void deliverWebhook(
-            webhook.url,
-            body,
-            webhook.signingSecret,
-            timestamp,
-            webhook.headers,
-          );
-        }
-      }
+      await deliverToWebhooks(orgId, workspaceId, payload);
 
       // 2. Dispatch to event triggers
       const eventTriggers = await db

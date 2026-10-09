@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   cronTriggerConfigSchema,
   eventTriggerFiltersSchema,
-  webhookEventSchema,
+  eventTriggerEventSchema,
   type CronTriggerConfig,
   type EventTriggerConfig,
 } from "@platypus/schemas";
@@ -170,10 +170,10 @@ export function createTriggerTools(
               "IANA timezone for cron triggers (e.g., 'America/New_York'). Defaults to 'UTC'.",
             ),
           events: z
-            .array(webhookEventSchema)
+            .array(eventTriggerEventSchema)
             .optional()
             .describe(
-              `Array of event names for event triggers. Allowed values: ${webhookEventSchema.options.join(", ")}`,
+              `Array of event names for event triggers. Allowed values: ${eventTriggerEventSchema.options.join(", ")}`,
             ),
           filters: eventTriggerFiltersSchema
             .optional()

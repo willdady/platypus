@@ -3,7 +3,11 @@ import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { triggerRun as triggerRunTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
-import type { WebhookEvent } from "@platypus/schemas";
+import {
+  announceTriggerRunsEnded,
+  endedTriggerRunColumns,
+} from "./trigger-run-announce.ts";
+import type { EventTriggerEvent } from "@platypus/schemas";
 
 /**
  * The run-rate breaker for Event and Inbound Triggers.
@@ -149,26 +153,30 @@ export const shouldSuppressTriggerRun = async (
  * with the evidence — so a caller cannot record a suppression and forget to
  * bound it. Called in place of the run it would have started; it carries the
  * same event fields a run row would, and no stats or completion time, because
- * no Agent was invoked.
+ * no Agent was invoked. The row is announced as `trigger_run.suppressed`.
  */
 export const suppressTriggerRun = async (input: {
   triggerId: string;
   maxRunsToKeep: number;
   entityId: string;
-  eventType: WebhookEvent;
+  eventType: EventTriggerEvent;
   eventData: unknown;
 }): Promise<void> => {
   const now = new Date();
-  await db.insert(triggerRunTable).values({
-    id: nanoid(),
-    triggerId: input.triggerId,
-    status: "suppressed",
-    entityId: input.entityId,
-    eventType: input.eventType,
-    eventData: input.eventData ?? null,
-    startedAt: now,
-    createdAt: now,
-  });
+  const suppressed = await db
+    .insert(triggerRunTable)
+    .values({
+      id: nanoid(),
+      triggerId: input.triggerId,
+      status: "suppressed",
+      entityId: input.entityId,
+      eventType: input.eventType,
+      eventData: input.eventData ?? null,
+      startedAt: now,
+      createdAt: now,
+    })
+    .returning(endedTriggerRunColumns);
+  void announceTriggerRunsEnded(suppressed);
 
   await retainTriggerRuns(input.triggerId, input.maxRunsToKeep);
 };

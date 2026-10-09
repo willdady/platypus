@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   navigationMock,
   authMock,
@@ -30,6 +36,33 @@ function renderForm() {
 }
 
 // --- Tests -------------------------------------------------------------------
+
+describe("WebhookForm event picker", () => {
+  beforeEach(() => {
+    resetFormHarness();
+  });
+
+  it("groups the Trigger run events under their own heading", () => {
+    renderForm();
+
+    const group = screen.getByRole("group", { name: "Trigger runs" });
+    for (const label of [
+      "Trigger run succeeded",
+      "Trigger run failed",
+      "Trigger run cancelled",
+      "Trigger run suppressed",
+    ]) {
+      expect(
+        within(group).getByRole("switch", { name: label }),
+      ).toBeInTheDocument();
+    }
+    expect(
+      within(screen.getByRole("group", { name: "Cards" })).getByRole("switch", {
+        name: "Card moved",
+      }),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("WebhookForm validation error surfacing", () => {
   beforeEach(() => {

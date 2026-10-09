@@ -1,5 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mockDb, resetMockDb } from "../../test-utils.ts";
+import { mockDb, resetMockDb, seedDb } from "../../test-utils.ts";
+
+const { mockAnnounce } = vi.hoisted(() => ({ mockAnnounce: vi.fn() }));
+
+vi.mock("../../services/trigger-run-announce.ts", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../services/trigger-run-announce.ts")
+  >()),
+  announceTriggerRunsEnded: mockAnnounce,
+}));
+
 import { TriggerSink } from "./trigger-sink.ts";
 import { RunEventRecorder } from "../run-events.ts";
 import { mockLogger } from "../../test-setup.ts";
@@ -462,6 +472,79 @@ describe("TriggerSink", () => {
       const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.stats).not.toHaveProperty("stoppedAtStepLimit");
     });
+  });
+});
+
+describe("TriggerSink terminal announcement", () => {
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+  });
+
+  const startedAt = new Date("2026-01-01T00:00:00Z");
+  const runRow = (status: string) => ({
+    id: "run-1",
+    triggerId: "trigger-1",
+    status,
+    eventType: null,
+    eventData: null,
+    entityId: null,
+    startedAt,
+    completedAt: null,
+    errorMessage: null,
+    stats: null,
+    finalText: null,
+    eventsTruncated: false,
+    createdAt: startedAt,
+  });
+
+  const finish = (sink: TriggerSink) =>
+    sink.onFinish({
+      runId: "run-1",
+      status: "failed",
+      messages: [],
+      stats: {},
+      error: new Error("Run timed out"),
+      finalText: "late answer",
+    });
+
+  it("announces the run it ended, once", async () => {
+    seedDb({ trigger_run: [runRow("running")] });
+
+    await finish(new TriggerSink({ triggerId: "trigger-1" }));
+
+    expect(mockAnnounce).toHaveBeenCalledTimes(1);
+    expect(mockAnnounce).toHaveBeenCalledWith([
+      expect.objectContaining({
+        runId: "run-1",
+        triggerId: "trigger-1",
+        status: "failed",
+        errorMessage: "Run timed out",
+        startedAt,
+      }),
+    ]);
+  });
+
+  it("leaves a run the recovery sweep already failed untouched, and announces nothing", async () => {
+    const swept = {
+      ...runRow("failed"),
+      errorMessage: "Server restarted during execution",
+      completedAt: new Date("2026-01-01T00:30:00Z"),
+    };
+    const db = seedDb({ trigger_run: [swept] });
+
+    await finish(new TriggerSink({ triggerId: "trigger-1" }));
+
+    expect(db.tables.trigger_run).toEqual([swept]);
+    expect(mockAnnounce).not.toHaveBeenCalled();
+  });
+
+  it("announces nothing for a run whose row is gone (its Trigger was deleted)", async () => {
+    seedDb({ trigger_run: [] });
+
+    await finish(new TriggerSink({ triggerId: "trigger-1" }));
+
+    expect(mockAnnounce).not.toHaveBeenCalled();
   });
 });
 
