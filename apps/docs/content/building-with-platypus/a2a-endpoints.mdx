@@ -170,8 +170,10 @@ learns one out of your Chats.
   `contextId` Platypus doesn't recognise starts a new Chat, and every Task in
   it carries the client's `contextId` back unchanged. Later messages with the
   same `contextId` continue that Chat. Two clients that happen to choose the
-  same `contextId` get separate Chats. A `contextId` can be at most **128
-  characters**; a longer one is refused with an "invalid params" error.
+  same `contextId` get separate Chats. A deleted Chat's id is one Platypus
+  doesn't recognise, so a client that sends it gets a new, empty Chat, not an
+  error. A `contextId` can be at most **128 characters**; a longer one is
+  refused with an "invalid params" error.
 - **Each message is a Task.** `SendMessage` answers with the Task once the run
   has started. A client that sets `returnImmediately` gets it at once;
   otherwise the request waits up to **30 seconds** for the run to end, then

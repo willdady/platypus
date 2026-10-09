@@ -201,7 +201,7 @@ found", which gave no hint of the fix. Every unreachable context still gets
 the same answer as one that doesn't exist, and Task methods still answer
 `TaskNotFoundError`.
 
-## Amendment — a client may mint its own `contextId`
+## Amendment — a client may mint its own `contextId` (#1359)
 
 This supersedes the amendment above (#1354, shipped in 3.16.1). The original decision
 makes a `contextId` a Chat id, and #1293 and #1354 refused any other, as

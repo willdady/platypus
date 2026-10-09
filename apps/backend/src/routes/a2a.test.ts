@@ -1596,8 +1596,9 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   );
 
   describe("a contextId the client minted", () => {
-    const chatOfContext = () => rows("chat").find((c) => c.id === minted)!;
-    const minted = a2aContextChatId("tok-1", "ctx-0123456789abcdef");
+    const chatOfContext = () =>
+      rows("chat").find((c) => c.id === mintedChatId)!;
+    const mintedChatId = a2aContextChatId("tok-1", "ctx-0123456789abcdef");
 
     it("opens a new Chat with its first message, and its Task carries it unchanged", async () => {
       seedConversation();
@@ -1639,7 +1640,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       expect(second.body.result.task.id).not.toBe(first.body.result.task.id);
       expect(rows("chat")).toHaveLength(1);
       expect(rows("chat_message").find((m) => m.id === "msg-b")).toMatchObject({
-        chatId: minted,
+        chatId: mintedChatId,
         parentId: reply.id,
       });
     });
@@ -1707,7 +1708,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       const other = await send({
         messageId: "msg-b",
         taskId: first.id,
-        contextId: minted,
+        contextId: mintedChatId,
       });
 
       expect(same.body.error.code).toBe(-32004);
@@ -3250,6 +3251,27 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     // pushed once.
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("pushes the contextId the client minted, not its Chat's id", async () => {
+    seedConversation();
+    const contextId = "ctx-0123456789abcdef";
+
+    await rpc("SendMessage", {
+      message: {
+        role: "ROLE_USER",
+        messageId: "msg-a",
+        contextId,
+        parts: [text("Where is my order?")],
+      },
+      configuration: {
+        returnImmediately: false,
+        taskPushNotificationConfig: config(),
+      },
+    });
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    expect(pushed()[0].body.task.contextId).toBe(contextId);
   });
 
   it("pushes at once when a config is registered on a Task that already ended", async () => {

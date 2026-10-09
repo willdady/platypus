@@ -35,6 +35,21 @@ import type { A2aCaller } from "./a2a-task.ts";
 
 export type TaskRow = typeof a2aTaskTable.$inferSelect;
 
+/**
+ * The `contextId` a Task carries: the one its client minted, else its Chat's
+ * id. `isTaskContext` is the same rule as a query.
+ */
+export const taskContextId = (
+  task: Pick<TaskRow, "chatId" | "contextId">,
+): string => task.contextId ?? task.chatId;
+
+/** Matches the Tasks whose `taskContextId` is `contextId`. */
+export const isTaskContext = (contextId: string): SQL | undefined =>
+  or(
+    eq(a2aTaskTable.contextId, contextId),
+    and(isNull(a2aTaskTable.contextId), eq(a2aTaskTable.chatId, contextId)),
+  );
+
 /** Where a Task's rows are read and written: the database, or a transaction. */
 export type Executor = typeof db | ChatClaimTx;
 
@@ -315,9 +330,9 @@ export const toTask = (
   { state, statusAt, replyId }: TaskStatus,
   text: string | undefined,
 ): Task => {
-  const read: Task = {
+  const result: Task = {
     id: task.id,
-    contextId: task.contextId ?? task.chatId,
+    contextId: taskContextId(task),
     status: {
       state,
       message: undefined,
@@ -327,8 +342,8 @@ export const toTask = (
     history: [],
     metadata: undefined,
   };
-  chatIds.set(read, task.chatId);
-  return read;
+  chatIds.set(result, task.chatId);
+  return result;
 };
 
 /** The Chat of each Task `toTask` made, which a client-minted contextId is not. */

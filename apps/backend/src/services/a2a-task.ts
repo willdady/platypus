@@ -50,6 +50,8 @@ import {
   findA2aTask,
   readTaskRows,
   replyTexts,
+  taskContextId,
+  isTaskContext,
   toTask,
   endStateOf,
   isTerminal,
@@ -362,7 +364,7 @@ const startTurn = async (
   // never starts a run. It is refused with the spec's error for the case.
   if (message.taskId) {
     const task = await findA2aTask(caller, message.taskId);
-    if (contextId && contextId !== (task.contextId ?? task.chatId)) {
+    if (contextId && contextId !== taskContextId(task)) {
       throw new RequestMalformedError("The contextId is not the Task's");
     }
     if (!isTerminal(await readTask(task))) {
@@ -394,7 +396,7 @@ const startTurn = async (
     // contextId naming the Owner's own Chat, another token's or another
     // endpoint's is the client's own string, so it opens a Chat of its own.
     // A Chat id is no secret, so it is not a credential.
-    const minted = a2aContextChatId(token.id, contextId);
+    const mintedChatId = a2aContextChatId(token.id, contextId);
     const chats = await db
       .select({
         id: chatTable.id,
@@ -407,7 +409,7 @@ const startTurn = async (
       .from(chatTable)
       .where(
         and(
-          inArray(chatTable.id, [contextId, minted]),
+          inArray(chatTable.id, [contextId, mintedChatId]),
           eq(chatTable.workspaceId, endpoint.workspaceId),
           eq(chatTable.agentId, endpoint.agentId),
           eq(chatTable.a2aTokenId, token.id),
@@ -417,7 +419,7 @@ const startTurn = async (
     context =
       chat?.id === contextId
         ? { chatId: contextId, contextId: null }
-        : { chatId: minted, contextId };
+        : { chatId: mintedChatId, contextId };
     if (chat) {
       const [sent] = await db
         .select({ id: chatMessage.id })
@@ -748,15 +750,7 @@ export const listA2aTasks = async (
   }
   const filters = and(
     mine,
-    params.contextId
-      ? or(
-          eq(a2aTaskTable.contextId, params.contextId),
-          and(
-            isNull(a2aTaskTable.contextId),
-            eq(a2aTaskTable.chatId, params.contextId),
-          ),
-        )
-      : undefined,
+    params.contextId ? isTaskContext(params.contextId) : undefined,
     params.status
       ? or(
           recorded ? eq(a2aTaskTable.state, recorded) : undefined,
