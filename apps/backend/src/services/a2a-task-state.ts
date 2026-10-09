@@ -314,18 +314,28 @@ export const toTask = (
   task: TaskRow,
   { state, statusAt, replyId }: TaskStatus,
   text: string | undefined,
-): Task => ({
-  id: task.id,
-  contextId: task.chatId,
-  status: {
-    state,
-    message: undefined,
-    timestamp: statusAt.toISOString(),
-  },
-  artifacts: text && replyId ? [replyArtifact(replyId, text)] : [],
-  history: [],
-  metadata: undefined,
-});
+): Task => {
+  const read: Task = {
+    id: task.id,
+    contextId: task.contextId ?? task.chatId,
+    status: {
+      state,
+      message: undefined,
+      timestamp: statusAt.toISOString(),
+    },
+    artifacts: text && replyId ? [replyArtifact(replyId, text)] : [],
+    history: [],
+    metadata: undefined,
+  };
+  chatIds.set(read, task.chatId);
+  return read;
+};
+
+/** The Chat of each Task `toTask` made, which a client-minted contextId is not. */
+const chatIds = new WeakMap<Task, string>();
+
+/** The id of the Chat a Task `toTask` made is in. */
+export const chatIdOf = (task: Task): string | undefined => chatIds.get(task);
 
 /**
  * A Task, read with `status`: then its reply's text if it completed. One

@@ -38,6 +38,7 @@ const { storePushConfig } = await import("./a2a-push.ts");
 const TASK: TaskRow = {
   id: "task-1",
   chatId: "chat-1",
+  contextId: null,
   messageId: "msg-a",
   endpointId: "ep-1",
   tokenId: "tok-1",

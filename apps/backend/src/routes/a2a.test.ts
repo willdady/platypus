@@ -175,6 +175,7 @@ import { runRegistry } from "../runs/run-registry.ts";
 import {
   A2aChatBusyError,
   a2aChatId,
+  a2aContextChatId,
   getA2aTask,
   listA2aTasks,
   type A2aCaller,
@@ -1574,28 +1575,157 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   it.each([
     ["another Workspace", { workspaceId: "ws-2", agentId: "agent-1" }],
     ["another Agent", { workspaceId: "ws-1", agentId: "agent-2" }],
-  ])("refuses a contextId of a Chat in %s", async (_case, chat) => {
-    seedConversation({
-      chat: [{ id: "chat-x", title: "Theirs", status: "succeeded", ...chat }],
+  ])(
+    "opens a Chat of its own for a contextId naming a Chat in %s",
+    async (_case, chat) => {
+      seedConversation({
+        chat: [{ id: "chat-x", title: "Theirs", status: "succeeded", ...chat }],
+      });
+
+      const res = await send({ messageId: "msg-a", contextId: "chat-x" });
+
+      expect(res.body.result.task.contextId).toBe("chat-x");
+      expect(rows("chat").map((c) => c.id)).toEqual([
+        "chat-x",
+        a2aContextChatId("tok-1", "chat-x"),
+      ]);
+      expect(
+        rows("chat_message").filter((m) => m.chatId === "chat-x"),
+      ).toHaveLength(0);
+    },
+  );
+
+  describe("a contextId the client minted", () => {
+    const chatOfContext = () => rows("chat").find((c) => c.id === minted)!;
+    const minted = a2aContextChatId("tok-1", "ctx-0123456789abcdef");
+
+    it("opens a new Chat with its first message, and its Task carries it unchanged", async () => {
+      seedConversation();
+
+      const res = await send({
+        messageId: "msg-a",
+        contextId: "ctx-0123456789abcdef",
+      });
+
+      const task = res.body.result.task;
+      expect(task).toMatchObject({
+        contextId: "ctx-0123456789abcdef",
+        status: { state: "TASK_STATE_COMPLETED" },
+      });
+      expect(rows("chat")).toHaveLength(1);
+      expect(chatOfContext()).toMatchObject({
+        agentId: "agent-1",
+        a2aTokenId: "tok-1",
+        a2aEndpointId: "ep-1",
+      });
+      expect(
+        (await rpc("GetTask", { id: task.id })).body.result.contextId,
+      ).toBe("ctx-0123456789abcdef");
     });
 
-    const res = await send({ messageId: "msg-a", contextId: "chat-x" });
+    it("continues that Chat with the next message, after its active leaf", async () => {
+      seedConversation();
+      const contextId = "ctx-0123456789abcdef";
+      const first = await send({ messageId: "msg-a", contextId });
+      const reply = rows("chat_message").find((m) => m.role === "assistant")!;
 
-    expect(res.body.error.code).toBe(-32602);
-    expect(model.prompts).toHaveLength(0);
-  });
+      model.reply = "Second answer";
+      const second = await send({ messageId: "msg-b", contextId });
 
-  it("refuses a contextId it never assigned, saying to omit it", async () => {
-    seedConversation();
-
-    const res = await send({ messageId: "msg-a", contextId: "client-made" });
-
-    expect(res.body.error).toMatchObject({
-      code: -32602,
-      message:
-        "Unknown contextId client-made: omit contextId to start a context, and the server assigns one",
+      expect(second.body.result.task).toMatchObject({
+        contextId,
+        artifacts: [{ parts: [{ text: "Second answer" }] }],
+      });
+      expect(second.body.result.task.id).not.toBe(first.body.result.task.id);
+      expect(rows("chat")).toHaveLength(1);
+      expect(rows("chat_message").find((m) => m.id === "msg-b")).toMatchObject({
+        chatId: minted,
+        parentId: reply.id,
+      });
     });
-    expect(model.prompts).toHaveLength(0);
+
+    it("answers a retried first message with the Task it already started", async () => {
+      seedConversation();
+      const contextId = "ctx-0123456789abcdef";
+
+      const first = await send({ messageId: "msg-a", contextId });
+      const retry = await send({ messageId: "msg-a", contextId });
+
+      expect(retry.body.result.task.id).toBe(first.body.result.task.id);
+      expect(model.prompts).toHaveLength(1);
+      expect(rows("chat")).toHaveLength(1);
+    });
+
+    it("opens a separate Chat for each token minting the same string", async () => {
+      seedConversation();
+      tables.a2a_token.push({
+        id: "tok-3",
+        endpointId: "ep-1",
+        name: "Other client",
+        tokenHash: hashBearerToken("pa2a_third-client"),
+        ...LIVE,
+      });
+
+      await send({ messageId: "msg-a", contextId: "shared" });
+      const other = await send(
+        { messageId: "msg-a", contextId: "shared" },
+        { token: "pa2a_third-client" },
+      );
+
+      expect(other.body.result.task.contextId).toBe("shared");
+      expect(rows("chat").map((c) => c.id)).toEqual([
+        a2aContextChatId("tok-1", "shared"),
+        a2aContextChatId("tok-3", "shared"),
+      ]);
+    });
+
+    it("lists its Tasks by the contextId the client minted", async () => {
+      seedConversation();
+      const contextId = "ctx-0123456789abcdef";
+      const mine = await send({ messageId: "msg-a", contextId });
+      await send({ messageId: "msg-z" });
+
+      const listed = (await rpc("ListTasks", { contextId })).body
+        .result as unknown as { tasks: RpcTask[] };
+
+      expect(listed.tasks.map((t) => [t.id, t.contextId])).toEqual([
+        [mine.body.result.task.id, contextId],
+      ]);
+    });
+
+    it("accepts it beside its own Task's id, and refuses another", async () => {
+      seedConversation();
+      const contextId = "ctx-0123456789abcdef";
+      const first = (await send({ messageId: "msg-a", contextId })).body.result
+        .task;
+
+      const same = await send({
+        messageId: "msg-b",
+        taskId: first.id,
+        contextId,
+      });
+      const other = await send({
+        messageId: "msg-b",
+        taskId: first.id,
+        contextId: minted,
+      });
+
+      expect(same.body.error.code).toBe(-32004);
+      expect(other.body.error.code).toBe(-32602);
+    });
+
+    it("is refused past 128 characters, opening nothing", async () => {
+      seedConversation();
+
+      const res = await send({
+        messageId: "msg-a",
+        contextId: "c".repeat(129),
+      });
+
+      expect(res.body.error.code).toBe(-32602);
+      expect(rows("chat")).toHaveLength(0);
+      expect(model.prompts).toHaveLength(0);
+    });
   });
 
   it.each([
@@ -4150,6 +4280,22 @@ describe("the A2A call log", () => {
     expect(everything).not.toContain("Hello from Helper");
   });
 
+  it("logs the Chat of a contextId the client minted, not the contextId", async () => {
+    seedConversation();
+
+    const sent = await send({ messageId: "msg-a", contextId: "ctx-1" });
+
+    expect(callLogLines()).toEqual([
+      line({
+        ...ids,
+        tokenId: "tok-1",
+        method: "SendMessage",
+        taskId: sent.body.result.task.id,
+        chatId: a2aContextChatId("tok-1", "ctx-1"),
+      }),
+    ]);
+  });
+
   it("logs a GetTask with its Task and Chat", async () => {
     seedConversation();
     const sent = await send({ messageId: "msg-a" });
@@ -5236,23 +5382,29 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
     );
 
     // The Owner's UI Chat is never written to, so memory extraction never
-    // reads a caller's text as the Owner's own.
-    it("is unknown, writing no message and starting no run", async () => {
+    // reads a caller's text as the Owner's own. The id is the client's own
+    // string to it, and opens a Chat of the token's own.
+    it("leaves that Chat untouched, opening one of the token's own", async () => {
       const res = await send({ messageId: "msg-a", contextId: "chat-x" });
 
-      expect(res.body.error.code).toBe(-32602);
-      expect(res.body.error.data[0].metadata).toBeUndefined();
-      expect(rows("chat_message").map((m) => m.id)).toEqual(["chat-x-msg"]);
-      expect(rows("a2a_task")).toHaveLength(0);
-      expect(model.prompts).toHaveLength(0);
+      expect(res.body.result.task.contextId).toBe("chat-x");
+      const own = a2aContextChatId("tok-1", "chat-x");
+      expect(rows("chat_message").map((m) => [m.chatId, m.id])).toEqual([
+        ["chat-x", "chat-x-msg"],
+        [own, "msg-a"],
+        [own, expect.any(String)],
+      ]);
+      expect(rows("a2a_task").map((t) => t.chatId)).toEqual([own]);
     });
 
-    it("is unknown for a messageId already in it, making no Task", async () => {
+    it("finds no Task for a messageId already in it, starting one of its own", async () => {
       const res = await send({ messageId: "chat-x-msg", contextId: "chat-x" });
 
-      expect(res.body.error.code).toBe(-32602);
-      expect(rows("a2a_task")).toHaveLength(0);
-      expect(model.prompts).toHaveLength(0);
+      expect(res.body.result.task.contextId).toBe("chat-x");
+      expect(rows("a2a_task").map((t) => t.chatId)).toEqual([
+        a2aContextChatId("tok-1", "chat-x"),
+      ]);
+      expect(model.prompts).toHaveLength(1);
     });
   });
 
@@ -5390,10 +5542,16 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
     expect(
       (await rpc("GetTask", { id }, { token: OTHER_TOKEN })).body.error.code,
     ).toBe(-32001);
+    // Its Chat's id is the other token's own string: it opens a Chat of its
+    // own and never continues the deleted token's.
+    const other = await send(
+      { messageId: "msg-b", contextId },
+      { token: OTHER_TOKEN },
+    );
+    expect(other.body.result.task.contextId).toBe(contextId);
     expect(
-      (await send({ messageId: "msg-b", contextId }, { token: OTHER_TOKEN }))
-        .body.error.code,
-    ).toBe(-32602);
+      rows("chat_message").filter((m) => m.chatId === contextId),
+    ).toHaveLength(2);
   });
 });
 

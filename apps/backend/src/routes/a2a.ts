@@ -7,7 +7,7 @@ import {
   type A2ARequestHandler,
 } from "@a2a-js/sdk/server";
 import { A2AError, VersionNotSupportedError } from "@a2a-js/sdk/errors";
-import { AgentCard, type StreamResponse } from "@a2a-js/sdk";
+import { AgentCard, type StreamResponse, type Task } from "@a2a-js/sdk";
 import {
   A2A_PROTOCOL_VERSION,
   lookupA2aEndpoint,
@@ -30,7 +30,7 @@ import {
   getA2aPushConfig,
   listA2aPushConfigs,
 } from "../services/a2a-push.ts";
-import { findA2aTask } from "../services/a2a-task-state.ts";
+import { chatIdOf, findA2aTask } from "../services/a2a-task-state.ts";
 import { taskStatus } from "../services/a2a-task-lifecycle.ts";
 import {
   streamA2aMessage,
@@ -170,14 +170,15 @@ const refusal = (log: A2aCallLogEntry, error: unknown): unknown => {
 };
 
 /**
- * The Task and Chat a method answered with: a Task names both, and a push
- * config method names the Task its params named, which it found.
+ * The Task and Chat a method answered with, and a push config method names
+ * the Task its params named, which it found. The Chat is the one the Task was
+ * read from: a contextId the client minted is not its Chat's id.
  */
 const noteIds = (log: A2aCallLogEntry, params: unknown, result: unknown) => {
-  const task = result as { id?: unknown; contextId?: unknown } | undefined;
+  const task = result as Task | undefined;
   if (typeof task?.id === "string" && typeof task.contextId === "string") {
     log.taskId = task.id;
-    log.chatId = task.contextId;
+    log.chatId = chatIdOf(task);
     return;
   }
   const { taskId } = (params ?? {}) as { taskId?: unknown };
