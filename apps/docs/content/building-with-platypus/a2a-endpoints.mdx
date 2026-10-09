@@ -165,8 +165,8 @@ learns one out of your Chats.
 - **`SendMessage` without a `contextId`** starts a new Chat with the endpoint's
   Agent. The answer's `contextId` is that Chat; send it with later messages to
   continue the conversation.
-- **A client can choose its own `contextId`.** Some clients, Hermes Agent
-  among them, make up a `contextId` for a conversation's first message. A
+- **A client can choose its own `contextId`.** Some clients make up a
+  `contextId` for a conversation's first message. A
   `contextId` Platypus doesn't recognise starts a new Chat, and every Task in
   it carries the client's `contextId` back unchanged. Later messages with the
   same `contextId` continue that Chat. Two clients that happen to choose the
@@ -185,6 +185,11 @@ learns one out of your Chats.
   after you or the client continue the Chat. It also keeps the reply it ended
   with: regenerating that reply in the Chat doesn't change the artifact, and
   deleting it leaves the Task with its state and no artifact.
+- **A reply cut short is still `completed`.** A run that stops at the Agent's
+  **Max steps**, or at the model's output limit, ends `completed` like any
+  other, and nothing tells the client the reply is partial. Nobody is watching
+  an A2A run, so give the exposed Agent enough **Max steps** for the work you
+  expect clients to send it.
 - **A retry is safe.** The client's `messageId` becomes the message's id in the
   Chat, so sending the same `messageId` again answers with the Task it already
   started, never a second run. That holds even when the retry arrives while
@@ -331,7 +336,7 @@ registered.
 - **Delivery works like a [Webhook](/building-with-platypus/webhooks#delivery-and-retries)'s**,
   with the same timeout and retries.
 - **Push URLs must be public.** Platypus never pushes to a loopback,
-  cloud-metadata or private-network address, unless your server administrator
+  cloud-metadata or private-network address, unless your Operator
   allows private networks for clients on their own network. Any `http` or
   `https` URL is accepted when it is registered; one that leads somewhere not
   allowed is skipped when the Task ends, so check your URL is reachable from
