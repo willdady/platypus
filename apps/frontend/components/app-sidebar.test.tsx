@@ -27,7 +27,7 @@ import type { Actor } from "@/lib/authorization";
 
 const { params, reads, auth } = vi.hoisted(() => ({
   params: { orgId: "org1", workspaceId: "ws1" },
-  auth: { actor: "org-admin" as Actor },
+  auth: { actor: "org-admin" as Actor, ownsWorkspace: true },
   // Keyed by `${workspaceId}|${entity}`. Each entry is handed back by
   // reference, as SWR does, so a read's `data` identity is stable across
   // renders.
@@ -114,6 +114,7 @@ beforeEach(() => {
   reads.clear();
   params.workspaceId = "ws1";
   auth.actor = "org-admin";
+  auth.ownsWorkspace = true;
 });
 
 afterEach(() => {
@@ -330,5 +331,29 @@ describe("AppSidebar chat actions", () => {
     expect(url).toBe("http://test/organizations/org1/workspaces/ws1/chat/c1");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body)).toEqual({ isPinned: true });
+  });
+
+  // The backend refuses every one of these to anyone but the Workspace Owner
+  // — an Org Admin included — so offering them would only produce an error.
+  it("offers a non-owner no Pin, Edit or Delete", () => {
+    auth.ownsWorkspace = false;
+    seedHeader();
+    setRead("ws1", CHAT_LIST, {
+      results: [
+        chat("c1", "Untagged chat"),
+        { ...chat("c2", "Tagged chat"), tags: ["ops"] },
+      ],
+    });
+    renderSidebar();
+
+    expect(
+      within(screen.getByText("Untagged chat").closest("li")!).queryByRole(
+        "button",
+        { name: "Chat options" },
+      ),
+    ).toBeNull();
+    const menu = openChatMenu("Tagged chat");
+    expect(within(menu).getByText("ops")).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem")).toBeNull();
   });
 });

@@ -180,3 +180,12 @@ export const canManageWorkspaceDelegation = orgAdminOnly;
 export function canSendChatMessages(ownsWorkspace: boolean): boolean {
   return ownsWorkspace;
 }
+
+/**
+ * May this caller pin, rename, re-tag or delete a Chat in this Workspace? The
+ * same literal ownership as {@link canSendChatMessages}, mirroring the
+ * `requireWorkspaceOwner` guard on the Chat update and delete routes.
+ */
+export function canChangeChat(ownsWorkspace: boolean): boolean {
+  return ownsWorkspace;
+}

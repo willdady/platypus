@@ -12,7 +12,11 @@ import {
 import { toast } from "sonner";
 import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { canCreateWorkspace, canOpenOrgSettings } from "@/lib/authorization";
+import {
+  canChangeChat,
+  canCreateWorkspace,
+  canOpenOrgSettings,
+} from "@/lib/authorization";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   Sidebar,
@@ -85,7 +89,10 @@ export function AppSidebar() {
     workspaceId: string;
   }>();
   const backendUrl = useBackendUrl();
-  const { actor } = useAuth();
+  const { actor, ownsWorkspace } = useAuth();
+  // Chats belong to the Workspace Owner; everyone else reads them, so the
+  // row menu offers nobody else an action the backend would refuse.
+  const canChange = canChangeChat(ownsWorkspace);
   const isMobile = useIsMobile();
 
   const routes = workspaceRoutes(orgId, workspaceId);
@@ -489,70 +496,77 @@ export function AppSidebar() {
                               )}
                             </Link>
                           </SidebarMenuButton>
-                          <DropdownMenu modal={false}>
-                            <DropdownMenuTrigger asChild>
-                              <SidebarMenuAction
-                                className="cursor-pointer text-muted-foreground"
-                                aria-label="Chat options"
+                          {(canChange ||
+                            (chat.tags && chat.tags.length > 0)) && (
+                            <DropdownMenu modal={false}>
+                              <DropdownMenuTrigger asChild>
+                                <SidebarMenuAction
+                                  className="cursor-pointer text-muted-foreground"
+                                  aria-label="Chat options"
+                                >
+                                  <EllipsisVertical className="h-4 w-4" />
+                                </SidebarMenuAction>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                className="max-w-3xs"
+                                side="right"
+                                align="start"
                               >
-                                <EllipsisVertical className="h-4 w-4" />
-                              </SidebarMenuAction>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              className="max-w-3xs"
-                              side="right"
-                              align="start"
-                            >
-                              <DropdownMenuItem
-                                className="cursor-pointer"
-                                onSelect={() => handleTogglePin(chat.id)}
-                                disabled={isTogglingPin}
-                              >
-                                {chat.isPinned ? (
+                                {canChange && (
                                   <>
-                                    <PinOff className="h-4 w-4" /> Unpin
-                                  </>
-                                ) : (
-                                  <>
-                                    <Pin className="h-4 w-4" /> Pin
+                                    <DropdownMenuItem
+                                      className="cursor-pointer"
+                                      onSelect={() => handleTogglePin(chat.id)}
+                                      disabled={isTogglingPin}
+                                    >
+                                      {chat.isPinned ? (
+                                        <>
+                                          <PinOff className="h-4 w-4" /> Unpin
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Pin className="h-4 w-4" /> Pin
+                                        </>
+                                      )}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="cursor-pointer"
+                                      onSelect={() => {
+                                        setRenameChatId(chat.id);
+                                        setRenameTitle(chat.title);
+                                        setRenameTags(chat.tags ?? []);
+                                        setRenameValidationErrors({});
+                                      }}
+                                    >
+                                      <Pencil className="h-4 w-4" /> Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="cursor-pointer"
+                                      onSelect={() => setDeleteChatId(chat.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" /> Delete
+                                    </DropdownMenuItem>
                                   </>
                                 )}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="cursor-pointer"
-                                onSelect={() => {
-                                  setRenameChatId(chat.id);
-                                  setRenameTitle(chat.title);
-                                  setRenameTags(chat.tags ?? []);
-                                  setRenameValidationErrors({});
-                                }}
-                              >
-                                <Pencil className="h-4 w-4" /> Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="cursor-pointer"
-                                onSelect={() => setDeleteChatId(chat.id)}
-                              >
-                                <Trash2 className="h-4 w-4" /> Delete
-                              </DropdownMenuItem>
-                              {chat.tags && chat.tags.length > 0 && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuGroup className="flex flex-wrap p-1 gap-1">
-                                    {chat.tags.map((tag: string) => (
-                                      <Badge
-                                        key={tag}
-                                        className="cursor-default"
-                                        variant="secondary"
-                                      >
-                                        {tag}
-                                      </Badge>
-                                    ))}
-                                  </DropdownMenuGroup>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                {chat.tags && chat.tags.length > 0 && (
+                                  <>
+                                    {canChange && <DropdownMenuSeparator />}
+                                    <DropdownMenuGroup className="flex flex-wrap p-1 gap-1">
+                                      {chat.tags.map((tag: string) => (
+                                        <Badge
+                                          key={tag}
+                                          className="cursor-default"
+                                          variant="secondary"
+                                        >
+                                          {tag}
+                                        </Badge>
+                                      ))}
+                                    </DropdownMenuGroup>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
                       </SidebarMenuItem>
                     ))}
