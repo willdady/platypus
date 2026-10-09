@@ -300,6 +300,29 @@ describe("Provider Routes", () => {
       expect(status).toBe(200);
       expect(results[0].apiKey).toBe("sk-secret");
     });
+
+    it("redacts a Shared Provider's apiKey from an owner delegated providerSelfManagement", async () => {
+      // The delegation covers this Workspace's own Providers only; a Shared
+      // Provider's credentials belong to the Org Admins (ADR-0007).
+      mockSession();
+      world({
+        role: "member",
+        providerSelfManagement: true,
+        rows: {
+          provider: [
+            sharedProvider({ headers: { Authorization: "Bearer org-hdr" } }),
+          ],
+          attachment: [attachedHere("p2")],
+        },
+      });
+
+      const { status, results } = await list();
+      expect(status).toBe(200);
+      expect(results[0]).not.toHaveProperty("apiKey");
+      expect(results[0]).not.toHaveProperty("headers");
+      expect(JSON.stringify(results)).not.toContain("sk-org");
+      expect(JSON.stringify(results)).not.toContain("org-hdr");
+    });
   });
 
   describe("GET /:providerId", () => {
@@ -336,6 +359,24 @@ describe("Provider Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.text();
       expect(body).not.toContain("sk-secret");
+      expect(JSON.parse(body)).not.toHaveProperty("apiKey");
+    });
+
+    it("redacts a Shared Provider's apiKey from an owner delegated providerSelfManagement", async () => {
+      mockSession();
+      world({
+        role: "member",
+        providerSelfManagement: true,
+        rows: {
+          provider: [sharedProvider()],
+          attachment: [attachedHere("p2")],
+        },
+      });
+
+      const res = await app.request(`${baseUrl}/p2`);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).not.toContain("sk-org");
       expect(JSON.parse(body)).not.toHaveProperty("apiKey");
     });
 

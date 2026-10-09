@@ -57,9 +57,14 @@ provider.get(
     // (ADR-0006) — the same rule the write routes reject on. The rows themselves
     // still list, because selecting a Provider on an Agent or Chat does not
     // require self-management.
+    // A Shared row is configured only by an Org Admin on the Organization
+    // surface (ADR-0007), so the delegation never reveals its credentials.
     const reveal = await workspaceCredentialsVisible(c, "provider");
     const results = scoped.map(({ row, scope }) =>
-      providerReadModel(row, { reveal, scope }),
+      providerReadModel(row, {
+        reveal: reveal && scope === "workspace",
+        scope,
+      }),
     );
     return c.json({ results });
   },
@@ -82,7 +87,12 @@ provider.get(
     );
     // See the list route: redacted unless this caller may manage the Provider.
     const reveal = await workspaceCredentialsVisible(c, "provider");
-    return c.json(providerReadModel(found.row, { reveal, scope: found.scope }));
+    return c.json(
+      providerReadModel(found.row, {
+        reveal: reveal && found.scope === "workspace",
+        scope: found.scope,
+      }),
+    );
   },
 );
 

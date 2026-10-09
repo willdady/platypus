@@ -133,6 +133,45 @@ describe("MCP Routes", () => {
         expect.objectContaining({ id: "mcp-org", scope: "organization" }),
       ]);
     });
+
+    it("redacts a Shared MCP's bearerToken from an owner delegated mcpSelfManagement", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      const workspaceMcps = [
+        {
+          id: "mcp-ws",
+          name: "Workspace MCP",
+          authType: "Bearer",
+          bearerToken: "ws-tok",
+        },
+      ];
+      const orgMcps = [
+        {
+          mcp: {
+            id: "mcp-org",
+            name: "Org MCP",
+            authType: "Bearer",
+            bearerToken: "org-tok",
+          },
+        },
+      ];
+      mockDb.where
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
+        .mockResolvedValueOnce(workspaceMcps) // route: workspace-scoped query
+        .mockResolvedValueOnce(orgMcps); // route: attached org-scoped query
+      mockDb.limit.mockResolvedValueOnce([{ flag: true }]); // delegated
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).not.toContain("org-tok");
+      // The delegation still reveals the Workspace's own MCP.
+      expect(body).toContain("ws-tok");
+    });
   });
 
   describe("GET /:mcpId", () => {
@@ -236,6 +275,38 @@ describe("MCP Routes", () => {
       expect(await res.json()).toEqual(
         expect.objectContaining({ id: "mcp-org", scope: "organization" }),
       );
+    });
+
+    it("redacts a Shared MCP's bearerToken from an owner delegated mcpSelfManagement", async () => {
+      // The delegation covers this Workspace's own MCPs only; a Shared MCP's
+      // credentials belong to the Org Admins (ADR-0007).
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // resolveScoped lookup → org-scoped row
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "mcp-org",
+          name: "Shared",
+          organizationId: orgId,
+          workspaceId: null,
+          authType: "Bearer",
+          bearerToken: "org-tok",
+          headers: { "X-Api-Key": "org-hdr" },
+        },
+      ]);
+      // attachment check → attached here, so visible
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+      mockDb.limit.mockResolvedValueOnce([{ flag: true }]); // delegated
+
+      const res = await app.request(`${baseUrl}/mcp-org`);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).not.toContain("org-tok");
+      expect(body).not.toContain("org-hdr");
+      expect(JSON.parse(body)).not.toHaveProperty("bearerToken");
     });
 
     it("returns 404 for an org-scoped MCP not attached here", async () => {

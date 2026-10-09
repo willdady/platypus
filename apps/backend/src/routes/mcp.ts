@@ -74,9 +74,11 @@ mcp.get(
     // Request credentials are revealed only to a caller who may manage this MCP
     // (ADR-0006) — the same rule the write routes reject on. The rows still list,
     // because granting an MCP to an Agent does not require self-management.
+    // A Shared row is configured only by an Org Admin on the Organization
+    // surface (ADR-0007), so the delegation never reveals its credentials.
     const reveal = await workspaceCredentialsVisible(c, "mcp");
     const results = scoped.map(({ row, scope }) =>
-      mcpReadModel(row, { reveal, scope }),
+      mcpReadModel(row, { reveal: reveal && scope === "workspace", scope }),
     );
 
     return c.json({ results });
@@ -94,7 +96,12 @@ mcp.get(
     const found = await requireScoped(db, "mcp", mcpId, workspaceScopeOf(c));
     // See the list route: redacted unless this caller may manage the MCP.
     const reveal = await workspaceCredentialsVisible(c, "mcp");
-    return c.json(mcpReadModel(found.row, { reveal, scope: found.scope }));
+    return c.json(
+      mcpReadModel(found.row, {
+        reveal: reveal && found.scope === "workspace",
+        scope: found.scope,
+      }),
+    );
   },
 );
 
