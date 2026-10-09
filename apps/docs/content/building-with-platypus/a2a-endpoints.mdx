@@ -250,10 +250,11 @@ A client with someone waiting on the reply can watch it arrive over
 server-sent events instead of polling.
 
 - **`SendStreamingMessage`** takes the same message as `SendMessage` and
-  answers with a stream: first the Task, then the Agent's reply as it is
-  written, as artifact updates that each add to the last, then the finished
-  reply as one artifact and the Task's final status. The stream ends with the
-  Task.
+  answers with a stream: first the Task, then a status update as it starts
+  `working`, then the Agent's reply as it is written, as artifact updates that
+  each add to the last, then the finished reply as one artifact and the Task's
+  final status, which ends the stream. A Task that fails or is canceled sends
+  no finished reply.
 - **`SubscribeToTask`** rejoins a Task that is still running, for example
   after the client's connection dropped. It sends the Task as it stands, the
   reply so far, then the rest of the reply as it is written, any change of
@@ -325,7 +326,9 @@ registered.
 - **A run lost to a server crash** ends `failed` within about a minute, once
   Platypus notices it has gone quiet, and that is pushed like any other end. A
   run stopped by a server shutting down cleanly ends `canceled`. An end that
-  a crash kept from being pushed is pushed within about a minute.
+  a crash kept from being pushed is pushed within about a minute. A crash in
+  the middle of a push loses that push, so read the Task with `GetTask` if one
+  never arrives.
 - **Your credentials come back to you.** A request carries the
   `authentication` the client registered as an `Authorization` header (for
   example `Authorization: Bearer <credentials>`), and its `token`, if any, as
@@ -341,8 +344,9 @@ registered.
   `https` URL is accepted when it is registered; one that leads somewhere not
   allowed is skipped when the Task ends, so check your URL is reachable from
   the internet.
-- **Each URL is pushed once.** Once a Task has ended, a config can't be pointed
-  at a different URL: registering its `id` with a new `url` is refused.
+- **Each registration is pushed at most once.** Once a Task has ended, a config
+  can't be pointed at a different URL: registering its `id` with a new `url` is
+  refused.
 - **Up to 5 URLs per Task.** Registering a URL that is already on the Task,
   without naming its `id`, replaces it rather than adding a second. So does
   registering an `id` the Task already has, even when two registrations of it
