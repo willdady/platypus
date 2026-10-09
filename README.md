@@ -36,6 +36,7 @@ Platypus is an open-source, full-stack application for building AI Agents that r
 - **🤖 Agents, Skills & Sub-Agents:** Build an Agent once — model, instructions, and tools — then give it reusable Skills it loads on demand and sub-agents it can delegate to.
 - **🧰 Built-in Tool Sets:** Agents move Kanban cards, update Dashboards, post Notifications, manage Triggers, read the web, and even build other Agents and Skills.
 - **🔌 MCP Support:** First-class **Model Context Protocol** support, so Agents connect securely to local and remote data sources.
+- **📡 A2A Endpoints:** Expose an Agent to outside agents and chat platforms over the open [A2A](https://a2a-protocol.org) protocol, with a token per client and every conversation kept as an ordinary Chat.
 - **🏖️ Sandbox:** Shell and filesystem access inside an isolated, per-workspace execution environment, with pluggable Docker and SSH reference backends.
 - **🧠 Memory:** Facts and preferences are extracted from your conversations in the background and injected into future chats, so Agents remember you over time.
 - **📋 Boards & Dashboards:** Drag-and-drop Kanban boards and widget-based dashboards, both readable and updatable by Agents through built-in tools.
@@ -76,7 +77,7 @@ The docs site is the single source of truth for setup, concepts, and reference m
 - **[Administering](https://docs.platypus.chat/administering)** — managing Workspaces and sharing resources across an Organization.
 - **[Self-Hosting](https://docs.platypus.chat/self-hosting)** — Docker Compose, configuration & environment, providers & auth, and sandbox infrastructure.
 - **[Concepts](https://docs.platypus.chat/concepts)** — the domain model: Organizations, Workspaces, Agents, Skills, MCP, Sandbox, and Memory.
-- **[Building with Platypus](https://docs.platypus.chat/building-with-platypus)** — agents & sub-agents, skills, tool sets, MCP servers, triggers, boards, dashboards, notifications, and webhooks.
+- **[Building with Platypus](https://docs.platypus.chat/building-with-platypus)** — agents & sub-agents, skills, tool sets, MCP servers, A2A endpoints, triggers, boards, dashboards, notifications, and webhooks.
 - **[Extending](https://docs.platypus.chat/extending)** — writing plugins: Tool sets, Sandbox backends, and web-search backends.
 - **[Reference](https://docs.platypus.chat/reference)** — backend and frontend configuration reference.
 
