@@ -233,6 +233,19 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     await stale.dispose();
   });
 
+  // Served from its listing, the MCP is loaded; a call that later fails to
+  // reach it is a failed tool call, not an unloaded Tool set (#1184).
+  it("does not list an MCP served from its stored listing as unloaded", async () => {
+    const { queries } = store();
+    await (await openToolSession(scope, agent, queries)).dispose();
+
+    server.up = false;
+    const stale = await openToolSession(scope, agent, queries);
+
+    expect(stale.unloadedToolSets).toEqual([]);
+    await stale.dispose();
+  });
+
   // A server that takes the connection and never answers is a failed fetch
   // like any other, not one that holds the turn open (#1135).
   it("serves the stored listing when the server connects but never answers, and closes that connection", async () => {
@@ -441,6 +454,9 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
           const session = await openToolSession(scope, agent, queries);
 
           expect(session.tools).toEqual({});
+          expect(session.unloadedToolSets).toEqual([
+            { toolSetId: "mcp-1", name: "Flaky MCP", reason: "unauthorized" },
+          ]);
           const messages = warn.mock.calls.map((c) => String(c[1]));
           expect(messages).toContain(
             "MCP 'mcp-1' rejected its credentials; it needs re-authorising — skipping its tools",

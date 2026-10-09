@@ -84,6 +84,8 @@ const run = (over: Partial<TriggerRunDetail> = {}): TriggerRunDetail => ({
   completedAt: new Date(T0 + 5_000),
   errorMessage: null,
   stats: null,
+  unloadedToolSets: [],
+  failedToolCalls: 0,
   createdAt: new Date(T0),
   finalText: "Three cards moved to Done.",
   eventsTruncated: false,
@@ -240,6 +242,26 @@ describe("TriggerRunDetailPage", () => {
     expect(screen.getByText("Nightly digest")).toBeInTheDocument();
     expect(screen.getByText(RUN_TIMELINE_EMPTY_NOTICE)).toBeInTheDocument();
     expect(screen.queryByText("Response")).not.toBeInTheDocument();
+  });
+
+  it("warns about the tools a successful run went without (#1184)", async () => {
+    state.data = {
+      run: run({
+        unloadedToolSets: [
+          { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" },
+        ],
+        failedToolCalls: 2,
+      }),
+      events: [],
+    };
+
+    await renderPage();
+
+    expect(screen.getByText("Success")).toBeInTheDocument();
+    expect(
+      screen.getByText("'Jira' loaded no tools: unreachable"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2 tool calls failed")).toBeInTheDocument();
   });
 
   it("shows the placeholder, never a blank page, before the run has loaded", async () => {

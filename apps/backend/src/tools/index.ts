@@ -106,6 +106,13 @@ export type ToolSetRegistration = {
     context: CoreToolSetContext,
     /** The run's own abort, so a cancelled turn stops waiting on the factory. */
     signal?: AbortSignal,
+    /**
+     * Told when the factory threw, timed out or returned no tool map — the
+     * faults behind an empty result — so the run can record this Tool set as
+     * unloaded (#1184). Not called for a factory that served no tools on
+     * purpose, nor for one abandoned because the run was cancelled.
+     */
+    onFactoryFailed?: () => void,
   ) => Promise<Record<string, Tool>>;
   /**
    * The contribution's tools when it declared them as a static map, for the
@@ -367,6 +374,7 @@ export const composeToolSet = (
   const buildTurnTools = async (
     context: CoreToolSetContext,
     signal?: AbortSignal,
+    onFactoryFailed?: () => void,
   ): Promise<Record<string, Tool>> => {
     let resolved: unknown = tools;
     if (typeof tools === "function") {
@@ -399,6 +407,7 @@ export const composeToolSet = (
               ? "Tool set factory abandoned because the turn was cancelled"
               : "Tool set factory threw; serving none of its tools this turn",
         );
+        if (!(cause instanceof CallerAbortedError)) onFactoryFailed?.();
         return {};
       }
     }
@@ -415,6 +424,7 @@ export const composeToolSet = (
         { plugin: pluginName, toolSet: id },
         "Tool set resolved to no tool map; serving none of its tools this turn",
       );
+      onFactoryFailed?.();
       return {};
     }
 

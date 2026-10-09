@@ -41,7 +41,12 @@ import {
   SEARCH_SOURCE_NATIVE,
   SEARCH_SOURCE_NONE,
 } from "@platypus/schemas";
-import type { ConcreteModelId, Provider, Skill } from "@platypus/schemas";
+import type {
+  ConcreteModelId,
+  Provider,
+  Skill,
+  UnloadedToolSet,
+} from "@platypus/schemas";
 import {
   getWebBackend,
   type WebBackendContext,
@@ -123,6 +128,13 @@ export type ChatTurn = {
    * message's metadata for the Chat to render. The model is never told.
    */
   searchUnavailable?: boolean;
+  /**
+   * The Agent's granted Tool sets and MCPs that loaded no tools, and why
+   * (#1184) — the Tool session's own list, never a delegate's. Another outcome
+   * of building the plan, beside {@link searchUnavailable}. Only a Trigger run
+   * records it; the model is never told.
+   */
+  unloadedToolSets?: readonly UnloadedToolSet[];
   dispose: () => Promise<void>;
 };
 
@@ -812,6 +824,7 @@ export const prepareChatTurn = async (
         maxSteps: agent ? undefined : (request.maxSteps ?? undefined),
       },
       searchUnavailable,
+      unloadedToolSets: session.unloadedToolSets,
       // The session closes what it opened, delegates' nested sessions included —
       // the caller no longer reconciles two lists of clients to get there.
       dispose: session.dispose,

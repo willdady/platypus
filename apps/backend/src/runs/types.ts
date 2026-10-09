@@ -1,5 +1,5 @@
 import type { PlatypusUIMessage } from "../types.ts";
-import type { CachedInputTokens } from "@platypus/schemas";
+import type { CachedInputTokens, UnloadedToolSet } from "@platypus/schemas";
 import type { WorkspaceScope } from "../scope.ts";
 import type { RunTimeouts } from "./run-registry.ts";
 import type { RunEventRecorder } from "./run-events.ts";
@@ -223,6 +223,12 @@ export type ResolvedGeneration = {
  */
 export type ResolvedRunPlan = {
   resolved: ResolvedGeneration;
+  /**
+   * The Agent's granted Tool sets and MCPs that loaded no tools for this run,
+   * and why (#1184). Only the Trigger sink records them; a Chat turn and an
+   * A2A Task ignore them.
+   */
+  unloadedToolSets?: readonly UnloadedToolSet[];
 };
 
 /**

@@ -329,3 +329,55 @@ describe("GET / never selects Run events", () => {
     }
   });
 });
+
+// The warnings a run carries (#1184) ride both the list row and the detail, so
+// a run that went without its tools says so wherever it is shown.
+describe("unloaded Tool sets and failed tool calls", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetMockDb();
+  });
+
+  const projections = () =>
+    mockDb.select.mock.calls
+      .map((call) => call[0] as Record<string, unknown> | undefined)
+      .filter((cols) => cols !== undefined && "triggerName" in cols);
+
+  it("selects both on the list row and returns them", async () => {
+    stubAuthLookups();
+    const unloadedToolSets = [
+      { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" },
+    ];
+    mockDb.offset.mockResolvedValueOnce([
+      runRow({ unloadedToolSets, failedToolCalls: 2 }),
+    ]);
+
+    const res = await app.request(baseUrl);
+
+    expect(projections()[0]).toMatchObject({
+      unloadedToolSets: triggerRunTable.unloadedToolSets,
+      failedToolCalls: triggerRunTable.failedToolCalls,
+    });
+    const body = (await res.json()) as { results: Record<string, unknown>[] };
+    expect(body.results[0]).toMatchObject({
+      unloadedToolSets,
+      failedToolCalls: 2,
+    });
+  });
+
+  it("selects both on the run detail", async () => {
+    stubAuthLookups();
+    mockDb.limit.mockResolvedValueOnce([
+      runRow({ unloadedToolSets: [], failedToolCalls: 0 }),
+    ]);
+    mockDb.orderBy.mockResolvedValueOnce([]);
+
+    const res = await app.request(`${baseUrl}/run-1`);
+
+    expect(res.status).toBe(200);
+    expect(projections()[0]).toMatchObject({
+      unloadedToolSets: triggerRunTable.unloadedToolSets,
+      failedToolCalls: triggerRunTable.failedToolCalls,
+    });
+  });
+});

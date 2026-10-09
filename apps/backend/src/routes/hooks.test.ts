@@ -433,6 +433,9 @@ describe("/hooks/triggers", () => {
       errorMessage: "Model error",
       finalText: "private output",
       eventData: { inputs: { issueKey: "PLAT-42" } },
+      stats: { steps: 3, toolCalls: [], inputTokens: 9, outputTokens: 9 },
+      unloadedToolSets: [],
+      failedToolCalls: 0,
       ...over,
     });
 
@@ -453,6 +456,27 @@ describe("/hooks/triggers", () => {
         startedAt: "2026-09-29T10:00:00.000Z",
         completedAt: "2026-09-29T10:05:00.000Z",
         errorMessage: "Model error",
+        unloadedToolSets: [],
+        failedToolCalls: 0,
+      });
+    });
+
+    it("says which Tool sets loaded no tools and how many tool calls failed (#1184)", async () => {
+      const unloadedToolSets = [
+        { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" },
+      ];
+      seed({
+        runs: [
+          run({ status: "success", unloadedToolSets, failedToolCalls: 2 }),
+        ],
+      });
+
+      const res = await poll("trig-1", "run-1");
+
+      expect(await res.json()).toMatchObject({
+        status: "success",
+        unloadedToolSets,
+        failedToolCalls: 2,
       });
     });
 

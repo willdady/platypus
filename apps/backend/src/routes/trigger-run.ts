@@ -96,6 +96,8 @@ const runRowColumns = {
   completedAt: triggerRunTable.completedAt,
   errorMessage: triggerRunTable.errorMessage,
   stats: triggerRunTable.stats,
+  unloadedToolSets: triggerRunTable.unloadedToolSets,
+  failedToolCalls: triggerRunTable.failedToolCalls,
   createdAt: triggerRunTable.createdAt,
 };
 

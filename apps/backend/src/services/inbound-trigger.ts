@@ -8,6 +8,7 @@ import {
   type OrgGate,
   type InboundTriggerInput,
   type BearerTokenStatus,
+  type UnloadedToolSet,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
@@ -549,12 +550,16 @@ export type InboundRunStatus = {
   startedAt: Date;
   completedAt: Date | null;
   errorMessage: string | null;
+  unloadedToolSets: UnloadedToolSet[];
+  failedToolCalls: number;
 };
 
 /**
  * One of this Trigger's runs, for a caller polling the id it was given:
- * status, timestamps and error, never output. `null` for a run that belongs
- * to another Trigger or that retention has pruned.
+ * status, timestamps and error, and the Tool sets that loaded no tools and
+ * the count of failed tool calls (#1184) — never output, never stats.
+ * `null` for a run that belongs to another Trigger or that retention has
+ * pruned.
  */
 export const getInboundRunStatus = async (
   triggerId: string,
@@ -567,6 +572,8 @@ export const getInboundRunStatus = async (
       startedAt: triggerRunTable.startedAt,
       completedAt: triggerRunTable.completedAt,
       errorMessage: triggerRunTable.errorMessage,
+      unloadedToolSets: triggerRunTable.unloadedToolSets,
+      failedToolCalls: triggerRunTable.failedToolCalls,
     })
     .from(triggerRunTable)
     .where(

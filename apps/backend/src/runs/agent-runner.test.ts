@@ -825,6 +825,23 @@ describe("AgentRunner.generate", () => {
     expect(resolved?.plan.resolved.providerId).toBe("p1");
   });
 
+  it("forwards the Tool sets that loaded no tools to onResolved (#1184)", async () => {
+    const unloadedToolSets = [
+      { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" as const },
+    ];
+    mockPrepareChatTurn.mockResolvedValueOnce({
+      ...fakeTurn(),
+      unloadedToolSets,
+    });
+    mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
+
+    const sink = new RecordingSink();
+    await runner.generate({ scope, input: baseInput, sink });
+
+    const resolved = sink.events.find((e) => e.name === "onResolved");
+    expect(resolved?.plan.unloadedToolSets).toEqual(unloadedToolSets);
+  });
+
   // Unattended runs include a no-progress stop condition alongside the step
   // ceiling. A board re-read whose result is identical K times trips it.
   const repeatedReadSteps = () => {

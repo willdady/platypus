@@ -11,6 +11,7 @@ import { dispatchWebhookEvent } from "./event-dispatch.ts";
 import type {
   TriggerRunWebhookEventPayload,
   TriggerType,
+  UnloadedToolSet,
 } from "@platypus/schemas";
 
 /**
@@ -27,6 +28,8 @@ export const endedTriggerRunColumns = {
   errorMessage: triggerRunTable.errorMessage,
   eventType: triggerRunTable.eventType,
   entityId: triggerRunTable.entityId,
+  unloadedToolSets: triggerRunTable.unloadedToolSets,
+  failedToolCalls: triggerRunTable.failedToolCalls,
 };
 
 export type EndedTriggerRun = {
@@ -38,6 +41,8 @@ export type EndedTriggerRun = {
   errorMessage: string | null;
   eventType: string | null;
   entityId: string | null;
+  unloadedToolSets: UnloadedToolSet[];
+  failedToolCalls: number;
 };
 
 type TriggerCoordinates = {
@@ -63,6 +68,8 @@ const terminalEvent = (
     agentId: trigger.agentId,
     eventType: run.eventType ?? null,
     entityId: run.entityId ?? null,
+    unloadedToolSets: run.unloadedToolSets,
+    failedToolCalls: run.failedToolCalls,
   };
   switch (run.status) {
     case "success":

@@ -108,13 +108,35 @@ describe("TriggerSink", () => {
   });
 
   describe("onResolved", () => {
-    it("does not touch the DB", async () => {
+    it("does not touch the DB when every Tool set loaded", async () => {
       const sink = new TriggerSink({ triggerId: "trigger-1" });
 
       await sink.onResolved({ runId: "run-1", plan });
+      await sink.onResolved({
+        runId: "run-1",
+        plan: { ...plan, unloadedToolSets: [] },
+      });
 
       expect(mockDb.update).not.toHaveBeenCalled();
       expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    // Written before the model is called, so a run that fails on its first
+    // step still says which tools it never had (#1184).
+    it("records the Tool sets that loaded no tools on the run row", async () => {
+      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const unloadedToolSets = [
+        { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" as const },
+      ];
+
+      await sink.onResolved({
+        runId: "run-1",
+        plan: { ...plan, unloadedToolSets },
+      });
+
+      expect(updates()).toEqual([
+        { table: triggerRunTable, set: { unloadedToolSets } },
+      ]);
     });
   });
 
@@ -716,6 +738,48 @@ describe("TriggerSink run events", () => {
       expect.objectContaining({ error: failure }),
       expect.any(String),
     );
+  });
+
+  it("writes the failed tool call count on the next flush and on finish (#1184)", async () => {
+    const { sink, events } = await startWithEvents();
+    const a = events.open(null, { type: "tool-call", toolName: "search" });
+    events.close(a!, { status: "error", error: "boom" });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(
+      updates().find((u) => u.table === triggerRunTable)?.set,
+    ).toMatchObject({ failedToolCalls: 1 });
+
+    const b = events.open(null, { type: "tool-call", toolName: "search" });
+    events.close(b!, { status: "error", error: "boom" });
+    await sink.onFinish({
+      runId: "run-1",
+      status: "failed",
+      messages: [],
+      stats: {},
+      error: new Error("model failed"),
+    });
+
+    const row = updates()
+      .filter((u) => u.table === triggerRunTable)
+      .at(-1);
+    expect(row?.set).toMatchObject({ status: "failed", failedToolCalls: 2 });
+    // The unloaded Tool sets written at resolution are not overwritten.
+    expect(row?.set).not.toHaveProperty("unloadedToolSets");
+  });
+
+  it("finishes a run with no failed tool calls at zero", async () => {
+    const { sink } = await startWithEvents();
+
+    await sink.onFinish({
+      runId: "run-1",
+      status: "succeeded",
+      messages: [],
+      stats: {},
+    });
+
+    const row = updates().find((u) => u.table === triggerRunTable);
+    expect(row?.set).toMatchObject({ failedToolCalls: 0 });
   });
 
   it("marks the run when its timeline hit the event ceiling", async () => {

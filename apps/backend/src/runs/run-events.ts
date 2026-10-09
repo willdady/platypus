@@ -104,6 +104,7 @@ export class RunEventRecorder {
   /** Ids already inserted whose state changed since. */
   private pendingUpdate = new Set<string>();
   private truncated = false;
+  private failedCalls = 0;
   private listener?: () => void;
 
   constructor(params: {
@@ -129,6 +130,15 @@ export class RunEventRecorder {
   /** The run hit its event ceiling, so this timeline is incomplete. */
   get eventsTruncated(): boolean {
     return this.truncated;
+  }
+
+  /**
+   * How many tool calls — delegations included — ended in error, rejected
+   * inputs among them (#1184). Counts what this recorder recorded, so calls
+   * dropped past the ceiling are not in it.
+   */
+  get failedToolCalls(): number {
+    return this.failedCalls;
   }
 
   /** The one observer — a sink that bumps its flush on every change. */
@@ -276,6 +286,13 @@ export class RunEventRecorder {
 
   private settle(recorded: Recorded, spec: CloseSpec): void {
     recorded.event.status = spec.status;
+    if (
+      spec.status === "error" &&
+      (recorded.event.type === "tool-call" ||
+        recorded.event.type === "delegate")
+    ) {
+      this.failedCalls++;
+    }
     recorded.event.durationMs = Math.max(
       0,
       Math.round(this.clocks.monotonic() - recorded.monoStart),

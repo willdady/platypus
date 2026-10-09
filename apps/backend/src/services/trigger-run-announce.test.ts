@@ -24,6 +24,10 @@ const endedRun = (over: Record<string, unknown> = {}) => ({
   errorMessage: "boom",
   eventType: "card.updated",
   entityId: "card-1",
+  unloadedToolSets: [
+    { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" as const },
+  ],
+  failedToolCalls: 2,
   ...over,
 });
 
@@ -63,6 +67,10 @@ describe("announceTriggerRunsEnded", () => {
         agentId: "agent-1",
         eventType: "card.updated",
         entityId: "card-1",
+        unloadedToolSets: [
+          { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" },
+        ],
+        failedToolCalls: 2,
       },
     });
   });

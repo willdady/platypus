@@ -438,6 +438,49 @@ describe("recordUiChunk", () => {
     });
     expect(JSON.stringify(recorder.events)).not.toContain("find everything");
   });
+
+  it("counts the tool calls that ended in error, rejected inputs included (#1184)", () => {
+    const { scope, recorder } = scopeOf();
+    const call = (toolCallId: string) =>
+      recordUiChunk(scope, {
+        type: "tool-input-available",
+        toolCallId,
+        toolName: "search",
+        input: {},
+      });
+
+    recordUiChunk(scope, {
+      type: "tool-input-error",
+      toolCallId: "bad-input",
+      toolName: "search",
+      input: {},
+      errorText: "Invalid input for tool search",
+    });
+    call("threw");
+    recordUiChunk(scope, {
+      type: "tool-output-error",
+      toolCallId: "threw",
+      errorText: "boom",
+    });
+    call("ok");
+    recordUiChunk(scope, {
+      type: "tool-output-available",
+      toolCallId: "ok",
+      output: "fine",
+    });
+    call("denied");
+    recordUiChunk(scope, { type: "tool-output-denied", toolCallId: "denied" });
+    recordUiChunk(scope, { type: "text-start", id: "t1" });
+    recordUiChunk(scope, { type: "text-end", id: "t1" });
+
+    expect(recorder.failedToolCalls).toBe(2);
+  });
+
+  it("counts no failed tool calls for a clean run", () => {
+    const { recorder } = scopeOf();
+
+    expect(recorder.failedToolCalls).toBe(0);
+  });
 });
 
 describe("wrapToolsWithRunEvents", () => {

@@ -183,9 +183,22 @@ export class TriggerSink implements RunSink {
     this.events?.subscribe(() => this.flusher?.bump());
   }
 
-  async onResolved(_: { runId: RunId; plan: ResolvedRunPlan }): Promise<void> {
-    // No-op: row was inserted in onStart and the plan adds no fields the
-    // triggerRun schema persists today.
+  /**
+   * Records the Agent's Tool sets that loaded no tools (#1184) — before the
+   * model is called, so a run that fails on its first step still has them.
+   * A run whose every Tool set loaded writes nothing: the column's default
+   * already says so.
+   */
+  async onResolved(ctx: {
+    runId: RunId;
+    plan: ResolvedRunPlan;
+  }): Promise<void> {
+    const unloaded = ctx.plan.unloadedToolSets ?? [];
+    if (unloaded.length === 0) return;
+    await db
+      .update(triggerRunTable)
+      .set({ unloadedToolSets: [...unloaded] })
+      .where(eq(triggerRunTable.id, ctx.runId));
   }
 
   // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
@@ -229,6 +242,7 @@ export class TriggerSink implements RunSink {
         completedAt: new Date(),
         finalText: ctx.finalText ?? null,
         eventsTruncated: this.events?.eventsTruncated ?? false,
+        failedToolCalls: this.events?.failedToolCalls ?? 0,
       })
       .where(
         and(
@@ -248,12 +262,14 @@ export class TriggerSink implements RunSink {
   private async flush(): Promise<void> {
     const triggerStats = toTriggerRunStats(this.latestStats);
     const truncated = this.events?.eventsTruncated ?? false;
-    if (triggerStats != null || truncated) {
+    const failedToolCalls = this.events?.failedToolCalls ?? 0;
+    if (triggerStats != null || truncated || failedToolCalls > 0) {
       await db
         .update(triggerRunTable)
         .set({
           ...(triggerStats != null ? { stats: triggerStats } : {}),
           ...(truncated ? { eventsTruncated: true } : {}),
+          ...(failedToolCalls > 0 ? { failedToolCalls } : {}),
         })
         .where(eq(triggerRunTable.id, this.runId));
     }
