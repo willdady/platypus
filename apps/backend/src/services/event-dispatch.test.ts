@@ -998,6 +998,8 @@ describe("event-dispatch", () => {
         agentId: "agent-1",
         eventType: null,
         entityId: null,
+        unloadedToolSets: [],
+        failedToolCalls: 0,
       },
     };
 

@@ -1987,6 +1987,10 @@ describe("chat-execution", () => {
       expect(turn.stream.tools).toHaveProperty("stillHere");
       // A registered id is never re-read as an MCP, however its factory ended.
       expect(getMcp).not.toHaveBeenCalled();
+      // And the turn says which one it went without (#1184).
+      expect(turn.unloadedToolSets).toEqual([
+        expect.objectContaining({ toolSetId, reason: "factory_failed" }),
+      ]);
     });
 
     // Issue #1135: a factory that never settles is abandoned when the run is

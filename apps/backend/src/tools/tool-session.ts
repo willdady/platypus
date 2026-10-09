@@ -5,7 +5,11 @@ import {
   type MCPTransport,
 } from "@ai-sdk/mcp";
 import type { Tool, ToolExecutionOptions } from "ai";
-import { TOOL_NAME_PATTERN, namespaceMcpToolName } from "@platypus/schemas";
+import {
+  TOOL_NAME_PATTERN,
+  namespaceMcpToolName,
+  type UnloadedToolSet,
+} from "@platypus/schemas";
 import type { mcp as mcpTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { CORE_BUILTIN_OWNER, getToolSetPlugin } from "../plugins/registry.ts";
@@ -272,6 +276,14 @@ export type ToolSession = {
    */
   readOnlyToolNames: ReadonlySet<string>;
   /**
+   * The Agent's granted Tool sets and MCPs that served this session no tools
+   * through a fault, and why (#1184), in `toolSetIds` order. A factory that
+   * served none on purpose is not listed, nor is an MCP served from its
+   * Last-known listing, nor anything a cancelled run abandoned. A delegate's
+   * are its own nested session's, never added here.
+   */
+  unloadedToolSets: readonly UnloadedToolSet[];
+  /**
    * Open a session for another Agent — a delegate — under this session's scope,
    * whose connections close with this one's. Lifetime nests so a delegate never
    * hands its clients back to a caller to remember.
@@ -339,6 +351,7 @@ export const openToolSession = async (
   // Every name, among `tools`, whose MCP declared `readOnlyHint` (#626). Only
   // ever added to from the MCP case of `merge` below.
   const readOnlyToolNames = new Set<string>();
+  const unloadedToolSets: UnloadedToolSet[] = [];
   const closers: Array<() => Promise<void>> = [];
   // Registered closers, by identity, and scoped to **this session** — so the
   // case it collapses is one turn reaching the same teardown twice, as two Tool
@@ -399,9 +412,14 @@ export const openToolSession = async (
    * opening connections — clients the session would then never see to close.
    */
   type Resolution =
-    | { kind: "none" }
+    | { kind: "none"; unloaded?: UnloadedToolSet }
     | { kind: "failed"; error: unknown }
-    | { kind: "tools"; tools: Record<string, Tool>; owner: ToolOwner }
+    | {
+        kind: "tools";
+        tools: Record<string, Tool>;
+        owner: ToolOwner;
+        unloaded?: UnloadedToolSet;
+      }
     | {
         kind: "mcp";
         mcp: McpRow;
@@ -426,9 +444,22 @@ export const openToolSession = async (
   ): Promise<Resolution> => {
     const registration = getToolSet(toolSetId);
     if (registration) {
+      let factoryFailed = false;
+      const built = await registration.buildTurnTools(context, signal, () => {
+        factoryFailed = true;
+      });
       return {
         kind: "tools",
-        tools: await registration.buildTurnTools(context, signal),
+        tools: built,
+        ...(factoryFailed
+          ? {
+              unloaded: {
+                toolSetId,
+                name: registration.name,
+                reason: "factory_failed" as const,
+              },
+            }
+          : {}),
         owner: {
           toolSetId,
           // A Tool set belonging to no loaded plugin is a core registration, and
@@ -445,11 +476,17 @@ export const openToolSession = async (
       logger.warn(
         `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
       );
-      return { kind: "none" };
+      return {
+        kind: "none",
+        unloaded: { toolSetId, name: null, reason: "not_found" },
+      };
     }
     if (!mcp.url) {
       logger.warn(`MCP '${toolSetId}' has no URL configured`);
-      return { kind: "none" };
+      return {
+        kind: "none",
+        unloaded: { toolSetId, name: mcp.name, reason: "misconfigured" },
+      };
     }
 
     const attribution = {
@@ -575,7 +612,10 @@ export const openToolSession = async (
             { error, ...attribution },
             `MCP '${toolSetId}' rejected its credentials; it needs re-authorising — skipping its tools`,
           );
-          return { kind: "none" };
+          return {
+            kind: "none",
+            unloaded: { toolSetId, name: mcp.name, reason: "unauthorized" },
+          };
         }
         const fault =
           error instanceof DeadlineExceededError
@@ -587,7 +627,10 @@ export const openToolSession = async (
             { error, ...attribution },
             `MCP '${toolSetId}' ${fault}; skipping its tools`,
           );
-          return { kind: "none" };
+          return {
+            kind: "none",
+            unloaded: { toolSetId, name: mcp.name, reason: "unreachable" },
+          };
         }
         logger.warn(
           { error, ...attribution },
@@ -678,12 +721,14 @@ export const openToolSession = async (
   const merge = (resolution: Resolution): void => {
     switch (resolution.kind) {
       case "none":
+        if (resolution.unloaded) unloadedToolSets.push(resolution.unloaded);
         return;
       // Rethrown here rather than where it was raised, so it reaches the caller
       // in assignment order and after every sibling has finished opening.
       case "failed":
         throw resolution.error;
       case "tools":
+        if (resolution.unloaded) unloadedToolSets.push(resolution.unloaded);
         claim(resolution.tools, resolution.owner);
         return;
       case "mcp": {
@@ -775,11 +820,23 @@ export const openToolSession = async (
     // having none simply leaves it without them.
     if (disposed) {
       await child.dispose();
-      return { ...child, tools: {}, readOnlyToolNames: new Set() };
+      return {
+        ...child,
+        tools: {},
+        readOnlyToolNames: new Set(),
+        unloadedToolSets: [],
+      };
     }
     closers.push(child.dispose);
     return child;
   };
 
-  return { tools, readOnlyToolNames, nest, registerCloser, dispose };
+  return {
+    tools,
+    readOnlyToolNames,
+    unloadedToolSets,
+    nest,
+    registerCloser,
+    dispose,
+  };
 };

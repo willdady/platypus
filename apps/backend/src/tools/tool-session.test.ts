@@ -845,6 +845,187 @@ describe("openToolSession", () => {
     });
   });
 
+  describe("unloaded Tool sets (issue #1184)", () => {
+    it("lists nothing when every granted Tool set loads", async () => {
+      register("set.loads", { fine: toolNamed("fine") });
+      connected({ mcpTool: toolNamed("mcpTool") });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.loads", "mcp-1"),
+        queriesFor([mcpRow()]),
+      );
+
+      expect(session.unloadedToolSets).toEqual([]);
+    });
+
+    it("lists an id that is neither a Tool set nor an MCP as not found", async () => {
+      const session = await openToolSession(
+        scope,
+        grantedAgent("deleted-set"),
+        noMcps(),
+      );
+
+      expect(session.unloadedToolSets).toEqual([
+        { toolSetId: "deleted-set", name: null, reason: "not_found" },
+      ]);
+    });
+
+    it("lists an MCP with no URL as misconfigured", async () => {
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow({ url: null, name: "Jira" })]),
+      );
+
+      expect(session.unloadedToolSets).toEqual([
+        { toolSetId: "mcp-1", name: "Jira", reason: "misconfigured" },
+      ]);
+    });
+
+    it("lists an unreachable MCP with no last-known listing as unreachable", async () => {
+      mockCreateMCPClient.mockRejectedValueOnce(new Error("ECONNREFUSED"));
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow({ name: "Jira" })]),
+      );
+
+      expect(session.unloadedToolSets).toEqual([
+        { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" },
+      ]);
+    });
+
+    it("lists an MCP that never answers as unreachable", async () => {
+      vi.useFakeTimers();
+      try {
+        mockCreateMCPClient.mockResolvedValueOnce({
+          listTools: vi.fn(() => new Promise(() => {})),
+          toolsFromDefinitions: vi.fn(),
+          close: vi.fn().mockResolvedValue(undefined),
+        });
+
+        const opening = openToolSession(
+          scope,
+          grantedAgent("mcp-1"),
+          queriesFor([mcpRow()]),
+        );
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+        const session = await opening;
+
+        expect(session.unloadedToolSets).toEqual([
+          { toolSetId: "mcp-1", name: "Test MCP", reason: "unreachable" },
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("lists an MCP that rejects its credentials as unauthorized", async () => {
+      mockCreateMCPClient.mockRejectedValueOnce(
+        Object.assign(new Error("denied"), {
+          name: "MCPClientError",
+          statusCode: 401,
+        }),
+      );
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow()]),
+      );
+
+      expect(session.unloadedToolSets).toEqual([
+        { toolSetId: "mcp-1", name: "Test MCP", reason: "unauthorized" },
+      ]);
+    });
+
+    it("lists a Tool set whose factory throws as factory failed, by its name", async () => {
+      register("set.unloaded-throws", () => {
+        throw new Error("boom");
+      });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.unloaded-throws"),
+        noMcps(),
+      );
+
+      expect(session.unloadedToolSets).toEqual([
+        {
+          toolSetId: "set.unloaded-throws",
+          name: "set.unloaded-throws",
+          reason: "factory_failed",
+        },
+      ]);
+    });
+
+    it("lists a Tool set whose factory times out as factory failed", async () => {
+      vi.useFakeTimers();
+      try {
+        register("set.unloaded-hangs", () => new Promise(() => {}));
+
+        const opening = openToolSession(
+          scope,
+          grantedAgent("set.unloaded-hangs"),
+          noMcps(),
+        );
+        await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
+        const session = await opening;
+
+        expect(session.unloadedToolSets).toEqual([
+          expect.objectContaining({
+            toolSetId: "set.unloaded-hangs",
+            reason: "factory_failed",
+          }),
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("does not list a factory that deliberately serves no tools", async () => {
+      register("set.serves-none", () => ({}));
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.serves-none"),
+        noMcps(),
+      );
+
+      expect(session.unloadedToolSets).toEqual([]);
+    });
+
+    it("records nothing for a run cancelled while its Tool sets resolve", async () => {
+      register("set.unloaded-until-abort", () => new Promise(() => {}));
+      mockCreateMCPClient.mockReturnValueOnce(new Promise(() => {}));
+      const run = new AbortController();
+
+      const opening = openToolSession(
+        scope,
+        grantedAgent("set.unloaded-until-abort", "mcp-1"),
+        queriesFor([mcpRow()]),
+        { signal: run.signal },
+      );
+      run.abort(new Error("cancelled"));
+      const session = await opening;
+
+      expect(session.unloadedToolSets).toEqual([]);
+    });
+
+    it("keeps a delegate's unloaded Tool sets out of the parent's list", async () => {
+      const parent = await openToolSession(scope, grantedAgent(), noMcps());
+      const child = await parent.nest({
+        id: "agent-2",
+        toolSetIds: ["deleted-set"],
+      });
+
+      expect(child.unloadedToolSets).toHaveLength(1);
+      expect(parent.unloadedToolSets).toEqual([]);
+    });
+  });
+
   describe("MCP read-only hints (issue #626)", () => {
     it("carries a declared read-only hint through, keyed by the namespaced name", async () => {
       connected({ readTool: toolNamed("readTool") }, { readTool: true });

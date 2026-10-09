@@ -335,7 +335,15 @@ use:
     "triggerType": "event",
     "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
     "eventType": "card.created",
-    "entityId": "V1StGXR8_Z5jdHi6B-myT"
+    "entityId": "V1StGXR8_Z5jdHi6B-myT",
+    "unloadedToolSets": [
+      {
+        "toolSetId": "Rk8mN2xQ5vLp7wT3yBsD4",
+        "name": "Jira",
+        "reason": "unreachable"
+      }
+    ],
+    "failedToolCalls": 1
   }
 }
 ```
@@ -356,7 +364,9 @@ Trigger:
     "triggerType": "cron",
     "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
     "eventType": null,
-    "entityId": null
+    "entityId": null,
+    "unloadedToolSets": [],
+    "failedToolCalls": 0
   }
 }
 ```
@@ -376,7 +386,9 @@ A `trigger_run.cancelled` from an Inbound Trigger someone stopped:
     "triggerType": "inbound",
     "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
     "eventType": null,
-    "entityId": "PLAT-42"
+    "entityId": "PLAT-42",
+    "unloadedToolSets": [],
+    "failedToolCalls": 0
   }
 }
 ```
@@ -396,24 +408,28 @@ A `trigger_run.suppressed` never ran, so it has no `completedAt`:
     "triggerType": "event",
     "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
     "eventType": "card.updated",
-    "entityId": "V1StGXR8_Z5jdHi6B-myT"
+    "entityId": "V1StGXR8_Z5jdHi6B-myT",
+    "unloadedToolSets": [],
+    "failedToolCalls": 0
   }
 }
 ```
 
-| Field          | Description                                                                                   |
-| -------------- | --------------------------------------------------------------------------------------------- |
-| `runId`        | The run. For an Inbound Trigger, the same id the call returned.                               |
-| `status`       | `success`, `failed`, `cancelled` or `suppressed`.                                             |
-| `startedAt`    | When the run started — for `suppressed`, when the firing was dropped.                         |
-| `completedAt`  | When the run ended. `null` for `suppressed`, since nothing ran.                               |
-| `errorMessage` | Why a `failed` run failed, for a person to read — don't match on it; `null` otherwise.        |
-| `triggerId`    | The Trigger that fired.                                                                       |
-| `triggerName`  | The Trigger's name when the run ended.                                                        |
-| `triggerType`  | `cron`, `event` or `inbound`.                                                                 |
-| `agentId`      | The Agent the Trigger runs.                                                                   |
-| `eventType`    | For an Event Trigger, the event that fired it; `null` otherwise.                              |
-| `entityId`     | The card or notification an Event Trigger ran for, or an Inbound Trigger's record; or `null`. |
+| Field              | Description                                                                                                                                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runId`            | The run. For an Inbound Trigger, the same id the call returned.                                                                                                                                               |
+| `status`           | `success`, `failed`, `cancelled` or `suppressed`.                                                                                                                                                             |
+| `startedAt`        | When the run started — for `suppressed`, when the firing was dropped.                                                                                                                                         |
+| `completedAt`      | When the run ended. `null` for `suppressed`, since nothing ran.                                                                                                                                               |
+| `errorMessage`     | Why a `failed` run failed, for a person to read — don't match on it; `null` otherwise.                                                                                                                        |
+| `triggerId`        | The Trigger that fired.                                                                                                                                                                                       |
+| `triggerName`      | The Trigger's name when the run ended.                                                                                                                                                                        |
+| `triggerType`      | `cron`, `event` or `inbound`.                                                                                                                                                                                 |
+| `agentId`          | The Agent the Trigger runs.                                                                                                                                                                                   |
+| `eventType`        | For an Event Trigger, the event that fired it; `null` otherwise.                                                                                                                                              |
+| `entityId`         | The card or notification an Event Trigger ran for, or an Inbound Trigger's record; or `null`.                                                                                                                 |
+| `unloadedToolSets` | The Agent's Tool sets and MCPs that loaded no tools for the run, each with `toolSetId`, `name` and `reason` — see [run warnings](/building-with-platypus/triggers#run-warnings). Empty when every one loaded. |
+| `failedToolCalls`  | How many of the run's tool calls ended in an error. `0` for `suppressed`.                                                                                                                                     |
 
 The Agent's output is never sent — no final answer, no stats, no event data.
 Read those in [run history](/building-with-platypus/triggers#review-run-history).

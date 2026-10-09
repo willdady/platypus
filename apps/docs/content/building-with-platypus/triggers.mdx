@@ -451,6 +451,36 @@ The answer carries the run's `runId`, `status`, `startedAt`, `completedAt` and
 while the run is under way, and ends as `success`, `failed`, `cancelled` or
 `suppressed` — the last meaning no Agent ran.
 
+It also carries the run's [warnings](#run-warnings): `unloadedToolSets`, the
+Agent's Tool sets and MCPs that loaded no tools, each as
+`{ "toolSetId", "name", "reason" }`, and `failedToolCalls`, how many tool calls
+ended in an error. A clean run answers `[]` and `0`.
+
+```json
+{
+  "runId": "Lr5tY1wQ8nK3mV7bX2cZd",
+  "status": "success",
+  "startedAt": "2026-06-26T10:00:00.000Z",
+  "completedAt": "2026-06-26T10:03:00.000Z",
+  "errorMessage": null,
+  "unloadedToolSets": [
+    {
+      "toolSetId": "Rk8mN2xQ5vLp7wT3yBsD4",
+      "name": "Jira",
+      "reason": "unreachable"
+    }
+  ],
+  "failedToolCalls": 0
+}
+```
+
+<Callout type="warning">
+  `success` means the model finished, not that the work got done. An Agent whose
+  MCP was down still answers, and ends `success`. A caller that only checks
+  `status` will report the run as done. Check `unloadedToolSets` and
+  `failedToolCalls` as well.
+</Callout>
+
 Polling is for short-term checks. It goes through the same check as a call, so
 it answers `404` once the run is pruned from run history, and also as soon as
 the token is regenerated, revoked or expired, the Trigger is disabled, the
@@ -489,6 +519,36 @@ Each row carries the run's status, when it started and how long it took, the
 event type for Event triggers, per-run stats, and any error message. It's the
 place to confirm a schedule is actually firing and to debug a Trigger that's
 failing.
+
+### Run warnings
+
+A row also says when the run went without some of its tools, even if it ended
+_Success_:
+
+- **'Jira' loaded no tools: unreachable**: one of the Agent's Tool sets or
+  MCPs served the run no tools. The run went on without them.
+- **2 tool calls failed**: tool calls that ended in an error, including calls
+  the model made with input the tool rejected. Each is ringed red on the run's
+  [timeline](#inspect-a-run).
+
+Warnings never change a run's status. A clean run shows neither. The reason
+says what to fix:
+
+| Reason                        | What happened                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------- |
+| not found                     | The Tool set or MCP no longer exists. It is shown by id. Remove it from the Agent.                    |
+| its Plugin failed to build it | The Plugin behind the Tool set failed or took longer than 20 seconds. Check the backend logs.         |
+| misconfigured                 | The MCP has no URL. Edit the MCP.                                                                     |
+| rejected its credentials      | The MCP refused its token or sign-in. Fix its token, or use **Re-authorize** on an OAuth MCP.         |
+| unreachable                   | The MCP could not be reached in 20 seconds, and it had no tool list from the last day to use instead. |
+
+An MCP that was unreachable but listed its tools within the last day still
+loads from that list, so it is not shown here. If the model calls one of its
+tools and the call fails, that shows up as a failed tool call.
+
+The Inbound poll and the `trigger_run.*` Webhook events give the reason as a
+fixed code: `not_found`, `factory_failed`, `misconfigured`, `unauthorized` or
+`unreachable`.
 
 Each run's identifier isn't shown on the row. Instead every run offers a
 **Copy run id** control. Use it

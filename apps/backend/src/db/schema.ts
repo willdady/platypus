@@ -13,7 +13,10 @@ import { sql } from "drizzle-orm";
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
 import { user } from "./auth-schema.ts";
-import type { KanbanCardHistoryChange } from "@platypus/schemas";
+import type {
+  KanbanCardHistoryChange,
+  UnloadedToolSet,
+} from "@platypus/schemas";
 import type { ListToolsResult } from "@ai-sdk/mcp";
 
 // Custom vector type without fixed dimensions — allows variable-dimension vectors per workspace
@@ -919,6 +922,17 @@ export const triggerRun = pgTable(
     // The run's timeline hit the per-run event ceiling, so `trigger_run_event`
     // holds a prefix of what happened rather than all of it.
     eventsTruncated: t.boolean("events_truncated").notNull().default(false),
+    // The Agent's granted Tool sets and MCPs that loaded no tools for this run,
+    // each `{ toolSetId, name, reason }`, and how many of its tool calls ended
+    // in error (#1184). Columns rather than `stats`, which is null until the
+    // first step: a run that fails before then still says what it never had.
+    // Warnings only — neither ever changes `status`.
+    unloadedToolSets: t
+      .jsonb("unloaded_tool_sets")
+      .$type<UnloadedToolSet[]>()
+      .notNull()
+      .default([]),
+    failedToolCalls: t.integer("failed_tool_calls").notNull().default(0),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [

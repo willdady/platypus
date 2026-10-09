@@ -203,6 +203,47 @@ describe("composeToolSet", () => {
     );
   });
 
+  describe("reporting a failed factory (issue #1184)", () => {
+    it.each<[string, ToolSetContribution["tools"]]>([
+      [
+        "throws",
+        () => {
+          throw new Error("no API key");
+        },
+      ],
+      ["returns no tool map", () => "oops" as unknown as Record<string, Tool>],
+    ])("reports a factory that %s", async (_label, tools) => {
+      const onFactoryFailed = vi.fn();
+
+      await compose(tools).buildTurnTools(ctx, undefined, onFactoryFailed);
+
+      expect(onFactoryFailed).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not report a factory that serves no tools on purpose", async () => {
+      const onFactoryFailed = vi.fn();
+
+      await compose(() => ({})).buildTurnTools(ctx, undefined, onFactoryFailed);
+
+      expect(onFactoryFailed).not.toHaveBeenCalled();
+    });
+
+    it("does not report a factory abandoned because the run was cancelled", async () => {
+      const onFactoryFailed = vi.fn();
+      const run = new AbortController();
+
+      const building = compose(() => new Promise(() => {})).buildTurnTools(
+        ctx,
+        run.signal,
+        onFactoryFailed,
+      );
+      run.abort(new Error("cancelled"));
+      await building;
+
+      expect(onFactoryFailed).not.toHaveBeenCalled();
+    });
+  });
+
   // #321: a raw Drizzle `Date` fails the next step's prompt validation. The
   // guarantee used to hold only when the turn supplied an `onActivity` callback.
   it("normalizes every tool's result, with no observability wrapper in play", async () => {

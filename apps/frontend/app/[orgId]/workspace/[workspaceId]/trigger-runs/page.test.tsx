@@ -114,6 +114,8 @@ const run = (
   startedAt: new Date("2026-01-01T09:00:00Z"),
   completedAt: new Date("2026-01-01T09:00:10Z"),
   stats: stats(),
+  unloadedToolSets: [],
+  failedToolCalls: 0,
   createdAt: new Date("2026-01-01T09:00:00Z"),
   ...overrides,
 });

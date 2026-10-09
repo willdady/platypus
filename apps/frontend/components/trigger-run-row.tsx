@@ -19,6 +19,8 @@ import {
   type TriggerRunStats,
   type TriggerRunStatus,
   type TriggerRunWithTrigger,
+  type UnloadedToolSet,
+  type UnloadedToolSetReason,
 } from "@platypus/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +45,27 @@ import { workspaceRoutes } from "@/lib/routes";
  */
 export const RUN_SUPPRESSED_NOTICE =
   "Suppressed: this trigger ran too often for this record, so no Agent was started.";
+
+/** The accessible name of a run's warnings, for tests to find them by. */
+export const RUN_WARNINGS_LABEL = "Run warnings";
+
+const UNLOADED_REASON_LABELS: Record<UnloadedToolSetReason, string> = {
+  not_found: "not found",
+  factory_failed: "its Plugin failed to build it",
+  misconfigured: "misconfigured",
+  unauthorized: "rejected its credentials",
+  unreachable: "unreachable",
+};
+
+/**
+ * One granted Tool set or MCP that served the run no tools (#1184), by its
+ * display name — or its id when the id names nothing any more.
+ */
+const unloadedToolSetNotice = ({ toolSetId, name, reason }: UnloadedToolSet) =>
+  `'${name ?? toolSetId}' loaded no tools: ${UNLOADED_REASON_LABELS[reason]}`;
+
+const failedToolCallsNotice = (count: number) =>
+  `${count} tool call${count !== 1 ? "s" : ""} failed`;
 
 const statusBadge = (status: TriggerRunStatus) => {
   switch (status) {
@@ -246,6 +269,23 @@ export const TriggerRunRow = ({
             )}
             {stats?.stoppedAtStepLimit && (
               <TurnNotice className="mt-1">{RUN_STEP_LIMIT_NOTICE}</TurnNotice>
+            )}
+            {/* Warnings, never a status: a run that went without some of its
+              tools, or whose tool calls failed, can still end `success`
+              (#1184). Nothing extra for a clean run. */}
+            {(run.unloadedToolSets.length > 0 || run.failedToolCalls > 0) && (
+              <div role="group" aria-label={RUN_WARNINGS_LABEL}>
+                {run.unloadedToolSets.map((unloaded) => (
+                  <TurnNotice key={unloaded.toolSetId} className="mt-1">
+                    {unloadedToolSetNotice(unloaded)}
+                  </TurnNotice>
+                ))}
+                {run.failedToolCalls > 0 && (
+                  <TurnNotice className="mt-1">
+                    {failedToolCallsNotice(run.failedToolCalls)}
+                  </TurnNotice>
+                )}
+              </div>
             )}
             {run.status === "suppressed" && (
               <TurnNotice className="mt-1">{RUN_SUPPRESSED_NOTICE}</TurnNotice>

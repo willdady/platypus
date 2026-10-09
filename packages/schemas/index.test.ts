@@ -1805,6 +1805,8 @@ describe("trigger_run.* Webhook events", () => {
     agentId: "agent-1",
     eventType: null,
     entityId: null,
+    unloadedToolSets: [],
+    failedToolCalls: 0,
   };
 
   it("lets a Webhook subscribe to them", () => {
@@ -1870,6 +1872,28 @@ describe("trigger_run.* Webhook events", () => {
     });
     expect(parsed).not.toHaveProperty("finalText");
     expect(parsed).not.toHaveProperty("stats");
+  });
+  it("says which Tool sets loaded no tools, and why (#1184)", () => {
+    const unloaded = {
+      toolSetId: "mcp-1",
+      name: "Jira",
+      reason: "unreachable",
+    };
+    expect(
+      webhookEventDataSchemas["trigger_run.succeeded"].safeParse({
+        ...ended,
+        status: "success",
+        unloadedToolSets: [unloaded],
+        failedToolCalls: 2,
+      }).success,
+    ).toBe(true);
+    expect(
+      webhookEventDataSchemas["trigger_run.succeeded"].safeParse({
+        ...ended,
+        status: "success",
+        unloadedToolSets: [{ ...unloaded, reason: "flaky" }],
+      }).success,
+    ).toBe(false);
   });
 });
 

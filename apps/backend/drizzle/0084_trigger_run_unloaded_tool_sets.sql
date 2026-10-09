@@ -1,0 +1,2 @@
+ALTER TABLE "trigger_run" ADD COLUMN "unloaded_tool_sets" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "trigger_run" ADD COLUMN "failed_tool_calls" integer DEFAULT 0 NOT NULL;

@@ -2564,6 +2564,34 @@ export const triggerRunStatsSchema = z.object({
 
 export type TriggerRunStats = z.infer<typeof triggerRunStatsSchema>;
 
+/**
+ * Why one of an Agent's granted Tool sets or MCPs served no tools to a run
+ * (#1184): the id names nothing, a plugin factory threw, timed out or returned
+ * no tool map, an MCP is missing its URL, rejected its credentials, or could
+ * not be reached in time with no last-known listing to fall back on.
+ */
+export const unloadedToolSetReasonSchema = z.enum([
+  "not_found",
+  "factory_failed",
+  "misconfigured",
+  "unauthorized",
+  "unreachable",
+]);
+
+export type UnloadedToolSetReason = z.infer<typeof unloadedToolSetReasonSchema>;
+
+/**
+ * A granted Tool set or MCP that loaded no tools for a run. `name` is its
+ * display name, or null when the id names nothing.
+ */
+export const unloadedToolSetSchema = z.object({
+  toolSetId: z.string(),
+  name: z.string().nullable(),
+  reason: unloadedToolSetReasonSchema,
+});
+
+export type UnloadedToolSet = z.infer<typeof unloadedToolSetSchema>;
+
 export const triggerRunSchema = z.object({
   id: z.string(),
   triggerId: z.string(),
@@ -2574,6 +2602,13 @@ export const triggerRunSchema = z.object({
   completedAt: z.date().nullable().optional(),
   errorMessage: z.string().nullable().optional(),
   stats: triggerRunStatsSchema.nullable().optional(),
+  /**
+   * The Agent's granted Tool sets and MCPs that loaded no tools for this run,
+   * and how many of its tool calls ended in error (#1184). Warnings only:
+   * neither ever changes the run's status.
+   */
+  unloadedToolSets: z.array(unloadedToolSetSchema),
+  failedToolCalls: z.number().int().nonnegative(),
   createdAt: z.date(),
 });
 
@@ -3302,7 +3337,8 @@ const webhookNotificationRecordShape = {
 /**
  * A Trigger run that reached a terminal status. Field names match the Inbound
  * poll response; `status` is the stored word, pinned per event. No final text,
- * no stats, no event data — the run's output stays inside Platypus.
+ * no stats, no event data — the run's output stays inside Platypus. A
+ * `suppressed` run never ran, so its list is empty and its count is 0.
  */
 const webhookTriggerRunShape = <S extends TriggerRunStatus>(status: S) =>
   z.object({
@@ -3317,6 +3353,8 @@ const webhookTriggerRunShape = <S extends TriggerRunStatus>(status: S) =>
     agentId: z.string(),
     eventType: z.string().nullable(),
     entityId: z.string().nullable(),
+    unloadedToolSets: z.array(unloadedToolSetSchema),
+    failedToolCalls: z.number().int().nonnegative(),
   });
 
 /**

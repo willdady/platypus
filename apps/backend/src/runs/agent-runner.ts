@@ -323,7 +323,10 @@ export class AgentRunner {
       run,
       "Run setup failed after adopting its turn",
       async () => {
-        const plan: ResolvedRunPlan = { resolved: turn.resolved };
+        const plan: ResolvedRunPlan = {
+          resolved: turn.resolved,
+          unloadedToolSets: turn.unloadedToolSets,
+        };
         await sink.onResolved({ runId: input.runId, plan });
 
         // The conversation is converted once, here, and handed to whichever
