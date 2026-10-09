@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.17.0](https://github.com/willdady/platypus/compare/v3.16.1...v3.17.0) (2026-10-09)
+
+
+### Features
+
+* **backend:** announce Trigger run outcomes as Webhook-only trigger_run.* events ([#1362](https://github.com/willdady/platypus/issues/1362)) ([444ddd1](https://github.com/willdady/platypus/commit/444ddd10a5c05ff09ceba68a46b6f3c4eb19bc36))
+* **backend:** record unloaded tool sets and failed tool calls on Trigger runs ([#1367](https://github.com/willdady/platypus/issues/1367)) ([3b27f10](https://github.com/willdady/platypus/commit/3b27f10c96f9e4c36276588b09d93c280acbe38b))
+
+
+### Bug Fixes
+
+* **backend:** accept a client-minted A2A contextId ([#1359](https://github.com/willdady/platypus/issues/1359)) ([b7ceea6](https://github.com/willdady/platypus/commit/b7ceea65cc24f45bd01ffe7bb5518b9c281ba410))
+* **backend:** redact Shared Provider and MCP credentials on the Workspace surface ([ce1a257](https://github.com/willdady/platypus/commit/ce1a2574b45407516a678af72e76d2b4e0ffc64b))
+* **docs:** correct drift found by a building-with-platypus audit ([#1364](https://github.com/willdady/platypus/issues/1364)) ([672c78c](https://github.com/willdady/platypus/commit/672c78c72021f99fb856bc304e428ec856ff071b))
+* **docs:** resolve the claims the building-with-platypus audit left open ([#1366](https://github.com/willdady/platypus/issues/1366)) ([a43361b](https://github.com/willdady/platypus/commit/a43361be499a3c1e74af433942b83c11994202b2))
+* **frontend:** offer Pin, Edit and Delete on a Chat only to the Workspace Owner ([#1363](https://github.com/willdady/platypus/issues/1363)) ([f6979b5](https://github.com/willdady/platypus/commit/f6979b547588945e2c91c23ed1063cbe2e16d7d0))
+
 ## [3.16.1](https://github.com/willdady/platypus/compare/v3.16.0...v3.16.1) (2026-10-08)
 
 
