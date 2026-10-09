@@ -181,7 +181,7 @@ A run that failed shows its error there. The most common ones:
 | What the run says                                  | Usually means                                                                                                         |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Failed, naming a repeated tool call                | The Agent looped — it couldn't find the board, or the column name in the Instructions doesn't match the Board exactly |
-| **Success**, but no card appeared                  | The Agent decided not to; check its one-sentence report in the run                                                    |
+| **Success**, but no card appeared                  | The Agent decided not to; open the run with **View run** and read its one-sentence report under **Response**          |
 | Success, with **Run cut short at the step limit.** | The Agent spent its steps fetching cards before filing the digest. Raise **Max steps** on the Agent form              |
 | Failed with a Provider error                       | Credentials or a model id — the same failure a Chat would show                                                        |
 

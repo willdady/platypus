@@ -127,7 +127,8 @@ The combined `<slug>__<toolName>` name must also be 64 characters or fewer. A
 tool name that doesn't fit is excluded from the turn (and flagged by **Test
 connection**) rather than being cut short; if you hit this, the fix is to give
 the MCP a shorter Name. A tool whose own name contains characters other than
-letters, digits, `_` and `-` is excluded the same way, and renaming won't help.
+letters, digits, `_` and `-` is excluded the same way, and **Test connection**
+flags it under the same _too long_ message — but renaming won't help.
 
 ### Read-only tools free up space automatically
 
