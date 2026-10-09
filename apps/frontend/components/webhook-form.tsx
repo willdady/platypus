@@ -5,10 +5,15 @@ import {
   FieldLabel,
   FieldGroup,
   FieldSet,
+  FieldLegend,
   FieldDescription,
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  eventTriggerEventSchema,
+  triggerRunWebhookEventSchema,
+} from "@platypus/schemas";
 import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -54,16 +59,27 @@ interface WebhookFormProps {
   webhookId?: string;
 }
 
-const ALL_EVENTS = [
-  "notification.created",
-  "notification.updated",
-  "notification.read",
-  "notification.dismissed",
-  "card.created",
-  "card.updated",
-  "card.moved",
-  "card.deleted",
-] as const;
+/**
+ * The picker's groups. Trigger run events are Webhook-only: an Event Trigger
+ * cannot subscribe to them, so only this picker offers them.
+ */
+const EVENT_GROUPS = [
+  {
+    label: "Notifications",
+    events: eventTriggerEventSchema.options.filter((e) =>
+      e.startsWith("notification."),
+    ),
+  },
+  {
+    label: "Cards",
+    events: eventTriggerEventSchema.options.filter((e) =>
+      e.startsWith("card."),
+    ),
+  },
+  { label: "Trigger runs", events: triggerRunWebhookEventSchema.options },
+];
+
+const ALL_EVENTS = EVENT_GROUPS.flatMap((group) => group.events);
 
 const EVENT_LABELS: Record<string, string> = {
   "notification.created": "Notification created",
@@ -74,6 +90,10 @@ const EVENT_LABELS: Record<string, string> = {
   "card.updated": "Card updated",
   "card.moved": "Card moved",
   "card.deleted": "Card deleted",
+  "trigger_run.succeeded": "Trigger run succeeded",
+  "trigger_run.failed": "Trigger run failed",
+  "trigger_run.cancelled": "Trigger run cancelled",
+  "trigger_run.suppressed": "Trigger run suppressed",
 };
 
 const RETRACTABLE_FIELDS = [
@@ -362,19 +382,26 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             <FieldDescription className="mb-3">
               Select which events trigger webhook delivery.
             </FieldDescription>
-            <div className="grid grid-cols-2 gap-3">
-              {ALL_EVENTS.map((event) => (
-                <div key={event} className="flex items-center gap-3">
-                  <Switch
-                    id={`event-${event}`}
-                    checked={events.includes(event)}
-                    onCheckedChange={() => toggleEvent(event)}
-                    disabled={isSubmitting}
-                  />
-                  <FieldLabel htmlFor={`event-${event}`} className="mb-0">
-                    {EVENT_LABELS[event]}
-                  </FieldLabel>
-                </div>
+            <div className="flex flex-col gap-5">
+              {EVENT_GROUPS.map((group) => (
+                <FieldSet key={group.label} className="gap-0">
+                  <FieldLegend variant="label">{group.label}</FieldLegend>
+                  <div className="grid grid-cols-2 gap-3">
+                    {group.events.map((event) => (
+                      <div key={event} className="flex items-center gap-3">
+                        <Switch
+                          id={`event-${event}`}
+                          checked={events.includes(event)}
+                          onCheckedChange={() => toggleEvent(event)}
+                          disabled={isSubmitting}
+                        />
+                        <FieldLabel htmlFor={`event-${event}`} className="mb-0">
+                          {EVENT_LABELS[event]}
+                        </FieldLabel>
+                      </div>
+                    ))}
+                  </div>
+                </FieldSet>
               ))}
             </div>
             {validationErrors.events && (

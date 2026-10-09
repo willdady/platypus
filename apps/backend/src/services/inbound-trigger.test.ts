@@ -8,9 +8,14 @@ vi.mock("./trigger-firing.ts", () => ({
 vi.mock("./notification.ts", () => ({
   createNotification: vi.fn(() => Promise.resolve({ id: "notification-1" })),
 }));
+vi.mock("./trigger-run-announce.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./trigger-run-announce.ts")>()),
+  announceTriggerRunsEnded: vi.fn(() => Promise.resolve()),
+}));
 
 import { fireTrigger } from "./trigger-firing.ts";
 import { createNotification } from "./notification.ts";
+import { announceTriggerRunsEnded } from "./trigger-run-announce.ts";
 import {
   bearerToken,
   bearerTokenStatus,
@@ -474,6 +479,17 @@ describe("inbound triggers", () => {
           id: "run-suppressed",
           status: "suppressed",
         });
+        // The suppressed row is announced once; an accepted call announces
+        // nothing until its run ends.
+        expect(announceTriggerRunsEnded).toHaveBeenCalledTimes(1);
+        expect(announceTriggerRunsEnded).toHaveBeenCalledWith([
+          expect.objectContaining({
+            runId: "run-suppressed",
+            triggerId: "trig-1",
+            status: "suppressed",
+            entityId: "PLAT-42",
+          }),
+        ]);
 
         mockNanoid.mockReturnValueOnce("run-other-record");
         const other = await acceptInboundCall(
@@ -484,6 +500,7 @@ describe("inbound triggers", () => {
         );
         expect(other.outcome).toBe("accepted");
         expect(fireTrigger).toHaveBeenCalledTimes(1);
+        expect(announceTriggerRunsEnded).toHaveBeenCalledTimes(1);
       } finally {
         delete process.env.TRIGGER_BREAKER_MAX_RUNS;
       }

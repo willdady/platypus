@@ -2209,7 +2209,11 @@ export const memoryDailySummarySchema = z.object({
 // the foot of this file, where the Card and Notification pieces it builds on
 // are already in scope.
 
-export const webhookEventSchema = z.enum([
+/**
+ * The events an **Event Trigger** can subscribe to: the Workspace occurrences
+ * the stream's two consumers share.
+ */
+export const eventTriggerEventSchema = z.enum([
   "notification.created",
   "notification.updated",
   "notification.read",
@@ -2218,6 +2222,29 @@ export const webhookEventSchema = z.enum([
   "card.updated",
   "card.moved",
   "card.deleted",
+]);
+
+export type EventTriggerEvent = z.infer<typeof eventTriggerEventSchema>;
+
+/**
+ * Webhook-only events: a Trigger run reaching a terminal status. An Event
+ * Trigger never sees them — a run ending must not be able to start another.
+ */
+export const triggerRunWebhookEventSchema = z.enum([
+  "trigger_run.succeeded",
+  "trigger_run.failed",
+  "trigger_run.cancelled",
+  "trigger_run.suppressed",
+]);
+
+export type TriggerRunWebhookEvent = z.infer<
+  typeof triggerRunWebhookEventSchema
+>;
+
+/** Every event a **Webhook** can subscribe to. */
+export const webhookEventSchema = z.enum([
+  ...eventTriggerEventSchema.options,
+  ...triggerRunWebhookEventSchema.options,
 ]);
 
 export type WebhookEvent = z.infer<typeof webhookEventSchema>;
@@ -2243,7 +2270,7 @@ export const eventTriggerFiltersSchema = z.object({
 });
 
 export const eventTriggerConfigSchema = z.object({
-  events: z.array(webhookEventSchema).min(1),
+  events: z.array(eventTriggerEventSchema).min(1),
   filters: eventTriggerFiltersSchema.optional(),
 });
 
@@ -3273,6 +3300,26 @@ const webhookNotificationRecordShape = {
 };
 
 /**
+ * A Trigger run that reached a terminal status. Field names match the Inbound
+ * poll response; `status` is the stored word, pinned per event. No final text,
+ * no stats, no event data — the run's output stays inside Platypus.
+ */
+const webhookTriggerRunShape = <S extends TriggerRunStatus>(status: S) =>
+  z.object({
+    runId: z.string(),
+    status: z.literal(status),
+    startedAt: z.date(),
+    completedAt: z.date().nullable(),
+    errorMessage: z.string().nullable(),
+    triggerId: z.string(),
+    triggerName: z.string(),
+    triggerType: triggerTypeSchema,
+    agentId: z.string(),
+    eventType: z.string().nullable(),
+    entityId: z.string().nullable(),
+  });
+
+/**
  * Every event's payload, keyed by event name. The `satisfies` is the whole
  * enforcement: an event added to {@link webhookEventSchema} without a payload
  * here fails to compile, and a payload for an event that does not exist fails
@@ -3310,6 +3357,10 @@ export const webhookEventDataSchemas = {
     boardId: z.string(),
     columnId: z.string(),
   }),
+  "trigger_run.succeeded": webhookTriggerRunShape("success"),
+  "trigger_run.failed": webhookTriggerRunShape("failed"),
+  "trigger_run.cancelled": webhookTriggerRunShape("cancelled"),
+  "trigger_run.suppressed": webhookTriggerRunShape("suppressed"),
 } satisfies Record<WebhookEvent, z.ZodType>;
 
 /** The `data` the named event carries. */
@@ -3317,10 +3368,26 @@ export type WebhookEventData<E extends WebhookEvent = WebhookEvent> = z.infer<
   (typeof webhookEventDataSchemas)[E]
 >;
 
-/** An event and its payload — the value `dispatchEvent` takes. */
+/** An event and its payload — the value a Webhook delivery carries. */
 export type WebhookEventPayload = {
   [E in WebhookEvent]: { event: E; data: WebhookEventData<E> };
 }[WebhookEvent];
+
+/**
+ * An event an Event Trigger can fire on, and its payload — the value
+ * `dispatchEvent` takes. The accessors below are total over this type alone:
+ * a `trigger_run.*` event never reaches the debounce or the breaker.
+ */
+export type EventTriggerEventPayload = Extract<
+  WebhookEventPayload,
+  { event: EventTriggerEvent }
+>;
+
+/** A Trigger run's terminal event and its payload. */
+export type TriggerRunWebhookEventPayload = Extract<
+  WebhookEventPayload,
+  { event: TriggerRunWebhookEvent }
+>;
 
 /**
  * What an event names: one entity, or a set of them. The debounce bucket and
@@ -3333,7 +3400,7 @@ export type WebhookEventEntity =
 
 /** The entity an event names. The one place that knows where the id lives. */
 export const webhookEventEntity = (
-  payload: WebhookEventPayload,
+  payload: EventTriggerEventPayload,
 ): WebhookEventEntity => {
   switch (payload.event) {
     case "notification.created":
@@ -3361,13 +3428,13 @@ export const webhookEventEntity = (
  * each reader deciding for itself what carries a diff.
  */
 export const webhookEventChangedFields = (
-  payload: WebhookEventPayload,
+  payload: EventTriggerEventPayload,
 ): string[] | undefined =>
   payload.event === "card.updated" ? payload.data.changedFields : undefined;
 
 /** The Board and Column an event names, where it names them. */
 export const webhookEventScope = (
-  payload: WebhookEventPayload,
+  payload: EventTriggerEventPayload,
 ): { boardId?: string; columnId?: string } => {
   switch (payload.event) {
     case "card.created":

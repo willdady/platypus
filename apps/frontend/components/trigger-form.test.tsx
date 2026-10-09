@@ -52,6 +52,16 @@ async function renderEventTriggerForm() {
   await selectOption("Cron", "Event");
 }
 
+describe("TriggerForm — event picker", () => {
+  it("offers no Trigger run events, which only a Webhook can subscribe to", async () => {
+    await renderEventTriggerForm();
+
+    expect(screen.getByLabelText("card.updated")).toBeInTheDocument();
+    expect(screen.queryByText("Trigger runs")).toBeNull();
+    expect(screen.queryByLabelText("trigger_run.failed")).toBeNull();
+  });
+});
+
 describe("TriggerForm — board and column filters", () => {
   it("hides the column filter until a board is selected", async () => {
     await renderEventTriggerForm();

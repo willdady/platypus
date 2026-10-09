@@ -52,6 +52,7 @@ import {
   TOOL_NAME_NAMESPACE_SEPARATOR,
   TOOL_NAME_PATTERN,
   triggerSchema,
+  eventTriggerEventSchema,
   webhookEventDataSchemas,
   webhookEventSchema,
   type WebhookEvent,
@@ -733,7 +734,7 @@ describe("webhook event payloads", () => {
       .split("\n")
       .slice(0, line - 1)
       .join("\n")
-      .match(/`([a-z]+\.[a-z]+)`/g)
+      .match(/`([a-z_]+\.[a-z]+)`/g)
       ?.map((span) => span.replaceAll("`", ""))
       .filter((span) => events.includes(span));
     const event = named ?? preceding?.at(-1);
@@ -863,12 +864,12 @@ describe("trigger event payloads", () => {
       }
     }
     const named = example.text.match(/^Event: (\S+)/);
-    const events: readonly string[] = webhookEventSchema.options;
+    const events: readonly string[] = eventTriggerEventSchema.options;
     if (named && !events.includes(named[1])) {
       violations.push(
         `apps/docs/content/${page}:${example.line} works the example through \`${named[1]}\`, ` +
-          `which is not in packages/schemas/index.ts (webhookEventSchema).\n` +
-          `That event never fires.`,
+          `which is not in packages/schemas/index.ts (eventTriggerEventSchema).\n` +
+          `No Event trigger fires on it.`,
       );
     }
     expectNoViolations(violations);

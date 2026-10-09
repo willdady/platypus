@@ -30,12 +30,16 @@ import {
   shouldSuppressTriggerRun,
   suppressTriggerRun,
 } from "./trigger-breaker.ts";
+import {
+  announceTriggerRunsEnded,
+  endedTriggerRunColumns,
+} from "./trigger-run-announce.ts";
 import type { TriggerRow } from "./trigger.ts";
 import type { RunInput } from "../runs/types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type {
   InboundTriggerInput,
-  WebhookEventPayload,
+  EventTriggerEventPayload,
 } from "@platypus/schemas";
 
 /**
@@ -57,7 +61,7 @@ import type {
 
 export type EventContext = {
   /** The event that fired this run, carried with its declared payload. */
-  payload: WebhookEventPayload;
+  payload: EventTriggerEventPayload;
   /**
    * The single entity the event named, when it named one. Persisted on the run
    * row so the run-rate breaker can count per entity; absent for events that
@@ -174,11 +178,11 @@ export const fireTrigger = async (
  * Ends an inbound run whose firing threw before its Drive adopted the row, so
  * the run id its caller holds reaches a terminal status instead of reading
  * `pending` until the recovery sweep. A row the Drive already adopted is left
- * alone: its sink wrote the real outcome.
+ * alone: its sink wrote the real outcome, and announced it.
  */
 const failPendingRun = async (runId: string, error: unknown) => {
   try {
-    await db
+    const ended = await db
       .update(triggerRunTable)
       .set({
         status: "failed",
@@ -190,7 +194,9 @@ const failPendingRun = async (runId: string, error: unknown) => {
           eq(triggerRunTable.id, runId),
           eq(triggerRunTable.status, "pending"),
         ),
-      );
+      )
+      .returning(endedTriggerRunColumns);
+    if (ended.length > 0) void announceTriggerRunsEnded(ended);
   } catch (updateError) {
     logger.error(
       { runId, error: errorMessage(updateError) },

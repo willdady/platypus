@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { WebhookEventData, WebhookEventPayload } from "@platypus/schemas";
+import type {
+  EventTriggerEventPayload,
+  WebhookEventData,
+  WebhookEventPayload,
+} from "@platypus/schemas";
 import {
   cardEvent,
   mockDb,
@@ -27,7 +31,7 @@ vi.mock("./trigger-firing.ts", () => ({
 
 import { mockLogger } from "../test-setup.ts";
 
-import { dispatchEvent } from "./event-dispatch.ts";
+import { dispatchEvent, dispatchWebhookEvent } from "./event-dispatch.ts";
 import { withCausation, withOriginatingTrigger } from "../event-causation.ts";
 
 /** The dispatch-decision lines the logger recorded, newest last. */
@@ -37,7 +41,7 @@ const decisionLines = (): Record<string, unknown>[] =>
     .map((call) => call[0] as Record<string, unknown>);
 
 /** A `card.deleted` naming one card — the ids it carries and nothing else. */
-const deletedEvent = (cardId: string): WebhookEventPayload => ({
+const deletedEvent = (cardId: string): EventTriggerEventPayload => ({
   event: "card.deleted",
   data: { cardId, boardId: "board-1", columnId: "col-1" },
 });
@@ -45,7 +49,7 @@ const deletedEvent = (cardId: string): WebhookEventPayload => ({
 /** A `notification.read` in either of its two declared shapes. */
 const readEvent = (
   data: WebhookEventData<"notification.read">,
-): WebhookEventPayload => ({ event: "notification.read", data });
+): EventTriggerEventPayload => ({ event: "notification.read", data });
 
 const makeWebhook = (overrides: Record<string, unknown> = {}) => ({
   id: "wh-1",
@@ -104,8 +108,8 @@ async function flushMicrotasks() {
  */
 async function runsForPair(
   trigger: ReturnType<typeof makeEventTrigger>,
-  first: WebhookEventPayload,
-  second: WebhookEventPayload,
+  first: EventTriggerEventPayload,
+  second: EventTriggerEventPayload,
 ): Promise<number> {
   // Each dispatch runs its own webhook query (none) then trigger query.
   mockDb.where
@@ -976,6 +980,69 @@ describe("event-dispatch", () => {
         payload: created,
         entityId: "c1",
       });
+    });
+  });
+
+  describe("dispatchWebhookEvent", () => {
+    const runFailed: WebhookEventPayload = {
+      event: "trigger_run.failed",
+      data: {
+        runId: "run-1",
+        status: "failed",
+        startedAt: new Date("2026-01-01T00:00:00Z"),
+        completedAt: new Date("2026-01-01T00:01:00Z"),
+        errorMessage: "boom",
+        triggerId: "trigger-9",
+        triggerName: "Nightly",
+        triggerType: "cron",
+        agentId: "agent-1",
+        eventType: null,
+        entityId: null,
+      },
+    };
+
+    it("delivers a trigger_run event to a Webhook subscribed to it", async () => {
+      mockDb.where.mockResolvedValueOnce([
+        makeWebhook({ events: ["trigger_run.failed"] }),
+      ]);
+
+      dispatchWebhookEvent("org-1", "ws-1", runFailed);
+      await flushMicrotasks();
+
+      expect(mockDeliverWebhook).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(
+        mockDeliverWebhook.mock.calls[0][1] as string,
+      ) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        event: "trigger_run.failed",
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        data: {
+          runId: "run-1",
+          status: "failed",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          errorMessage: "boom",
+        },
+      });
+    });
+
+    it("never reaches an Event Trigger, even one whose stored row subscribes to it", async () => {
+      // A legacy or hand-edited row the API would now reject.
+      const legacy = makeEventTrigger({
+        config: { events: ["trigger_run.failed"] },
+      });
+      mockDb.where
+        .mockResolvedValueOnce([makeWebhook({ events: ["card.created"] })])
+        .mockResolvedValueOnce([legacy]);
+
+      dispatchWebhookEvent("org-1", "ws-1", runFailed);
+      await flushMicrotasks();
+
+      expect(mockFireTrigger).not.toHaveBeenCalled();
+      expect(mockDeliverWebhook).not.toHaveBeenCalled();
+      // The Webhook lookup is the only query: Event Triggers are never read.
+      expect(mockDb.where).toHaveBeenCalledTimes(1);
+      expect(decisionLines()).toEqual([]);
     });
   });
 });

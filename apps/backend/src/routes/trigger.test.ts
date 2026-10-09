@@ -269,6 +269,10 @@ describe("Trigger Routes", () => {
         { type: "inbound", config: { cronExpression: "* * * * *" } },
       ],
       ["an unknown event", { type: "event", config: { events: ["bogus"] } }],
+      [
+        "a Webhook-only trigger_run event",
+        { type: "event", config: { events: ["trigger_run.failed"] } },
+      ],
       ["an inbound config for a Cron Trigger", { type: "cron", config: {} }],
     ])(
       "validates the config against its own type, refusing %s",

@@ -62,7 +62,9 @@ will fire.
 ### Or choose events (Event)
 
 For an Event trigger, select one or more **Events** (e.g. `card.created`,
-`card.updated`, `card.moved`, `notification.created`). Optionally narrow with
+`card.updated`, `card.moved`, `notification.created`). A Trigger run ending is
+not among them: those events go only to a
+[Webhook](/building-with-platypus/webhooks#trigger-run-events). Optionally narrow with
 **Only cards in this Board** and **Only cards in this Column** so the Trigger
 only fires for activity in one place. The filters appear once you select a card
 event, and **Only cards in this Column** once you pick a Board.
@@ -449,6 +451,11 @@ the token is regenerated, revoked or expired, the Trigger is disabled, the
 Organization stops allowing the Workspace, or the Workspace Owner leaves the
 Organization or is banned. A refused poll is not logged and
 does not move **Last rejected**.
+
+To hear when a run ends without polling, subscribe a
+[Webhook](/building-with-platypus/webhooks#trigger-run-events) to the
+`trigger_run.*` events. Keep the poll as the fallback: a Webhook delivery is
+best-effort and can be lost.
 
 ## Review run history
 

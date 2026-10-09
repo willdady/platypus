@@ -5,6 +5,13 @@ import { triggerRun as triggerRunTable } from "../db/schema.ts";
 
 import { mockLogger, mockNanoid } from "../test-setup.ts";
 
+const { mockAnnounce } = vi.hoisted(() => ({ mockAnnounce: vi.fn() }));
+
+vi.mock("./trigger-run-announce.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./trigger-run-announce.ts")>()),
+  announceTriggerRunsEnded: mockAnnounce,
+}));
+
 mockNanoid.mockReturnValue("suppressed-1");
 
 import {
@@ -157,6 +164,23 @@ describe("trigger-breaker", () => {
       });
       expect(inserted.startedAt).toEqual(new Date("2026-01-01T12:00:00Z"));
       expect(inserted.createdAt).toEqual(new Date("2026-01-01T12:00:00Z"));
+    });
+
+    it("announces the row it wrote", async () => {
+      const row = { runId: "suppressed-1", status: "suppressed" };
+      mockDb.returning.mockResolvedValueOnce([row]);
+      mockDb.limit.mockResolvedValue([]);
+
+      await suppressTriggerRun({
+        triggerId: "trigger-1",
+        maxRunsToKeep: 10,
+        entityId: "card-1",
+        eventType: "card.updated",
+        eventData: { id: "card-1" },
+      });
+
+      expect(mockAnnounce).toHaveBeenCalledTimes(1);
+      expect(mockAnnounce).toHaveBeenCalledWith([row]);
     });
 
     it("trims the Trigger's history with the row it just wrote", async () => {

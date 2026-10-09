@@ -186,7 +186,7 @@ const parseCronConfig = (
 
 /**
  * Validates an event config — a non-empty `events` array of real
- * `webhookEventSchema` values, and (if present) `filters` matching the real
+ * `eventTriggerEventSchema` values, and (if present) `filters` matching the real
  * `eventTriggerFiltersSchema` (`boardId`/`columnId`/`changedFields`) — and
  * returns it normalized, or throws.
  */

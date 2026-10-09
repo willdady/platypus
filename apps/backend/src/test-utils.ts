@@ -20,7 +20,10 @@ import type {
   LoadedPlugin,
   LoadPluginsResult,
 } from "./plugins/loader.ts";
-import type { WebhookEventData, WebhookEventPayload } from "@platypus/schemas";
+import type {
+  WebhookEventData,
+  EventTriggerEventPayload,
+} from "@platypus/schemas";
 import type {
   InferToolInput,
   InferToolOutput,
@@ -465,7 +468,7 @@ export const cardEvent = <
 >(
   event: E,
   over: Partial<WebhookEventData<E>> = {},
-): WebhookEventPayload =>
+): EventTriggerEventPayload =>
   ({
     event,
     data: {
@@ -489,13 +492,13 @@ export const cardEvent = <
       ...(event === "card.moved" ? { previousColumnId: "col-0" } : {}),
       ...over,
     },
-  }) as WebhookEventPayload;
+  }) as EventTriggerEventPayload;
 
 /** A `notification.created`/`notification.updated` event and its record. */
 export const notificationEvent = (
   event: "notification.created" | "notification.updated",
   over: Partial<WebhookEventData<"notification.created">> = {},
-): WebhookEventPayload => ({
+): EventTriggerEventPayload => ({
   event,
   data: {
     id: "n-1",

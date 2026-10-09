@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import {
   webhookEventSchema,
+  eventTriggerEventSchema,
+  eventTriggerConfigSchema,
   webhookEventDataSchemas,
   webhookEventChangedFields,
   webhookEventEntity,
@@ -1788,6 +1790,86 @@ describe("webhook event payloads", () => {
       somethingNew: "x",
     });
     expect(parsed).toMatchObject({ id: "c1", somethingNew: "x" });
+  });
+});
+
+describe("trigger_run.* Webhook events", () => {
+  const ended = {
+    runId: "run-1",
+    startedAt: new Date(),
+    completedAt: new Date(),
+    errorMessage: null,
+    triggerId: "t-1",
+    triggerName: "Nightly",
+    triggerType: "cron" as const,
+    agentId: "agent-1",
+    eventType: null,
+    entityId: null,
+  };
+
+  it("lets a Webhook subscribe to them", () => {
+    const events = ["trigger_run.failed", "card.created"];
+    expect(
+      webhookCreateSchema.parse({ name: "Hook", url: "https://x.io", events })
+        .events,
+    ).toEqual(events);
+    expect(webhookUpdateSchema.parse({ events }).events).toEqual(events);
+  });
+
+  it("keeps them out of what an Event Trigger can subscribe to", () => {
+    expect(eventTriggerEventSchema.options).not.toContain("trigger_run.failed");
+    expect(
+      eventTriggerConfigSchema.safeParse({ events: ["trigger_run.failed"] })
+        .success,
+    ).toBe(false);
+    expect(
+      eventTriggerConfigSchema.safeParse({ events: ["card.created"] }).success,
+    ).toBe(true);
+  });
+
+  it("is a Webhook event alongside every Event Trigger event", () => {
+    expect([...webhookEventSchema.options].sort()).toEqual(
+      [
+        ...eventTriggerEventSchema.options,
+        "trigger_run.succeeded",
+        "trigger_run.failed",
+        "trigger_run.cancelled",
+        "trigger_run.suppressed",
+      ].sort(),
+    );
+  });
+
+  it("pins each event to the stored status it reports", () => {
+    expect(
+      webhookEventDataSchemas["trigger_run.failed"].safeParse({
+        ...ended,
+        status: "failed",
+        errorMessage: "boom",
+      }).success,
+    ).toBe(true);
+    expect(
+      webhookEventDataSchemas["trigger_run.succeeded"].safeParse({
+        ...ended,
+        status: "success",
+      }).success,
+    ).toBe(true);
+    expect(
+      webhookEventDataSchemas["trigger_run.succeeded"].safeParse({
+        ...ended,
+        status: "failed",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("carries no Agent output", () => {
+    const parsed = webhookEventDataSchemas["trigger_run.succeeded"].parse({
+      ...ended,
+      status: "success",
+      finalText: "secret",
+      stats: { steps: 1 },
+    });
+    expect(parsed).not.toHaveProperty("finalText");
+    expect(parsed).not.toHaveProperty("stats");
   });
 });
 

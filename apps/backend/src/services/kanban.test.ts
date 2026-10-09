@@ -14,7 +14,7 @@ import { ConflictError, ValidationError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import {
   KANBAN_CARD_HISTORY_LIMIT,
-  type WebhookEvent,
+  type EventTriggerEvent,
 } from "@platypus/schemas";
 import {
   applyBodyDiff,
@@ -37,7 +37,10 @@ import {
  * The dispatch a card write should have made: the event paired with its
  * payload, matched on the fields the test names rather than the whole row.
  */
-const dispatched = (event: WebhookEvent, data: Record<string, unknown>) => ({
+const dispatched = (
+  event: EventTriggerEvent,
+  data: Record<string, unknown>,
+) => ({
   event,
   data: expect.objectContaining(data) as unknown,
 });

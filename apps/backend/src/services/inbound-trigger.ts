@@ -29,6 +29,11 @@ import {
 } from "./trigger-breaker.ts";
 import { ownerMayAct, ownerMembershipJoin } from "./owner-membership.ts";
 import { fireTrigger } from "./trigger-firing.ts";
+import {
+  announceTriggerRunsEnded,
+  endedTriggerRunColumns,
+  type EndedTriggerRun,
+} from "./trigger-run-announce.ts";
 import { narrowTriggerConfig, type TriggerRow } from "./trigger.ts";
 import {
   bearerToken,
@@ -418,6 +423,9 @@ export const acceptInboundCall = async (
   // Whether this call holds a run slot, so every path that does not end in a
   // started run gives it back exactly once.
   let holdsSlot = false;
+  // The `suppressed` row this call wrote, announced once its transaction has
+  // committed.
+  let suppressedRun: EndedTriggerRun | undefined;
   let decision: InboundAcceptance;
   try {
     decision = await inLocalTurn(lockKey, () =>
@@ -458,16 +466,20 @@ export const acceptInboundCall = async (
         }
         const runId = nanoid();
         const now = new Date();
-        await tx.insert(triggerRunTable).values({
-          id: runId,
-          triggerId: trigger.id,
-          status: suppress ? "suppressed" : "pending",
-          entityId,
-          eventType: null,
-          eventData: { inputs },
-          startedAt: now,
-          createdAt: now,
-        });
+        const [row] = await tx
+          .insert(triggerRunTable)
+          .values({
+            id: runId,
+            triggerId: trigger.id,
+            status: suppress ? "suppressed" : "pending",
+            entityId,
+            eventType: null,
+            eventData: { inputs },
+            startedAt: now,
+            createdAt: now,
+          })
+          .returning(endedTriggerRunColumns);
+        if (suppress) suppressedRun = row;
         return suppress
           ? { outcome: "suppressed" as const, runId }
           : { outcome: "accepted" as const, runId };
@@ -479,6 +491,7 @@ export const acceptInboundCall = async (
   }
 
   if (decision.outcome === "suppressed") {
+    if (suppressedRun) void announceTriggerRunsEnded([suppressedRun]);
     // A suppressed row is bounded by its own budget; applied here as
     // `suppressTriggerRun` applies it for an Event Trigger.
     await retainTriggerRuns(trigger.id, trigger.maxRunsToKeep).catch(

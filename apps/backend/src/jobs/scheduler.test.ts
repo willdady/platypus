@@ -10,18 +10,24 @@ import { sql, type SQL } from "drizzle-orm";
  * drizzle real and renders the query instead.
  */
 
-const { mockDb, mockFireTrigger, mockSendReminders, mockSendA2aReminders } =
-  vi.hoisted(() => ({
-    mockDb: {
-      update: vi.fn<(table: unknown) => unknown>(),
-      select: vi.fn(),
-      execute: vi.fn<(query: SQL) => Promise<unknown>>(),
-      $client: { connect: vi.fn<() => Promise<unknown>>() },
-    },
-    mockFireTrigger: vi.fn(),
-    mockSendReminders: vi.fn<(now: Date) => Promise<void>>(),
-    mockSendA2aReminders: vi.fn<(now: Date) => Promise<void>>(),
-  }));
+const {
+  mockDb,
+  mockFireTrigger,
+  mockSendReminders,
+  mockSendA2aReminders,
+  mockAnnounce,
+} = vi.hoisted(() => ({
+  mockDb: {
+    update: vi.fn<(table: unknown) => unknown>(),
+    select: vi.fn(),
+    execute: vi.fn<(query: SQL) => Promise<unknown>>(),
+    $client: { connect: vi.fn<() => Promise<unknown>>() },
+  },
+  mockFireTrigger: vi.fn(),
+  mockSendReminders: vi.fn<(now: Date) => Promise<void>>(),
+  mockSendA2aReminders: vi.fn<(now: Date) => Promise<void>>(),
+  mockAnnounce: vi.fn(),
+}));
 
 vi.mock("../index.ts", () => ({ db: mockDb }));
 vi.mock("../services/trigger-firing.ts", () => ({
@@ -32,6 +38,10 @@ vi.mock("../services/inbound-trigger.ts", () => ({
 }));
 vi.mock("../services/a2a-token.ts", () => ({
   sendA2aTokenReminders: mockSendA2aReminders,
+}));
+vi.mock("../services/trigger-run-announce.ts", () => ({
+  endedTriggerRunColumns: {},
+  announceTriggerRunsEnded: mockAnnounce,
 }));
 
 import { mockLogger } from "../test-setup.ts";
@@ -325,8 +335,8 @@ describe("recoverStuckTriggers", () => {
 
   it("closes the orphaned runs' still-open events as errors, with no duration", async () => {
     const { updates } = captureUpdates([
-      { id: "run-1", triggerId: "t1" },
-      { id: "run-2", triggerId: "t2" },
+      { runId: "run-1", triggerId: "t1" },
+      { runId: "run-2", triggerId: "t2" },
     ]);
 
     await recoverStuckTriggers();
@@ -352,6 +362,37 @@ describe("recoverStuckTriggers", () => {
     await recoverStuckTriggers();
 
     expect(updates.map((c) => c.table)).toEqual([triggerRunTable]);
+  });
+
+  it("announces each run it failed, once", async () => {
+    const orphans = [
+      {
+        runId: "run-1",
+        triggerId: "t1",
+        status: "failed",
+        errorMessage: "Server restarted during execution",
+      },
+      {
+        runId: "run-2",
+        triggerId: "t2",
+        status: "failed",
+        errorMessage: "Server restarted during execution",
+      },
+    ];
+    captureUpdates(orphans);
+
+    await recoverStuckTriggers();
+
+    expect(mockAnnounce).toHaveBeenCalledTimes(1);
+    expect(mockAnnounce).toHaveBeenCalledWith(orphans);
+  });
+
+  it("announces nothing when no run was orphaned", async () => {
+    captureUpdates([]);
+
+    await recoverStuckTriggers();
+
+    expect(mockAnnounce).not.toHaveBeenCalled();
   });
 
   it("reschedules every enabled cron Trigger left with a NULL nextRunAt and no running run", async () => {

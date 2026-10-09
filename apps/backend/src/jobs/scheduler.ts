@@ -24,6 +24,10 @@ import { fireTrigger } from "../services/trigger-firing.ts";
 import { sendInboundTokenReminders } from "../services/inbound-trigger.ts";
 import { sendA2aTokenReminders } from "../services/a2a-token.ts";
 import {
+  announceTriggerRunsEnded,
+  endedTriggerRunColumns,
+} from "../services/trigger-run-announce.ts";
+import {
   narrowTriggerConfig,
   nextCronRunAt,
   type TriggerRow,
@@ -398,10 +402,7 @@ export async function recoverStuckTriggers(): Promise<void> {
         ),
       ),
     )
-    .returning({
-      id: triggerRunTable.id,
-      triggerId: triggerRunTable.triggerId,
-    });
+    .returning(endedTriggerRunColumns);
 
   if (orphaned.length > 0) {
     // No terminal run leaves an open event. The sweep is one of the two paths
@@ -414,7 +415,7 @@ export async function recoverStuckTriggers(): Promise<void> {
         and(
           inArray(
             triggerRunEventTable.runId,
-            orphaned.map((r) => r.id),
+            orphaned.map((r) => r.runId),
           ),
           eq(triggerRunEventTable.status, "running"),
         ),
@@ -424,6 +425,11 @@ export async function recoverStuckTriggers(): Promise<void> {
       { count: orphaned.length, cutoff: cutoff.toISOString() },
       "Marked orphaned trigger runs as failed (older than per-run timeout)",
     );
+
+    // One `trigger_run.failed` per row this update changed. The advisory lock
+    // keeps two sweeps from racing; a late finish on a swept row writes and
+    // announces nothing, because the sink's write matches only a live row.
+    void announceTriggerRunsEnded(orphaned);
   }
 
   const unscheduled = and(
