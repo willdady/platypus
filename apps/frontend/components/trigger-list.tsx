@@ -27,6 +27,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { statusBadge } from "@/components/trigger-run-row";
 import {
   Timer,
@@ -47,6 +54,7 @@ import {
   type EventTriggerConfig,
   type InboundTriggerConfig,
   type TriggerType,
+  triggerTypeSchema,
 } from "@platypus/schemas";
 import Link from "next/link";
 import { useBackendUrl } from "@/components/auth-provider";
@@ -71,6 +79,9 @@ const describeSchedule = (cronExpression: string, timezone: string): string => {
     return cronExpression;
   }
 };
+
+/** The value a Select carries for "no filter" — Radix rejects an empty one. */
+const ALL = "all";
 
 export const TRIGGER_TYPE_LABELS: Record<TriggerType, string> = {
   cron: "Cron",
@@ -149,6 +160,7 @@ export const TriggerList = ({
   const [triggerToToggle, setTriggerToToggle] = useState<Trigger | null>(null);
   const [isToggling, setIsToggling] = useState(false);
   const [showFired, setShowFired] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<TriggerType | typeof ALL>(ALL);
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -222,28 +234,67 @@ export const TriggerList = ({
   }
 
   // Shown even with nothing listed: fired One-offs may be all there is.
-  const showFiredToggle = (
-    <div className="flex items-center gap-2">
-      <Switch
-        id="show-fired-triggers"
-        checked={showFired}
-        onCheckedChange={setShowFired}
-      />
-      <Label htmlFor="show-fired-triggers" className="text-sm font-normal">
-        Show fired
-      </Label>
+  const controls = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <Select
+        value={typeFilter}
+        onValueChange={(value) =>
+          setTypeFilter(value as TriggerType | typeof ALL)
+        }
+      >
+        <SelectTrigger className="w-36" aria-label="Filter by type">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All types</SelectItem>
+          {triggerTypeSchema.options.map((type) => (
+            <SelectItem key={type} value={type}>
+              {TRIGGER_TYPE_LABELS[type]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex items-center gap-2">
+        <Switch
+          id="show-fired-triggers"
+          checked={showFired}
+          onCheckedChange={setShowFired}
+          // Only a One-off fires, and a One-off is always Cron.
+          disabled={typeFilter === "event" || typeFilter === "inbound"}
+        />
+        <Label htmlFor="show-fired-triggers" className="text-sm font-normal">
+          Show fired
+        </Label>
+      </div>
     </div>
   );
 
+  // The page around it owns the copy for a Workspace with no triggers at all.
   if (!triggers.length) {
-    return showFiredToggle;
+    return controls;
+  }
+
+  const shown =
+    typeFilter === ALL
+      ? triggers
+      : triggers.filter((trigger) => trigger.type === typeFilter);
+
+  if (!shown.length) {
+    return (
+      <>
+        {controls}
+        <p className="text-sm text-muted-foreground">
+          No {TRIGGER_TYPE_LABELS[typeFilter as TriggerType]} triggers to show.
+        </p>
+      </>
+    );
   }
 
   return (
     <>
-      {showFiredToggle}
+      {controls}
       <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
-        {triggers.map((trigger) => (
+        {shown.map((trigger) => (
           <li key={trigger.id}>
             <Item variant="outline" className="h-full cursor-pointer" asChild>
               <Link href={routes.triggers.detail(trigger.id)}>
