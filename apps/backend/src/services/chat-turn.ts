@@ -21,6 +21,7 @@ import { resolveTurn } from "./chat-messages.ts";
 import { currentTurnId, isA2aChat } from "./a2a-task-state.ts";
 import { endTurnIn, turnEnded } from "./a2a-task-lifecycle.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
+import { withRunSource } from "../event-causation.ts";
 
 /**
  * Starts one Chat turn and returns its streaming response — the one path every
@@ -186,18 +187,23 @@ export const startChatTurn = async (params: {
   // or a missing Workspace throws before the sink persists anything, so the
   // chat is never bricked — the central `onError` (ADR-0010) maps the typed
   // error to its HTTP status.
-  return await agentRunner.stream({
-    scope,
-    input,
-    sink,
-    options: {
-      // No request signal is taken: chat runs continue server-side
-      // regardless of the client connection, and are cancelled by run id.
-      origin,
-      frontendUrl: process.env.FRONTEND_URL,
-      timeouts: chatTimeouts(),
-    },
-  });
+  //
+  // Everything this turn does, at any delegation depth, is from this Chat —
+  // the source a Notification it posts records (#1229).
+  return await withRunSource({ kind: "chat", chatId: request.id }, () =>
+    agentRunner.stream({
+      scope,
+      input,
+      sink,
+      options: {
+        // No request signal is taken: chat runs continue server-side
+        // regardless of the client connection, and are cancelled by run id.
+        origin,
+        frontendUrl: process.env.FRONTEND_URL,
+        timeouts: chatTimeouts(),
+      },
+    }),
+  );
 };
 
 /**

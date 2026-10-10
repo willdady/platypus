@@ -97,3 +97,24 @@ export function withOriginatingTrigger<T>(
 ): T {
   return triggerId ? originatingTriggerStorage.run(triggerId, fn) : fn();
 }
+
+/**
+ * The Chat or Trigger run the current execution belongs to, if any — a third
+ * ambient dimension, established once where a Chat turn or a Trigger run
+ * starts and inherited by every Sub-Agent beneath it. A Notification records
+ * it as its source (#1229), so a prompt can never set or spoof it.
+ */
+export type RunSource =
+  | { kind: "chat"; chatId: string }
+  | { kind: "triggerRun"; triggerRunId: string };
+
+const runSourceStorage = new AsyncLocalStorage<RunSource>();
+
+/** The ambient {@link RunSource}, or `undefined` outside any run. */
+export const currentRunSource = (): RunSource | undefined =>
+  runSourceStorage.getStore();
+
+/** Runs `fn` with `source` established as the ambient {@link RunSource}. */
+export function withRunSource<T>(source: RunSource, fn: () => T): T {
+  return runSourceStorage.run(source, fn);
+}

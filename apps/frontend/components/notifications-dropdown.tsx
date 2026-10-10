@@ -19,11 +19,12 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   type InvitationListItem,
   type NotificationListItem,
+  type NotificationSource,
 } from "@platypus/schemas";
 import Link from "next/link";
 import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
-import { userRoutes } from "@/lib/routes";
+import { userRoutes, workspaceRoutes } from "@/lib/routes";
 
 interface NotificationsDropdownProps {
   orgId?: string;
@@ -120,10 +121,20 @@ export function NotificationsDropdown({
     setExpandedId(expandedId === notif.id ? null : notif.id);
   };
 
+  /** The page of the Chat or Trigger run a notification was posted from. */
+  const sourceHref = (source: NotificationSource) => {
+    if (!source || !orgId || !workspaceId) return null;
+    const routes = workspaceRoutes(orgId, workspaceId);
+    return source.kind === "chat"
+      ? routes.chat.detail(source.chatId)
+      : routes.triggerRuns.detail(source.triggerRunId);
+  };
+
   const hasContent = notifications.length > 0 || invitations.length > 0;
 
   return (
     <DropdownMenu
+      open={isOpen}
       onOpenChange={(open) => {
         setIsOpen(open);
         setExpandedId(null);
@@ -162,6 +173,7 @@ export function NotificationsDropdown({
             <div className="max-h-96 overflow-y-auto">
               {notifications.map((notif) => {
                 const isExpanded = expandedId === notif.id;
+                const href = sourceHref(notif.source);
                 return (
                   <div
                     key={notif.id}
@@ -243,6 +255,19 @@ export function NotificationsDropdown({
                             </>
                           )}
                         </span>
+                        {href && (
+                          <Link
+                            href={href}
+                            className="text-xs text-primary hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!notif.isRead) handleMarkAsRead(notif.id);
+                              setIsOpen(false);
+                            }}
+                          >
+                            Open
+                          </Link>
+                        )}
                       </div>
                     </div>
                     <button

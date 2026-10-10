@@ -2751,12 +2751,26 @@ export type TriggerRunDetailResponse = z.infer<
 
 // Notification
 
+/**
+ * The Chat or Trigger run a Notification was posted from; null outside a run,
+ * or once that Chat is deleted or that run is pruned.
+ */
+export const notificationSourceSchema = z
+  .discriminatedUnion("kind", [
+    z.object({ kind: z.literal("chat"), chatId: z.string() }),
+    z.object({ kind: z.literal("triggerRun"), triggerRunId: z.string() }),
+  ])
+  .nullable();
+
+export type NotificationSource = z.infer<typeof notificationSourceSchema>;
+
 export const notificationSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   agentId: z.string(),
   title: z.string().nullable().optional(),
   body: z.string().min(1).max(2000),
+  source: notificationSourceSchema,
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -3330,6 +3344,7 @@ const webhookNotificationRecordShape = {
   agentId: z.string(),
   title: z.string().nullable(),
   body: z.string(),
+  source: notificationSourceSchema,
   createdAt: z.date(),
   updatedAt: z.date(),
 };

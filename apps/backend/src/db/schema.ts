@@ -1118,6 +1118,14 @@ export const notification = pgTable(
       .references(() => agent.id, { onDelete: "cascade" }),
     title: t.text("title"),
     body: t.text("body").notNull(),
+    // The Chat or Trigger run it was posted from (#1229), at most one; both
+    // null outside a run, or once the source is deleted or pruned.
+    sourceChatId: t
+      .text("source_chat_id")
+      .references(() => chat.id, { onDelete: "set null" }),
+    sourceTriggerRunId: t
+      .text("source_trigger_run_id")
+      .references(() => triggerRun.id, { onDelete: "set null" }),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -1125,6 +1133,8 @@ export const notification = pgTable(
     index("idx_notification_workspace_id").on(t.workspaceId),
     index("idx_notification_agent_id").on(t.agentId),
     index("idx_notification_created_at").on(t.createdAt),
+    index("idx_notification_source_chat_id").on(t.sourceChatId),
+    index("idx_notification_source_trigger_run_id").on(t.sourceTriggerRunId),
   ],
 );
 

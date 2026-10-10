@@ -40,6 +40,7 @@ import type { TriggerRow } from "./trigger.ts";
 import {
   currentCausingAgents,
   currentOriginatingTrigger,
+  currentRunSource,
   withCausation,
   withOriginatingTrigger,
 } from "../event-causation.ts";
@@ -562,12 +563,13 @@ describe("fireTrigger", () => {
     it("establishes itself as the originating Trigger for everything the run writes", async () => {
       const trigger = makeTrigger();
       world(trigger);
-      let seen: { trigger?: string; agents?: readonly string[] } = {};
+      let seen: Record<string, unknown> = {};
       mockGenerate.mockImplementationOnce(async () => {
         await Promise.resolve();
         seen = {
           trigger: currentOriginatingTrigger(),
           agents: currentCausingAgents(),
+          source: currentRunSource(),
         };
         return { text: "ok", stats: {} };
       });
@@ -575,8 +577,15 @@ describe("fireTrigger", () => {
       await fireTrigger(trigger, { kind: "cron" });
 
       // The Agent chain is the Drive's to establish; this layer only names the
-      // Trigger.
-      expect(seen).toEqual({ trigger: "trigger-1", agents: [] });
+      // Trigger and the run.
+      expect(seen).toEqual({
+        trigger: "trigger-1",
+        agents: [],
+        source: {
+          kind: "triggerRun",
+          triggerRunId: generateArgs().input.runId,
+        },
+      });
     });
 
     it("runs the Agent as the Trigger, on behalf of the Workspace owner", async () => {

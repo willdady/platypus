@@ -11,7 +11,9 @@ status: accepted
 > where the record it touched carries stale Agent attribution from an earlier
 > edit. The ambient record now carries a second dimension alongside the chain —
 > the Trigger whose run is driving the work — established once around a Trigger
-> run and read back when the dispatcher logs its decision. See
+> run and read back when the dispatcher logs its decision. A third — the Chat
+> or Trigger run the work belongs to — is established where a Chat turn or a
+> Trigger run starts, and a Notification records it as its source. See
 > `apps/backend/src/event-causation.ts` and
 > `apps/backend/src/services/event-dispatch.ts`.
 
