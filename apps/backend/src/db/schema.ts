@@ -765,6 +765,17 @@ export const skill = pgTable(
       .notNull()
       .default(false),
     argumentHint: t.text("argument_hint"),
+    // Every `SKILL.md` frontmatter key not mapped to a column above, kept as-is
+    // and merged back on export (ADR-0036).
+    frontmatter: t
+      .jsonb("frontmatter")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    // A hash over the stored content — the mapped fields, `frontmatter`, `body`
+    // and each `skill_file`'s path and sha256 (`bundleHash`). Null only on a
+    // Skill last written before bundles existed; its next write sets it.
+    bundleHash: t.text("bundle_hash"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -774,6 +785,32 @@ export const skill = pgTable(
     unique("unique_skill_name_workspace").on(t.workspaceId, t.name),
     unique("unique_skill_name_org").on(t.organizationId, t.name),
   ],
+);
+
+/**
+ * One bundled file of a Skill other than `SKILL.md`, which lives on the `skill`
+ * row (ADR-0036). The bytes are in the StorageBackend under `storageKey`
+ * (`<orgId>/skills/<skillId>/<uploadId>/<fileId>`); the bundle path lives only
+ * here, since key segments are restricted and the disk backend can be
+ * case-insensitive.
+ */
+export const skillFile = pgTable(
+  "skill_file",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    skillId: t
+      .text("skill_id")
+      .notNull()
+      .references(() => skill.id, { onDelete: "cascade" }),
+    path: t.text("path").notNull(),
+    size: t.integer("size").notNull(),
+    sha256: t.text("sha256").notNull(),
+    // Decided by content once at import, never by extension.
+    isText: t.boolean("is_text").notNull(),
+    storageKey: t.text("storage_key").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [unique("unique_skill_file_path").on(t.skillId, t.path)],
 );
 
 export const context = pgTable(

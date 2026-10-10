@@ -726,6 +726,7 @@ describe("Chat Routes", () => {
           disableModelInvocation: true,
         },
       ]); // the named Skill
+      mockDb.orderBy.mockResolvedValueOnce([]); // its bundled files: none
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-cmd" }]);
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
       freshStream();

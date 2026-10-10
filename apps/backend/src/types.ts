@@ -1,6 +1,6 @@
 import { type UIMessage, type InferUITool } from "ai";
 import type { CachedInputTokens, SandboxUpload } from "@platypus/schemas";
-import { createLoadSkillTool } from "./tools/skill.ts";
+import { createLoadSkillTool, createReadSkillFileTool } from "./tools/skill.ts";
 import type { DelegateTool } from "./tools/sub-agent.ts";
 import type { createFsDownloadTool } from "./sandbox/tools.ts";
 
@@ -170,9 +170,13 @@ export type ChatMessageMetadata = {
  *
  * `fsDownload` earns its place because its card builds the download link from
  * the tool's output path.
+ *
+ * `readSkillFile` earns its place because its row reads the Skill name and
+ * file path off the tool's input.
  */
 export type CustomUITools = {
   loadSkill: InferUITool<ReturnType<typeof createLoadSkillTool>>;
+  readSkillFile: InferUITool<ReturnType<typeof createReadSkillFileTool>>;
   delegate: InferUITool<DelegateTool>;
   fsDownload: InferUITool<ReturnType<typeof createFsDownloadTool>>;
 };

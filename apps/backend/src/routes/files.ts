@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { isSuperAdmin } from "../middleware/authorization.ts";
-import { assertValidStorageKey } from "../storage/keys.ts";
+import { assertValidStorageKey, SKILL_KEY_SEGMENT } from "../storage/keys.ts";
 import { FILES_ROUTE_PREFIX } from "../storage/file-reference.ts";
 import {
   organizationMember,
@@ -55,6 +55,12 @@ files.get("/*", requireAuth, async (c) => {
   // so reject anything Platypus could not have stored before it reaches a
   // backend. Throws, so the `onError` seam answers 400 (ADR-0010).
   assertValidStorageKey(key);
+
+  // A bundled Skill file is served only through its Skill's own download
+  // route, as an attachment (ADR-0036) — never from here, for anyone.
+  if (key.split("/")[1] === SKILL_KEY_SEGMENT) {
+    return c.json({ error: "Access denied" }, 403);
+  }
 
   // Parse org and workspace from the key
   const keyParts = parseStorageKey(key);

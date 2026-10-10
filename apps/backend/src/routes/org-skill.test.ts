@@ -2,6 +2,14 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 
+// The bundle hash and file list are exercised against a real Postgres in
+// `services/skill-bundle.test.ts`; here they pass the row through.
+vi.mock("../services/skill-bundle.ts", () => ({
+  rehashSkill: vi.fn((_db: unknown, row: unknown) => Promise.resolve(row)),
+  listSkillFiles: vi.fn(() => Promise.resolve([])),
+  skillFilesForApi: vi.fn(() => Promise.resolve([])),
+}));
+
 describe("Organization Skill Routes", () => {
   beforeEach(() => {
     resetMockDb();
@@ -100,7 +108,7 @@ describe("Organization Skill Routes", () => {
 
       const res = await app.request(`${baseUrl}/skill-1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(skill);
+      expect(await res.json()).toEqual({ ...skill, files: [] });
     });
 
     it("returns 404 if not found", async () => {

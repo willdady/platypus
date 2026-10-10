@@ -67,6 +67,7 @@ import {
 } from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { SkillImportButton } from "@/components/skill-bundle";
 
 // The list serves two surfaces: a Workspace (workspaceId provided) where it
 // shows workspace-scoped Skills plus attached org-scoped Shared Skills as
@@ -369,6 +370,10 @@ export const SkillsList = ({
             <Plus /> Create skill
           </Link>
         </Button>
+        <SkillImportButton
+          scope={workspaceId ? { orgId, workspaceId } : { orgId }}
+          onImported={() => void mutate()}
+        />
         {canAttach && workspaceId && (
           <AttachSharedAction
             orgId={orgId}

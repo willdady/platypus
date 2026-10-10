@@ -136,19 +136,16 @@ describe("createSkillManagementTools", () => {
           body: validBody,
         });
 
-      it.each([24, 129, 500, 1024])(
+      it.each([1, 24, 129, 500, 1024])(
         "accepts a description of %i characters",
         (length) => {
           expect(parse("a".repeat(length)).success).toBe(true);
         },
       );
 
-      it.each([23, 1025])(
-        "rejects a description of %i characters",
-        (length) => {
-          expect(parse("a".repeat(length)).success).toBe(false);
-        },
-      );
+      it.each([0, 1025])("rejects a description of %i characters", (length) => {
+        expect(parse("a".repeat(length)).success).toBe(false);
+      });
     });
   });
 

@@ -89,7 +89,15 @@ export function createSkillManagementTools(
       // an attached Shared Skill creates this Workspace's own version of it
       // rather than editing the Organization's. `resolveScopedByName` then
       // prefers that local row, which is what makes the override take effect.
-      const row = await upsertSkill(ctx, { name, description, body });
+      // A Shared Skill with bundled files is the exception: `upsertSkill`
+      // refuses to shadow it (LockedError), reported here as `{ error }`.
+      let row;
+      try {
+        row = await upsertSkill(ctx, { name, description, body });
+      } catch (error) {
+        if (error instanceof LockedError) return { error: error.message };
+        throw error;
+      }
 
       const url = buildResourceUrl(
         frontendUrl,

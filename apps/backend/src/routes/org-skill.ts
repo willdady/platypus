@@ -9,6 +9,16 @@ import {
   requireOrgScoped,
 } from "../services/scoped-resource.ts";
 import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
+import {
+  exportSkillBundle,
+  importSkillBundle,
+  readStoredSkillFile,
+  replaceSkillBundle,
+  requireSkillFile,
+  skillFilesForApi,
+} from "../services/skill-bundle.ts";
+import { NotFoundError } from "../errors.ts";
+import { attachment, skillZipBodyLimit } from "./skill-download.ts";
 import type { Variables } from "../server.ts";
 
 // Org-scoped Skills are Shared resources (ADR-0007): a single source of truth
@@ -47,8 +57,77 @@ orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const skillId = c.req.param("skillId");
   const record = await requireOrgScoped(db, "skill", skillId, orgId);
-  return c.json(record);
+  return c.json({ ...record, files: await skillFilesForApi(skillId) });
 });
+
+/** Import a zip as a new org-scoped Skill (admin only) */
+orgSkill.post(
+  "/import",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  skillZipBodyLimit,
+  async (c) => {
+    // Always a new Skill: a name already taken is a 409 via the central
+    // onError (ADR-0010).
+    const zip = new Uint8Array(await c.req.arrayBuffer());
+    const row = await importSkillBundle(
+      { kind: "organization", orgId: orgScopeOf(c).orgId },
+      zip,
+    );
+    return c.json(row, 201);
+  },
+);
+
+/** Replace an org-scoped Skill's whole bundle from a zip (admin only) */
+orgSkill.put(
+  "/:skillId/bundle",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  skillZipBodyLimit,
+  async (c) => {
+    const zip = new Uint8Array(await c.req.arrayBuffer());
+    const row = await replaceSkillBundle(
+      { kind: "organization", orgId: orgScopeOf(c).orgId },
+      c.req.param("skillId"),
+      zip,
+    );
+    return c.json(row, 200);
+  },
+);
+
+/** Export an org-scoped Skill as a zip */
+orgSkill.get("/:skillId/export", requireAuth, requireOrgAccess(), async (c) => {
+  const { orgId } = orgScopeOf(c);
+  const record = await requireOrgScoped(
+    db,
+    "skill",
+    c.req.param("skillId"),
+    orgId,
+  );
+  const zip = await exportSkillBundle(record);
+  return attachment(c, zip, `${record.name}.zip`, "application/zip");
+});
+
+/** Download one bundled file of an org-scoped Skill */
+orgSkill.get(
+  "/:skillId/files/:fileId",
+  requireAuth,
+  requireOrgAccess(),
+  async (c) => {
+    const { orgId } = orgScopeOf(c);
+    const skillId = c.req.param("skillId");
+    await requireOrgScoped(db, "skill", skillId, orgId);
+    const file = await requireSkillFile(skillId, c.req.param("fileId"));
+    const data = await readStoredSkillFile(file);
+    if (!data) throw new NotFoundError("Skill file not found");
+    return attachment(
+      c,
+      data,
+      file.path.split("/").at(-1)!,
+      "application/octet-stream",
+    );
+  },
+);
 
 /** Update an org-scoped Skill by ID (admin only) */
 orgSkill.put(

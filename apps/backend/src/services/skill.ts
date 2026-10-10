@@ -6,15 +6,20 @@ import { db } from "../index.ts";
 import { skill as skillTable, agent as agentTable } from "../db/schema.ts";
 import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import type { ScopeContext } from "../scope.ts";
-import { ConflictError, NotFoundError } from "../errors.ts";
+import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
+import { skillStorageKeyPrefix } from "../storage/keys.ts";
+import { deleteStoredPrefix } from "../storage/utils.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
 import {
   orgScopedWhere,
   requireOrgScoped,
   requireSharedDeletable,
   requireWorkspaceMutable,
+  resolveScopedByName,
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
+import { bundleHash } from "./skill-bundle-format.ts";
+import { listSkillFiles, rehashSkill } from "./skill-bundle.ts";
 
 /**
  * The Skill write model: create/update/delete that both route surfaces adapt
@@ -136,6 +141,17 @@ export async function createSkill(
     .values({
       id: nanoid(),
       ...data,
+      bundleHash: bundleHash({
+        fields: {
+          name: data.name,
+          description: data.description,
+          body: data.body,
+          disableModelInvocation: data.disableModelInvocation ?? false,
+          argumentHint: data.argumentHint ?? null,
+        },
+        frontmatter: {},
+        files: [],
+      }),
       ...(scope.kind === "workspace"
         ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
         : { organizationId: scope.orgId, workspaceId: null }),
@@ -194,7 +210,9 @@ export async function updateSkill(
   if (scope.kind === "workspace" && agentIds !== undefined) {
     await syncAgentAssignments(scope.ctx.workspaceId, skillId, agentIds);
   }
-  return row;
+  // The body and mapped fields are part of the bundle hash; the files are not
+  // touched by this form, so they stay where they are.
+  return row && rehashSkill(db, row);
 }
 
 /**
@@ -204,11 +222,27 @@ export async function updateSkill(
  * Workspace-private: reusing the name of an attached Shared Skill creates this
  * Workspace's own version rather than editing the Organization's row. The scope
  * comes from `ctx`, never the body.
+ *
+ * Throws `LockedError` when the name resolves to a Shared Skill with bundled
+ * files: the Workspace version would carry none of them yet silently take
+ * precedence over the bundle, and forking a bundle is not supported yet
+ * (#1005). On the Workspace's own bundled Skill the files are kept and the
+ * hash recomputed.
  */
 export async function upsertSkill(
   ctx: ScopeContext,
   fields: { name: string; description: string; body: string },
 ): Promise<SkillRow> {
+  const existing = await resolveScopedByName(db, "skill", fields.name, ctx);
+  if (
+    existing?.scope === "organization" &&
+    (await listSkillFiles(db, existing.row.id)).length > 0
+  ) {
+    throw new LockedError(
+      `Skill '${fields.name}' is a shared skill with bundled files, and a workspace version of it can't be created yet`,
+    );
+  }
+
   const now = new Date();
   const [row] = await db
     .insert(skillTable)
@@ -230,7 +264,7 @@ export async function upsertSkill(
       },
     })
     .returning();
-  return row;
+  return rehashSkill(db, row);
 }
 
 /**
@@ -271,6 +305,9 @@ export async function deleteSkill(
     await db
       .delete(skillTable)
       .where(workspaceScopedWhere("skill", skillId, scope.ctx.workspaceId));
+    await deleteStoredPrefix(
+      skillStorageKeyPrefix({ orgId: scope.ctx.orgId, skillId }),
+    );
     return;
   }
 
@@ -294,4 +331,7 @@ export async function deleteSkill(
   if (result.length === 0) {
     throw new NotFoundError("Skill not found");
   }
+  await deleteStoredPrefix(
+    skillStorageKeyPrefix({ orgId: scope.orgId, skillId }),
+  );
 }

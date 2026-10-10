@@ -12,7 +12,17 @@ import {
 } from "../middleware/authorization.ts";
 import { listScoped, requireScoped } from "../services/scoped-resource.ts";
 import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
+import {
+  exportSkillBundle,
+  importSkillBundle,
+  readStoredSkillFile,
+  replaceSkillBundle,
+  requireSkillFile,
+  skillFilesForApi,
+} from "../services/skill-bundle.ts";
 import { promoteScoped } from "../services/promote.ts";
+import { NotFoundError } from "../errors.ts";
+import { attachment, skillZipBodyLimit } from "./skill-download.ts";
 import type { Variables } from "../server.ts";
 
 const skill = new Hono<{ Variables: Variables }>();
@@ -62,7 +72,85 @@ skill.get(
       ...found.row,
       scope: found.scope,
       agentIds: agentsWithSkill.map((a) => a.id),
+      files: await skillFilesForApi(skillId),
     });
+  },
+);
+
+/** Import a zip as a new workspace-scoped Skill (editor+) */
+skill.post(
+  "/import",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  skillZipBodyLimit,
+  async (c) => {
+    // Always a new Skill: a name already taken here is a 409 via the central
+    // onError (ADR-0010); Replace bundle is the re-import path.
+    const zip = new Uint8Array(await c.req.arrayBuffer());
+    const row = await importSkillBundle(
+      { kind: "workspace", ctx: workspaceScopeOf(c) },
+      zip,
+    );
+    return c.json(row, 201);
+  },
+);
+
+/** Replace a workspace-scoped Skill's whole bundle from a zip (editor+) */
+skill.put(
+  "/:skillId/bundle",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  skillZipBodyLimit,
+  async (c) => {
+    // A Shared Skill is locked here like any edit (ADR-0007).
+    const zip = new Uint8Array(await c.req.arrayBuffer());
+    const row = await replaceSkillBundle(
+      { kind: "workspace", ctx: workspaceScopeOf(c) },
+      c.req.param("skillId"),
+      zip,
+    );
+    return c.json(row, 200);
+  },
+);
+
+/** Export a visible Skill as a zip */
+skill.get(
+  "/:skillId/export",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  async (c) => {
+    const found = await requireScoped(
+      db,
+      "skill",
+      c.req.param("skillId"),
+      workspaceScopeOf(c),
+    );
+    const zip = await exportSkillBundle(found.row);
+    return attachment(c, zip, `${found.row.name}.zip`, "application/zip");
+  },
+);
+
+/** Download one bundled file of a visible Skill */
+skill.get(
+  "/:skillId/files/:fileId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  async (c) => {
+    const skillId = c.req.param("skillId");
+    await requireScoped(db, "skill", skillId, workspaceScopeOf(c));
+    const file = await requireSkillFile(skillId, c.req.param("fileId"));
+    const data = await readStoredSkillFile(file);
+    if (!data) throw new NotFoundError("Skill file not found");
+    return attachment(
+      c,
+      data,
+      file.path.split("/").at(-1)!,
+      "application/octet-stream",
+    );
   },
 );
 

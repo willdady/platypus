@@ -1,7 +1,7 @@
 /**
  * The tool names core assigns to a Chat turn *after* the Tool session has
  * claimed its own (`services/chat-execution.ts`): the Web-search pair, the
- * Sub-Agent delegate dispatcher, and the Skill loader.
+ * Sub-Agent delegate dispatcher, and the Skill loader and file reader.
  *
  * Each of those stages lands by plain assignment, and the precedence is
  * deliberate — search wins over a Tool set that happens to share a name, and a
@@ -34,6 +34,9 @@ export const DELEGATE_TOOL_NAME = "delegate";
 /** The tool a turn offers when its Agent has Skills. */
 export const LOAD_SKILL_TOOL_NAME = "loadSkill";
 
+/** Offered alongside `loadSkill`: reads a text file bundled with a Skill. */
+export const READ_SKILL_FILE_TOOL_NAME = "readSkillFile";
+
 /**
  * Every name above, in the order the turn assigns them. Core Tool sets keep
  * bare tool names, so this is the list a core Tool set may not statically
@@ -44,4 +47,5 @@ export const RESERVED_TURN_TOOL_NAMES: readonly string[] = [
   READ_URL_TOOL_NAME,
   DELEGATE_TOOL_NAME,
   LOAD_SKILL_TOOL_NAME,
+  READ_SKILL_FILE_TOOL_NAME,
 ];

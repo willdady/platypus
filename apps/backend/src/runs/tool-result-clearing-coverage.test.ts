@@ -116,6 +116,7 @@ beforeAll(async () => {
   // through the Tool-set registry.
   void createLoadSkillTool;
   names.add("loadSkill");
+  names.add("readSkillFile");
 
   // Ad hoc for the same reason: the one delegation tool is assigned directly
   // in `chat-execution.ts` when at least one sub-agent resolved.
@@ -201,6 +202,8 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
 
   // Not clearable: instructions the model is meant to keep following.
   loadSkill: false,
+  // Clearable: a bundled file, which the model can read again.
+  readSkillFile: true,
 
   // Not clearable: a delegation result is the whole of a sub-agent's work, and
   // re-delegating to get it back would re-run the run.

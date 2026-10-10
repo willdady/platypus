@@ -57,7 +57,7 @@ import type { AlternativePosition } from "@/lib/chat-alternatives";
 import { isTurnInFlight as isInFlight } from "@/lib/chat-recovery";
 import { ResponseMetricsPopover } from "./response-metrics-popover";
 import { TurnNotice } from "./turn-notice";
-import { LoadSkillTool } from "./load-skill-tool";
+import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
 import { FsDownloadTool } from "./fs-download-tool";
 import {
@@ -96,6 +96,9 @@ type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
 const isLoadSkillPart = (part: MessagePart) => part.type === "tool-loadSkill";
 
+const isReadSkillFilePart = (part: MessagePart) =>
+  part.type === "tool-readSkillFile";
+
 /**
  * Both shapes a delegation is stored in. `tool-delegate` is what every new one
  * writes; `tool-delegateTo<Name>` is what Chats written before the single
@@ -126,6 +129,7 @@ const isWebToolPart = (part: MessagePart) =>
  */
 const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
   isLoadSkillPart,
+  isReadSkillFilePart,
   isWebToolPart,
   isSubAgentToolPart,
   isFsDownloadPart,
@@ -367,6 +371,17 @@ export const ChatMessage = memo(function ChatMessage({
         <LoadSkillTool
           key={`${message.id}-${i}`}
           toolPart={part as Extract<MessagePart, { type: "tool-loadSkill" }>}
+        />
+      ),
+    },
+    {
+      matches: isReadSkillFilePart,
+      render: (part, i) => (
+        <ReadSkillFileTool
+          key={`${message.id}-${i}`}
+          toolPart={
+            part as Extract<MessagePart, { type: "tool-readSkillFile" }>
+          }
         />
       ),
     },

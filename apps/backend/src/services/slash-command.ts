@@ -5,6 +5,7 @@ import { LOAD_SKILL_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { resolveAssignedSkillByName } from "./skill-resolution.ts";
+import { skillLoadResult, type SkillLoadResult } from "./skill-bundle.ts";
 
 /**
  * A user-invoked Skill, named from the chat input.
@@ -67,15 +68,16 @@ export type SlashCommandQueries = {
     workspaceId: string,
   ): Promise<string[] | null>;
   /**
-   * The assigned Skill of this name, or `null` for a name that resolves to
-   * nothing this Agent holds. `disableModelInvocation` is not consulted: it
-   * gates the model's catalogue, and this caller is the user (#713).
+   * What `loadSkill` would return for the assigned Skill of this name, or
+   * `null` for a name that resolves to nothing this Agent holds.
+   * `disableModelInvocation` is not consulted: it gates the model's catalogue,
+   * and this caller is the user (#713).
    */
   resolveAssignedSkill(
     name: string,
     ctx: { orgId: string; workspaceId: string },
     permittedSkillIds: string[],
-  ): Promise<{ name: string; body: string } | null>;
+  ): Promise<SkillLoadResult | null>;
 };
 
 const drizzleSlashCommandQueries: SlashCommandQueries = {
@@ -95,7 +97,7 @@ const drizzleSlashCommandQueries: SlashCommandQueries = {
       permittedSkillIds,
     );
     return resolution.kind === "resolved"
-      ? { name: resolution.row.name, body: resolution.row.body }
+      ? skillLoadResult(db, resolution.row)
       : null;
   },
 };
@@ -119,10 +121,7 @@ const generateToolCallId = createIdGenerator({ prefix: "call", size: 24 });
  * answer — what a model-initiated call looks like. A standalone assistant
  * message would render as two.
  */
-const loadSkillSeedMessage = (skill: {
-  name: string;
-  body: string;
-}): PlatypusUIMessage => ({
+const loadSkillSeedMessage = (skill: SkillLoadResult): PlatypusUIMessage => ({
   id: generateMessageId(),
   role: "assistant",
   parts: [
@@ -131,7 +130,7 @@ const loadSkillSeedMessage = (skill: {
       toolCallId: generateToolCallId(),
       state: "output-available",
       input: { name: skill.name },
-      output: { name: skill.name, body: skill.body },
+      output: skill,
     },
   ],
 });

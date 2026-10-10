@@ -1,11 +1,15 @@
 import { ValidationError } from "../errors.ts";
 
 /**
- * A storage key names one stored object relative to the backend's root. Two
+ * A storage key names one stored object relative to the backend's root. Three
  * shapes are generated, and nothing else is: a File part's
  * `{orgId}/{workspaceId}/{chatId}/{messageId}/{partIndex}-{hash8}.{ext}`
- * (`generateStorageKey`), and an Agent avatar's
- * `agents/{agentId}/avatar-{nanoid}.webp` (`storeAvatar`).
+ * (`generateStorageKey`), an Agent avatar's
+ * `agents/{agentId}/avatar-{nanoid}.webp` (`storeAvatar`), and a bundled Skill
+ * file's `{orgId}/skills/{skillId}/{uploadId}/{fileId}` (`skillStorageKeyPrefix`).
+ * A Skill key's second segment is the literal `skills`, never a Workspace id, so
+ * `/files/*` refuses it: Skill files are served only through their Skill's own
+ * download route (ADR-0036).
  *
  * Keys are not held only by Platypus. A File part's key round-trips through the
  * client: the read path rewrites `storage://<key>` to an HTTP URL, the Chat
@@ -102,4 +106,21 @@ export function workspaceStorageKeyPrefix(scope: WorkspaceKeyScope): string {
 
 export function chatStorageKeyPrefix(scope: ChatKeyScope): string {
   return `${workspaceStorageKeyPrefix(scope)}${scope.chatId}/`;
+}
+
+/** The Skill a bundled file's key belongs to. */
+export interface SkillKeyScope extends OrganizationKeyScope {
+  skillId: string;
+}
+
+/** The literal second segment of every Skill key, where a File part has its Workspace id. */
+export const SKILL_KEY_SEGMENT = "skills";
+
+/**
+ * The prefix every file of one Skill shares, across all its uploads. It sits
+ * under the Organization even for a Workspace-scoped Skill, so promoting the
+ * Skill to a Shared one moves no bytes, and deleting the Organization removes it.
+ */
+export function skillStorageKeyPrefix(scope: SkillKeyScope): string {
+  return `${organizationStorageKeyPrefix(scope)}${SKILL_KEY_SEGMENT}/${scope.skillId}/`;
 }

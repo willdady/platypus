@@ -1325,22 +1325,24 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     expected: stringField(agentSchema, "description"),
   },
   {
+    // The Skill floors are 1 — "can't be empty", stated in words on the page,
+    // not as a range — so only the ceilings are pinned here.
     doc: "building-with-platypus/skills.mdx",
     anchor: "**Name** — a kebab-case identifier",
     source: "packages/schemas/index.ts (skillSchema.name)",
-    expected: stringField(skillSchema, "name"),
+    expected: { max: stringField(skillSchema, "name").max },
   },
   {
     doc: "building-with-platypus/skills.mdx",
     anchor: "**Description** — a brief summary of what the Skill does",
     source: "packages/schemas/index.ts (skillSchema.description)",
-    expected: stringField(skillSchema, "description"),
+    expected: { max: stringField(skillSchema, "description").max },
   },
   {
     doc: "building-with-platypus/skills.mdx",
     anchor: "**Body** — the full instructions",
     source: "packages/schemas/index.ts (skillSchema.body)",
-    expected: stringField(skillSchema, "body"),
+    expected: { max: stringField(skillSchema, "body").max },
   },
   {
     doc: "building-with-platypus/skills.mdx",

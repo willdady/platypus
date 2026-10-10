@@ -610,6 +610,13 @@
       "when": 1791674174540,
       "tag": "0086_user_timezone_and_schedule_tool_set_rename",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1791676699262,
+      "tag": "0087_skill_bundles",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 ---
 title: Skills
-description: Author a Skill — a named capability with a description and instructions — attach it to an Agent, and let the model load its full instructions on demand via the loadSkill tool.
+description: Author or import a Skill — a named capability with a description, instructions and optional bundled files — attach it to an Agent, and let the model load it on demand via the loadSkill tool.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -8,10 +8,11 @@ import { Callout, Steps } from "nextra/components";
 # Skills
 
 A **Skill** is packaged know-how you attach to an Agent: a name, a description,
-and a body of instructions for doing one thing well. The Agent sees only the
+a body of instructions for doing one thing well, and optionally a **bundle** of
+reference files, scripts and assets that travel with it. The Agent sees only the
 name and description up front and pulls in the full body _on demand_ — keeping
 the system prompt short. For the concept, see [Skills](/concepts/skills); this
-page is how to author one.
+page is how to author or import one.
 
 ## Author a Skill
 
@@ -24,16 +25,14 @@ From your Workspace, go to the **Skills** section and click **Create skill**.
 ### Fill in the fields
 
 - **Name** — a kebab-case identifier, e.g. `write-release-note` (lowercase
-  letters, numbers, and hyphens; 5–64 characters). This is the name the model
-  uses to request the Skill.
+  letters, numbers, and hyphens; up to 64 characters). This is the name the
+  model uses to request the Skill.
 - **Description** — a brief summary of what the Skill does and when to reach for
-  it (24–1024 characters). The model reads this to decide _whether_ a request is
-  relevant, so make it specific.
-- **Body** — the full instructions, **48–50,000 characters**. This is what the
-  model receives only after it loads the Skill, so be as detailed as you like:
-  step-by-step procedures, examples, formatting rules, edge cases. The 48-character
-  floor is enforced on save, so a one-line placeholder body is rejected — write
-  the real instructions or don't create the Skill yet.
+  it (up to 1024 characters). The model reads this to decide _whether_ a request
+  is relevant, so make it specific.
+- **Body** — the full instructions, up to **50,000 characters**. This is what
+  the model receives only after it loads the Skill, so be as detailed as you
+  like: step-by-step procedures, examples, formatting rules, edge cases.
 - **Argument hint** _(optional)_ — up to **120 characters** describing what text
   should follow the command when a person invokes this Skill. It is shown beside
   the name in the Chat input's [command list](/building-with-platypus/chat#invoking-a-skill-yourself).
@@ -47,6 +46,87 @@ From your Workspace, go to the **Skills** section and click **Create skill**.
   description is always in context (so keep it tight); the body is fetched only
   when needed (so it can be long). Use the **argument hint** to tell people what
   to type after the command name.
+</Callout>
+
+Name, description and body can't be empty; there is no other minimum.
+
+## Import a Skill from a zip
+
+Skills published in the [Agent Skills](https://agentskills.io) format — a
+folder holding a `SKILL.md` and any other files it refers to — import as they
+are. Zip the folder, then click **Import zip** beside **Create skill** and pick
+the file. An Org Admin can do the same from **Organization settings → Skills**
+to create a Shared Skill.
+
+Platypus reads the Skill from `SKILL.md`:
+
+- `SKILL.md` must sit at the root of the zip, or inside a single top-level
+  folder. The folder's name doesn't matter.
+- It must open with a YAML frontmatter block between `---` lines. `name` and
+  `description` are required. `disable-model-invocation` sets **User-invocable
+  only**, and `argument-hint` sets **Argument hint**.
+- Everything after the frontmatter becomes the **Body**.
+- Every other frontmatter key, such as `license` or `compatibility`, is kept
+  as-is and shown read-only on the Skill. Platypus doesn't act on them.
+- Every other file in the zip is stored with the Skill at its path inside the
+  folder. `__MACOSX/` and `.DS_Store` are ignored.
+
+Importing always creates a new Skill. If a Skill with that name already exists
+in the Workspace (or, for a Shared Skill, in the Organization), the import is
+refused — use **Replace bundle** on the existing Skill instead.
+
+### Limits
+
+| Limit                    | Value                     |
+| ------------------------ | ------------------------- |
+| Zip size                 | 10 MiB                    |
+| Total size once unpacked | 25 MiB                    |
+| Entries in the zip       | 500, folders included     |
+| Frontmatter              | 16 KB, and a YAML mapping |
+
+A zip is also refused if any entry has an absolute path, a `..` segment or a
+backslash, if it contains a symlink, or if two entries name the same path. A zip
+inside the zip is stored as an ordinary file. Any problem rejects the whole
+import with a message naming it, and nothing is saved.
+
+## Bundled files, export and Replace bundle
+
+Open a Skill to see its **Bundle** card:
+
+- **Files** lists every bundled file other than `SKILL.md`, with its size.
+  Files are view-only; download one to read it.
+- **Frontmatter** shows the keys kept from the imported `SKILL.md`.
+- **Export** downloads the Skill as a zip: a folder named after the Skill
+  holding `SKILL.md` and every bundled file. Importing that zip gives back the
+  same Skill.
+- **Replace bundle** takes a zip in the same format as **Import zip** and
+  replaces the whole Skill with it — name, description, body, frontmatter and
+  every file. If the zip is refused, the Skill is left as it was.
+
+Editing the form still changes the name, description, body and the other
+fields; the bundled files stay as they are.
+
+## How an Agent reads bundled files
+
+When an Agent loads a Skill that has bundled files, the result also lists each
+file's path, and whether it is text. The Agent reads a text file through the
+**`readSkillFile`** tool, passing the Skill's name and the file's path relative
+to the Skill's folder — for example `references/forms.md`. In Chat this shows as
+**Reading skill file: pdf/references/forms.md**.
+
+`readSkillFile` returns text files of up to **1 MiB**. Whether a file is text is
+decided from its content when it is imported, not from its extension. Binary
+files, such as images or fonts, can't be read this way: running a bundled script
+or using a binary asset needs a [Sandbox](/concepts/sandboxes),
+and isn't supported yet.
+
+The same rules apply as for `loadSkill`: the Agent can read files only from
+Skills attached to it, and not from a Skill marked **User-invocable only**.
+
+<Callout type="info">
+  An Agent can't create a Workspace version of a Shared Skill that has bundled
+  files. Its `upsertSkill` tool refuses the name, because the new version would
+  have none of the files.
 </Callout>
 
 ## Attach a Skill to an Agent

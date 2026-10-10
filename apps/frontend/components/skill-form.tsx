@@ -39,6 +39,7 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { SkillBundleCard } from "@/components/skill-bundle";
 
 const RETRACTABLE_FIELDS = [
   "name",
@@ -54,6 +55,14 @@ const INITIAL_DATA = {
   argumentHint: "",
   disableModelInvocation: false,
 };
+
+const toForm = (skill: Skill) => ({
+  name: skill.name,
+  description: skill.description,
+  body: skill.body,
+  argumentHint: skill.argumentHint ?? "",
+  disableModelInvocation: skill.disableModelInvocation,
+});
 
 const SkillFormSkeleton = ({
   className,
@@ -110,6 +119,8 @@ const SkillForm = ({
   const router = useRouter();
 
   const {
+    record,
+    mutateRecord,
     loadState,
     formData,
     setFormData,
@@ -128,13 +139,7 @@ const SkillForm = ({
     entity: "skills",
     scope,
     id: skillId,
-    fromRecord: (skill) => ({
-      name: skill.name,
-      description: skill.description,
-      body: skill.body,
-      argumentHint: skill.argumentHint ?? "",
-      disableModelInvocation: skill.disableModelInvocation,
-    }),
+    fromRecord: toForm,
     // agentIds are present in workspace mode only.
     onSeed: (skill) => {
       if (skill.agentIds) setSelectedAgentIds(skill.agentIds);
@@ -311,6 +316,19 @@ const SkillForm = ({
             </FieldGroup>
           </CardContent>
         </Card>
+      )}
+
+      {record && (
+        <SkillBundleCard
+          scope={scope}
+          skill={record}
+          onReplaced={(replaced) => {
+            // A Replace rewrites the fields too, so the form re-seeds from it
+            // rather than keeping what was typed before.
+            setFormData(toForm(replaced));
+            void mutateRecord();
+          }}
+        />
       )}
 
       <FormFooterButtons

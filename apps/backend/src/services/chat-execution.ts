@@ -18,8 +18,14 @@ import {
   type ToolSessionScope,
 } from "../tools/tool-session.ts";
 import { MEMORY_TOOLSET_ID } from "../tools/index.ts";
-import { createLoadSkillTool } from "../tools/skill.ts";
-import { LOAD_SKILL_TOOL_NAME } from "../tools/turn-tool-names.ts";
+import {
+  createLoadSkillTool,
+  createReadSkillFileTool,
+} from "../tools/skill.ts";
+import {
+  LOAD_SKILL_TOOL_NAME,
+  READ_SKILL_FILE_TOOL_NAME,
+} from "../tools/turn-tool-names.ts";
 import {
   createDelegateTools,
   type SubAgentCatalogueEntry,
@@ -749,6 +755,11 @@ export const prepareChatTurn = async (
 
     if (permittedSkillIds.length > 0) {
       tools[LOAD_SKILL_TOOL_NAME] = createLoadSkillTool(
+        orgId,
+        workspaceId,
+        permittedSkillIds,
+      );
+      tools[READ_SKILL_FILE_TOOL_NAME] = createReadSkillFileTool(
         orgId,
         workspaceId,
         permittedSkillIds,
