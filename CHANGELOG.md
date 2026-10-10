@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.18.0](https://github.com/willdady/platypus/compare/v3.17.0...v3.18.0) (2026-10-10)
+
+
+### Features
+
+* **frontend:** drop the description from the skills menu ([#1370](https://github.com/willdady/platypus/issues/1370)) ([a86a2dc](https://github.com/willdady/platypus/commit/a86a2dca76c47821f2edafb89c3be84f98715ce6))
+* **frontend:** filter the Workspace home Triggers list by type ([#1376](https://github.com/willdady/platypus/issues/1376)) ([99099a3](https://github.com/willdady/platypus/commit/99099a3bc6a9ef28a6107e513f10f720e01dbcdc))
+* **frontend:** mark A2A Chats in the sidebar with an icon ([#1375](https://github.com/willdady/platypus/issues/1375)) ([55e758a](https://github.com/willdady/platypus/commit/55e758aeb7bb30c0745e5758498a19b9465f1ad4))
+* let Agents create One-off Triggers that hide once fired and expire ([c6571e3](https://github.com/willdady/platypus/commit/c6571e3a33248b4bfa8114117ca7edcb2924733f)), closes [#1290](https://github.com/willdady/platypus/issues/1290)
+* record a Notification's source Chat or Trigger run ([dc5f775](https://github.com/willdady/platypus/commit/dc5f7751393a528f08059eb9c9fc5fd548c748c9)), closes [#1229](https://github.com/willdady/platypus/issues/1229)
+* transfer a Workspace to another member ([104638f](https://github.com/willdady/platypus/commit/104638f7e5a0f074512ced14ee73e86d0d9d1089)), closes [#1215](https://github.com/willdady/platypus/issues/1215)
+
+
+### Bug Fixes
+
+* close Workspace transfer races and tidy One-off Triggers ([#1374](https://github.com/willdady/platypus/issues/1374)) ([94fbc79](https://github.com/willdady/platypus/commit/94fbc790eda6348e3087364e4fd2ca001881b858))
+* **frontend:** tighten icon spacing in the composer's attachments menu ([#1377](https://github.com/willdady/platypus/issues/1377)) ([06a90c0](https://github.com/willdady/platypus/commit/06a90c0be83a5124cb4a6010bc8010f6458d7ead))
+
 ## [3.17.0](https://github.com/willdady/platypus/compare/v3.16.1...v3.17.0) (2026-10-09)
 
 
