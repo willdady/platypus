@@ -8,10 +8,7 @@ import {
   type SlashCommand,
 } from "./slash-commands";
 
-const command = (name: string): SlashCommand => ({
-  name,
-  description: `Does ${name}`,
-});
+const command = (name: string): SlashCommand => ({ name });
 
 describe("slashQueryOf", () => {
   it("reads the partial name of a command being typed", () => {

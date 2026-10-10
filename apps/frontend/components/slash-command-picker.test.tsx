@@ -129,6 +129,12 @@ describe("SlashCommandPicker", () => {
     expect(screen.getByRole("option")).toHaveTextContent("<topic>");
   });
 
+  it("leaves the Skill's description out of the row", () => {
+    const { textarea } = renderPicker({ commands });
+    type(textarea, "/blog");
+    expect(screen.getByRole("option")).not.toHaveTextContent("Does blog-post");
+  });
+
   it("highlights the exact match when a shorter name also matches", () => {
     const { textarea } = renderPicker({ commands });
     type(textarea, "/deploy");

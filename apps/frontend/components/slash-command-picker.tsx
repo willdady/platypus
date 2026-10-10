@@ -76,9 +76,6 @@ export const SlashCommandPicker = ({
                     {item.argumentHint}
                   </span>
                 )}
-                <span className="text-muted-foreground ml-auto truncate text-xs">
-                  {item.description}
-                </span>
               </li>
             ))}
           </ul>
