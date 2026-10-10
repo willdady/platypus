@@ -754,6 +754,9 @@ const TriggerForm = ({
     .map(([, message]) => message);
 
   const tokenStatus = trigger?.tokenStatus ?? "none";
+  // A fired One-off can be renamed or deleted, never re-armed.
+  const fired = !!trigger?.firedAt;
+  const scheduleLocked = isSubmitting || fired;
   const hasToken = tokenStatus !== "none";
   // Only once everything the answer depends on has loaded: under `selected`
   // that includes the Workspace's own flag, and a Workspace still loading (or
@@ -933,6 +936,13 @@ const TriggerForm = ({
               {/* Cron-specific fields */}
               {triggerType === "cron" && (
                 <>
+                  {fired && (
+                    <p className="text-sm text-muted-foreground">
+                      This One-off Trigger has fired, so its schedule can&apos;t
+                      change and it can&apos;t be enabled again. Create a new
+                      Trigger to run it again.
+                    </p>
+                  )}
                   {/* Schedule Mode Toggle */}
                   <Field>
                     <FieldLabel>Schedule Mode</FieldLabel>
@@ -943,7 +953,7 @@ const TriggerForm = ({
                           scheduleMode === "simple" ? "default" : "outline"
                         }
                         onClick={() => setScheduleMode("simple")}
-                        disabled={isSubmitting}
+                        disabled={scheduleLocked}
                         className="cursor-pointer"
                       >
                         Simple
@@ -960,7 +970,7 @@ const TriggerForm = ({
                             cronExpression: effectiveCronExpression,
                           }));
                         }}
-                        disabled={isSubmitting}
+                        disabled={scheduleLocked}
                         className="cursor-pointer"
                       >
                         Advanced
@@ -981,9 +991,9 @@ const TriggerForm = ({
                               frequency: value as Frequency,
                             }))
                           }
-                          disabled={isSubmitting}
+                          disabled={scheduleLocked}
                         >
-                          <SelectTrigger disabled={isSubmitting}>
+                          <SelectTrigger disabled={scheduleLocked}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1025,9 +1035,9 @@ const TriggerForm = ({
                                       hour: value,
                                     }))
                                   }
-                                  disabled={isSubmitting}
+                                  disabled={scheduleLocked}
                                 >
-                                  <SelectTrigger disabled={isSubmitting}>
+                                  <SelectTrigger disabled={scheduleLocked}>
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -1056,9 +1066,9 @@ const TriggerForm = ({
                                     minute: value,
                                   }))
                                 }
-                                disabled={isSubmitting}
+                                disabled={scheduleLocked}
                               >
-                                <SelectTrigger disabled={isSubmitting}>
+                                <SelectTrigger disabled={scheduleLocked}>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1089,9 +1099,9 @@ const TriggerForm = ({
                                 dayOfWeek: value,
                               }))
                             }
-                            disabled={isSubmitting}
+                            disabled={scheduleLocked}
                           >
-                            <SelectTrigger disabled={isSubmitting}>
+                            <SelectTrigger disabled={scheduleLocked}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1118,9 +1128,9 @@ const TriggerForm = ({
                                 dayOfMonth: value,
                               }))
                             }
-                            disabled={isSubmitting}
+                            disabled={scheduleLocked}
                           >
-                            <SelectTrigger disabled={isSubmitting}>
+                            <SelectTrigger disabled={scheduleLocked}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1146,7 +1156,7 @@ const TriggerForm = ({
                       placeholder="0 9 * * *"
                       value={formData.cronExpression}
                       onChange={toFieldChange("cronExpression")}
-                      disabled={isSubmitting}
+                      disabled={scheduleLocked}
                       inputClassName={!isCronValid ? "border-destructive" : ""}
                       error={
                         validationErrors.cronExpression ||
@@ -1166,7 +1176,7 @@ const TriggerForm = ({
                     name="timezone"
                     value={formData.timezone}
                     onValueChange={(value) => setField("timezone", value)}
-                    disabled={isSubmitting}
+                    disabled={scheduleLocked}
                     placeholder="Select timezone"
                     error={validationErrors.timezone}
                   >
@@ -1196,7 +1206,7 @@ const TriggerForm = ({
                       onCheckedChange={(checked) =>
                         setFormData((prev) => ({ ...prev, isOneOff: checked }))
                       }
-                      disabled={isSubmitting}
+                      disabled={scheduleLocked}
                     />
                     <FieldLabel htmlFor="isOneOff">
                       <div className="flex flex-col">
@@ -1577,7 +1587,7 @@ const TriggerForm = ({
                   onCheckedChange={(checked) =>
                     setFormData((prev) => ({ ...prev, enabled: checked }))
                   }
-                  disabled={isSubmitting}
+                  disabled={scheduleLocked}
                 />
                 <FieldLabel htmlFor="enabled">
                   <div className="flex flex-col">

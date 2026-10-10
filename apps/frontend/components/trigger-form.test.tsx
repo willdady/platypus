@@ -216,6 +216,31 @@ describe("TriggerForm — editing a saved trigger", () => {
     });
   });
 
+  it("locks a fired One-off Trigger's schedule and Enabled, and says why", () => {
+    setDataFor("/triggers/trigger-1", {
+      ...saved({
+        cronExpression: "30 9 * * *",
+        timezone: "UTC",
+        isOneOff: true,
+      }),
+      enabled: false,
+      firedAt: "2026-01-02T09:30:00.000Z",
+    });
+    render(
+      <TriggerForm orgId="org1" workspaceId="ws1" triggerId="trigger-1" />,
+    );
+
+    expect(
+      screen.getByText(/This One-off Trigger has fired/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /Enabled/ })).toBeDisabled();
+    expect(
+      screen.getByRole("switch", { name: /One-off Trigger/ }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Advanced" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeEnabled();
+  });
+
   it("seeds an event trigger's events and filters, and sends them back", async () => {
     const config = {
       events: ["card.updated"],
