@@ -47,6 +47,12 @@ Add yours to the `contributes.toolSets` array of a `PlatypusPlugin`. Core
 plugins live under the backend's `plugins` directory, split by cohesion: pure
 utilities in one, the domain tool sets in another.
 
+**Data access follows origin.** A core plugin may import backend internals —
+the database, the backend's tool modules. A third-party plugin uses only what
+`@platypuschat/plugin-sdk` hands it; when it needs a value core already has,
+add an optional field to the SDK context rather than reaching past it
+(ADR-0013).
+
 ```typescript
 export const plugin: PlatypusPlugin = {
   name: "@platypus/tools-basic",
@@ -66,7 +72,7 @@ export const plugin: PlatypusPlugin = {
 };
 ```
 
-- **id** — kebab-case, and a *stable identifier*: Agents persist granted ids,
+- **id** — kebab-case, and a _stable identifier_: Agents persist granted ids,
   so renaming a shipped id silently strips the set from every Agent holding it.
   Core ids stay unprefixed.
 - **category** — groups the set in the Agent form. Take an existing category
@@ -81,7 +87,7 @@ A capability earns its own plugin when an Operator would plausibly want to
 **deny it in isolation** — that is why egress and infra are separate plugins
 while utilities share one. Cohesion, not subject matter, is the test.
 
-A new plugin needs an entry in the built-in loader map, which *is* the core
+A new plugin needs an entry in the built-in loader map, which _is_ the core
 allowlist — membership there is what makes a plugin core. Then decide its
 gating: the always-on list for essentials no Operator would deny, otherwise it
 waits behind the plugins env var. A name in both is rejected fail-loud, since
@@ -128,7 +134,7 @@ each set resolves, so identical keys collapse to one entry — a deliberate
 dedup, not a collision. Differing keys give the Agent the same tool twice
 under two names.
 
-When two *different* tools claim one name the later claim wins and the shadowed
+When two _different_ tools claim one name the later claim wins and the shadowed
 one is logged with both owners, so check the logs before assuming a tool is
 missing. Turn precedence runs session tools, then search, then sub-agent tools
 — each layer beating the one before it.
