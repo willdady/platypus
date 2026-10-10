@@ -174,7 +174,7 @@ describe("parseSkillZip rejections", () => {
             `name: demo\ndescription: d\nnotes: ${"x".repeat(16 * 1024)}`,
           ),
         }),
-      /larger than 16 KB/,
+      /larger than 16 KiB/,
     ],
   ];
 

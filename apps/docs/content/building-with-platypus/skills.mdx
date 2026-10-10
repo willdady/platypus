@@ -77,12 +77,12 @@ refused — use **Replace bundle** on the existing Skill instead.
 
 ### Limits
 
-| Limit                    | Value                     |
-| ------------------------ | ------------------------- |
-| Zip size                 | 10 MiB                    |
-| Total size once unpacked | 25 MiB                    |
-| Entries in the zip       | 500, folders included     |
-| Frontmatter              | 16 KB, and a YAML mapping |
+| Limit                    | Value                      |
+| ------------------------ | -------------------------- |
+| Zip size                 | 10 MiB                     |
+| Total size once unpacked | 25 MiB                     |
+| Entries in the zip       | 500, folders included      |
+| Frontmatter              | 16 KiB, and a YAML mapping |
 
 A zip is also refused if any entry has an absolute path, a `..` segment or a
 backslash, if it contains a symlink, or if two entries name the same path. A zip
@@ -124,9 +124,9 @@ The same rules apply as for `loadSkill`: the Agent can read files only from
 Skills attached to it, and not from a Skill marked **User-invocable only**.
 
 <Callout type="info">
-  An Agent can't create a Workspace version of a Shared Skill that has bundled
-  files. Its `upsertSkill` tool refuses the name, because the new version would
-  have none of the files.
+  An Agent that manages your Skills can't create a Workspace version of a Shared
+  Skill that has bundled files: the new version would have none of the files.
+  Ask an Org Admin to change the Shared Skill instead.
 </Callout>
 
 ## Attach a Skill to an Agent

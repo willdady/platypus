@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { isSuperAdmin } from "../middleware/authorization.ts";
-import { assertValidStorageKey, SKILL_KEY_SEGMENT } from "../storage/keys.ts";
+import { assertValidStorageKey, isSkillStorageKey } from "../storage/keys.ts";
 import { FILES_ROUTE_PREFIX } from "../storage/file-reference.ts";
 import {
   organizationMember,
@@ -58,7 +58,7 @@ files.get("/*", requireAuth, async (c) => {
 
   // A bundled Skill file is served only through its Skill's own download
   // route, as an attachment (ADR-0036) — never from here, for anyone.
-  if (key.split("/")[1] === SKILL_KEY_SEGMENT) {
+  if (isSkillStorageKey(key)) {
     return c.json({ error: "Access denied" }, 403);
   }
 

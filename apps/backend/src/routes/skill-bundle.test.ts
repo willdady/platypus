@@ -96,6 +96,16 @@ describe("GET /files/*", () => {
     expect(res.status).toBe(403);
     expect(storageGet).not.toHaveBeenCalled();
   });
+
+  // The disk backend can be case-insensitive, so `SKILLS` reaches the same file.
+  it("refuses a Skill key whatever its case", async () => {
+    mockSession({ id: "user-1", email: "a@example.com", role: "admin" });
+    const res = await app.request(
+      `/files/${skillKey.replace("skills", "SKILLS")}`,
+    );
+    expect(res.status).toBe(403);
+    expect(storageGet).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /skills/import", () => {

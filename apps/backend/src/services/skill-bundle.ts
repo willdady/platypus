@@ -43,7 +43,7 @@ export type SkillFileRow = typeof skillFileTable.$inferSelect;
  * a bundled `.html` or `.svg` can never be served inline from the deployment's
  * origin.
  */
-const SKILL_FILE_CONTENT_TYPE = "application/octet-stream";
+export const SKILL_FILE_CONTENT_TYPE = "application/octet-stream";
 
 const orgIdOf = (scope: SkillScope) =>
   scope.kind === "workspace" ? scope.ctx.orgId : scope.orgId;
@@ -303,6 +303,20 @@ export const requireSkillFile = async (
     .limit(1);
   if (!file) throw new NotFoundError("Skill file not found");
   return file;
+};
+
+/**
+ * One bundled file's bytes and download name, or `NotFoundError`. The caller
+ * has already established the Skill is visible.
+ */
+export const downloadSkillFile = async (
+  skillId: string,
+  fileId: string,
+): Promise<{ data: Buffer; filename: string }> => {
+  const file = await requireSkillFile(skillId, fileId);
+  const data = await readStoredSkillFile(file);
+  if (!data) throw new NotFoundError("Skill file not found");
+  return { data, filename: file.path.split("/").at(-1)! };
 };
 
 /** A Skill's files as the API returns them: no storage key. */

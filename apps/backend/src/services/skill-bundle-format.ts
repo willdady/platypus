@@ -232,7 +232,9 @@ const parseSkillMd = (
   if (!isTextContent(bytes)) fail("SKILL.md is not UTF-8 text");
   const { yaml, body } = splitFrontmatter(utf8.decode(bytes));
   if (Buffer.byteLength(yaml) > SKILL_FRONTMATTER_MAX_BYTES) {
-    fail(`Frontmatter is larger than ${SKILL_FRONTMATTER_MAX_BYTES / 1024} KB`);
+    fail(
+      `Frontmatter is larger than ${SKILL_FRONTMATTER_MAX_BYTES / 1024} KiB`,
+    );
   }
 
   let parsed: unknown;

@@ -121,7 +121,7 @@ export const createReadSkillFileTool = (
       }
       if (file.size > SKILL_FILE_READ_MAX_BYTES) {
         return {
-          error: `'${normalised}' is larger than the 1 MiB readSkillFile limit`,
+          error: `'${normalised}' is larger than the ${SKILL_FILE_READ_MAX_BYTES / 1024 / 1024} MiB readSkillFile limit`,
         };
       }
 

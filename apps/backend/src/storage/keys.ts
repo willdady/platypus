@@ -117,6 +117,14 @@ export interface SkillKeyScope extends OrganizationKeyScope {
 export const SKILL_KEY_SEGMENT = "skills";
 
 /**
+ * Whether a key names a bundled Skill file. Case-insensitive: the disk backend
+ * can be, so `org/SKILLS/…` reaches the same file as `org/skills/…`.
+ */
+export function isSkillStorageKey(key: string): boolean {
+  return key.split("/")[1]?.toLowerCase() === SKILL_KEY_SEGMENT;
+}
+
+/**
  * The prefix every file of one Skill shares, across all its uploads. It sits
  * under the Organization even for a Workspace-scoped Skill, so promoting the
  * Skill to a Shared one moves no bytes, and deleting the Organization removes it.

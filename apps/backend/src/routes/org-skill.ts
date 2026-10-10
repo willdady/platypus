@@ -12,12 +12,11 @@ import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
 import {
   exportSkillBundle,
   importSkillBundle,
-  readStoredSkillFile,
+  downloadSkillFile,
   replaceSkillBundle,
-  requireSkillFile,
+  SKILL_FILE_CONTENT_TYPE,
   skillFilesForApi,
 } from "../services/skill-bundle.ts";
-import { NotFoundError } from "../errors.ts";
 import { attachment, skillZipBodyLimit } from "./skill-download.ts";
 import type { Variables } from "../server.ts";
 
@@ -117,15 +116,11 @@ orgSkill.get(
     const { orgId } = orgScopeOf(c);
     const skillId = c.req.param("skillId");
     await requireOrgScoped(db, "skill", skillId, orgId);
-    const file = await requireSkillFile(skillId, c.req.param("fileId"));
-    const data = await readStoredSkillFile(file);
-    if (!data) throw new NotFoundError("Skill file not found");
-    return attachment(
-      c,
-      data,
-      file.path.split("/").at(-1)!,
-      "application/octet-stream",
+    const { data, filename } = await downloadSkillFile(
+      skillId,
+      c.req.param("fileId"),
     );
+    return attachment(c, data, filename, SKILL_FILE_CONTENT_TYPE);
   },
 );
 
