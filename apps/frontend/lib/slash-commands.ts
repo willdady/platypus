@@ -11,7 +11,6 @@
 /** What the picker needs of a Skill to offer it. */
 export type SlashCommand = {
   name: string;
-  description: string;
   argumentHint?: string | null;
 };
 
