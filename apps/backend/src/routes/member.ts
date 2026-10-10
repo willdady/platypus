@@ -1,20 +1,20 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { db } from "../index.ts";
+import { organizationMember, user as userTable } from "../db/schema.ts";
 import {
-  organizationMember,
-  trigger as triggerTable,
-  user as userTable,
-  workspace as workspaceTable,
-} from "../db/schema.ts";
-import { organizationMemberUpdateSchema } from "@platypus/schemas";
-import { eq, and, count, inArray } from "drizzle-orm";
+  organizationMemberRemoveSchema,
+  organizationMemberUpdateSchema,
+} from "@platypus/schemas";
+import { eq, and, count } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   isSuperAdmin,
   orgScopeOf,
   requireOrgAccess,
 } from "../middleware/authorization.ts";
+import { isBanned } from "../services/owner-membership.ts";
+import { removeMember } from "../services/member-removal.ts";
 import type { Variables } from "../server.ts";
 
 const member = new Hono<{ Variables: Variables }>();
@@ -37,16 +37,22 @@ member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
         email: userTable.email,
         image: userTable.image,
         role: userTable.role,
+        banned: userTable.banned,
+        banExpires: userTable.banExpires,
       },
     })
     .from(organizationMember)
     .innerJoin(userTable, eq(organizationMember.userId, userTable.id))
     .where(eq(organizationMember.organizationId, orgId));
 
-  const results = members.map((m) => ({
-    ...m,
-    isSuperAdmin: isSuperAdmin(m.user),
-  }));
+  const results = members.map(
+    ({ user: { banned, banExpires, ...user }, ...m }) => ({
+      ...m,
+      user,
+      isSuperAdmin: isSuperAdmin(user),
+      isBanned: isBanned({ banned, banExpires }),
+    }),
+  );
 
   return c.json({ results });
 });
@@ -164,6 +170,7 @@ member.delete(
   "/:memberId",
   requireAuth,
   requireOrgAccess(["admin"]),
+  sValidator("json", organizationMemberRemoveSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const memberId = c.req.param("memberId");
@@ -212,31 +219,11 @@ member.delete(
       }
     }
 
-    // The member's Workspaces stay, still owned by them, so their Triggers are
-    // disabled in the same transaction: nothing else stops them running as a
-    // user who has left. Only the Workspace Owner can re-enable a Trigger, so
-    // they stay off unless the member is invited back.
-    await db.transaction(async (tx) => {
-      await tx
-        .update(triggerTable)
-        .set({ enabled: false, updatedAt: new Date() })
-        .where(
-          inArray(
-            triggerTable.workspaceId,
-            tx
-              .select({ id: workspaceTable.id })
-              .from(workspaceTable)
-              .where(
-                and(
-                  eq(workspaceTable.organizationId, orgId),
-                  eq(workspaceTable.ownerId, targetMember.userId),
-                ),
-              ),
-          ),
-        );
-      await tx
-        .delete(organizationMember)
-        .where(eq(organizationMember.id, memberId));
+    await removeMember({
+      orgId,
+      member: targetMember,
+      workspaces: c.req.valid("json").workspaces,
+      transferredBy: currentUser.name,
     });
 
     return c.json({ message: "Member removed from organization" });

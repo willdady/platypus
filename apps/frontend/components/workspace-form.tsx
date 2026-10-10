@@ -35,7 +35,11 @@ import {
   WORKSPACE_MAX_DAILY_SUMMARIES_MIN,
 } from "@platypus/schemas";
 import { retractFieldError } from "@/lib/form-errors";
-import { canManageWorkspaceDelegation } from "@/lib/authorization";
+import {
+  canManageWorkspaceDelegation,
+  canTransferWorkspace,
+} from "@/lib/authorization";
+import { TransferWorkspaceAction } from "@/components/transfer-workspace-dialog";
 import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -117,6 +121,7 @@ const WorkspaceFormSkeleton = ({ delegation }: { delegation: boolean }) => (
 const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
   const { actor } = useAuth();
   const canManageDelegation = canManageWorkspaceDelegation(actor);
+  const canTransfer = canTransferWorkspace(actor);
   const router = useRouter();
 
   // Fetch providers
@@ -516,16 +521,25 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
           </FieldGroup>
         </FieldSet>
 
-        <FormFooterButtons
-          submitText="Save"
-          onSubmit={() => void submit()}
-          submitDisabled={isSubmitting || !canSubmit}
-          submitClassName=""
-          deleteVisible
-          deleteDisabled={isSubmitting}
-          deleteClassName=""
-          onDelete={openDeleteDialog}
-        />
+        <div className="flex flex-wrap items-start gap-2">
+          <FormFooterButtons
+            submitText="Save"
+            onSubmit={() => void submit()}
+            submitDisabled={isSubmitting || !canSubmit}
+            submitClassName=""
+            deleteVisible
+            deleteDisabled={isSubmitting}
+            deleteClassName=""
+            onDelete={openDeleteDialog}
+          />
+          {canTransfer && (
+            <TransferWorkspaceAction
+              orgId={orgId}
+              workspaceId={workspaceId}
+              providers={providers}
+            />
+          )}
+        </div>
 
         <EntityDeleteDialog
           open={isDeleteDialogOpen}

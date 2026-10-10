@@ -194,6 +194,17 @@ export const workspaceUpdateSchema = workspaceSchema.pick({
   inboundTriggersAllowed: true,
 });
 
+/**
+ * A Workspace transfer (ADR-0035): the member who becomes its Owner, and
+ * whether its Chats and Memories go with it.
+ */
+export const workspaceTransferSchema = z.object({
+  newOwnerId: z.string().min(1),
+  keepHistory: z.boolean(),
+});
+
+export type WorkspaceTransfer = z.infer<typeof workspaceTransferSchema>;
+
 // Chat
 
 export const chatStatusSchema = z.enum([
@@ -2147,6 +2158,27 @@ export const organizationMemberUpdateSchema = organizationMemberSchema.pick({
   role: true,
 });
 
+/**
+ * What Remove from Org does with one Workspace the member owns: transfer it
+ * to another member, or delete it (ADR-0035).
+ */
+export const memberWorkspaceDecisionSchema = z.discriminatedUnion("action", [
+  workspaceTransferSchema.extend({
+    workspaceId: z.string().min(1),
+    action: z.literal("transfer"),
+  }),
+  z.object({ workspaceId: z.string().min(1), action: z.literal("delete") }),
+]);
+
+export type MemberWorkspaceDecision = z.infer<
+  typeof memberWorkspaceDecisionSchema
+>;
+
+/** Remove from Org: one decision for each Workspace the member owns. */
+export const organizationMemberRemoveSchema = z.object({
+  workspaces: z.array(memberWorkspaceDecisionSchema).default([]),
+});
+
 export const organizationMemberWithUserSchema = organizationMemberSchema.extend(
   {
     user: z.object({
@@ -2162,6 +2194,8 @@ export const organizationMemberWithUserSchema = organizationMemberSchema.extend(
 
 export const orgMemberListItemSchema = organizationMemberWithUserSchema.extend({
   isSuperAdmin: z.boolean(),
+  // Banned now; a banned member cannot receive a Workspace transfer.
+  isBanned: z.boolean(),
 });
 
 export type OrgMemberListItem = z.infer<typeof orgMemberListItemSchema>;
@@ -2754,7 +2788,9 @@ export type TriggerRunDetailResponse = z.infer<
 export const notificationSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  agentId: z.string(),
+  // Null on a Notification Platypus itself posted, such as a Workspace
+  // transfer notice.
+  agentId: z.string().nullable(),
   title: z.string().nullable().optional(),
   body: z.string().min(1).max(2000),
   createdAt: z.date(),
@@ -2764,7 +2800,7 @@ export const notificationSchema = z.object({
 export type Notification = z.infer<typeof notificationSchema>;
 
 export const notificationListItemSchema = notificationSchema.extend({
-  agentName: z.string(),
+  agentName: z.string().nullable(),
   agentAvatarUrl: z.string().optional(),
   isRead: z.boolean(),
 });

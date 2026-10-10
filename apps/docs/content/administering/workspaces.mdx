@@ -1,6 +1,6 @@
 ---
 title: Workspace settings
-description: The per-Workspace form — its Context, the task and memory Providers, memory retention, the two switches that hand work to the owner, and whether it takes Inbound Trigger calls.
+description: The per-Workspace form — its Context, the task and memory Providers, memory retention, the two switches that hand work to the owner, whether it takes Inbound Trigger calls, and transferring it to another member.
 ---
 
 import { Callout } from "nextra/components";
@@ -32,12 +32,11 @@ keeps what you entered; nothing is created until **Save** on the last one.
    is unavailable when the deployment has no Sandbox backend installed.
 
 <Callout type="warning">
-  **Choose the Owner carefully: there is no owner field on the settings form
-  afterwards.** A Workspace's owner is fixed when it is created and nothing
-  reassigns it. Only the owner can chat in it — an Org Admin or Super Admin can
-  change its settings but only read its Chats. If the wrong person owns a
-  Workspace, the fix is to recreate it under the right owner, which is not
-  pleasant once there are Chats in it.
+  **There is no owner field on the settings form afterwards.** Only the owner
+  can chat in a Workspace — an Org Admin or Super Admin can change its settings
+  but only read its Chats. To give it to someone else, use
+  [Transfer](#transferring-a-workspace), which switches off everything that ran
+  as the old owner.
 </Callout>
 
 ## The Context field
@@ -128,6 +127,48 @@ is **Selected workspaces** — see [Inbound Triggers](/administering#inbound-tri
 Under **No workspaces** or **All workspaces** the switch is locked, and its description
 says which applies and links to the Organization's **Inbound Triggers** screen,
 which lists the same switch for every Workspace.
+
+## Transferring a Workspace
+
+**Transfer**, beside **Delete**, makes another member of the Organization the
+Workspace's owner. Only an Org Admin or Super Admin sees it. The new owner must
+be a member and not banned. When nobody qualifies, **Transfer** is disabled and
+points you to inviting someone.
+
+Pick the **New owner**, and whether to **Keep history** (on by default):
+
+- **Keep history** on — Chats stay, and the old owner's Memories in this
+  Workspace move to the new owner.
+- **Keep history** off — the Workspace's Chats, with their files, A2A tasks and
+  Trigger run transcripts, its Memories and its Notifications are deleted.
+
+Either way, Boards, Cards, Sandbox files and Dashboards are kept. **Next**
+shows what the transfer does before you confirm it.
+
+Every transfer, whichever you pick:
+
+- switches off every Trigger, and revokes every Inbound Trigger token and A2A
+  token;
+- clears MCP sign-ins and bearer tokens on this Workspace's own MCP servers,
+  and the environment the owner set on its Sandbox;
+- switches off **Owner-managed providers** and **Owner-managed MCP servers**;
+- stops any Chat, Trigger run or A2A task running in it;
+- takes the Workspace away from the old owner at once;
+- posts a Notification in the Workspace telling the new owner what happened.
+
+The new owner turns on the Triggers and issues the tokens they want, and
+authorizes the MCP servers again. Nothing starts running as them until they do.
+
+<Callout type="warning">
+  **Workspace-scoped Provider keys stay.** Platypus cannot tell a key an Org
+  Admin entered from one the old owner entered, so it keeps them all rather than
+  stop every Agent. The confirm step lists the Workspace's own Providers:
+  replace any key that was the old owner's personal one.
+</Callout>
+
+Some things keep naming the old owner: their own Workspace Context for this
+Workspace stays theirs, and the new owner never sees it. Card authors,
+assignees and Card history are left as they were.
 
 ## Deleting a Workspace
 

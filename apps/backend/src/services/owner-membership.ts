@@ -32,6 +32,14 @@ export type OwnerStanding = {
   banExpires: Date | null | undefined;
 };
 
+/** Whether a User is banned at `now`: a ban with an expiry ends when it runs out. */
+export const isBanned = (
+  user: Pick<OwnerStanding, "banned" | "banExpires">,
+  now: Date = new Date(),
+): boolean =>
+  !!user.banned &&
+  (!user.banExpires || user.banExpires.getTime() > now.getTime());
+
 /**
  * Whether the Workspace Owner may still act in it. A banned Owner may not —
  * super admin or not — until a ban with an expiry runs out. Otherwise a member
@@ -43,9 +51,6 @@ export const ownerMayAct = (
   owner: OwnerStanding,
   now: Date = new Date(),
 ): boolean => {
-  const banned =
-    !!owner.banned &&
-    (!owner.banExpires || owner.banExpires.getTime() > now.getTime());
-  if (banned) return false;
+  if (isBanned(owner, now)) return false;
   return !!owner.membershipId || owner.role === "admin";
 };

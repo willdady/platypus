@@ -27,16 +27,44 @@ export const destroySandboxRow = async (row: SandboxRow): Promise<void> => {
 // can reconcile leaked external resources out-of-band.
 export const destroyWorkspaceSandboxes = async (
   workspaceId: string,
-): Promise<void> => {
+): Promise<void> => (await prepareWorkspaceSandboxTeardown(workspaceId))();
+
+// The same teardown, with everything it reads from the database read now, so
+// it can run once the Workspace's rows are deleted — after the delete commits,
+// and only if it does. Never throws, now or when run.
+export const prepareWorkspaceSandboxTeardown = async (
+  workspaceId: string,
+): Promise<() => Promise<void>> => {
   const rows = await db
     .select()
     .from(sandboxTable)
     .where(eq(sandboxTable.workspaceId, workspaceId));
+  // A row that fails to open fails its teardown, as it would have unprepared.
+  const opened = await Promise.all(
+    rows.map((row) =>
+      openSandboxRow(row, "destroy").then(
+        (open) => ({ row, open }),
+        (error: unknown) => ({ row, error }),
+      ),
+    ),
+  );
 
+  return () => destroyOpened(workspaceId, opened);
+};
+
+const destroyOpened = async (
+  workspaceId: string,
+  opened: (
+    | { row: SandboxRow; open: Awaited<ReturnType<typeof openSandboxRow>> }
+    | { row: SandboxRow; error: unknown }
+  )[],
+): Promise<void> => {
   await Promise.all(
-    rows.map(async (row) => {
+    opened.map(async (entry) => {
+      const { row } = entry;
       try {
-        await destroySandboxRow(row);
+        if ("error" in entry) throw entry.error;
+        await entry.open.backend.destroy(entry.open.ctx);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         // Core's line about a plugin's adapter, so it binds the owning plugin

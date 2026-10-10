@@ -172,7 +172,7 @@ export function NotificationsDropdown({
                       {notif.agentAvatarUrl ? (
                         <AvatarImage
                           src={notif.agentAvatarUrl}
-                          alt={notif.agentName}
+                          alt={notif.agentName ?? "Platypus"}
                         />
                       ) : null}
                       <AvatarFallback>
@@ -182,7 +182,8 @@ export function NotificationsDropdown({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground truncate">
-                          {notif.agentName}
+                          {/* Null on a Notification Platypus itself posted. */}
+                          {notif.agentName ?? "Platypus"}
                         </span>
                         {!notif.isRead && (
                           <span className="size-2 rounded-full bg-primary shrink-0" />

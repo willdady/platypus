@@ -156,6 +156,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
         <RemoveMemberDialog
           orgId={orgId}
           member={removingMember}
+          members={members}
           open={!!removingMember}
           onOpenChange={(open: boolean) => !open && setRemovingMember(null)}
           onSuccess={() => {

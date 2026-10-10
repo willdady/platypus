@@ -1112,9 +1112,10 @@ export const notification = pgTable(
       .text("workspace_id")
       .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
+    // The Agent that posted it. Null on one Platypus itself posts, such as a
+    // Workspace transfer's notice to the new Owner.
     agentId: t
       .text("agent_id")
-      .notNull()
       .references(() => agent.id, { onDelete: "cascade" }),
     title: t.text("title"),
     body: t.text("body").notNull(),

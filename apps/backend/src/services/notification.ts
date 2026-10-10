@@ -44,7 +44,8 @@ export const createNotification = async (
     .returning();
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.created",
-    data: rows[0],
+    // Written with the Agent's id, so it has one; only Platypus posts without.
+    data: { ...rows[0], agentId: ctx.agentId },
   });
   return rows[0];
 };
@@ -86,7 +87,8 @@ export const updateNotification = async (
   if (!rows.length) return null;
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.updated",
-    data: rows[0],
+    // Matched on the Agent's id, so it has one.
+    data: { ...rows[0], agentId: ctx.agentId },
   });
   return rows[0];
 };
@@ -192,7 +194,7 @@ export const listWorkspaceNotifications = (
       readAt: notificationReadTable.readAt,
     })
     .from(notificationTable)
-    .innerJoin(agentTable, eq(notificationTable.agentId, agentTable.id))
+    .leftJoin(agentTable, eq(notificationTable.agentId, agentTable.id))
     .leftJoin(
       notificationReadTable,
       and(

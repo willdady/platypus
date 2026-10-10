@@ -5,16 +5,12 @@ import { db } from "../index.ts";
 import {
   workspace as workspaceTable,
   organizationMember,
-  provider as providerTable,
-  agent as agentTable,
   attachment as attachmentTable,
   sandbox as sandboxTable,
 } from "../db/schema.ts";
-import { deleteStoredPrefix } from "../storage/utils.ts";
-import { workspaceStorageKeyPrefix } from "../storage/keys.ts";
-import { deleteAvatar } from "../services/avatar.ts";
 import {
   workspaceCreateSchema,
+  workspaceTransferSchema,
   workspaceUpdateSchema,
 } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
@@ -33,7 +29,11 @@ import { createProvider } from "../services/provider-write.ts";
 import { sandboxCreateError } from "../sandbox/validate.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
-import { destroyWorkspaceSandboxes } from "../sandbox/teardown.ts";
+import {
+  deleteWorkspaceRows,
+  prepareWorkspaceCleanup,
+} from "../services/workspace-delete.ts";
+import { transferWorkspace } from "../services/workspace-transfer.ts";
 
 const workspace = new Hono<{ Variables: Variables }>();
 
@@ -289,30 +289,33 @@ workspace.delete(
   requireWorkspaceAccess,
   async (c) => {
     const scope = workspaceScopeOf(c);
-    const { workspaceId } = scope;
-    // Best-effort sandbox teardown before the DB cascade fires. Never throws;
-    // failures are recorded in sandbox_teardown_failure (ADR-0001).
-    await destroyWorkspaceSandboxes(workspaceId);
-    // Read before the cascade takes the Agent rows, and their keys, away.
-    const agents = await db
-      .select({ avatarKey: agentTable.avatarKey })
-      .from(agentTable)
-      .where(eq(agentTable.workspaceId, workspaceId));
-    // `provider` carries no FK to `workspace` (issue #661) — a cascade FK
-    // would race `agent.providerId`'s `restrict` constraint, since Postgres
-    // checks RESTRICT immediately rather than deferring to end of statement.
-    // Delete the workspace first (cascading its Agents away) so the
-    // Workspace-scoped Providers below are no longer referenced, then delete
-    // them explicitly, all within one transaction.
-    await db.transaction(async (tx) => {
-      await tx.delete(workspaceTable).where(eq(workspaceTable.id, workspaceId));
-      await tx
-        .delete(providerTable)
-        .where(eq(providerTable.workspaceId, workspaceId));
-    });
-    await deleteStoredPrefix(workspaceStorageKeyPrefix(scope));
-    await Promise.all(agents.map(({ avatarKey }) => deleteAvatar(avatarKey)));
+    const cleanUp = await prepareWorkspaceCleanup(scope);
+    await db.transaction((tx) => deleteWorkspaceRows(tx, scope.workspaceId));
+    await cleanUp();
     return c.json({ message: "Workspace deleted" });
+  },
+);
+
+/** Transfer a workspace to another member (org admin only, ADR-0035) */
+workspace.post(
+  "/:workspaceId/transfer",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  requireWorkspaceAccess,
+  sValidator("json", workspaceTransferSchema),
+  async (c) => {
+    const { orgId, workspaceId } = workspaceScopeOf(c);
+    await transferWorkspace({
+      orgId,
+      workspaceId,
+      ...c.req.valid("json"),
+      transferredBy: c.get("user")!.name,
+    });
+    const [record] = await db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, workspaceId));
+    return c.json(record);
   },
 );
 

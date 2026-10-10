@@ -67,7 +67,14 @@ describe("Member Routes", () => {
         {
           id: "m2",
           userId: "u2",
-          user: { id: "u2", name: "User 2", email: "u2@ex.com", role: "admin" },
+          user: {
+            id: "u2",
+            name: "User 2",
+            email: "u2@ex.com",
+            role: "admin",
+            banned: true,
+            banExpires: null,
+          },
         },
       ];
 
@@ -78,11 +85,13 @@ describe("Member Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       const json = (await res.json()) as {
-        results: { id: string; isSuperAdmin: boolean }[];
+        results: { id: string; isSuperAdmin: boolean; isBanned: boolean }[];
       };
-      expect(json.results.map((m) => [m.id, m.isSuperAdmin])).toEqual([
-        ["m1", false],
-        ["m2", true],
+      expect(
+        json.results.map((m) => [m.id, m.isSuperAdmin, m.isBanned]),
+      ).toEqual([
+        ["m1", false, false],
+        ["m2", true, true],
       ]);
     });
 
@@ -217,30 +226,30 @@ describe("Member Routes", () => {
       expect(ids(fake)).toEqual(["m-self", "m-other"]);
     });
 
-    it("disables the Triggers in Workspaces the member owns in this organization only", async () => {
-      const fake = seedDb({
-        organization_member: [
-          membership("m-self", "admin-1", "admin"),
-          membership("m1", "u1", "member"),
-        ],
-        workspace: [
-          { id: "ws-u1", organizationId: orgId, ownerId: "u1" },
-          { id: "ws-u1-org2", organizationId: "org-2", ownerId: "u1" },
-          { id: "ws-admin", organizationId: orgId, ownerId: "admin-1" },
-        ],
-        trigger: [
-          { id: "t-u1", workspaceId: "ws-u1", enabled: true },
-          { id: "t-u1-org2", workspaceId: "ws-u1-org2", enabled: true },
-          { id: "t-admin", workspaceId: "ws-admin", enabled: true },
-        ],
+    it("refuses to remove a member without a decision for each Workspace they own", async () => {
+      const fake = world([membership("m1", "u1", "member")]);
+      fake.tables.workspace = [
+        { id: "ws-u1", organizationId: orgId, ownerId: "u1" },
+      ];
+
+      const res = await send("DELETE", "m1", { workspaces: [] });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Choose Transfer or Delete for each Workspace the member owns",
+      });
+      expect(ids(fake)).toContain("m1");
+    });
+
+    it("answers 400 to a decision with no action", async () => {
+      const fake = world([membership("m1", "u1", "member")]);
+
+      const res = await send("DELETE", "m1", {
+        workspaces: [{ workspaceId: "ws-u1" }],
       });
 
-      const res = await send("DELETE", "m1");
-
-      expect(res.status).toBe(200);
-      expect(
-        Object.fromEntries(fake.tables.trigger.map((t) => [t.id, t.enabled])),
-      ).toEqual({ "t-u1": false, "t-u1-org2": true, "t-admin": true });
+      expect(res.status).toBe(400);
+      expect(ids(fake)).toContain("m1");
     });
 
     it("removes an admin while another admin remains", async () => {
