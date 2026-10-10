@@ -3,6 +3,7 @@ import { db } from "../../index.ts";
 import {
   triggerRun as triggerRunTable,
   triggerRunEvent as triggerRunEventTable,
+  workspace as workspaceTable,
 } from "../../db/schema.ts";
 import type {
   TriggerRunStats,
@@ -26,6 +27,9 @@ import type { PlatypusUIMessage } from "../../types.ts";
 
 export type TriggerSinkParams = {
   triggerId: string;
+  workspaceId: string;
+  /** The Owner the run was resolved to act as; it starts only while they still are. */
+  ownerId: string;
   /**
    * The single entity the event named, when it named one. Stored on the run
    * row so the run-rate breaker can count runs per Trigger per entity; absent
@@ -142,39 +146,59 @@ export class TriggerSink implements RunSink {
   }): Promise<void> {
     this.runId = ctx.runId;
     this.events = ctx.events;
-    if (this.params.adoptPendingRow) {
-      // `startedAt` moves to the real start, so the run's duration does not
-      // include the moment between acceptance and the Drive picking it up.
-      // Only a row still `pending` is adopted: one the recovery sweep already
-      // failed, or retention pruned, must not come back as a live run nobody's
-      // dedup or poll can see. Throwing fails the run before the Agent starts.
-      const adopted = await db
-        .update(triggerRunTable)
-        .set({ status: "running", startedAt: new Date() })
+    await db.transaction(async (tx) => {
+      // A Workspace transfer holds this row while it lists the runs to cancel,
+      // so a run either starts before and is cancelled with them, or waits and
+      // finds a new Owner it was not resolved to act as (ADR-0035).
+      const [owned] = await tx
+        .select({ id: workspaceTable.id })
+        .from(workspaceTable)
         .where(
           and(
-            eq(triggerRunTable.id, ctx.runId),
-            eq(triggerRunTable.status, "pending"),
+            eq(workspaceTable.id, this.params.workspaceId),
+            eq(workspaceTable.ownerId, this.params.ownerId),
           ),
         )
-        .returning({ id: triggerRunTable.id });
-      if (adopted.length === 0) {
+        .for("share");
+      if (!owned) {
         throw new Error(
-          `Inbound trigger run '${ctx.runId}' is no longer pending; not started`,
+          `Workspace '${this.params.workspaceId}' no longer has the Owner this run acts as; trigger run '${ctx.runId}' not started`,
         );
       }
-    } else {
-      await db.insert(triggerRunTable).values({
-        id: ctx.runId,
-        triggerId: this.params.triggerId,
-        status: "running",
-        entityId: this.params.entityId ?? null,
-        eventType: this.params.eventType ?? null,
-        eventData: this.params.eventData ?? null,
-        startedAt: new Date(),
-        createdAt: new Date(),
-      });
-    }
+      if (this.params.adoptPendingRow) {
+        // `startedAt` moves to the real start, so the run's duration does not
+        // include the moment between acceptance and the Drive picking it up.
+        // Only a row still `pending` is adopted: one the recovery sweep already
+        // failed, or retention pruned, must not come back as a live run nobody's
+        // dedup or poll can see. Throwing fails the run before the Agent starts.
+        const adopted = await tx
+          .update(triggerRunTable)
+          .set({ status: "running", startedAt: new Date() })
+          .where(
+            and(
+              eq(triggerRunTable.id, ctx.runId),
+              eq(triggerRunTable.status, "pending"),
+            ),
+          )
+          .returning({ id: triggerRunTable.id });
+        if (adopted.length === 0) {
+          throw new Error(
+            `Inbound trigger run '${ctx.runId}' is no longer pending; not started`,
+          );
+        }
+      } else {
+        await tx.insert(triggerRunTable).values({
+          id: ctx.runId,
+          triggerId: this.params.triggerId,
+          status: "running",
+          entityId: this.params.entityId ?? null,
+          eventType: this.params.eventType ?? null,
+          eventData: this.params.eventData ?? null,
+          startedAt: new Date(),
+          createdAt: new Date(),
+        });
+      }
+    });
 
     this.flusher = new FlushScheduler(
       () => this.flush(),

@@ -8,13 +8,20 @@ import {
 } from "../test-utils.ts";
 import app from "../server.ts";
 
+const resetChain = () => {
+  resetMockDb();
+  vi.clearAllMocks();
+  mockDb.where.mockReturnValue(mockDb);
+  mockDb.innerJoin.mockReturnValue(mockDb);
+  // The accept holds the membership it lands on, the only "share" lock.
+  mockDb.for.mockImplementation(((strength: string) =>
+    strength === "share"
+      ? Promise.resolve([{ id: "member-1" }])
+      : mockDb) as never);
+};
+
 describe("User Invitation Routes", () => {
-  beforeEach(() => {
-    resetMockDb();
-    vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
-    mockDb.innerJoin.mockReturnValue(mockDb);
-  });
+  beforeEach(() => resetChain());
 
   const baseUrl = "/users/me/invitations";
 
@@ -353,6 +360,7 @@ describe("User Invitation Routes", () => {
       // applyBlueprintsToWorkspace: Tier 2 source rows (unordered), then items.
       mockDb.where
         .mockReturnValueOnce(mockDb) // fetch invitation -> limit
+        .mockReturnValueOnce(mockDb) // the membership it lands on -> for
         .mockReturnValueOnce(mockDb) // ordered blueprints -> orderBy
         .mockResolvedValueOnce([
           // bp-1 sets the task provider; bp-2 overrides it (last wins).
@@ -553,13 +561,6 @@ describe("User Invitation Routes", () => {
     };
 
     /** Restores the chainable mocks between phases of the round trip. */
-    const resetChain = () => {
-      resetMockDb();
-      vi.clearAllMocks();
-      mockDb.where.mockReturnValue(mockDb);
-      mockDb.innerJoin.mockReturnValue(mockDb);
-    };
-
     /**
      * Drives the create handler as an Org Admin and returns the `email` it wrote
      * to the invitation row.

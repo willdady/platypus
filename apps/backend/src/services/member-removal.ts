@@ -14,7 +14,35 @@ import {
   applyWorkspaceTransfer,
   finishTransfer,
   type TransferAftermath,
+  type Tx,
 } from "./workspace-transfer.ts";
+
+const requireEachOwnedDecided = async (
+  database: typeof db | Tx,
+  orgId: string,
+  userId: string,
+  workspaces: MemberWorkspaceDecision[],
+) => {
+  const owned = await database
+    .select({ id: workspaceTable.id })
+    .from(workspaceTable)
+    .where(
+      and(
+        eq(workspaceTable.organizationId, orgId),
+        eq(workspaceTable.ownerId, userId),
+      ),
+    );
+  const decided = new Set(workspaces.map(({ workspaceId }) => workspaceId));
+  if (
+    decided.size !== workspaces.length ||
+    decided.size !== owned.length ||
+    owned.some(({ id }) => !decided.has(id))
+  ) {
+    throw new ValidationError(
+      "Choose Transfer or Delete for each Workspace the member owns",
+    );
+  }
+};
 
 /**
  * Remove from Org (ADR-0035). Every Workspace the member owns in the
@@ -34,25 +62,7 @@ export const removeMember = async ({
   workspaces: MemberWorkspaceDecision[];
   transferredBy: string;
 }): Promise<void> => {
-  const owned = await db
-    .select({ id: workspaceTable.id })
-    .from(workspaceTable)
-    .where(
-      and(
-        eq(workspaceTable.organizationId, orgId),
-        eq(workspaceTable.ownerId, member.userId),
-      ),
-    );
-  const decided = new Set(workspaces.map(({ workspaceId }) => workspaceId));
-  if (
-    decided.size !== workspaces.length ||
-    decided.size !== owned.length ||
-    owned.some(({ id }) => !decided.has(id))
-  ) {
-    throw new ValidationError(
-      "Choose Transfer or Delete for each Workspace the member owns",
-    );
-  }
+  await requireEachOwnedDecided(db, orgId, member.userId, workspaces);
 
   // Read before the transaction, while the rows exist; run only after it
   // commits, so a refused removal tears nothing down.
@@ -65,6 +75,14 @@ export const removeMember = async ({
   );
 
   const transfers = await db.transaction(async (tx) => {
+    // Workspace creation holds this row while it adds one for the member, so
+    // with it locked the owned set cannot grow before the removal commits.
+    await tx
+      .select({ id: organizationMember.id })
+      .from(organizationMember)
+      .where(eq(organizationMember.id, member.id))
+      .for("update");
+    await requireEachOwnedDecided(tx, orgId, member.userId, workspaces);
     const aftermaths: TransferAftermath[] = [];
     for (const decision of workspaces) {
       if (decision.action === "transfer") {

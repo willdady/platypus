@@ -26,7 +26,7 @@ import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 import { revokedTokenFields } from "./bearer-token.ts";
 import { isBanned } from "./owner-membership.ts";
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type WorkspaceTransferInput = {
   orgId: string;

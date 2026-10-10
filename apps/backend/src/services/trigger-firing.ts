@@ -316,10 +316,12 @@ const runTrigger = async (
     includeMemories: trigger.includeMemories,
   };
 
+  const owner = { workspaceId, ownerId: workspace.ownerId };
   const sink = inboundContext
-    ? new TriggerSink({ triggerId: id, adoptPendingRow: true })
+    ? new TriggerSink({ triggerId: id, ...owner, adoptPendingRow: true })
     : new TriggerSink({
         triggerId: id,
+        ...owner,
         entityId: eventContext?.entityId,
         eventType: eventContext?.payload.event,
         eventData: eventContext?.payload.data,

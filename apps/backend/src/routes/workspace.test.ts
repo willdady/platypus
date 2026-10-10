@@ -52,6 +52,7 @@ describe("Workspace Routes", () => {
 
       // Mock requireOrgAccess: return admin role
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([{ userId: "user-1" }]); // owner is a member
 
       // Mock insert
       const mockWorkspace = { id: "ws-1", name: "New Workspace" };
@@ -143,11 +144,47 @@ describe("Workspace Routes", () => {
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
+    // Removing the owner meanwhile waits on this lock, then must decide the
+    // new Workspace too (ADR-0035).
+    it("locks the owner's membership until the Workspace is created", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ userId: "member-2" }]); // owner is a member
+      mockDb.returning.mockResolvedValueOnce([{ id: "ws-1" }]);
+
+      const res = await app.request("/organizations/org-1/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "Member Workspace", ownerId: "member-2" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockDb.for).toHaveBeenCalledWith("share");
+      expect(mockDb.for.mock.invocationCallOrder[0]).toBeLessThan(
+        mockDb.insert.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("lets a super admin with no membership create their own Workspace", async () => {
+      mockSession({ id: "super-1", role: "admin" });
+      mockDb.returning.mockResolvedValueOnce([{ id: "ws-1" }]);
+      mockDb.limit.mockResolvedValue([]); // no membership anywhere
+
+      const res = await app.request("/organizations/org-1/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "Mine" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+    });
+
     // The organization id is a tenancy boundary. It is derived from the path
     // after requireOrgAccess, rather than accepted from the request body.
     it("binds a workspace to the authorized organization", async () => {
       mockSession({ id: "admin-1", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([{ userId: "admin-1" }]); // owner is a member
       mockDb.returning.mockResolvedValueOnce([
         { id: "ws-1", name: "Bound Workspace", organizationId: "org-1" },
       ]);
@@ -194,6 +231,7 @@ describe("Workspace Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
       mockDb.where.mockResolvedValueOnce([{ id: "shared-1" }]); // the Shared Provider resolves in this org
+      mockDb.limit.mockResolvedValueOnce([{ userId: "admin-1" }]); // owner is a member
       mockDb.returning.mockResolvedValueOnce([{ id: "ws-1", name: "Ready" }]);
       mockDb.returning.mockResolvedValueOnce([{ id: "p-1" }]);
 

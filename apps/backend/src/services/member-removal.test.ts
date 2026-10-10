@@ -191,4 +191,26 @@ describe("removeMember", () => {
     ).toEqual([]);
     expect(deleteStoredPrefix).not.toHaveBeenCalled();
   });
+
+  it("changes nothing when a Workspace is created for the member mid-removal", async () => {
+    // Lands after the decisions were checked, before the removal commits.
+    const transaction = holder.db!.transaction.bind(holder.db);
+    vi.spyOn(holder.db!, "transaction").mockImplementationOnce(
+      async (...args) => {
+        await pg.exec(`INSERT INTO "workspace" ("id", "organization_id", "owner_id", "name")
+          VALUES ('ws-late', 'org-1', 'u-old', 'Late')`);
+        return transaction(...args);
+      },
+    );
+
+    await expect(
+      remove([
+        { workspaceId: "ws-a", action: "delete" },
+        { workspaceId: "ws-b", action: "delete" },
+      ]),
+    ).rejects.toThrow(ValidationError);
+
+    expect(await members()).toEqual(allMembers);
+    expect(deleteStoredPrefix).not.toHaveBeenCalled();
+  });
 });

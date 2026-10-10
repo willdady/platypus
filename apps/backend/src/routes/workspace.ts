@@ -27,7 +27,7 @@ import {
 } from "../services/scoped-resource.ts";
 import { createProvider } from "../services/provider-write.ts";
 import { sandboxCreateError } from "../sandbox/validate.ts";
-import { NotFoundError } from "../errors.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 import {
   deleteWorkspaceRows,
@@ -49,29 +49,8 @@ workspace.post(
     const data = c.req.valid("json");
 
     // ownerId is admin-assignable (ADR-0008); default to the calling admin
-    // when not supplied. A named owner must be a member of the organization —
-    // governance would be meaningless if an admin could hand a workspace to a
-    // non-member (or a typo'd / cross-org user id).
+    // when not supplied.
     const ownerId = data.ownerId ?? user.id;
-    if (data.ownerId && data.ownerId !== user.id) {
-      const [member] = await db
-        .select({ userId: organizationMember.userId })
-        .from(organizationMember)
-        .where(
-          and(
-            eq(organizationMember.organizationId, orgId),
-            eq(organizationMember.userId, data.ownerId),
-          ),
-        )
-        .limit(1);
-
-      if (!member) {
-        return c.json(
-          { error: "Owner must be a member of the organization" },
-          400,
-        );
-      }
-    }
 
     const {
       provider,
@@ -101,6 +80,26 @@ workspace.post(
     // The Workspace and the resources it is provisioned with land together or
     // not at all — a failed Provider must not leave an unusable Workspace.
     const record = await db.transaction(async (tx) => {
+      // The owner must be a member of the organization — governance would be
+      // meaningless if an admin could hand a workspace to a non-member (or a
+      // typo'd / cross-org user id); a super admin needs none for their own.
+      // Held until commit, so removing the owner meanwhile waits and must then
+      // decide this Workspace too (ADR-0035).
+      const [member] = await tx
+        .select({ userId: organizationMember.userId })
+        .from(organizationMember)
+        .where(
+          and(
+            eq(organizationMember.organizationId, orgId),
+            eq(organizationMember.userId, ownerId),
+          ),
+        )
+        .for("share")
+        .limit(1);
+      if (!member && !(ownerId === user.id && user.role === "admin")) {
+        throw new ValidationError("Owner must be a member of the organization");
+      }
+
       const [row] = await tx
         .insert(workspaceTable)
         .values({

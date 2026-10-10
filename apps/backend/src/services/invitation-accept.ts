@@ -99,6 +99,21 @@ export async function acceptInvitationForUser(
       .onConflictDoNothing({
         target: [organizationMember.organizationId, organizationMember.userId],
       });
+    // Held until commit, so removing the member meanwhile waits and must then
+    // decide the Workspace below too (ADR-0035). Gone means a removal won.
+    const [member] = await tx
+      .select({ id: organizationMember.id })
+      .from(organizationMember)
+      .where(
+        and(
+          eq(organizationMember.organizationId, invite.organizationId),
+          eq(organizationMember.userId, user.id),
+        ),
+      )
+      .for("share");
+    if (!member) {
+      throw new Error("Membership was removed while accepting the invitation");
+    }
 
     // Accepting an invitation always provisions a Workspace owned by the
     // accepting member (ADR-0008). With no Blueprint it is empty; the invite's
