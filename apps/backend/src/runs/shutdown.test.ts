@@ -14,6 +14,7 @@ import type { RunStatus } from "./types.ts";
 /** A Chat whose turn this process is running, through its real sink. */
 const startChatRun = async () => {
   const fake = seedDb({
+    workspace: [{ id: "ws-1", ownerId: "owner-1" }],
     chat: [
       {
         id: "chat-1",
@@ -28,6 +29,7 @@ const startChatRun = async () => {
   const sink = new ChatSink({
     orgId: "org-1",
     workspaceId: "ws-1",
+    ownerId: "owner-1",
     parentId: null,
     message: { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
   });

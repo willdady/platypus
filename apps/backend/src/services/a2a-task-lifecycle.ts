@@ -8,7 +8,7 @@ import {
   or,
 } from "drizzle-orm";
 import type { Task } from "@a2a-js/sdk";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import {
   a2aPushConfig as a2aPushConfigTable,
   a2aTask as a2aTaskTable,
@@ -18,7 +18,6 @@ import {
 import { logger } from "../logger.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
 import type { RunStatus } from "../runs/types.ts";
-import type { ChatClaimTx } from "../runs/sinks/chat-sink.ts";
 import {
   bareReading,
   currentTurnId,
@@ -108,7 +107,7 @@ const recordEnd = async (
  * committed.
  */
 export const endTurnIn = async (
-  tx: ChatClaimTx,
+  tx: Tx,
   chatId: string,
   turnId: string,
   status: RunStatus,

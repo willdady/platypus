@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { eq, type SQL } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import {
   agent as agentTable,
   provider as providerTable,
@@ -49,7 +49,7 @@ import {
 
 export type ProviderRow = typeof providerTable.$inferSelect;
 
-type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+type Executor = typeof db | Tx;
 
 /** The fields a create carries — every field but the id and its scope. */
 export type ProviderCreateFields = Omit<

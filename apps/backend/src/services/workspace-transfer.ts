@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import {
   a2aEndpoint as a2aEndpointTable,
   a2aToken as a2aTokenTable,
@@ -25,8 +25,6 @@ import { errorMessage } from "../utils/error-message.ts";
 import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 import { revokedTokenFields } from "./bearer-token.ts";
 import { isBanned } from "./owner-membership.ts";
-
-export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type WorkspaceTransferInput = {
   orgId: string;
@@ -72,7 +70,10 @@ const requireRecipient = async (
         eq(organizationMember.userId, newOwnerId),
       ),
     )
-    .limit(1);
+    .limit(1)
+    // Held until commit, so removing the recipient meanwhile waits and then
+    // finds this Workspace among the ones it must decide.
+    .for("share", { of: organizationMember });
   if (!recipient) {
     throw new ValidationError("New Owner must be a member of the organization");
   }

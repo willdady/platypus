@@ -186,6 +186,20 @@ describe("TriggerList list states", () => {
       screen.getByRole("status", { name: "Loading triggers" }),
     ).toHaveAttribute("aria-busy", "true");
   });
+
+  // Flipping Show fired re-reads under a new key; the list it had stays up
+  // rather than flashing to the skeleton and back.
+  it("keeps the list it has while a re-read is in flight", () => {
+    mockScopedSWR({
+      "/triggers": { data: { results: [cronTrigger] }, isLoading: true },
+    });
+    renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("Nightly job")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Loading triggers" }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("TriggerList inbound triggers", () => {

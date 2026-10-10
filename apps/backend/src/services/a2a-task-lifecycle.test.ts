@@ -17,7 +17,7 @@ import {
   a2aPushConfig as a2aPushConfigTable,
   a2aTask as a2aTaskTable,
 } from "../db/schema.ts";
-import type { ChatClaimTx } from "../runs/sinks/chat-sink.ts";
+import type { Tx } from "../index.ts";
 
 /**
  * The A2A Task lifecycle (ADR-0034) against an in-process Postgres built from
@@ -105,7 +105,7 @@ const endRun = (status: "succeeded" | "failed" | "cancelled") =>
     await tx.execute(
       sql`UPDATE "chat" SET "status" = ${status} WHERE "id" = 'chat-1'`,
     );
-    return endTurnIn(tx as unknown as ChatClaimTx, "chat-1", "msg-1", status);
+    return endTurnIn(tx as unknown as Tx, "chat-1", "msg-1", status);
   });
 
 /** The states each push delivered, in order. */

@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { db } from "../index.ts";
+import type { Tx } from "../index.ts";
 import {
   blueprint as blueprintTable,
   blueprintItem as blueprintItemTable,
@@ -11,7 +11,6 @@ import {
 // Any query executor — the top-level `db` or a transaction handle. Both share
 // the query-builder surface this module uses, so callers can wrap a multi-step
 // apply in their own transaction (invite-accept does; ad-hoc apply does too).
-type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 // The Workspace pointer-settings a Blueprint can stamp (ADR-0008, Tier 2).
 const TIER2_FIELDS = [
@@ -44,7 +43,7 @@ export interface ApplyBlueprintsResult {
  * boundary — accept-time provisioning applies the whole set atomically.
  */
 export const applyBlueprintsToWorkspace = async (
-  exec: Executor,
+  exec: Tx,
   workspaceId: string,
   blueprintIds: string[],
 ): Promise<ApplyBlueprintsResult> => {

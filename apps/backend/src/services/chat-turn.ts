@@ -162,6 +162,7 @@ export const startChatTurn = async (params: {
   const sink = new ChatSink({
     orgId: scope.orgId,
     workspaceId: scope.workspaceId,
+    ownerId: actorUserId(scope.principal),
     message: turn.message,
     parentId: turn.parentId,
     newChat,

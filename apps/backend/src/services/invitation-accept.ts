@@ -9,7 +9,7 @@ import {
 } from "../db/schema.ts";
 import { WORKSPACE_NAME_MAX_LENGTH } from "@platypus/schemas";
 import { applyBlueprintsToWorkspace } from "./blueprint-apply.ts";
-import { NotFoundError } from "../errors.ts";
+import { ConflictError, NotFoundError } from "../errors.ts";
 
 /**
  * Possessive form of a name for the default Workspace name (ADR-0008).
@@ -112,7 +112,9 @@ export async function acceptInvitationForUser(
       )
       .for("share");
     if (!member) {
-      throw new Error("Membership was removed while accepting the invitation");
+      throw new ConflictError(
+        "Membership was removed while accepting the invitation",
+      );
     }
 
     // Accepting an invitation always provisions a Workspace owned by the

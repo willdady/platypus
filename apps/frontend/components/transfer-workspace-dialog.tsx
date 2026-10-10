@@ -24,6 +24,7 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl, workspaceEntity, writeAt } from "@/lib/api-write";
 import {
+  historyOutcome,
   NoRecipientHint,
   TransferFields,
   transferRecipients,
@@ -159,10 +160,8 @@ export const TransferWorkspaceAction = ({
                     : "loses access immediately."}
                 </li>
                 <li>
-                  {keepHistory
-                    ? `Chats stay, and their Memories move to ${nameOf(newOwnerId)}.`
-                    : "Chats, Memories and Notifications are deleted."}{" "}
-                  Boards, cards, Sandbox files and Dashboards are kept.
+                  {historyOutcome(keepHistory, nameOf(newOwnerId))} Boards,
+                  cards, Sandbox files and Dashboards are kept.
                 </li>
                 <li>
                   Every Trigger is switched off, and every Inbound Trigger and

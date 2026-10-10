@@ -279,7 +279,7 @@ export async function writeEntity<TResult = unknown, TData = unknown>(
 
 export interface WriteAtOptions<TData> {
   readonly method: "POST" | "PUT" | "PATCH" | "DELETE";
-  /** Omit only when the write is a DELETE. A `Blob` is sent as the raw body. */
+  /** Omit for a write with no body. A `Blob` is sent as the raw body. */
   readonly data?: TData;
   /** SWR keys this write should invalidate. Defaults to none. */
   readonly revalidateKeys?: readonly string[];

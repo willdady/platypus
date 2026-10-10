@@ -137,6 +137,8 @@ describe("Chat Routes", () => {
     mockDb.orderBy.mockReturnValue(mockDb);
     mockDb.limit.mockReturnValue(mockDb);
     mockDb.offset.mockReturnValue(mockDb);
+    // The turn's claim finds the Workspace still has the Owner it acts as.
+    mockDb.for.mockResolvedValue([{ id: "ws-1" }]);
   });
 
   const orgId = "org-1";

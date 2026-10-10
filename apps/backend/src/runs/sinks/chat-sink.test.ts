@@ -28,11 +28,8 @@ vi.mock("../../services/chat-metadata.ts", () => ({
 }));
 
 import { TaskState } from "@a2a-js/sdk";
-import {
-  ChatSink,
-  type ChatClaimTx,
-  type ChatSinkParams,
-} from "./chat-sink.ts";
+import { ChatSink, type ChatSinkParams } from "./chat-sink.ts";
+import type { Tx } from "../../index.ts";
 import { a2aTask } from "../../db/schema.ts";
 import type { TaskRow } from "../../services/a2a-task-state.ts";
 import { endTurnIn, readTask } from "../../services/a2a-task-lifecycle.ts";
@@ -98,6 +95,9 @@ const storedRow = (
   ...overrides,
 });
 
+/** The Workspace the turns run in, owned by the Owner they act as. */
+const workspace = [{ id: "ws-1", ownerId: "owner-1" }];
+
 /** The Chat's primary key, which a turn's claim on a new Chat leans on. */
 const chatPkey = { unique: { chat: [{ name: "chat_pkey", columns: ["id"] }] } };
 
@@ -105,6 +105,7 @@ const chatPkey = { unique: { chat: [{ name: "chat_pkey", columns: ["id"] }] } };
 const seedChat = (rows: Row[] = []) =>
   seedDb(
     {
+      workspace,
       chat: [chatRow()],
       chat_message: [
         storedRow("u0", null, "user"),
@@ -143,6 +144,7 @@ const submitSink = (overrides: Partial<ChatSinkParams> = {}) =>
   new ChatSink({
     orgId: "org-1",
     workspaceId: "ws-1",
+    ownerId: "owner-1",
     message: u1,
     parentId: "a0",
     ...overrides,
@@ -199,7 +201,7 @@ describe("ChatSink", () => {
     });
 
     it("creates a new Chat with its first message", async () => {
-      const fake = seedDb({});
+      const fake = seedDb({ workspace });
 
       await submitSink({ parentId: null }).onStart({
         runId: "chat-1",
@@ -234,7 +236,7 @@ describe("ChatSink", () => {
 
     it("fails, writing no message, on a Chat id another Workspace holds", async () => {
       const fake = seedDb(
-        { chat: [chatRow({ workspaceId: "ws-other" })] },
+        { workspace, chat: [chatRow({ workspaceId: "ws-other" })] },
         chatPkey,
       );
 
@@ -247,13 +249,31 @@ describe("ChatSink", () => {
       expect(fake.tables.chat_message ?? []).toHaveLength(0);
     });
 
+    // ADR-0035: a turn started as the old Owner must not land after a
+    // transfer has listed the Chats it cancels, nor bring back a cleared Chat.
+    it("refuses, writing nothing, once the Workspace has a new Owner", async () => {
+      const fake = seedDb(
+        { workspace: [{ id: "ws-1", ownerId: "owner-2" }], chat: [] },
+        chatPkey,
+      );
+
+      await expect(
+        submitSink({ parentId: null }).onStart({
+          runId: "chat-1",
+          messages: [u1],
+        }),
+      ).rejects.toThrow(ConflictError);
+      expect(fake.tables.chat).toHaveLength(0);
+      expect(fake.tables.chat_message ?? []).toHaveLength(0);
+    });
+
     // The one-run-per-Chat lock, held in the row so it holds across backend
     // instances (#1237): the turn running here may be another process's.
     it.each([
       ["an existing Chat", () => seedChat()],
       [
         "a new Chat another instance just created",
-        () => seedDb({ chat: [], chat_message: [] }, chatPkey),
+        () => seedDb({ workspace, chat: [], chat_message: [] }, chatPkey),
       ],
     ])(
       "refuses a second turn on %s while one runs, and the loser writes nothing",
@@ -743,6 +763,7 @@ describe("ChatSink", () => {
     // columns.
     it("writes maxSteps null when the direct turn carries none", async () => {
       const fake = seedDb({
+        workspace,
         chat: [chatRow({ maxSteps: 10 })],
         chat_message: [
           storedRow("u0", null, "user"),
@@ -863,20 +884,19 @@ describe("ChatSink", () => {
   // it can land against a sink that writes its end in more than one step.
   describe("a turn's end, against a claim of the next turn", () => {
     /** The A2A Task of the turn answering `messageId`, as the claim makes it. */
-    const insertTask =
-      (id: string, messageId: string) => async (tx: ChatClaimTx) => {
-        await tx.insert(a2aTask).values({
-          id,
-          chatId: "chat-1",
-          messageId,
-          endpointId: "ep-1",
-          tokenId: "tok-1",
-          state: null,
-          replyId: null,
-          statusAt: new Date(),
-          createdAt: new Date(),
-        });
-      };
+    const insertTask = (id: string, messageId: string) => async (tx: Tx) => {
+      await tx.insert(a2aTask).values({
+        id,
+        chatId: "chat-1",
+        messageId,
+        endpointId: "ep-1",
+        tokenId: "tok-1",
+        state: null,
+        replyId: null,
+        statusAt: new Date(),
+        createdAt: new Date(),
+      });
+    };
 
     /** Records the A2A Task's end for the turn answering `messageId`. */
     const endTask =

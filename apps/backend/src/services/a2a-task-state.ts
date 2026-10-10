@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm";
 import { TaskState, type Task } from "@a2a-js/sdk";
 import { RequestMalformedError, TaskNotFoundError } from "@a2a-js/sdk/errors";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import {
   a2aTask as a2aTaskTable,
   chat as chatTable,
@@ -18,7 +18,6 @@ import {
   type A2aTaskEndState,
 } from "../db/schema.ts";
 import type { RunStatus } from "../runs/types.ts";
-import type { ChatClaimTx } from "../runs/sinks/chat-sink.ts";
 import { replyArtifact } from "./a2a-parts.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 
@@ -51,7 +50,7 @@ export const isTaskContext = (contextId: string): SQL | undefined =>
   );
 
 /** Where a Task's rows are read and written: the database, or a transaction. */
-export type Executor = typeof db | ChatClaimTx;
+export type Executor = typeof db | Tx;
 
 /** A finished run's Chat status as the end a Task records. */
 export const END_OF_RUN: Partial<Record<RunStatus, A2aTaskEndState>> = {
