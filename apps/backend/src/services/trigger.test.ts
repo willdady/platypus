@@ -578,6 +578,148 @@ describe("trigger module", () => {
     });
   });
 
+  describe("one-off triggers", () => {
+    const oneOffConfig = {
+      cronExpression: "0 9 1 1 *",
+      timezone: "UTC",
+      isOneOff: true,
+    };
+    const oneOffFields = (): TriggerCreateFields => ({
+      ...cronFields(),
+      config: oneOffConfig,
+    });
+    const pending = (n: number, over: Row = {}) =>
+      Array.from({ length: n }, (_, i) =>
+        triggerRow({ id: `once-${i}`, config: oneOffConfig, ...over }),
+      );
+    const fired = (over: Row = {}) =>
+      triggerRow({
+        id: "fired",
+        config: oneOffConfig,
+        enabled: false,
+        firedAt: new Date("2026-01-01T09:00:00Z"),
+        ...over,
+      });
+
+    it("refuses the 51st pending One-off in a workspace, naming the limit", async () => {
+      world({ trigger: pending(50) });
+
+      await expect(createTrigger(ctx, oneOffFields())).rejects.toThrow(
+        ValidationError,
+      );
+      await expect(createTrigger(ctx, oneOffFields())).rejects.toThrow(/50/);
+    });
+
+    it("counts a One-off disabled before it fired, but not a fired one or another workspace's", async () => {
+      const fake = world({
+        trigger: [
+          ...pending(48),
+          triggerRow({ id: "off", config: oneOffConfig, enabled: false }),
+          fired(),
+          triggerRow({
+            id: "theirs",
+            workspaceId: "ws-2",
+            config: oneOffConfig,
+          }),
+        ],
+      });
+
+      await createTrigger(ctx, oneOffFields());
+
+      await expect(createTrigger(ctx, oneOffFields())).rejects.toThrow(/50/);
+      expect(fake.tables.trigger).toHaveLength(52);
+    });
+
+    it("refuses converting a recurring Trigger into a One-off past the limit", async () => {
+      world({ trigger: [...pending(50), triggerRow()] });
+
+      await expect(
+        updateTrigger(ctx, "trig-1", { config: oneOffConfig }),
+      ).rejects.toThrow(/50/);
+    });
+
+    it("lets a pending One-off at the limit be edited", async () => {
+      world({ trigger: pending(50) });
+
+      await expect(
+        updateTrigger(ctx, "once-0", { config: oneOffConfig, name: "Renamed" }),
+      ).resolves.toMatchObject({ name: "Renamed" });
+    });
+
+    it.each([
+      ["re-enabling", { enabled: true }],
+      [
+        "rescheduling",
+        { config: { ...oneOffConfig, cronExpression: "0 10 1 1 *" } },
+      ],
+      ["making it recurring", { config: { ...oneOffConfig, isOneOff: false } }],
+      [
+        "changing its type",
+        { type: "event", config: { events: ["card.created"] } },
+      ],
+    ] as [string, TriggerUpdateFields][])(
+      "refuses %s a fired One-off",
+      async (_label, fields) => {
+        world({ trigger: [fired()] });
+
+        await expect(updateTrigger(ctx, "fired", fields)).rejects.toThrow(
+          ValidationError,
+        );
+      },
+    );
+
+    it("allows renaming a fired One-off with its config unchanged, and deleting it", async () => {
+      world({ trigger: [fired()] });
+
+      await expect(
+        updateTrigger(ctx, "fired", {
+          name: "Renamed",
+          enabled: false,
+          config: oneOffConfig,
+        }),
+      ).resolves.toMatchObject({ name: "Renamed", enabled: false });
+      await expect(deleteTrigger(ctx, "fired")).resolves.toBe(true);
+    });
+
+    it("hides fired One-offs from the list unless includeFired is set", async () => {
+      world({ trigger: [fired(), triggerRow()] });
+
+      expect((await listTriggers(ctx)).map((t) => t.id)).toEqual(["trig-1"]);
+      expect(
+        (await listTriggers(ctx, { includeFired: true })).map((t) => t.id),
+      ).toEqual(["fired", "trig-1"]);
+    });
+
+    it("lists each Trigger with its newest run's status", async () => {
+      world({
+        trigger: [fired(), triggerRow()],
+        trigger_run: [
+          {
+            id: "r-old",
+            triggerId: "fired",
+            status: "running",
+            startedAt: new Date("2026-01-01T09:00:00Z"),
+          },
+          {
+            id: "r-new",
+            triggerId: "fired",
+            status: "failed",
+            startedAt: new Date("2026-01-02T09:00:00Z"),
+          },
+        ],
+      });
+
+      const result = await listTriggers(ctx, { includeFired: true });
+
+      expect(
+        result.map(({ id, lastRunStatus }) => ({ id, lastRunStatus })),
+      ).toEqual([
+        { id: "fired", lastRunStatus: "failed" },
+        { id: "trig-1", lastRunStatus: null },
+      ]);
+    });
+  });
+
   describe("getTrigger", () => {
     it("returns this workspace's trigger", async () => {
       world({ trigger: [triggerRow()] });

@@ -181,8 +181,9 @@ async function performWrite<TResult, TData>(
   revalidateKeys: readonly string[],
   extraHeaders?: Record<string, string>,
 ): Promise<WriteOutcome<TResult>> {
-  // A Blob (a picked File) is sent as the raw body, typed by the browser.
-  const json = method !== "DELETE" && !(data instanceof Blob);
+  // A Blob (a picked File) is sent as the raw body, typed by the browser. A
+  // DELETE carries a body only when given one, as Remove from Org is.
+  const json = data !== undefined && !(data instanceof Blob);
   let response: Response;
   try {
     response = await fetch(url, {
@@ -192,7 +193,7 @@ async function performWrite<TResult, TData>(
         ? { "Content-Type": "application/json", ...extraHeaders }
         : extraHeaders,
       body:
-        method === "DELETE"
+        data === undefined
           ? undefined
           : json
             ? JSON.stringify(data)

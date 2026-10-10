@@ -66,8 +66,9 @@ const TriggerRunsPage = ({
   const statusFilter = searchParams.get("status") ?? "";
   const isFiltered = Boolean(triggerFilter || statusFilter);
 
+  // Fired One-offs too: their runs are listed here, filterable by name.
   const { data: triggersData } = useScopedSWR<{ results: Trigger[] }>(
-    "triggers",
+    "triggers?includeFired=true",
     { orgId, workspaceId },
   );
   const triggers = triggersData?.results ?? [];

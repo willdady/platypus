@@ -164,16 +164,27 @@ Three levels of authority, each bounded by the one above:
 | ------------------- | --------------------------------------------------------- | ---------------------------------------------------------- |
 | **Super Admin**     | The platform account. Bypasses all in-app authorization   | Seeded on first boot from `ADMIN_EMAIL` / `ADMIN_PASSWORD` |
 | **Org Admin**       | Holds the Organization's credentials and Shared resources | An existing Org Admin sets their **Org Role** to `admin`   |
-| **Workspace Owner** | Owns one Workspace and everything composed inside it      | Assigned when the Workspace is created                     |
+| **Workspace Owner** | Owns one Workspace and everything composed inside it      | Assigned when the Workspace is created, or by a transfer   |
 
 An Org Admin changes roles from **Organization settings → Members**, using a
 row's **Edit org role**, and can remove somebody with **Remove from Org**. A
 **Super Admin** row shows no actions there — the platform account is not an Org
 Admin's to manage.
 
-Removing a member leaves the Workspaces they own in place and disables every
-Trigger in them. Nobody else can switch those Triggers back on. If you invite
-the person back, they turn on the ones they still want.
+Removing a member means deciding each Workspace they own in the Organization:
+transfer it to another member, or delete it. The removal waits until every one
+has a choice, and goes through all at once or not at all.
+
+### Whose Workspace it is
+
+A Workspace belongs to the **Organization**, not to its owner. Its owner is the
+one person who chats in it, but an Org Admin can read every Chat in it, and can
+hand it to another member, history included. Tell the people you invite: a
+Chat in a work Workspace is no more private than a company mailbox.
+
+An Org Admin or Super Admin transfers a Workspace from its settings, or while
+removing its owner — see [Transferring a
+Workspace](/administering/workspaces#transferring-a-workspace).
 
 ## The platform user-management screen
 

@@ -3,6 +3,7 @@ import {
   asc,
   count,
   eq,
+  isNotNull,
   isNull,
   lt,
   lte,
@@ -250,7 +251,7 @@ export async function processDueTriggers(): Promise<void> {
         .update(triggerTable)
         .set(
           config.isOneOff
-            ? { enabled: false, nextRunAt: null, updatedAt: now }
+            ? { enabled: false, nextRunAt: null, firedAt: now, updatedAt: now }
             : { nextRunAt, updatedAt: now },
         )
         .where(and(eq(triggerTable.id, job.id), isDue, not(hasRunningRun)))
@@ -466,6 +467,32 @@ export async function recoverStuckTriggers(): Promise<void> {
   }
 }
 
+/** How long a fired One-off Trigger outlives the end of its run. */
+const FIRED_ONE_OFF_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes the fired One-off Triggers whose run ended more than
+ * {@link FIRED_ONE_OFF_TTL_MS} ago, whatever its outcome; the run and its
+ * timeline go with them by cascade. One whose run is still pending or running
+ * is kept. One that never wrote a run is timed from when it fired.
+ */
+export async function reapFiredOneOffTriggers(): Promise<void> {
+  const cutoff = new Date(Date.now() - FIRED_ONE_OFF_TTL_MS);
+  const reaped = await db
+    .delete(triggerTable)
+    .where(
+      and(
+        isNotNull(triggerTable.firedAt),
+        sql`not exists (select 1 from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id} and ${triggerRunTable.status} in ('pending', 'running'))`,
+        sql`coalesce((select max(${triggerRunTable.completedAt}) from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id}), ${triggerTable.firedAt}) < ${cutoff}`,
+      ),
+    )
+    .returning({ id: triggerTable.id });
+  if (reaped.length > 0) {
+    logger.info({ count: reaped.length }, "Reaped expired One-off Triggers");
+  }
+}
+
 /**
  * Periodic recovery for Chats left `running` by a server crash mid-turn.
  *
@@ -581,6 +608,11 @@ export function startScheduler(): void {
         await recoverStuckTriggers();
       } catch (error) {
         logger.error({ error }, "Trigger recovery sweep failed");
+      }
+      try {
+        await reapFiredOneOffTriggers();
+      } catch (error) {
+        logger.error({ error }, "One-off Trigger reap failed");
       }
       try {
         await recoverStuckChats();

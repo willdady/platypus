@@ -12,6 +12,8 @@ import { mockLogger } from "../test-setup.ts";
 import { getStorage } from "../storage/index.ts";
 import app from "../server.ts";
 import { resolveScoped } from "../services/scoped-resource.ts";
+import { transferWorkspace } from "../services/workspace-transfer.ts";
+import { ValidationError } from "../errors.ts";
 import {
   workspace as workspaceTable,
   provider as providerTable,
@@ -26,6 +28,13 @@ vi.mock("../services/scoped-resource.ts", async (importOriginal) => ({
   resolveScoped: vi.fn(),
 }));
 const resolveScopedMock = vi.mocked(resolveScoped);
+
+// The transfer itself runs against a real Postgres in its own tests
+// (`workspace-transfer.test.ts`); here only who may call it, and what it answers.
+vi.mock("../services/workspace-transfer.ts", () => ({
+  transferWorkspace: vi.fn(),
+}));
+const transferWorkspaceMock = vi.mocked(transferWorkspace);
 
 describe("Workspace Routes", () => {
   beforeEach(() => {
@@ -700,6 +709,104 @@ describe("Workspace Routes", () => {
           "Failed to delete files from storage",
         );
       });
+    });
+  });
+
+  describe("POST /organizations/:orgId/workspaces/:workspaceId/transfer", () => {
+    const world = () =>
+      seedDb({
+        organization_member: [
+          {
+            id: "m-admin",
+            userId: "admin-1",
+            organizationId: "org-1",
+            role: "admin",
+          },
+          {
+            id: "m-old",
+            userId: "u-old",
+            organizationId: "org-1",
+            role: "member",
+          },
+          {
+            id: "m-new",
+            userId: "u-new",
+            organizationId: "org-1",
+            role: "member",
+          },
+        ],
+        workspace: [{ id: "ws-1", organizationId: "org-1", ownerId: "u-old" }],
+      });
+    const transfer = (body: unknown) =>
+      app.request("/organizations/org-1/workspaces/ws-1/transfer", {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
+
+    it("transfers the Workspace for an Org Admin, naming them to the new Owner", async () => {
+      mockSession({ id: "admin-1", name: "Ada", role: "user" });
+      world();
+
+      const res = await transfer({ newOwnerId: "u-new", keepHistory: false });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ id: "ws-1" });
+      expect(transferWorkspaceMock).toHaveBeenCalledWith({
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        newOwnerId: "u-new",
+        keepHistory: false,
+        transferredBy: "Ada",
+      });
+    });
+
+    it.each([
+      ["the current Owner", "u-old"],
+      ["another member", "u-new"],
+    ])("refuses %s with 403", async (_, id) => {
+      mockSession({ id, role: "user" });
+      world();
+
+      const res = await transfer({ newOwnerId: "u-new", keepHistory: true });
+
+      expect(res.status).toBe(403);
+      expect(transferWorkspaceMock).not.toHaveBeenCalled();
+    });
+
+    it("answers 400 when the recipient is refused", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+      world();
+      transferWorkspaceMock.mockRejectedValueOnce(
+        new ValidationError("New Owner must be a member of the organization"),
+      );
+
+      const res = await transfer({ newOwnerId: "u-out", keepHistory: true });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "New Owner must be a member of the organization",
+      });
+    });
+
+    it("answers 400 without a history choice", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+      world();
+
+      const res = await transfer({ newOwnerId: "u-new" });
+
+      expect(res.status).toBe(400);
+      expect(transferWorkspaceMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses the old Owner once the Workspace is someone else's", async () => {
+      mockSession({ id: "u-old", role: "user" });
+      const fake = world();
+      fake.tables.workspace[0].ownerId = "u-new";
+
+      const res = await app.request("/organizations/org-1/workspaces/ws-1");
+
+      expect(res.status).toBe(403);
     });
   });
 });

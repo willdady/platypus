@@ -7,6 +7,7 @@ vi.mock("../services/event-dispatch.ts", () => ({
 
 import { createNotificationTools } from "./notification.ts";
 import { dispatchEvent } from "../services/event-dispatch.ts";
+import { withChildCausation, withRunSource } from "../event-causation.ts";
 
 const workspaceId = "ws-1";
 const agentId = "agent-1";
@@ -64,12 +65,40 @@ describe("createNotificationTools", () => {
       title: "Test",
       body: "line 1\nline 2",
     });
-    expect(db.tables.notification).toContainEqual(result);
+    expect(db.tables.notification).toContainEqual(
+      expect.objectContaining({ title: "Test", body: "line 1\nline 2" }),
+    );
     expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
       event: "notification.created",
       data: result,
     });
   });
+
+  it("createNotification outside a run records no source", async () => {
+    expect(
+      await callTool(tools.createNotification, { body: "hi" }),
+    ).toMatchObject({ source: null });
+  });
+
+  it.each([
+    { kind: "chat", chatId: "chat-1" },
+    { kind: "triggerRun", triggerRunId: "run-1" },
+  ] as const)(
+    "createNotification records the ambient $kind, from a Sub-Agent too",
+    async (source) => {
+      const result: unknown = await withRunSource(source, () =>
+        withChildCausation("sub-agent", () =>
+          callTool(tools.createNotification, { body: "hi" }),
+        ),
+      );
+
+      expect(result).toMatchObject({ source });
+      expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
+        event: "notification.created",
+        data: result,
+      });
+    },
+  );
 
   it("listNotifications returns only this agent's, in this workspace, newest first, up to the limit", async () => {
     expect(await callTool(tools.listNotifications, {})).toMatchObject([
@@ -82,13 +111,22 @@ describe("createNotificationTools", () => {
   });
 
   describe("updateNotification", () => {
-    it("updates and dispatches", async () => {
-      const result: unknown = await callTool(tools.updateNotification, {
-        notificationId: "mine-old",
-        body: "Updated",
-      });
+    it("updates and dispatches, keeping its source", async () => {
+      db.tables.notification[0].sourceChatId = "chat-1";
+      const result: unknown = await withRunSource(
+        { kind: "triggerRun", triggerRunId: "run-2" },
+        () =>
+          callTool(tools.updateNotification, {
+            notificationId: "mine-old",
+            body: "Updated",
+          }),
+      );
 
-      expect(result).toMatchObject({ id: "mine-old", body: "Updated" });
+      expect(result).toMatchObject({
+        id: "mine-old",
+        body: "Updated",
+        source: { kind: "chat", chatId: "chat-1" },
+      });
       expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
         event: "notification.updated",
         data: result,

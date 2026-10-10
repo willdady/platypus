@@ -41,6 +41,7 @@ import { startChatTurn } from "./chat-turn.ts";
 import { retrieveRecentSummaries } from "./memory-retrieval.ts";
 import type { WorkspaceScope } from "../scope.ts";
 import type { RunInput } from "../runs/types.ts";
+import { currentRunSource } from "../event-causation.ts";
 
 const runInput = () =>
   (mockStream.mock.calls[0][0] as { input: RunInput }).input;
@@ -71,6 +72,20 @@ describe("startChatTurn", () => {
     // Reset, not cleared: a lookup a test queued and never reached goes too.
     mockExistingChat.mockReset().mockResolvedValue([]);
     mockStream.mockResolvedValue(new Response("ok"));
+  });
+
+  // #1229: what a Notification posted during the turn records as its source.
+  it("runs the turn with its Chat as the ambient run source", async () => {
+    let seen: unknown;
+    mockStream.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      seen = currentRunSource();
+      return new Response("ok");
+    });
+
+    await start(false);
+
+    expect(seen).toEqual({ kind: "chat", chatId: "chat-1" });
   });
 
   it("retrieves and pins Memories when included", async () => {

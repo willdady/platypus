@@ -194,6 +194,15 @@ export const workspaceUpdateSchema = workspaceSchema.pick({
   inboundTriggersAllowed: true,
 });
 
+/**
+ * A Workspace transfer (ADR-0035): the member who becomes its Owner, and
+ * whether its Chats and Memories go with it.
+ */
+export const workspaceTransferSchema = z.object({
+  newOwnerId: z.string().min(1),
+  keepHistory: z.boolean(),
+});
+
 // Chat
 
 export const chatStatusSchema = z.enum([
@@ -2147,6 +2156,27 @@ export const organizationMemberUpdateSchema = organizationMemberSchema.pick({
   role: true,
 });
 
+/**
+ * What Remove from Org does with one Workspace the member owns: transfer it
+ * to another member, or delete it (ADR-0035).
+ */
+export const memberWorkspaceDecisionSchema = z.discriminatedUnion("action", [
+  workspaceTransferSchema.extend({
+    workspaceId: z.string().min(1),
+    action: z.literal("transfer"),
+  }),
+  z.object({ workspaceId: z.string().min(1), action: z.literal("delete") }),
+]);
+
+export type MemberWorkspaceDecision = z.infer<
+  typeof memberWorkspaceDecisionSchema
+>;
+
+/** Remove from Org: one decision for each Workspace the member owns. */
+export const organizationMemberRemoveSchema = z.object({
+  workspaces: z.array(memberWorkspaceDecisionSchema).default([]),
+});
+
 export const organizationMemberWithUserSchema = organizationMemberSchema.extend(
   {
     user: z.object({
@@ -2162,6 +2192,8 @@ export const organizationMemberWithUserSchema = organizationMemberSchema.extend(
 
 export const orgMemberListItemSchema = organizationMemberWithUserSchema.extend({
   isSuperAdmin: z.boolean(),
+  // Banned now; a banned member cannot receive a Workspace transfer.
+  isBanned: z.boolean(),
 });
 
 export type OrgMemberListItem = z.infer<typeof orgMemberListItemSchema>;
@@ -2368,6 +2400,17 @@ export const TRIGGER_INSTRUCTION_MAX_LENGTH = 10000;
 export const TRIGGER_MAX_RUNS_TO_KEEP_MIN = 1;
 export const TRIGGER_MAX_RUNS_TO_KEEP_MAX = 1000;
 
+export const triggerRunStatusSchema = z.enum([
+  "pending",
+  "running",
+  "success",
+  "failed",
+  "cancelled",
+  "suppressed",
+]);
+
+export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
+
 export const triggerSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -2401,6 +2444,10 @@ export const triggerSchema = z.object({
   ]),
   lastRunAt: z.date().nullable().optional(),
   nextRunAt: z.date().nullable().optional(),
+  // One-off Triggers only: when it fired. A fired One-off is spent.
+  firedAt: z.date().nullable().optional(),
+  // The newest run's status, on list reads; null before the first run.
+  lastRunStatus: triggerRunStatusSchema.nullable().optional(),
   // Inbound Triggers only. The token itself is never returned after it is
   // issued; these describe it.
   tokenStatus: bearerTokenStatusSchema.optional(),
@@ -2465,17 +2512,6 @@ export const triggerUpdateSchema = partialWithoutDefaults(
 });
 
 // Trigger Run
-
-export const triggerRunStatusSchema = z.enum([
-  "pending",
-  "running",
-  "success",
-  "failed",
-  "cancelled",
-  "suppressed",
-]);
-
-export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
 
 /**
  * How each run status is written wherever a User reads one — the row badge and
@@ -2751,12 +2787,28 @@ export type TriggerRunDetailResponse = z.infer<
 
 // Notification
 
+/**
+ * The Chat or Trigger run a Notification was posted from; null outside a run,
+ * or once that Chat is deleted or that run is pruned.
+ */
+export const notificationSourceSchema = z
+  .discriminatedUnion("kind", [
+    z.object({ kind: z.literal("chat"), chatId: z.string() }),
+    z.object({ kind: z.literal("triggerRun"), triggerRunId: z.string() }),
+  ])
+  .nullable();
+
+export type NotificationSource = z.infer<typeof notificationSourceSchema>;
+
 export const notificationSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  agentId: z.string(),
+  // Null on a Notification Platypus itself posted, such as a Workspace
+  // transfer notice.
+  agentId: z.string().nullable(),
   title: z.string().nullable().optional(),
   body: z.string().min(1).max(2000),
+  source: notificationSourceSchema,
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -2764,7 +2816,7 @@ export const notificationSchema = z.object({
 export type Notification = z.infer<typeof notificationSchema>;
 
 export const notificationListItemSchema = notificationSchema.extend({
-  agentName: z.string(),
+  agentName: z.string().nullable(),
   agentAvatarUrl: z.string().optional(),
   isRead: z.boolean(),
 });
@@ -3330,6 +3382,7 @@ const webhookNotificationRecordShape = {
   agentId: z.string(),
   title: z.string().nullable(),
   body: z.string(),
+  source: notificationSourceSchema,
   createdAt: z.date(),
   updatedAt: z.date(),
 };

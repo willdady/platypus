@@ -23,14 +23,19 @@ import { logger } from "../logger.ts";
 
 const trigger = new Hono<{ Variables: Variables }>();
 
-/** List all triggers in workspace */
+/**
+ * List the triggers in the workspace. Fired One-off Triggers are left out
+ * unless `?includeFired=true`.
+ */
 trigger.get(
   "/",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const results = await listTriggers(workspaceScopeOf(c));
+    const results = await listTriggers(workspaceScopeOf(c), {
+      includeFired: c.req.query("includeFired") === "true",
+    });
     return c.json({ results: results.map(toPublicTrigger) });
   },
 );

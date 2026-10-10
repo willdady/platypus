@@ -36,7 +36,7 @@ vi.mock("../services/trigger-firing.ts", () => ({
   fireTrigger: mockFireTrigger,
 }));
 
-const { processDueTriggers, recoverStuckTriggers } =
+const { processDueTriggers, reapFiredOneOffTriggers, recoverStuckTriggers } =
   await import("./scheduler.ts");
 
 const NOW = new Date("2026-08-30T12:00:30.000Z");
@@ -175,6 +175,7 @@ describe("processDueTriggers", () => {
     expect(await row("once")).toMatchObject({
       enabled: false,
       nextRunAt: null,
+      firedAt: NOW,
     });
   });
 
@@ -283,5 +284,72 @@ describe("recoverStuckTriggers", () => {
     await recoverStuckTriggers();
 
     expect((await row(id)).nextRunAt).toBeNull();
+  });
+});
+
+describe("reapFiredOneOffTriggers", () => {
+  const daysAgo = (d: number) => minutesAgo(d * 24 * 60);
+  const seedFired = async (
+    id: string,
+    run: Partial<typeof triggerRunTable.$inferInsert> | null,
+  ) => {
+    await seedTrigger(id, {
+      config: { ...hourly, isOneOff: true },
+      enabled: false,
+      nextRunAt: null,
+      firedAt: daysAgo(10),
+    });
+    if (run) {
+      await db.insert(triggerRunTable).values({
+        id: `run-${id}`,
+        triggerId: id,
+        startedAt: daysAgo(10),
+        ...run,
+      });
+    }
+  };
+  const remaining = async () =>
+    (await db.select({ id: triggerTable.id }).from(triggerTable))
+      .map((r) => r.id)
+      .sort();
+
+  it("deletes a fired One-off 7 days after its run ended, whatever the outcome", async () => {
+    await seedFired("ok", { status: "success", completedAt: daysAgo(8) });
+    await seedFired("bad", { status: "failed", completedAt: daysAgo(8) });
+    await seedFired("recent", { status: "success", completedAt: daysAgo(6) });
+
+    await reapFiredOneOffTriggers();
+
+    // The runs go by the FK cascade, which this fixture's replica mode skips.
+    expect(await remaining()).toEqual(["recent"]);
+  });
+
+  it("never reaps a fired One-off whose run is still pending or running", async () => {
+    await seedFired("pending", { status: "pending" });
+    await seedFired("running", { status: "running" });
+
+    await reapFiredOneOffTriggers();
+
+    expect(await remaining()).toEqual(["pending", "running"]);
+  });
+
+  it("reaps a fired One-off that never wrote a run, 7 days after it fired", async () => {
+    await seedFired("norun", null);
+
+    await reapFiredOneOffTriggers();
+
+    expect(await remaining()).toEqual([]);
+  });
+
+  it("leaves unfired One-offs and recurring Triggers alone", async () => {
+    await seedTrigger("pending-once", {
+      config: { ...hourly, isOneOff: true },
+      enabled: false,
+    });
+    await seedTrigger("recurring", { lastRunAt: daysAgo(30) });
+
+    await reapFiredOneOffTriggers();
+
+    expect(await remaining()).toEqual(["pending-once", "recurring"]);
   });
 });

@@ -8,6 +8,7 @@ import {
 } from "../db/schema.ts";
 import { ownedWhere, resolveOwned } from "./workspace-resource.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
+import { currentRunSource, type RunSource } from "../event-causation.ts";
 
 type Database = typeof db;
 type NotificationContext = {
@@ -18,6 +19,29 @@ type NotificationContext = {
 
 const normalizeBody = (body: string) =>
   body.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+
+type NotificationRow = typeof notificationTable.$inferSelect;
+
+/** The source a stored row names, from whichever column is set. */
+export const notificationSource = (row: {
+  sourceChatId?: string | null;
+  sourceTriggerRunId?: string | null;
+}): RunSource | null =>
+  row.sourceChatId
+    ? { kind: "chat", chatId: row.sourceChatId }
+    : row.sourceTriggerRunId
+      ? { kind: "triggerRun", triggerRunId: row.sourceTriggerRunId }
+      : null;
+
+/** A row as the API and Webhooks carry it: the source columns as `source`. */
+const toRecord = ({
+  sourceChatId,
+  sourceTriggerRunId,
+  ...rest
+}: NotificationRow) => ({
+  ...rest,
+  source: notificationSource({ sourceChatId, sourceTriggerRunId }),
+});
 
 const agentOwnedWhere = (ctx: NotificationContext, id: string) =>
   and(
@@ -30,6 +54,8 @@ export const createNotification = async (
   ctx: Required<NotificationContext>,
   data: { title?: string; body: string },
 ) => {
+  // Read from the run, never the caller: an Agent cannot set or spoof it.
+  const source = currentRunSource();
   const rows = await database
     .insert(notificationTable)
     .values({
@@ -38,33 +64,40 @@ export const createNotification = async (
       agentId: ctx.agentId,
       title: data.title ?? null,
       body: normalizeBody(data.body),
+      sourceChatId: source?.kind === "chat" ? source.chatId : null,
+      sourceTriggerRunId:
+        source?.kind === "triggerRun" ? source.triggerRunId : null,
       createdAt: new Date(),
       updatedAt: new Date(),
     })
     .returning();
+  const record = toRecord(rows[0]);
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.created",
-    data: rows[0],
+    // Written with the Agent's id, so it has one; only Platypus posts without.
+    data: { ...record, agentId: ctx.agentId },
   });
-  return rows[0];
+  return record;
 };
 
-export const listNotifications = (
+export const listNotifications = async (
   database: Database,
   ctx: Required<NotificationContext>,
   limit: number,
 ) =>
-  database
-    .select()
-    .from(notificationTable)
-    .where(
-      and(
-        eq(notificationTable.workspaceId, ctx.workspaceId),
-        eq(notificationTable.agentId, ctx.agentId),
-      ),
-    )
-    .orderBy(desc(notificationTable.createdAt))
-    .limit(limit);
+  (
+    await database
+      .select()
+      .from(notificationTable)
+      .where(
+        and(
+          eq(notificationTable.workspaceId, ctx.workspaceId),
+          eq(notificationTable.agentId, ctx.agentId),
+        ),
+      )
+      .orderBy(desc(notificationTable.createdAt))
+      .limit(limit)
+  ).map(toRecord);
 
 export const updateNotification = async (
   database: Database,
@@ -84,11 +117,13 @@ export const updateNotification = async (
     .where(agentOwnedWhere(ctx, id))
     .returning();
   if (!rows.length) return null;
+  const record = toRecord(rows[0]);
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.updated",
-    data: rows[0],
+    // Matched on the Agent's id, so it has one.
+    data: { ...record, agentId: ctx.agentId },
   });
-  return rows[0];
+  return record;
 };
 
 export const deleteNotification = async (
@@ -185,6 +220,8 @@ export const listWorkspaceNotifications = (
       agentId: notificationTable.agentId,
       title: notificationTable.title,
       body: notificationTable.body,
+      sourceChatId: notificationTable.sourceChatId,
+      sourceTriggerRunId: notificationTable.sourceTriggerRunId,
       createdAt: notificationTable.createdAt,
       updatedAt: notificationTable.updatedAt,
       agentName: agentTable.name,
@@ -192,7 +229,7 @@ export const listWorkspaceNotifications = (
       readAt: notificationReadTable.readAt,
     })
     .from(notificationTable)
-    .innerJoin(agentTable, eq(notificationTable.agentId, agentTable.id))
+    .leftJoin(agentTable, eq(notificationTable.agentId, agentTable.id))
     .leftJoin(
       notificationReadTable,
       and(
