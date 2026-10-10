@@ -301,7 +301,8 @@ export const PromptInputActionAddAttachments = ({
         attachments.openFileDialog();
       }}
     >
-      <ImageIcon className="mr-2 size-4" /> {label}
+      <ImageIcon className="size-4" />
+      {label}
     </DropdownMenuItem>
   );
 };
@@ -319,7 +320,8 @@ export const PromptInputActionAddSandboxUploads = (
         attachments.openSandboxFileDialog();
       }}
     >
-      <BoxIcon className="mr-2 size-4" /> Upload to Sandbox
+      <BoxIcon className="size-4" />
+      Upload to Sandbox
     </DropdownMenuItem>
   );
 };
