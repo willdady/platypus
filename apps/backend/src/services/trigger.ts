@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { desc, inArray } from "drizzle-orm";
+import { asc, desc, inArray } from "drizzle-orm";
 import {
   cronTriggerConfigSchema,
   eventTriggerConfigSchema,
@@ -525,9 +525,9 @@ export async function listTriggers(
   );
   if (rows.length === 0) return [];
 
-  // Newest first, so the first status seen per Trigger is its latest.
+  // Each Trigger's newest run only, however many it keeps.
   const runs = await db
-    .select({
+    .selectDistinctOn([triggerRunTable.triggerId], {
       triggerId: triggerRunTable.triggerId,
       status: triggerRunTable.status,
     })
@@ -538,13 +538,10 @@ export async function listTriggers(
         rows.map((row) => row.id),
       ),
     )
-    .orderBy(desc(triggerRunTable.startedAt));
-  const lastStatus = new Map<string, TriggerRunStatus>();
-  for (const run of runs) {
-    if (!lastStatus.has(run.triggerId)) {
-      lastStatus.set(run.triggerId, run.status as TriggerRunStatus);
-    }
-  }
+    .orderBy(asc(triggerRunTable.triggerId), desc(triggerRunTable.startedAt));
+  const lastStatus = new Map(
+    runs.map((run) => [run.triggerId, run.status as TriggerRunStatus]),
+  );
   return rows.map((row) => ({
     ...row,
     lastRunStatus: lastStatus.get(row.id) ?? null,

@@ -99,6 +99,7 @@ process.env.STORAGE_BACKEND = "disk";
  */
 type BuilderMethodName =
   | "select"
+  | "selectDistinctOn"
   | "from"
   | "where"
   | "for"
@@ -149,6 +150,7 @@ export type MockDb = PromiseLike<unknown> & {
 function installBuilderMethods(target: MockDb): void {
   const methods: readonly BuilderMethodName[] = [
     "select",
+    "selectDistinctOn",
     "from",
     "where",
     "for",

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb, seedDb } from "./test-utils.ts";
 import { db } from "./index.ts";
-import { and, count, eq, isNull, lt, max, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, lt, max, ne } from "drizzle-orm";
 import { workspace as workspaceTable } from "./db/schema.ts";
 
 /**
@@ -242,6 +242,29 @@ describe("the seeded fake beside the chainable mock", () => {
     expect(seeded.queries).toEqual([
       { kind: "select", table: "workspace" },
       { kind: "select", table: "workspace" },
+    ]);
+  });
+
+  it("keeps the first row in order of each key from `selectDistinctOn`", async () => {
+    seedDb({
+      workspace: [
+        { id: "ws-1", name: "Old", organizationId: "org-1" },
+        { id: "ws-2", name: "New", organizationId: "org-1" },
+        { id: "ws-3", name: "Only", organizationId: "org-2" },
+      ],
+    });
+
+    const newest = await db
+      .selectDistinctOn([workspaceTable.organizationId], {
+        org: workspaceTable.organizationId,
+        name: workspaceTable.name,
+      })
+      .from(workspaceTable)
+      .orderBy(asc(workspaceTable.organizationId), desc(workspaceTable.id));
+
+    expect(newest).toEqual([
+      { org: "org-1", name: "New" },
+      { org: "org-2", name: "Only" },
     ]);
   });
 });
