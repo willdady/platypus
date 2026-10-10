@@ -18,7 +18,9 @@ are three types:
   a CI pipeline, calls it over HTTP with the Trigger's token. See
   [Inbound Triggers](#inbound-triggers).
 
-You'll find Triggers in the **Triggers** section of your Workspace.
+You'll find Triggers in the **Triggers** section of your Workspace. The list
+shows every type; pick **Cron**, **Event** or **Inbound** in the menu above it,
+which reads **All types** by default, to see only that type.
 
 ## Create a Trigger
 
@@ -58,7 +60,8 @@ cannot re-enable it or change its schedule, only rename or delete it, so its
 form greys out the schedule and **Enabled**. To run it again, create a new one.
 A fired One-off Trigger drops out of the Triggers list and the Workspace home
 count; switch on **Show fired** above the list to see it, with the status of
-its run. It is deleted, together with its run, **7 days** after that run ends,
+its run. **Show fired** is greyed out while the list shows only **Event** or
+**Inbound** Triggers, since only a Cron Trigger can be a One-off. It is deleted, together with its run, **7 days** after that run ends,
 whether the run succeeded or not.
 
 A Workspace holds at most **50** One-off Triggers that have not fired yet,

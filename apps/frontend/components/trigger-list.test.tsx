@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import type { Trigger } from "@platypus/schemas";
 import {
   authMock,
@@ -14,6 +14,7 @@ import {
   mutate,
   toastError,
 } from "@/lib/list-test-harness";
+import { selectOption } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -232,5 +233,72 @@ describe("TriggerList inbound triggers", () => {
 
     expect(screen.getByText("No token")).toBeInTheDocument();
     expect(screen.getByText("Expired")).toBeInTheDocument();
+  });
+});
+
+describe("TriggerList type filter", () => {
+  const eventTrigger = {
+    id: "t5",
+    name: "Card watcher",
+    type: "event",
+    enabled: true,
+    agentId: "agent1",
+    config: { events: ["card.created"] },
+  } as unknown as Trigger;
+
+  it("lists every type until one is picked", () => {
+    renderTriggers([cronTrigger, eventTrigger]);
+
+    expect(
+      screen.getByRole("combobox", { name: "Filter by type" }),
+    ).toHaveTextContent("All types");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("narrows the list to the chosen type", async () => {
+    renderTriggers([cronTrigger, eventTrigger]);
+
+    await act(async () => {
+      await selectOption("All types", "Event");
+    });
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText("Card watcher")).toBeInTheDocument();
+    expect(screen.queryByText("Nightly job")).toBeNull();
+  });
+
+  it("disables Show fired for the types that never fire", async () => {
+    renderTriggers([cronTrigger, eventTrigger]);
+    const showFired = screen.getByRole("switch", { name: "Show fired" });
+
+    await act(async () => {
+      await selectOption("All types", "Event");
+    });
+    expect(showFired).toBeDisabled();
+
+    await act(async () => {
+      await selectOption("Event", "Cron");
+    });
+    expect(showFired).toBeEnabled();
+  });
+
+  // A filter that matches nothing must say so, and leave the way back visible.
+  it("says nothing matches and keeps the controls when no trigger has the type", async () => {
+    renderTriggers([cronTrigger]);
+
+    await act(async () => {
+      await selectOption("All types", "Inbound");
+    });
+
+    expect(
+      screen.getByText("No Inbound triggers to show."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("listitem")).toBeNull();
+    expect(
+      screen.getByRole("combobox", { name: "Filter by type" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: "Show fired" }),
+    ).toBeInTheDocument();
   });
 });
