@@ -70,14 +70,20 @@ describe("createNotificationTools", () => {
     );
     expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
       event: "notification.created",
-      data: result,
+      data: { ...(result as object), source: null },
     });
   });
 
+  // The Agent has no use for its own Chat or run id, so the tools never show it.
+  const dispatched = () => vi.mocked(dispatchEvent).mock.calls[0][2].data;
+
   it("createNotification outside a run records no source", async () => {
-    expect(
-      await callTool(tools.createNotification, { body: "hi" }),
-    ).toMatchObject({ source: null });
+    const result: unknown = await callTool(tools.createNotification, {
+      body: "hi",
+    });
+
+    expect(result).not.toHaveProperty("source");
+    expect(dispatched()).toMatchObject({ source: null });
   });
 
   it.each([
@@ -92,11 +98,8 @@ describe("createNotificationTools", () => {
         ),
       );
 
-      expect(result).toMatchObject({ source });
-      expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
-        event: "notification.created",
-        data: result,
-      });
+      expect(result).not.toHaveProperty("source");
+      expect(dispatched()).toMatchObject({ source });
     },
   );
 
@@ -108,6 +111,9 @@ describe("createNotificationTools", () => {
     expect(await callTool(tools.listNotifications, { limit: 1 })).toMatchObject(
       [{ id: "mine-new" }],
     );
+    expect(
+      await callTool(tools.listNotifications, { limit: 1 }),
+    ).not.toContainEqual(expect.objectContaining({ source: null }));
   });
 
   describe("updateNotification", () => {
@@ -122,14 +128,14 @@ describe("createNotificationTools", () => {
           }),
       );
 
-      expect(result).toMatchObject({
-        id: "mine-old",
-        body: "Updated",
-        source: { kind: "chat", chatId: "chat-1" },
-      });
+      expect(result).toMatchObject({ id: "mine-old", body: "Updated" });
+      expect(result).not.toHaveProperty("source");
       expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
         event: "notification.updated",
-        data: result,
+        data: {
+          ...(result as object),
+          source: { kind: "chat", chatId: "chat-1" },
+        },
       });
     });
 

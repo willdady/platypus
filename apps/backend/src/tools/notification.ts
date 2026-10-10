@@ -8,6 +8,12 @@ import {
   updateNotification,
 } from "../services/notification.ts";
 
+// The Agent has no use for its own Chat or run id; Webhooks and the API carry it.
+const withoutSource = <T extends { source: unknown }>({
+  source: _source,
+  ...rest
+}: T) => rest;
+
 export function createNotificationTools(
   workspaceId: string,
   agentId: string,
@@ -30,7 +36,7 @@ export function createNotificationTools(
         .describe("The notification body (supports markdown)"),
     }),
     execute: async ({ title, body }) =>
-      createNotification(db, ctx, { title, body }),
+      withoutSource(await createNotification(db, ctx, { title, body })),
   });
   const list = tool({
     description: "List this agent's recent notifications in the workspace.",
@@ -43,7 +49,8 @@ export function createNotificationTools(
         .optional()
         .describe("Maximum number of notifications to return (default 20)"),
     }),
-    execute: async ({ limit }) => listNotifications(db, ctx, limit ?? 20),
+    execute: async ({ limit }) =>
+      (await listNotifications(db, ctx, limit ?? 20)).map(withoutSource),
   });
   const update = tool({
     description: "Update a notification this agent created.",
@@ -68,7 +75,9 @@ export function createNotificationTools(
         title,
         body,
       });
-      return result ?? { error: "Notification not found" };
+      return result
+        ? withoutSource(result)
+        : { error: "Notification not found" };
     },
   });
   const remove = tool({
