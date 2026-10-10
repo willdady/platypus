@@ -2368,6 +2368,17 @@ export const TRIGGER_INSTRUCTION_MAX_LENGTH = 10000;
 export const TRIGGER_MAX_RUNS_TO_KEEP_MIN = 1;
 export const TRIGGER_MAX_RUNS_TO_KEEP_MAX = 1000;
 
+export const triggerRunStatusSchema = z.enum([
+  "pending",
+  "running",
+  "success",
+  "failed",
+  "cancelled",
+  "suppressed",
+]);
+
+export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
+
 export const triggerSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -2401,6 +2412,10 @@ export const triggerSchema = z.object({
   ]),
   lastRunAt: z.date().nullable().optional(),
   nextRunAt: z.date().nullable().optional(),
+  // One-off Triggers only: when it fired. A fired One-off is spent.
+  firedAt: z.date().nullable().optional(),
+  // The newest run's status, on list reads; null before the first run.
+  lastRunStatus: triggerRunStatusSchema.nullable().optional(),
   // Inbound Triggers only. The token itself is never returned after it is
   // issued; these describe it.
   tokenStatus: bearerTokenStatusSchema.optional(),
@@ -2465,17 +2480,6 @@ export const triggerUpdateSchema = partialWithoutDefaults(
 });
 
 // Trigger Run
-
-export const triggerRunStatusSchema = z.enum([
-  "pending",
-  "running",
-  "success",
-  "failed",
-  "cancelled",
-  "suppressed",
-]);
-
-export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
 
 /**
  * How each run status is written wherever a User reads one — the row badge and

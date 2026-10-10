@@ -46,7 +46,7 @@ export const plugin: PlatypusPlugin = {
         name: "Triggers",
         category: "Automation",
         description:
-          "Manage triggers (cron schedules and event-based) including listing agents, creating, editing, and viewing triggers",
+          "Manage triggers (cron schedules, one-off runs and event-based) including listing agents, creating, editing, and viewing triggers, and getting the current time. Ask the user for their timezone when it isn't known rather than assuming UTC.",
         tools: ({ workspaceId, orgId, frontendUrl }) =>
           createTriggerTools(workspaceId, orgId, frontendUrl),
       },

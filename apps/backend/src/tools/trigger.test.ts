@@ -55,6 +55,7 @@ describe("createTriggerTools", () => {
       "getTrigger",
       "upsertTrigger",
       "deleteTrigger",
+      "getCurrentTime",
     ]);
   });
 
@@ -93,7 +94,7 @@ describe("createTriggerTools", () => {
     });
   });
 
-  it("listTriggers forwards enabledOnly and returns a summary of each trigger", async () => {
+  it("listTriggers forwards enabledOnly, includes fired One-offs, and returns a summary of each trigger", async () => {
     const createdAt = new Date("2026-01-01");
     vi.mocked(listTriggers).mockResolvedValueOnce([
       {
@@ -107,7 +108,9 @@ describe("createTriggerTools", () => {
         lastRunAt: null,
         createdAt,
         instruction: "a long prompt the summary leaves out",
-        config: { cronExpression: "0 9 * * *" },
+        config: { cronExpression: "0 9 * * *", isOneOff: true },
+        firedAt: createdAt,
+        lastRunStatus: "success",
       },
     ] as never);
 
@@ -120,14 +123,20 @@ describe("createTriggerTools", () => {
           agentId: "a1",
           type: "cron",
           enabled: true,
+          isOneOff: true,
           nextRunAt: null,
           lastRunAt: null,
+          firedAt: createdAt,
+          lastRunStatus: "success",
           createdAt,
         },
       ],
       count: 1,
     });
-    expect(listTriggers).toHaveBeenCalledWith(ctx, { enabledOnly: true });
+    expect(listTriggers).toHaveBeenCalledWith(ctx, {
+      enabledOnly: true,
+      includeFired: true,
+    });
   });
 
   describe("getTrigger", () => {
@@ -189,6 +198,44 @@ describe("createTriggerTools", () => {
         includeMemories: true,
         config: { cronExpression: "0 9 * * *" },
       });
+    });
+
+    it("creates a One-off and echoes its next run in UTC and in its timezone", async () => {
+      vi.mocked(createTrigger).mockResolvedValueOnce({
+        id: "t9",
+        type: "cron",
+        config: {
+          cronExpression: "0 9 11 10 *",
+          timezone: "Australia/Sydney",
+          isOneOff: true,
+        },
+        nextRunAt: new Date("2026-10-10T22:00:00.000Z"),
+      } as never);
+
+      expect(
+        await callTool(tools.upsertTrigger, {
+          ...cronCreate,
+          config: {
+            cronExpression: "0 9 11 10 *",
+            timezone: "Australia/Sydney",
+            isOneOff: true,
+          },
+        }),
+      ).toMatchObject({
+        success: true,
+        nextRunAt: "2026-10-10T22:00:00.000Z",
+        nextRunAtLocal: "Sunday, October 11, 2026 at 9:00:00 AM GMT+11",
+      });
+      expect(createTrigger).toHaveBeenCalledWith(
+        ctx,
+        expect.objectContaining({
+          config: {
+            cronExpression: "0 9 11 10 *",
+            timezone: "Australia/Sydney",
+            isOneOff: true,
+          },
+        }),
+      );
     });
 
     it.each(["name", "agentId", "instruction", "type", "config"] as const)(

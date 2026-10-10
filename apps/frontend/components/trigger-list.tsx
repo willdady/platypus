@@ -25,6 +25,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { statusBadge } from "@/components/trigger-run-row";
 import {
   Timer,
   Zap,
@@ -145,6 +148,7 @@ export const TriggerList = ({
   const routes = workspaceRoutes(orgId, workspaceId);
   const [triggerToToggle, setTriggerToToggle] = useState<Trigger | null>(null);
   const [isToggling, setIsToggling] = useState(false);
+  const [showFired, setShowFired] = useState(false);
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -158,7 +162,7 @@ export const TriggerList = ({
     mutate,
   } = useScopedSWR<{
     results: Trigger[];
-  }>("triggers", scope);
+  }>(showFired ? "triggers?includeFired=true" : "triggers", scope);
 
   const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
     "agents",
@@ -214,12 +218,27 @@ export const TriggerList = ({
     return <ListError error={error} subject="triggers" />;
   }
 
+  // Shown even with nothing listed: fired One-offs may be all there is.
+  const showFiredToggle = (
+    <div className="flex items-center gap-2">
+      <Switch
+        id="show-fired-triggers"
+        checked={showFired}
+        onCheckedChange={setShowFired}
+      />
+      <Label htmlFor="show-fired-triggers" className="text-sm font-normal">
+        Show fired
+      </Label>
+    </div>
+  );
+
   if (!triggers.length) {
-    return null;
+    return showFiredToggle;
   }
 
   return (
     <>
+      {showFiredToggle}
       <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
         {triggers.map((trigger) => (
           <li key={trigger.id}>
@@ -237,10 +256,20 @@ export const TriggerList = ({
                           One-off
                         </Badge>
                       )}
-                    {!trigger.enabled && (
-                      <Badge variant="secondary" className="text-xs">
-                        Disabled
-                      </Badge>
+                    {trigger.firedAt ? (
+                      <>
+                        <Badge variant="secondary" className="text-xs">
+                          Fired
+                        </Badge>
+                        {trigger.lastRunStatus &&
+                          statusBadge(trigger.lastRunStatus)}
+                      </>
+                    ) : (
+                      !trigger.enabled && (
+                        <Badge variant="secondary" className="text-xs">
+                          Disabled
+                        </Badge>
+                      )
                     )}
                   </div>
                   {trigger.description && (
@@ -329,23 +358,26 @@ export const TriggerList = ({
                           <List /> View runs
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="cursor-pointer"
-                        onSelect={() => handleToggleEnabled(trigger)}
-                        disabled={
-                          isToggling && triggerToToggle?.id === trigger.id
-                        }
-                      >
-                        {trigger.enabled ? (
-                          <>
-                            <Pause /> Disable
-                          </>
-                        ) : (
-                          <>
-                            <Play /> Enable
-                          </>
-                        )}
-                      </DropdownMenuItem>
+                      {/* A fired One-off is spent: it cannot be re-armed. */}
+                      {!trigger.firedAt && (
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onSelect={() => handleToggleEnabled(trigger)}
+                          disabled={
+                            isToggling && triggerToToggle?.id === trigger.id
+                          }
+                        >
+                          {trigger.enabled ? (
+                            <>
+                              <Pause /> Disable
+                            </>
+                          ) : (
+                            <>
+                              <Play /> Enable
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="cursor-pointer text-destructive focus:text-destructive"

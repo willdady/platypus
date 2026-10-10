@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { desc } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
 import {
   cronTriggerConfigSchema,
   eventTriggerConfigSchema,
@@ -8,10 +8,14 @@ import {
   type CronTriggerConfig,
   type EventTriggerConfig,
   type InboundTriggerConfig,
+  type TriggerRunStatus,
   type TriggerType,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
-import { trigger as triggerTable } from "../db/schema.ts";
+import {
+  trigger as triggerTable,
+  triggerRun as triggerRunTable,
+} from "../db/schema.ts";
 import type { ScopeContext } from "../scope.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { validateCronExpression } from "../utils/cron.ts";
@@ -216,6 +220,68 @@ const parseInboundConfig = (config: unknown): InboundTriggerConfig => {
   return parsed.data;
 };
 
+/** At most this many One-off Triggers that have yet to fire, per Workspace. */
+export const MAX_PENDING_ONE_OFF_TRIGGERS = 50;
+
+const isOneOffConfig = (config: unknown): boolean =>
+  cronTriggerConfigSchema.safeParse(config).data?.isOneOff === true;
+
+/** A One-off Trigger that has not fired yet, enabled or not. */
+const isPendingOneOff = (
+  row: Pick<TriggerRow, "type" | "config" | "firedAt">,
+): boolean => row.type === "cron" && !row.firedAt && isOneOffConfig(row.config);
+
+/**
+ * Throws `ValidationError` when this Workspace already holds its limit of
+ * pending One-off Triggers.
+ */
+// ponytail: count-then-insert, so two concurrent creates can land one over the
+// limit; a bound on runaway Agents, not an exact quota.
+const requireOneOffRoom = async (ctx: ScopeContext): Promise<void> => {
+  const rows = await listOwned(
+    db,
+    "trigger",
+    { workspaceId: ctx.workspaceId },
+    null,
+  );
+  if (rows.filter(isPendingOneOff).length >= MAX_PENDING_ONE_OFF_TRIGGERS) {
+    throw new ValidationError(
+      `This workspace already has ${MAX_PENDING_ONE_OFF_TRIGGERS} one-off triggers that have not yet fired, the most it can hold. Delete one, or wait for one to fire.`,
+    );
+  }
+};
+
+/**
+ * Throws `ValidationError` when an update would re-arm a fired One-off
+ * Trigger: re-enable it, change its type, or change its schedule. Anything
+ * else, such as a rename, is allowed.
+ */
+const requireNotReArmed = (
+  existing: TriggerRow,
+  fields: TriggerUpdateFields,
+): void => {
+  const stored = cronTriggerConfigSchema.safeParse(existing.config).data;
+  const next =
+    fields.config === undefined
+      ? stored
+      : cronTriggerConfigSchema.safeParse(fields.config).data;
+  const sameSchedule =
+    !!stored &&
+    !!next &&
+    next.cronExpression === stored.cronExpression &&
+    next.timezone === stored.timezone &&
+    next.isOneOff === stored.isOneOff;
+  if (
+    fields.enabled === true ||
+    (fields.type !== undefined && fields.type !== existing.type) ||
+    !sameSchedule
+  ) {
+    throw new ValidationError(
+      "This one-off trigger has already fired and cannot be re-enabled or rescheduled. Create a new trigger instead.",
+    );
+  }
+};
+
 const INBOUND_ONLY_IN_UI =
   "Inbound triggers can only be created, edited and deleted by the Workspace Owner in the Triggers page.";
 
@@ -269,6 +335,7 @@ export async function createTrigger(
     const parsed = parseCronConfig(fields.config);
     config = parsed.config;
     nextRunAt = parsed.nextRunAt;
+    if (config.isOneOff) await requireOneOffRoom(ctx);
   } else if (fields.type === "event") {
     config = parseEventConfig(fields.config);
   } else if (fields.type === "inbound") {
@@ -344,6 +411,7 @@ export async function updateTrigger(
       "A trigger's type cannot be changed to or from 'inbound'. Create a new trigger instead.",
     );
   }
+  if (existing.firedAt) requireNotReArmed(existing, fields);
   if (fields.agentId !== undefined) {
     await requireUsableAgent(ctx, fields.agentId);
   }
@@ -396,6 +464,9 @@ export async function updateTrigger(
     if (fields.config !== undefined || fields.type !== undefined) {
       const effectiveConfigInput = fields.config ?? existing.config;
       const parsed = parseCronConfig(effectiveConfigInput);
+      if (parsed.config.isOneOff && !isPendingOneOff(existing)) {
+        await requireOneOffRoom(ctx);
+      }
       updateData.nextRunAt = parsed.nextRunAt;
       if (fields.config !== undefined) {
         updateData.config = parsed.config;
@@ -431,20 +502,53 @@ export async function updateTrigger(
 }
 
 /**
- * This Workspace's Triggers, newest first — only the enabled ones when
- * `enabledOnly` is set.
+ * This Workspace's Triggers, newest first, each with its newest run's status —
+ * only the enabled ones when `enabledOnly` is set. Fired One-off Triggers are
+ * left out unless `includeFired` is set.
  */
 export async function listTriggers(
   ctx: ScopeContext,
-  { enabledOnly = false }: { enabledOnly?: boolean } = {},
-): Promise<TriggerRow[]> {
-  const rows = await listOwned(
-    db,
-    "trigger",
-    { workspaceId: ctx.workspaceId },
-    desc(triggerTable.createdAt),
+  {
+    enabledOnly = false,
+    includeFired = false,
+  }: { enabledOnly?: boolean; includeFired?: boolean } = {},
+): Promise<(TriggerRow & { lastRunStatus: TriggerRunStatus | null })[]> {
+  const rows = (
+    await listOwned(
+      db,
+      "trigger",
+      { workspaceId: ctx.workspaceId },
+      desc(triggerTable.createdAt),
+    )
+  ).filter(
+    (row) => (!enabledOnly || row.enabled) && (includeFired || !row.firedAt),
   );
-  return enabledOnly ? rows.filter((row) => row.enabled) : rows;
+  if (rows.length === 0) return [];
+
+  // Newest first, so the first status seen per Trigger is its latest.
+  const runs = await db
+    .select({
+      triggerId: triggerRunTable.triggerId,
+      status: triggerRunTable.status,
+    })
+    .from(triggerRunTable)
+    .where(
+      inArray(
+        triggerRunTable.triggerId,
+        rows.map((row) => row.id),
+      ),
+    )
+    .orderBy(desc(triggerRunTable.startedAt));
+  const lastStatus = new Map<string, TriggerRunStatus>();
+  for (const run of runs) {
+    if (!lastStatus.has(run.triggerId)) {
+      lastStatus.set(run.triggerId, run.status as TriggerRunStatus);
+    }
+  }
+  return rows.map((row) => ({
+    ...row,
+    lastRunStatus: lastStatus.get(row.id) ?? null,
+  }));
 }
 
 /** A Trigger in this Workspace. Throws `NotFoundError` when not here. */

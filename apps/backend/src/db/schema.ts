@@ -863,6 +863,10 @@ export const trigger = pgTable(
     config: t.jsonb("config").notNull(),
     lastRunAt: t.timestamp("last_run_at"),
     nextRunAt: t.timestamp("next_run_at"),
+    // One-off Triggers only: when the scheduler claimed it. Set = spent — never
+    // re-armed, hidden from the Trigger list by default, and reaped a fixed
+    // time after its run ends. Null on a One-off disabled before it fired.
+    firedAt: t.timestamp("fired_at"),
     // Inbound Triggers only (ADR-0030). The token is shown once and stored as
     // a SHA-256 hash — it is 256 random bits, so a slow hash buys nothing. Null
     // on other types, and on an Inbound Trigger whose token was revoked.

@@ -71,6 +71,7 @@ const makeTrigger = (over: Partial<TriggerRow> = {}): TriggerRow => ({
   config: cronConfig,
   lastRunAt: null,
   nextRunAt: null,
+  firedAt: null,
   tokenHash: null,
   tokenCreatedAt: null,
   tokenExpiresAt: null,

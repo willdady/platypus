@@ -162,10 +162,13 @@ describe("TriggerList cron schedule", () => {
 describe("TriggerList list states", () => {
   // The page around it owns the empty copy, so the list renders nothing at all
   // rather than a second, competing empty state.
-  it("renders nothing when the workspace has no triggers", () => {
-    const { container } = renderTriggers([]);
+  it("renders only the Show fired toggle when the workspace lists no triggers", () => {
+    renderTriggers([]);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(
+      screen.getByRole("switch", { name: "Show fired" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
   });
 
   it("surfaces a failed read rather than rendering an empty list", () => {
