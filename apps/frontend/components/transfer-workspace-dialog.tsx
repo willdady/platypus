@@ -70,6 +70,10 @@ export const TransferWorkspaceAction = ({
   const nameOf = (userId: string) =>
     members.find((m) => m.userId === userId)?.user.name ?? "The current owner";
   const ownProviders = providers.filter((p) => p.workspaceId === workspaceId);
+  // An Org Admin keeps reading every Workspace, theirs or not.
+  const oldOwner = members.find((m) => m.userId === workspace.ownerId);
+  const oldOwnerIsAdmin =
+    oldOwner?.role === "admin" || oldOwner?.isSuperAdmin === true;
 
   const openDialog = () => {
     setStep("choose");
@@ -149,13 +153,16 @@ export const TransferWorkspaceAction = ({
               <ul className="list-disc space-y-1 pl-5">
                 <li>
                   {nameOf(newOwnerId)} becomes the owner.{" "}
-                  {nameOf(workspace.ownerId)} loses access immediately.
+                  {nameOf(workspace.ownerId)}{" "}
+                  {oldOwnerIsAdmin
+                    ? "can no longer chat in it."
+                    : "loses access immediately."}
                 </li>
                 <li>
                   {keepHistory
                     ? `Chats stay, and their Memories move to ${nameOf(newOwnerId)}.`
                     : "Chats, Memories and Notifications are deleted."}{" "}
-                  Boards, Cards, Sandbox files and Dashboards are kept.
+                  Boards, cards, Sandbox files and Dashboards are kept.
                 </li>
                 <li>
                   Every Trigger is switched off, and every Inbound Trigger and

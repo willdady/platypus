@@ -83,7 +83,7 @@ describe("TransferWorkspaceAction", () => {
     expect(screen.getByText(/Olive loses access immediately/)).toBeTruthy();
     expect(screen.getByText(/Every Trigger is switched off/)).toBeTruthy();
     expect(
-      screen.getByText(/Boards, Cards, Sandbox files and Dashboards are kept/),
+      screen.getByText(/Boards, cards, Sandbox files and Dashboards are kept/),
     ).toBeTruthy();
     expect(screen.getByText("Team OpenAI")).toBeTruthy();
     expect(screen.queryByText("Shared Anthropic")).toBeNull();

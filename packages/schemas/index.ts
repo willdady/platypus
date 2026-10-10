@@ -203,8 +203,6 @@ export const workspaceTransferSchema = z.object({
   keepHistory: z.boolean(),
 });
 
-export type WorkspaceTransfer = z.infer<typeof workspaceTransferSchema>;
-
 // Chat
 
 export const chatStatusSchema = z.enum([
