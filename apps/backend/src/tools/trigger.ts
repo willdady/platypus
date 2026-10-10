@@ -37,7 +37,7 @@ export function createTriggerTools(
    * timezone, so the model can check it against the instant the User asked
    * for. Empty for a Trigger with no next run.
    */
-  const nextRunEcho = (record: {
+  const describeNextRun = (record: {
     type: string;
     config: unknown;
     nextRunAt: Date | null;
@@ -285,7 +285,7 @@ export function createTriggerTools(
           return {
             success: true,
             trigger: toPublicTrigger(record),
-            ...nextRunEcho(record),
+            ...describeNextRun(record),
             ...(url && { url }),
           };
         } catch (error) {
@@ -327,7 +327,7 @@ export function createTriggerTools(
         return {
           success: true,
           trigger: toPublicTrigger(record),
-          ...nextRunEcho(record),
+          ...describeNextRun(record),
           ...(url && { url }),
         };
       } catch (error) {

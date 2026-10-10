@@ -235,9 +235,9 @@ const isPendingOneOff = (
  * Throws `ValidationError` when this Workspace already holds its limit of
  * pending One-off Triggers.
  */
-// ponytail: count-then-insert, so two concurrent creates can land one over the
-// limit; a bound on runaway Agents, not an exact quota.
 const requireOneOffRoom = async (ctx: ScopeContext): Promise<void> => {
+  // ponytail: count-then-insert, so two concurrent creates can land one over
+  // the limit; a bound on runaway Agents, not an exact quota.
   const rows = await listOwned(
     db,
     "trigger",
