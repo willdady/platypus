@@ -23,6 +23,12 @@ export const transferRecipients = (
 ): OrgMemberListItem[] =>
   members.filter((m) => m.userId !== ownerId && !m.isBanned);
 
+/** What a transfer does with the Workspace's history, for either choice. */
+export const historyOutcome = (keepHistory: boolean, newOwner: string) =>
+  keepHistory
+    ? `Chats stay, and their Memories move to ${newOwner}.`
+    : "Chats, Memories and Notifications are deleted.";
+
 /** Shown in place of a transfer when nobody can receive one. */
 export const NoRecipientHint = ({ orgId }: { orgId: string }) => (
   <p className="text-sm text-muted-foreground">
@@ -79,9 +85,7 @@ export const TransferFields = ({
           Keep history
         </FieldLabel>
         <FieldDescription>
-          {keepHistory
-            ? "Chats stay, and their Memories move to the new owner."
-            : "Chats, Memories and Notifications are deleted."}
+          {historyOutcome(keepHistory, "the new owner")}
         </FieldDescription>
       </div>
       <Switch

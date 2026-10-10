@@ -162,7 +162,10 @@ export const TriggerList = ({
     mutate,
   } = useScopedSWR<{
     results: Trigger[];
-  }>(showFired ? "triggers?includeFired=true" : "triggers", scope);
+  }>(showFired ? "triggers?includeFired=true" : "triggers", scope, {
+    // Flipping Show fired changes the key; keep the list up while it loads.
+    keepPreviousData: true,
+  });
 
   const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
     "agents",
@@ -206,7 +209,7 @@ export const TriggerList = ({
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !triggersData) {
     return (
       <LoadingRegion label="Loading triggers">
         <TriggerCardsSkeleton />

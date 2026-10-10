@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { asc, desc, inArray } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import {
   cronTriggerConfigSchema,
   eventTriggerConfigSchema,
@@ -11,10 +11,11 @@ import {
   type TriggerRunStatus,
   type TriggerType,
 } from "@platypus/schemas";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import {
   trigger as triggerTable,
   triggerRun as triggerRunTable,
+  workspace as workspaceTable,
 } from "../db/schema.ts";
 import type { ScopeContext } from "../scope.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
@@ -236,13 +237,17 @@ const isPendingOneOff = (
 
 /**
  * Throws `ValidationError` when this Workspace already holds its limit of
- * pending One-off Triggers.
+ * pending One-off Triggers. Holds the Workspace row until `tx` commits, so
+ * concurrent writes count one after the other and cannot land over the limit.
  */
-const requireOneOffRoom = async (ctx: ScopeContext): Promise<void> => {
-  // ponytail: count-then-insert, so two concurrent creates can land one over
-  // the limit; a bound on runaway Agents, not an exact quota.
+const requireOneOffRoom = async (tx: Tx, ctx: ScopeContext): Promise<void> => {
+  await tx
+    .select({ id: workspaceTable.id })
+    .from(workspaceTable)
+    .where(eq(workspaceTable.id, ctx.workspaceId))
+    .for("update");
   const rows = await listOwned(
-    db,
+    tx,
     "trigger",
     { workspaceId: ctx.workspaceId },
     null,
@@ -334,11 +339,12 @@ export async function createTrigger(
   let config: CronTriggerConfig | EventTriggerConfig | InboundTriggerConfig;
   let tokenFields: ReturnType<typeof issuedTokenFields> | undefined;
   let token: string | undefined;
+  let oneOff = false;
   if (fields.type === "cron") {
     const parsed = parseCronConfig(fields.config);
     config = parsed.config;
     nextRunAt = parsed.nextRunAt;
-    if (config.isOneOff) await requireOneOffRoom(ctx);
+    oneOff = parsed.config.isOneOff === true;
   } else if (fields.type === "event") {
     config = parseEventConfig(fields.config);
   } else if (fields.type === "inbound") {
@@ -353,26 +359,26 @@ export async function createTrigger(
     );
   }
 
-  const [row] = await db
-    .insert(triggerTable)
-    .values({
-      id: nanoid(),
-      workspaceId: ctx.workspaceId,
-      agentId: fields.agentId,
-      type: fields.type,
-      name: fields.name,
-      description: fields.description ?? null,
-      instruction: fields.instruction,
-      enabled: fields.enabled ?? CREATE_DEFAULTS.enabled,
-      maxRunsToKeep: fields.maxRunsToKeep ?? CREATE_DEFAULTS.maxRunsToKeep,
-      search: fields.search ?? CREATE_DEFAULTS.search,
-      includeMemories:
-        fields.includeMemories ?? CREATE_DEFAULTS.includeMemories,
-      config,
-      nextRunAt,
-      ...tokenFields,
-    })
-    .returning();
+  const values = {
+    id: nanoid(),
+    workspaceId: ctx.workspaceId,
+    agentId: fields.agentId,
+    type: fields.type,
+    name: fields.name,
+    description: fields.description ?? null,
+    instruction: fields.instruction,
+    enabled: fields.enabled ?? CREATE_DEFAULTS.enabled,
+    maxRunsToKeep: fields.maxRunsToKeep ?? CREATE_DEFAULTS.maxRunsToKeep,
+    search: fields.search ?? CREATE_DEFAULTS.search,
+    includeMemories: fields.includeMemories ?? CREATE_DEFAULTS.includeMemories,
+    config,
+    nextRunAt,
+    ...tokenFields,
+  };
+  const [row] = await db.transaction(async (tx) => {
+    if (oneOff) await requireOneOffRoom(tx, ctx);
+    return tx.insert(triggerTable).values(values).returning();
+  });
   // The token leaves here once, beside the row, and is never readable again:
   // only its hash was stored.
   return token ? { ...row, issuedToken: token } : row;
@@ -427,6 +433,8 @@ export async function updateTrigger(
   const updateData: Partial<TriggerRow> = {
     updatedAt: new Date(),
   };
+  /** Whether the update makes this a pending One-off it was not before. */
+  let needsOneOffRoom = false;
   if (fields.agentId !== undefined) updateData.agentId = fields.agentId;
   if (fields.name !== undefined) updateData.name = fields.name;
   if (fields.description !== undefined)
@@ -467,9 +475,8 @@ export async function updateTrigger(
     if (fields.config !== undefined || fields.type !== undefined) {
       const effectiveConfigInput = fields.config ?? existing.config;
       const parsed = parseCronConfig(effectiveConfigInput);
-      if (parsed.config.isOneOff && !isPendingOneOff(existing)) {
-        await requireOneOffRoom(ctx);
-      }
+      needsOneOffRoom =
+        parsed.config.isOneOff === true && !isPendingOneOff(existing);
       updateData.nextRunAt = parsed.nextRunAt;
       if (fields.config !== undefined) {
         updateData.config = parsed.config;
@@ -492,12 +499,15 @@ export async function updateTrigger(
     );
   }
 
-  const row = await updateOwned(
-    db,
-    "trigger",
-    { id: triggerId, workspaceId: ctx.workspaceId },
-    updateData,
-  );
+  const row = await db.transaction(async (tx) => {
+    if (needsOneOffRoom) await requireOneOffRoom(tx, ctx);
+    return updateOwned(
+      tx,
+      "trigger",
+      { id: triggerId, workspaceId: ctx.workspaceId },
+      updateData,
+    );
+  });
   if (!row) {
     throw new NotFoundError("Trigger not found");
   }

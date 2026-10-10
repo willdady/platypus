@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import {
   agent as agentTable,
   provider as providerTable,
@@ -9,8 +9,6 @@ import { prepareWorkspaceSandboxTeardown } from "../sandbox/teardown.ts";
 import { workspaceStorageKeyPrefix } from "../storage/keys.ts";
 import { deleteStoredPrefix } from "../storage/utils.ts";
 import { deleteAvatar } from "./avatar.ts";
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * What deleting a Workspace leaves outside the database — its Sandboxes, its

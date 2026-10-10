@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { MemberWorkspaceDecision } from "@platypus/schemas";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import {
   organizationMember,
   workspace as workspaceTable,
@@ -14,16 +14,14 @@ import {
   applyWorkspaceTransfer,
   finishTransfer,
   type TransferAftermath,
-  type Tx,
 } from "./workspace-transfer.ts";
 
-const requireEachOwnedDecided = async (
+const ownedWorkspaces = (
   database: typeof db | Tx,
   orgId: string,
   userId: string,
-  workspaces: MemberWorkspaceDecision[],
-) => {
-  const owned = await database
+) =>
+  database
     .select({ id: workspaceTable.id })
     .from(workspaceTable)
     .where(
@@ -32,6 +30,11 @@ const requireEachOwnedDecided = async (
         eq(workspaceTable.ownerId, userId),
       ),
     );
+
+const requireEachOwnedDecided = (
+  owned: { id: string }[],
+  workspaces: MemberWorkspaceDecision[],
+) => {
   const decided = new Set(workspaces.map(({ workspaceId }) => workspaceId));
   if (
     decided.size !== workspaces.length ||
@@ -62,7 +65,10 @@ export const removeMember = async ({
   workspaces: MemberWorkspaceDecision[];
   transferredBy: string;
 }): Promise<void> => {
-  await requireEachOwnedDecided(db, orgId, member.userId, workspaces);
+  requireEachOwnedDecided(
+    await ownedWorkspaces(db, orgId, member.userId),
+    workspaces,
+  );
 
   // Read before the transaction, while the rows exist; run only after it
   // commits, so a refused removal tears nothing down.
@@ -82,7 +88,13 @@ export const removeMember = async ({
       .from(organizationMember)
       .where(eq(organizationMember.id, member.id))
       .for("update");
-    await requireEachOwnedDecided(tx, orgId, member.userId, workspaces);
+    // Locked, so a transfer of one of them already under way finishes first,
+    // and the Workspace it moved drops out of the set rather than being
+    // deleted or transferred again from its new Owner.
+    requireEachOwnedDecided(
+      await ownedWorkspaces(tx, orgId, member.userId).for("update"),
+      workspaces,
+    );
     const aftermaths: TransferAftermath[] = [];
     for (const decision of workspaces) {
       if (decision.action === "transfer") {

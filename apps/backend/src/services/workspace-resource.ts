@@ -10,7 +10,7 @@ import {
   sandbox as sandboxTable,
   a2aEndpoint as a2aEndpointTable,
 } from "../db/schema.ts";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import { NotFoundError } from "../errors.ts";
 
 /**
@@ -45,7 +45,7 @@ import { NotFoundError } from "../errors.ts";
  *   its ref carries the scope keys alone and every predicate is scope-only.
  */
 
-type Database = typeof db;
+type Database = typeof db | Tx;
 
 /**
  * The flat Workspace-child resource types — one row per id, scoped by

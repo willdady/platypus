@@ -1,6 +1,10 @@
 import { and, eq, ne, or } from "drizzle-orm";
-import { db } from "../../index.ts";
-import { chat as chatTable, chatMessage } from "../../db/schema.ts";
+import { db, type Tx } from "../../index.ts";
+import {
+  chat as chatTable,
+  chatMessage,
+  workspace as workspaceTable,
+} from "../../db/schema.ts";
 import { ConflictError, isUniqueViolation } from "../../errors.ts";
 import { logger } from "../../logger.ts";
 import { generateChatMetadata } from "../../services/chat-metadata.ts";
@@ -23,12 +27,12 @@ import type {
 /** Why a Chat refuses a turn, a delete or a leaf switch while a run holds it. */
 export const CHAT_BUSY_MESSAGE = "A reply is still being written in this Chat";
 
-/** The transaction a Chat's claim, or its terminal write, is written in. */
-export type ChatClaimTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 export type ChatSinkParams = {
   orgId: string;
   workspaceId: string;
+  /** The Owner this turn acts as; the claim refuses a Workspace that has
+   *  since been transferred to someone else. */
+  ownerId: string;
   /** The user message this turn submits; absent on a regenerate. */
   message?: PlatypusUIMessage;
   /**
@@ -59,14 +63,14 @@ export type ChatSinkParams = {
    * Task records its end here (ADR-0032). Anything that must follow the
    * commit, such as a push, belongs in `onEnded`.
    */
-  onEnding?: (tx: ChatClaimTx, status: RunStatus) => Promise<unknown>;
+  onEnding?: (tx: Tx, status: RunStatus) => Promise<unknown>;
   /**
    * Writes rows that belong to the turn in the claim's own transaction, after
    * its user message: they commit with the claim, so no other call sees the
    * Chat `running` without them, or fail it, so the turn never starts. An A2A
    * turn's Task is made here (ADR-0032).
    */
-  onClaimed?: (tx: ChatClaimTx) => Promise<void>;
+  onClaimed?: (tx: Tx) => Promise<void>;
   /** Override the FlushScheduler interval. Defaults to 5 seconds. */
   flushIntervalMs?: number;
 };
@@ -136,6 +140,22 @@ export class ChatSink implements RunSink {
     // runner fails the run and the request with it. The pinned Memories block
     // (ADR-0020) is written so a re-take on this turn survives for the next.
     await db.transaction(async (tx) => {
+      // A Workspace transfer holds this row while it lists the Chats to
+      // cancel, so a turn either claims before and is cancelled with them, or
+      // waits and finds a new Owner it was not started as (ADR-0035).
+      const [owned] = await tx
+        .select({ id: workspaceTable.id })
+        .from(workspaceTable)
+        .where(
+          and(
+            eq(workspaceTable.id, workspaceId),
+            eq(workspaceTable.ownerId, this.params.ownerId),
+          ),
+        )
+        .for("share");
+      if (!owned) {
+        throw new ConflictError("This Workspace has been transferred");
+      }
       const now = new Date();
       const running = {
         status: "running",
@@ -329,7 +349,7 @@ export class ChatSink implements RunSink {
    * has called `onEnded`.
    */
   private async writeStatus(status: RunStatus): Promise<void> {
-    const write = async (tx: ChatClaimTx, recordEnd: boolean) => {
+    const write = async (tx: Tx, recordEnd: boolean) => {
       await tx
         .update(chatTable)
         .set({ status, ...this.restoredLeaf(), updatedAt: new Date() })
