@@ -143,7 +143,7 @@ describe("AppSidebar chat history", () => {
     expect(screen.getByText("First chat")).toBeInTheDocument();
   });
 
-  it("labels an A2A Chat with its client's name", () => {
+  it("marks an A2A Chat with an icon naming its client", () => {
     seedHeader();
     setRead("ws1", CHAT_LIST, {
       results: [
@@ -155,7 +155,14 @@ describe("AppSidebar chat history", () => {
     });
     renderSidebar();
 
-    expect(screen.getByText("Telegram via Hermes")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Over A2A from Telegram via Hermes" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Over A2A from Telegram via Hermes Order question",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the last list, without a false no-match, while a search is in flight", () => {

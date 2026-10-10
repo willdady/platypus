@@ -70,6 +70,7 @@ import {
   Settings,
   Search,
   Loader2,
+  Network,
   X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -488,12 +489,16 @@ export function AppSidebar() {
                                   aria-label="Run in progress"
                                 />
                               )}
-                              <p className="truncate">{chat.title}</p>
                               {chat.a2aClientName && (
-                                <span className="ml-auto max-w-[40%] shrink-0 truncate text-xs text-muted-foreground">
-                                  {chat.a2aClientName}
-                                </span>
+                                <Network
+                                  className="h-3 w-3 shrink-0 text-muted-foreground"
+                                  role="img"
+                                  aria-label={`Over A2A from ${chat.a2aClientName}`}
+                                >
+                                  <title>{`Over A2A from ${chat.a2aClientName}`}</title>
+                                </Network>
                               )}
+                              <p className="truncate">{chat.title}</p>
                             </Link>
                           </SidebarMenuButton>
                           {(canChange ||
