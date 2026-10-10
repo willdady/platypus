@@ -515,7 +515,8 @@ export async function updateTrigger(
 }
 
 /**
- * This Workspace's Triggers, newest first, each with its newest run's status —
+ * This Workspace's Triggers, newest first, each with its newest run's status
+ * and start time —
  * only the enabled ones when `enabledOnly` is set. Fired One-off Triggers are
  * left out unless `includeFired` is set.
  */
@@ -525,7 +526,12 @@ export async function listTriggers(
     enabledOnly = false,
     includeFired = false,
   }: { enabledOnly?: boolean; includeFired?: boolean } = {},
-): Promise<(TriggerRow & { lastRunStatus: TriggerRunStatus | null })[]> {
+): Promise<
+  (TriggerRow & {
+    lastRunStatus: TriggerRunStatus | null;
+    lastRunStartedAt: Date | null;
+  })[]
+> {
   const rows = (
     await listOwned(
       db,
@@ -543,6 +549,7 @@ export async function listTriggers(
     .selectDistinctOn([triggerRunTable.triggerId], {
       triggerId: triggerRunTable.triggerId,
       status: triggerRunTable.status,
+      startedAt: triggerRunTable.startedAt,
     })
     .from(triggerRunTable)
     .where(
@@ -552,13 +559,15 @@ export async function listTriggers(
       ),
     )
     .orderBy(asc(triggerRunTable.triggerId), desc(triggerRunTable.startedAt));
-  const lastStatus = new Map(
-    runs.map((run) => [run.triggerId, run.status as TriggerRunStatus]),
-  );
-  return rows.map((row) => ({
-    ...row,
-    lastRunStatus: lastStatus.get(row.id) ?? null,
-  }));
+  const lastRun = new Map(runs.map((run) => [run.triggerId, run]));
+  return rows.map((row) => {
+    const run = lastRun.get(row.id);
+    return {
+      ...row,
+      lastRunStatus: (run?.status as TriggerRunStatus | undefined) ?? null,
+      lastRunStartedAt: run?.startedAt ?? null,
+    };
+  });
 }
 
 /** A Trigger in this Workspace. Throws `NotFoundError` when not here. */

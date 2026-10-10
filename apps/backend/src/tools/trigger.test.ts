@@ -111,6 +111,7 @@ describe("createTriggerTools", () => {
         config: { cronExpression: "0 9 * * *", isOneOff: true },
         firedAt: createdAt,
         lastRunStatus: "success",
+        lastRunStartedAt: createdAt,
       },
     ] as never);
 
@@ -128,6 +129,7 @@ describe("createTriggerTools", () => {
           lastRunAt: null,
           firedAt: createdAt,
           lastRunStatus: "success",
+          lastRunStartedAt: createdAt,
           createdAt,
         },
       ],

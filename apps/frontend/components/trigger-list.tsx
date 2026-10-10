@@ -59,6 +59,7 @@ import {
 import Link from "next/link";
 import { useBackendUrl } from "@/components/auth-provider";
 import { formatDateTime } from "@/lib/format-date";
+import { formatRelativeTime } from "@/lib/relative-time";
 import cronstrue from "cronstrue";
 import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -311,13 +312,9 @@ export const TriggerList = ({
                         </Badge>
                       )}
                     {trigger.firedAt ? (
-                      <>
-                        <Badge variant="secondary" className="text-xs">
-                          Fired
-                        </Badge>
-                        {trigger.lastRunStatus &&
-                          statusBadge(trigger.lastRunStatus)}
-                      </>
+                      <Badge variant="secondary" className="text-xs">
+                        Fired
+                      </Badge>
                     ) : (
                       !trigger.enabled && (
                         <Badge variant="secondary" className="text-xs">
@@ -378,6 +375,16 @@ export const TriggerList = ({
                             </Badge>
                           ),
                         )}
+                      </span>
+                    )}
+                    {trigger.lastRunStatus && trigger.lastRunStartedAt && (
+                      <span className="flex items-center gap-1">
+                        <span>Last run:</span>
+                        {statusBadge(trigger.lastRunStatus)}
+                        {" · "}
+                        <span title={formatDateTime(trigger.lastRunStartedAt)}>
+                          {formatRelativeTime(trigger.lastRunStartedAt)}
+                        </span>
                       </span>
                     )}
                   </div>

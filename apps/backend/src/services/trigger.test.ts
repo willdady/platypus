@@ -690,7 +690,7 @@ describe("trigger module", () => {
       ).toEqual(["fired", "trig-1"]);
     });
 
-    it("lists each Trigger with its newest run's status", async () => {
+    it("lists each Trigger with its newest run's status and start time", async () => {
       world({
         trigger: [fired(), triggerRow()],
         trigger_run: [
@@ -712,10 +712,18 @@ describe("trigger module", () => {
       const result = await listTriggers(ctx, { includeFired: true });
 
       expect(
-        result.map(({ id, lastRunStatus }) => ({ id, lastRunStatus })),
+        result.map(({ id, lastRunStatus, lastRunStartedAt }) => ({
+          id,
+          lastRunStatus,
+          lastRunStartedAt,
+        })),
       ).toEqual([
-        { id: "fired", lastRunStatus: "failed" },
-        { id: "trig-1", lastRunStatus: null },
+        {
+          id: "fired",
+          lastRunStatus: "failed",
+          lastRunStartedAt: new Date("2026-01-02T09:00:00Z"),
+        },
+        { id: "trig-1", lastRunStatus: null, lastRunStartedAt: null },
       ]);
     });
   });

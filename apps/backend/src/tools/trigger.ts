@@ -116,6 +116,7 @@ export function createTriggerTools(
         lastRunAt: row.lastRunAt,
         firedAt: row.firedAt,
         lastRunStatus: row.lastRunStatus,
+        lastRunStartedAt: row.lastRunStartedAt,
         createdAt: row.createdAt,
       }));
 

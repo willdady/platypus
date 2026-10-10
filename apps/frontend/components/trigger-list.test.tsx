@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import type { Trigger } from "@platypus/schemas";
 import {
   authMock,
@@ -26,6 +26,13 @@ vi.mock("swr", () => swrMock);
 vi.mock("@/lib/format-date", () => ({
   formatDateTime: (value: Date | string | number) =>
     `formatted:${new Date(value).toISOString()}`,
+}));
+
+// Likewise for the last run's relative time, which would otherwise move with
+// the clock.
+vi.mock("@/lib/relative-time", () => ({
+  formatRelativeTime: (value: Date | string | number) =>
+    `relative:${new Date(value).toISOString()}`,
 }));
 
 import { TriggerList } from "./trigger-list";
@@ -314,5 +321,91 @@ describe("TriggerList type filter", () => {
     expect(
       screen.getByRole("switch", { name: "Show fired" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("TriggerList last run", () => {
+  const startedAt = "2026-02-01T08:00:00.000Z";
+  const ran = (trigger: Record<string, unknown>, status = "success"): Trigger =>
+    ({
+      enabled: true,
+      agentId: "agent1",
+      lastRunStatus: status,
+      lastRunStartedAt: startedAt,
+      ...trigger,
+    }) as unknown as Trigger;
+
+  const lastRunLine = (name: string) =>
+    within(screen.getByText(name).closest("li") as HTMLElement).queryByText(
+      "Last run:",
+    )?.parentElement ?? null;
+
+  it("shows every type's last run status and when it started", () => {
+    renderTriggers([
+      ran({ ...cronTrigger }),
+      ran(
+        {
+          id: "t5",
+          name: "Card watcher",
+          type: "event",
+          config: { events: ["card.created"] },
+        },
+        "failed",
+      ),
+      ran(
+        {
+          id: "t2",
+          name: "Ready for AI",
+          type: "inbound",
+          config: { inputs: [], recordKey: "", tokenExpiryDays: 90 },
+          tokenStatus: "active",
+        },
+        "running",
+      ),
+    ]);
+
+    for (const [name, label] of [
+      ["Nightly job", "Success"],
+      ["Card watcher", "Failed"],
+      ["Ready for AI", "Running"],
+    ]) {
+      const line = lastRunLine(name);
+      expect(line).toHaveTextContent(label);
+      expect(line).toHaveTextContent(`relative:${startedAt}`);
+    }
+    expect(screen.getAllByTitle(`formatted:${startedAt}`)).toHaveLength(3);
+  });
+
+  it("shows no last run line for a trigger that has never run", () => {
+    renderTriggers([
+      { ...cronTrigger, lastRunStatus: null, lastRunStartedAt: null },
+    ]);
+
+    expect(screen.queryByText("Last run:")).toBeNull();
+  });
+
+  it("keeps Fired in a fired One-off's title row and its status on the last run line", () => {
+    renderTriggers([
+      ran(
+        {
+          ...cronTrigger,
+          enabled: false,
+          config: { ...cronTrigger.config, isOneOff: true },
+          firedAt: "2026-02-01T08:00:00.000Z",
+        },
+        "failed",
+      ),
+    ]);
+
+    expect(screen.getByText("Fired")).toBeInTheDocument();
+    expect(screen.getAllByText("Failed")).toHaveLength(1);
+    expect(lastRunLine("Nightly job")).toHaveTextContent("Failed");
+  });
+
+  it("shows both Disabled and the failure for a disabled trigger", () => {
+    renderTriggers([ran({ ...cronTrigger, enabled: false }, "failed")]);
+
+    expect(screen.getByText("Disabled")).toBeInTheDocument();
+    expect(lastRunLine("Nightly job")).toHaveTextContent("Failed");
   });
 });

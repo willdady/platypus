@@ -59,8 +59,7 @@ A One-off Trigger is spent once it fires. It stays switched off for good: you
 cannot re-enable it or change its schedule, only rename or delete it, so its
 form greys out the schedule and **Enabled**. To run it again, create a new one.
 A fired One-off Trigger drops out of the Triggers list and the Workspace home
-count; switch on **Show fired** above the list to see it, with the status of
-its run. **Show fired** is greyed out while the list shows only **Event** or
+count; switch on **Show fired** above the list to see it. **Show fired** is greyed out while the list shows only **Event** or
 **Inbound** Triggers, since only a Cron Trigger can be a One-off. It is deleted, together with its run, **7 days** after that run ends,
 whether the run succeeded or not.
 
@@ -530,8 +529,14 @@ Workspace are there, newest first, each row naming the Trigger it came from and
 linking to it. Older runs are pruned per Trigger, keeping at least its newest
 **Max Runs to Keep** — see [What a run does](#what-a-run-does).
 
-That is the page that answers "what fired here recently?" and "which Trigger
-just failed?". Two filters narrow it, and both live in the address bar, so a
+To see whether a Trigger is failing, you don't need this page: every Trigger in
+the Workspace home list shows a **Last run** line with its newest run's status
+and how long ago it started. Hover the time for the exact date. A Trigger that
+has never run shows no Last run line. The list refreshes when you return to the
+tab, so a _Running_ status there can lag behind the run.
+
+Trigger runs is for history and detail: "what fired here recently?" and "why
+did that run fail?". Two filters narrow it, and both live in the address bar, so a
 filtered view survives a refresh and can be sent to a colleague as a link:
 
 - **Trigger** — all Triggers, or one of them. **View runs** on a Trigger's

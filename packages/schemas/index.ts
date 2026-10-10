@@ -2448,6 +2448,9 @@ export const triggerSchema = z.object({
   firedAt: z.date().nullable().optional(),
   // The newest run's status, on list reads; null before the first run.
   lastRunStatus: triggerRunStatusSchema.nullable().optional(),
+  // When that newest run started, on list reads; null before the first run.
+  // Unlike `lastRunAt`, it always describes the same run as `lastRunStatus`.
+  lastRunStartedAt: z.date().nullable().optional(),
   // Inbound Triggers only. The token itself is never returned after it is
   // issued; these describe it.
   tokenStatus: bearerTokenStatusSchema.optional(),

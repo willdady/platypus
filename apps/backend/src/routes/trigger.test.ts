@@ -92,21 +92,39 @@ describe("Trigger Routes", () => {
         stubAuthLookups();
         mockDb.orderBy.mockResolvedValueOnce([cronTrigger, fired]);
         mockDb.orderBy.mockResolvedValueOnce([
-          { triggerId: "trig-fired", status: "success" },
+          {
+            triggerId: "trig-fired",
+            status: "success",
+            startedAt: new Date("2026-01-02T09:00:00Z"),
+          },
         ]);
         const res = await app.request(`${baseUrl}${query}`);
         expect(res.status).toBe(200);
         return (
           (await res.json()) as {
-            results: { id: string; lastRunStatus: string | null }[];
+            results: {
+              id: string;
+              lastRunStatus: string | null;
+              lastRunStartedAt: string | null;
+            }[];
           }
-        ).results.map(({ id, lastRunStatus }) => ({ id, lastRunStatus }));
+        ).results.map(({ id, lastRunStatus, lastRunStartedAt }) => ({
+          id,
+          lastRunStatus,
+          lastRunStartedAt,
+        }));
       };
 
-      expect(await list("")).toEqual([{ id: "trig-1", lastRunStatus: null }]);
+      expect(await list("")).toEqual([
+        { id: "trig-1", lastRunStatus: null, lastRunStartedAt: null },
+      ]);
       expect(await list("?includeFired=true")).toEqual([
-        { id: "trig-1", lastRunStatus: null },
-        { id: "trig-fired", lastRunStatus: "success" },
+        { id: "trig-1", lastRunStatus: null, lastRunStartedAt: null },
+        {
+          id: "trig-fired",
+          lastRunStatus: "success",
+          lastRunStartedAt: "2026-01-02T09:00:00.000Z",
+        },
       ]);
     });
 
