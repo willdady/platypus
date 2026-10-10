@@ -51,8 +51,9 @@ Choose a **Schedule Mode**:
 - **Advanced** — enter a raw **Cron Expression** (`minute hour day-of-month month
 day-of-week`), e.g. `0 9 * * *` for "every day at 9:00 AM".
 
-Set the **Timezone** (defaults to your browser's) — the schedule is evaluated in
-that zone. A **Next Run Preview** shows when it will fire next. Toggle **One-off
+Set the **Timezone** — the schedule is evaluated in that zone. A new Trigger
+defaults to the **Timezone** on your profile, then your browser's, then `UTC`;
+editing a Trigger shows the zone it was saved with. A **Next Run Preview** shows when it will fire next. Toggle **One-off
 Trigger** to run once, at the first time the schedule names.
 
 A One-off Trigger is spent once it fires. It stays switched off for good: you
@@ -75,9 +76,10 @@ refused; delete one or wait for one to fire.
 
 An Agent with the **Triggers** Tool set can create One-off Triggers too, for
 example when you ask it to remind you of something tomorrow. It reports back the
-time the Trigger will fire, in UTC and in the Trigger's timezone. If it does not
-know your timezone it asks you, so tell it rather than letting the time be read
-as UTC.
+time the Trigger will fire, in UTC and in the Trigger's timezone. Set a
+**Timezone** on your profile and the Agent schedules in it; without one, it asks
+you, so tell it rather than letting the time be read in the deployment's default
+zone.
 
 Once saved, the Triggers list describes the schedule in plain English with its
 timezone, such as "At 09:00 AM (UTC)". Hover it to see the underlying cron

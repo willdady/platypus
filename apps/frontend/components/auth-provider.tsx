@@ -9,6 +9,7 @@ import {
   useMemo,
 } from "react";
 import { createAuthClient } from "better-auth/react";
+import { inferAdditionalFields } from "better-auth/client/plugins";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import type { Workspace } from "@platypus/schemas";
@@ -38,6 +39,8 @@ interface User {
   banned: boolean | null;
   banReason: string | null;
   banExpires: Date | null;
+  /** The User timezone (an IANA name), or null when unset. */
+  timezone?: string | null;
 }
 
 interface Session {
@@ -58,7 +61,7 @@ interface AuthContextType {
   isPending: boolean;
   isAuthLoading: boolean;
   error: Error | null;
-  authClient: ReturnType<typeof createAuthClient>;
+  authClient: AuthClient;
   refreshSession: () => Promise<void>;
   orgMembership: OrgMembership | null;
   /** The named actor for this request — see `lib/authorization.ts`. */
@@ -100,11 +103,25 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // client and a new request: one reload sent 300+ `get-session` calls and
 // tripped the backend's rate limiter (#1216). Here the store is created once,
 // so every attempt reads the same one and it fetches once.
-const authClients = new Map<string, ReturnType<typeof createAuthClient>>();
+const authClients = new Map<string, AuthClient>();
+const newAuthClient = (backendUrl: string) =>
+  createAuthClient({
+    baseURL: backendUrl,
+    basePath: "/auth",
+    // Mirrors the backend's user additional fields so `updateUser` accepts them
+    plugins: [
+      inferAdditionalFields({
+        user: { timezone: { type: "string", required: false } },
+      }),
+    ],
+  });
+
+type AuthClient = ReturnType<typeof newAuthClient>;
+
 const getAuthClient = (backendUrl: string) => {
   let client = authClients.get(backendUrl);
   if (!client) {
-    client = createAuthClient({ baseURL: backendUrl, basePath: "/auth" });
+    client = newAuthClient(backendUrl);
     authClients.set(backendUrl, client);
   }
   return client;

@@ -55,7 +55,7 @@ import {
   InboundTokenDialog,
   inboundEndpointUrl,
 } from "@/components/inbound-token-dialog";
-import { useBackendUrl } from "@/components/auth-provider";
+import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   type Trigger,
   type Agent,
@@ -95,17 +95,7 @@ import {
 import { joinUrl } from "@/lib/utils";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import { TRIGGER_TYPE_LABELS } from "@/components/trigger-list";
-
-const TIMEZONES = ["UTC", ...Intl.supportedValuesOf("timeZone")];
-
-const getBrowserTimezone = (): string => {
-  try {
-    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return TIMEZONES.includes(browserTz) ? browserTz : "UTC";
-  } catch {
-    return "UTC";
-  }
-};
+import { getBrowserTimezone, TIMEZONES } from "@/lib/timezones";
 
 type Frequency =
   | "every-5-minutes"
@@ -479,6 +469,9 @@ const TriggerForm = ({
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const backendUrl = useBackendUrl();
+  const { user } = useAuth();
+  // A new Trigger's zone: the User timezone, else the browser's, else UTC
+  const defaultTimezone = user?.timezone ?? getBrowserTimezone();
 
   // Whether the Organization gate lets this Workspace take calls, so an Owner
   // is told before they wire up a caller that would only ever get 404.
@@ -549,7 +542,7 @@ const TriggerForm = ({
       agentId: "",
       instruction: "",
       cronExpression: "0 9 * * *",
-      timezone: getBrowserTimezone(),
+      timezone: defaultTimezone,
       isOneOff: false,
       enabled: true,
       maxRunsToKeep: 10,
@@ -571,7 +564,7 @@ const TriggerForm = ({
       timezone:
         trigger.type === "cron"
           ? (trigger.config as CronTriggerConfig).timezone
-          : getBrowserTimezone(),
+          : defaultTimezone,
       isOneOff:
         trigger.type === "cron"
           ? (trigger.config as CronTriggerConfig).isOneOff
@@ -689,6 +682,16 @@ const TriggerForm = ({
       router.push(workspaceRoutes(orgId, workspaceId).root);
     },
     failureMessage: "Error saving trigger",
+  });
+
+  // On a cold load the session lands after mount: move a new Trigger still on
+  // the browser's zone onto the User timezone once it arrives.
+  useResetOnChange(user?.timezone, () => {
+    const timezone = user?.timezone;
+    if (triggerId || !timezone) return;
+    setFormData((prev) =>
+      prev.timezone === getBrowserTimezone() ? { ...prev, timezone } : prev,
+    );
   });
 
   const {

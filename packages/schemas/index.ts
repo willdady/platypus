@@ -2281,6 +2281,21 @@ export const webhookEventSchema = z.enum([
 
 export type WebhookEvent = z.infer<typeof webhookEventSchema>;
 
+// Timezone
+
+/** An IANA timezone name: any zone `Intl.DateTimeFormat` accepts, plus `UTC`. */
+export const timezoneSchema = z.string().refine(
+  (tz) => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: tz });
+      return tz !== "";
+    } catch {
+      return false;
+    }
+  },
+  { message: "Invalid timezone" },
+);
+
 // Trigger
 
 export const triggerTypeSchema = z.enum(["cron", "event", "inbound"]);

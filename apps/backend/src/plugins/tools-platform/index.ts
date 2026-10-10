@@ -47,8 +47,9 @@ export const plugin: PlatypusPlugin = {
         category: "Automation",
         description:
           "Manage triggers (cron schedules, one-off runs and event-based) including listing agents, creating, editing, and viewing triggers, and getting the current time",
-        tools: ({ workspaceId, orgId, frontendUrl }) =>
-          createTriggerTools(workspaceId, orgId, frontendUrl),
+        // Core always fills `timezone`; it is optional only in the SDK type
+        tools: ({ workspaceId, orgId, frontendUrl, timezone = "UTC" }) =>
+          createTriggerTools(workspaceId, orgId, frontendUrl, timezone),
       },
       {
         id: "agent-discovery",

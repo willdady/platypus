@@ -1,8 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
 
-const TIMEZONE = process.env.TIMEZONE || "UTC";
-
 /** A trailing `Z`/`±HH:MM`/`±HHMM`, or a `GMT`/`UTC` marker. */
 const EXPLICIT_OFFSET = /(?:Z|[+-]\d{2}:?\d{2})$|\b(?:GMT|UTC)\b/i;
 
@@ -61,25 +59,27 @@ function parseInZone(dateTime: string, timeZone: string): Date {
   return new Date(wall - zoneOffsetMs(guess, timeZone));
 }
 
-export const getCurrentTime = tool({
-  description:
-    "Get the current date and time. Use this when the user asks what time it is, what day it is, or needs to know the current date.",
-  inputSchema: z.object({}),
-  execute: () => {
-    const now = new Date();
-    const formatted = new Intl.DateTimeFormat("en-US", {
-      dateStyle: "full",
-      timeStyle: "long",
-      timeZone: TIMEZONE,
-    }).format(now);
+/** `getCurrentTime`, reporting in `timezone` — the acting User's effective zone. */
+export const createGetCurrentTime = (timezone: string) =>
+  tool({
+    description:
+      "Get the current date and time. Use this when the user asks what time it is, what day it is, or needs to know the current date.",
+    inputSchema: z.object({}),
+    execute: () => {
+      const now = new Date();
+      const formatted = new Intl.DateTimeFormat("en-US", {
+        dateStyle: "full",
+        timeStyle: "long",
+        timeZone: timezone,
+      }).format(now);
 
-    return {
-      timezone: TIMEZONE,
-      timestamp: now.toISOString(),
-      formatted,
-    };
-  },
-});
+      return {
+        timezone,
+        timestamp: now.toISOString(),
+        formatted,
+      };
+    },
+  });
 
 export const convertTimezone = tool({
   description:
@@ -139,4 +139,10 @@ export const convertTimezone = tool({
       isoDateTime,
     };
   },
+});
+
+/** The `time` Tool set, reporting in the acting User's effective `timezone`. */
+export const createTimeTools = (timezone: string) => ({
+  getCurrentTime: createGetCurrentTime(timezone),
+  convertTimezone,
 });

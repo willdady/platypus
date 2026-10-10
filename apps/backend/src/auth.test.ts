@@ -29,6 +29,48 @@ const loadAdvancedOptions = async (): Promise<AdvancedOptions> =>
   (await loadAuth()).options as AdvancedOptions;
 
 /**
+ * The composed options, run for real: the same `emailAndPassword` block and
+ * plugins, with an in-memory database in place of Postgres. The tables are
+ * pre-declared because the adapter reads a missing one as an error, not as
+ * empty. Password hashing is swapped for a reversible stand-in: which
+ * endpoints the fence leaves open does not depend on the hash, and scrypt
+ * costs seconds per test.
+ */
+const runnableAuth = async () => {
+  const { options } = await loadAuth();
+  return betterAuth({
+    ...options,
+    emailAndPassword: {
+      ...options.emailAndPassword,
+      password: {
+        hash: (password) => Promise.resolve(`hashed:${password}`),
+        verify: ({ hash, password }) =>
+          Promise.resolve(hash === `hashed:${password}`),
+      },
+    },
+    database: memoryAdapter({
+      user: [],
+      session: [],
+      account: [],
+      verification: [],
+    }),
+  });
+};
+
+/** The `Cookie` header a browser would send back after this sign-in. */
+const sessionCookie = (response: Response): string =>
+  response.headers
+    .getSetCookie()
+    .map((cookie) => cookie.split(";")[0])
+    .join("; ");
+
+const INVITEE = {
+  email: "invitee@example.com",
+  password: "at-least-8-chars",
+  name: "Robin",
+};
+
+/**
  * The cookie-domain contract is asserted against the composed better-auth
  * options, not just the helper that builds the fragment, so the wiring in
  * `auth.ts` is covered end to end.
@@ -101,48 +143,6 @@ describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
     process.env.REQUIRE_INVITATION_TO_SIGN_UP = "true";
     expect(await disableSignUp()).toBe(true);
   });
-
-  /**
-   * The composed options, run for real: the same `emailAndPassword` block and
-   * plugins, with an in-memory database in place of Postgres. The tables are
-   * pre-declared because the adapter reads a missing one as an error, not as
-   * empty. Password hashing is swapped for a reversible stand-in: which
-   * endpoints the fence leaves open does not depend on the hash, and scrypt
-   * costs seconds per test.
-   */
-  const runnableAuth = async () => {
-    const { options } = await loadAuth();
-    return betterAuth({
-      ...options,
-      emailAndPassword: {
-        ...options.emailAndPassword,
-        password: {
-          hash: (password) => Promise.resolve(`hashed:${password}`),
-          verify: ({ hash, password }) =>
-            Promise.resolve(hash === `hashed:${password}`),
-        },
-      },
-      database: memoryAdapter({
-        user: [],
-        session: [],
-        account: [],
-        verification: [],
-      }),
-    });
-  };
-
-  /** The `Cookie` header a browser would send back after this sign-in. */
-  const sessionCookie = (response: Response): string =>
-    response.headers
-      .getSetCookie()
-      .map((cookie) => cookie.split(";")[0])
-      .join("; ");
-
-  const INVITEE = {
-    email: "invitee@example.com",
-    password: "at-least-8-chars",
-    name: "Robin",
-  };
 
   describe("with sign-up closed", () => {
     beforeEach(() => {
@@ -224,5 +224,65 @@ describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
     const result = await auth.api.signUpEmail({ body: INVITEE });
 
     expect(result.user.email).toBe(INVITEE.email);
+  });
+});
+
+describe("User timezone", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env.BETTER_AUTH_URL = "http://localhost:4001";
+    process.env.FRONTEND_URL = "http://localhost:3001";
+    process.env.BETTER_AUTH_SECRET = "a-test-secret-that-is-at-least-32-chars";
+    delete process.env.AUTH_COOKIE_DOMAIN;
+    delete process.env.REQUIRE_INVITATION_TO_SIGN_UP;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  const signedInUser = async () => {
+    const auth = await runnableAuth();
+    await auth.api.signUpEmail({ body: INVITEE });
+    const signedIn = await auth.api.signInEmail({
+      body: { email: INVITEE.email, password: INVITEE.password },
+      asResponse: true,
+    });
+    const headers = new Headers({ cookie: sessionCookie(signedIn) });
+    const sessionTimezone = async () =>
+      (
+        await auth.api.getSession({
+          headers,
+          query: { disableCookieCache: true },
+        })
+      )?.user.timezone;
+    return { auth, headers, sessionTimezone };
+  };
+
+  it("sets, changes and clears the timezone, and puts it on the session user", async () => {
+    const { auth, headers, sessionTimezone } = await signedInUser();
+    expect(await sessionTimezone()).toBeFalsy();
+
+    await auth.api.updateUser({
+      body: { timezone: "Australia/Melbourne" },
+      headers,
+    });
+    expect(await sessionTimezone()).toBe("Australia/Melbourne");
+
+    await auth.api.updateUser({ body: { timezone: "UTC" }, headers });
+    expect(await sessionTimezone()).toBe("UTC");
+
+    await auth.api.updateUser({ body: { timezone: null }, headers });
+    expect(await sessionTimezone()).toBeNull();
+  });
+
+  it("refuses an invalid zone with a 400 and stores nothing", async () => {
+    const { auth, headers, sessionTimezone } = await signedInUser();
+    await auth.api.updateUser({ body: { timezone: "Europe/London" }, headers });
+
+    await expect(
+      auth.api.updateUser({ body: { timezone: "Mars/Olympus" }, headers }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(await sessionTimezone()).toBe("Europe/London");
   });
 });

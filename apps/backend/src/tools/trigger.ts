@@ -20,13 +20,15 @@ import {
   updateTrigger,
 } from "../services/trigger.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
-import { getCurrentTime } from "./time.ts";
+import { createGetCurrentTime } from "./time.ts";
 import type { ScopeContext } from "../scope.ts";
 
 export function createTriggerTools(
   workspaceId: string,
   orgId: string,
   frontendUrl: string | undefined,
+  /** The acting User's effective timezone (`ToolSetContext.timezone`). */
+  timezone: string,
 ): Record<string, Tool> {
   // A trigger may point at any Agent this Workspace can run — its own, or a
   // Shared one attached to it (ADR-0007), which is exactly what the Chat turn
@@ -150,7 +152,7 @@ export function createTriggerTools(
     description:
       "Create a new trigger or update an existing trigger. If triggerId is provided, updates the existing trigger. If triggerId is not provided, creates a new trigger (requires name, agentId, instruction, type, and config). " +
       "For something the User wants done once (a reminder, a one-time task), create a cron trigger with config.isOneOff set to true: it fires at the first time its cron expression matches, then is spent and cannot be re-enabled. Use getCurrentTime to work out dates such as 'tomorrow'. " +
-      "If you don't know the User's timezone, ask them rather than assuming UTC, and pass it as config.timezone. " +
+      "If you don't know the User's timezone, ask them rather than guessing, and pass it as config.timezone. " +
       "A cron trigger's result carries nextRunAt (UTC) and nextRunAtLocal (in its timezone): check it is the instant the User asked for. Cron has no year, so a date already past this year runs next year.",
     inputSchema: z.object({
       triggerId: z
@@ -203,7 +205,7 @@ export function createTriggerTools(
             .string()
             .optional()
             .describe(
-              "IANA timezone for cron triggers (e.g., 'America/New_York'). Defaults to 'UTC'.",
+              "IANA timezone for cron triggers (e.g., 'America/New_York'). Defaults to the Workspace Owner's timezone, or the deployment default if they have not set one.",
             ),
           isOneOff: z
             .boolean()
@@ -305,6 +307,16 @@ export function createTriggerTools(
         };
       }
 
+      // A cron Trigger the Agent gave no timezone runs in the acting User's zone
+      const createConfig =
+        type === "cron"
+          ? {
+              ...config,
+              timezone:
+                (config as Partial<CronTriggerConfig>).timezone ?? timezone,
+            }
+          : config;
+
       try {
         const record = await createTrigger(ctx, {
           agentId,
@@ -316,7 +328,7 @@ export function createTriggerTools(
           maxRunsToKeep: fields.maxRunsToKeep,
           search: fields.search,
           includeMemories: fields.includeMemories,
-          config,
+          config: createConfig,
         });
 
         const url = buildResourceUrl(
@@ -370,6 +382,6 @@ export function createTriggerTools(
     deleteTrigger,
     // The Time Tool set's own tool under the same name, so an Agent holding
     // both sees it once.
-    getCurrentTime,
+    getCurrentTime: createGetCurrentTime(timezone),
   };
 }

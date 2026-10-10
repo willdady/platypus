@@ -5,6 +5,7 @@ import { requireInvitationToSignUp } from "./sign-up.ts";
 import { db } from "./index.ts";
 import { backendBaseUrl } from "./base-urls.ts";
 import * as authSchema from "./db/auth-schema.ts";
+import { timezoneSchema } from "@platypus/schemas";
 import {
   crossSubdomainCookieConfig,
   resolveAuthCookieDomain,
@@ -32,6 +33,17 @@ export const auth = betterAuth({
     // admin plugin's create-user API do not consult it, so an Invitation link
     // still redeems into an account and the first-boot seed still runs.
     disableSignUp: requireInvitationToSignUp(),
+  },
+  user: {
+    additionalFields: {
+      // The User timezone: an IANA name, or null when unset
+      timezone: {
+        type: "string",
+        required: false,
+        input: true,
+        validator: { input: timezoneSchema.nullable() },
+      },
+    },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days

@@ -158,16 +158,16 @@ history — fix the Agent's **Instructions**.
 - **Instruction**: `Write today's digest and file it on the My work board.`
 - **Schedule Mode**: **Advanced**
 - **Cron Expression**: `0 9 * * 1-5`
-- **Timezone**: your own zone
+- **Timezone**: your own zone — the form fills in your profile timezone if you set one
 
 Leave **Enabled** on and save. The **Next Run Preview** tells you whether you got
 the expression right before you wait a day to find out.
 
 <Callout type="warning">
-  Set the **Timezone** on the Trigger. The deployment-wide timezone setting does
-  **not** affect Trigger schedules — it only changes what the time tools report.
-  Leave the field on a zone you didn't mean and your 9am digest lands at 9am
-  somewhere else.
+  Check the **Timezone** on the Trigger before you save. The deployment-wide
+  timezone setting does **not** affect a Trigger made in the form. Leave the
+  field on a zone you didn't mean and your 9am digest lands at 9am somewhere
+  else.
 </Callout>
 
 ## 6. Confirm it fired

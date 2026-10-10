@@ -26,7 +26,7 @@ export const toastInfo = vi.fn();
  * reference on every `useAuth()` so the identity stays stable across renders.
  */
 export const authState: {
-  user: { id: string } | null;
+  user: { id: string; timezone?: string | null } | null;
   actor: string;
   workspaceDelegation: unknown;
 } = { user: { id: "u1" }, actor: "org-admin", workspaceDelegation: null };

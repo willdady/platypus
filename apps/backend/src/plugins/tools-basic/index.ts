@@ -6,7 +6,7 @@ import {
   convertWeight,
   convertVolume,
 } from "../../tools/math.ts";
-import { getCurrentTime, convertTimezone } from "../../tools/time.ts";
+import { createTimeTools } from "../../tools/time.ts";
 import { generateUuid, generateNanoId } from "../../tools/identifiers.ts";
 
 // First core plugin: pure utility Tool sets (math, time, identifiers). Grouped
@@ -38,10 +38,8 @@ export const plugin: PlatypusPlugin = {
         category: "Utilities",
         description:
           "Tools for getting current time and converting between timezones",
-        tools: {
-          getCurrentTime,
-          convertTimezone,
-        },
+        // Core always fills `timezone`; it is optional only in the SDK type
+        tools: ({ timezone = "UTC" }) => createTimeTools(timezone),
       },
       {
         id: "identifiers",

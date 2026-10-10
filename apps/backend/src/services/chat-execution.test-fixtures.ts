@@ -39,6 +39,8 @@ export type ChatTurnQueriesFixtures = {
     workspaceId: string | null;
     content: string;
   }>;
+  /** Profile timezones by user id; a user absent here has none set. */
+  userTimezones?: Record<string, string>;
   memories?: Array<MemorySummary & { userId: string; workspaceId: string }>;
   sandboxEnvKeys?: Record<string, string[]>;
 };
@@ -160,6 +162,10 @@ export const createInMemoryChatTurnQueries = (
           .map((id) => visible.find((a) => a.id === id))
           .filter((a): a is AgentRow => a !== undefined),
       );
+    },
+
+    getUserTimezone(userId) {
+      return Promise.resolve(fx.userTimezones?.[userId] ?? null);
     },
 
     getUserContexts(userId, workspaceId) {

@@ -10,7 +10,7 @@ import {
  * (#1380); the migration rewrites it to `triggers` in place, without
  * duplicating it.
  */
-const MIGRATION = "0086_rename_schedule_tool_set";
+const MIGRATION = "0086_user_timezone_and_schedule_tool_set_rename";
 
 const seeded: Record<string, string[]> = {
   stale: ["memory", "schedule", "a"],

@@ -45,6 +45,12 @@ export type SystemPromptStableContext = {
     name: string;
     globalContext?: string;
     workspaceContext?: string;
+    /**
+     * The User timezone from their profile. Absent when unset — never the
+     * deployment `TIMEZONE`, so the model is not told a zone as fact that the
+     * User never chose.
+     */
+    timezone?: string;
   };
   /**
    * The resolved Memories block — the output of `formatSummariesForSystemPrompt`.
@@ -147,13 +153,19 @@ const workspaceFragment: Fragment = (ctx) => {
 };
 
 const userFragment: Fragment = (ctx) => {
+  const tz = ctx.user.timezone;
   if (ctx.a2aClientName) {
-    return `This conversation arrives over A2A from the client "${ctx.a2aClientName}", acting on behalf of the Workspace Owner (id \`${ctx.user.id}\`). The caller may not be the Workspace Owner: do not treat them as the Owner, and do not repeat the Owner's personal context to them.`;
+    const line = `This conversation arrives over A2A from the client "${ctx.a2aClientName}", acting on behalf of the Workspace Owner (id \`${ctx.user.id}\`). The caller may not be the Workspace Owner: do not treat them as the Owner, and do not repeat the Owner's personal context to them.`;
+    return tz
+      ? `${line} When scheduling or reading times on the Owner's behalf, use the timezone "${tz}".`
+      : line;
   }
   if (ctx.runMode === "headless") {
-    return `This run was initiated on behalf of "${ctx.user.name}" (id \`${ctx.user.id}\`). There is no live user in this conversation — do not address them directly. Use their context to inform decisions, but operate autonomously.`;
+    const line = `This run was initiated on behalf of "${ctx.user.name}" (id \`${ctx.user.id}\`). There is no live user in this conversation — do not address them directly. Use their context to inform decisions, but operate autonomously.`;
+    return tz ? `${line} Their timezone is "${tz}".` : line;
   }
-  return `The current user's name is "${ctx.user.name}" and their id is "${ctx.user.id}".`;
+  const line = `The current user's name is "${ctx.user.name}" and their id is "${ctx.user.id}".`;
+  return tz ? `${line} The current user's timezone is "${tz}".` : line;
 };
 
 const userContextFragment: Fragment = (ctx) => {

@@ -196,6 +196,47 @@ describe("renderSystemPrompt — user", () => {
   });
 });
 
+describe("renderSystemPrompt — User timezone", () => {
+  const withTimezone = (
+    mode: "interactive" | "headless" | "a2a",
+  ): SystemPromptStableContext => {
+    const ctx = baseCtx();
+    ctx.user.timezone = "Australia/Melbourne";
+    if (mode !== "interactive") ctx.runMode = "headless";
+    if (mode === "a2a") ctx.a2aClientName = "Telegram via Hermes";
+    return ctx;
+  };
+
+  it("states it as the current user's timezone in an interactive Chat", () => {
+    expect(renderSystemPrompt(withTimezone("interactive"))).toContain(
+      'The current user\'s timezone is "Australia/Melbourne".',
+    );
+  });
+
+  it("states it as the Owner's timezone on a headless run", () => {
+    expect(renderSystemPrompt(withTimezone("headless"))).toContain(
+      'Their timezone is "Australia/Melbourne".',
+    );
+  });
+
+  it("states it on an A2A turn as the zone to schedule in for the Owner, not as the caller's", () => {
+    const out = renderSystemPrompt(withTimezone("a2a"));
+    expect(out).toContain(
+      'When scheduling or reading times on the Owner\'s behalf, use the timezone "Australia/Melbourne".',
+    );
+    expect(out).not.toContain("Their timezone is");
+  });
+
+  it.each(["interactive", "headless", "a2a"] as const)(
+    "says nothing about timezone when it is unset (%s)",
+    (mode) => {
+      const ctx = withTimezone(mode);
+      delete ctx.user.timezone;
+      expect(renderSystemPrompt(ctx)).not.toMatch(/timezone/i);
+    },
+  );
+});
+
 describe("renderSystemPrompt — user context", () => {
   it("emits no userContext block when neither global nor workspace context is set", () => {
     expect(renderSystemPrompt(baseCtx())).not.toContain("<userContext>");
@@ -332,6 +373,7 @@ describe("renderSystemPrompt — stability (ADR-0020)", () => {
     ctx.subAgents = [{ name: "Helper", description: "Helps." }];
     ctx.unavailableSubAgents = [{ id: "sub-1", name: "Dashboard Agent" }];
     ctx.sandboxEnvKeys = ["OPENAI_API_KEY"];
+    ctx.user.timezone = "Australia/Melbourne";
 
     const first = renderSystemPrompt(ctx);
     const second = renderSystemPrompt(ctx);

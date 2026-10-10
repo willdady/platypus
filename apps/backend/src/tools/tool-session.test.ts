@@ -57,6 +57,7 @@ const scope: ToolSessionScope = {
   workspaceId: "ws-1",
   userId: "user-1",
   frontendUrl: undefined,
+  timezone: "Australia/Melbourne",
 };
 
 /** The Agent a session resolves for, with the ids it was granted. */
@@ -187,6 +188,7 @@ describe("openToolSession", () => {
         agentId: "agent-1",
         userId: "user-1",
         frontendUrl: undefined,
+        timezone: "Australia/Melbourne",
         // The scope's fields, plus the one capability on the context.
         registerCloser: expect.any(Function) as unknown,
       },
@@ -1385,9 +1387,10 @@ describe("openToolSession", () => {
         expect.objectContaining({
           agentId: "sub-agent-1",
           // …and under the parent's Workspace and user: a delegated run is a run
-          // for the same human, in the same Workspace.
+          // for the same human, in the same Workspace, and in their timezone.
           workspaceId: "ws-1",
           userId: "user-1",
+          timezone: "Australia/Melbourne",
         }),
         PLUGIN,
       );

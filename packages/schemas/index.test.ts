@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import {
   webhookEventSchema,
+  timezoneSchema,
   eventTriggerEventSchema,
   eventTriggerConfigSchema,
   webhookEventDataSchemas,
@@ -2016,5 +2017,18 @@ describe("chatUpdateSchema", () => {
     expect(chatUpdateSchema.parse({ isPinned: true })).toEqual({
       isPinned: true,
     });
+  });
+});
+
+describe("timezoneSchema", () => {
+  it("accepts IANA zones and UTC", () => {
+    for (const tz of ["Australia/Melbourne", "America/New_York", "UTC"]) {
+      expect(timezoneSchema.safeParse(tz).success).toBe(true);
+    }
+  });
+
+  it("rejects an unknown zone rather than coercing it", () => {
+    expect(timezoneSchema.safeParse("Mars/Olympus").success).toBe(false);
+    expect(timezoneSchema.safeParse("").success).toBe(false);
   });
 });

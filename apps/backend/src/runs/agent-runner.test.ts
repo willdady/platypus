@@ -1436,6 +1436,7 @@ describe("a turn that resolves after its run has already terminated", () => {
         workspaceId: "ws-1",
         userId: "user-1",
         frontendUrl: undefined,
+        timezone: "UTC",
       },
       undefined,
       {

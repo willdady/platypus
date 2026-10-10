@@ -34,17 +34,20 @@ For a guided walkthrough of configuring a deployment, see
 | `DATABASE_URL`    | Postgres 17 connection string (with pgvector). **No default in code.** `.example.env` ships `postgres://postgres:mypassword@localhost:5432/postgres`.                                                | _(none)_  | **Yes**  |
 | `LOG_LEVEL`       | Logging verbosity (`trace`, `debug`, `info`, `warn`, `error`, `fatal`).                                                                                                                              | `info`    | No       |
 | `NODE_ENV`        | `production` writes logs as JSON lines to stdout and turns on better-auth's production checks; anything else pretty-prints logs for a terminal. The published image sets `production`.               | _(unset)_ | No       |
-| `TIMEZONE`        | IANA timezone (e.g. `America/New_York`, `Europe/London`) used by the **time Tools only** — see the note below.                                                                                       | `UTC`     | No       |
+| `TIMEZONE`        | IANA timezone (e.g. `America/New_York`, `Europe/London`) used when a User has no profile timezone — see the note below.                                                                              | `UTC`     | No       |
 | `NODE_OPTIONS`    | Node runtime flags. `.example.env` and `compose.yaml` ship `--disable-warning=ExperimentalWarning` to silence the experimental-feature warning.                                                      | _(none)_  | No       |
 
 <Callout type="warning">
-  `TIMEZONE` is read in exactly one place: the `getCurrentTime` tool.
-  `convertTimezone` takes explicit `fromTimezone`/`toTimezone` parameters and
-  never reads this variable. `TIMEZONE` also does **not** set the zone a
-  Trigger's cron schedule is evaluated in — each Trigger carries its own
-  **Timezone** field, set in the Trigger form and defaulting to the browser's
-  zone — and it does not affect log timestamps. Setting `TIMEZONE` and expecting
-  a 9am Trigger to fire at 9am local is the trap; set the zone on the Trigger.
+  `TIMEZONE` is the fallback for a User who has not set a **Timezone** on their
+  profile. For them, `getCurrentTime` reports in it, and a Trigger an Agent
+  creates without naming a zone is scheduled in it. A User who has set a profile
+  timezone gets theirs instead. `convertTimezone` takes explicit
+  `fromTimezone`/`toTimezone` parameters and never reads this variable.
+  `TIMEZONE` does **not** set the zone of a Trigger made in the Trigger form —
+  that form defaults to the User's profile timezone, then the browser's — and it
+  does not affect log timestamps. Setting `TIMEZONE` and expecting a 9am Trigger
+  made in the form to fire at 9am local is the trap; set the zone on the
+  Trigger.
 </Callout>
 
 ## Plugins

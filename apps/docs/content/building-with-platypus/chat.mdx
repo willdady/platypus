@@ -622,6 +622,26 @@ edit, or **Regenerate**.
   concluding it's a bug is the usual confusion here.
 </Callout>
 
+## Telling Agents your timezone
+
+Set **Timezone** under **My settings → Profile** and the Agent knows which zone
+"tomorrow at 9" means. Pick a zone from the searchable list, or press **Use
+detected** to fill in your browser's, then **Save** — nothing is saved until you
+do. **Clear** unsets it.
+
+Once set, the zone is stated in every Chat's system prompt, `getCurrentTime`
+reports in it, and a Trigger an Agent creates for you is scheduled in it unless
+you name another zone.
+Triggers and A2A Chats in your Workspaces use it too, since they run on your
+behalf.
+
+<Callout type="warning">
+  With **Timezone** unset, the Agent is not told your zone. A request like
+  "every day at 9" that names no zone can be read in the deployment's default
+  zone, which is often `UTC`. Set the field once rather than naming your zone in
+  every request.
+</Callout>
+
 ## Sharing a Chat
 
 Chats belong to the Workspace Owner. Anyone else who can reach the Chat sees it

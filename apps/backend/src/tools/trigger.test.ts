@@ -27,6 +27,7 @@ import { NotFoundError, ValidationError } from "../errors.ts";
 const workspaceId = "ws-1";
 const orgId = "org-1";
 const frontendUrl = "http://localhost:3000";
+const timezone = "Australia/Melbourne";
 const ctx = { orgId, workspaceId };
 
 const cronCreate = {
@@ -45,7 +46,7 @@ describe("createTriggerTools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockDb();
-    tools = createTriggerTools(workspaceId, orgId, frontendUrl);
+    tools = createTriggerTools(workspaceId, orgId, frontendUrl, timezone);
   });
 
   it("returns the expected tool names", () => {
@@ -175,7 +176,7 @@ describe("createTriggerTools", () => {
   });
 
   describe("upsertTrigger", () => {
-    it("creates through the Trigger module and links the new trigger", async () => {
+    it("creates through the Trigger module, in the acting User's timezone when none is given, and links the new trigger", async () => {
       vi.mocked(createTrigger).mockResolvedValueOnce({ id: "t9" } as never);
 
       expect(
@@ -198,7 +199,7 @@ describe("createTriggerTools", () => {
         maxRunsToKeep: undefined,
         search: undefined,
         includeMemories: true,
-        config: { cronExpression: "0 9 * * *" },
+        config: { cronExpression: "0 9 * * *", timezone },
       });
     });
 

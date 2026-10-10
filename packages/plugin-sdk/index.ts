@@ -110,6 +110,16 @@ export interface ToolSetContext {
   frontendUrl: string | undefined;
   userId: string;
   /**
+   * The acting User's effective IANA timezone: their profile timezone, else the
+   * deployment `TIMEZONE`, else `UTC`. On a Trigger or A2A run that User is the
+   * Workspace Owner. Read it to report or schedule times on their behalf.
+   *
+   * Current core always supplies it. It is optional in the type only so a
+   * plugin built against this SDK still loads on an older core, which never
+   * passed it.
+   */
+  timezone?: string;
+  /**
    * Register something to close when this turn ends — see
    * {@link CloserRegistrar}.
    *

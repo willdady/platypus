@@ -1,3 +1,4 @@
+ALTER TABLE "user" ADD COLUMN "timezone" text;--> statement-breakpoint
 -- The schedules→triggers rename changed the core Tool set id; rewrite grants
 -- stored under the old id, de-duplicating Agents that already have both. Order
 -- is kept (first occurrence wins) since it sets Tool name precedence.

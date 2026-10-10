@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import type { ToolSetContext } from "@platypuschat/plugin-sdk";
 import type { Mock } from "vitest";
 import { makePluginContext } from "../test-utils.ts";
 
@@ -2133,6 +2134,83 @@ describe("chat-execution", () => {
         expect(turn.stream.tools).toHaveProperty("memoryGet");
         await turn.dispose();
       });
+    });
+  });
+
+  describe("User timezone", () => {
+    const originalTimezone = process.env.TIMEZONE;
+    afterEach(() => {
+      if (originalTimezone === undefined) delete process.env.TIMEZONE;
+      else process.env.TIMEZONE = originalTimezone;
+    });
+
+    /** Runs a turn whose one Tool set records the timezone it was handed. */
+    let probes = 0;
+    const timezoneTurn = async (
+      userTimezones: Record<string, string>,
+      input: { runMode?: "interactive" | "headless" } = {},
+    ) => {
+      const toolSetId = `test.timezone-probe-${++probes}`;
+      const factory = vi.fn((_ctx: ToolSetContext) => ({}));
+      registerToolSet(
+        toolSetId,
+        composeToolSet({
+          id: toolSetId,
+          pluginName: "test-plugin",
+          isCore: true,
+          contribution: { name: "Probe", category: "Test", tools: factory },
+          plugin: makePluginContext(),
+        }),
+      );
+      const agent = { ...baseAgent, toolSetIds: [toolSetId] };
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: agent.id }, ...input },
+        createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          agents: [agent],
+          providers: [baseProvider],
+          userTimezones,
+        }),
+      );
+      await turn.dispose();
+      return {
+        system: turn.stream.system,
+        timezone: factory.mock.calls[0][0].timezone,
+      };
+    };
+
+    it("hands Tool sets the profile timezone and states it in the prompt", async () => {
+      process.env.TIMEZONE = "Europe/London";
+      const turn = await timezoneTurn({ "user-1": "Australia/Melbourne" });
+
+      expect(turn.timezone).toBe("Australia/Melbourne");
+      expect(turn.system).toContain(
+        'The current user\'s timezone is "Australia/Melbourne".',
+      );
+    });
+
+    it("uses the Owner's profile timezone on a Trigger run", async () => {
+      const turn = await timezoneTurn(
+        { "user-1": "Australia/Melbourne" },
+        { runMode: "headless" },
+      );
+
+      expect(turn.timezone).toBe("Australia/Melbourne");
+      expect(turn.system).toContain('Their timezone is "Australia/Melbourne".');
+    });
+
+    it("falls back to the deployment TIMEZONE for Tool sets without telling the model a zone", async () => {
+      process.env.TIMEZONE = "Europe/London";
+      const turn = await timezoneTurn({});
+
+      expect(turn.timezone).toBe("Europe/London");
+      expect(turn.system).not.toContain("Europe/London");
+      expect(turn.system).not.toMatch(/timezone/i);
+    });
+
+    it("falls back to UTC when neither is set", async () => {
+      delete process.env.TIMEZONE;
+      expect((await timezoneTurn({})).timezone).toBe("UTC");
     });
   });
 

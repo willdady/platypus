@@ -8,6 +8,7 @@ import {
   setDataFor,
   setLoading,
   resetFormHarness,
+  authState,
   stubAcceptedSave,
   savedBody,
   push,
@@ -167,6 +168,29 @@ describe("TriggerForm — Include Memories", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(savedBody(fetchMock).includeMemories).toBe(true);
+  });
+});
+
+describe("TriggerForm — default timezone", () => {
+  it("moves a new Trigger onto the User timezone when the session lands after mount", async () => {
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
+    authState.user = null;
+    const { rerender } = render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+
+    authState.user = { id: "u1", timezone: "Pacific/Chatham" };
+    rerender(<TriggerForm orgId="org1" workspaceId="ws1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "My Trigger" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do something" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedConfig(fetchMock).timezone).toBe("Pacific/Chatham");
   });
 });
 

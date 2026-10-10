@@ -381,11 +381,11 @@ These rarely need changing but exist when you need them — see the
 - **Storage** — uploaded files go to local disk by default; an S3-compatible
   backend can be selected instead.
 - **Logging** — log verbosity is configurable.
-- **Time** — `TIMEZONE` sets the zone the **time Tools** report and convert in
-  (`getCurrentTime`, `convertTimezone`; the Triggers Tool set carries
-  `getCurrentTime` too). That is its entire reach: it does not
-  affect Trigger schedules, which carry their own per-Trigger timezone chosen in
-  the Trigger form, and it does not affect log timestamps.
+- **Time** — `TIMEZONE` is the fallback zone for a User who has not set a
+  **Timezone** on their profile: `getCurrentTime` reports in it, and a Trigger an
+  Agent creates without naming a zone is scheduled in it. It does not set the
+  zone of a Trigger made in the Trigger form, and it does not affect log
+  timestamps.
 - **Schedulers & runs** — concurrency caps and per-run / per-step timeouts for
   scheduled and triggered agent executions, and for interactive Chat turns. The
   per-step bound is an idle timeout: it measures how long the model has sent

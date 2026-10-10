@@ -103,6 +103,7 @@ const scope: ToolSessionScope = {
   workspaceId: "ws-1",
   userId: "user-1",
   frontendUrl: undefined,
+  timezone: "UTC",
 };
 const agent = { id: "agent-1", toolSetIds: ["mcp-1"] };
 

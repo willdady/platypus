@@ -7,6 +7,7 @@ import {
   mcp as mcpTable,
   organization as organizationTable,
   sandbox as sandboxTable,
+  user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import {
@@ -251,6 +252,8 @@ export type ChatTurnQueries = ToolSessionQueries & {
     orgId: string,
     workspaceId: string,
   ): Promise<AgentRow[]>;
+  /** The User timezone from the user's profile, or null when unset. */
+  getUserTimezone(userId: string): Promise<string | null>;
   getUserContexts(
     userId: string,
     workspaceId: string,
@@ -386,6 +389,15 @@ const drizzleChatTurnQueries: ChatTurnQueries = {
     return ids
       .map((id) => byId.get(id))
       .filter((row): row is AgentRow => row !== undefined);
+  },
+
+  async getUserTimezone(userId) {
+    const rows = await db
+      .select({ timezone: userTable.timezone })
+      .from(userTable)
+      .where(eq(userTable.id, userId))
+      .limit(1);
+    return rows[0]?.timezone ?? null;
   },
 
   async getUserContexts(userId, workspaceId) {
@@ -570,7 +582,11 @@ export const prepareChatTurn = async (
 
   // Org identity is framing, not a hard dependency — a missing org row must not
   // fail the turn, so this is a soft lookup rather than a NotFoundError.
-  const organization = await queries.getOrganization(orgId);
+  // `user` is the Owner on Trigger and A2A runs, so its timezone is theirs.
+  const [organization, profileTimezone] = await Promise.all([
+    queries.getOrganization(orgId),
+    queries.getUserTimezone(user.id),
+  ]);
 
   const context = await resolveChatContext(
     queries,
@@ -591,6 +607,8 @@ export const prepareChatTurn = async (
     workspaceId,
     userId: user.id,
     frontendUrl,
+    // Tools always need a zone to work in; the prompt states only the profile's.
+    timezone: profileTimezone ?? (process.env.TIMEZONE || "UTC"),
   };
   // Started before the `Promise.all` rather than inside it because the delegates
   // built alongside it nest their own sessions into this one — they take the
@@ -703,6 +721,7 @@ export const prepareChatTurn = async (
         name: user.name,
         globalContext: userContexts.global,
         workspaceContext: userContexts.workspace,
+        timezone: profileTimezone ?? undefined,
       },
       // The flag gates the block; the pin and the live retrieval are only sources
       // for it. Gating here rather than trusting the sources to be empty is what

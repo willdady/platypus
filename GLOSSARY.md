@@ -243,6 +243,9 @@ _Avoid_: memory retrieval per turn (in a Chat the fragment renders every turn; t
 **Context** (User Context):
 Free-text notes a User attaches at global or per-Workspace scope, rendered into the system prompt. Nothing to do with the model's **Context window** — the word carries both meanings and they are never interchangeable.
 
+**User timezone**:
+The IANA zone a User sets on their profile, which Agents and Triggers read on that User's behalf — the Owner's on a headless or A2A run. Set, it is stated in the **System prompt** and is the zone the time Tools report in and an Agent-created Trigger is scheduled in. Unset, the model is not told a zone and those Tools fall back to the deployment default (`TIMEZONE`, else `UTC`).
+
 **Operator**:
 The actor who controls a Platypus deployment — process environment, compose files, and infrastructure. Equivalent to the platform super-admin (`user.role = "admin"`), who bypasses all in-app authorization. Installs and enables Plugins and sets their deploy-time Plugin config, and declares deployment-time allowlists (e.g. the eligible Docker Sandbox networks) that bound what an Org Admin can configure in-app.
 _Avoid_: sysadmin, root, host owner.

@@ -94,8 +94,14 @@ const offlineMcpClient = (): Promise<MCPClient> => {
  */
 export type ToolSessionScope = Omit<
   ToolSetContext,
-  "agentId" | "registerCloser"
->;
+  "agentId" | "registerCloser" | "timezone"
+> & {
+  /**
+   * Required here though optional on the SDK's context: optional there only so
+   * a plugin tolerates an older core, and core always fills it in.
+   */
+  timezone: string;
+};
 
 /**
  * A registrar for a caller that must register a closer before the session it

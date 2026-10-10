@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { getCurrentTime, convertTimezone } from "./time.ts";
+import { createGetCurrentTime, convertTimezone } from "./time.ts";
 import { callTool } from "../test-utils.ts";
 
 describe("getCurrentTime", () => {
@@ -7,16 +7,21 @@ describe("getCurrentTime", () => {
     vi.useRealTimers();
   });
 
-  it("returns the current instant in the configured timezone", async () => {
+  it("reports and formats the current instant in the given timezone", async () => {
     vi.useFakeTimers({ now: new Date("2025-01-07T14:30:00Z") });
 
-    const result = await callTool(getCurrentTime, {});
+    const result = await callTool(
+      createGetCurrentTime("Australia/Melbourne"),
+      {},
+    );
 
     expect(result).toMatchObject({
-      timezone: process.env.TIMEZONE || "UTC",
+      timezone: "Australia/Melbourne",
       timestamp: "2025-01-07T14:30:00.000Z",
     });
-    expect(result.formatted).toContain("Tuesday, January 7, 2025");
+    // 01:30 the next day in Melbourne (UTC+11 in January)
+    expect(result.formatted).toContain("Wednesday, January 8, 2025");
+    expect(result.formatted).toContain("1:30:00 AM");
   });
 });
 

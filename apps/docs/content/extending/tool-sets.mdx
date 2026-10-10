@@ -75,6 +75,12 @@ may read the database. Use `frontendUrl` to put a clickable link to a resource i
 a tool's output — it is `undefined` when the deployment hasn't set one, so treat
 the link as optional.
 
+Read `timezone` to report or schedule a time for the User. It is the acting
+User's IANA timezone — the Workspace Owner's on a Trigger or A2A run — taken
+from their profile, else the deployment's `TIMEZONE`, else `UTC`. Current core
+always fills it in; the type marks it optional only because an older core
+doesn't, so fall back to `UTC` if your Plugin must run on one.
+
 A factory also receives the Plugin's deploy-time config as an appended second
 argument — see
 [Plugin API & config](/extending/plugin-api-and-config#deploy-time-config-and-credentials).
