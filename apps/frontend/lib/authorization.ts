@@ -167,6 +167,9 @@ export const canOpenOrgSettings = orgAdminOnly;
  */
 export const canManageWorkspaceDelegation = orgAdminOnly;
 
+/** ADR-0035: may this actor transfer a Workspace to another member? */
+export const canTransferWorkspace = orgAdminOnly;
+
 // ---- Chat: literal Workspace ownership (not the `Actor` tier) ----
 
 /**

@@ -5,16 +5,12 @@ import { db } from "../index.ts";
 import {
   workspace as workspaceTable,
   organizationMember,
-  provider as providerTable,
-  agent as agentTable,
   attachment as attachmentTable,
   sandbox as sandboxTable,
 } from "../db/schema.ts";
-import { deleteStoredPrefix } from "../storage/utils.ts";
-import { workspaceStorageKeyPrefix } from "../storage/keys.ts";
-import { deleteAvatar } from "../services/avatar.ts";
 import {
   workspaceCreateSchema,
+  workspaceTransferSchema,
   workspaceUpdateSchema,
 } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
@@ -31,9 +27,13 @@ import {
 } from "../services/scoped-resource.ts";
 import { createProvider } from "../services/provider-write.ts";
 import { sandboxCreateError } from "../sandbox/validate.ts";
-import { NotFoundError } from "../errors.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
 import type { Variables } from "../server.ts";
-import { destroyWorkspaceSandboxes } from "../sandbox/teardown.ts";
+import {
+  deleteWorkspaceRows,
+  prepareWorkspaceCleanup,
+} from "../services/workspace-delete.ts";
+import { transferWorkspace } from "../services/workspace-transfer.ts";
 
 const workspace = new Hono<{ Variables: Variables }>();
 
@@ -49,29 +49,8 @@ workspace.post(
     const data = c.req.valid("json");
 
     // ownerId is admin-assignable (ADR-0008); default to the calling admin
-    // when not supplied. A named owner must be a member of the organization —
-    // governance would be meaningless if an admin could hand a workspace to a
-    // non-member (or a typo'd / cross-org user id).
+    // when not supplied.
     const ownerId = data.ownerId ?? user.id;
-    if (data.ownerId && data.ownerId !== user.id) {
-      const [member] = await db
-        .select({ userId: organizationMember.userId })
-        .from(organizationMember)
-        .where(
-          and(
-            eq(organizationMember.organizationId, orgId),
-            eq(organizationMember.userId, data.ownerId),
-          ),
-        )
-        .limit(1);
-
-      if (!member) {
-        return c.json(
-          { error: "Owner must be a member of the organization" },
-          400,
-        );
-      }
-    }
 
     const {
       provider,
@@ -101,6 +80,26 @@ workspace.post(
     // The Workspace and the resources it is provisioned with land together or
     // not at all — a failed Provider must not leave an unusable Workspace.
     const record = await db.transaction(async (tx) => {
+      // The owner must be a member of the organization — governance would be
+      // meaningless if an admin could hand a workspace to a non-member (or a
+      // typo'd / cross-org user id); a super admin needs none for their own.
+      // Held until commit, so removing the owner meanwhile waits and must then
+      // decide this Workspace too (ADR-0035).
+      const [member] = await tx
+        .select({ userId: organizationMember.userId })
+        .from(organizationMember)
+        .where(
+          and(
+            eq(organizationMember.organizationId, orgId),
+            eq(organizationMember.userId, ownerId),
+          ),
+        )
+        .for("share")
+        .limit(1);
+      if (!member && !(ownerId === user.id && user.role === "admin")) {
+        throw new ValidationError("Owner must be a member of the organization");
+      }
+
       const [row] = await tx
         .insert(workspaceTable)
         .values({
@@ -289,30 +288,33 @@ workspace.delete(
   requireWorkspaceAccess,
   async (c) => {
     const scope = workspaceScopeOf(c);
-    const { workspaceId } = scope;
-    // Best-effort sandbox teardown before the DB cascade fires. Never throws;
-    // failures are recorded in sandbox_teardown_failure (ADR-0001).
-    await destroyWorkspaceSandboxes(workspaceId);
-    // Read before the cascade takes the Agent rows, and their keys, away.
-    const agents = await db
-      .select({ avatarKey: agentTable.avatarKey })
-      .from(agentTable)
-      .where(eq(agentTable.workspaceId, workspaceId));
-    // `provider` carries no FK to `workspace` (issue #661) — a cascade FK
-    // would race `agent.providerId`'s `restrict` constraint, since Postgres
-    // checks RESTRICT immediately rather than deferring to end of statement.
-    // Delete the workspace first (cascading its Agents away) so the
-    // Workspace-scoped Providers below are no longer referenced, then delete
-    // them explicitly, all within one transaction.
-    await db.transaction(async (tx) => {
-      await tx.delete(workspaceTable).where(eq(workspaceTable.id, workspaceId));
-      await tx
-        .delete(providerTable)
-        .where(eq(providerTable.workspaceId, workspaceId));
-    });
-    await deleteStoredPrefix(workspaceStorageKeyPrefix(scope));
-    await Promise.all(agents.map(({ avatarKey }) => deleteAvatar(avatarKey)));
+    const cleanUp = await prepareWorkspaceCleanup(scope);
+    await db.transaction((tx) => deleteWorkspaceRows(tx, scope.workspaceId));
+    await cleanUp();
     return c.json({ message: "Workspace deleted" });
+  },
+);
+
+/** Transfer a workspace to another member (org admin only, ADR-0035) */
+workspace.post(
+  "/:workspaceId/transfer",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  requireWorkspaceAccess,
+  sValidator("json", workspaceTransferSchema),
+  async (c) => {
+    const { orgId, workspaceId } = workspaceScopeOf(c);
+    await transferWorkspace({
+      orgId,
+      workspaceId,
+      ...c.req.valid("json"),
+      transferredBy: c.get("user")!.name,
+    });
+    const [record] = await db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, workspaceId));
+    return c.json(record);
   },
 );
 

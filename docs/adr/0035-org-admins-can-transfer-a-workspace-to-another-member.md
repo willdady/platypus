@@ -1,15 +1,8 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#1215"
+status: accepted
 ---
 
 # Org Admins can transfer a Workspace to another member
-
-> State of the code today: a Workspace's Owner is set once, at creation, and
-> nothing changes it. Remove from Org leaves the removed User's Workspaces owned
-> by them, with their Triggers disabled, and nobody can act in them. This ADR
-> records the decision only. It moves to `accepted` in the pull request that
-> builds it.
 
 A Workspace still has exactly one Owner, but the Owner can now change. An Org Admin (or Super Admin) can hand a Workspace to another member of the Organization through a **Workspace transfer**. Before this, removing a User stranded their Workspaces: Organization access needs membership, every Owner-only action was refused, and deleting the Workspace was the only way out. The trade-off is privacy. Chats may hold personal material, so a transfer puts the old Owner's conversations in front of a specific new person. We accepted that because a Workspace already behaves like a company mailbox: Org Admins create every Workspace (ADR-0008) and can already read every Chat in it, and handing a departing person's mailbox to a successor is ordinary corporate practice. To keep the trade-off deliberate, the Org Admin chooses at transfer time whether the history goes with it.
 

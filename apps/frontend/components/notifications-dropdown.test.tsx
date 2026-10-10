@@ -264,3 +264,50 @@ describe("NotificationsDropdown body", () => {
     expect(screen.queryByText("Show less")).toBeNull();
   });
 });
+
+describe("NotificationsDropdown source link", () => {
+  const renderWithSource = (source: unknown) => {
+    feeds["/notifications"] = { results: [{ ...unread, source }] };
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+    openDropdownMenu();
+  };
+
+  it.each([
+    [{ kind: "chat", chatId: "chat-1" }, "/org1/workspace/ws1/chat/chat-1"],
+    [
+      { kind: "triggerRun", triggerRunId: "run-1" },
+      "/org1/workspace/ws1/trigger-runs/run-1",
+    ],
+  ])("links a notification from %o to its page", (source, href) => {
+    renderWithSource(source);
+
+    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
+      "href",
+      href,
+    );
+  });
+
+  it("shows no link for a notification without a source", () => {
+    renderWithSource(null);
+
+    expect(
+      screen.queryByRole("link", { name: "Open" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks it read and closes the bell when the link is followed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithSource({ kind: "chat", chatId: "chat-1" });
+
+    fireEvent.click(screen.getByRole("link", { name: "Open" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${NOTIFICATIONS_URL}/n1/read`,
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(screen.queryByText("Nightly digest")).not.toBeInTheDocument();
+  });
+});

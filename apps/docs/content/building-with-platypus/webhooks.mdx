@@ -137,11 +137,18 @@ the full notification record:
     "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
     "title": "Daily summary ready",
     "body": "Your daily summary has been generated.",
+    "source": { "kind": "triggerRun", "triggerRunId": "Vb7nQ2xL9pRt4mKs8dWy3" },
     "createdAt": "2026-06-26T09:31:00.000Z",
     "updatedAt": "2026-06-26T09:31:00.000Z"
   }
 }
 ```
+
+`source` says where the Agent posted it from: `{ "kind": "chat", "chatId": … }`
+for a Chat, `{ "kind": "triggerRun", "triggerRunId": … }` for a Trigger run, or
+`null`. It is `null` for a notification posted outside either, such as a token
+expiry notice, and for one whose Chat has since been deleted or whose run has
+been pruned. Editing a notification never changes it.
 
 `notification.updated` carries the same record, as it stands after the edit:
 
@@ -157,6 +164,7 @@ the full notification record:
     "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
     "title": "Daily summary ready",
     "body": "Your daily summary has been regenerated.",
+    "source": { "kind": "triggerRun", "triggerRunId": "Vb7nQ2xL9pRt4mKs8dWy3" },
     "createdAt": "2026-06-26T09:31:00.000Z",
     "updatedAt": "2026-06-26T09:33:00.000Z"
   }

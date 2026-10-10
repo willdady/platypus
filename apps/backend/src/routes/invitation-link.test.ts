@@ -17,6 +17,11 @@ describe("Invitation Link Routes", () => {
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
     mockDb.innerJoin.mockReturnValue(mockDb);
+    // The accept holds the membership it lands on, the only "share" lock.
+    mockDb.for.mockImplementation(((strength: string) =>
+      strength === "share"
+        ? Promise.resolve([{ id: "member-1" }])
+        : mockDb) as never);
   });
 
   const baseUrl = "/invitation-links";

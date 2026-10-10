@@ -46,14 +46,19 @@ const plan: ResolvedRunPlan = {
   },
 };
 
+const owner = { workspaceId: "ws-1", ownerId: "user-1" };
+
 describe("TriggerSink", () => {
   beforeEach(() => {
     resetMockDb();
+    // The Workspace still has the Owner the run was resolved to act as.
+    mockDb.for.mockResolvedValue([{ id: "ws-1" }]);
   });
 
   describe("onStart", () => {
     it("inserts a triggerRun row with status running and event metadata", async () => {
       const sink = new TriggerSink({
+        ...owner,
         triggerId: "trigger-1",
         eventType: "card.created",
         eventData: { cardId: "c1" },
@@ -78,6 +83,7 @@ describe("TriggerSink", () => {
 
     it("stores the event's entity so the run-rate breaker can count per record", async () => {
       const sink = new TriggerSink({
+        ...owner,
         triggerId: "trigger-1",
         entityId: "card-1",
         eventType: "card.updated",
@@ -94,7 +100,7 @@ describe("TriggerSink", () => {
     });
 
     it("inserts a row with null event metadata when no event context is provided", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onStart({ runId: "run-1", messages: [] });
 
@@ -107,9 +113,22 @@ describe("TriggerSink", () => {
     });
   });
 
+  it("starts nothing once the Workspace has a different Owner", async () => {
+    mockDb.for.mockResolvedValueOnce([]);
+    const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
+
+    await expect(
+      sink.onStart({ runId: "run-1", messages: [] }),
+    ).rejects.toThrow("no longer has the Owner");
+
+    // Read under a share lock, which a transfer's update lock waits on.
+    expect(mockDb.for).toHaveBeenCalledWith("share");
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
   describe("onResolved", () => {
     it("does not touch the DB when every Tool set loaded", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onResolved({ runId: "run-1", plan });
       await sink.onResolved({
@@ -124,7 +143,7 @@ describe("TriggerSink", () => {
     // Written before the model is called, so a run that fails on its first
     // step still says which tools it never had (#1184).
     it("records the Tool sets that loaded no tools on the run row", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
       const unloadedToolSets = [
         { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" as const },
       ];
@@ -151,6 +170,7 @@ describe("TriggerSink", () => {
 
     it("writes incremental stats to the triggerRun row on the flush interval", async () => {
       const sink = new TriggerSink({
+        ...owner,
         triggerId: "trigger-1",
         flushIntervalMs: 100,
       });
@@ -196,6 +216,7 @@ describe("TriggerSink", () => {
 
     it("does not write when no steps have been observed yet", async () => {
       const sink = new TriggerSink({
+        ...owner,
         triggerId: "trigger-1",
         flushIntervalMs: 100,
       });
@@ -210,7 +231,7 @@ describe("TriggerSink", () => {
 
   describe("onFinish", () => {
     it("maps a succeeded run to status 'success' with stats", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -240,7 +261,7 @@ describe("TriggerSink", () => {
     // Issue #446 / ADR-0018: an Operator reading the runs page can see a
     // scheduled Agent heading for the limit only if the figure is recorded.
     it("persists Context occupancy alongside the unchanged token sums", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -266,7 +287,7 @@ describe("TriggerSink", () => {
     });
 
     it("omits occupancy for a Provider that reported no usage", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -283,7 +304,7 @@ describe("TriggerSink", () => {
     // Issue #734. The cached-input breakdown is a spread, the same idiom as
     // occupancy: absent means the Provider reported no cache detail, never a 0.
     it("persists the cached-input breakdown alongside the unchanged token sums", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -311,7 +332,7 @@ describe("TriggerSink", () => {
     });
 
     it("omits the cache fields for a run whose Provider reported none", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -328,7 +349,7 @@ describe("TriggerSink", () => {
     });
 
     it("maps a failed run to status 'failed' with the error message", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -348,7 +369,7 @@ describe("TriggerSink", () => {
     // #647: a run cancelled at 40 seconds used to land as a failed run with no
     // error, indistinguishable from a crash on the detail page.
     it("records a cancelled run as 'cancelled', not 'failed'", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -363,7 +384,7 @@ describe("TriggerSink", () => {
     });
 
     it("persists the final assistant text on the run", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -379,7 +400,7 @@ describe("TriggerSink", () => {
     });
 
     it("stores no final text for a run that never produced one", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -394,7 +415,7 @@ describe("TriggerSink", () => {
     });
 
     it("only writes stats when steps are present (succeeded with no stats yields null)", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -410,7 +431,7 @@ describe("TriggerSink", () => {
     // Without this the run lands as a plain 'success' and nothing anywhere says
     // the answer was cut off at the model's ceiling.
     it("persists the truncation marker on a run that hit the output limit", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -437,7 +458,7 @@ describe("TriggerSink", () => {
     });
 
     it("omits the marker entirely for a run that finished cleanly", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -454,7 +475,7 @@ describe("TriggerSink", () => {
     // ended at its step ceiling is only distinguishable from one the Agent
     // finished if the flag is written here.
     it("persists the step-limit marker on a run whose loop was stopped short", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -482,7 +503,7 @@ describe("TriggerSink", () => {
     });
 
     it("omits the step-limit marker for a run that finished cleanly", async () => {
-      const sink = new TriggerSink({ triggerId: "trigger-1" });
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 
       await sink.onFinish({
         runId: "run-1",
@@ -533,7 +554,7 @@ describe("TriggerSink terminal announcement", () => {
   it("announces the run it ended, once", async () => {
     seedDb({ trigger_run: [runRow("running")] });
 
-    await finish(new TriggerSink({ triggerId: "trigger-1" }));
+    await finish(new TriggerSink({ ...owner, triggerId: "trigger-1" }));
 
     expect(mockAnnounce).toHaveBeenCalledTimes(1);
     expect(mockAnnounce).toHaveBeenCalledWith([
@@ -555,7 +576,7 @@ describe("TriggerSink terminal announcement", () => {
     };
     const db = seedDb({ trigger_run: [swept] });
 
-    await finish(new TriggerSink({ triggerId: "trigger-1" }));
+    await finish(new TriggerSink({ ...owner, triggerId: "trigger-1" }));
 
     expect(db.tables.trigger_run).toEqual([swept]);
     expect(mockAnnounce).not.toHaveBeenCalled();
@@ -564,7 +585,7 @@ describe("TriggerSink terminal announcement", () => {
   it("announces nothing for a run whose row is gone (its Trigger was deleted)", async () => {
     seedDb({ trigger_run: [] });
 
-    await finish(new TriggerSink({ triggerId: "trigger-1" }));
+    await finish(new TriggerSink({ ...owner, triggerId: "trigger-1" }));
 
     expect(mockAnnounce).not.toHaveBeenCalled();
   });
@@ -579,6 +600,7 @@ describe("TriggerSink terminal announcement", () => {
 describe("TriggerSink run events", () => {
   beforeEach(() => {
     resetMockDb();
+    mockDb.for.mockResolvedValue([{ id: "ws-1" }]);
     vi.useFakeTimers();
   });
 
@@ -587,7 +609,11 @@ describe("TriggerSink run events", () => {
   });
 
   const startWithEvents = async (flushIntervalMs = 100) => {
-    const sink = new TriggerSink({ triggerId: "trigger-1", flushIntervalMs });
+    const sink = new TriggerSink({
+      ...owner,
+      triggerId: "trigger-1",
+      flushIntervalMs,
+    });
     const events = new RunEventRecorder({ runId: "run-1" });
     await sink.onStart({ runId: "run-1", messages: [], events });
     return { sink, events };
@@ -688,6 +714,7 @@ describe("TriggerSink run events", () => {
 
   it("marks the run truncated on the very next flush after the ceiling is hit, not only at the end", async () => {
     const sink = new TriggerSink({
+      ...owner,
       triggerId: "trigger-1",
       flushIntervalMs: 100,
     });
@@ -784,6 +811,7 @@ describe("TriggerSink run events", () => {
 
   it("marks the run when its timeline hit the event ceiling", async () => {
     const sink = new TriggerSink({
+      ...owner,
       triggerId: "trigger-1",
       flushIntervalMs: 100,
     });

@@ -51,7 +51,31 @@ day-of-week`), e.g. `0 9 * * *` for "every day at 9:00 AM".
 
 Set the **Timezone** (defaults to your browser's) — the schedule is evaluated in
 that zone. A **Next Run Preview** shows when it will fire next. Toggle **One-off
-Trigger** to run once and then disable itself.
+Trigger** to run once, at the first time the schedule names.
+
+A One-off Trigger is spent once it fires. It stays switched off for good: you
+cannot re-enable it or change its schedule, only rename or delete it, so its
+form greys out the schedule and **Enabled**. To run it again, create a new one.
+A fired One-off Trigger drops out of the Triggers list and the Workspace home
+count; switch on **Show fired** above the list to see it, with the status of
+its run. It is deleted, together with its run, **7 days** after that run ends,
+whether the run succeeded or not.
+
+A Workspace holds at most **50** One-off Triggers that have not fired yet,
+including ones you switched off before they fired. Creating one past that is
+refused; delete one or wait for one to fire.
+
+<Callout type="warning">
+  A cron expression has no year. A One-off Trigger for a date already past this
+  year does not fail: it fires on that date next year. Check the **Next Run
+  Preview** before you save.
+</Callout>
+
+An Agent with the **Triggers** Tool set can create One-off Triggers too, for
+example when you ask it to remind you of something tomorrow. It reports back the
+time the Trigger will fire, in UTC and in the Trigger's timezone. If it does not
+know your timezone it asks you, so tell it rather than letting the time be read
+as UTC.
 
 Once saved, the Triggers list describes the schedule in plain English with its
 timezone, such as "At 09:00 AM (UTC)". Hover it to see the underlying cron
@@ -159,7 +183,8 @@ starts a new run instead of being handed the stuck one.
 - **Scheduled (cron) runs** are checked about once a minute. When a due
   Trigger's run starts, its next run time is set from the cadence straight away,
   not after the run finishes, so a _failed_ run moves the schedule on just as a
-  successful one does. A one-off Trigger disables itself at that point instead.
+  successful one does. A One-off Trigger switches itself off for good at that
+  point instead.
   Switching **Enabled** back on restarts the cadence from that moment: the first
   run lands on the next slot the schedule names, so a Trigger that was off over
   one of its slots does not fire the moment you re-enable it to catch up.

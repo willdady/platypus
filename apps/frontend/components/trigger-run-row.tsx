@@ -67,7 +67,7 @@ const unloadedToolSetNotice = ({ toolSetId, name, reason }: UnloadedToolSet) =>
 const failedToolCallsNotice = (count: number) =>
   `${count} tool call${count !== 1 ? "s" : ""} failed`;
 
-const statusBadge = (status: TriggerRunStatus) => {
+export const statusBadge = (status: TriggerRunStatus) => {
   switch (status) {
     case "success":
       return (

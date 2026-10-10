@@ -67,6 +67,42 @@ describe("Notification Routes", () => {
       expect(body.results[0].agentAvatarUrl).toBeUndefined();
     });
 
+    it("returns each notification's source, null when it has none", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      const row = (id: string, over: Record<string, unknown>) => ({
+        id,
+        workspaceId,
+        agentId: "agent-1",
+        title: null,
+        body: id,
+        sourceChatId: null,
+        sourceTriggerRunId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        agentName: "My Agent",
+        agentAvatarKey: null,
+        readAt: null,
+        ...over,
+      });
+      mockDb.offset.mockResolvedValueOnce([
+        row("n-chat", { sourceChatId: "chat-1" }),
+        row("n-run", { sourceTriggerRunId: "run-1" }),
+        row("n-none", {}),
+      ]);
+
+      const res = await app.request(baseUrl);
+      const body = (await res.json()) as { results: { source: unknown }[] };
+      expect(body.results.map((r) => r.source)).toEqual([
+        { kind: "chat", chatId: "chat-1" },
+        { kind: "triggerRun", triggerRunId: "run-1" },
+        null,
+      ]);
+    });
+
     it("should return empty array when no notifications exist", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess

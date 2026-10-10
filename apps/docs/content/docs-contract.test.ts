@@ -1803,6 +1803,20 @@ const BACKEND_CONSTANTS = [
     cost: "An integrator waits the wrong time for a stuck record to take calls again.",
   },
   {
+    source: "apps/backend/src/services/trigger.ts",
+    name: "MAX_PENDING_ONE_OFF_TRIGGERS",
+    phrase: (count: number) => `at most **${count}** One-off Triggers`,
+    files: ["building-with-platypus/triggers.mdx"],
+    cost: "A Workspace Owner is refused a One-off Trigger at a count the page never warned of.",
+  },
+  {
+    source: "apps/backend/src/services/trigger.ts",
+    name: "FIRED_ONE_OFF_TTL_DAYS",
+    phrase: (days: number) => `with its run, **${days} days**`,
+    files: ["building-with-platypus/triggers.mdx"],
+    cost: "A Workspace Owner goes looking for a fired One-off Trigger after it was already deleted.",
+  },
+  {
     source: "apps/backend/src/services/a2a-push.ts",
     name: "MAX_PUSH_CONFIGS_PER_TASK",
     phrase: (count: number) => `**Up to ${count} URLs per Task.**`,

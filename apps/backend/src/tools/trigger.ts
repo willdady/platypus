@@ -13,12 +13,14 @@ import { listScoped } from "../services/scoped-resource.ts";
 import {
   createTrigger,
   deleteTrigger as deleteTriggerService,
+  FIRED_ONE_OFF_TTL_DAYS,
   getTrigger as getTriggerService,
   listTriggers as listTriggersService,
   toPublicTrigger,
   updateTrigger,
 } from "../services/trigger.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
+import { getCurrentTime } from "./time.ts";
 import type { ScopeContext } from "../scope.ts";
 
 export function createTriggerTools(
@@ -30,6 +32,28 @@ export function createTriggerTools(
   // Shared one attached to it (ADR-0007), which is exactly what the Chat turn
   // resolves when the trigger fires.
   const ctx: ScopeContext = { orgId, workspaceId };
+
+  /**
+   * A written Trigger's next run, in UTC and on the wall clock of its own
+   * timezone, so the model can check it against the instant the User asked
+   * for. Empty for a Trigger with no next run.
+   */
+  const describeNextRun = (record: {
+    type: string;
+    config: unknown;
+    nextRunAt: Date | null;
+  }) => {
+    if (record.type !== "cron" || !record.nextRunAt) return {};
+    const { timezone } = record.config as CronTriggerConfig;
+    return {
+      nextRunAt: record.nextRunAt.toISOString(),
+      nextRunAtLocal: new Intl.DateTimeFormat("en-US", {
+        dateStyle: "full",
+        timeStyle: "long",
+        timeZone: timezone,
+      }).format(record.nextRunAt),
+    };
+  };
 
   /** Translates the Trigger module's typed errors into a Tool result. */
   const toToolError = (error: unknown) => {
@@ -65,7 +89,7 @@ export function createTriggerTools(
 
   const listTriggers = tool({
     description:
-      "List all triggers in the current workspace. Returns summary information for each trigger. Use getTrigger to get full details including instruction and config.",
+      "List all triggers in the current workspace, including one-off triggers that have already fired. Returns summary information for each trigger, with the status of its last run (null before it has run). Use getTrigger to get full details including instruction and config.",
     inputSchema: z.object({
       enabledOnly: z
         .boolean()
@@ -74,7 +98,10 @@ export function createTriggerTools(
         .describe("If true, only return enabled triggers"),
     }),
     execute: async ({ enabledOnly }) => {
-      const rows = await listTriggersService(ctx, { enabledOnly });
+      const rows = await listTriggersService(ctx, {
+        enabledOnly,
+        includeFired: true,
+      });
       const triggers = rows.map((row) => ({
         id: row.id,
         name: row.name,
@@ -82,8 +109,13 @@ export function createTriggerTools(
         agentId: row.agentId,
         type: row.type,
         enabled: row.enabled,
+        ...(row.type === "cron" && {
+          isOneOff: (row.config as CronTriggerConfig).isOneOff === true,
+        }),
         nextRunAt: row.nextRunAt,
         lastRunAt: row.lastRunAt,
+        firedAt: row.firedAt,
+        lastRunStatus: row.lastRunStatus,
         createdAt: row.createdAt,
       }));
 
@@ -115,7 +147,10 @@ export function createTriggerTools(
 
   const upsertTrigger = tool({
     description:
-      "Create a new trigger or update an existing trigger. If triggerId is provided, updates the existing trigger. If triggerId is not provided, creates a new trigger (requires name, agentId, instruction, type, and config).",
+      "Create a new trigger or update an existing trigger. If triggerId is provided, updates the existing trigger. If triggerId is not provided, creates a new trigger (requires name, agentId, instruction, type, and config). " +
+      "For something the User wants done once (a reminder, a one-time task), create a cron trigger with config.isOneOff set to true: it fires at the first time its cron expression matches, then is spent and cannot be re-enabled. Use getCurrentTime to work out dates such as 'tomorrow'. " +
+      "If you don't know the User's timezone, ask them rather than assuming UTC, and pass it as config.timezone. " +
+      "A cron trigger's result carries nextRunAt (UTC) and nextRunAtLocal (in its timezone): check it is the instant the User asked for. Cron has no year, so a date already past this year runs next year.",
     inputSchema: z.object({
       triggerId: z
         .string()
@@ -168,6 +203,12 @@ export function createTriggerTools(
             .optional()
             .describe(
               "IANA timezone for cron triggers (e.g., 'America/New_York'). Defaults to 'UTC'.",
+            ),
+          isOneOff: z
+            .boolean()
+            .optional()
+            .describe(
+              `Cron triggers only: if true, the trigger fires once at the next time its cron expression matches, then is disabled for good and deleted ${FIRED_ONE_OFF_TTL_DAYS} days after its run ends. Defaults to false (recurring).`,
             ),
           events: z
             .array(eventTriggerEventSchema)
@@ -245,6 +286,7 @@ export function createTriggerTools(
           return {
             success: true,
             trigger: toPublicTrigger(record),
+            ...describeNextRun(record),
             ...(url && { url }),
           };
         } catch (error) {
@@ -286,6 +328,7 @@ export function createTriggerTools(
         return {
           success: true,
           trigger: toPublicTrigger(record),
+          ...describeNextRun(record),
           ...(url && { url }),
         };
       } catch (error) {
@@ -324,5 +367,8 @@ export function createTriggerTools(
     getTrigger,
     upsertTrigger,
     deleteTrigger,
+    // The Time Tool set's own tool under the same name, so an Agent holding
+    // both sees it once.
+    getCurrentTime,
   };
 }

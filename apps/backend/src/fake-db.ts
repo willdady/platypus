@@ -418,7 +418,7 @@ const uniqueViolation = (constraint: string) => {
  * empty rather than an error, so a query for a resource a test never created
  * simply finds nothing.
  *
- * Covers `select`/`selectDistinct`/`from`/`innerJoin`/`leftJoin`/`where`/`orderBy`/`groupBy`/`limit`/`offset`,
+ * Covers `select`/`selectDistinct`/`selectDistinctOn`/`from`/`innerJoin`/`leftJoin`/`where`/`orderBy`/`groupBy`/`limit`/`offset`,
  * a `select(…).as(alias)` subquery joined by `leftJoinLateral` on `true`,
  * `insert`/`values`/`returning`, `update`/`set`/`where`/`returning`,
  * `delete`/`where`/`returning`, `execute`, and a `transaction` that really
@@ -509,7 +509,11 @@ export const createFakeDb = (
       },
     });
 
-    const select = (selection?: Record<string, unknown>, distinct = false) => {
+    const select = (
+      selection?: Record<string, unknown>,
+      distinct = false,
+      distinctOn: ColumnRef[] = [],
+    ) => {
       let table: unknown;
       let condition: Condition;
       let take = Infinity;
@@ -580,6 +584,18 @@ export const createFakeDb = (
             if (left === right) return 0;
             const ascending = left < right ? -1 : 1;
             return op === "asc" ? ascending : -ascending;
+          });
+        }
+
+        // `SELECT DISTINCT ON`: the first row, in order, of each key.
+        if (distinctOn.length) {
+          const seen = new Set<string>();
+          matched = matched.filter((row) => {
+            const resolve = resolverFor(row);
+            const key = JSON.stringify(distinctOn.map((c) => resolve(c)));
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
           });
         }
 
@@ -816,6 +832,8 @@ export const createFakeDb = (
       select: (selection?: Record<string, unknown>) => select(selection),
       selectDistinct: (selection?: Record<string, unknown>) =>
         select(selection, true),
+      selectDistinctOn: (on: unknown[], selection?: Record<string, unknown>) =>
+        select(selection, false, on.map(refOf)),
       insert,
       update,
       delete: remove,

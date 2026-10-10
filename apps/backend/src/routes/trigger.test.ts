@@ -72,11 +72,42 @@ describe("Trigger Routes", () => {
     it("lists all triggers in the workspace", async () => {
       stubAuthLookups();
       mockDb.orderBy.mockResolvedValueOnce([cronTrigger, eventTrigger]);
+      mockDb.orderBy.mockResolvedValueOnce([]); // their runs
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { results: unknown[] };
       expect(body.results).toHaveLength(2);
+    });
+
+    it("leaves fired One-off Triggers out unless includeFired=true", async () => {
+      const fired = {
+        ...cronTrigger,
+        id: "trig-fired",
+        enabled: false,
+        config: { ...cronTrigger.config, isOneOff: true },
+        firedAt: new Date("2026-01-02"),
+      };
+      const list = async (query: string) => {
+        stubAuthLookups();
+        mockDb.orderBy.mockResolvedValueOnce([cronTrigger, fired]);
+        mockDb.orderBy.mockResolvedValueOnce([
+          { triggerId: "trig-fired", status: "success" },
+        ]);
+        const res = await app.request(`${baseUrl}${query}`);
+        expect(res.status).toBe(200);
+        return (
+          (await res.json()) as {
+            results: { id: string; lastRunStatus: string | null }[];
+          }
+        ).results.map(({ id, lastRunStatus }) => ({ id, lastRunStatus }));
+      };
+
+      expect(await list("")).toEqual([{ id: "trig-1", lastRunStatus: null }]);
+      expect(await list("?includeFired=true")).toEqual([
+        { id: "trig-1", lastRunStatus: null },
+        { id: "trig-fired", lastRunStatus: "success" },
+      ]);
     });
 
     it("never returns an Inbound Trigger's token hash", async () => {
@@ -91,6 +122,7 @@ describe("Trigger Routes", () => {
           tokenNotice: "expiring_30",
         },
       ]);
+      mockDb.orderBy.mockResolvedValueOnce([]); // its runs
 
       const res = await app.request(baseUrl);
       const text = await res.text();

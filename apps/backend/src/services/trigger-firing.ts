@@ -24,6 +24,7 @@ import {
   currentCausingAgents,
   currentOriginatingTrigger,
   withOriginatingTrigger,
+  withRunSource,
 } from "../event-causation.ts";
 import {
   retainTriggerRuns,
@@ -315,10 +316,12 @@ const runTrigger = async (
     includeMemories: trigger.includeMemories,
   };
 
+  const owner = { workspaceId, ownerId: workspace.ownerId };
   const sink = inboundContext
-    ? new TriggerSink({ triggerId: id, adoptPendingRow: true })
+    ? new TriggerSink({ triggerId: id, ...owner, adoptPendingRow: true })
     : new TriggerSink({
         triggerId: id,
+        ...owner,
         entityId: eventContext?.entityId,
         eventType: eventContext?.payload.event,
         eventData: eventContext?.payload.data,
@@ -348,17 +351,20 @@ const runTrigger = async (
   // Everything this run writes is caused by this Trigger, at any delegation
   // depth — the ambient context a later dispatch reads back to name where the
   // event came from (ADR-0022). The Agent chain is established deeper, by the
-  // Drive.
+  // Drive. The run itself is the source a Notification it posts records
+  // (#1229).
   await withOriginatingTrigger(id, () =>
-    agentRunner.generate({
-      scope,
-      input,
-      sink,
-      options: {
-        frontendUrl: process.env.FRONTEND_URL,
-        timeouts: triggerTimeouts(),
-      },
-    }),
+    withRunSource({ kind: "triggerRun", triggerRunId: runId }, () =>
+      agentRunner.generate({
+        scope,
+        input,
+        sink,
+        options: {
+          frontendUrl: process.env.FRONTEND_URL,
+          timeouts: triggerTimeouts(),
+        },
+      }),
+    ),
   );
 };
 

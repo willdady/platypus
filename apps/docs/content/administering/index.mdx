@@ -71,13 +71,17 @@ A member with the `admin` role is an Org Admin — they can do everything on thi
 page, including to you. A **Super Admin** row is the platform-level account and
 has no actions available here at all; an Org Admin can't change or remove it.
 
-<Callout type="warning">
-  **Remove from Org** leaves the Workspaces that person owns in place and
-  disables every Trigger in them, Inbound Triggers included, so their callers
-  are refused from then on. Nobody else can switch those Triggers back on.
-  Nobody can chat in their Workspaces afterwards either, and since a Workspace's
-  owner can't be reassigned, the only fix is to delete them.
-</Callout>
+**Remove from Org** lists every Workspace the person owns here, and each one
+needs **Transfer** or **Delete** before **Remove** unlocks. A transfer hands
+the Workspace to another member, as [Transferring a
+Workspace](/administering/workspaces#transferring-a-workspace) describes; pick
+the new owner and whether its history goes too. **Apply to all** copies the
+first Workspace's choice to the rest. If nobody else can receive a Workspace,
+**Delete** is the only choice offered.
+
+The removal and every choice in it happen together or not at all: if one
+transfer is refused, nothing changes and the person stays a member. Someone
+who owns no Workspaces here gets a plain confirmation.
 
 <Callout type="info">
   **Plugins** is deliberately read-only — there is no install or enable button.

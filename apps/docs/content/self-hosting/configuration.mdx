@@ -382,7 +382,8 @@ These rarely need changing but exist when you need them — see the
   backend can be selected instead.
 - **Logging** — log verbosity is configurable.
 - **Time** — `TIMEZONE` sets the zone the **time Tools** report and convert in
-  (`getCurrentTime`, `convertTimezone`). That is its entire reach: it does not
+  (`getCurrentTime`, `convertTimezone`; the Triggers Tool set carries
+  `getCurrentTime` too). That is its entire reach: it does not
   affect Trigger schedules, which carry their own per-Trigger timezone chosen in
   the Trigger form, and it does not affect log timestamps.
 - **Schedulers & runs** — concurrency caps and per-run / per-step timeouts for

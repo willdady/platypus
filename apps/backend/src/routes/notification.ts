@@ -11,6 +11,7 @@ import {
   markAllRead,
   deleteNotification,
   listWorkspaceNotifications,
+  notificationSource,
   unreadNotificationCount,
   unreadNotificationIds,
 } from "../services/notification.ts";
@@ -52,6 +53,7 @@ notification.get(
         agentId: r.agentId,
         title: r.title,
         body: r.body,
+        source: notificationSource(r),
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
         agentName: r.agentName,

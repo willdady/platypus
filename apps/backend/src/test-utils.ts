@@ -99,6 +99,7 @@ process.env.STORAGE_BACKEND = "disk";
  */
 type BuilderMethodName =
   | "select"
+  | "selectDistinctOn"
   | "from"
   | "where"
   | "for"
@@ -149,6 +150,7 @@ export type MockDb = PromiseLike<unknown> & {
 function installBuilderMethods(target: MockDb): void {
   const methods: readonly BuilderMethodName[] = [
     "select",
+    "selectDistinctOn",
     "from",
     "where",
     "for",
@@ -506,6 +508,7 @@ export const notificationEvent = (
     agentId: "agent-1",
     title: null,
     body: "Something happened",
+    source: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,

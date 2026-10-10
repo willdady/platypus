@@ -863,6 +863,10 @@ export const trigger = pgTable(
     config: t.jsonb("config").notNull(),
     lastRunAt: t.timestamp("last_run_at"),
     nextRunAt: t.timestamp("next_run_at"),
+    // One-off Triggers only: when the scheduler claimed it. Set = spent — never
+    // re-armed, hidden from the Trigger list by default, and reaped a fixed
+    // time after its run ends. Null on a One-off disabled before it fired.
+    firedAt: t.timestamp("fired_at"),
     // Inbound Triggers only (ADR-0030). The token is shown once and stored as
     // a SHA-256 hash — it is 256 random bits, so a slow hash buys nothing. Null
     // on other types, and on an Inbound Trigger whose token was revoked.
@@ -1112,12 +1116,21 @@ export const notification = pgTable(
       .text("workspace_id")
       .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
+    // The Agent that posted it. Null on a Notification Platypus posts itself, such as a
+    // Workspace transfer's notice to the new Owner.
     agentId: t
       .text("agent_id")
-      .notNull()
       .references(() => agent.id, { onDelete: "cascade" }),
     title: t.text("title"),
     body: t.text("body").notNull(),
+    // The Chat or Trigger run it was posted from (#1229), at most one; both
+    // null outside a run, or once the source is deleted or pruned.
+    sourceChatId: t
+      .text("source_chat_id")
+      .references(() => chat.id, { onDelete: "set null" }),
+    sourceTriggerRunId: t
+      .text("source_trigger_run_id")
+      .references(() => triggerRun.id, { onDelete: "set null" }),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -1125,6 +1138,8 @@ export const notification = pgTable(
     index("idx_notification_workspace_id").on(t.workspaceId),
     index("idx_notification_agent_id").on(t.agentId),
     index("idx_notification_created_at").on(t.createdAt),
+    index("idx_notification_source_chat_id").on(t.sourceChatId),
+    index("idx_notification_source_trigger_run_id").on(t.sourceTriggerRunId),
   ],
 );
 
