@@ -13,6 +13,7 @@ import { listScoped } from "../services/scoped-resource.ts";
 import {
   createTrigger,
   deleteTrigger as deleteTriggerService,
+  FIRED_ONE_OFF_TTL_DAYS,
   getTrigger as getTriggerService,
   listTriggers as listTriggersService,
   toPublicTrigger,
@@ -207,7 +208,7 @@ export function createTriggerTools(
             .boolean()
             .optional()
             .describe(
-              "Cron triggers only: if true, the trigger fires once at the next time its cron expression matches, then is disabled for good and deleted 7 days after its run ends. Defaults to false (recurring).",
+              `Cron triggers only: if true, the trigger fires once at the next time its cron expression matches, then is disabled for good and deleted ${FIRED_ONE_OFF_TTL_DAYS} days after its run ends. Defaults to false (recurring).`,
             ),
           events: z
             .array(eventTriggerEventSchema)

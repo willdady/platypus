@@ -28,7 +28,9 @@ import {
   announceTriggerRunsEnded,
   endedTriggerRunColumns,
 } from "../services/trigger-run-announce.ts";
+import { DAY_MS } from "../services/bearer-token.ts";
 import {
+  FIRED_ONE_OFF_TTL_DAYS,
   narrowTriggerConfig,
   nextCronRunAt,
   type TriggerRow,
@@ -467,17 +469,14 @@ export async function recoverStuckTriggers(): Promise<void> {
   }
 }
 
-/** How long a fired One-off Trigger outlives the end of its run. */
-const FIRED_ONE_OFF_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
 /**
  * Deletes the fired One-off Triggers whose run ended more than
- * {@link FIRED_ONE_OFF_TTL_MS} ago, whatever its outcome; the run and its
+ * {@link FIRED_ONE_OFF_TTL_DAYS} ago, whatever its outcome; the run and its
  * timeline go with them by cascade. One whose run is still pending or running
  * is kept. One that never wrote a run is timed from when it fired.
  */
 export async function reapFiredOneOffTriggers(): Promise<void> {
-  const cutoff = new Date(Date.now() - FIRED_ONE_OFF_TTL_MS);
+  const cutoff = new Date(Date.now() - FIRED_ONE_OFF_TTL_DAYS * DAY_MS);
   const reaped = await db
     .delete(triggerTable)
     .where(

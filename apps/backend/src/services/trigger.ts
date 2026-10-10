@@ -223,6 +223,9 @@ const parseInboundConfig = (config: unknown): InboundTriggerConfig => {
 /** At most this many One-off Triggers that have yet to fire, per Workspace. */
 export const MAX_PENDING_ONE_OFF_TRIGGERS = 50;
 
+/** How long a fired One-off Trigger outlives the end of its run. */
+export const FIRED_ONE_OFF_TTL_DAYS = 7;
+
 const isOneOffConfig = (config: unknown): boolean =>
   cronTriggerConfigSchema.safeParse(config).data?.isOneOff === true;
 
