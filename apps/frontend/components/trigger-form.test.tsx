@@ -14,6 +14,7 @@ import {
   push,
 } from "@/lib/form-test-harness";
 import { selectOption } from "@/lib/test-utils";
+import { getBrowserTimezone } from "@/lib/timezones";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -191,6 +192,33 @@ describe("TriggerForm — default timezone", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(savedConfig(fetchMock).timezone).toBe("Pacific/Chatham");
+  });
+
+  it("keeps a browser zone the User picked before the session lands", async () => {
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
+    authState.user = null;
+    const browserZone = getBrowserTimezone();
+    const otherZone = browserZone === "UTC" ? "Asia/Tokyo" : "UTC";
+    const { rerender } = render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+
+    // Radix only reports a change, so pick the browser zone back deliberately.
+    await selectOption(browserZone, otherZone);
+    await selectOption(otherZone, browserZone);
+
+    authState.user = { id: "u1", timezone: "Pacific/Chatham" };
+    rerender(<TriggerForm orgId="org1" workspaceId="ws1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "My Trigger" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do something" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedConfig(fetchMock).timezone).toBe(browserZone);
   });
 });
 

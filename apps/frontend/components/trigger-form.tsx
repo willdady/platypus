@@ -459,6 +459,7 @@ const TriggerForm = ({
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [filterBoardId, setFilterBoardId] = useState<string>("");
   const [filterColumnId, setFilterColumnId] = useState<string>("");
+  const [timezoneTouched, setTimezoneTouched] = useState(false);
   const [filterChangedFields, setFilterChangedFields] = useState<string[]>([]);
   const [inboundInputs, setInboundInputs] = useState<InboundInputDraft[]>([]);
   const [recordKey, setRecordKey] = useState<string>("");
@@ -684,14 +685,12 @@ const TriggerForm = ({
     failureMessage: "Error saving trigger",
   });
 
-  // On a cold load the session lands after mount: move a new Trigger still on
-  // the browser's zone onto the User timezone once it arrives.
+  // On a cold load the session lands after mount: move a new Trigger onto the
+  // User timezone once it arrives, unless the User has already picked a zone.
   useResetOnChange(user?.timezone, () => {
     const timezone = user?.timezone;
-    if (triggerId || !timezone) return;
-    setFormData((prev) =>
-      prev.timezone === getBrowserTimezone() ? { ...prev, timezone } : prev,
-    );
+    if (triggerId || !timezone || timezoneTouched) return;
+    setFormData((prev) => ({ ...prev, timezone }));
   });
 
   const {
@@ -1178,7 +1177,10 @@ const TriggerForm = ({
                     label="Timezone"
                     name="timezone"
                     value={formData.timezone}
-                    onValueChange={(value) => setField("timezone", value)}
+                    onValueChange={(value) => {
+                      setTimezoneTouched(true);
+                      setField("timezone", value);
+                    }}
                     disabled={scheduleLocked}
                     placeholder="Select timezone"
                     error={validationErrors.timezone}
