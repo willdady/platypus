@@ -188,6 +188,13 @@ const SkillForm = ({
     },
   });
 
+  // Delete checks the saved agent set, so toggles not yet saved would make it
+  // fail with a message that contradicts the screen (#1395).
+  const savedAgentIds = record?.agentIds ?? [];
+  const agentsDirty =
+    savedAgentIds.length !== selectedAgentIds.length ||
+    savedAgentIds.some((id) => !selectedAgentIds.includes(id));
+
   const form = (
     <div className={classNames}>
       <FieldSet className="mb-6">
@@ -336,9 +343,14 @@ const SkillForm = ({
         onSubmit={() => void submit()}
         submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={!!skillId}
-        deleteDisabled={isSubmitting}
+        deleteDisabled={isSubmitting || agentsDirty}
         onDelete={openDeleteDialog}
       />
+      {skillId && agentsDirty && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          This skill has unsaved agent changes. Update first.
+        </p>
+      )}
 
       <EntityDeleteDialog
         open={isDeleteDialogOpen}

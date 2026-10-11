@@ -181,7 +181,7 @@ describe("createSkillManagementTools", () => {
 
     it.each([
       new ConflictError(
-        "Cannot delete skill because it is referenced by one or more agents",
+        'Cannot delete: this skill is enabled for 1 agent ("Helper"). Turn it off for that agent first.',
       ),
       // Visibility changed between the name lookup and the write.
       new NotFoundError("Skill not found"),

@@ -308,7 +308,7 @@ describe("Skill Routes", () => {
   });
 
   describe("DELETE /:skillId", () => {
-    it("should return 409 if skill is referenced by an agent", async () => {
+    it("should 409 naming the agents that still use the skill", async () => {
       mockSession();
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
@@ -319,7 +319,10 @@ describe("Skill Routes", () => {
       // requireWorkspaceMutable → resolveScoped row lookup (workspace-scoped)
       mockDb.limit.mockResolvedValueOnce([{ id: "skill-1", workspaceId }]);
       // check referencing agents
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1" }]);
+      mockDb.orderBy.mockResolvedValueOnce([
+        { id: "agent-1", name: "Digest" },
+        { id: "agent-2", name: "Helper" },
+      ]);
 
       const res = await app.request(`${baseUrl}/skill-1`, {
         method: "DELETE",
@@ -327,7 +330,7 @@ describe("Skill Routes", () => {
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         error:
-          "Cannot delete skill because it is referenced by one or more agents",
+          'Cannot delete: this skill is enabled for 2 agents ("Digest", "Helper"). Turn it off for those agents first.',
       });
       expect(mockDb.delete).not.toHaveBeenCalled();
     });
@@ -343,7 +346,7 @@ describe("Skill Routes", () => {
       // requireWorkspaceMutable → resolveScoped row lookup (workspace-scoped)
       mockDb.limit.mockResolvedValueOnce([{ id: "skill-1", workspaceId }]);
       // check referencing agents (none)
-      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/skill-1`, {
         method: "DELETE",

@@ -315,9 +315,8 @@ describe("skill write model", () => {
 
   describe("deleteSkill", () => {
     it("deletes a workspace-scoped skill when no agent references it", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]) // requireWorkspaceMutable
-        .mockResolvedValueOnce([]); // referencing agents: none
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]); // requireWorkspaceMutable
+      mockDb.orderBy.mockResolvedValueOnce([]); // referencing agents: none
 
       await deleteSkill({ kind: "workspace", ctx: workspaceCtx }, "s1");
 
@@ -334,14 +333,18 @@ describe("skill write model", () => {
       );
     });
 
-    it("throws ConflictError while a workspace agent references the skill", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]) // requireWorkspaceMutable
-        .mockResolvedValueOnce([{ id: "agent-1" }]); // referencing agents
+    it("throws ConflictError naming the workspace agent that references the skill", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]); // requireWorkspaceMutable
+      mockDb.orderBy.mockResolvedValueOnce([{ id: "agent-1", name: "Helper" }]); // referencing agents
 
-      await expect(
-        deleteSkill({ kind: "workspace", ctx: workspaceCtx }, "s1"),
-      ).rejects.toThrow(ConflictError);
+      const deleting = deleteSkill(
+        { kind: "workspace", ctx: workspaceCtx },
+        "s1",
+      );
+      await expect(deleting).rejects.toThrow(ConflictError);
+      await expect(deleting).rejects.toThrow(
+        'Cannot delete: this skill is enabled for 1 agent ("Helper"). Turn it off for that agent first.',
+      );
       expect(mockDb.delete).not.toHaveBeenCalled();
     });
 

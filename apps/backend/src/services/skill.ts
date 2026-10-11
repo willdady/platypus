@@ -273,9 +273,10 @@ export async function deleteSkill(
     await requireWorkspaceMutable(db, "skill", skillId, scope.ctx);
 
     // A Skill that still names this Workspace's agents is still in use; refuse
-    // rather than leave dangling references.
+    // rather than leave dangling references. Not `inUseConflict`: its remedy
+    // (delete or switch the dependents) is wrong for an agent's Skill list.
     const referencingAgents = await db
-      .select({ id: agentTable.id })
+      .select({ id: agentTable.id, name: agentTable.name })
       .from(agentTable)
       .where(
         and(
@@ -283,10 +284,14 @@ export async function deleteSkill(
           sql`${agentTable.skillIds} @> ${JSON.stringify([skillId])}::jsonb`,
         ),
       )
-      .limit(1);
+      .orderBy(agentTable.name);
     if (referencingAgents.length > 0) {
+      const one = referencingAgents.length === 1;
+      const quoted = referencingAgents.map((a) => `"${a.name}"`).join(", ");
       throw new ConflictError(
-        "Cannot delete skill because it is referenced by one or more agents",
+        `Cannot delete: this skill is enabled for ${referencingAgents.length} agent${
+          one ? "" : "s"
+        } (${quoted}). Turn it off for ${one ? "that agent" : "those agents"} first.`,
       );
     }
 
