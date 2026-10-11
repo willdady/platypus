@@ -152,7 +152,7 @@ export function createTriggerTools(
     description:
       "Create a new trigger or update an existing trigger. If triggerId is provided, updates the existing trigger. If triggerId is not provided, creates a new trigger (requires name, agentId, instruction, type, and config). " +
       "For something the User wants done once (a reminder, a one-time task), create a cron trigger with config.isOneOff set to true: it fires at the first time its cron expression matches, then is spent and cannot be re-enabled. Use getCurrentTime to work out dates such as 'tomorrow'. " +
-      "If you don't know the User's timezone, ask them rather than guessing, and pass it as config.timezone. " +
+      "A cron trigger with no config.timezone is scheduled in the User's timezone when the system prompt names one; pass config.timezone only when the User means a different zone. If the system prompt names no timezone, ask the User rather than guessing, and pass their answer as config.timezone. " +
       "A cron trigger's result carries nextRunAt (UTC) and nextRunAtLocal (in its timezone): check it is the instant the User asked for. Cron has no year, so a date already past this year runs next year.",
     inputSchema: z.object({
       triggerId: z
