@@ -118,8 +118,8 @@ to the Skill's folder — for example `references/forms.md`. In Chat this shows 
 `readSkillFile` returns text files of up to **1 MiB**. Whether a file is text is
 decided from its content when it is imported, not from its extension. Binary
 files, such as images or fonts, can't be read this way: running a bundled script
-or using a binary asset needs a [Sandbox](/concepts/sandboxes),
-and isn't supported yet.
+or using a binary asset needs a Sandbox — see [Skills in a
+Sandbox](#skills-in-a-sandbox).
 
 The same rules apply as for `loadSkill`: the Agent can read files only from
 Skills attached to it, and not from a Skill marked **User-invocable only**.
@@ -129,6 +129,59 @@ Skills attached to it, and not from a Skill marked **User-invocable only**.
   Skill that has bundled files: the new version would have none of the files.
   Ask an Org Admin to change the Shared Skill instead.
 </Callout>
+
+## Skills in a Sandbox
+
+When an Agent with the **Sandbox** Tool set loads a Skill that has bundled
+files, and the Workspace has a [Sandbox](/concepts/sandboxes), Platypus copies
+the Skill into the Sandbox at `.platypus/skills/<name>/`: its `SKILL.md` and
+every bundled file at its path. The Agent is told the folder, and relative paths
+in the Skill resolve against it, so it can run `scripts/extract.py` from there.
+Invoking the Skill with `/` copies it the same way.
+
+The copy is refreshed only when the Skill changes. Loading an unchanged Skill
+again writes nothing; after an edit or **Replace bundle**, the next load
+rewrites the whole folder, and files no longer in the Skill are removed.
+
+<Callout type="warning">
+  The copy belongs to Platypus. Editing a file under `.platypus/skills/` is lost
+  the next time the Skill changes and is loaded. Change the Skill itself
+  instead.
+</Callout>
+
+If the Agent has no Sandbox Tool set, the Workspace has no Sandbox, or the copy
+fails (for example because the Sandbox is stopped), the Skill still loads: the
+Agent is told why it wasn't copied and reads text files with `readSkillFile`.
+
+Some Sandbox backends can't receive binary files. With one of those, only the
+Skill's text files are copied, and the Agent is told which files were left out.
+
+Keep in mind:
+
+- **Any Agent with a shell can read a copied Skill.** The Sandbox belongs to the
+  Workspace, so an Agent with the Sandbox Tool set can read every Skill copied
+  there, including Skills that aren't attached to it.
+- **Bundled scripts run with the Sandbox's [default environment
+  variables](/concepts/sandboxes#default-environment-variables).** Read a
+  third-party Skill's scripts before you attach it to an Agent with a Sandbox.
+- **Copies stay behind.** Deleting, renaming or detaching a Skill doesn't remove
+  its folder from the Sandbox.
+- **Nothing is written to `.agents/skills/` or `.claude/skills/`.** If you run a
+  coding agent such as Claude Code inside the Sandbox and want it to find these
+  Skills, symlink the folder yourself, for example
+  `ln -s ../.platypus/skills .agents/skills`.
+
+### Needs Sandbox
+
+A Skill shows a **Needs Sandbox** badge in the Skills list and on its **Bundle**
+card when it has a file under `scripts/`, a text file whose first line starts
+with `#!`, or a binary file. Platypus decides this from the files' content, not
+their extensions. These Skills are still offered to Agents without a Sandbox,
+which can read their text files but can't run their scripts.
+
+If a Skill has binary files and the Workspace's Sandbox can't receive them, its
+**Bundle** card warns: **Some files in this Skill can't be copied to this
+Workspace's Sandbox.**
 
 ## Attach a Skill to an Agent
 

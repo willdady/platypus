@@ -392,6 +392,20 @@ export const buildSkillZip = (bundle: {
   frontmatter: Record<string, unknown>;
   files: { path: string; data: Uint8Array }[];
 }): Uint8Array => {
+  const entries: Record<string, Uint8Array> = {
+    [`${bundle.fields.name}/SKILL.md`]: strToU8(buildSkillMd(bundle)),
+  };
+  for (const file of bundle.files) {
+    entries[`${bundle.fields.name}/${file.path}`] = file.data;
+  }
+  return zipSync(entries);
+};
+
+/** `SKILL.md` as an export writes it: frontmatter rebuilt, then the body. */
+export const buildSkillMd = (bundle: {
+  fields: SkillBundleFields;
+  frontmatter: Record<string, unknown>;
+}): string => {
   const { name, description, body, disableModelInvocation, argumentHint } =
     bundle.fields;
   const yaml = stringifyYaml({
@@ -401,9 +415,22 @@ export const buildSkillZip = (bundle: {
     ...(argumentHint !== null && { "argument-hint": argumentHint }),
     ...bundle.frontmatter,
   });
-  const entries: Record<string, Uint8Array> = {
-    [`${name}/SKILL.md`]: strToU8(`---\n${yaml}---\n${body}`),
-  };
-  for (const file of bundle.files) entries[`${name}/${file.path}`] = file.data;
-  return zipSync(entries);
+  return `---\n${yaml}---\n${body}`;
 };
+
+/** Whether a file's first line starts with `#!`. */
+export const startsWithShebang = (data: Uint8Array): boolean =>
+  data[0] === 0x23 && data[1] === 0x21;
+
+/**
+ * Whether a bundle holds anything only a Sandbox can use: a file under
+ * `scripts/`, a text file starting with `#!`, or a binary file. Decided from
+ * content, never from extensions.
+ */
+export const bundleNeedsSandbox = (files: SkillBundleFile[]): boolean =>
+  files.some(
+    (file) =>
+      file.path.startsWith("scripts/") ||
+      !file.isText ||
+      startsWithShebang(file.data),
+  );

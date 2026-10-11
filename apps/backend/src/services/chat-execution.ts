@@ -17,7 +17,7 @@ import {
   type ToolSessionQueries,
   type ToolSessionScope,
 } from "../tools/tool-session.ts";
-import { MEMORY_TOOLSET_ID } from "../tools/index.ts";
+import { MEMORY_TOOLSET_ID, SANDBOX_TOOLSET_ID } from "../tools/index.ts";
 import {
   createLoadSkillTool,
   createReadSkillFileTool,
@@ -758,6 +758,7 @@ export const prepareChatTurn = async (
         orgId,
         workspaceId,
         permittedSkillIds,
+        (agent?.toolSetIds ?? []).includes(SANDBOX_TOOLSET_ID),
       );
       tools[READ_SKILL_FILE_TOOL_NAME] = createReadSkillFileTool(
         orgId,

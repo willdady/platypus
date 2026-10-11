@@ -617,6 +617,13 @@
       "when": 1791676699262,
       "tag": "0087_skill_bundles",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1791683222735,
+      "tag": "0088_skill_needs_sandbox",
+      "breakpoints": true
     }
   ]
 }

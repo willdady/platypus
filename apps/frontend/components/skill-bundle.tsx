@@ -1,14 +1,37 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, FileArchive, FileUp } from "lucide-react";
+import {
+  Download,
+  FileArchive,
+  FileUp,
+  SquareTerminal,
+  TriangleAlert,
+} from "lucide-react";
 import { toast } from "sonner";
-import type { Skill, SkillFile } from "@platypus/schemas";
+import type { Sandbox, Skill, SkillFile } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldDescription } from "@/components/ui/field";
 import { useBackendUrl } from "@/components/auth-provider";
 import { scopedUrl, writeAt, type Scope } from "@/lib/api-write";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { optionalFetcher } from "@/lib/utils";
+
+/** Marks a Skill whose scripts or binary files only a Sandbox can use. */
+export const NeedsSandboxBadge = ({ skill }: { skill: Skill }) => {
+  if (!skill.needsSandbox) return null;
+
+  return (
+    <span
+      className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider"
+      title="This skill has scripts or binary files that only an agent with a Sandbox can use"
+    >
+      <SquareTerminal className="size-3" />
+      Needs Sandbox
+    </span>
+  );
+};
 
 /**
  * Picks a `.zip` and sends it as the raw request body to `url`. The backend
@@ -107,11 +130,22 @@ export const SkillBundleCard = ({
   });
   const files: SkillFile[] = skill.files ?? [];
   const frontmatter = Object.entries(skill.frontmatter ?? {});
+  // Only a Workspace has a Sandbox; a backend that can't receive bytes gets
+  // the Skill's text files only.
+  const { data: sandbox } = useScopedSWR<Sandbox | null>(
+    "sandbox",
+    scope.workspaceId ? scope : null,
+    { fetcher: optionalFetcher },
+  );
+  const binariesSkipped =
+    sandbox?.transfer.upload === false && files.some((file) => !file.isText);
 
   return (
     <Card className="mb-6">
       <CardHeader>
-        <CardTitle>Bundle</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Bundle <NeedsSandboxBadge skill={skill} />
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <FieldDescription>
@@ -119,6 +153,14 @@ export const SkillBundleCard = ({
           fields above, the frontmatter and every file with the zip&apos;s
           contents.
         </FieldDescription>
+
+        {binariesSkipped && (
+          <p className="flex items-center gap-1 text-sm text-warning-foreground">
+            <TriangleAlert className="size-4" />
+            Some files in this Skill can&apos;t be copied to this
+            Workspace&apos;s Sandbox.
+          </p>
+        )}
 
         {files.length > 0 ? (
           <ul className="divide-y rounded-md border text-sm">

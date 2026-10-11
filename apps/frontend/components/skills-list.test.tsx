@@ -115,6 +115,16 @@ describe("SkillsList invocation badge", () => {
     expect(screen.getAllByText("User-invocable only")).toHaveLength(1);
     expect(screen.getByText("Workspace Skill")).toBeInTheDocument();
   });
+
+  it("badges a Skill that needs a Sandbox, Shared or not", () => {
+    renderSkills([
+      { ...orgSkill, needsSandbox: true },
+      { ...workspaceSkill, id: "scripts", name: "Scripts", needsSandbox: true },
+      workspaceSkill,
+    ]);
+
+    expect(screen.getAllByText("Needs Sandbox")).toHaveLength(2);
+  });
 });
 
 describe("SkillsList delete", () => {

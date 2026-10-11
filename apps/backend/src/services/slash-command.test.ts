@@ -18,9 +18,9 @@ const queriesFor = (
   skills: Array<{ id: string; name: string; body: string }>,
   skillIds: string[] | null = skills.map((s) => s.id),
 ) => {
-  const getAgentSkillIds = vi
-    .fn<SlashCommandQueries["getAgentSkillIds"]>()
-    .mockResolvedValue(skillIds);
+  const getAgentAssignments = vi
+    .fn<SlashCommandQueries["getAgentAssignments"]>()
+    .mockResolvedValue(skillIds && { skillIds, toolSetIds: [] });
   const resolveAssignedSkill = vi
     .fn<SlashCommandQueries["resolveAssignedSkill"]>()
     .mockImplementation((name, _ctx, permitted) => {
@@ -31,7 +31,7 @@ const queriesFor = (
         found ? { name: found.name, body: found.body } : null,
       );
     });
-  return { getAgentSkillIds, resolveAssignedSkill };
+  return { getAgentAssignments, resolveAssignedSkill };
 };
 
 type FakeQueries = ReturnType<typeof queriesFor>;
@@ -178,7 +178,7 @@ describe("seedUserInvokedSkill", () => {
         queries,
       ),
     ).toBe(messages);
-    expect(queries.getAgentSkillIds.mock.calls).toEqual([]);
+    expect(queries.getAgentAssignments.mock.calls).toEqual([]);
   });
 
   it("seeds only for the latest turn, leaving an earlier turn's pair in place", async () => {

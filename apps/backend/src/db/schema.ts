@@ -776,6 +776,10 @@ export const skill = pgTable(
     // and each `skill_file`'s path and sha256 (`bundleHash`). Null only on a
     // Skill last written before bundles existed; its next write sets it.
     bundleHash: t.text("bundle_hash"),
+    // Whether the bundle has anything only a Sandbox can use: a file under
+    // `scripts/`, a text file starting with `#!`, or a binary file. Decided by
+    // content at import, never by extension.
+    needsSandbox: t.boolean("needs_sandbox").notNull().default(false),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

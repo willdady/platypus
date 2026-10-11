@@ -59,7 +59,9 @@ describe("createLoadSkillTool", () => {
   });
 
   const load = (name: string, permitted: string[]) =>
-    callTool(createLoadSkillTool(orgId, workspaceId, permitted), { name });
+    callTool(createLoadSkillTool(orgId, workspaceId, permitted, false), {
+      name,
+    });
 
   it.each([
     ["a workspace skill", "my-skill", "ws-skill"],

@@ -677,6 +677,9 @@ export const skillBaseSchema = z.object({
   // from an imported bundle. Read-only.
   frontmatter: z.record(z.string(), z.unknown()).default({}),
   bundleHash: z.string().nullable().optional(),
+  // Whether the bundle has scripts, a `#!` file or binary files, which only a
+  // Sandbox can use. Derived from content at import. Read-only.
+  needsSandbox: z.boolean().default(false),
   // Present on a single Skill's read, absent from lists.
   files: z.array(skillFileSchema).optional(),
   createdAt: z.date(),

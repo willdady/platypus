@@ -11,6 +11,7 @@ import { skillStorageKeyPrefix } from "../storage/keys.ts";
 import { deleteStoredPrefix } from "../storage/utils.ts";
 import {
   bundleHash,
+  bundleNeedsSandbox,
   buildSkillZip,
   parseSkillZip,
   type SkillBundleFields,
@@ -193,6 +194,7 @@ export async function importSkillBundle(
           ...bundle.fields,
           frontmatter: bundle.frontmatter,
           bundleHash: bundleHash(bundle),
+          needsSandbox: bundleNeedsSandbox(bundle.files),
           ...scopeColumnsOf(scope),
         })
         .returning();
@@ -245,6 +247,7 @@ export async function replaceSkillBundle(
           ...bundle.fields,
           frontmatter: bundle.frontmatter,
           bundleHash: bundleHash(bundle),
+          needsSandbox: bundleNeedsSandbox(bundle.files),
           updatedAt: new Date(),
         })
         .where(where)
@@ -288,35 +291,6 @@ export async function exportSkillBundle(row: SkillRow): Promise<Uint8Array> {
     files,
   });
 }
-
-/** What `loadSkill` returns, and what a slash command seeds. */
-export type SkillLoadResult =
-  | { name: string; body: string }
-  | {
-      name: string;
-      body: string;
-      files: { path: string; isText: boolean }[];
-      note: string;
-    };
-
-/**
- * The one builder of a loaded Skill's result, called by both `loadSkill` and
- * slash-command seeding so the two cannot drift. A Skill with no bundled files
- * keeps exactly the `{ name, body }` it always had.
- */
-export const skillLoadResult = async (
-  database: Database,
-  row: SkillRow,
-): Promise<SkillLoadResult> => {
-  const files = await listSkillFiles(database, row.id);
-  if (files.length === 0) return { name: row.name, body: row.body };
-  return {
-    name: row.name,
-    body: row.body,
-    files: files.map(({ path, isText }) => ({ path, isText })),
-    note: "This skill bundles the files listed above. Read a text file with the readSkillFile tool, passing its path relative to the skill's root.",
-  };
-};
 
 /** One of a Skill's bundled files, or `NotFoundError`. */
 export const requireSkillFile = async (

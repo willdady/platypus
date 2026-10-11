@@ -16,6 +16,8 @@ import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import os from "node:os";
 import { afterEach } from "vitest";
 import type { Tool } from "ai";
+import { z } from "zod";
+import type { SandboxBackend } from "@platypuschat/plugin-sdk";
 import { resetStorage } from "../storage/index.ts";
 import { mockNanoid } from "../test-setup.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
@@ -46,6 +48,79 @@ const { createLoadSkillTool, createReadSkillFileTool } =
 const { createSkillManagementTools } =
   await import("../tools/skill-management.ts");
 const { parseSkillZip, bundleHash } = await import("./skill-bundle-format.ts");
+const { registerSandboxBackend } = await import("../sandbox/index.ts");
+
+/**
+ * An in-memory Sandbox: what the copy left in it, and every write it took.
+ * `rm -rf` and `chmod +x` are the only commands it understands.
+ */
+const sandboxState = {
+  files: new Map<string, string>(),
+  executable: new Set<string>(),
+  writes: 0,
+  failing: false,
+  withBytes: true,
+};
+const quotedArgs = (command: string) =>
+  [...command.matchAll(/'((?:[^']|'\\'')*)'/g)].map((m) =>
+    m[1].replaceAll("'\\''", "'"),
+  );
+const fakeSandbox = (): SandboxBackend => {
+  // Async, as a real backend's calls are: a stopped Sandbox rejects.
+  const guard = () =>
+    sandboxState.failing
+      ? Promise.reject(new Error("sandbox stopped"))
+      : Promise.resolve();
+  const write = async (path: string, content: string) => {
+    await guard();
+    sandboxState.writes++;
+    sandboxState.files.set(path, content);
+  };
+  const unsupported = () => Promise.reject(new Error("unsupported"));
+  return {
+    shellExec: async (_ctx, { command }) => {
+      await guard();
+      const args = quotedArgs(command);
+      if (command.startsWith("rm -rf")) {
+        sandboxState.writes++;
+        for (const key of [...sandboxState.files.keys()]) {
+          if (args.some((dir) => key.startsWith(`${dir}/`))) {
+            sandboxState.files.delete(key);
+          }
+        }
+      } else if (command.startsWith("chmod +x")) {
+        args.forEach((path) => sandboxState.executable.add(path));
+      } else {
+        throw new Error(`fake sandbox can't run: ${command}`);
+      }
+      return {
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+        truncated: false,
+        durationMs: 1,
+      };
+    },
+    fsRead: async (_ctx, { path }) => {
+      await guard();
+      const content = sandboxState.files.get(path);
+      if (content === undefined)
+        throw new Error(`fs.read: no such file ${path}`);
+      return { content, lineCount: 1, truncated: false };
+    },
+    fsWrite: async (_ctx, { path, content }) => {
+      await write(path, content);
+      return { bytesWritten: content.length };
+    },
+    fsEdit: unsupported,
+    fsList: unsupported,
+    destroy: () => Promise.resolve(),
+    ...(sandboxState.withBytes && {
+      fsWriteBytes: (_ctx, { path, bytes }) =>
+        write(path, Buffer.from(bytes).toString("latin1")),
+    }),
+  };
+};
 
 let pg: PGlite;
 beforeAll(async () => {
@@ -54,6 +129,13 @@ beforeAll(async () => {
   mockNanoid.mockImplementation(actual.nanoid);
   pg = await migratedPglite();
   holder.db = drizzle(pg);
+  registerSandboxBackend({
+    backend: "fake",
+    name: "Fake",
+    configSchema: z.object({}),
+    credentialsSchema: z.object({}),
+    create: fakeSandbox,
+  });
 }, 60_000);
 afterAll(() => pg.close());
 
@@ -95,7 +177,17 @@ beforeEach(async () => {
     INSERT INTO "provider" ("id", "workspace_id", "name", "provider_type", "api_key", "task_model_id", "memory_extraction_model_id", "modelIds") VALUES
       ('p-1', 'ws-1', 'P', 'openai', 'k', 'm', 'm', '[]');
   `);
+  sandboxState.files.clear();
+  sandboxState.executable.clear();
+  sandboxState.writes = 0;
+  sandboxState.failing = false;
+  sandboxState.withBytes = true;
 });
+
+const addSandbox = () =>
+  pg.exec(
+    `INSERT INTO "sandbox" ("id", "workspace_id", "name", "backend") VALUES ('sb-1', 'ws-1', 'Box', 'fake')`,
+  );
 
 const skillMd = (name: string, body = "Read forms.md first.\n") =>
   strToU8(
@@ -381,8 +473,11 @@ describe("Skill writes outside the bundle", () => {
 });
 
 describe("loadSkill and readSkillFile", () => {
-  const load = (skillId: string, name: string) =>
-    callTool(createLoadSkillTool("org-1", "ws-1", [skillId]), { name });
+  const load = (skillId: string, name: string, hasSandboxToolSet = false) =>
+    callTool(
+      createLoadSkillTool("org-1", "ws-1", [skillId], hasSandboxToolSet),
+      { name },
+    );
 
   it("lists a bundle's files", async () => {
     const row = await importSkillBundle(wsScope, pdfZip());
@@ -456,5 +551,205 @@ describe("loadSkill and readSkillFile", () => {
     expect(await read(row.id, "pdf", "forms.md")).toEqual({
       error: "Skill 'pdf' can only be invoked by a user",
     });
+  });
+});
+
+describe("copying a bundled Skill into the Sandbox", () => {
+  const load = (skillId: string, name: string, hasSandboxToolSet = true) =>
+    callTool(
+      createLoadSkillTool("org-1", "ws-1", [skillId], hasSandboxToolSet),
+      { name },
+    ) as Promise<{ directory?: string; note: string; files: unknown[] }>;
+
+  const scriptsZip = (run = "#!/bin/sh\necho hi\n") =>
+    zipSync({
+      "tool/SKILL.md": skillMd("tool"),
+      "tool/references/guide.md": strToU8("# Guide"),
+      "tool/run": strToU8(run),
+      "tool/logo.png": new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0]),
+    });
+
+  it("writes SKILL.md and every bundled file under .platypus/skills/<name>/", async () => {
+    await addSandbox();
+    const row = await importSkillBundle(wsScope, scriptsZip());
+
+    const result = await load(row.id, "tool");
+
+    expect(result.directory).toBe(".platypus/skills/tool");
+    expect(result.note).toContain(".platypus/skills/tool");
+    expect(sandboxState.files.get(".platypus/skills/tool/SKILL.md")).toBe(
+      "---\nname: tool\ndescription: Work with PDF files.\nlicense: Proprietary\n---\nRead forms.md first.",
+    );
+    expect(
+      sandboxState.files.get(".platypus/skills/tool/references/guide.md"),
+    ).toBe("# Guide");
+    expect(sandboxState.files.has(".platypus/skills/tool/logo.png")).toBe(true);
+    expect(sandboxState.executable).toEqual(
+      new Set([".platypus/skills/tool/run"]),
+    );
+  });
+
+  it("writes nothing on a second load of an unchanged bundle", async () => {
+    await addSandbox();
+    const row = await importSkillBundle(wsScope, scriptsZip());
+    await load(row.id, "tool");
+    const writes = sandboxState.writes;
+
+    const again = await load(row.id, "tool");
+
+    expect(sandboxState.writes).toBe(writes);
+    expect(again.directory).toBe(".platypus/skills/tool");
+  });
+
+  it("rewrites the copy after Replace bundle, removing files no longer in it", async () => {
+    await addSandbox();
+    const row = await importSkillBundle(wsScope, scriptsZip());
+    await load(row.id, "tool");
+
+    await replaceSkillBundle(
+      wsScope,
+      row.id,
+      zipSync({
+        "tool/SKILL.md": skillMd("tool"),
+        "tool/references/new.md": strToU8("# New"),
+      }),
+    );
+    await load(row.id, "tool");
+
+    expect(
+      [...sandboxState.files.keys()]
+        .filter((key) => key.startsWith(".platypus/skills/tool/"))
+        .sort(),
+    ).toEqual([
+      ".platypus/skills/tool/SKILL.md",
+      ".platypus/skills/tool/references/new.md",
+    ]);
+  });
+
+  it("copies only text files to a backend without fsWriteBytes, naming the binaries it skipped", async () => {
+    sandboxState.withBytes = false;
+    await addSandbox();
+    const row = await importSkillBundle(wsScope, scriptsZip());
+
+    const result = await load(row.id, "tool");
+
+    expect(sandboxState.files.has(".platypus/skills/tool/run")).toBe(true);
+    expect(sandboxState.files.has(".platypus/skills/tool/logo.png")).toBe(
+      false,
+    );
+    expect(result.note).toContain("logo.png");
+  });
+
+  it("copies nothing for an Agent without the sandbox Tool set, and says why", async () => {
+    await addSandbox();
+    const row = await importSkillBundle(wsScope, scriptsZip());
+
+    const result = await load(row.id, "tool", false);
+
+    expect(sandboxState.writes).toBe(0);
+    expect(result.directory).toBeUndefined();
+    expect(result.note).toMatch(/no Sandbox tools.*readSkillFile/);
+  });
+
+  it("says why when the Workspace has no Sandbox", async () => {
+    const row = await importSkillBundle(wsScope, scriptsZip());
+    const result = await load(row.id, "tool");
+    expect(result.directory).toBeUndefined();
+    expect(result.note).toMatch(/no Sandbox, .*readSkillFile/);
+  });
+
+  it("still returns the body and files when the Sandbox errors during the copy", async () => {
+    sandboxState.failing = true;
+    await addSandbox();
+    const row = await importSkillBundle(wsScope, scriptsZip());
+
+    const result = await load(row.id, "tool");
+
+    expect(result).toMatchObject({
+      name: "tool",
+      body: "Read forms.md first.",
+    });
+    expect(result.files).toHaveLength(3);
+    expect(result.directory).toBeUndefined();
+    expect(result.note).toMatch(
+      /could not be copied into the Sandbox this time/,
+    );
+  });
+
+  it("copies a Skill invoked by slash command, exactly as loadSkill does", async () => {
+    await addSandbox();
+    const row = await importSkillBundle(wsScope, scriptsZip());
+    await pg.exec(
+      `INSERT INTO "agent" ("id", "workspace_id", "provider_id", "name", "description", "model_id", "skill_ids", "tool_set_ids") VALUES ('agent-1', 'ws-1', 'p-1', 'Helper', 'Helps', 'm', '["${row.id}"]', '["sandbox"]')`,
+    );
+
+    const seeded = await seedUserInvokedSkill({
+      messages: [
+        { id: "m1", role: "user", parts: [{ type: "text", text: "/tool" }] },
+      ],
+      orgId: "org-1",
+      workspaceId: "ws-1",
+      agentId: "agent-1",
+    });
+
+    expect(sandboxState.files.has(".platypus/skills/tool/run")).toBe(true);
+    const part = seeded.at(-1)!.parts[0] as { output: unknown };
+    expect(part.output).toEqual(await load(row.id, "tool"));
+  });
+
+  it("never writes into .agents/skills or .claude/skills", async () => {
+    await addSandbox();
+    const row = await importSkillBundle(wsScope, scriptsZip());
+    await load(row.id, "tool");
+    expect(
+      [...sandboxState.files.keys()].every((key) =>
+        key.startsWith(".platypus/skills/"),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("needsSandbox", () => {
+  const bundleWith = (files: Record<string, Uint8Array>) =>
+    importSkillBundle(
+      wsScope,
+      zipSync({
+        "x/SKILL.md": skillMd("x"),
+        ...Object.fromEntries(
+          Object.entries(files).map(([path, data]) => [`x/${path}`, data]),
+        ),
+      }),
+    );
+
+  it.each([
+    ["a file under scripts/", { "scripts/x.py": strToU8("print(1)") }],
+    ["a root file starting with #!", { run: strToU8("#!/bin/sh\necho") }],
+    ["a PNG", { "logo.png": new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0]) }],
+  ])("is true for a bundle with %s", async (_label, files) => {
+    expect((await bundleWith(files)).needsSandbox).toBe(true);
+  });
+
+  it("is false for a references-only bundle", async () => {
+    const row = await bundleWith({ "references/a.md": strToU8("# A") });
+    expect(row.needsSandbox).toBe(false);
+  });
+
+  it("follows the bundle through Replace bundle", async () => {
+    const row = await bundleWith({ "references/a.md": strToU8("# A") });
+    const replaced = await replaceSkillBundle(
+      wsScope,
+      row.id,
+      zipSync({ "x/SKILL.md": skillMd("x"), "x/scripts/a.sh": strToU8("ls") }),
+    );
+    expect(replaced.needsSandbox).toBe(true);
+  });
+
+  it("warns, when not copied, that the Skill's scripts can't be used", async () => {
+    const row = await bundleWith({ "scripts/x.py": strToU8("print(1)") });
+    const result = (await callTool(
+      createLoadSkillTool("org-1", "ws-1", [row.id], false),
+      { name: "x" },
+    )) as { note: string };
+    expect(result.note).toContain("scripts and binary assets can't be used");
   });
 });

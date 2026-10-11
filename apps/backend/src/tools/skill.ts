@@ -5,8 +5,8 @@ import { resolveAssignedSkillByName } from "../services/skill-resolution.ts";
 import {
   findSkillFileByPath,
   readStoredSkillFile,
-  skillLoadResult,
 } from "../services/skill-bundle.ts";
+import { skillLoadResult } from "../services/skill-sandbox.ts";
 import { normaliseBundlePath } from "../services/skill-bundle-format.ts";
 import type { RowOf } from "../services/scoped-resource.ts";
 
@@ -51,6 +51,7 @@ export const createLoadSkillTool = (
   orgId: string,
   workspaceId: string,
   permittedSkillIds: string[],
+  hasSandboxToolSet: boolean,
 ) =>
   tool({
     description:
@@ -58,7 +59,7 @@ export const createLoadSkillTool = (
     inputSchema: z.object({
       name: z.string().describe("The kebab-case name of the skill to load"),
     }),
-    execute: async ({ name }: { name: string }) => {
+    execute: async ({ name }: { name: string }, { abortSignal }) => {
       const found = await resolveForModel(
         name,
         orgId,
@@ -66,7 +67,11 @@ export const createLoadSkillTool = (
         permittedSkillIds,
       );
       if ("error" in found) return found;
-      return skillLoadResult(db, found.row);
+      return skillLoadResult(db, found.row, {
+        workspaceId,
+        hasSandboxToolSet,
+        signal: abortSignal,
+      });
     },
   });
 

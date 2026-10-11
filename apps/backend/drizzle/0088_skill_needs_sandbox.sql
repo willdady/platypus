@@ -1,0 +1,1 @@
+ALTER TABLE "skill" ADD COLUMN "needs_sandbox" boolean DEFAULT false NOT NULL;
