@@ -18,7 +18,7 @@ import { afterEach } from "vitest";
 import type { Tool } from "ai";
 import { resetStorage } from "../storage/index.ts";
 import { mockNanoid } from "../test-setup.ts";
-import { ValidationError } from "../errors.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
 
 /**
  * Skill bundles (ADR-0036) end to end against an in-process Postgres built
@@ -217,6 +217,18 @@ describe("importSkillBundle", () => {
         "日本.md",
       ].sort(),
     );
+  });
+
+  it("fails an export as a server fault when storage has lost a file", async () => {
+    const row = await importSkillBundle(wsScope, pdfZip());
+    await fs.rm(
+      path.join(process.env.STORAGE_DISK_PATH!, skillPrefix(row.id)),
+      { recursive: true },
+    );
+
+    const error = await exportSkillBundle(row).catch((e: unknown) => e);
+    expect(error).not.toBeInstanceOf(NotFoundError);
+    expect((error as Error).message).toMatch(/^Skill file missing/);
   });
 });
 

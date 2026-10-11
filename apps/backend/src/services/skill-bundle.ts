@@ -1,6 +1,6 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, type SQL } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import {
   skill as skillTable,
   skillFile as skillFileTable,
@@ -38,6 +38,8 @@ import type { SkillRow, SkillScope } from "./skill.ts";
 
 export type SkillFileRow = typeof skillFileTable.$inferSelect;
 
+type Executor = Database | Tx;
+
 /**
  * Every file is stored as `application/octet-stream`, whatever it contains, so
  * a bundled `.html` or `.svg` can never be served inline from the deployment's
@@ -48,17 +50,51 @@ export const SKILL_FILE_CONTENT_TYPE = "application/octet-stream";
 const orgIdOf = (scope: SkillScope) =>
   scope.kind === "workspace" ? scope.ctx.orgId : scope.orgId;
 
-const fieldsOf = (row: SkillRow): SkillBundleFields => ({
+/** The scope columns a new Skill row is inserted with. */
+export const scopeColumnsOf = (scope: SkillScope) =>
+  scope.kind === "workspace"
+    ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
+    : { organizationId: scope.orgId, workspaceId: null };
+
+/**
+ * The `where` that writes one Skill at `scope`, once it is known to be
+ * writable there. At Workspace scope a Shared Skill is a single source of
+ * truth edited only on the Organization surface (ADR-0007):
+ * `requireWorkspaceMutable` throws NotFound (→404) when the Skill is not
+ * visible here, then Locked (→403) when it is org-scoped. At Organization
+ * scope `requireOrgScoped` throws NotFound (→404) before the write ever runs
+ * (#605).
+ */
+export const writableSkillWhere = async (
+  scope: SkillScope,
+  skillId: string,
+): Promise<SQL> => {
+  if (scope.kind === "workspace") {
+    await requireWorkspaceMutable(db, "skill", skillId, scope.ctx);
+    return workspaceScopedWhere("skill", skillId, scope.ctx.workspaceId);
+  }
+  await requireOrgScoped(db, "skill", skillId, scope.orgId);
+  return orgScopedWhere("skill", skillId, scope.orgId);
+};
+
+/** The mapped fields of a row, or of a create, as the bundle hash sees them. */
+export const fieldsOf = (row: {
+  name: string;
+  description: string;
+  body: string;
+  disableModelInvocation?: boolean;
+  argumentHint?: string | null;
+}): SkillBundleFields => ({
   name: row.name,
   description: row.description,
   body: row.body,
-  disableModelInvocation: row.disableModelInvocation,
+  disableModelInvocation: row.disableModelInvocation ?? false,
   argumentHint: row.argumentHint ?? null,
 });
 
 /** A Skill's bundled files, by path. */
 export const listSkillFiles = (
-  database: Database,
+  database: Executor,
   skillId: string,
 ): Promise<SkillFileRow[]> =>
   database
@@ -69,7 +105,7 @@ export const listSkillFiles = (
 
 /** The bundle hash of a row as it now stands, with the files it holds. */
 export const hashSkillRow = async (
-  database: Database,
+  database: Executor,
   row: SkillRow,
 ): Promise<string> =>
   bundleHash({
@@ -83,7 +119,7 @@ export const hashSkillRow = async (
  * body or mapped fields, keeping its files.
  */
 export const rehashSkill = async (
-  database: Database,
+  database: Executor,
   row: SkillRow,
 ): Promise<SkillRow> => {
   const [updated] = await database
@@ -157,9 +193,7 @@ export async function importSkillBundle(
           ...bundle.fields,
           frontmatter: bundle.frontmatter,
           bundleHash: bundleHash(bundle),
-          ...(scope.kind === "workspace"
-            ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
-            : { organizationId: scope.orgId, workspaceId: null }),
+          ...scopeColumnsOf(scope),
         })
         .returning();
       if (rows.length > 0) await tx.insert(skillFileTable).values(rows);
@@ -191,15 +225,7 @@ export async function replaceSkillBundle(
   skillId: string,
   zip: Uint8Array,
 ): Promise<SkillRow> {
-  let where;
-  if (scope.kind === "workspace") {
-    await requireWorkspaceMutable(db, "skill", skillId, scope.ctx);
-    where = workspaceScopedWhere("skill", skillId, scope.ctx.workspaceId);
-  } else {
-    await requireOrgScoped(db, "skill", skillId, scope.orgId);
-    where = orgScopedWhere("skill", skillId, scope.orgId);
-  }
-
+  const where = await writableSkillWhere(scope, skillId);
   const bundle = parseSkillZip(zip);
   const { prefix, rows } = await storeFiles(
     orgIdOf(scope),
@@ -244,12 +270,15 @@ export const readStoredSkillFile = async (
 ): Promise<Buffer | null> =>
   (await getStorage().get(file.storageKey))?.data ?? null;
 
-/** The zip an export downloads. See `buildSkillZip`. */
+/**
+ * The zip an export downloads. See `buildSkillZip`. A `skill_file` row whose
+ * bytes storage no longer holds is a server fault (→500), not a missing Skill.
+ */
 export async function exportSkillBundle(row: SkillRow): Promise<Uint8Array> {
   const files = await Promise.all(
     (await listSkillFiles(db, row.id)).map(async (file) => {
       const data = await readStoredSkillFile(file);
-      if (!data) throw new NotFoundError(`Skill file missing: ${file.path}`);
+      if (!data) throw new Error(`Skill file missing: ${file.path}`);
       return { path: file.path, data };
     }),
   );
@@ -305,9 +334,25 @@ export const requireSkillFile = async (
   return file;
 };
 
+/** One of a Skill's bundled files by its path in the bundle, if it has one. */
+export const findSkillFileByPath = async (
+  skillId: string,
+  path: string,
+): Promise<SkillFileRow | undefined> => {
+  const [file] = await db
+    .select()
+    .from(skillFileTable)
+    .where(
+      and(eq(skillFileTable.skillId, skillId), eq(skillFileTable.path, path)),
+    )
+    .limit(1);
+  return file;
+};
+
 /**
- * One bundled file's bytes and download name, or `NotFoundError`. The caller
- * has already established the Skill is visible.
+ * One bundled file's bytes and download name, or `NotFoundError` when the
+ * Skill has no such file. The caller has already established the Skill is
+ * visible. A row whose bytes storage no longer holds is a server fault (→500).
  */
 export const downloadSkillFile = async (
   skillId: string,
@@ -315,7 +360,7 @@ export const downloadSkillFile = async (
 ): Promise<{ data: Buffer; filename: string }> => {
   const file = await requireSkillFile(skillId, fileId);
   const data = await readStoredSkillFile(file);
-  if (!data) throw new NotFoundError("Skill file not found");
+  if (!data) throw new Error(`Skill file missing: ${file.path}`);
   return { data, filename: file.path.split("/").at(-1)! };
 };
 

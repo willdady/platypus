@@ -1,10 +1,9 @@
 import { tool } from "ai";
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../index.ts";
-import { skillFile as skillFileTable } from "../db/schema.ts";
 import { resolveAssignedSkillByName } from "../services/skill-resolution.ts";
 import {
+  findSkillFileByPath,
   readStoredSkillFile,
   skillLoadResult,
 } from "../services/skill-bundle.ts";
@@ -101,16 +100,7 @@ export const createReadSkillFileTool = (
         return { error: (error as Error).message };
       }
 
-      const [file] = await db
-        .select()
-        .from(skillFileTable)
-        .where(
-          and(
-            eq(skillFileTable.skillId, found.row.id),
-            eq(skillFileTable.path, normalised),
-          ),
-        )
-        .limit(1);
+      const file = await findSkillFileByPath(found.row.id, normalised);
       if (!file) {
         return { error: `Skill '${name}' has no file '${normalised}'` };
       }

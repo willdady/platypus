@@ -1,5 +1,4 @@
 import type { z } from "zod";
-import type { SQL } from "drizzle-orm";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
@@ -12,14 +11,19 @@ import { deleteStoredPrefix } from "../storage/utils.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
 import {
   orgScopedWhere,
-  requireOrgScoped,
   requireSharedDeletable,
   requireWorkspaceMutable,
   resolveScopedByName,
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
 import { bundleHash } from "./skill-bundle-format.ts";
-import { listSkillFiles, rehashSkill } from "./skill-bundle.ts";
+import {
+  fieldsOf,
+  listSkillFiles,
+  rehashSkill,
+  scopeColumnsOf,
+  writableSkillWhere,
+} from "./skill-bundle.ts";
 
 /**
  * The Skill write model: create/update/delete that both route surfaces adapt
@@ -142,19 +146,11 @@ export async function createSkill(
       id: nanoid(),
       ...data,
       bundleHash: bundleHash({
-        fields: {
-          name: data.name,
-          description: data.description,
-          body: data.body,
-          disableModelInvocation: data.disableModelInvocation ?? false,
-          argumentHint: data.argumentHint ?? null,
-        },
+        fields: fieldsOf(data),
         frontmatter: {},
         files: [],
       }),
-      ...(scope.kind === "workspace"
-        ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
-        : { organizationId: scope.orgId, workspaceId: null }),
+      ...scopeColumnsOf(scope),
     })
     .returning();
 
@@ -178,27 +174,19 @@ export async function updateSkill(
 ): Promise<SkillRow> {
   const { agentIds, ...data } = fields;
 
-  let where: SQL;
-  if (scope.kind === "workspace") {
-    // A Shared Skill is a single source of truth edited only on the
-    // Organization surface (ADR-0007); requireWorkspaceMutable throws
-    // NotFound (→404) when the Skill is not visible here, then Locked (→403)
-    // when it is org-scoped.
-    await requireWorkspaceMutable(db, "skill", skillId, scope.ctx);
-    where = workspaceScopedWhere("skill", skillId, scope.ctx.workspaceId);
-  } else {
-    // The existence check the Organization surface used to defer to an empty
-    // UPDATE result (#605): requireOrgScoped throws NotFound (→404) before the
-    // write ever runs.
-    await requireOrgScoped(db, "skill", skillId, scope.orgId);
-    where = orgScopedWhere("skill", skillId, scope.orgId);
-  }
+  const where = await writableSkillWhere(scope, skillId);
 
-  const [row] = await db
-    .update(skillTable)
-    .set({ ...data, updatedAt: new Date() })
-    .where(where)
-    .returning();
+  // The body and mapped fields are part of the bundle hash; the files are not
+  // touched by this form, so they stay where they are. The rehash shares the
+  // update's transaction so a concurrent Replace bundle can't slip between them.
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(skillTable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(where)
+      .returning();
+    return updated && rehashSkill(tx, updated);
+  });
 
   // The pre-checks above prove the row exists, but a concurrent delete can still
   // win the race between the check and the UPDATE; the Organization surface
@@ -210,9 +198,7 @@ export async function updateSkill(
   if (scope.kind === "workspace" && agentIds !== undefined) {
     await syncAgentAssignments(scope.ctx.workspaceId, skillId, agentIds);
   }
-  // The body and mapped fields are part of the bundle hash; the files are not
-  // touched by this form, so they stay where they are.
-  return row && rehashSkill(db, row);
+  return row;
 }
 
 /**
@@ -244,27 +230,29 @@ export async function upsertSkill(
   }
 
   const now = new Date();
-  const [row] = await db
-    .insert(skillTable)
-    .values({
-      id: nanoid(),
-      workspaceId: ctx.workspaceId,
-      name: fields.name,
-      description: fields.description,
-      body: fields.body,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [skillTable.workspaceId, skillTable.name],
-      set: {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(skillTable)
+      .values({
+        id: nanoid(),
+        workspaceId: ctx.workspaceId,
+        name: fields.name,
         description: fields.description,
         body: fields.body,
+        createdAt: now,
         updatedAt: now,
-      },
-    })
-    .returning();
-  return rehashSkill(db, row);
+      })
+      .onConflictDoUpdate({
+        target: [skillTable.workspaceId, skillTable.name],
+        set: {
+          description: fields.description,
+          body: fields.body,
+          updatedAt: now,
+        },
+      })
+      .returning();
+    return rehashSkill(tx, row);
+  });
 }
 
 /**

@@ -9,7 +9,8 @@ import app from "../server.ts";
 
 // The bundle hash and file list are exercised against a real Postgres in
 // `services/skill-bundle.test.ts`; here they pass the row through.
-vi.mock("../services/skill-bundle.ts", () => ({
+vi.mock("../services/skill-bundle.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/skill-bundle.ts")>()),
   rehashSkill: vi.fn((_db: unknown, row: unknown) => Promise.resolve(row)),
   listSkillFiles: vi.fn(() => Promise.resolve([])),
   skillFilesForApi: vi.fn(() => Promise.resolve([])),

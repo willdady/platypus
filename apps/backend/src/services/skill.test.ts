@@ -15,7 +15,8 @@ import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 
 // The bundle hash and file list are exercised against a real Postgres in
 // `services/skill-bundle.test.ts`; here they pass the row through.
-vi.mock("./skill-bundle.ts", () => ({
+vi.mock("./skill-bundle.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./skill-bundle.ts")>()),
   rehashSkill: vi.fn((_db: unknown, row: unknown) => Promise.resolve(row)),
   listSkillFiles: vi.fn(() => Promise.resolve([])),
   skillFilesForApi: vi.fn(() => Promise.resolve([])),
