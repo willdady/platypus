@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.19.0](https://github.com/willdady/platypus/compare/v3.18.0...v3.19.0) (2026-10-11)
+
+
+### Features
+
+* **backend:** trim whitespace around an imported SKILL.md body ([#1394](https://github.com/willdady/platypus/issues/1394)) ([a5d74c6](https://github.com/willdady/platypus/commit/a5d74c64b76ac6d1d815db49295ffdd945c91e2c))
+* copy bundled Skills into the Sandbox on load ([#1396](https://github.com/willdady/platypus/issues/1396)) ([9f4521c](https://github.com/willdady/platypus/commit/9f4521c44de0d63ad0b050dc7fe78e8f5611e791))
+* **frontend:** show the last run's status on each Trigger in the workspace home list ([3f652a0](https://github.com/willdady/platypus/commit/3f652a07ddd5cc6a076cb3dff34a88102887488b)), closes [#1379](https://github.com/willdady/platypus/issues/1379)
+* let a User set their timezone for Agents and Triggers ([b7282d0](https://github.com/willdady/platypus/commit/b7282d09e310f445efd5de7d6bdeca7452aa26ad)), closes [#1345](https://github.com/willdady/platypus/issues/1345)
+* store Skills as file bundles with zip import, export and readSkillFile ([#1391](https://github.com/willdady/platypus/issues/1391)) ([e9e114d](https://github.com/willdady/platypus/commit/e9e114dbaf07cdad9e3af0b6ed5a737889bd4f96))
+
+
+### Bug Fixes
+
+* **backend:** migrate stale 'schedule' Tool set ids to 'triggers' ([efa1d80](https://github.com/willdady/platypus/commit/efa1d805c40060a7d6aa656621b3f43c163413e3)), closes [#1380](https://github.com/willdady/platypus/issues/1380)
+* **backend:** send a restrictive Content-Security-Policy on served files and serve SVGs as downloads ([649ed82](https://github.com/willdady/platypus/commit/649ed82e50ac66b16193c9e95ef0d4f09a763e3f))
+* **backend:** tell the Agent a cron Trigger defaults to the User's timezone ([#1399](https://github.com/willdady/platypus/issues/1399)) ([56f58ff](https://github.com/willdady/platypus/commit/56f58ff801d56e6fe79671c8cb1560ad968232e1))
+
 ## [3.18.0](https://github.com/willdady/platypus/compare/v3.17.0...v3.18.0) (2026-10-10)
 
 
