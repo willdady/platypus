@@ -204,7 +204,11 @@ const readZipEntries = (zip: Uint8Array): ZipEntry[] => {
   return entries;
 };
 
-/** Splits `SKILL.md` into its frontmatter YAML and the body that follows it. */
+/**
+ * Splits `SKILL.md` into its frontmatter YAML and the body that follows it,
+ * trimmed: the blank lines authors leave after the closing fence are layout,
+ * not instructions.
+ */
 const splitFrontmatter = (text: string): { yaml: string; body: string } => {
   const lines = text.replace(/^\uFEFF/, "").split("\n");
   const isFence = (line: string | undefined) => line?.trimEnd() === "---";
@@ -214,7 +218,10 @@ const splitFrontmatter = (text: string): { yaml: string; body: string } => {
   if (close < 0) fail("SKILL.md must open with a `---` frontmatter block");
   return {
     yaml: lines.slice(1, close).join("\n"),
-    body: lines.slice(close + 1).join("\n"),
+    body: lines
+      .slice(close + 1)
+      .join("\n")
+      .trim(),
   };
 };
 
@@ -291,7 +298,8 @@ const isIgnored = (path: string) =>
 /**
  * Parses and validates an uploaded Skill zip. Every rule is checked before the
  * caller writes anything, and any violation throws a `ValidationError` (400)
- * naming the rule — nothing is truncated, coerced or repaired.
+ * naming the rule — nothing is truncated, coerced or repaired, beyond trimming
+ * the whitespace around the `SKILL.md` body.
  */
 export const parseSkillZip = (zip: Uint8Array): ParsedSkillBundle => {
   const seen = new Set<string>();

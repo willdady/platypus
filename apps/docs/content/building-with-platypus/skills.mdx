@@ -65,7 +65,8 @@ Platypus reads the Skill from `SKILL.md`:
 - It must open with a YAML frontmatter block between `---` lines. `name` and
   `description` are required. `disable-model-invocation` sets **User-invocable
   only**, and `argument-hint` sets **Argument hint**.
-- Everything after the frontmatter becomes the **Body**.
+- Everything after the frontmatter becomes the **Body**, with blank lines and
+  spaces at its start and end trimmed.
 - Every other frontmatter key, such as `license` or `compatibility`, is kept
   as-is and shown read-only on the Skill. Platypus doesn't act on them.
 - Every other file in the zip is stored with the Skill at its path inside the

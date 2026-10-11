@@ -33,7 +33,7 @@ describe("parseSkillZip", () => {
       name: "pdf",
       description:
         "Use this skill whenever the user wants to do anything with PDF files.",
-      body: "\n# PDF Processing Guide\n\nSee [forms.md](forms.md).\n",
+      body: "# PDF Processing Guide\n\nSee [forms.md](forms.md).",
       disableModelInvocation: false,
       argumentHint: null,
     });
@@ -176,6 +176,14 @@ describe("parseSkillZip rejections", () => {
         }),
       /larger than 16 KiB/,
     ],
+    [
+      "a body that is only whitespace",
+      () =>
+        zipSync({
+          "SKILL.md": skillMd("name: demo\ndescription: d", "  \n\t\n  "),
+        }),
+      /SKILL\.md body is invalid/,
+    ],
   ];
 
   it.each(cases)("rejects %s", (_label, build, message) => {
@@ -185,6 +193,17 @@ describe("parseSkillZip rejections", () => {
 });
 
 describe("parseSkillZip contents", () => {
+  it("trims the whitespace around the body, keeping what is inside it", () => {
+    const zip = zipSync({
+      "SKILL.md": skillMd(
+        "name: demo\ndescription: d",
+        "   \n\n  # Steps\n\n  1. Indented\n\n \t\n",
+      ),
+    });
+
+    expect(parseSkillZip(zip).fields.body).toBe("# Steps\n\n  1. Indented");
+  });
+
   it("classifies by content, not extension", () => {
     const png = new Uint8Array([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0,

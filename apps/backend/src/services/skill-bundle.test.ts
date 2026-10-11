@@ -105,7 +105,7 @@ const skillMd = (name: string, body = "Read forms.md first.\n") =>
 const pdfFields = {
   name: "pdf",
   description: "Work with PDF files.",
-  body: "Read forms.md first.\n",
+  body: "Read forms.md first.",
 };
 
 const pdfZip = (name = "pdf") =>
@@ -390,7 +390,7 @@ describe("loadSkill and readSkillFile", () => {
 
     expect(result).toMatchObject({
       name: "pdf",
-      body: "Read forms.md first.\n",
+      body: "Read forms.md first.",
       note: expect.stringContaining("readSkillFile") as unknown,
     });
     expect((result as { files: unknown[] }).files).toContainEqual({
@@ -406,7 +406,7 @@ describe("loadSkill and readSkillFile", () => {
     );
     expect(await load(row.id, "solo")).toEqual({
       name: "solo",
-      body: "Read forms.md first.\n",
+      body: "Read forms.md first.",
     });
   });
 
