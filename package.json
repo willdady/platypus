@@ -45,6 +45,9 @@
     "overrides": {
       "nextra>zod": "4.3.6",
       "nextra-theme-docs>zod": "4.3.6"
+    },
+    "patchedDependencies": {
+      "drizzle-kit@0.31.11": "patches/drizzle-kit@0.31.11.patch"
     }
   }
 }

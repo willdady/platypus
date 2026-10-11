@@ -1,0 +1,99 @@
+diff --git a/api.js b/api.js
+index f4ecb91959f62fc938416a0585458c0a710af161..f70098af252fe903638851446060c149577b09c4 100644
+--- a/api.js
++++ b/api.js
+@@ -23174,12 +23174,17 @@ WHERE
+             const checkConstraints = {};
+             const tableResponse = await getColumnsInfoQuery({ schema: tableSchema, table: tableName, db });
+             const tableConstraints = await db.query(
+-              `SELECT c.column_name, c.data_type, constraint_type, constraint_name, constraint_schema
++              `SELECT c.column_name, c.data_type, constraint_type, constraint_name, constraint_schema,
++        (SELECT i.indnullsnotdistinct FROM pg_constraint pc JOIN pg_index i ON i.indexrelid = pc.conindid
++          WHERE pc.conname = tc.constraint_name AND pc.connamespace = tc.constraint_schema::text::regnamespace) AS nulls_not_distinct
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
+       JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
+         AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
+-      WHERE tc.table_name = '${tableName}' and constraint_schema = '${tableSchema}';`
++      WHERE tc.table_name = '${tableName}' and constraint_schema = '${tableSchema}'
++      ORDER BY constraint_name, (SELECT kcu.ordinal_position FROM information_schema.key_column_usage AS kcu
++        WHERE kcu.constraint_schema = tc.constraint_schema AND kcu.constraint_name = tc.constraint_name
++          AND kcu.column_name = ccu.column_name);`
+             );
+             const tableChecks = await db.query(`SELECT 
+ 						tc.constraint_name,
+@@ -23288,7 +23293,7 @@ WHERE
+               } else {
+                 uniqueConstrains[constraintName] = {
+                   columns: [columnName],
+-                  nullsNotDistinct: false,
++                  nullsNotDistinct: unqs.nulls_not_distinct === true,
+                   name: constraintName
+                 };
+               }
+diff --git a/api.mjs b/api.mjs
+index a940272dfb05accf57a472c46c52652ec9ad0080..7882552c1b843af7988cb72c0d3af75aa10360b1 100644
+--- a/api.mjs
++++ b/api.mjs
+@@ -23190,12 +23190,17 @@ WHERE
+             const checkConstraints = {};
+             const tableResponse = await getColumnsInfoQuery({ schema: tableSchema, table: tableName, db });
+             const tableConstraints = await db.query(
+-              `SELECT c.column_name, c.data_type, constraint_type, constraint_name, constraint_schema
++              `SELECT c.column_name, c.data_type, constraint_type, constraint_name, constraint_schema,
++        (SELECT i.indnullsnotdistinct FROM pg_constraint pc JOIN pg_index i ON i.indexrelid = pc.conindid
++          WHERE pc.conname = tc.constraint_name AND pc.connamespace = tc.constraint_schema::text::regnamespace) AS nulls_not_distinct
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
+       JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
+         AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
+-      WHERE tc.table_name = '${tableName}' and constraint_schema = '${tableSchema}';`
++      WHERE tc.table_name = '${tableName}' and constraint_schema = '${tableSchema}'
++      ORDER BY constraint_name, (SELECT kcu.ordinal_position FROM information_schema.key_column_usage AS kcu
++        WHERE kcu.constraint_schema = tc.constraint_schema AND kcu.constraint_name = tc.constraint_name
++          AND kcu.column_name = ccu.column_name);`
+             );
+             const tableChecks = await db.query(`SELECT 
+ 						tc.constraint_name,
+@@ -23304,7 +23309,7 @@ WHERE
+               } else {
+                 uniqueConstrains[constraintName] = {
+                   columns: [columnName],
+-                  nullsNotDistinct: false,
++                  nullsNotDistinct: unqs.nulls_not_distinct === true,
+                   name: constraintName
+                 };
+               }
+diff --git a/bin.cjs b/bin.cjs
+index c28f3e4732f0d911237dc1eb1bc466cefaa1b976..648c8f07827da44350fe6771a7a6278c750e5823 100755
+--- a/bin.cjs
++++ b/bin.cjs
+@@ -17732,12 +17732,17 @@ WHERE
+             const checkConstraints = {};
+             const tableResponse = await getColumnsInfoQuery({ schema: tableSchema, table: tableName, db });
+             const tableConstraints = await db.query(
+-              `SELECT c.column_name, c.data_type, constraint_type, constraint_name, constraint_schema
++              `SELECT c.column_name, c.data_type, constraint_type, constraint_name, constraint_schema,
++        (SELECT i.indnullsnotdistinct FROM pg_constraint pc JOIN pg_index i ON i.indexrelid = pc.conindid
++          WHERE pc.conname = tc.constraint_name AND pc.connamespace = tc.constraint_schema::text::regnamespace) AS nulls_not_distinct
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.constraint_column_usage AS ccu USING (constraint_schema, constraint_name)
+       JOIN information_schema.columns AS c ON c.table_schema = tc.constraint_schema
+         AND tc.table_name = c.table_name AND ccu.column_name = c.column_name
+-      WHERE tc.table_name = '${tableName}' and constraint_schema = '${tableSchema}';`
++      WHERE tc.table_name = '${tableName}' and constraint_schema = '${tableSchema}'
++      ORDER BY constraint_name, (SELECT kcu.ordinal_position FROM information_schema.key_column_usage AS kcu
++        WHERE kcu.constraint_schema = tc.constraint_schema AND kcu.constraint_name = tc.constraint_name
++          AND kcu.column_name = ccu.column_name);`
+             );
+             const tableChecks = await db.query(`SELECT 
+ 						tc.constraint_name,
+@@ -17846,7 +17851,7 @@ WHERE
+               } else {
+                 uniqueConstrains[constraintName] = {
+                   columns: [columnName],
+-                  nullsNotDistinct: false,
++                  nullsNotDistinct: unqs.nulls_not_distinct === true,
+                   name: constraintName
+                 };
+               }
