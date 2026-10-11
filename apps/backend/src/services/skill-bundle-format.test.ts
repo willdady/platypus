@@ -121,6 +121,15 @@ describe("parseSkillZip rejections", () => {
       /symlink/,
     ],
     [
+      "a symlink entry from a non-Unix host",
+      () =>
+        zipSync({
+          "SKILL.md": minimal(),
+          link: [strToU8("/etc/passwd"), { os: 0, attrs: 0o120777 << 16 }],
+        }),
+      /symlink/,
+    ],
+    [
       "duplicate paths after normalisation",
       () =>
         zipSync({

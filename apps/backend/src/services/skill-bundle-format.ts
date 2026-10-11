@@ -132,7 +132,6 @@ const readZipEntries = (zip: Uint8Array): ZipEntry[] => {
     if (offset + 46 > zip.length || u32(offset) !== 0x02014b50) {
       fail("File is not a valid zip archive");
     }
-    const madeByOs = u16(offset + 4) >> 8;
     const flags = u16(offset + 8);
     const method = u16(offset + 10);
     const compressedSize = u32(offset + 20);
@@ -150,7 +149,7 @@ const readZipEntries = (zip: Uint8Array): ZipEntry[] => {
     } catch {
       name = fail("Zip entry name is not valid UTF-8");
     }
-    if (madeByOs === 3 && (mode & 0o170000) === 0o120000) {
+    if ((mode & 0o170000) === 0o120000) {
       fail(`Zip contains a symlink: ${name}`);
     }
     if (flags & 1) fail(`Zip entry is encrypted: ${name}`);
