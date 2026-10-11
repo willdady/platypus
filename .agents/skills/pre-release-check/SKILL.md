@@ -69,6 +69,22 @@ Then `pnpm format` followed by `git status --short`. `format` **writes**, so a d
 afterwards means formatting has drifted on `main` and needs its own commit. Neither the
 build nor formatting drift is checked anywhere upstream of here.
 
+Neither is the **image build**. `build-and-push.yml` runs only once the release exists,
+and its `pnpm install` sees only what each Dockerfile copies in — not the working tree
+`pnpm build` ran against. That is how 3.19.0's release build failed: a `patches/`
+directory the root `package.json` had started to require was never copied into the
+frontend image. If the range touches any of `package.json` (root), `pnpm-lock.yaml`,
+`pnpm-workspace.yaml`, `.npmrc`, `patches/`, or a `Dockerfile`, build the install stages
+before calling green:
+
+```bash
+docker build --target deps -f apps/frontend/Dockerfile .
+docker build --target prod-deps -f apps/backend/Dockerfile .
+```
+
+Each takes a minute or two. A failure here is a hold, and it is one no CI run will
+show you.
+
 Report the CI run and each local check as pass or fail, with the failing output. **Green
 is a CI success on this exact commit plus every local check passing on an unmodified
 tree.** Anything red is a hold — say so and stop; do not carry a failure forward into the
@@ -108,7 +124,7 @@ Report:
 - Anything breaking: a removed or renamed env var, a changed default, an API or schema shift
   a self-hoster upgrades into. Breaking work in a non-major release is a **hold**.
 - The next major's milestone (`v<N>.0.0`, e.g. `gh issue list --milestone v4.0.0 --state
-  all`). It holds one issue per planned breaking change, each deprecated during the
+all`). It holds one issue per planned breaking change, each deprecated during the
   current major. If this release is a major, list every issue that is still open. Each
   one is a break this major was meant to carry, and whether to hold the release or move
   the issue to the following major's milestone is the user's call. If it isn't a major,
