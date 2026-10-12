@@ -15,6 +15,7 @@ import {
   toastError,
   toastInfo,
 } from "@/lib/list-test-harness";
+import { selectOption } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -221,6 +222,102 @@ describe("SkillsList promote", () => {
       "http://test/organizations/org1/workspaces/ws1/skills/s2/promote",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+describe("SkillsList filters", () => {
+  const skillNamed = (id: string, name: string): SkillWithScope =>
+    ({ ...workspaceSkill, id, name }) as SkillWithScope;
+
+  const search = (text: string) =>
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search skills" }), {
+      target: { value: text },
+    });
+
+  it("narrows the list to the skills whose name fuzzily matches the search", () => {
+    renderSkills([
+      skillNamed("a", "write-release-note"),
+      skillNamed("b", "triage-issue"),
+    ]);
+
+    search("wrn");
+
+    expect(screen.getByText("write-release-note")).toBeInTheDocument();
+    expect(screen.queryByText("triage-issue")).not.toBeInTheDocument();
+  });
+
+  it("says no skills match, rather than none exist, when the filters exclude every skill", () => {
+    renderSkills([skillNamed("a", "write-release-note")]);
+
+    search("zzz");
+
+    expect(
+      screen.getByText("No skills match your filters."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No skills yet/i)).not.toBeInTheDocument();
+  });
+
+  it("offers no filters on the Organization surface", () => {
+    renderOrgSkills([orgSkill]);
+
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  describe("by agent", () => {
+    const skills = [
+      skillNamed("a", "alpha"),
+      skillNamed("b", "bravo"),
+      skillNamed("c", "charlie"),
+    ];
+    const agents = [
+      { id: "ag1", name: "Writer", skillIds: ["a", "b"] },
+      { id: "ag2", name: "Triager", skillIds: ["b"] },
+      { id: "ag3", name: "Idle", skillIds: [] },
+    ];
+
+    const renderWithAgents = () => {
+      mockScopedSWR({ "/skills": skills, "/agents": agents });
+      return renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+    };
+
+    const shownNames = () =>
+      ["alpha", "bravo", "charlie"].filter((name) => screen.queryByText(name));
+
+    it("shows only the skills attached to the chosen agent", async () => {
+      renderWithAgents();
+
+      await selectOption("Any agent", "Triager");
+
+      expect(shownNames()).toEqual(["bravo"]);
+    });
+
+    it("shows only the skills attached to no agent when Unattached is chosen", async () => {
+      renderWithAgents();
+
+      await selectOption("Any agent", "Unattached");
+
+      expect(shownNames()).toEqual(["charlie"]);
+    });
+
+    it("offers only agents attached to a listed skill", async () => {
+      renderWithAgents();
+
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Filter by agent" }),
+        {
+          key: "ArrowDown",
+        },
+      );
+
+      const options = await screen.findAllByRole("option");
+      expect(options.map((option) => option.textContent)).toEqual([
+        "Any agent",
+        "Writer",
+        "Triager",
+        "Unattached",
+      ]);
+    });
   });
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { defaultFilter } from "cmdk";
 import {
   Item,
   ItemTitle,
@@ -9,6 +10,14 @@ import {
   ItemContent,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import {
@@ -36,6 +45,7 @@ import {
   EllipsisVertical,
   Pencil,
   Plus,
+  Search,
   Share2,
   Trash2,
   TriangleAlert,
@@ -77,6 +87,11 @@ import {
 // locked cards, and the Organization settings surface (no workspaceId) where it
 // manages org-scoped Skills directly (ADR-0007).
 type SkillWithScope = Skill & { scope?: "organization" | "workspace" };
+
+/** The value a Select carries for "no filter" — Radix rejects an empty one. */
+const ALL = "all";
+/** The agent-filter value for Skills attached to no agent. */
+const UNATTACHED = "unattached";
 
 const UserInvocableBadge = ({ skill }: { skill: SkillWithScope }) => {
   if (!skill.disableModelInvocation) return null;
@@ -137,6 +152,8 @@ export const SkillsList = ({
   const [skillToManage, setSkillToManage] = useState<SkillWithScope | null>(
     null,
   );
+  const [nameFilter, setNameFilter] = useState("");
+  const [agentFilter, setAgentFilter] = useState<string>(ALL);
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -231,15 +248,70 @@ export const SkillsList = ({
     return <ListError error={error} subject="skills" />;
   }
 
+  // The Command palette's own scorer, applied to the name: a card grid, not a
+  // `Command` list, so it is called directly rather than through `Command`.
+  const query = nameFilter.trim();
+  const matchesAgent = (skill: SkillWithScope) => {
+    if (agentFilter === ALL) return true;
+    const skillAgents = getAgentsForSkill(skill.id);
+    return agentFilter === UNATTACHED
+      ? skillAgents.length === 0
+      : skillAgents.some((agent) => agent.id === agentFilter);
+  };
+  const shown = skills.filter(
+    (skill) =>
+      (!query || defaultFilter(skill.name, query) > 0) && matchesAgent(skill),
+  );
+
+  // Only agents that would narrow the list to something are worth offering.
+  const agentOptions = agents.filter((agent) =>
+    skills.some((skill) => agent.skillIds?.includes(skill.id)),
+  );
+
+  // Workspace home only: the Organization surface fetches no agent data, so
+  // the agent filter would have nothing to offer there.
+  const controls = workspaceId && (
+    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="relative w-full sm:w-64">
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+        <Input
+          type="search"
+          placeholder="Search skills…"
+          aria-label="Search skills"
+          value={nameFilter}
+          onChange={(e) => setNameFilter(e.target.value)}
+          className="pl-8"
+        />
+      </div>
+      <Select value={agentFilter} onValueChange={setAgentFilter}>
+        <SelectTrigger className="w-44" aria-label="Filter by agent">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>Any agent</SelectItem>
+          {agentOptions.map((agent) => (
+            <SelectItem key={agent.id} value={agent.id}>
+              {agent.name}
+            </SelectItem>
+          ))}
+          <SelectItem value={UNATTACHED}>Unattached</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   return (
     <>
+      {controls}
       {skills.length === 0 ? (
         <ListState variant="empty">
           No skills yet. Create one to get started.
         </ListState>
+      ) : shown.length === 0 ? (
+        <ListState variant="empty">No skills match your filters.</ListState>
       ) : (
         <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
-          {skills.map((skill) => {
+          {shown.map((skill) => {
             // Org-scoped (Shared) Skills are locked inside a workspace: they can
             // only be edited from the organization settings surface.
             const isOrgScopedInWorkspace =
