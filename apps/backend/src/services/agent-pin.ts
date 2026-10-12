@@ -22,7 +22,8 @@ export const pinnedAgentIds = async (
   return new Set(rows.map((r) => r.agentId));
 };
 
-const pinWhere = (workspaceId: string, agentId: string) =>
+/** Matches one Agent's pin in one Workspace; detach clears it by this too. */
+export const agentPinWhere = (workspaceId: string, agentId: string) =>
   and(eq(pinTable.workspaceId, workspaceId), eq(pinTable.agentId, agentId));
 
 export const pinAgent = async (
@@ -30,10 +31,11 @@ export const pinAgent = async (
   agentId: string,
 ): Promise<void> => {
   await requireScoped(db, "agent", agentId, ctx);
+  // Already pinned is the common repeat; ON CONFLICT covers only the race.
   const [existing] = await db
     .select({ agentId: pinTable.agentId })
     .from(pinTable)
-    .where(pinWhere(ctx.workspaceId, agentId))
+    .where(agentPinWhere(ctx.workspaceId, agentId))
     .limit(1);
   if (existing) return;
   await db
@@ -47,5 +49,5 @@ export const unpinAgent = async (
   agentId: string,
 ): Promise<void> => {
   await requireScoped(db, "agent", agentId, ctx);
-  await db.delete(pinTable).where(pinWhere(ctx.workspaceId, agentId));
+  await db.delete(pinTable).where(agentPinWhere(ctx.workspaceId, agentId));
 };

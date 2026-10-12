@@ -14,6 +14,7 @@ import {
   ValidationError,
 } from "../errors.ts";
 import { isScopedResourceType, resolveOrgScoped } from "./scoped-resource.ts";
+import { agentPinWhere } from "./agent-pin.ts";
 
 /**
  * The Attachment module: the rules for attaching and detaching a Shared
@@ -189,12 +190,7 @@ export async function detachResource(
         );
       await tx
         .delete(workspaceAgentPinTable)
-        .where(
-          and(
-            eq(workspaceAgentPinTable.workspaceId, workspaceId),
-            eq(workspaceAgentPinTable.agentId, resourceId),
-          ),
-        );
+        .where(agentPinWhere(workspaceId, resourceId));
     }
   });
 }
