@@ -24,7 +24,8 @@ import { validateTriggerBreakerConfig } from "./src/services/trigger-breaker.ts"
 import { validateInboundTriggerSettings } from "./src/services/inbound-trigger.ts";
 import { validateA2aSettings } from "./src/services/a2a-call.ts";
 
-const PORT = process.env.PORT || "4001";
+const DEFAULT_PORT = 4001;
+const PORT = process.env.PORT || String(DEFAULT_PORT);
 
 /**
  * The production admin-User creator handed to the seed: the better-auth admin

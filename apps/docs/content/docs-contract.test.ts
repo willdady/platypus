@@ -334,6 +334,101 @@ const rowCovers = (row: string, name: string): boolean => {
     : row === name;
 };
 
+/**
+ * Where the backend keeps the fallback for each variable whose Default cell on
+ * the backend reference page is a number. Each file declares it as
+ * `DEFAULT_<VAR> = <product of integers>;`. No row is excluded today: every
+ * numeric default the page quotes is one the backend chooses itself.
+ */
+const BACKEND_DEFAULT_SOURCES: Record<string, string> = {
+  PORT: "apps/backend/index.ts",
+  INVITATION_EXPIRY_DAYS: "apps/backend/src/routes/invitation.ts",
+  MEMORY_EXTRACTION_INTERVAL_MS: "apps/backend/src/jobs/memory-scheduler.ts",
+  SCHEDULE_SCHEDULER_INTERVAL_MS: "apps/backend/src/jobs/scheduler.ts",
+  SCHEDULE_MAX_CONCURRENT: "apps/backend/src/jobs/scheduler.ts",
+  TRIGGER_PER_STEP_TIMEOUT_MS: "apps/backend/src/runs/trigger-timeouts.ts",
+  TRIGGER_PER_RUN_TIMEOUT_MS: "apps/backend/src/runs/trigger-timeouts.ts",
+  TRIGGER_BREAKER_MAX_RUNS: "apps/backend/src/services/trigger-breaker.ts",
+  TRIGGER_BREAKER_WINDOW_SECONDS:
+    "apps/backend/src/services/trigger-breaker.ts",
+  TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP:
+    "apps/backend/src/services/trigger-breaker.ts",
+  INBOUND_TRIGGER_MAX_CONCURRENT_RUNS:
+    "apps/backend/src/services/inbound-trigger.ts",
+  INBOUND_TRIGGER_MAX_BODY_BYTES:
+    "apps/backend/src/services/inbound-trigger.ts",
+  A2A_MAX_CONCURRENT_RUNS: "apps/backend/src/services/a2a-call.ts",
+  A2A_MAX_CONCURRENT_STREAMS: "apps/backend/src/services/a2a-call.ts",
+  A2A_MAX_BODY_BYTES: "apps/backend/src/services/a2a-call.ts",
+  CHAT_PER_STEP_TIMEOUT_MS: "apps/backend/src/runs/chat-timeouts.ts",
+  CHAT_PER_RUN_TIMEOUT_MS: "apps/backend/src/runs/chat-timeouts.ts",
+};
+
+/**
+ * The value of `NAME = <product of integers>;` in a repo file, e.g.
+ * `10 * 60 * 1000` or `65536`, or `undefined` when there is no such line.
+ */
+const readIntegerConstant = (
+  source: string,
+  name: string,
+): number | undefined => {
+  const declared = readRepoFile(source).match(
+    new RegExp(`\\b${name} = ([\\d_ *]+);`),
+  );
+  return declared?.[1]
+    .split("*")
+    .reduce((product, n) => product * Number(n.replace(/[_\s]/g, "")), 1);
+};
+
+/** Durations a Default cell's gloss may name, in seconds. */
+const GLOSS_SECONDS: Record<string, number> = {
+  second: 1,
+  minute: 60,
+  hour: 3_600,
+};
+
+/**
+ * Sizes a Default cell's gloss may name, in bytes. `KB` and `MB` are read as
+ * binary because the page has written them for binary values.
+ */
+const GLOSS_BYTES: Record<string, number> = {
+  KiB: 1_024,
+  KB: 1_024,
+  MiB: 1_024 ** 2,
+  MB: 1_024 ** 2,
+};
+
+/**
+ * What a gloss like "5 minutes" or "64 KiB" means in `name`'s own unit — a
+ * minute is 60000 for a `_MS` variable and 60 for a `_SECONDS` one — or
+ * `undefined` when it names no unit this reads.
+ */
+const glossValue = (name: string, gloss: string): number | undefined => {
+  const match = gloss.match(/^(\d+) ([A-Za-z]+?)s?$/);
+  if (!match) return undefined;
+  const count = Number(match[1]);
+  const seconds = GLOSS_SECONDS[match[2]];
+  if (seconds && name.endsWith("_MS")) return count * seconds * 1_000;
+  if (seconds && name.endsWith("_SECONDS")) return count * seconds;
+  const bytes = GLOSS_BYTES[match[2]];
+  if (bytes && name.endsWith("_BYTES")) return count * bytes;
+  return undefined;
+};
+
+/** The value a `.example.env` line assigns `name`, commented-out or not. */
+const envExampleValue = (
+  content: string,
+  name: string,
+): { value: string; line: number } | undefined => {
+  for (const [index, text] of content.split("\n").entries()) {
+    const match = text.match(
+      new RegExp(`^\\s*#?\\s*${name}=\\s*"?([^"\\s#]*)"?`),
+    );
+    if (match) return { value: match[1], line: index + 1 };
+  }
+  return undefined;
+};
+
 describe("environment variables", () => {
   type Declaration = { origin: string; pages: string[] };
   const declared = new Map<string, Declaration>();
@@ -454,6 +549,112 @@ describe("environment variables", () => {
       }
     }
     expectNoViolations(violations);
+  });
+
+  describe("numeric defaults on the backend page", () => {
+    type NumericDefault = {
+      name: string;
+      line: number;
+      value: number;
+      gloss?: string;
+    };
+    const numericDefaults: NumericDefault[] = [];
+    for (const table of markdownTables(readDoc(BACKEND_REFERENCE_PAGE))) {
+      const column = table.header.indexOf("Default");
+      if (table.header[0] !== "Variable" || column === -1) continue;
+      table.rows.forEach((row, index) => {
+        const name = firstCodeSpan(row[0]);
+        const cell = row[column]?.match(/^`(\d+)`(?: \(([^)]+)\))?$/);
+        if (!name || !cell) return;
+        numericDefaults.push({
+          name,
+          line: table.line + 2 + index,
+          value: Number(cell[1]),
+          gloss: cell[2],
+        });
+      });
+    }
+    const at = (line: number) =>
+      `apps/docs/content/${BACKEND_REFERENCE_PAGE}:${line}`;
+
+    it("found the numeric Default cells", () => {
+      expect(
+        numericDefaults.length,
+        `parsed no numeric Default cells out of ${BACKEND_REFERENCE_PAGE}`,
+      ).toBeGreaterThan(10);
+    });
+
+    it("quotes the value the backend uses when the variable is unset", () => {
+      const violations: string[] = [];
+      for (const { name, line, value } of numericDefaults) {
+        const source = BACKEND_DEFAULT_SOURCES[name];
+        if (!source) {
+          violations.push(
+            `${at(line)} gives \`${name}\` the default ${value}, but this test does not know where the backend sets it.\n` +
+              `Declare \`DEFAULT_${name} = <number>;\` beside the code that reads it and add it to BACKEND_DEFAULT_SOURCES.`,
+          );
+          continue;
+        }
+        const code = readIntegerConstant(source, `DEFAULT_${name}`);
+        if (code === undefined) {
+          violations.push(
+            `No \`DEFAULT_${name} = <number>;\` in ${source} — re-anchor BACKEND_DEFAULT_SOURCES if it moved.`,
+          );
+        } else if (code !== value) {
+          violations.push(
+            `${at(line)} gives \`${name}\` the default ${value}, but ${source} sets DEFAULT_${name} to ${code}.\n` +
+              `An Operator tuning against the page starts from the wrong number.`,
+          );
+        }
+      }
+      expectNoViolations(violations);
+    });
+
+    it("glosses each default with the value it states", () => {
+      const violations: string[] = [];
+      for (const { name, line, value, gloss } of numericDefaults) {
+        if (gloss === undefined) continue;
+        const glossed = glossValue(name, gloss);
+        if (glossed === undefined) {
+          violations.push(
+            `${at(line)} glosses \`${name}\`'s default as "${gloss}", which this test cannot read.\n` +
+              `Use a unit from GLOSS_SECONDS or GLOSS_BYTES, or teach this test the new one.`,
+          );
+        } else if (glossed !== value) {
+          violations.push(
+            `${at(line)} glosses \`${name}\`'s default ${value} as "${gloss}", which is ${glossed}.`,
+          );
+        }
+      }
+      expectNoViolations(violations);
+    });
+
+    it("ships the same value in every .example.env that assigns it", () => {
+      const violations: string[] = [];
+      for (const { name, line, value } of numericDefaults) {
+        for (const file of ENV_EXAMPLE_NAMES) {
+          const assigned = envExampleValue(readRepoFile(file), name);
+          if (assigned && Number(assigned.value) !== value) {
+            violations.push(
+              `${file}:${assigned.line} sets \`${name}\` to "${assigned.value}", but ${at(line)} and the backend default it to ${value}.\n` +
+                `An example file is copied as-is; a different value there is a default nobody documented.`,
+            );
+          }
+        }
+      }
+      expectNoViolations(violations);
+    });
+
+    it("keeps BACKEND_DEFAULT_SOURCES to rows the page has", () => {
+      const quoted = new Set(numericDefaults.map(({ name }) => name));
+      const stale = Object.keys(BACKEND_DEFAULT_SOURCES).filter(
+        (name) => !quoted.has(name),
+      );
+      expect(
+        stale,
+        `BACKEND_DEFAULT_SOURCES lists variables with no numeric Default cell on ${BACKEND_REFERENCE_PAGE}. Remove them.`,
+      ).toEqual([]);
+    });
   });
 });
 

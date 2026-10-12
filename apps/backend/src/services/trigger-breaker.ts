@@ -41,7 +41,9 @@ export type TriggerBreakerConfig = {
 };
 
 /** Also the threshold `validateTriggerBreakerConfig` warns above. */
-const DEFAULT_WINDOW_SECONDS = 3600;
+const DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS = 3600;
+const DEFAULT_TRIGGER_BREAKER_MAX_RUNS = 20;
+const DEFAULT_TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP = 20;
 
 /**
  * Reads one positive-integer setting. An explicitly-set value that is not one
@@ -71,15 +73,19 @@ export const readPositiveInt = (
 export const triggerBreakerConfig = (
   env: NodeJS.ProcessEnv = process.env,
 ): TriggerBreakerConfig => ({
-  maxRuns: readPositiveInt("TRIGGER_BREAKER_MAX_RUNS", 20, env),
+  maxRuns: readPositiveInt(
+    "TRIGGER_BREAKER_MAX_RUNS",
+    DEFAULT_TRIGGER_BREAKER_MAX_RUNS,
+    env,
+  ),
   windowSeconds: readPositiveInt(
     "TRIGGER_BREAKER_WINDOW_SECONDS",
-    DEFAULT_WINDOW_SECONDS,
+    DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS,
     env,
   ),
   suppressedRunsToKeep: readPositiveInt(
     "TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP",
-    20,
+    DEFAULT_TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP,
     env,
   ),
 });
@@ -98,11 +104,11 @@ export const triggerBreakerConfig = (
 export const validateTriggerBreakerConfig = (): TriggerBreakerConfig => {
   const config = triggerBreakerConfig();
   logger.info(config, "Trigger run-rate breaker configured");
-  if (config.windowSeconds > DEFAULT_WINDOW_SECONDS) {
+  if (config.windowSeconds > DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS) {
     logger.warn(
       {
         windowSeconds: config.windowSeconds,
-        defaultWindowSeconds: DEFAULT_WINDOW_SECONDS,
+        defaultWindowSeconds: DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS,
       },
       "Trigger breaker window is longer than the default; trigger runs are retained for the whole window",
     );

@@ -3,8 +3,10 @@ import { logger } from "../logger.ts";
 import { ADVISORY_LOCK_IDS } from "../db/advisory-lock.ts";
 import { runWithLock, scheduleAligned } from "./scheduler.ts";
 
+const DEFAULT_MEMORY_EXTRACTION_INTERVAL_MS = 5 * 60 * 1000;
 const MEMORY_EXTRACTION_INTERVAL_MS = parseInt(
-  process.env.MEMORY_EXTRACTION_INTERVAL_MS || "300000", // 5 minutes
+  process.env.MEMORY_EXTRACTION_INTERVAL_MS ||
+    String(DEFAULT_MEMORY_EXTRACTION_INTERVAL_MS),
 );
 
 export function startMemoryScheduler() {

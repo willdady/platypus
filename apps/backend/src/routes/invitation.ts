@@ -19,8 +19,9 @@ import { ConflictError, NotFoundError, isUniqueViolation } from "../errors.ts";
 
 const invitation = new Hono<{ Variables: Variables }>();
 
+const DEFAULT_INVITATION_EXPIRY_DAYS = 7;
 const INVITATION_EXPIRY_DAYS = parseInt(
-  process.env.INVITATION_EXPIRY_DAYS || "7",
+  process.env.INVITATION_EXPIRY_DAYS || String(DEFAULT_INVITATION_EXPIRY_DAYS),
 );
 
 /** Create a new invitation (org admin only) */

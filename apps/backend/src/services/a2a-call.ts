@@ -23,18 +23,26 @@ export type A2aSettings = {
   maxBodyBytes: number;
 };
 
+const DEFAULT_A2A_MAX_CONCURRENT_RUNS = 10;
+const DEFAULT_A2A_MAX_CONCURRENT_STREAMS = 100;
+const DEFAULT_A2A_MAX_BODY_BYTES = 1048576;
+
 export const a2aSettings = (): A2aSettings => ({
   maxConcurrentRuns: readPositiveInt(
     "A2A_MAX_CONCURRENT_RUNS",
-    10,
+    DEFAULT_A2A_MAX_CONCURRENT_RUNS,
     process.env,
   ),
   maxConcurrentStreams: readPositiveInt(
     "A2A_MAX_CONCURRENT_STREAMS",
-    100,
+    DEFAULT_A2A_MAX_CONCURRENT_STREAMS,
     process.env,
   ),
-  maxBodyBytes: readPositiveInt("A2A_MAX_BODY_BYTES", 1048576, process.env),
+  maxBodyBytes: readPositiveInt(
+    "A2A_MAX_BODY_BYTES",
+    DEFAULT_A2A_MAX_BODY_BYTES,
+    process.env,
+  ),
 });
 
 /**
