@@ -582,6 +582,7 @@ export const AgentsList = ({
               <ul aria-label="Pinned agents" className={gridClassName}>
                 {pinnedAgents.map(renderCard)}
               </ul>
+              <hr className="mt-6" />
             </div>
           )}
           {unpinnedAgents.length > 0 && (

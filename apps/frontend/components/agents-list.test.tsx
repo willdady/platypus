@@ -230,6 +230,7 @@ describe("AgentsList pinning", () => {
     expect(screen.getByRole("heading", { name: "Pinned" })).toBeInTheDocument();
     expect(namesIn("Pinned agents")).toEqual(["Abe", "Zed"]);
     expect(namesIn("Agents")).toEqual(["Bob", "Mia"]);
+    expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
   it("shows no Pinned group when nothing is pinned", () => {
@@ -238,6 +239,7 @@ describe("AgentsList pinning", () => {
     expect(
       screen.queryByRole("heading", { name: "Pinned" }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
     expect(namesIn("Agents")).toEqual(["Bob", "Mia"]);
   });
 
