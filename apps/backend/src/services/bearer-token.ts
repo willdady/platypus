@@ -23,6 +23,9 @@ import { createNotification } from "./notification.ts";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** How close to expiry a token is reported, and reminded, as expiring. */
+const EXPIRING_SOON_DAYS = 7;
+
 /** The tables that hold a token, each with the same token columns. */
 type TokenTable = typeof triggerTable | typeof a2aTokenTable;
 
@@ -82,7 +85,7 @@ export const bearerTokenStatus = (
   if (!token.tokenHash || !token.tokenExpiresAt) return "none";
   const left = token.tokenExpiresAt.getTime() - now.getTime();
   if (left <= 0) return "expired";
-  return left <= 7 * DAY_MS ? "expiring" : "active";
+  return left <= EXPIRING_SOON_DAYS * DAY_MS ? "expiring" : "active";
 };
 
 /** The columns a revoke writes: no token, and nothing left to notify about. */
@@ -224,7 +227,8 @@ export const dueReminder = (
   const left = expires - now.getTime();
   if (left <= 0) return null;
   const at = (days: number) => expires - days * DAY_MS;
-  if (left <= 7 * DAY_MS) return at(7) > created ? "expiring_7" : null;
+  if (left <= EXPIRING_SOON_DAYS * DAY_MS)
+    return at(EXPIRING_SOON_DAYS) > created ? "expiring_7" : null;
   if (left <= 30 * DAY_MS) return at(30) > created ? "expiring_30" : null;
   return null;
 };

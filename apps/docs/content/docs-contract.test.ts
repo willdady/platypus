@@ -48,9 +48,12 @@ import {
   MAX_PLUGIN_TOOL_NAME_LENGTH,
   mcpSchema,
   modelConfigSchema,
+  RUN_EVENT_ERROR_MAX_BYTES,
   skillSchema,
   TOOL_NAME_NAMESPACE_SEPARATOR,
   TOOL_NAME_PATTERN,
+  TOOL_RESULT_CLEARING_KEEP_RECENT,
+  TOOL_RESULT_CLEARING_THRESHOLD,
   triggerSchema,
   eventTriggerEventSchema,
   webhookEventDataSchemas,
@@ -1832,6 +1835,73 @@ const BACKEND_CONSTANTS = [
     files: ["building-with-platypus/a2a-endpoints.mdx"],
     cost: "A client waits for a push the Task has no pushes left to send.",
   },
+  {
+    source: "apps/backend/src/runs/stream-keepalive.ts",
+    name: "DEFAULT_HEARTBEAT_INTERVAL_MS",
+    phrase: (ms: number) => `a comment line every ${ms / 1_000} seconds`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "An integrator sets a proxy's idle timeout below the real heartbeat and has quiet streams cut off.",
+  },
+  {
+    source: "apps/backend/src/routes/a2a.ts",
+    name: "AGENT_CARD_CACHE_SECONDS",
+    phrase: (seconds: number) =>
+      `for up to ${NUMBER_WORDS[seconds / 60] ?? seconds / 60} minutes`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A Workspace Owner waits the wrong time for an edited Name or Description to reach callers.",
+  },
+  {
+    source: "apps/backend/src/services/a2a-task.ts",
+    name: "MAX_CONTEXT_ID_LENGTH",
+    phrase: (length: number) => `at most **${length} characters**`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A client is refused a `contextId` at a length the page never warned of.",
+  },
+  {
+    source: "apps/backend/src/services/a2a-task.ts",
+    name: "A2A_BLOCKING_WAIT_MS",
+    phrase: (ms: number) => `waits up to **${ms / 1_000} seconds**`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A client sizes its request timeout against the wrong wait and gives up on a run, or waits on one that already returned.",
+  },
+  {
+    source: "apps/backend/src/services/a2a-task.ts",
+    name: "DEFAULT_PAGE_SIZE",
+    phrase: (count: number) => `A page holds **${count}** Tasks`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A client that pages without a `pageSize` expects the wrong number of Tasks per page.",
+  },
+  {
+    source: "apps/backend/src/services/a2a-task.ts",
+    name: "MAX_PAGE_SIZE",
+    phrase: (count: number) => `**Pages of up to ${count}.**`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A client is refused a `pageSize` the page says it may ask for.",
+  },
+  {
+    source: "apps/backend/src/services/a2a-call.ts",
+    name: "A2A_MAX_STREAMS_PER_TOKEN",
+    phrase: (count: number) => `each token can hold at most ${count}`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A client opening streams is refused with `429` at a count the page never warned of.",
+  },
+  {
+    source: "apps/backend/src/services/bearer-token.ts",
+    name: "EXPIRING_SOON_DAYS",
+    phrase: (days: number) => `(within ${days} days)`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A Workspace Owner reads **Expiring soon** as more, or less, time than the token has left.",
+  },
+  {
+    source: "apps/backend/src/services/bearer-token.ts",
+    name: "TOUCH_INTERVAL_MS",
+    phrase: (ms: number) =>
+      ms === 60_000
+        ? "at most once a minute"
+        : `at most once every ${ms / 60_000} minutes`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A Workspace Owner checking whether a token is still in use reads its last-used time as fresher than it is.",
+  },
 ] as const;
 
 describe("backend constants the concept pages quote", () => {
@@ -1854,6 +1924,51 @@ describe("backend constants the concept pages quote", () => {
           readDoc(file).includes(expected),
           `${file} does not say "${expected}", but ${source} sets ${name} to ` +
             `${declared![1].trim()}.\n${cost}`,
+        ).toBe(true);
+      }
+    },
+  );
+});
+
+/**
+ * Numbers a reader plans around that `@platypus/schemas` exports, so the value
+ * is imported rather than read from source text.
+ */
+const SCHEMA_CONSTANTS = [
+  {
+    name: "TOOL_RESULT_CLEARING_THRESHOLD",
+    value: TOOL_RESULT_CLEARING_THRESHOLD,
+    phrase: (fraction: number) => `**${Math.round(fraction * 100)}%**`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A User watching the context meter expects older tool results to drop at the wrong point.",
+  },
+  {
+    name: "TOOL_RESULT_CLEARING_KEEP_RECENT",
+    value: TOOL_RESULT_CLEARING_KEEP_RECENT,
+    phrase: (count: number) =>
+      `The ${NUMBER_WORDS[count] ?? count} most recent results stay`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A User expects the model to still see a tool result it no longer gets.",
+  },
+  {
+    name: "RUN_EVENT_ERROR_MAX_BYTES",
+    value: RUN_EVENT_ERROR_MAX_BYTES,
+    phrase: (bytes: number) => `capped at ${bytes / 1024} KB`,
+    files: ["building-with-platypus/triggers.mdx"],
+    cost: "A reader debugging a failed run takes a cut error for the whole of it.",
+  },
+] as const;
+
+describe("schema constants the pages quote", () => {
+  it.each(SCHEMA_CONSTANTS)(
+    "$name is stated where quoted",
+    ({ name, value, phrase, files, cost }) => {
+      const expected = phrase(value);
+      for (const file of files) {
+        expect(
+          readDoc(file).includes(expected),
+          `${file} does not say "${expected}", but @platypus/schemas sets ` +
+            `${name} to ${value}.\n${cost}`,
         ).toBe(true);
       }
     },

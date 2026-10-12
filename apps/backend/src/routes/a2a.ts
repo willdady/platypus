@@ -86,6 +86,9 @@ const withCallLog = async (
   }
 };
 
+/** How long a client may cache the Agent Card. */
+const AGENT_CARD_CACHE_SECONDS = 5 * 60;
+
 /**
  * The public Agent Card. Needs no token: the URL is the secret. Cacheable for
  * a few minutes, so an edit to the endpoint's name or description can take
@@ -107,7 +110,7 @@ a2a.get("/:endpointId/.well-known/agent-card.json", etag(), (c) => {
       return c.json({ error: "Not Found" }, 404);
     }
     log.outcome = "ok";
-    c.header("Cache-Control", "private, max-age=300");
+    c.header("Cache-Control", `private, max-age=${AGENT_CARD_CACHE_SECONDS}`);
     return c.json(publicAgentCard(lookup.endpoint));
   });
 });
