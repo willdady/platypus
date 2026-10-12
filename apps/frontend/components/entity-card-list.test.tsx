@@ -113,12 +113,10 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
-  // The page around it owns the empty copy, so the list renders nothing at all
-  // rather than a second, competing empty state.
-  it("renders nothing when the workspace has none", () => {
-    const { container } = renderCards([]);
+  it("says when the workspace has none", () => {
+    renderCards([]);
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText(/^No .* yet\.$/)).toBeInTheDocument();
   });
 
   it("surfaces a failed read rather than rendering an empty list", () => {

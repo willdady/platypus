@@ -29,6 +29,7 @@ import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { a2aCardUrl } from "@/lib/a2a-endpoint";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
+import { ListState } from "@/components/list-state";
 
 /** The anchor a new endpoint's page opens at, so its first token is next. */
 export const ACCESS_SECTION_ID = "access";
@@ -157,7 +158,7 @@ export const A2aTokens = ({
           expires.
         </FieldDescription>
         {endpoint.tokens.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No tokens yet.</p>
+          <ListState variant="empty">No tokens yet.</ListState>
         ) : (
           <ul className="flex flex-col gap-2">
             {endpoint.tokens.map((token) => (

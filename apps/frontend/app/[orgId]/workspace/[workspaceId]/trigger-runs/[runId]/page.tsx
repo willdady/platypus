@@ -12,13 +12,7 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
 import { fetcher } from "@/lib/utils";
@@ -101,15 +95,11 @@ const TriggerRunDetailPage = ({
         </p>
 
         {error && !data ? (
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <TriangleAlert className="size-6" />
-              </EmptyMedia>
-              <EmptyTitle>Couldn&apos;t load this run</EmptyTitle>
-              <EmptyDescription>{RUN_DETAIL_ERROR_NOTICE}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <EmptyCard
+            icon={<TriangleAlert />}
+            title="Couldn't load this run"
+            description={RUN_DETAIL_ERROR_NOTICE}
+          />
         ) : data ? (
           <div className="space-y-6">
             <div className="border rounded-lg">

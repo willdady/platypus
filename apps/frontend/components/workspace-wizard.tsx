@@ -34,13 +34,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import {
   Field,
   FieldDescription,
@@ -344,18 +338,12 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
             className="data-[state=inactive]:hidden"
           >
             {sharedProviders.length === 0 ? (
-              <Empty className="mb-6 border-2 border-dashed">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <Unplug className="size-6" />
-                  </EmptyMedia>
-                  <EmptyTitle>No shared providers</EmptyTitle>
-                  <EmptyDescription>
-                    This organization has no shared providers yet. Create a new
-                    provider for this workspace instead.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
+              <EmptyCard
+                className="mb-6"
+                icon={<Unplug />}
+                title="No shared providers"
+                description="This organization has no shared providers yet. Create a new provider for this workspace instead."
+              />
             ) : (
               <ul className="mb-6">
                 {sharedProviders.map((p) => (
@@ -427,18 +415,12 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
           />
         ) : (
           <>
-            <Empty className="mb-6 border-2 border-dashed">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Box className="size-6" />
-                </EmptyMedia>
-                <EmptyTitle>No sandbox</EmptyTitle>
-                <EmptyDescription>
-                  Agents in this workspace won&apos;t have shell or filesystem
-                  tools.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+            <EmptyCard
+              className="mb-6"
+              icon={<Box />}
+              title="No sandbox"
+              description="Agents in this workspace won't have shell or filesystem tools."
+            />
             <div className="flex gap-2">
               <Button variant="outline" onClick={back} disabled={isSubmitting}>
                 Back

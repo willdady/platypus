@@ -28,7 +28,7 @@ describe("OrgMembersPage", () => {
     mockScopedSWR({ "/members": [] });
     renderList(<OrgMembersPage />);
 
-    expect(screen.getByText("No members found.")).toBeInTheDocument();
+    expect(screen.getByText("No members found")).toBeInTheDocument();
   });
 
   it("shows a failed read as an error with a retry, not as no members", () => {
@@ -40,7 +40,7 @@ describe("OrgMembersPage", () => {
     expect(
       screen.getByText("Failed to load members. Server error"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("No members found.")).toBeNull();
+    expect(screen.queryByText("No members found")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();

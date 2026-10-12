@@ -13,7 +13,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListError } from "@/components/list-state";
+import { EmptyCard } from "@/components/empty-card";
+import { Network } from "lucide-react";
 import {
   ButtonSkeleton,
   InlineSkeleton,
@@ -117,9 +119,11 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
   const endpoints = data?.results ?? [];
   if (!endpoints.length) {
     return (
-      <ListState variant="empty">
-        No workspace in this organization has an A2A endpoint.
-      </ListState>
+      <EmptyCard
+        icon={<Network />}
+        title="No A2A endpoints configured"
+        description="No workspace in this organization has an A2A endpoint."
+      />
     );
   }
 

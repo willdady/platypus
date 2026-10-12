@@ -2,12 +2,14 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Pencil, Plus } from "lucide-react";
+import { Network, Pencil, Plus } from "lucide-react";
 import type { A2aEndpointListItem } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { Button } from "./ui/button";
 import { useAuth } from "./auth-provider";
-import { ListError, ListState } from "./list-state";
+import { ListError } from "./list-state";
+import { EmptyCard } from "@/components/empty-card";
+
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { workspaceRoutes } from "@/lib/routes";
 import {
@@ -67,9 +69,16 @@ const A2aEndpointsList = ({
 
   if (!endpoints.length) {
     return (
-      <ListState variant="empty" action={addButton}>
-        No A2A endpoints in this workspace.
-      </ListState>
+      <EmptyCard
+        icon={<Network />}
+        title="No A2A endpoints configured"
+        description={
+          ownsWorkspace
+            ? "Add an endpoint to expose an agent in this workspace over A2A."
+            : "There are no A2A endpoints in this workspace. Only the workspace owner can add one."
+        }
+        action={addButton}
+      />
     );
   }
 

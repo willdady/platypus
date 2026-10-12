@@ -8,14 +8,7 @@ import {
 } from "@/lib/authorization";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import { Button } from "@/components/ui/button";
 import { OctagonX, Home, Building } from "lucide-react";
 import Link from "next/link";
@@ -55,23 +48,20 @@ function AccessDenied({
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <Empty className="max-w-md border-2 border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <OctagonX className="size-6 text-destructive" />
-          </EmptyMedia>
-          <EmptyTitle>{title}</EmptyTitle>
-          <EmptyDescription>{description}</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
+      <EmptyCard
+        className="max-w-md"
+        icon={<OctagonX className="text-destructive" />}
+        title={title}
+        description={description}
+        action={
           <Button asChild>
             <Link href={href}>
-              <Icon className="size-4" />
+              <Icon />
               {text}
             </Link>
           </Button>
-        </EmptyContent>
-      </Empty>
+        }
+      />
     </div>
   );
 }

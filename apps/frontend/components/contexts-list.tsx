@@ -10,6 +10,7 @@ import type { Context } from "@platypus/schemas";
 import { userRoutes } from "@/lib/routes";
 import { Skeleton } from "./ui/skeleton";
 import { ListError } from "./list-state";
+import { EmptyCard } from "@/components/empty-card";
 
 interface ContextWithNames extends Context {
   workspaceName?: string | null;
@@ -55,16 +56,17 @@ const ContextsList = ({ className }: { className?: string }) => {
 
   if (!workspaceContexts.length) {
     return (
-      <div className="text-center py-12 border border-dashed rounded-lg">
-        <Folder className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-        <p className="text-muted-foreground mb-4">No workspace contexts.</p>
-        <Button asChild>
-          <Link href={userRoutes.createContext}>
-            <Plus className="w-4 h-4" />
-            Add workspace context
-          </Link>
-        </Button>
-      </div>
+      <EmptyCard
+        icon={<Folder />}
+        title="No workspace contexts"
+        action={
+          <Button asChild>
+            <Link href={userRoutes.createContext}>
+              <Plus /> Add workspace context
+            </Link>
+          </Button>
+        }
+      />
     );
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentType } from "react";
+import { type ComponentType, type ReactNode } from "react";
 import { Building, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -36,12 +36,13 @@ interface ScopedResource {
 
 interface EmptyStateProps {
   readonly orgId: string;
-  readonly workspaceId: string;
+  readonly workspaceId?: string;
   readonly canManage: boolean;
+  readonly action?: ReactNode;
 }
 
 export interface ResourceListLabels {
-  /** Create CTA: "Add provider" / "Add MCP". */
+  /** Create CTA: "Add provider" / "Add MCP server". */
   readonly add: string;
   /** Attach CTA: "Attach shared provider" / "Attach shared MCP". */
   readonly attach: string;
@@ -63,7 +64,7 @@ export interface ResourceListConfig {
   /** The Workspace delegation flag granting self-management (ADR-0006). */
   readonly delegationFlag: keyof WorkspaceDelegationFlags;
   readonly labels: ResourceListLabels;
-  /** Rendered when a workspace has no resources and the caller can neither attach nor create one. */
+  /** Rendered when the list has no resources, holding whichever Add / Attach buttons the caller gets. */
   readonly emptyState: ComponentType<EmptyStateProps>;
 }
 
@@ -137,14 +138,6 @@ export const ResourceList = ({
   }
 
   const resources: ScopedResource[] = data?.results ?? [];
-  // When the caller can attach or create, fall through to the main render
-  // (which offers those buttons) even if the workspace has no resources yet.
-  if (!resources.length && workspaceId && !canAttach && !canManage) {
-    const EmptyState = config.emptyState;
-    return (
-      <EmptyState orgId={orgId} workspaceId={workspaceId} canManage={false} />
-    );
-  }
 
   // The resource's own settings surface, with any trailing segment: a row's
   // detail page, or its create page.
@@ -153,6 +146,40 @@ export const ResourceList = ({
     ? workspaceRoutes(orgId, workspaceId).settings[config.settingsKey]
     : orgSettingsRoot;
   const settingsHref = (segment: string) => `${settingsRoot}/${segment}`;
+
+  const actions = (
+    <div className="flex gap-2">
+      {canManage && (
+        <Button asChild>
+          <Link href={settingsHref("create")}>
+            <Plus /> {config.labels.add}
+          </Link>
+        </Button>
+      )}
+      {canAttach && workspaceId && (
+        <AttachSharedAction
+          orgId={orgId}
+          workspaceId={workspaceId}
+          resourceType={config.resourceType}
+          label={config.labels.attach}
+          resources={resources}
+          onAttached={mutate}
+        />
+      )}
+    </div>
+  );
+
+  if (!resources.length) {
+    const EmptyState = config.emptyState;
+    return (
+      <EmptyState
+        orgId={orgId}
+        workspaceId={workspaceId}
+        canManage={canManage}
+        action={canManage || canAttach ? actions : undefined}
+      />
+    );
+  }
 
   return (
     <>
@@ -194,25 +221,7 @@ export const ResourceList = ({
           );
         })}
       </ul>
-      <div className="flex gap-2">
-        {canManage && (
-          <Button asChild>
-            <Link href={settingsHref("create")}>
-              <Plus /> {config.labels.add}
-            </Link>
-          </Button>
-        )}
-        {canAttach && workspaceId && (
-          <AttachSharedAction
-            orgId={orgId}
-            workspaceId={workspaceId}
-            resourceType={config.resourceType}
-            label={config.labels.attach}
-            resources={resources}
-            onAttached={mutate}
-          />
-        )}
-      </div>
+      {actions}
       <DetachSharedDialog
         detach={detach}
         title={config.labels.detachTitle}

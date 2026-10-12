@@ -89,12 +89,23 @@ describe("A2aEndpointsList", () => {
     mockScopedSWR({ "/a2a-endpoints": [] });
     renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
-    expect(
-      screen.getByText("No A2A endpoints in this workspace."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No A2A endpoints configured")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Add endpoint/ }),
     ).toBeInTheDocument();
+  });
+
+  it("tells an Org Admin in another Owner's workspace only the workspace owner can add one", () => {
+    asOwner(false);
+    mockScopedSWR({ "/a2a-endpoints": [] });
+    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+
+    expect(
+      screen.getByText(/Only the workspace owner can add one/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Add endpoint/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a failed read as an error with a retry, not as no endpoints", () => {
@@ -107,7 +118,7 @@ describe("A2aEndpointsList", () => {
       screen.getByText("Failed to load A2A endpoints. Server error"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("No A2A endpoints in this workspace."),
+      screen.queryByText("No A2A endpoints configured"),
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));

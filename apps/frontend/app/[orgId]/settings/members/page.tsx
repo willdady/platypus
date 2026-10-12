@@ -5,6 +5,7 @@ import { type OrgMemberListItem, type Organization } from "@platypus/schemas";
 import { MembersList } from "@/components/members-list";
 import { ListError } from "@/components/list-state";
 import { Users } from "lucide-react";
+import { EmptyCard } from "@/components/empty-card";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { organizationEntity } from "@/lib/api-write";
 import {
@@ -65,10 +66,7 @@ const OrgMembersPage = () => {
       ) : error && !data ? (
         <ListError error={error} subject="members" onRetry={() => mutate()} />
       ) : data?.results.length === 0 ? (
-        <div className="text-center py-12 border border-dashed rounded-lg">
-          <Users className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-          <p className="text-muted-foreground">No members found.</p>
-        </div>
+        <EmptyCard icon={<Users />} title="No members found" />
       ) : (
         <MembersList
           orgId={orgId}

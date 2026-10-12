@@ -4,13 +4,7 @@ import { useMemo } from "react";
 import { ListTree, TriangleAlert } from "lucide-react";
 import type { RunEvent, TriggerRunStatus } from "@platypus/schemas";
 import { ActivityRow } from "@/components/activity-row";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import {
   Tooltip,
   TooltipContent,
@@ -124,15 +118,11 @@ export const RunTimeline = ({
 
   if (layout.rows.length === 0) {
     return (
-      <Empty className="border border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <ListTree className="size-6" />
-          </EmptyMedia>
-          <EmptyTitle>No timeline</EmptyTitle>
-          <EmptyDescription>{RUN_TIMELINE_EMPTY_NOTICE}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <EmptyCard
+        icon={<ListTree />}
+        title="No timeline"
+        description={RUN_TIMELINE_EMPTY_NOTICE}
+      />
     );
   }
 

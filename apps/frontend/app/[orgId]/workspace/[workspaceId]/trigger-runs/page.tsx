@@ -15,13 +15,7 @@ import {
 import { BackButton } from "@/components/back-button";
 import { TriggerRunRow } from "@/components/trigger-run-row";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import {
   Select,
   SelectContent,
@@ -223,55 +217,41 @@ const TriggerRunsPage = ({
           // A read that failed is not an empty result. Saying "nothing matched"
           // here would be a claim about data the page never received — and the
           // likeliest cause is a filter in the URL the endpoint rejected.
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <TriangleAlert className="size-6" />
-              </EmptyMedia>
-              <EmptyTitle>Couldn&apos;t load runs</EmptyTitle>
-              <EmptyDescription>
-                {isFiltered
-                  ? "The list could not be read. Clearing the filters may fix it."
-                  : "The list could not be read. Try again in a moment."}
-              </EmptyDescription>
-            </EmptyHeader>
-            {isFiltered && (
-              <Button variant="outline" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
-          </Empty>
+          <EmptyCard
+            icon={<TriangleAlert />}
+            title="Couldn't load runs"
+            description={
+              isFiltered
+                ? "The list could not be read. Clearing the filters may fix it."
+                : "The list could not be read. Try again in a moment."
+            }
+            action={
+              isFiltered && (
+                <Button variant="outline" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              )
+            }
+          />
         ) : runs.length === 0 ? (
           // Two empty states: a workspace that has never run anything is a
           // different thing from a filter that matches nothing.
-          <Empty className="border border-dashed">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <History className="size-6" />
-              </EmptyMedia>
-              {isFiltered ? (
-                <>
-                  <EmptyTitle>No runs match these filters</EmptyTitle>
-                  <EmptyDescription>
-                    Nothing in this workspace matches what you asked for. Widen
-                    the filters to see more.
-                  </EmptyDescription>
-                </>
-              ) : (
-                <>
-                  <EmptyTitle>No runs yet</EmptyTitle>
-                  <EmptyDescription>
-                    Runs appear here as the triggers in this workspace fire.
-                  </EmptyDescription>
-                </>
-              )}
-            </EmptyHeader>
-            {isFiltered && (
-              <Button variant="outline" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            )}
-          </Empty>
+          <EmptyCard
+            icon={<History />}
+            title={isFiltered ? "No runs match these filters" : "No runs yet"}
+            description={
+              isFiltered
+                ? "Nothing in this workspace matches what you asked for. Widen the filters to see more."
+                : "Runs appear here as the triggers in this workspace fire."
+            }
+            action={
+              isFiltered && (
+                <Button variant="outline" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              )
+            }
+          />
         ) : (
           <>
             <div className="border rounded-lg divide-y">

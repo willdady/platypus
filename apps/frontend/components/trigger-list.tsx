@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import {
   CardGridSkeleton,
   LoadingRegion,
@@ -252,9 +252,9 @@ export const TriggerList = ({
     return <ListError error={error} subject="triggers" />;
   }
 
-  // The page around it owns the copy for a Workspace with no triggers at all.
+  // No controls with nothing to filter, as with the Skills section above it.
   if (!allTriggers.length) {
-    return null;
+    return <ListState variant="empty">No triggers yet.</ListState>;
   }
 
   // Shown even with nothing listed: fired One-offs may be all there is.
@@ -306,9 +306,9 @@ export const TriggerList = ({
     return (
       <>
         {controls}
-        <p className="text-sm text-muted-foreground">
+        <ListState variant="empty">
           No {TRIGGER_TYPE_LABELS[typeFilter as TriggerType]} triggers to show.
-        </p>
+        </ListState>
       </>
     );
   }

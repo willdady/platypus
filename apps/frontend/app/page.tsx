@@ -8,14 +8,7 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Header } from "@/components/header";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -80,25 +73,18 @@ export default function Home() {
         <div className="min-h-screen flex flex-col">
           <Header />
           <div className="flex-1 flex flex-col items-center justify-center p-8">
-            <Empty className="border-2 border-dashed">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Building />
-                </EmptyMedia>
-                <EmptyTitle>No organizations found</EmptyTitle>
-                <EmptyDescription>
-                  Get started by creating your first organization to manage your
-                  workspaces and agents.
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button asChild className="w-full">
+            <EmptyCard
+              icon={<Building />}
+              title="No organizations found"
+              description="Get started by creating your first organization to manage your workspaces and agents."
+              action={
+                <Button asChild>
                   <Link href="/create">
-                    <Plus className="h-4 w-4" /> Create organization
+                    <Plus /> Create organization
                   </Link>
                 </Button>
-              </EmptyContent>
-            </Empty>
+              }
+            />
           </div>
         </div>
       </ProtectedRoute>

@@ -11,13 +11,7 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Mirrors the read-only `GET /organizations/:orgId/plugins` payload (ADR-0013).
@@ -77,18 +71,11 @@ const PluginsList = ({
   // Only a cold failure replaces the list; a failed revalidation keeps it.
   if (error && !data) {
     return (
-      <Empty className="border-2 border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Blocks className="size-6" />
-          </EmptyMedia>
-          <EmptyTitle>Couldn&apos;t load plugins</EmptyTitle>
-          <EmptyDescription>
-            The installed-plugins catalog is temporarily unavailable. Try
-            refreshing the page.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <EmptyCard
+        icon={<Blocks />}
+        title="Couldn't load plugins"
+        description="The installed-plugins catalog is temporarily unavailable. Try refreshing the page."
+      />
     );
   }
 
@@ -96,19 +83,17 @@ const PluginsList = ({
 
   if (!plugins.length) {
     return (
-      <Empty className="border-2 border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Blocks className="size-6" />
-          </EmptyMedia>
-          <EmptyTitle>No plugins installed</EmptyTitle>
-          <EmptyDescription>
+      <EmptyCard
+        icon={<Blocks />}
+        title="No plugins installed"
+        description={
+          <>
             Plugins are enabled at deploy time via the{" "}
             <code>PLATYPUS_PLUGINS</code> environment variable. Ask your
             operator to add one — there is no in-app install.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+          </>
+        }
+      />
     );
   }
 

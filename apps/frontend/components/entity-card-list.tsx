@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import { CardGridSkeleton, LoadingRegion } from "@/components/list-skeletons";
 import {
   DropdownMenu,
@@ -98,7 +98,7 @@ export const EntityCardList = ({
   }
 
   if (!cards.length) {
-    return null;
+    return <ListState variant="empty">No {config.entity} yet.</ListState>;
   }
 
   return (

@@ -15,7 +15,7 @@ import {
   Layers,
   Mail,
   Network,
-  Plug,
+  Wrench,
   Settings,
   Sparkles,
   Unplug,
@@ -115,7 +115,7 @@ export function OrgSettingsMenu({
                 isActive={pathname.startsWith(mcpHref)}
               >
                 <Link href={mcpHref}>
-                  <Plug /> MCP
+                  <Wrench /> MCP
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

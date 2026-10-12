@@ -146,7 +146,7 @@ describe.each(RESOURCES)(
       authState.workspaceDelegation = { [delegationFlag]: true };
       renderRows([]);
 
-      expect(screen.queryByText(/configured/)).not.toBeInTheDocument();
+      expect(screen.getByText(/^No .* configured$/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
         "href",
         `/org1/workspace/ws1/${settingsPath}/create`,
@@ -170,6 +170,7 @@ describe.each(RESOURCES)(
       authState.actor = "org-admin";
       renderRows([]);
 
+      expect(screen.getByText(/^No .* configured$/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
         "href",
         `/org1/workspace/ws1/${settingsPath}/create`,
@@ -177,6 +178,21 @@ describe.each(RESOURCES)(
       expect(
         screen.getByRole("button", { name: /^Attach shared/ }),
       ).toBeInTheDocument();
+    });
+
+    it("shows the Organization's empty card with its create CTA when it has none", () => {
+      authState.actor = "org-admin";
+      mockScopedSWR({ [`/${entity}`]: [] });
+      renderList(<List orgId="org1" />);
+
+      expect(screen.getByText(/^No .* configured$/)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
+        "href",
+        `/org1/${settingsPath}/create`,
+      );
+      expect(
+        screen.queryByRole("button", { name: /^Attach shared/ }),
+      ).not.toBeInTheDocument();
     });
 
     it("renders a fetch failure rather than swallowing it", () => {

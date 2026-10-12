@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListError } from "@/components/list-state";
+import { EmptyCard } from "@/components/empty-card";
+
 import {
   ButtonRowSkeleton,
   CardGridSkeleton,
@@ -24,7 +26,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { EllipsisVertical, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import {
+  EllipsisVertical,
+  Layers,
+  Pencil,
+  Play,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import type { Blueprint } from "@platypus/schemas";
 import { writeEntity } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -72,13 +81,25 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
     return <ListError error={error} subject="blueprints" />;
   }
 
+  const actions = (
+    <div className="flex gap-2">
+      <Button variant={blueprints.length ? "outline" : "default"} asChild>
+        <Link href={routes.createBlueprint}>
+          <Plus /> Create blueprint
+        </Link>
+      </Button>
+    </div>
+  );
+
   return (
     <>
       {blueprints.length === 0 ? (
-        <ListState variant="empty">
-          No blueprints yet. Create one to provision new workspaces with a set
-          of shared resources in a single step.
-        </ListState>
+        <EmptyCard
+          icon={<Layers />}
+          title="No blueprints yet"
+          description="Create one to provision new workspaces with a set of shared resources in a single step."
+          action={actions}
+        />
       ) : (
         <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
           {blueprints.map((blueprint) => {
@@ -152,13 +173,7 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
         </ul>
       )}
 
-      <div className="mt-4 flex gap-2">
-        <Button variant="outline" asChild>
-          <Link href={routes.createBlueprint}>
-            <Plus /> Create blueprint
-          </Link>
-        </Button>
-      </div>
+      {blueprints.length > 0 && <div className="mt-4">{actions}</div>}
 
       {blueprintToApply && (
         <ApplyBlueprintDialog

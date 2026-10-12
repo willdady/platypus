@@ -71,6 +71,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DetailFormState } from "@/components/detail-form-state";
 import { ListError } from "@/components/list-state";
+import { EmptyCard } from "@/components/empty-card";
 import {
   Tooltip,
   TooltipContent,
@@ -732,9 +733,12 @@ const DashboardPage = ({
             <GridSkeleton />
           )
         ) : widgets.length === 0 && !editMode ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-4 p-4 text-muted-foreground">
-            <LayoutDashboard className="h-12 w-12 opacity-30" />
-            <p>No widgets yet. Click Edit to add some.</p>
+          <div className="p-4">
+            <EmptyCard
+              icon={<LayoutDashboard />}
+              title="No widgets yet"
+              description="Click Edit to add some."
+            />
           </div>
         ) : gridMounted ? (
           <div

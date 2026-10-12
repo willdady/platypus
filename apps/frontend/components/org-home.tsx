@@ -7,14 +7,7 @@ import { Plus, Settings, FolderClosed } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { canCreateWorkspace, canOpenOrgSettings } from "@/lib/authorization";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import type { Workspace } from "@platypus/schemas";
 import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes } from "@/lib/routes";
@@ -82,38 +75,34 @@ export function OrgHome({ orgId }: { orgId: string }) {
           </div>
         </div>
       ) : (
-        <Empty className="border-2 border-dashed">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <FolderClosed />
-            </EmptyMedia>
-            <EmptyTitle>No workspaces found</EmptyTitle>
-            <EmptyDescription>
-              {canCreate
-                ? "Create your first workspace in this organization to start building agents."
-                : "You don't have a workspace yet. An organization admin can provision one for you."}
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <div className="flex items-center gap-2">
+        <EmptyCard
+          icon={<FolderClosed />}
+          title="No workspaces found"
+          description={
+            canCreate
+              ? "Create your first workspace in this organization to start building agents."
+              : "You don't have a workspace yet. An organization admin can provision one for you."
+          }
+          action={
+            <>
               {/* ADR-0008: Workspace creation is org-admin-only. */}
               {canCreate && (
-                <Button asChild className="flex-1">
+                <Button asChild>
                   <Link href={routes.createWorkspace}>
-                    <Plus className="size-4" /> Add workspace
+                    <Plus /> Add workspace
                   </Link>
                 </Button>
               )}
               {canOpenSettings && (
                 <Button variant="outline" asChild>
                   <Link href={routes.settings.root}>
-                    <Settings className="size-4" /> Organization settings
+                    <Settings /> Organization settings
                   </Link>
                 </Button>
               )}
-            </div>
-          </EmptyContent>
-        </Empty>
+            </>
+          }
+        />
       )}
     </div>
   );

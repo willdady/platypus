@@ -30,14 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ListError } from "@/components/list-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -612,31 +605,27 @@ const SandboxSettings = ({
 
   if (!showForm) {
     return (
-      <Empty className="border-2 border-dashed">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Box className="size-6" />
-          </EmptyMedia>
-          <EmptyTitle>No sandbox configured</EmptyTitle>
-          <EmptyDescription>
-            {!canConfigure
-              ? "No sandbox is configured for this workspace. Ask an organization admin to set one up."
-              : noBackends
-                ? "No sandbox backends are registered on this server. Add @platypus/docker to PLATYPUS_PLUGINS (or register another backend) and restart the backend."
-                : "Configure a sandbox to run agent code in an isolated environment."}
-          </EmptyDescription>
-        </EmptyHeader>
-        {canConfigure && (
-          <EmptyContent>
+      <EmptyCard
+        icon={<Box />}
+        title="No sandbox configured"
+        description={
+          !canConfigure
+            ? "No sandbox is configured for this workspace. Ask an organization admin to set one up."
+            : noBackends
+              ? "No sandbox backends are registered on this server. Add @platypus/docker to PLATYPUS_PLUGINS (or register another backend) and restart the backend."
+              : "Configure a sandbox to run agent code in an isolated environment."
+        }
+        action={
+          canConfigure && (
             <Button
               onClick={() => setIsConfiguring(true)}
               disabled={noBackends}
             >
               <Plus /> Configure sandbox
             </Button>
-          </EmptyContent>
-        )}
-      </Empty>
+          )
+        }
+      />
     );
   }
 

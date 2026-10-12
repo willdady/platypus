@@ -3,14 +3,7 @@
 import Link from "next/link";
 import { FileQuestion, ShieldX, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { EmptyCard } from "@/components/empty-card";
 import { errorStatus, isNotFoundOrForbidden } from "@/lib/utils";
 
 const noticeFor = (subject: string, error: unknown) => {
@@ -61,20 +54,18 @@ export const FetchErrorNotice = ({
   const notice = noticeFor(subject, error);
   const retryable = onRetry && !isNotFoundOrForbidden(error);
   return (
-    <Empty className="border-2 border-dashed">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">{notice.icon}</EmptyMedia>
-        <EmptyTitle>{notice.title}</EmptyTitle>
-        <EmptyDescription>{notice.description}</EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
-        <div className="flex gap-2">
+    <EmptyCard
+      icon={notice.icon}
+      title={notice.title}
+      description={notice.description}
+      action={
+        <>
           {retryable && <Button onClick={() => onRetry()}>Retry</Button>}
           <Button asChild variant="outline">
             <Link href={backHref}>{backLabel}</Link>
           </Button>
-        </div>
-      </EmptyContent>
-    </Empty>
+        </>
+      }
+    />
   );
 };

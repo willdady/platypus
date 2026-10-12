@@ -56,14 +56,14 @@ describe("ContextsList", () => {
     });
     renderList(<ContextsList />);
 
-    expect(screen.getByText("No workspace contexts.")).toBeInTheDocument();
+    expect(screen.getByText("No workspace contexts")).toBeInTheDocument();
   });
 
   it("offers the create CTA when there are none", () => {
     mockScopedSWR({ contexts: [] });
     renderList(<ContextsList />);
 
-    expect(screen.getByText("No workspace contexts.")).toBeInTheDocument();
+    expect(screen.getByText("No workspace contexts")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Add workspace context/ }),
     ).toBeInTheDocument();
@@ -76,9 +76,7 @@ describe("ContextsList", () => {
     expect(
       screen.getByLabelText("Loading workspace contexts"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("No workspace contexts."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("No workspace contexts")).not.toBeInTheDocument();
   });
 
   it("says the read failed rather than rendering nothing", () => {
@@ -88,9 +86,7 @@ describe("ContextsList", () => {
     expect(
       screen.getByText("Failed to load workspace contexts. 500"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("No workspace contexts."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("No workspace contexts")).not.toBeInTheDocument();
   });
 });
 
@@ -133,9 +129,7 @@ describe("WebhooksList", () => {
     mockScopedSWR({ webhooks: [] });
     render();
 
-    expect(
-      screen.getByText("No webhooks configured for this workspace."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No webhooks configured")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Add webhook/ }),
     ).toBeInTheDocument();
@@ -147,7 +141,7 @@ describe("WebhooksList", () => {
 
     expect(screen.getByText("Failed to load webhooks.")).toBeInTheDocument();
     expect(
-      screen.queryByText("No webhooks configured for this workspace."),
+      screen.queryByText("No webhooks configured"),
     ).not.toBeInTheDocument();
   });
 
@@ -159,7 +153,7 @@ describe("WebhooksList", () => {
       screen.getByRole("status", { name: "Loading webhooks" }),
     ).toHaveAttribute("aria-busy", "true");
     expect(
-      screen.queryByText("No webhooks configured for this workspace."),
+      screen.queryByText("No webhooks configured"),
     ).not.toBeInTheDocument();
   });
 });

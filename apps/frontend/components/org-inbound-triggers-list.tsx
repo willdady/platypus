@@ -13,7 +13,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListError } from "@/components/list-state";
+import { EmptyCard } from "@/components/empty-card";
+import { Webhook } from "lucide-react";
 import {
   BadgeSkeleton,
   ButtonSkeleton,
@@ -137,9 +139,11 @@ export const OrgInboundTriggersList = ({ orgId }: { orgId: string }) => {
   const triggers = data?.results ?? [];
   if (!triggers.length) {
     return (
-      <ListState variant="empty">
-        No workspace in this organization has an Inbound Trigger.
-      </ListState>
+      <EmptyCard
+        icon={<Webhook />}
+        title="No Inbound Triggers configured"
+        description="No workspace in this organization has an Inbound Trigger."
+      />
     );
   }
 

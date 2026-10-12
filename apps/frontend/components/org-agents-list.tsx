@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListError } from "@/components/list-state";
+import { EmptyCard } from "@/components/empty-card";
 import {
   CardGridSkeleton,
   IconButtonSkeleton,
@@ -99,10 +100,11 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
 
   if (agents.length === 0) {
     return (
-      <ListState variant="empty">
-        No shared agents yet. Promote a workspace agent to the organization to
-        share it across workspaces.
-      </ListState>
+      <EmptyCard
+        icon={<Bot />}
+        title="No shared agents yet"
+        description="Promote a workspace agent to the organization to share it across workspaces."
+      />
     );
   }
 

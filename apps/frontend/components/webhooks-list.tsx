@@ -2,9 +2,11 @@
 
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Radio } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
+import { EmptyCard } from "@/components/empty-card";
+
 import { workspaceRoutes } from "@/lib/routes";
 import {
   ButtonSkeleton,
@@ -48,16 +50,18 @@ const WebhooksList = ({
 
   if (!webhooks.length) {
     return (
-      <div>
-        <p className="text-muted-foreground mb-4">
-          No webhooks configured for this workspace.
-        </p>
-        <Button asChild>
-          <Link href={routes.settings.createWebhook}>
-            <Plus /> Add webhook
-          </Link>
-        </Button>
-      </div>
+      <EmptyCard
+        icon={<Radio />}
+        title="No webhooks configured"
+        description="Add a webhook to deliver this workspace's events to a URL you control."
+        action={
+          <Button asChild>
+            <Link href={routes.settings.createWebhook}>
+              <Plus /> Add webhook
+            </Link>
+          </Button>
+        }
+      />
     );
   }
 

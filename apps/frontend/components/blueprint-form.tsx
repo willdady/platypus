@@ -20,7 +20,7 @@ import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import { Bot, Plug, Sparkles, Unplug } from "lucide-react";
+import { Bot, Sparkles, Unplug, Wrench } from "lucide-react";
 import type {
   Blueprint,
   BlueprintItem,
@@ -57,7 +57,7 @@ const RESOURCE_GROUPS: {
 }[] = [
   { type: "agent", label: "Agents", collection: "agents", icon: Bot },
   { type: "skill", label: "Skills", collection: "skills", icon: Sparkles },
-  { type: "mcp", label: "MCP servers", collection: "mcps", icon: Plug },
+  { type: "mcp", label: "MCP servers", collection: "mcps", icon: Wrench },
   {
     type: "provider",
     label: "Providers",

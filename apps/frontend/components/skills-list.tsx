@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
+import { EmptyCard } from "@/components/empty-card";
 import {
   ButtonRowSkeleton,
   CardGridSkeleton,
@@ -46,6 +47,7 @@ import {
   Pencil,
   Plus,
   Share2,
+  Sparkles,
   Trash2,
   TriangleAlert,
   UserRound,
@@ -307,13 +309,46 @@ export const SkillsList = ({
     </div>
   );
 
+  // The Organization's own Skills screen shows the empty card, holding the
+  // buttons; the workspace home's Skills section keeps the one-line state.
+  const showCard = !workspaceId && skills.length === 0;
+
+  const actions = (
+    <>
+      <Button variant={showCard ? "default" : "outline"} asChild>
+        <Link href={`${editBasePath}/create`}>
+          <Plus /> Create skill
+        </Link>
+      </Button>
+      <SkillImportButton
+        scope={workspaceId ? { orgId, workspaceId } : { orgId }}
+        onImported={() => void mutate()}
+      />
+      {canAttach && workspaceId && (
+        <AttachSharedAction
+          orgId={orgId}
+          workspaceId={workspaceId}
+          resourceType="skill"
+          label="Attach shared skill"
+          resources={skills}
+          onAttached={mutate}
+        />
+      )}
+    </>
+  );
+
   return (
     <>
       {controls}
-      {skills.length === 0 ? (
-        <ListState variant="empty">
-          No skills yet. Create one to get started.
-        </ListState>
+      {showCard ? (
+        <EmptyCard
+          icon={<Sparkles />}
+          title="No skills yet"
+          description="Create or import a skill to give your agents packaged know-how they load when a task needs it."
+          action={actions}
+        />
+      ) : skills.length === 0 ? (
+        <ListState variant="empty">No skills yet.</ListState>
       ) : shown.length === 0 ? (
         <ListState variant="empty">No skills match your filters.</ListState>
       ) : (
@@ -448,27 +483,7 @@ export const SkillsList = ({
         </ul>
       )}
 
-      <div className="mt-4 flex gap-2">
-        <Button variant="outline" asChild>
-          <Link href={`${editBasePath}/create`}>
-            <Plus /> Create skill
-          </Link>
-        </Button>
-        <SkillImportButton
-          scope={workspaceId ? { orgId, workspaceId } : { orgId }}
-          onImported={() => void mutate()}
-        />
-        {canAttach && workspaceId && (
-          <AttachSharedAction
-            orgId={orgId}
-            workspaceId={workspaceId}
-            resourceType="skill"
-            label="Attach shared skill"
-            resources={skills}
-            onAttached={mutate}
-          />
-        )}
-      </div>
+      {!showCard && <div className="mt-4 flex gap-2">{actions}</div>}
 
       {skillToManage && (
         <ManageAttachmentsDialog

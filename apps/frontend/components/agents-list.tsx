@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListError } from "@/components/list-state";
+import { EmptyCard } from "@/components/empty-card";
 import {
   ButtonRowSkeleton,
   CardGridSkeleton,
@@ -566,12 +567,35 @@ export const AgentsList = ({
   const gridClassName =
     "grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4";
 
+  const actions = (
+    <>
+      <Button variant={agents.length ? "outline" : "default"} asChild>
+        <Link href={routes.agents.create}>
+          <Plus /> Create agent
+        </Link>
+      </Button>
+      {canManageShared && (
+        <AttachSharedAction
+          orgId={orgId}
+          workspaceId={workspaceId}
+          resourceType="agent"
+          label="Attach shared agent"
+          resources={agents}
+          onAttached={mutate}
+        />
+      )}
+    </>
+  );
+
   return (
     <>
       {agents.length === 0 ? (
-        <ListState variant="empty">
-          No agents yet. Create one to get started.
-        </ListState>
+        <EmptyCard
+          icon={<Bot />}
+          title="No agents yet"
+          description="Create an agent to start chatting with it in this workspace."
+          action={actions}
+        />
       ) : (
         <>
           {pinnedAgents.length > 0 && (
@@ -593,23 +617,7 @@ export const AgentsList = ({
         </>
       )}
 
-      <div className="mt-4 flex gap-2">
-        <Button variant="outline" asChild>
-          <Link href={routes.agents.create}>
-            <Plus /> Create agent
-          </Link>
-        </Button>
-        {canManageShared && (
-          <AttachSharedAction
-            orgId={orgId}
-            workspaceId={workspaceId}
-            resourceType="agent"
-            label="Attach shared agent"
-            resources={agents}
-            onAttached={mutate}
-          />
-        )}
-      </div>
+      {agents.length > 0 && <div className="mt-4 flex gap-2">{actions}</div>}
 
       <DetachSharedDialog
         detach={orgAgentDetach}

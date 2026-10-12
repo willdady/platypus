@@ -9,6 +9,9 @@ describe("ListState", () => {
     expect(screen.getByText("No blueprints yet.")).toHaveClass(
       "text-muted-foreground",
     );
+    expect(screen.getByText("No blueprints yet.").parentElement).toHaveClass(
+      "border-dashed",
+    );
   });
 
   it("renders an error in the destructive tone", () => {
@@ -17,6 +20,9 @@ describe("ListState", () => {
     expect(screen.getByText("Failed to load agents.")).toHaveClass(
       "text-destructive",
     );
+    expect(
+      screen.getByText("Failed to load agents.").parentElement,
+    ).not.toHaveClass("border-dashed");
   });
 });
 

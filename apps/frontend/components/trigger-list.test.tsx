@@ -168,11 +168,11 @@ describe("TriggerList cron schedule", () => {
 });
 
 describe("TriggerList list states", () => {
-  // The page around it owns the empty copy, so the list renders nothing at all
-  // rather than a second, competing empty state, nor controls with nothing to
-  // filter.
-  it("renders nothing when the workspace has no triggers", () => {
+  // No controls with nothing to filter.
+  it("says so, without controls, when the workspace has no triggers", () => {
     renderTriggers([]);
+
+    expect(screen.getByText("No triggers yet.")).toBeInTheDocument();
 
     expect(
       screen.queryByRole("switch", { name: "Show fired" }),

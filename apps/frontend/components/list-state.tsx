@@ -11,6 +11,13 @@ const TONE: Record<ListStateVariant, string> = {
   error: "text-destructive",
 };
 
+// Empty gets `EmptyCard`'s dashed frame, marking the slot the content would
+// fill. An error stays bare: it also renders inside dialogs and chat.
+const FRAME: Record<ListStateVariant, string> = {
+  empty: "rounded-lg border-2 border-dashed",
+  error: "",
+};
+
 /**
  * The empty / error state every list shows (#877). Each list supplies only the
  * copy that differs; tone and the centered frame live here, so the states stop
@@ -28,7 +35,12 @@ export function ListState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-8">
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center gap-3 py-8",
+        FRAME[variant],
+      )}
+    >
       <p className={cn("text-sm", TONE[variant])}>{children}</p>
       {action}
     </div>
