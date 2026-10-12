@@ -250,22 +250,33 @@ export const SkillsList = ({
 
   // The Command palette's own scorer, applied to the name: a card grid, not a
   // `Command` list, so it is called directly rather than through `Command`.
-  const query = nameFilter.trim();
-  const matchesAgent = (skill: SkillWithScope) => {
-    if (agentFilter === ALL) return true;
-    const skillAgents = getAgentsForSkill(skill.id);
-    return agentFilter === UNATTACHED
-      ? skillAgents.length === 0
-      : skillAgents.some((agent) => agent.id === agentFilter);
-  };
-  const shown = skills.filter(
-    (skill) =>
-      (!query || defaultFilter(skill.name, query) > 0) && matchesAgent(skill),
-  );
-
   // Only agents that would narrow the list to something are worth offering.
   const agentOptions = agents.filter((agent) =>
     skills.some((skill) => agent.skillIds?.includes(skill.id)),
+  );
+
+  // A chosen agent that has since dropped out of the options (detached from
+  // its last Skill, or deleted) reads as no filter, rather than leaving a
+  // blank select over an empty list.
+  const activeAgentFilter =
+    agentFilter === UNATTACHED ||
+    agentOptions.some((agent) => agent.id === agentFilter)
+      ? agentFilter
+      : ALL;
+
+  const query = nameFilter.trim();
+  const matchesAgent = (skill: SkillWithScope) => {
+    if (activeAgentFilter === ALL) return true;
+    const skillAgents = getAgentsForSkill(skill.id);
+    return activeAgentFilter === UNATTACHED
+      ? skillAgents.length === 0
+      : skillAgents.some((agent) => agent.id === activeAgentFilter);
+  };
+  // The Command palette's own scorer, applied to the name: a card grid, not a
+  // `Command` list, so it is called directly rather than through `Command`.
+  const shown = skills.filter(
+    (skill) =>
+      (!query || defaultFilter(skill.name, query) > 0) && matchesAgent(skill),
   );
 
   // Workspace home only: the Organization surface fetches no agent data, so
@@ -283,7 +294,7 @@ export const SkillsList = ({
           className="pl-8"
         />
       </div>
-      <Select value={agentFilter} onValueChange={setAgentFilter}>
+      <Select value={activeAgentFilter} onValueChange={setAgentFilter}>
         <SelectTrigger className="w-44" aria-label="Filter by agent">
           <SelectValue />
         </SelectTrigger>

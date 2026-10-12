@@ -300,6 +300,23 @@ describe("SkillsList filters", () => {
       expect(shownNames()).toEqual(["charlie"]);
     });
 
+    it("falls back to any agent when the chosen agent no longer uses a listed skill", async () => {
+      const { rerender } = renderWithAgents();
+      await selectOption("Any agent", "Triager");
+
+      mockScopedSWR({
+        "/agents": agents.map((agent) =>
+          agent.id === "ag2" ? { ...agent, skillIds: [] } : agent,
+        ),
+      });
+      rerender(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+      expect(shownNames()).toEqual(["alpha", "bravo", "charlie"]);
+      expect(
+        screen.getByRole("combobox", { name: "Filter by agent" }),
+      ).toHaveTextContent("Any agent");
+    });
+
     it("offers only agents attached to a listed skill", async () => {
       renderWithAgents();
 
