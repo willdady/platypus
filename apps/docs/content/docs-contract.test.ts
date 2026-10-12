@@ -1732,6 +1732,9 @@ const NUMBER_WORDS = [
   "ten",
 ];
 
+/** A page's text with line wraps folded, so a phrase survives a reflow. */
+const proseOf = (file: string): string => readDoc(file).replace(/\s+/g, " ");
+
 /**
  * Numbers a reader plans around that live only as a backend constant, not in a
  * schema this file can import. Each is read as `NAME = <product of integers>`
@@ -1836,6 +1839,14 @@ const BACKEND_CONSTANTS = [
     cost: "A client waits for a push the Task has no pushes left to send.",
   },
   {
+    source: "apps/backend/src/runs/run-events.ts",
+    name: "RUN_EVENT_CEILING",
+    phrase: (count: number) =>
+      `keeps the first ${NUMBER_WORDS[count / 1_000] ?? count / 1_000} thousand`,
+    files: ["building-with-platypus/triggers.mdx"],
+    cost: "A reader debugging a long run takes a cut-off timeline for the whole run.",
+  },
+  {
     source: "apps/backend/src/runs/stream-keepalive.ts",
     name: "DEFAULT_HEARTBEAT_INTERVAL_MS",
     phrase: (ms: number) => `a comment line every ${ms / 1_000} seconds`,
@@ -1909,7 +1920,7 @@ describe("backend constants the concept pages quote", () => {
     "$name is stated where quoted",
     ({ source, name, phrase, files, cost }) => {
       const declared = readRepoFile(source).match(
-        new RegExp(`${name} = ([\\d_ *]+);`),
+        new RegExp(`\\b${name} = ([\\d_ *]+);`),
       );
       expect(
         declared,
@@ -1921,7 +1932,7 @@ describe("backend constants the concept pages quote", () => {
       const expected = phrase(value);
       for (const file of files) {
         expect(
-          readDoc(file).includes(expected),
+          proseOf(file).includes(expected),
           `${file} does not say "${expected}", but ${source} sets ${name} to ` +
             `${declared![1].trim()}.\n${cost}`,
         ).toBe(true);
@@ -1966,7 +1977,7 @@ describe("schema constants the pages quote", () => {
       const expected = phrase(value);
       for (const file of files) {
         expect(
-          readDoc(file).includes(expected),
+          proseOf(file).includes(expected),
           `${file} does not say "${expected}", but @platypus/schemas sets ` +
             `${name} to ${value}.\n${cost}`,
         ).toBe(true);
