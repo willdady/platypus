@@ -44,7 +44,6 @@ import {
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
 import { sweepMissedEnds, turnEnded } from "../services/a2a-task-lifecycle.ts";
 
-// Check interval: 60 seconds (1 minute)
 const DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS = 60 * 1000;
 const SCHEDULER_INTERVAL_MS = parseInt(
   process.env.SCHEDULE_SCHEDULER_INTERVAL_MS ||

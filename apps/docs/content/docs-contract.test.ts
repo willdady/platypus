@@ -598,7 +598,8 @@ describe("environment variables", () => {
         const code = readIntegerConstant(source, `DEFAULT_${name}`);
         if (code === undefined) {
           violations.push(
-            `No \`DEFAULT_${name} = <number>;\` in ${source} — re-anchor BACKEND_DEFAULT_SOURCES if it moved.`,
+            `${at(line)} gives \`${name}\` the default ${value}, but there is no \`DEFAULT_${name} = <number>;\` in ${source}.\n` +
+              `Re-anchor BACKEND_DEFAULT_SOURCES if it moved.`,
           );
         } else if (code !== value) {
           violations.push(
@@ -2120,22 +2121,17 @@ describe("backend constants the concept pages quote", () => {
   it.each(BACKEND_CONSTANTS)(
     "$name is stated where quoted",
     ({ source, name, phrase, files, cost }) => {
-      const declared = readRepoFile(source).match(
-        new RegExp(`\\b${name} = ([\\d_ *]+);`),
-      );
+      const value = readIntegerConstant(source, name);
       expect(
-        declared,
+        value,
         `No \`${name} = <number>\` in ${source} — re-anchor this test if it moved.`,
-      ).not.toBeNull();
-      const value = declared![1]
-        .split("*")
-        .reduce((product, n) => product * Number(n.replace(/[_\s]/g, "")), 1);
-      const expected = phrase(value);
+      ).toBeDefined();
+      const expected = phrase(value!);
       for (const file of files) {
         expect(
           proseOf(file).includes(expected),
           `${file} does not say "${expected}", but ${source} sets ${name} to ` +
-            `${declared![1].trim()}.\n${cost}`,
+            `${value}.\n${cost}`,
         ).toBe(true);
       }
     },
