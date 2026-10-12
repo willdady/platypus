@@ -133,11 +133,15 @@ export const markerOperators = () => ({
     ({ op: "and", conditions: conditions.filter(Boolean) }) as Marker,
   or: (...conditions: Condition[]) =>
     ({ op: "or", conditions: conditions.filter(Boolean) }) as Marker,
-  count: (): CountMarker => ({
-    isCount: true,
-    as: () => ({ ...markerOperators().count(), aliased: true }),
-  }),
+  count: () => countMarker(),
   max: (column: unknown): MaxMarker => ({ isMax: true, column: refOf(column) }),
+});
+
+/** A `count()` marker; `.as(…)` returns an aliased one. */
+const countMarker = (aliased?: true): CountMarker => ({
+  isCount: true,
+  ...(aliased && { aliased }),
+  as: () => countMarker(true),
 });
 
 /**
