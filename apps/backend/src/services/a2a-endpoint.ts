@@ -1,4 +1,13 @@
-import { and, asc, count, desc, eq, getTableColumns } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  sql,
+} from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   a2aInterfaceUrl as interfaceUrl,
@@ -70,20 +79,35 @@ export const toPublicToken = (row: A2aTokenRow) => {
   return { ...rest, tokenStatus: bearerTokenStatus(row) };
 };
 
-/** The Workspace's endpoints, each with its Agent's name. */
+/**
+ * The Workspace's endpoints, each with its Agent's name and how many of its
+ * tokens have not expired — as `bearerTokenStatus` reads expiry — so one no
+ * client can call stands out.
+ */
 export const listA2aEndpoints = async (
   workspaceId: string,
 ): Promise<A2aEndpointListItem[]> => {
-  const rows = await db
-    .select()
+  const live = db
+    .select({ count: count().as("live_token_count") })
+    .from(a2aTokenTable)
+    .where(
+      and(
+        eq(a2aTokenTable.endpointId, a2aEndpointTable.id),
+        gt(a2aTokenTable.tokenExpiresAt, new Date()),
+      ),
+    )
+    .as("live_tokens");
+  return db
+    .select({
+      ...getTableColumns(a2aEndpointTable),
+      agentName: agentTable.name,
+      liveTokenCount: live.count,
+    })
     .from(a2aEndpointTable)
     .innerJoin(agentTable, eq(agentTable.id, a2aEndpointTable.agentId))
+    .leftJoinLateral(live, sql`true`)
     .where(eq(a2aEndpointTable.workspaceId, workspaceId))
     .orderBy(asc(a2aEndpointTable.createdAt));
-  return rows.map(({ a2a_endpoint: endpoint, agent }) => ({
-    ...endpoint,
-    agentName: agent.name,
-  }));
 };
 
 /** The endpoint with its tokens. Throws `NotFoundError` outside the Workspace. */

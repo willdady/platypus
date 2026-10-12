@@ -24,6 +24,7 @@ const ENDPOINT = {
   agentName: "Helper",
   name: "Acme helpdesk",
   enabled: false,
+  liveTokenCount: 1,
 };
 
 beforeEach(() => {
@@ -45,6 +46,23 @@ describe("A2aEndpointsList", () => {
     expect(
       screen.getByRole("link", { name: /Add endpoint/ }),
     ).toBeInTheDocument();
+  });
+
+  it("flags an endpoint with no live tokens, beside Disabled", () => {
+    mockScopedSWR({
+      "/a2a-endpoints": [
+        { ...ENDPOINT, liveTokenCount: 0 },
+        { ...ENDPOINT, id: "ep-2", name: "Working", enabled: true },
+      ],
+    });
+    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+
+    const flagged = screen.getByRole("link", { name: /Acme helpdesk/ });
+    expect(flagged).toHaveTextContent("Disabled");
+    expect(flagged).toHaveTextContent("No active tokens");
+    expect(screen.getByRole("link", { name: /Working/ })).not.toHaveTextContent(
+      "No active tokens",
+    );
   });
 
   it("offers no Add endpoint to an Org Admin in another Owner's workspace", () => {

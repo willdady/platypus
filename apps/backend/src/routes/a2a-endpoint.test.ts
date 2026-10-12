@@ -134,6 +134,43 @@ describe("A2A endpoint routes", () => {
       );
     });
 
+    it("counts each endpoint's unexpired tokens, listing one with none", async () => {
+      const past = new Date("2020-01-01T00:00:00.000Z");
+      const later = (days: number) =>
+        new Date(createdAt.getTime() + days * DAY);
+      seed({
+        endpoints: [
+          endpoint(),
+          endpoint({ id: "ep-expired", createdAt: later(1) }),
+          endpoint({ id: "ep-none", createdAt: later(2) }),
+        ],
+        tokens: [
+          liveToken(),
+          liveToken({ id: "tok-2", tokenExpiresAt: past }),
+          liveToken({
+            id: "tok-3",
+            endpointId: "ep-expired",
+            tokenExpiresAt: past,
+          }),
+          liveToken({
+            id: "tok-4",
+            endpointId: "ep-expired",
+            tokenExpiresAt: past,
+          }),
+        ],
+      });
+
+      const res = await app.request(baseUrl);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { results: Row[] };
+      expect(body.results.map((e: Row) => [e.id, e.liveTokenCount])).toEqual([
+        ["ep-1", 1],
+        ["ep-expired", 0],
+        ["ep-none", 0],
+      ]);
+    });
+
     it("creates an endpoint under a minted id, defaulting name and description to the Agent's", async () => {
       mockNanoid.mockReturnValueOnce("minted-endpoint-id-0001");
       const fake = seed({ endpoints: [] });

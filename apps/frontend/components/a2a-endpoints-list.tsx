@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Pencil, Plus } from "lucide-react";
 import type { A2aEndpointListItem } from "@platypus/schemas";
@@ -14,6 +15,12 @@ import {
   ItemRowsSkeleton,
   LoadingRegion,
 } from "./list-skeletons";
+
+const StatusBadge = ({ children }: { children: ReactNode }) => (
+  <span className="px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
+    {children}
+  </span>
+);
 
 /** A Workspace's A2A endpoints (ADR-0032). Only the Owner adds or edits one. */
 const A2aEndpointsList = ({
@@ -76,10 +83,9 @@ const A2aEndpointsList = ({
                 <ItemContent>
                   <div className="flex items-center gap-2">
                     <ItemTitle>{endpoint.name}</ItemTitle>
-                    {!endpoint.enabled && (
-                      <span className="px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-                        Disabled
-                      </span>
+                    {!endpoint.enabled && <StatusBadge>Disabled</StatusBadge>}
+                    {endpoint.liveTokenCount === 0 && (
+                      <StatusBadge>No active tokens</StatusBadge>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground truncate">

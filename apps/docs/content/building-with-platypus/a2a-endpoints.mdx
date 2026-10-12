@@ -101,6 +101,10 @@ the expired token is refused. Both times update at most once a minute.
   `contextId` or list them with `ListTasks`. Handing it to a different client
   hands over the old client's history. To give a different client a fresh
   start, delete the token and add a new one.
+- **No active tokens** shows next to an endpoint on the **A2A endpoints** list
+  when no client can call it: it has no tokens, or every one has expired. Open
+  the endpoint and add a token, or regenerate an expired one, then give it to
+  the client.
 
 <Callout type="warning">
   Rotating a token usually means updating the client's configuration, so act on

@@ -44,8 +44,16 @@ export type Marker =
 /** What a `.where()` may receive: a marker, or nothing at all. */
 export type Condition = Marker | undefined | null;
 
-/** A marker standing in for `count()` in a `select({ n: count() })` projection. */
-export type CountMarker = { isCount: true };
+/**
+ * A marker standing in for `count()` in a `select({ n: count() })` projection.
+ * `aliased` records `count().as(…)`, which a subquery's aggregate needs; the
+ * alias itself is not kept, since the subquery reads the field by its key.
+ */
+export type CountMarker = {
+  isCount: true;
+  aliased?: true;
+  as: (alias: string) => CountMarker;
+};
 
 /** A marker standing in for `max(column)` in a `select({ top: max(…) })` projection. */
 export type MaxMarker = { isMax: true; column: ColumnRef };
@@ -125,7 +133,10 @@ export const markerOperators = () => ({
     ({ op: "and", conditions: conditions.filter(Boolean) }) as Marker,
   or: (...conditions: Condition[]) =>
     ({ op: "or", conditions: conditions.filter(Boolean) }) as Marker,
-  count: (): CountMarker => ({ isCount: true }),
+  count: (): CountMarker => ({
+    isCount: true,
+    as: () => ({ ...markerOperators().count(), aliased: true }),
+  }),
   max: (column: unknown): MaxMarker => ({ isMax: true, column: refOf(column) }),
 });
 
@@ -668,6 +679,14 @@ export const createFakeDb = (
          * selected key is a column of it, read from the subquery's rows.
          */
         as(alias: string) {
+          // Drizzle refuses to read an unaliased `count()` off a subquery.
+          for (const [key, value] of Object.entries(selection ?? {})) {
+            if (isCountMarker(value) && !value.aliased) {
+              throw new Error(
+                `subquery "${alias}" selects "${key}" as count() without .as(…)`,
+              );
+            }
+          }
           const subquery: Record<string | symbol, unknown> = {
             [TABLE_NAME]: alias,
             [LATERAL]: (outer: Resolve) => rows(outer),
