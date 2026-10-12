@@ -2343,7 +2343,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       expect(await artifactsOf(task.id)).toEqual([]);
     });
 
-    it("says a reply stopped at the Agent's Max steps is cut short, still completed", async () => {
+    it("says a reply stopped at the step limit is cut short, still completed", async () => {
       const { task, reply } = await complete();
       reply.metadata = { stoppedAtStepLimit: true };
 
@@ -2352,7 +2352,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       expect(read.status.state).toBe("TASK_STATE_COMPLETED");
       expect(read.metadata).toEqual({ stopReason: "max_steps" });
       expect(read.status.message).toMatchObject({ role: "ROLE_AGENT" });
-      expect(read.status.message!.parts[0].text).toMatch(/Max steps/);
+      expect(read.status.message!.parts[0].text).toMatch(/step limit/);
       expect(read.artifacts[0].parts[0].text).toBe("Hello from Helper");
     });
 
@@ -2651,7 +2651,12 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
       { id: "a", minute: 1 },
       { id: "b", minute: 2 },
       { id: "c", minute: 3 },
+      { id: "d", minute: 4, state: "failed" },
     ]);
+    // A failed Task's reply, cut short or not, gives it no stop reason.
+    rows("chat_message").find((m) => m.id === "reply-d")!.metadata = {
+      stoppedAtStepLimit: true,
+    };
     rows("chat_message").find((m) => m.id === "reply-a")!.metadata = {
       stoppedAtStepLimit: true,
     };
@@ -2664,10 +2669,15 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
         .result as unknown as { tasks: RpcTask[] };
       const byId = new Map(tasks.map((task) => [task.id, task]));
       expect(byId.get("a")!.metadata).toEqual({ stopReason: "max_steps" });
-      expect(byId.get("a")!.status.message!.parts[0].text).toMatch(/Max steps/);
+      expect(byId.get("a")!.status.message!.parts[0].text).toMatch(
+        /step limit/,
+      );
       expect(byId.get("b")!.metadata).toEqual({ stopReason: "output_limit" });
       expect(byId.get("c")!.metadata).toBeUndefined();
       expect(byId.get("c")!.status.message).toBeUndefined();
+      expect(byId.get("d")!.status.state).toBe("TASK_STATE_FAILED");
+      expect(byId.get("d")!.metadata).toBeUndefined();
+      expect(byId.get("d")!.status.message).toBeUndefined();
     }
   });
 

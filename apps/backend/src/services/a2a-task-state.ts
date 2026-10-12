@@ -18,6 +18,7 @@ import {
   type A2aTaskEndState,
 } from "../db/schema.ts";
 import type { RunStatus } from "../runs/types.ts";
+import type { ChatMessageMetadata } from "../types.ts";
 import { a2aTextPart, replyArtifact } from "./a2a-parts.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 
@@ -277,10 +278,10 @@ export type RecordedReply = { text: string; stopReason?: StopReason };
 
 /** The cut-short marker a reply's metadata carries, as a stop reason. */
 const stopReasonOf = (metadata: unknown): StopReason | undefined => {
-  const marked = (metadata ?? {}) as {
-    stoppedAtStepLimit?: boolean;
-    truncatedByTokenLimit?: boolean;
-  };
+  const marked = (metadata ?? {}) as Pick<
+    ChatMessageMetadata,
+    "stoppedAtStepLimit" | "truncatedByTokenLimit"
+  >;
   if (marked.stoppedAtStepLimit) return "max_steps";
   if (marked.truncatedByTokenLimit) return "output_limit";
   return undefined;
@@ -288,10 +289,9 @@ const stopReasonOf = (metadata: unknown): StopReason | undefined => {
 
 /** What the status message of a cut-short Task says, by why it was cut short. */
 const STOP_REASON_TEXT: Record<StopReason, string> = {
-  max_steps:
-    "The reply stopped at the Agent's Max steps and may be incomplete.",
+  max_steps: "Reply cut short at the step limit, so it may be incomplete.",
   output_limit:
-    "The reply stopped at the model's output limit and may be incomplete.",
+    "Reply cut short at the model's output limit, so it may be incomplete.",
 };
 
 /**
@@ -384,14 +384,16 @@ export const toTask = (
   const id = task.id;
   const contextId = taskContextId(task);
   const stopReason = replyId ? reply?.stopReason : undefined;
+  const message =
+    replyId && stopReason
+      ? stopMessage({ id, contextId }, replyId, stopReason)
+      : undefined;
   const result: Task = {
     id,
     contextId,
     status: {
       state,
-      message: stopReason
-        ? stopMessage({ id, contextId }, replyId!, stopReason)
-        : undefined,
+      message,
       timestamp: statusAt.toISOString(),
     },
     artifacts:
