@@ -29,6 +29,7 @@ export const authState: {
   user: { id: string; timezone?: string | null } | null;
   actor: string;
   workspaceDelegation: unknown;
+  ownsWorkspace?: boolean;
 } = { user: { id: "u1" }, actor: "org-admin", workspaceDelegation: null };
 
 export const authMock = {

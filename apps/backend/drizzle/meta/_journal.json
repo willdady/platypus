@@ -624,6 +624,13 @@
       "when": 1791683222735,
       "tag": "0088_skill_needs_sandbox",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1791769465910,
+      "tag": "0089_workspace_agent_pin",
+      "breakpoints": true
     }
   ]
 }

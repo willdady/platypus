@@ -35,6 +35,10 @@ _Avoid_: parsed text, converted file, OCR (Platypus does not OCR).
 **Agent**:
 A configurable preset that pins a Provider, model, Instructions, generation parameters, Tools, Skills, and Sub-Agents. Selecting an Agent on a Chat turn replaces direct Provider/model selection.
 
+**Pinned Agent**:
+An **Agent** the **Workspace Owner** has pinned in one Workspace, listed in its own group above the rest wherever that Workspace lists its Agents. A pin belongs to the Workspace, not to a User: only the Owner can set or clear it, everyone with access sees it, and a Shared Agent pinned in one Workspace is not pinned in another. Detaching a Shared Agent clears its pin there. Display only; it changes nothing about how the Agent runs.
+_Avoid_: favourite Agent, starred Agent (a pin is not per-User).
+
 **A2A endpoint**:
 An **Agent** made reachable to outside agents and chat platforms over A2A from one Workspace, under its own unguessable URL. Each endpoint has its own public name and description, which may differ from the Agent's own description, its own tokens (one per client) and its own memory settings. An Agent can have several endpoints. Every conversation through an endpoint is an ordinary **Chat** the Owner can read and continue. The run acts as the Workspace Owner, so a token is only as safe as the Agent's tools are narrow. Reachable only while the Organization's gate admits its Workspace and the Workspace has an Owner who is still a member.
 _Avoid_: published Agent (an endpoint is not public), A2A exposure, API key (a token reaches one endpoint, not the API).

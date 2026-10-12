@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { Agent, Provider } from "@platypus/schemas";
 import {
   authMock,
@@ -7,6 +7,7 @@ import {
   toastMock,
   swrMock,
   mockScopedSWR,
+  authState,
   resetListHarness,
   renderList,
   confirmDialog,
@@ -192,6 +193,111 @@ describe("AgentsList promote", () => {
       "http://test/organizations/org1/workspaces/ws1/agents/a2/promote",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+describe("AgentsList pinning", () => {
+  const agent = (id: string, name: string, isPinned = false) =>
+    ({
+      id,
+      name,
+      description: "desc",
+      scope: "workspace",
+      isPinned,
+    }) as unknown as AgentWithScope;
+
+  const namesIn = (list: string) =>
+    within(screen.getByRole("list", { name: list }))
+      .getAllByRole("listitem")
+      .map((item) => within(item).getAllByText(/./)[0].textContent);
+
+  beforeEach(() => {
+    authState.ownsWorkspace = true;
+  });
+
+  afterEach(() => {
+    delete authState.ownsWorkspace;
+  });
+
+  it("groups pinned agents above the rest, each sorted by name", () => {
+    renderAgents([
+      agent("a1", "Zed", true),
+      agent("a2", "Mia"),
+      agent("a3", "Abe", true),
+      agent("a4", "Bob"),
+    ]);
+
+    expect(screen.getByRole("heading", { name: "Pinned" })).toBeInTheDocument();
+    expect(namesIn("Pinned agents")).toEqual(["Abe", "Zed"]);
+    expect(namesIn("Agents")).toEqual(["Bob", "Mia"]);
+  });
+
+  it("shows no Pinned group when nothing is pinned", () => {
+    renderAgents([agent("a2", "Mia"), agent("a4", "Bob")]);
+
+    expect(
+      screen.queryByRole("heading", { name: "Pinned" }),
+    ).not.toBeInTheDocument();
+    expect(namesIn("Agents")).toEqual(["Bob", "Mia"]);
+  });
+
+  it.each([
+    ["a workspace agent", workspaceAgent],
+    ["an attached shared agent", orgAgent],
+  ])("lets the Owner pin %s", async (_label, target) => {
+    authState.actor = "workspace-owner";
+    const fetchMock = stubAcceptedSave();
+
+    renderAgents([target], "Pin");
+
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://test/organizations/org1/workspaces/ws1/agents/${target.id}/pin`,
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+
+  it("lets the Owner unpin a pinned agent", async () => {
+    const fetchMock = stubAcceptedSave();
+
+    renderAgents([agent("a2", "Mia", true)], "Unpin");
+
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/workspaces/ws1/agents/a2/pin",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("surfaces the backend's reason when a pin is refused", async () => {
+    stubRejectedSave("Agent not found", 404);
+
+    renderAgents([workspaceAgent], "Pin");
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Agent not found"),
+    );
+  });
+
+  // The backend refuses a pin from anyone but the Workspace Owner, an Org
+  // Admin included, so offering it would only produce an error.
+  it("offers a non-owner no Pin or Unpin", () => {
+    authState.ownsWorkspace = false;
+
+    renderAgents([agent("a2", "Mia", true), agent("a4", "Bob")]);
+    for (const trigger of screen.getAllByRole("button", {
+      name: /Actions for/,
+    })) {
+      fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
+      fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
+      fireEvent.click(trigger, { button: 0 });
+      expect(screen.queryByText(/^(Un)?pin$/)).not.toBeInTheDocument();
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        key: "Escape",
+      });
+    }
+    // The pinned grouping is still shown to them.
+    expect(namesIn("Pinned agents")).toEqual(["Mia"]);
   });
 });
 

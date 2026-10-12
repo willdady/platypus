@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import {
   authMock,
   mockScopedSWR,
@@ -35,6 +35,39 @@ describe("CommandMenu", () => {
     openMenu();
 
     expect(screen.getByText("Researcher")).toBeInTheDocument();
+  });
+
+  it("lists pinned agents first, in their own group", () => {
+    mockScopedSWR({
+      "/agents": [
+        { id: "a1", name: "Researcher", isPinned: false },
+        { id: "a2", name: "Writer", isPinned: true },
+      ],
+    });
+    openMenu();
+
+    const pinned = screen.getByRole("group", { name: "Pinned agents" });
+    const rest = screen.getByRole("group", { name: "Agents" });
+    expect(
+      within(pinned)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Writer"]);
+    expect(
+      within(rest)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Researcher"]);
+    expect(
+      pinned.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows no Pinned agents group when nothing is pinned", () => {
+    mockScopedSWR({ "/agents": [{ id: "a1", name: "Researcher" }] });
+    openMenu();
+
+    expect(screen.queryByRole("group", { name: "Pinned agents" })).toBeNull();
   });
 
   it.each(["agents", "boards", "triggers"])(

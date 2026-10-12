@@ -19,6 +19,7 @@ import {
   encodeProviderSelection,
 } from "@/lib/selection-reference";
 import { formatTokens } from "@/lib/context-window";
+import { splitPinned } from "@/lib/pinned-agents";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const filterByKeywords = (
@@ -159,6 +160,25 @@ export const ModelSelectorDialog = ({
     </Button>
   );
 
+  const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
+    splitPinned(agents);
+  const renderAgentItem = (agent: Agent) => (
+    <ModelSelectorItem
+      key={agent.id}
+      value={encodeAgentSelection(agent.id)}
+      keywords={[agent.name]}
+      className="cursor-pointer"
+      onMouseDown={keepFocus}
+      onSelect={() => {
+        onModelChange(encodeAgentSelection(agent.id));
+        onOpenChange(false);
+      }}
+    >
+      <AgentAvatar agent={agent} className="size-5" />
+      {agent.name}
+    </ModelSelectorItem>
+  );
+
   // A disabled button takes no pointer events, so the tooltip hangs off a
   // wrapper that does.
   if (lockedReason) {
@@ -193,25 +213,15 @@ export const ModelSelectorDialog = ({
         <ModelSelectorInput placeholder="Search agents and models..." />
         <ModelSelectorList>
           <ModelSelectorEmpty>No results found.</ModelSelectorEmpty>
-          {/* Agents Group */}
-          {agents.length > 0 && (
+          {/* Agents Groups: pinned ones first, in their own group */}
+          {pinnedAgents.length > 0 && (
+            <ModelSelectorGroup heading="Pinned">
+              {pinnedAgents.map(renderAgentItem)}
+            </ModelSelectorGroup>
+          )}
+          {unpinnedAgents.length > 0 && (
             <ModelSelectorGroup heading="Agents">
-              {agents.map((agent) => (
-                <ModelSelectorItem
-                  key={agent.id}
-                  value={encodeAgentSelection(agent.id)}
-                  keywords={[agent.name]}
-                  className="cursor-pointer"
-                  onMouseDown={keepFocus}
-                  onSelect={() => {
-                    onModelChange(encodeAgentSelection(agent.id));
-                    onOpenChange(false);
-                  }}
-                >
-                  <AgentAvatar agent={agent} className="size-5" />
-                  {agent.name}
-                </ModelSelectorItem>
-              ))}
+              {unpinnedAgents.map(renderAgentItem)}
             </ModelSelectorGroup>
           )}
 

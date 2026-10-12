@@ -1227,6 +1227,30 @@ export const webhook = pgTable(
   (t) => [index("idx_webhook_workspace_id").on(t.workspaceId)],
 );
 
+// A Pinned Agent: an Agent the Workspace Owner has pinned in one Workspace,
+// shown above the rest there. A join table rather than a column, because one
+// Shared Agent row is attached to many Workspaces (ADR-0007) and a Workspace
+// Agent has no Attachment. Deleting the Agent or Workspace deletes the pin;
+// detaching a Shared Agent deletes it in `detachResource`.
+export const workspaceAgentPin = pgTable(
+  "workspace_agent_pin",
+  (t) => ({
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    agentId: t
+      .text("agent_id")
+      .notNull()
+      .references(() => agent.id, { onDelete: "cascade" }),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    primaryKey({ columns: [t.workspaceId, t.agentId] }),
+    index("idx_workspace_agent_pin_agent_id").on(t.agentId),
+  ],
+);
+
 // An Agent made reachable over A2A from one Workspace (ADR-0032). The id is
 // the public, unguessable part of the URL — never the Agent's id. Deleting
 // the Agent deletes its endpoints; detaching a Shared Agent deletes them in

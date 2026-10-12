@@ -22,6 +22,23 @@ vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
+// The real list is every IANA zone (~420); opening the Timezone select renders
+// all of them, which pushed a two-pick test past the 5s timeout on CI. These
+// are the only zones the suite picks, plus the browser's own.
+vi.mock("@/lib/timezones", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/timezones")>();
+  return {
+    ...actual,
+    TIMEZONES: [
+      ...new Set([
+        "UTC",
+        "Asia/Tokyo",
+        "Pacific/Chatham",
+        actual.getBrowserTimezone(),
+      ]),
+    ],
+  };
+});
 
 import { TriggerForm } from "./trigger-form";
 

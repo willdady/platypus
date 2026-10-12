@@ -5,6 +5,7 @@ import {
   a2aEndpoint as a2aEndpointTable,
   attachment as attachmentTable,
   workspace as workspaceTable,
+  workspaceAgentPin as workspaceAgentPinTable,
 } from "../db/schema.ts";
 import {
   ConflictError,
@@ -13,6 +14,7 @@ import {
   ValidationError,
 } from "../errors.ts";
 import { isScopedResourceType, resolveOrgScoped } from "./scoped-resource.ts";
+import { agentPinWhere } from "./agent-pin.ts";
 
 /**
  * The Attachment module: the rules for attaching and detaching a Shared
@@ -175,7 +177,8 @@ export async function detachResource(
       throw new NotFoundError("Attachment not found");
     }
     // A detached Shared Agent is no longer this Workspace's to expose, so
-    // its A2A endpoints and their tokens go with the Attachment (ADR-0032).
+    // its A2A endpoints and their tokens go with the Attachment (ADR-0032),
+    // and so does its pin, so attaching it again leaves it unpinned.
     if (resourceType === "agent") {
       await tx
         .delete(a2aEndpointTable)
@@ -185,6 +188,9 @@ export async function detachResource(
             eq(a2aEndpointTable.agentId, resourceId),
           ),
         );
+      await tx
+        .delete(workspaceAgentPinTable)
+        .where(agentPinWhere(workspaceId, resourceId));
     }
   });
 }

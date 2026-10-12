@@ -30,6 +30,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { splitPinned } from "@/lib/pinned-agents";
 import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { userRoutes, workspaceRoutes } from "@/lib/routes";
@@ -75,6 +76,8 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
   } = useScopedSWR<{ results: Agent[] }>("agents", scope);
 
   const agents = agentsData?.results || [];
+  const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
+    splitPinned(agents);
 
   // Fetch boards for the workspace
   const {
@@ -110,6 +113,21 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
     setOpen(false);
     command();
   }, []);
+
+  const renderAgentItem = (agent: Agent) => (
+    <CommandItem
+      key={agent.id}
+      className="cursor-pointer"
+      onSelect={() => {
+        runCommand(() =>
+          router.push(`${routes.chat.root}?agentId=${agent.id}`),
+        );
+      }}
+    >
+      <AgentAvatar agent={agent} className="size-4" />
+      <span>{agent.name}</span>
+    </CommandItem>
+  );
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
@@ -273,22 +291,14 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <RetryReadItem subject="agents" onRetry={() => mutateAgents()} />
           </CommandGroup>
         )}
-        {agents.length > 0 && (
+        {pinnedAgents.length > 0 && (
+          <CommandGroup heading="Pinned agents">
+            {pinnedAgents.map(renderAgentItem)}
+          </CommandGroup>
+        )}
+        {unpinnedAgents.length > 0 && (
           <CommandGroup heading="Agents">
-            {agents.map((agent) => (
-              <CommandItem
-                key={agent.id}
-                className="cursor-pointer"
-                onSelect={() => {
-                  runCommand(() =>
-                    router.push(`${routes.chat.root}?agentId=${agent.id}`),
-                  );
-                }}
-              >
-                <AgentAvatar agent={agent} className="size-4" />
-                <span>{agent.name}</span>
-              </CommandItem>
-            ))}
+            {unpinnedAgents.map(renderAgentItem)}
           </CommandGroup>
         )}
         {boardsError && !boardsData && (

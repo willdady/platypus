@@ -225,22 +225,32 @@ describe("Agent Routes", () => {
   describe("GET /", () => {
     it("should list workspace and attached org agents tagged with scope", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      const workspaceAgents = [{ id: "agent-1", name: "Agent 1" }];
-      // The attached org-scoped Agents come back from an inner join, shaped
-      // { agent: {...} }.
-      const attachedOrgRows = [
-        { agent: { id: "org-agent-1", name: "Shared Agent" } },
-      ];
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockResolvedValueOnce(workspaceAgents) // workspace-scoped query
-        .mockResolvedValueOnce(attachedOrgRows); // attached org-scoped query
+      seedDb({
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
+        ],
+        workspace: [
+          { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
+        ],
+        agent: [
+          { id: "agent-1", workspaceId, organizationId: null, name: "Agent 1" },
+          {
+            id: "org-agent-1",
+            workspaceId: null,
+            organizationId: orgId,
+            name: "Shared Agent",
+          },
+        ],
+        attachment: [
+          {
+            id: "att-1",
+            workspaceId,
+            resourceType: "agent",
+            resourceId: "org-agent-1",
+          },
+        ],
+        workspace_agent_pin: [{ workspaceId, agentId: "org-agent-1" }],
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -248,8 +258,16 @@ describe("Agent Routes", () => {
       // frontend regroups by scope, so order is not observable behaviour.
       expect(await res.json()).toEqual({
         results: [
-          { id: "agent-1", name: "Agent 1", scope: "workspace" },
-          { id: "org-agent-1", name: "Shared Agent", scope: "organization" },
+          expect.objectContaining({
+            id: "agent-1",
+            scope: "workspace",
+            isPinned: false,
+          }),
+          expect.objectContaining({
+            id: "org-agent-1",
+            scope: "organization",
+            isPinned: true,
+          }),
         ],
       });
     });
@@ -729,6 +747,166 @@ describe("Agent Routes", () => {
       expect(res.status).toBe(status);
       expect(deleteAvatar).not.toHaveBeenCalled();
     });
+  });
+
+  describe("pin routes", () => {
+    /**
+     * `agent-1` is this Workspace's own Agent; `shared-1` is a Shared Agent
+     * attached here and in `ws-2`; `shared-2` is a Shared Agent attached
+     * nowhere; `agent-2` belongs to `ws-2`. `owner` owns both Workspaces.
+     */
+    const world = ({
+      owner = "user-1",
+      role = "member",
+      pins = [],
+    }: {
+      owner?: string;
+      role?: "admin" | "member";
+      pins?: { workspaceId: string; agentId: string }[];
+    } = {}): FakeDb =>
+      seedDb({
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role },
+        ],
+        workspace: [
+          { id: workspaceId, organizationId: orgId, ownerId: owner },
+          { id: "ws-2", organizationId: orgId, ownerId: owner },
+        ],
+        agent: [
+          {
+            id: "agent-1",
+            workspaceId,
+            organizationId: null,
+            name: "Mine",
+          },
+          {
+            id: "agent-2",
+            workspaceId: "ws-2",
+            organizationId: null,
+            name: "Elsewhere",
+          },
+          {
+            id: "shared-1",
+            workspaceId: null,
+            organizationId: orgId,
+            name: "Shared",
+          },
+          {
+            id: "shared-2",
+            workspaceId: null,
+            organizationId: orgId,
+            name: "Unattached",
+          },
+        ],
+        attachment: [
+          {
+            id: "att-1",
+            workspaceId,
+            resourceType: "agent",
+            resourceId: "shared-1",
+          },
+          {
+            id: "att-2",
+            workspaceId: "ws-2",
+            resourceType: "agent",
+            resourceId: "shared-1",
+          },
+        ],
+        workspace_agent_pin: pins,
+      });
+
+    const pin = (agentId: string, method: "PUT" | "DELETE", ws = workspaceId) =>
+      app.request(
+        `/organizations/${orgId}/workspaces/${ws}/agents/${agentId}/pin`,
+        { method },
+      );
+
+    const pinned = (fake: FakeDb) =>
+      fake.tables.workspace_agent_pin.map((p) => [p.workspaceId, p.agentId]);
+
+    const listed = async (ws = workspaceId) => {
+      const res = await app.request(
+        `/organizations/${orgId}/workspaces/${ws}/agents`,
+      );
+      const { results } = (await res.json()) as {
+        results: { id: string; isPinned: boolean }[];
+      };
+      return Object.fromEntries(results.map((a) => [a.id, a.isPinned]));
+    };
+
+    it.each([
+      ["a Workspace Agent", "agent-1"],
+      ["an attached Shared Agent", "shared-1"],
+    ])("the Owner pins and unpins %s", async (_label, id) => {
+      mockSession();
+      const fake = world();
+
+      expect((await pin(id, "PUT")).status).toBe(200);
+      expect(pinned(fake)).toEqual([[workspaceId, id]]);
+      expect((await listed())[id]).toBe(true);
+
+      expect((await pin(id, "DELETE")).status).toBe(200);
+      expect(pinned(fake)).toEqual([]);
+      expect((await listed())[id]).toBe(false);
+    });
+
+    it("lists every visible Agent unpinned when nothing is pinned", async () => {
+      mockSession();
+      world();
+
+      expect(await listed()).toEqual({ "agent-1": false, "shared-1": false });
+    });
+
+    it("pins and unpins idempotently", async () => {
+      mockSession();
+      const fake = world();
+
+      expect((await pin("agent-1", "PUT")).status).toBe(200);
+      expect((await pin("agent-1", "PUT")).status).toBe(200);
+      expect(pinned(fake)).toEqual([[workspaceId, "agent-1"]]);
+
+      expect((await pin("agent-1", "DELETE")).status).toBe(200);
+      expect((await pin("agent-1", "DELETE")).status).toBe(200);
+      expect(pinned(fake)).toEqual([]);
+    });
+
+    it("pins a Shared Agent in this Workspace only", async () => {
+      mockSession();
+      world();
+
+      await pin("shared-1", "PUT");
+
+      expect((await listed())["shared-1"]).toBe(true);
+      expect((await listed("ws-2"))["shared-1"]).toBe(false);
+    });
+
+    it.each([
+      ["another Workspace's Agent", "agent-2"],
+      ["an unattached Shared Agent", "shared-2"],
+      ["a missing Agent", "nope"],
+    ])("404s pinning %s", async (_label, id) => {
+      mockSession();
+      const fake = world();
+
+      expect((await pin(id, "PUT")).status).toBe(404);
+      expect(pinned(fake)).toEqual([]);
+    });
+
+    // An Org Admin reaches every Workspace, but a pin is the Owner's call.
+    it.each(["PUT", "DELETE"] as const)(
+      "refuses %s from a non-Owner",
+      async (method) => {
+        mockSession();
+        const fake = world({
+          owner: "someone-else",
+          role: "admin",
+          pins: [{ workspaceId, agentId: "agent-1" }],
+        });
+
+        expect((await pin("agent-1", method)).status).toBe(403);
+        expect(pinned(fake)).toEqual([[workspaceId, "agent-1"]]);
+      },
+    );
   });
 
   describe("POST /:agentId/promote", () => {
