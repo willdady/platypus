@@ -8,7 +8,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
-import { TaskState, type Task } from "@a2a-js/sdk";
+import { Role, TaskState, type Message, type Task } from "@a2a-js/sdk";
 import { RequestMalformedError, TaskNotFoundError } from "@a2a-js/sdk/errors";
 import { db, type Tx } from "../index.ts";
 import {
@@ -18,7 +18,7 @@ import {
   type A2aTaskEndState,
 } from "../db/schema.ts";
 import type { RunStatus } from "../runs/types.ts";
-import { replyArtifact } from "./a2a-parts.ts";
+import { a2aTextPart, replyArtifact } from "./a2a-parts.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 
 /**
@@ -269,25 +269,60 @@ export const deriveStatus = (task: TaskReading): DerivedStatus => {
 /** A reply's parts, as stored. */
 type ReplyParts = { type: string; text?: string }[];
 
+/** Why a completed Task's reply was cut short, as `Task.metadata.stopReason`. */
+export type StopReason = "max_steps" | "output_limit";
+
+/** What a Task's recorded reply tells its client: its text, and if it was cut short, why. */
+export type RecordedReply = { text: string; stopReason?: StopReason };
+
+/** The cut-short marker a reply's metadata carries, as a stop reason. */
+const stopReasonOf = (metadata: unknown): StopReason | undefined => {
+  const marked = (metadata ?? {}) as {
+    stoppedAtStepLimit?: boolean;
+    truncatedByTokenLimit?: boolean;
+  };
+  if (marked.stoppedAtStepLimit) return "max_steps";
+  if (marked.truncatedByTokenLimit) return "output_limit";
+  return undefined;
+};
+
+/** What the status message of a cut-short Task says, by why it was cut short. */
+const STOP_REASON_TEXT: Record<StopReason, string> = {
+  max_steps:
+    "The reply stopped at the Agent's Max steps and may be incomplete.",
+  output_limit:
+    "The reply stopped at the model's output limit and may be incomplete.",
+};
+
 /**
- * The text of each completed Task's recorded reply still in its Chat, keyed
- * by Task id, in one query. A Task whose reply the Owner deleted has none.
+ * Each completed Task's recorded reply still in its Chat, keyed by Task id,
+ * in one query: its text, and why it was cut short, if it was. Read from the
+ * reply the Task recorded, not the Chat's current leaf, so a regenerate in
+ * the UI leaves the Task as it was. A Task whose reply the Owner deleted has
+ * none. Without `withText`, the text is left unread, and empty.
  */
-export const replyTexts = async (
+export const recordedReplies = async (
   tasks: { id: string; chatId: string; status: TaskStatus }[],
-): Promise<Map<string, string>> => {
+  { withText = true }: { withText?: boolean } = {},
+): Promise<Map<string, RecordedReply>> => {
   const completed = tasks.filter(
     (task) =>
       task.status.state === TaskState.TASK_STATE_COMPLETED &&
       task.status.replyId,
   );
   if (!completed.length) return new Map();
-  const replies = await db
-    .select({
-      chatId: chatMessage.chatId,
-      id: chatMessage.id,
-      parts: chatMessage.parts,
-    })
+  const columns = {
+    chatId: chatMessage.chatId,
+    id: chatMessage.id,
+    metadata: chatMessage.metadata,
+  };
+  const replies: {
+    chatId: string;
+    id: string;
+    metadata: unknown;
+    parts?: unknown;
+  }[] = await db
+    .select(withText ? { ...columns, parts: chatMessage.parts } : columns)
     .from(chatMessage)
     .where(
       and(
@@ -302,44 +337,67 @@ export const replyTexts = async (
         isNull(chatMessage.deletedAt),
       ),
     );
-  const texts = new Map<string, string>();
+  const read = new Map<string, RecordedReply>();
   for (const task of completed) {
     const reply = replies.find(
       (row) => row.chatId === task.chatId && row.id === task.status.replyId,
     );
     if (!reply) continue;
-    texts.set(
-      task.id,
-      (reply.parts as ReplyParts)
+    read.set(task.id, {
+      text: ((reply.parts ?? []) as ReplyParts)
         .filter((part) => part.type === "text")
         .map((part) => part.text)
         .join("\n\n"),
-    );
+      stopReason: stopReasonOf(reply.metadata),
+    });
   }
-  return texts;
+  return read;
 };
+
+/** The agent message a cut-short Task's status carries, saying why. */
+const stopMessage = (
+  task: Pick<Task, "id" | "contextId">,
+  replyId: string,
+  stopReason: StopReason,
+): Message => ({
+  messageId: `${replyId}:${stopReason}`,
+  contextId: task.contextId,
+  taskId: task.id,
+  role: Role.ROLE_AGENT,
+  parts: [a2aTextPart(STOP_REASON_TEXT[stopReason])],
+  metadata: undefined,
+  extensions: [],
+  referenceTaskIds: [],
+});
 
 /**
  * The Task as the client reads it, from its status and, if completed, its
- * reply's text: its artifact. A completed Task whose reply the Owner has
- * deleted has none.
+ * recorded reply: the reply's text is its artifact, and a reply cut short
+ * adds a `stopReason` to its metadata and a status message saying so. A
+ * completed Task whose reply the Owner has deleted has neither.
  */
 export const toTask = (
   task: TaskRow,
   { state, statusAt, replyId }: TaskStatus,
-  text: string | undefined,
+  reply: RecordedReply | undefined,
 ): Task => {
+  const id = task.id;
+  const contextId = taskContextId(task);
+  const stopReason = replyId ? reply?.stopReason : undefined;
   const result: Task = {
-    id: task.id,
-    contextId: taskContextId(task),
+    id,
+    contextId,
     status: {
       state,
-      message: undefined,
+      message: stopReason
+        ? stopMessage({ id, contextId }, replyId!, stopReason)
+        : undefined,
       timestamp: statusAt.toISOString(),
     },
-    artifacts: text && replyId ? [replyArtifact(replyId, text)] : [],
+    artifacts:
+      reply?.text && replyId ? [replyArtifact(replyId, reply.text)] : [],
     history: [],
-    metadata: undefined,
+    metadata: stopReason ? { stopReason } : undefined,
   };
   chatIds.set(result, task.chatId);
   return result;
@@ -352,15 +410,15 @@ const chatIds = new WeakMap<Task, string>();
 export const chatIdOf = (task: Task): string | undefined => chatIds.get(task);
 
 /**
- * A Task, read with `status`: then its reply's text if it completed. One
- * query for the text.
+ * A Task, read with `status`: then its recorded reply if it completed. One
+ * query for the reply.
  */
 export const readWithStatus = async (
   task: TaskRow,
   status: TaskStatus,
 ): Promise<Task> => {
-  const texts = await replyTexts([{ ...task, status }]);
-  return toTask(task, status, texts.get(task.id));
+  const replies = await recordedReplies([{ ...task, status }]);
+  return toTask(task, status, replies.get(task.id));
 };
 
 /**
@@ -385,7 +443,7 @@ export const bareReading = (task: TaskRow): TaskReading => ({
 
 /**
  * A Task whose end is recorded, as the client reads it, from its row alone
- * and one query for its reply's text.
+ * and one query for its reply.
  */
 export const readRecordedTask = (
   task: TaskRow & { state: A2aTaskEndState },

@@ -40,6 +40,7 @@ const taskEvent = (task: Task): StreamResponse => ({
   payload: { $case: "task", value: task },
 });
 
+/** A change of the Task's status, with its metadata: a cut-short reply's `stopReason`. */
 const statusEvent = (task: Task): StreamResponse => ({
   payload: {
     $case: "statusUpdate",
@@ -47,7 +48,7 @@ const statusEvent = (task: Task): StreamResponse => ({
       taskId: task.id,
       contextId: task.contextId,
       status: task.status,
-      metadata: undefined,
+      metadata: task.metadata,
     },
   },
 });

@@ -49,7 +49,7 @@ import {
   currentTurnId,
   findA2aTask,
   readTaskRows,
-  replyTexts,
+  recordedReplies,
   taskContextId,
   isTaskContext,
   toTask,
@@ -792,14 +792,15 @@ export const listA2aTasks = async (
       status: running.get(row.id) ?? (await taskStatus(row)),
     })),
   );
-  // Read only for the page's completed Tasks, and only when asked for.
-  const texts = params.includeArtifacts
-    ? await replyTexts(page)
-    : new Map<string, string>();
+  // Read only for the page's completed Tasks: their text only when asked for,
+  // their stop reason always.
+  const replies = await recordedReplies(page, {
+    withText: !!params.includeArtifacts,
+  });
 
   return {
     tasks: page.map((task) => {
-      const read = toTask(task, task.status, texts.get(task.id));
+      const read = toTask(task, task.status, replies.get(task.id));
       return params.includeArtifacts ? read : { ...read, artifacts: [] };
     }),
     nextPageToken:

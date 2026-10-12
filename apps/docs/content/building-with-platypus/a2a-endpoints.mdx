@@ -186,11 +186,17 @@ learns one out of your Chats.
   after you or the client continue the Chat. It also keeps the reply it ended
   with: regenerating that reply in the Chat doesn't change the artifact, and
   deleting it leaves the Task with its state and no artifact.
-- **A reply cut short is still `completed`.** A run that stops at the Agent's
-  **Max steps**, or at the model's output limit, ends `completed` like any
-  other, and nothing tells the client the reply is partial. Nobody is watching
-  an A2A run, so give the exposed Agent enough **Max steps** for the work you
-  expect clients to send it.
+- **A reply cut short says so.** A run that stops at the Agent's
+  **Max steps**, or at the model's output limit, still ends `completed`, with
+  what the Agent wrote by then as its artifact. The Task's `metadata` carries
+  a `stopReason`: `max_steps` or `output_limit`. Its status carries a short
+  message from the Agent saying the reply stopped early and why. Both appear
+  wherever the client reads the Task: `GetTask`, `ListTasks`, the last status
+  update of a stream, and push notifications. A reply that finished has
+  neither. They describe the reply the Task ended with, so regenerating that
+  reply in the Chat doesn't change them. Nobody is watching an A2A run, so
+  give the exposed Agent enough **Max steps** for the work you expect clients
+  to send it.
 - **A retry is safe.** The client's `messageId` becomes the message's id in the
   Chat, so sending the same `messageId` again answers with the Task it already
   started, never a second run. That holds even when the retry arrives while

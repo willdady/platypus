@@ -27,6 +27,8 @@ const { model } = vi.hoisted(() => ({
     toolNames: [] as string[][],
     /** A tool the model calls in its first step, before it replies. */
     toolCall: null as string | null,
+    /** Set to end the reply at the model's output limit; else it stops. */
+    finishReason: null as "length" | null,
   },
 }));
 vi.mock("../services/provider.ts", async (importOriginal) => ({
@@ -81,7 +83,10 @@ vi.mock("../services/provider.ts", async (importOriginal) => ({
             { type: "text-end", id: "t1" },
             {
               type: "finish",
-              finishReason: { unified: "stop", raw: "stop" },
+              finishReason: {
+                unified: model.finishReason ?? "stop",
+                raw: model.finishReason ?? "stop",
+              },
               usage,
             },
           ];
@@ -253,6 +258,9 @@ afterEach(async () => {
 // follower whose notifications were lost does: read it often.
 beforeEach(() => setA2aFallbackPollMs(50));
 afterEach(() => setA2aFallbackPollMs());
+afterEach(() => {
+  model.finishReason = null;
+});
 
 const seed = ({
   endpoint = {},
@@ -669,11 +677,17 @@ const seedConversation = (
     },
   ));
 
+type RpcStatus = {
+  state: string;
+  timestamp?: string;
+  message?: { role: string; parts: { text: string }[] };
+};
 type RpcTask = {
   id: string;
   contextId: string;
-  status: { state: string; timestamp?: string };
+  status: RpcStatus;
   artifacts: { parts: { text: string; mediaType?: string }[] }[];
+  metadata?: Record<string, unknown>;
 };
 type RpcBody = {
   id?: unknown;
@@ -2329,6 +2343,78 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       expect(await artifactsOf(task.id)).toEqual([]);
     });
 
+    it("says a reply stopped at the Agent's Max steps is cut short, still completed", async () => {
+      const { task, reply } = await complete();
+      reply.metadata = { stoppedAtStepLimit: true };
+
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+
+      expect(read.status.state).toBe("TASK_STATE_COMPLETED");
+      expect(read.metadata).toEqual({ stopReason: "max_steps" });
+      expect(read.status.message).toMatchObject({ role: "ROLE_AGENT" });
+      expect(read.status.message!.parts[0].text).toMatch(/Max steps/);
+      expect(read.artifacts[0].parts[0].text).toBe("Hello from Helper");
+    });
+
+    it("says a reply stopped at the model's output limit is cut short, still completed", async () => {
+      model.finishReason = "length";
+      const { task } = await complete();
+
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+
+      expect(read.status.state).toBe("TASK_STATE_COMPLETED");
+      expect(read.metadata).toEqual({ stopReason: "output_limit" });
+      expect(read.status.message).toMatchObject({ role: "ROLE_AGENT" });
+      expect(read.status.message!.parts[0].text).toMatch(/output limit/);
+    });
+
+    it("reads a finished reply's Task exactly as before, with no stop reason or status message", async () => {
+      const { task } = await complete();
+
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+
+      expect(Object.keys(read).sort()).toEqual([
+        "artifacts",
+        "contextId",
+        "id",
+        "status",
+      ]);
+      expect(Object.keys(read.status).sort()).toEqual(["state", "timestamp"]);
+    });
+
+    it("keeps its own reply's stop reason when the Owner regenerates it", async () => {
+      const { task, reply } = await complete();
+      reply.metadata = { stoppedAtStepLimit: true };
+      rows("chat_message").push({
+        ...reply,
+        id: "reply-regenerated",
+        metadata: { truncatedByTokenLimit: true },
+        createdAt: new Date(Date.now() + 1000),
+      });
+      rows("chat")[0].activeLeafId = "reply-regenerated";
+
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+      expect(read.metadata).toEqual({ stopReason: "max_steps" });
+
+      // A finished reply regenerated as a cut-short one leaves it finished.
+      reply.metadata = {};
+      const again = (await rpc("GetTask", { id: task.id })).body.result;
+      expect(again.metadata).toBeUndefined();
+      expect(again.status.message).toBeUndefined();
+    });
+
+    it("gives a completed Task whose reply the Owner deleted no stop reason", async () => {
+      const { task, reply } = await complete();
+      reply.metadata = { stoppedAtStepLimit: true };
+
+      await deleteMessage(task.contextId, reply.id as string);
+
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+      expect(read.status.state).toBe("TASK_STATE_COMPLETED");
+      expect(read.metadata).toBeUndefined();
+      expect(read.status.message).toBeUndefined();
+    });
+
     it("records the end of a Task whose Chat moved on without one, on its first read", async () => {
       seedMovedOn();
       const before = Date.now();
@@ -2560,6 +2646,31 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
     expect(withThem.artifacts[0].parts[0].text).toBe("Reply a");
   });
 
+  it("carries each cut-short Task's stop reason, with or without artifacts", async () => {
+    seedTasks([
+      { id: "a", minute: 1 },
+      { id: "b", minute: 2 },
+      { id: "c", minute: 3 },
+    ]);
+    rows("chat_message").find((m) => m.id === "reply-a")!.metadata = {
+      stoppedAtStepLimit: true,
+    };
+    rows("chat_message").find((m) => m.id === "reply-b")!.metadata = {
+      truncatedByTokenLimit: true,
+    };
+
+    for (const includeArtifacts of [false, true]) {
+      const { tasks } = (await list({ includeArtifacts })).body
+        .result as unknown as { tasks: RpcTask[] };
+      const byId = new Map(tasks.map((task) => [task.id, task]));
+      expect(byId.get("a")!.metadata).toEqual({ stopReason: "max_steps" });
+      expect(byId.get("a")!.status.message!.parts[0].text).toMatch(/Max steps/);
+      expect(byId.get("b")!.metadata).toEqual({ stopReason: "output_limit" });
+      expect(byId.get("c")!.metadata).toBeUndefined();
+      expect(byId.get("c")!.status.message).toBeUndefined();
+    }
+  });
+
   it("filters by contextId, status and statusTimestampAfter", async () => {
     seedTasks([
       { id: "a", minute: 1 },
@@ -2679,7 +2790,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
       expect(queries.length).toBeLessThanOrEqual(2);
     });
 
-    it("lists a page of 100 Tasks without artifacts in three", async () => {
+    it("lists a page of 100 Tasks without artifacts in four, one for their replies' stop reasons", async () => {
       const seeded = seedTasks(
         Array.from({ length: 100 }, (_, i) => ({ id: `t${i}`, minute: i })),
       );
@@ -2689,8 +2800,10 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
         expect(page.tasks).toHaveLength(100);
       });
 
-      expect(queries.length).toBeLessThanOrEqual(3);
-      expect(queries.map((q) => q.table)).not.toContain("chat_message");
+      expect(queries.length).toBeLessThanOrEqual(4);
+      expect(
+        queries.filter((q) => q.table === "chat_message").length,
+      ).toBeLessThanOrEqual(1);
     });
 
     it("reads the page's replies in one more when artifacts are asked for", async () => {
@@ -3251,6 +3364,30 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     // pushed once.
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("pushes a cut-short reply's Task with its stop reason and status message", async () => {
+    seedConversation();
+    model.finishReason = "length";
+
+    await rpc("SendMessage", {
+      message: {
+        role: "ROLE_USER",
+        messageId: "msg-a",
+        parts: [text("Where is my order?")],
+      },
+      configuration: {
+        returnImmediately: false,
+        taskPushNotificationConfig: config(),
+      },
+    });
+
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    const { task } = pushed()[0].body;
+    expect(task.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(task.metadata).toEqual({ stopReason: "output_limit" });
+    expect(task.status.message).toMatchObject({ role: "ROLE_AGENT" });
+    expect(task.status.message!.parts[0].text).toMatch(/output limit/);
   });
 
   it("pushes the contextId the client minted, not its Chat's id", async () => {
@@ -4786,7 +4923,8 @@ describe("POST /a2a/:endpointId — streaming", () => {
     statusUpdate?: {
       taskId: string;
       contextId: string;
-      status: { state: string };
+      status: RpcStatus;
+      metadata?: Record<string, unknown>;
     };
     artifactUpdate?: {
       taskId: string;
@@ -4889,6 +5027,31 @@ describe("POST /a2a/:endpointId — streaming", () => {
     }
     const got = await rpc("GetTask", { id: task.id });
     expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
+  });
+
+  it("ends a cut-short reply's stream with its stop reason and status message, as GetTask reads it", async () => {
+    seedConversation();
+    model.finishReason = "length";
+
+    const events = await eventsOf(await streamSend({ messageId: "msg-a" }));
+
+    const last = events.at(-1)!.statusUpdate!;
+    expect(last.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(last.metadata).toEqual({ stopReason: "output_limit" });
+    const got = (await rpc("GetTask", { id: last.taskId })).body.result;
+    expect(last.status.message).toEqual(got.status.message);
+    expect(last.status.message!.parts[0].text).toMatch(/output limit/);
+  });
+
+  it("ends a finished reply's stream with no stop reason or status message", async () => {
+    seedConversation();
+
+    const events = await eventsOf(await streamSend({ messageId: "msg-a" }));
+
+    const last = events.at(-1)!.statusUpdate!;
+    expect(last.status.state).toBe("TASK_STATE_COMPLETED");
+    expect(last).not.toHaveProperty("metadata");
+    expect(last.status).not.toHaveProperty("message");
   });
 
   // #1337: a reply that ends in one step reads working while it streams,

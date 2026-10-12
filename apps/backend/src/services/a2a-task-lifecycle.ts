@@ -148,8 +148,8 @@ export const statusOf = async (task: TaskReading): Promise<TaskStatus> => {
 };
 
 /**
- * A Task, read: its status, then its reply's text if it completed. One query
- * for the status — none for an end already in hand — and one for the text.
+ * A Task, read: its status, then its recorded reply if it completed. One query
+ * for the status — none for an end already in hand — and one for the reply.
  */
 const readReading = async (task: TaskReading): Promise<Task> =>
   readWithStatus(task, await statusOf(task));
@@ -180,7 +180,7 @@ export const readTaskAfresh = async (task: TaskRow): Promise<Task> =>
 
 /**
  * One of the Tasks `tokenId` started on `endpointId`, read, as `findTokenTask`
- * finds it and `readTask` reads it, in one query and one for its reply's text.
+ * finds it and `readTask` reads it, in one query and one for its reply.
  */
 export const readTokenTask = async (
   owner: { endpointId: string; tokenId: string },
