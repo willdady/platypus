@@ -42,13 +42,21 @@ an account is narrower than "anyone who can route to it".
 ## Put a rate limiter in front
 
 The backend's own rate limiting is thin, and it depends on your proxy. The
-authentication library throttles `/auth/sign-in/*`, `/auth/sign-up/*` and
-`/auth/change-password` to **3 requests per 10 seconds** and the rest of `/auth/`
-to **100 per 10 seconds**, keyed on the client address it reads from a
-single-value `X-Forwarded-For` header. If your proxy does not set that header,
-every client shares one bucket, and two people signing in within the same ten
-seconds is enough to turn one of them away. Nothing throttles invitation-link
-guesses or the admin password-change endpoint beyond that general ceiling.
+authentication library throttles `/auth/` per client address:
+
+- `/auth/sign-in/*`, `/auth/sign-up/*`, `/auth/change-password` and
+  `/auth/change-email` — **3 requests per 10 seconds**.
+- `/auth/request-password-reset`, `/auth/forget-password/*`,
+  `/auth/send-verification-email`, `/auth/email-otp/send-verification-otp` and
+  `/auth/email-otp/request-password-reset` — **3 requests per 60 seconds**.
+- `/auth/get-session` — not limited.
+- The rest of `/auth/` — **100 requests per 10 seconds**.
+
+It reads the client address from a single-value `X-Forwarded-For` header. If
+your proxy does not set that header, every client shares one bucket, and two
+people signing in within the same ten seconds is enough to turn one of them
+away. Nothing throttles invitation-link guesses or the admin password-change
+endpoint beyond the 100-per-10-seconds ceiling.
 
 Put the real limit in the reverse proxy. On a deployment anyone hostile can
 reach, that is not optional.

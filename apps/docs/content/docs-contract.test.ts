@@ -1759,7 +1759,7 @@ const BACKEND_CONSTANTS = [
   {
     source: "apps/backend/src/services/file-extraction.ts",
     name: "MAX_EXTRACTION_INPUT_BYTES",
-    phrase: (bytes: number) => `**${bytes / 1024 / 1024} MB**`,
+    phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
     files: ["concepts/providers.mdx"],
     cost: "A reader attaching a large PDF is refused at a size the page never warned of.",
   },
@@ -1964,7 +1964,7 @@ const SCHEMA_CONSTANTS = [
   {
     name: "RUN_EVENT_ERROR_MAX_BYTES",
     value: RUN_EVENT_ERROR_MAX_BYTES,
-    phrase: (bytes: number) => `capped at ${bytes / 1024} KB`,
+    phrase: (bytes: number) => `capped at ${bytes / 1024} KiB`,
     files: ["building-with-platypus/triggers.mdx"],
     cost: "A reader debugging a failed run takes a cut error for the whole of it.",
   },
