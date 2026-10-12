@@ -44,15 +44,18 @@ import {
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
 import { sweepMissedEnds, turnEnded } from "../services/a2a-task-lifecycle.ts";
 
-// Check interval: 60 seconds (1 minute)
+const DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS = 60 * 1000;
 const SCHEDULER_INTERVAL_MS = parseInt(
-  process.env.SCHEDULE_SCHEDULER_INTERVAL_MS || "60000",
+  process.env.SCHEDULE_SCHEDULER_INTERVAL_MS ||
+    String(DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS),
 );
 
 // Maximum Cron Trigger runs in flight at once, across every instance sharing
 // the database. Event Trigger runs are not counted.
+const DEFAULT_SCHEDULE_MAX_CONCURRENT = 5;
 const MAX_CONCURRENT_TRIGGERS = parseInt(
-  process.env.SCHEDULE_MAX_CONCURRENT || "5",
+  process.env.SCHEDULE_MAX_CONCURRENT ||
+    String(DEFAULT_SCHEDULE_MAX_CONCURRENT),
 );
 
 /**

@@ -352,7 +352,7 @@ The call is answered before the Agent starts:
 | `202` `{ "runId": "…", "deduplicated": true }`  | That record already has a run pending or running; this is its id, and nothing new started.                                                  |
 | `400`                                           | The body isn't `{ "inputs": { … } }` JSON, a required input is missing, one isn't declared, or a value isn't a string. The body says which. |
 | `404`                                           | Refused. See below.                                                                                                                         |
-| `413`                                           | The body is larger than your Operator allows (64 KB unless they changed it).                                                                |
+| `413`                                           | The body is larger than your Operator allows (64 KiB unless they changed it).                                                               |
 | `429`                                           | The server is running as many inbound runs as it allows, and this call would start another. Retry after the seconds in `Retry-After`.       |
 
 An empty body, or one with no `inputs`, is a call with no inputs: accepted when
@@ -612,7 +612,7 @@ bar is a long wait. Each line is one of four kinds:
 Tool calls the Agent issued at the same time overlap on the timeline rather
 than following one another, which is how you tell parallel work from a chain
 of sequential calls. A line that ended in an error is ringed red and carries
-the error text — capped at 1 KB and marked _(truncated)_ when cut. A
+the error text — capped at 1 KiB and marked _(truncated)_ when cut. A
 sub-millisecond call is still drawn at a minimum width, so it does not vanish.
 
 What a line **never** carries is content: no tool inputs, no tool outputs, no

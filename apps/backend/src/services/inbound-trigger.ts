@@ -74,15 +74,22 @@ export type InboundTriggerSettings = {
   maxBodyBytes: number;
 };
 
+const DEFAULT_INBOUND_TRIGGER_MAX_CONCURRENT_RUNS = 10;
+const DEFAULT_INBOUND_TRIGGER_MAX_BODY_BYTES = 65536;
+
 export const inboundTriggerSettings = (
   env: NodeJS.ProcessEnv = process.env,
 ): InboundTriggerSettings => ({
   maxConcurrentRuns: readPositiveInt(
     "INBOUND_TRIGGER_MAX_CONCURRENT_RUNS",
-    10,
+    DEFAULT_INBOUND_TRIGGER_MAX_CONCURRENT_RUNS,
     env,
   ),
-  maxBodyBytes: readPositiveInt("INBOUND_TRIGGER_MAX_BODY_BYTES", 65536, env),
+  maxBodyBytes: readPositiveInt(
+    "INBOUND_TRIGGER_MAX_BODY_BYTES",
+    DEFAULT_INBOUND_TRIGGER_MAX_BODY_BYTES,
+    env,
+  ),
 });
 
 /**
