@@ -4,6 +4,9 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/format-date";
 import {
   Ban,
+  CircleCheck,
+  CircleX,
+  Clock,
   Copy,
   Database,
   Footprints,
@@ -12,6 +15,7 @@ import {
   Loader2,
   MessageSquare,
   Wrench,
+  type LucideIcon,
 } from "lucide-react";
 import { copyWithToast } from "@/lib/clipboard";
 import {
@@ -106,6 +110,38 @@ export const statusBadge = (status: TriggerRunStatus) => {
         <Badge variant="outline">{TRIGGER_RUN_STATUS_LABELS.pending}</Badge>
       );
   }
+};
+
+const STATUS_ICONS: Record<
+  TriggerRunStatus,
+  { icon: LucideIcon; className: string }
+> = {
+  success: { icon: CircleCheck, className: "text-green-600" },
+  failed: { icon: CircleX, className: "text-destructive" },
+  running: { icon: Loader2, className: "animate-spin" },
+  // Neutral, like its badge: a cancel is not a crash (#647).
+  cancelled: { icon: Ban, className: "" },
+  suppressed: { icon: Ban, className: "text-destructive" },
+  pending: { icon: Clock, className: "" },
+};
+
+/** A run status as a colored icon, named by its label, for tight spaces. */
+export const StatusIcon = ({ status }: { status: TriggerRunStatus }) => {
+  const { icon: Icon, className } =
+    STATUS_ICONS[status] ?? STATUS_ICONS.pending;
+  const label = TRIGGER_RUN_STATUS_LABELS[status];
+  // translate-y-px: centered on the line box, the icon reads high beside
+  // lowercase text; 1px down lines it up with the letters.
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      className="flex translate-y-px"
+    >
+      <Icon className={`h-3 w-3 ${className}`} />
+    </span>
+  );
 };
 
 /** The run detail page's address, where the list's rows lead. */

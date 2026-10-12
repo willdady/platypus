@@ -279,8 +279,9 @@ export const SkillsList = ({
   );
 
   // Workspace home only: the Organization surface fetches no agent data, so
-  // the agent filter would have nothing to offer there.
-  const controls = workspaceId && (
+  // the agent filter would have nothing to offer there. Nothing to filter, no
+  // controls.
+  const controls = workspaceId && skills.length > 0 && (
     <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
       <SearchInput
         placeholder="Search skills…"

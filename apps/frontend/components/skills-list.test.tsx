@@ -354,10 +354,16 @@ describe("SkillsList filters", () => {
 });
 
 describe("SkillsList list states", () => {
-  it("shows the empty state when the workspace has no skills", () => {
+  it("shows the empty state, without filter controls, when the workspace has no skills", () => {
     renderSkills([]);
 
     expect(screen.getByText(/No skills yet/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("searchbox", { name: "Search skills" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "Filter by agent" }),
+    ).not.toBeInTheDocument();
   });
 
   it("surfaces a failed read rather than rendering an empty list", () => {

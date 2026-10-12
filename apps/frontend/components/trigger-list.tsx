@@ -34,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { statusBadge } from "@/components/trigger-run-row";
+import { StatusIcon } from "@/components/trigger-run-row";
 import {
   Timer,
   Zap,
@@ -46,6 +46,9 @@ import {
   Pause,
   List,
   TriangleAlert,
+  CalendarClock,
+  CircleCheck,
+  type LucideIcon,
 } from "lucide-react";
 import {
   type Trigger,
@@ -90,6 +93,17 @@ export const TRIGGER_TYPE_LABELS: Record<TriggerType, string> = {
   inbound: "Inbound",
 };
 
+const TRIGGER_TYPE_ICONS: Record<TriggerType, LucideIcon> = {
+  cron: Timer,
+  event: Zap,
+  inbound: Webhook,
+};
+
+const TriggerTypeIcon = ({ type }: { type: TriggerType }) => {
+  const Icon = TRIGGER_TYPE_ICONS[type];
+  return Icon ? <Icon /> : null;
+};
+
 /** The trigger cards as they load; the workspace home draws them too. */
 export const TriggerCardsSkeleton = ({ cards }: { cards?: number }) => (
   <CardGridSkeleton
@@ -110,41 +124,45 @@ const InboundSummary = ({ trigger }: { trigger: Trigger }) => {
   const config = trigger.config as InboundTriggerConfig;
   const inputs = config.inputs;
   const status = trigger.tokenStatus ?? "none";
+  const parts = [
+    inputs.length > 0 && (
+      <span key="inputs" className="flex items-center gap-1 flex-wrap">
+        Inputs:
+        {inputs.map((input) => (
+          <Badge
+            key={input.name}
+            variant="secondary"
+            className="text-xs font-mono"
+          >
+            {input.name}
+          </Badge>
+        ))}
+      </span>
+    ),
+    status === "expiring" && (
+      <span
+        key="token"
+        className="flex items-center gap-1 text-warning-foreground"
+      >
+        <TriangleAlert className="h-3 w-3" />
+        Token expiring soon
+      </span>
+    ),
+    (status === "none" || status === "expired") && (
+      <span key="token" className="flex items-center gap-1">
+        Token:
+        <Badge variant={TOKEN_STATUS_VARIANTS[status]} className="text-xs">
+          {TOKEN_STATUS_LABELS[status]}
+        </Badge>
+      </span>
+    ),
+  ].filter(Boolean);
+  if (parts.length === 0) return null;
+
   return (
     <span className="flex items-center gap-1 flex-wrap">
       <Webhook className="h-3 w-3" />
-      Called from outside
-      {inputs.length > 0 && (
-        <>
-          {" · Inputs:"}
-          {inputs.map((input) => (
-            <Badge
-              key={input.name}
-              variant="secondary"
-              className="text-xs font-mono"
-            >
-              {input.name}
-            </Badge>
-          ))}
-        </>
-      )}
-      {status === "expiring" && (
-        <>
-          {" · "}
-          <span className="flex items-center gap-1 text-warning-foreground">
-            <TriangleAlert className="h-3 w-3" />
-            Token expiring soon
-          </span>
-        </>
-      )}
-      {(status === "none" || status === "expired") && (
-        <>
-          {" · Token:"}
-          <Badge variant={TOKEN_STATUS_VARIANTS[status]} className="text-xs">
-            {TOKEN_STATUS_LABELS[status]}
-          </Badge>
-        </>
-      )}
+      {parts.flatMap((part, i) => (i > 0 ? [" · ", part] : [part]))}
     </span>
   );
 };
@@ -175,10 +193,7 @@ export const TriggerList = ({
     mutate,
   } = useScopedSWR<{
     results: Trigger[];
-  }>(showFired ? "triggers?includeFired=true" : "triggers", scope, {
-    // Flipping Show fired changes the key; keep the list up while it loads.
-    keepPreviousData: true,
-  });
+  }>("triggers?includeFired=true", scope);
 
   const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
     "agents",
@@ -189,9 +204,12 @@ export const TriggerList = ({
     (agentsData?.results || []).map((a) => [a.id, a]),
   );
 
-  const triggers = [...(triggersData?.results || [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  // Fired One-offs are read too and hidden here, so the list knows whether
+  // the Workspace has any triggers at all.
+  const allTriggers = triggersData?.results || [];
+  const triggers = allTriggers
+    .filter((trigger) => showFired || !trigger.firedAt)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const deleteFlow = useDeleteFlow<Trigger>({
     mutate,
@@ -234,6 +252,11 @@ export const TriggerList = ({
     return <ListError error={error} subject="triggers" />;
   }
 
+  // The page around it owns the copy for a Workspace with no triggers at all.
+  if (!allTriggers.length) {
+    return null;
+  }
+
   // Shown even with nothing listed: fired One-offs may be all there is.
   const controls = (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -270,7 +293,6 @@ export const TriggerList = ({
     </div>
   );
 
-  // The page around it owns the copy for a Workspace with no triggers at all.
   if (!triggers.length) {
     return controls;
   }
@@ -303,21 +325,25 @@ export const TriggerList = ({
                   <div className="flex items-center gap-2">
                     <ItemTitle>{trigger.name}</ItemTitle>
                     <Badge variant="outline" className="text-xs">
+                      <TriggerTypeIcon type={trigger.type} />
                       {TRIGGER_TYPE_LABELS[trigger.type] ?? trigger.type}
                     </Badge>
                     {trigger.type === "cron" &&
                       (trigger.config as CronTriggerConfig).isOneOff && (
                         <Badge variant="outline" className="text-xs">
+                          <CalendarClock />
                           One-off
                         </Badge>
                       )}
                     {trigger.firedAt ? (
                       <Badge variant="secondary" className="text-xs">
+                        <CircleCheck />
                         Fired
                       </Badge>
                     ) : (
                       !trigger.enabled && (
                         <Badge variant="secondary" className="text-xs">
+                          <Pause />
                           Disabled
                         </Badge>
                       )
@@ -380,11 +406,10 @@ export const TriggerList = ({
                     {trigger.lastRunStatus && trigger.lastRunStartedAt && (
                       <span className="flex items-center gap-1">
                         <span>Last run:</span>
-                        {statusBadge(trigger.lastRunStatus)}
-                        {" · "}
                         <span title={formatDateTime(trigger.lastRunStartedAt)}>
                           {formatRelativeTime(trigger.lastRunStartedAt)}
                         </span>
+                        <StatusIcon status={trigger.lastRunStatus} />
                       </span>
                     )}
                   </div>

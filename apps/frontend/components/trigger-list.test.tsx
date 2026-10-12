@@ -169,14 +169,36 @@ describe("TriggerList cron schedule", () => {
 
 describe("TriggerList list states", () => {
   // The page around it owns the empty copy, so the list renders nothing at all
-  // rather than a second, competing empty state.
-  it("renders only the Show fired toggle when the workspace lists no triggers", () => {
+  // rather than a second, competing empty state, nor controls with nothing to
+  // filter.
+  it("renders nothing when the workspace has no triggers", () => {
     renderTriggers([]);
 
     expect(
-      screen.getByRole("switch", { name: "Show fired" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+      screen.queryByRole("switch", { name: "Show fired" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "Filter by type" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Fired One-offs are hidden by default; Show fired must stay reachable.
+  it("keeps the controls when only fired One-offs exist, and Show fired lists them", async () => {
+    renderTriggers([
+      {
+        ...cronTrigger,
+        enabled: false,
+        config: { ...cronTrigger.config, isOneOff: true },
+        firedAt: "2026-02-01T08:00:00.000Z",
+      } as unknown as Trigger,
+    ]);
+
+    expect(screen.queryByRole("listitem")).toBeNull();
+    const showFired = screen.getByRole("switch", { name: "Show fired" });
+    await act(async () => {
+      showFired.click();
+    });
+    expect(screen.getByText("Nightly job")).toBeInTheDocument();
   });
 
   it("surfaces a failed read rather than rendering an empty list", () => {
@@ -195,8 +217,8 @@ describe("TriggerList list states", () => {
     ).toHaveAttribute("aria-busy", "true");
   });
 
-  // Flipping Show fired re-reads under a new key; the list it had stays up
-  // rather than flashing to the skeleton and back.
+  // A revalidation keeps the list it has rather than flashing to the
+  // skeleton and back.
   it("keeps the list it has while a re-read is in flight", () => {
     mockScopedSWR({
       "/triggers": { data: { results: [cronTrigger] }, isLoading: true },
@@ -234,7 +256,13 @@ describe("TriggerList inbound triggers", () => {
     expect(screen.getByText("Inbound")).toBeInTheDocument();
     expect(screen.queryByText("Event")).toBeNull();
     expect(screen.getByText("issueKey")).toBeInTheDocument();
-    expect(screen.getByText(/Called from outside/)).toBeInTheDocument();
+    expect(screen.queryByText(/Called from outside/)).toBeNull();
+  });
+
+  it("draws no summary line for an input-less Trigger with a healthy token", () => {
+    renderTriggers([inboundTrigger({ config: { inputs: [] } })]);
+
+    expect(screen.queryByText(/Inputs:|Token/)).toBeNull();
   });
 
   it("flags a trigger whose token was revoked or has expired", () => {
@@ -369,8 +397,10 @@ describe("TriggerList last run", () => {
       ["Card watcher", "Failed"],
       ["Ready for AI", "Running"],
     ]) {
-      const line = lastRunLine(name);
-      expect(line).toHaveTextContent(label);
+      const line = lastRunLine(name) as HTMLElement;
+      expect(
+        within(line).getByRole("img", { name: label }),
+      ).toBeInTheDocument();
       expect(line).toHaveTextContent(`relative:${startedAt}`);
     }
     expect(screen.getAllByTitle(`formatted:${startedAt}`)).toHaveLength(3);
@@ -384,7 +414,7 @@ describe("TriggerList last run", () => {
     expect(screen.queryByText("Last run:")).toBeNull();
   });
 
-  it("keeps Fired in a fired One-off's title row and its status on the last run line", () => {
+  it("keeps Fired in a fired One-off's title row and its status on the last run line", async () => {
     renderTriggers([
       ran(
         {
@@ -397,15 +427,27 @@ describe("TriggerList last run", () => {
       ),
     ]);
 
+    await act(async () => {
+      screen.getByRole("switch", { name: "Show fired" }).click();
+    });
+
     expect(screen.getByText("Fired")).toBeInTheDocument();
-    expect(screen.getAllByText("Failed")).toHaveLength(1);
-    expect(lastRunLine("Nightly job")).toHaveTextContent("Failed");
+    expect(screen.getAllByRole("img", { name: "Failed" })).toHaveLength(1);
+    expect(
+      within(lastRunLine("Nightly job") as HTMLElement).getByRole("img", {
+        name: "Failed",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("shows both Disabled and the failure for a disabled trigger", () => {
     renderTriggers([ran({ ...cronTrigger, enabled: false }, "failed")]);
 
     expect(screen.getByText("Disabled")).toBeInTheDocument();
-    expect(lastRunLine("Nightly job")).toHaveTextContent("Failed");
+    expect(
+      within(lastRunLine("Nightly job") as HTMLElement).getByRole("img", {
+        name: "Failed",
+      }),
+    ).toBeInTheDocument();
   });
 });
