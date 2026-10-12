@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import {
   authMock,
   mockScopedSWR,
@@ -51,6 +51,46 @@ describe("Workspace home", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();
+  });
+
+  it("shows pinned agents in their own group above the rest", () => {
+    const agent = (id: string, name: string, isPinned: boolean) => ({
+      id,
+      name,
+      description: "desc",
+      scope: "workspace",
+      isPinned,
+    });
+    mockScopedSWR({
+      "/agents": [agent("a1", "Triage", false), agent("a2", "Writer", true)],
+      "/providers": [{ id: "p1", name: "OpenAI" }],
+      ...workspaceRead,
+    });
+    renderList(<Workspace />);
+
+    const pinned = screen.getByRole("list", { name: "Pinned agents" });
+    const rest = screen.getByRole("list", { name: "Agents" });
+    expect(within(pinned).getByText("Writer")).toBeInTheDocument();
+    expect(within(pinned).queryByText("Triage")).toBeNull();
+    expect(within(rest).getByText("Triage")).toBeInTheDocument();
+    expect(within(rest).queryByText("Writer")).toBeNull();
+    expect(
+      pinned.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows no Pinned group when no agent is pinned", () => {
+    mockScopedSWR({
+      "/agents": [
+        { id: "a1", name: "Triage", description: "desc", isPinned: false },
+      ],
+      "/providers": [{ id: "p1", name: "OpenAI" }],
+      ...workspaceRead,
+    });
+    renderList(<Workspace />);
+
+    expect(screen.getByText("Triage")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Pinned" })).toBeNull();
   });
 
   it("shows a failed workspace read as an error with a retry, not as not found", () => {

@@ -7,8 +7,10 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  requireWorkspaceOwner,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import { pinAgent, pinnedAgentIds, unpinAgent } from "../services/agent-pin.ts";
 import type { Variables } from "../server.ts";
 import {
   createAgent as createAgentRow,
@@ -58,10 +60,15 @@ agent.get(
   async (c) => {
     const baseUrl = getOrigin(c);
 
-    const scoped = await listScoped(db, "agent", workspaceScopeOf(c));
+    const ctx = workspaceScopeOf(c);
+    const [scoped, pinned] = await Promise.all([
+      listScoped(db, "agent", ctx),
+      pinnedAgentIds(ctx.workspaceId),
+    ]);
     const results = scoped.map(({ row, scope }) => ({
       ...agentWithAvatarUrl(row, baseUrl),
       scope,
+      isPinned: pinned.has(row.id),
     }));
     return c.json({ results });
   },
@@ -115,6 +122,32 @@ agent.put(
       return c.json({ error: result.error }, 400);
     }
     return c.json(agentWithAvatarUrl(result.row, baseUrl), 200);
+  },
+);
+
+/** Pin an agent in this workspace (Workspace Owner only; idempotent) */
+agent.put(
+  "/:agentId/pin",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceOwner,
+  async (c) => {
+    await pinAgent(workspaceScopeOf(c), c.req.param("agentId"));
+    return c.json({ message: "Agent pinned" });
+  },
+);
+
+/** Unpin an agent in this workspace (Workspace Owner only; idempotent) */
+agent.delete(
+  "/:agentId/pin",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceOwner,
+  async (c) => {
+    await unpinAgent(workspaceScopeOf(c), c.req.param("agentId"));
+    return c.json({ message: "Agent unpinned" });
   },
 );
 

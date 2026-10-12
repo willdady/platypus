@@ -755,7 +755,10 @@ export const createFakeDb = (
           const result = writeResult(inserted);
           // A clash has already thrown above: conflict targets are left to
           // the tests that run on Postgres.
-          return Object.assign(result, { onConflictDoUpdate: () => result });
+          return Object.assign(result, {
+            onConflictDoUpdate: () => result,
+            onConflictDoNothing: () => result,
+          });
         },
       };
     };

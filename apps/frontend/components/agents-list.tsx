@@ -50,6 +50,8 @@ import {
   Copy,
   EllipsisVertical,
   Pencil,
+  Pin,
+  PinOff,
   Plus,
   Trash2,
   Unlink,
@@ -66,14 +68,16 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { canManageSharedResource } from "@/lib/authorization";
+import { canManageSharedResource, canPinAgent } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import {
   AttachSharedAction,
   DetachSharedDialog,
   PromoteSharedDialog,
 } from "@/components/shared-resource-actions";
-import { writeEntity, type Scope } from "@/lib/api-write";
+import { scopedUrl, writeAt, writeEntity, type Scope } from "@/lib/api-write";
+import { splitPinned } from "@/lib/pinned-agents";
+import { toast } from "sonner";
 import {
   usePromoteShared,
   useSharedDetach,
@@ -132,7 +136,7 @@ export const AgentsList = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { actor } = useAuth();
+  const { actor, ownsWorkspace } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
@@ -182,6 +186,9 @@ export const AgentsList = ({
   const agents = [...(agentsData?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+  // A Pinned Agent shows only in the Pinned group, above the rest.
+  const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
+    splitPinned(agents);
   const providers = providersData?.results || [];
   const toolSets = toolSetsData?.results || [];
   const skills = skillsData?.results || [];
@@ -189,6 +196,7 @@ export const AgentsList = ({
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007), asked of the auth module instead of re-derived here.
   const canManageShared = canManageSharedResource(actor, workspaceId);
+  const canPin = canPinAgent(ownsWorkspace);
 
   const getToolSetNames = (toolSetIds: string[] | undefined) => {
     if (!toolSetIds?.length) return [];
@@ -226,6 +234,19 @@ export const AgentsList = ({
 
   const handleDeleteClick = (agent: Agent) => {
     deleteFlow.request(agent);
+  };
+
+  const handleTogglePin = async (agent: AgentWithScope) => {
+    if (!backendUrl) return;
+    const outcome = await writeAt(
+      scopedUrl(backendUrl, `agents/${agent.id}/pin`, scope),
+      { method: agent.isPinned ? "DELETE" : "PUT" },
+    );
+    if (outcome.outcome !== "success") {
+      toast.error(outcome.message);
+      return;
+    }
+    mutate();
   };
 
   const handleCloneConfirm = async () => {
@@ -296,6 +317,25 @@ export const AgentsList = ({
     const isOrgScoped = agent.scope === "organization";
     return (
       <>
+        {canPin && (
+          <>
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onSelect={() => handleTogglePin(agent)}
+            >
+              {agent.isPinned ? (
+                <>
+                  <PinOff /> Unpin
+                </>
+              ) : (
+                <>
+                  <Pin /> Pin
+                </>
+              )}
+            </DropdownMenuItem>
+            {(!isOrgScoped || canManageShared) && <DropdownMenuSeparator />}
+          </>
+        )}
         {isOrgScoped ? (
           // A Shared Agent is locked in the Workspace; only an Org Admin can
           // open it in the org settings editor or detach it here (ADR-0007).
@@ -356,7 +396,175 @@ export const AgentsList = ({
 
   // A Shared Agent with no admin actions has an empty menu; hide the trigger.
   const hasMenu = (agent: AgentWithScope) =>
-    agent.scope !== "organization" || canManageShared;
+    agent.scope !== "organization" || canManageShared || canPin;
+
+  const renderCard = (agent: AgentWithScope) => {
+    const isOrgScoped = agent.scope === "organization";
+    // Count and list only references that actually resolve in this
+    // workspace, so the badge count matches the tooltip — a detached
+    // shared resource drops out of both (it is no longer active here).
+    const toolSetNames = getToolSetNames(agent.toolSetIds);
+    const skillNames = getSkillNames(agent.skillIds);
+    const subAgentNames = getSubAgentNames(agent.subAgentIds);
+    return (
+      <li key={agent.id}>
+        <Item variant="outline" className="h-full items-stretch">
+          {agent.avatarUrl ? (
+            <ItemMedia variant="image" className="size-12 rounded-full">
+              {/* Agent avatar URL is user-supplied (arbitrary host); not
+            routable through the Next image optimizer. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={agent.avatarUrl}
+                alt={agent.name}
+                className="size-full object-cover"
+              />
+            </ItemMedia>
+          ) : (
+            <ItemMedia
+              variant="icon"
+              className="size-12 rounded-full [&_svg]:!size-7"
+            >
+              <Bot className="h-7 w-7 text-muted-foreground" />
+            </ItemMedia>
+          )}
+          <ItemContent>
+            <div className="flex items-center gap-2">
+              <ItemTitle>{agent.name}</ItemTitle>
+              {isOrgScoped && (
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
+                  <Building className="size-3" />
+                  Organization
+                </div>
+              )}
+            </div>
+            <ItemDescription className="text-xs line-clamp-3">
+              {agent.description}
+            </ItemDescription>
+            <div className="flex gap-3 mt-auto text-xs text-muted-foreground">
+              {toolSetNames.length ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-default">
+                      <Wrench className="h-3 w-3" />
+                      {toolSetNames.length} tool set
+                      {toolSetNames.length !== 1 && "s"}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <ul className="text-left">
+                      {toolSetNames.map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="flex items-center gap-1 cursor-default">
+                  <Wrench className="h-3 w-3" />0 tool sets
+                </span>
+              )}
+              {skillNames.length ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-default">
+                      <Sparkles className="h-3 w-3" />
+                      {skillNames.length} skill
+                      {skillNames.length !== 1 && "s"}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <ul className="text-left">
+                      {skillNames.map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="flex items-center gap-1 cursor-default">
+                  <Sparkles className="h-3 w-3" />0 skills
+                </span>
+              )}
+              {subAgentNames.length ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-default">
+                      <Bot className="h-3 w-3" />
+                      {subAgentNames.length} sub-agent
+                      {subAgentNames.length !== 1 && "s"}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <ul className="text-left">
+                      {subAgentNames.map((name) => (
+                        <li key={name}>{name}</li>
+                      ))}
+                    </ul>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="flex items-center gap-1 cursor-default">
+                  <Bot className="h-3 w-3" />0 sub-agents
+                </span>
+              )}
+            </div>
+          </ItemContent>
+          <ItemActions className="hidden xl:flex">
+            <Button size="sm" asChild>
+              <Link href={routes.chat.forAgent(agent.id)}>
+                <BotMessageSquare /> New chat
+              </Link>
+            </Button>
+            {hasMenu(agent) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    className="cursor-pointer text-muted-foreground"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Actions for ${agent.name}`}
+                  >
+                    <EllipsisVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {renderMenuItems(agent)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </ItemActions>
+          <ItemFooter className="xl:hidden mt-0 pl-16">
+            <Button size="sm" asChild>
+              <Link href={routes.chat.forAgent(agent.id)}>
+                <BotMessageSquare /> New chat
+              </Link>
+            </Button>
+            {hasMenu(agent) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    className="cursor-pointer text-muted-foreground"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Actions for ${agent.name}`}
+                  >
+                    <EllipsisVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {renderMenuItems(agent)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </ItemFooter>
+        </Item>
+      </li>
+    );
+  };
+
+  const gridClassName =
+    "grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4";
 
   return (
     <>
@@ -365,172 +573,23 @@ export const AgentsList = ({
           No agents yet. Create one to get started.
         </ListState>
       ) : (
-        <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
-          {agents.map((agent) => {
-            const isOrgScoped = agent.scope === "organization";
-            // Count and list only references that actually resolve in this
-            // workspace, so the badge count matches the tooltip — a detached
-            // shared resource drops out of both (it is no longer active here).
-            const toolSetNames = getToolSetNames(agent.toolSetIds);
-            const skillNames = getSkillNames(agent.skillIds);
-            const subAgentNames = getSubAgentNames(agent.subAgentIds);
-            return (
-              <li key={agent.id}>
-                <Item variant="outline" className="h-full items-stretch">
-                  {agent.avatarUrl ? (
-                    <ItemMedia variant="image" className="size-12 rounded-full">
-                      {/* Agent avatar URL is user-supplied (arbitrary host); not
-                    routable through the Next image optimizer. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={agent.avatarUrl}
-                        alt={agent.name}
-                        className="size-full object-cover"
-                      />
-                    </ItemMedia>
-                  ) : (
-                    <ItemMedia
-                      variant="icon"
-                      className="size-12 rounded-full [&_svg]:!size-7"
-                    >
-                      <Bot className="h-7 w-7 text-muted-foreground" />
-                    </ItemMedia>
-                  )}
-                  <ItemContent>
-                    <div className="flex items-center gap-2">
-                      <ItemTitle>{agent.name}</ItemTitle>
-                      {isOrgScoped && (
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-                          <Building className="size-3" />
-                          Organization
-                        </div>
-                      )}
-                    </div>
-                    <ItemDescription className="text-xs line-clamp-3">
-                      {agent.description}
-                    </ItemDescription>
-                    <div className="flex gap-3 mt-auto text-xs text-muted-foreground">
-                      {toolSetNames.length ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="flex items-center gap-1 cursor-default">
-                              <Wrench className="h-3 w-3" />
-                              {toolSetNames.length} tool set
-                              {toolSetNames.length !== 1 && "s"}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <ul className="text-left">
-                              {toolSetNames.map((name) => (
-                                <li key={name}>{name}</li>
-                              ))}
-                            </ul>
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <span className="flex items-center gap-1 cursor-default">
-                          <Wrench className="h-3 w-3" />0 tool sets
-                        </span>
-                      )}
-                      {skillNames.length ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="flex items-center gap-1 cursor-default">
-                              <Sparkles className="h-3 w-3" />
-                              {skillNames.length} skill
-                              {skillNames.length !== 1 && "s"}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <ul className="text-left">
-                              {skillNames.map((name) => (
-                                <li key={name}>{name}</li>
-                              ))}
-                            </ul>
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <span className="flex items-center gap-1 cursor-default">
-                          <Sparkles className="h-3 w-3" />0 skills
-                        </span>
-                      )}
-                      {subAgentNames.length ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="flex items-center gap-1 cursor-default">
-                              <Bot className="h-3 w-3" />
-                              {subAgentNames.length} sub-agent
-                              {subAgentNames.length !== 1 && "s"}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <ul className="text-left">
-                              {subAgentNames.map((name) => (
-                                <li key={name}>{name}</li>
-                              ))}
-                            </ul>
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <span className="flex items-center gap-1 cursor-default">
-                          <Bot className="h-3 w-3" />0 sub-agents
-                        </span>
-                      )}
-                    </div>
-                  </ItemContent>
-                  <ItemActions className="hidden xl:flex">
-                    <Button size="sm" asChild>
-                      <Link href={routes.chat.forAgent(agent.id)}>
-                        <BotMessageSquare /> New chat
-                      </Link>
-                    </Button>
-                    {hasMenu(agent) && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            className="cursor-pointer text-muted-foreground"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Actions for ${agent.name}`}
-                          >
-                            <EllipsisVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          {renderMenuItems(agent)}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </ItemActions>
-                  <ItemFooter className="xl:hidden mt-0 pl-16">
-                    <Button size="sm" asChild>
-                      <Link href={routes.chat.forAgent(agent.id)}>
-                        <BotMessageSquare /> New chat
-                      </Link>
-                    </Button>
-                    {hasMenu(agent) && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            className="cursor-pointer text-muted-foreground"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Actions for ${agent.name}`}
-                          >
-                            <EllipsisVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          {renderMenuItems(agent)}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </ItemFooter>
-                </Item>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          {pinnedAgents.length > 0 && (
+            <div className="mb-6 space-y-2">
+              <h3 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                <Pin className="size-4" /> Pinned
+              </h3>
+              <ul aria-label="Pinned agents" className={gridClassName}>
+                {pinnedAgents.map(renderCard)}
+              </ul>
+            </div>
+          )}
+          {unpinnedAgents.length > 0 && (
+            <ul aria-label="Agents" className={gridClassName}>
+              {unpinnedAgents.map(renderCard)}
+            </ul>
+          )}
+        </>
       )}
 
       <div className="mt-4 flex gap-2">

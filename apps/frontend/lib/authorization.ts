@@ -192,3 +192,12 @@ export function canSendChatMessages(ownsWorkspace: boolean): boolean {
 export function canChangeChat(ownsWorkspace: boolean): boolean {
   return ownsWorkspace;
 }
+
+/**
+ * May this caller pin or unpin an Agent in this Workspace? Literal ownership,
+ * mirroring the `requireWorkspaceOwner` guard on the Agent pin route: a pin
+ * belongs to the Workspace, so an Org Admin visiting it may not move one.
+ */
+export function canPinAgent(ownsWorkspace: boolean): boolean {
+  return ownsWorkspace;
+}

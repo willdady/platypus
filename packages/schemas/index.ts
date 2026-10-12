@@ -554,6 +554,9 @@ export const agentBaseSchema = z.object({
     .max(AGENT_INPUT_PLACEHOLDER_MAX_LENGTH)
     .optional(),
   avatarUrl: z.string().optional(),
+  // Whether the Workspace Owner pinned this Agent in the Workspace being
+  // listed. Per-Workspace, so present only on a Workspace's agents list.
+  isPinned: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

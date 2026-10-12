@@ -329,6 +329,42 @@ describe("Organization Attachment (central sharing) Routes", () => {
       ]);
     });
 
+    it("unpins a detached Shared Agent in that Workspace only, so re-attaching leaves it unpinned", async () => {
+      mockSession();
+      const fake = seed({
+        organization_member: membership("admin"),
+        workspace: workspaces,
+        agent: [sharedAgent],
+        attachment: attachments,
+        workspace_agent_pin: [
+          { workspaceId: "ws-1", agentId: "agent-1" },
+          { workspaceId: "ws-1", agentId: "agent-2" },
+          { workspaceId: "ws-2", agentId: "agent-1" },
+        ],
+      });
+
+      expect((await app.request(delUrl, { method: "DELETE" })).status).toBe(
+        200,
+      );
+      const reattach = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          resourceType: "agent",
+          resourceId: "agent-1",
+          workspaceId: "ws-1",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(reattach.status).toBe(201);
+      expect(
+        fake.tables.workspace_agent_pin.map((p) => [p.workspaceId, p.agentId]),
+      ).toEqual([
+        ["ws-1", "agent-2"],
+        ["ws-2", "agent-1"],
+      ]);
+    });
+
     it("404s when no such attachment exists", async () => {
       mockSession();
       seed({
