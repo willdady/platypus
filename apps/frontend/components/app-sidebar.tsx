@@ -68,12 +68,11 @@ import {
   CalendarDays,
   ArrowLeftRight,
   Settings,
-  Search,
   Loader2,
   Network,
-  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/search-input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { TagInput } from "@/components/tag-input";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -434,26 +433,12 @@ export function AppSidebar() {
         </SidebarHeader>
         <SidebarSeparator className="mx-0 mt-1" />
         <div className="px-2 py-2">
-          <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type="search"
-              placeholder="Search chats..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="h-8 pl-8 pr-8"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput("")}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                <X className="size-4" />
-              </button>
-            )}
-          </div>
+          <SearchInput
+            placeholder="Search chats..."
+            value={searchInput}
+            onValueChange={setSearchInput}
+            inputClassName="h-8"
+          />
         </div>
         <div className="relative min-h-0 flex flex-col flex-1 overflow-hidden">
           <SidebarContent className="pb-16">

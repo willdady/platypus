@@ -246,6 +246,21 @@ describe("SkillsList filters", () => {
     expect(screen.queryByText("triage-issue")).not.toBeInTheDocument();
   });
 
+  it("clears the search with its clear button", () => {
+    renderSkills([
+      skillNamed("a", "write-release-note"),
+      skillNamed("b", "triage-issue"),
+    ]);
+
+    search("wrn");
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+
+    expect(screen.getByText("triage-issue")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Clear search" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("says no skills match, rather than none exist, when the filters exclude every skill", () => {
     renderSkills([skillNamed("a", "write-release-note")]);
 

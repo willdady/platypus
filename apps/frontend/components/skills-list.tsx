@@ -10,7 +10,7 @@ import {
   ItemContent,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInput } from "@/components/search-input";
 import {
   Select,
   SelectContent,
@@ -45,7 +45,6 @@ import {
   EllipsisVertical,
   Pencil,
   Plus,
-  Search,
   Share2,
   Trash2,
   TriangleAlert,
@@ -283,17 +282,13 @@ export const SkillsList = ({
   // the agent filter would have nothing to offer there.
   const controls = workspaceId && (
     <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-      <div className="relative w-full sm:w-64">
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-        <Input
-          type="search"
-          placeholder="Search skills…"
-          aria-label="Search skills"
-          value={nameFilter}
-          onChange={(e) => setNameFilter(e.target.value)}
-          className="pl-8"
-        />
-      </div>
+      <SearchInput
+        placeholder="Search skills…"
+        aria-label="Search skills"
+        value={nameFilter}
+        onValueChange={setNameFilter}
+        className="w-full sm:w-64"
+      />
       <Select value={activeAgentFilter} onValueChange={setAgentFilter}>
         <SelectTrigger className="w-44" aria-label="Filter by agent">
           <SelectValue />
