@@ -18,6 +18,7 @@ import {
 import { SidebarProvider } from "@/components/ui/sidebar";
 import {
   installMatchMediaStub,
+  installResizeObserverStub,
   installRadixPointerPolyfills,
   jsonResponse,
 } from "@/lib/test-utils";
@@ -27,7 +28,11 @@ import type { Actor } from "@/lib/authorization";
 
 const { params, reads, auth } = vi.hoisted(() => ({
   params: { orgId: "org1", workspaceId: "ws1" },
-  auth: { actor: "org-admin" as Actor, ownsWorkspace: true },
+  auth: {
+    actor: "org-admin" as Actor,
+    ownsWorkspace: true,
+    workspaceDelegation: null as { providerSelfManagement: boolean } | null,
+  },
   // Keyed by `${workspaceId}|${entity}`. Each entry is handed back by
   // reference, as SWR does, so a read's `data` identity is stable across
   // renders.
@@ -115,10 +120,71 @@ beforeEach(() => {
   params.workspaceId = "ws1";
   auth.actor = "org-admin";
   auth.ownsWorkspace = true;
+  auth.workspaceDelegation = null;
 });
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("AppSidebar New chat", () => {
+  it("disables New chat once the workspace is known to have no providers", () => {
+    setRead("ws1", "providers", { results: [] });
+    renderSidebar();
+
+    expect(screen.queryByRole("link", { name: "New chat" })).toBeNull();
+    expect(screen.getByRole("button", { name: "New chat" })).toBeDisabled();
+  });
+
+  describe("hint", () => {
+    beforeEach(() => {
+      // Radix opens the tooltip on real timers and measures it.
+      vi.useRealTimers();
+      installResizeObserverStub();
+    });
+
+    it.each<[string, Actor, boolean, string]>([
+      ["an org admin", "org-admin", false, "Add a provider to start a chat"],
+      [
+        "a Workspace Owner the providers are delegated to",
+        "workspace-owner",
+        true,
+        "Add a provider to start a chat",
+      ],
+      [
+        "a Workspace Owner without the provider delegation",
+        "workspace-owner",
+        false,
+        "Ask an organization admin to add a provider",
+      ],
+    ])("tells %s why", async (_, actor, delegated, hint) => {
+      auth.actor = actor;
+      auth.workspaceDelegation = { providerSelfManagement: delegated };
+      setRead("ws1", "providers", { results: [] });
+      renderSidebar();
+
+      act(() => {
+        screen.getByRole("button", { name: "New chat" }).parentElement!.focus();
+      });
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(hint);
+    });
+  });
+
+  it.each([
+    ["loading", LOADING],
+    ["errored", { data: undefined, isLoading: false, error: new Error("500") }],
+    ["has providers", { data: { results: [{ id: "p1" }] }, isLoading: false }],
+  ])("links to the chat page while the providers read is %s", (_, read) => {
+    reads.set("ws1|providers", read);
+    renderSidebar();
+
+    expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/chat",
+    );
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
 });
 
 describe("AppSidebar chat history", () => {

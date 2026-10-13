@@ -14,10 +14,12 @@ import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   canChangeChat,
+  canConfigureWorkspaceResource,
   canCreateWorkspace,
   canOpenOrgSettings,
 } from "@/lib/authorization";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useHasNoProviders } from "@/hooks/use-has-no-providers";
 import {
   Sidebar,
   SidebarContent,
@@ -34,6 +36,11 @@ import {
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -89,7 +96,7 @@ export function AppSidebar() {
     workspaceId: string;
   }>();
   const backendUrl = useBackendUrl();
-  const { actor, ownsWorkspace } = useAuth();
+  const { actor, ownsWorkspace, workspaceDelegation } = useAuth();
   // Chats belong to the Workspace Owner; everyone else reads them, so the
   // row menu offers nobody else an action the backend would refuse.
   const canChange = canChangeChat(ownsWorkspace);
@@ -166,6 +173,13 @@ export function AppSidebar() {
       return intervalMs;
     },
   });
+
+  const hasNoProviders = useHasNoProviders(scope);
+  const canAddProvider = canConfigureWorkspaceResource(
+    actor,
+    "provider",
+    workspaceDelegation?.providerSelfManagement === true,
+  );
 
   const { data: orgData, isLoading: isOrgLoading } = useScopedSWR<Organization>(
     organizationEntity(orgId),
@@ -423,11 +437,30 @@ export function AppSidebar() {
               </DropdownMenu>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <Button asChild className="w-full">
-                <Link href={routes.chat.root}>
-                  <BotMessageSquare /> New chat
-                </Link>
-              </Button>
+              {hasNoProviders ? (
+                <Tooltip>
+                  {/* A disabled button fires no pointer or focus events, so
+                      the wrapper is what opens the tooltip. */}
+                  <TooltipTrigger asChild>
+                    <span tabIndex={0} className="block">
+                      <Button disabled className="w-full">
+                        <BotMessageSquare /> New chat
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {canAddProvider
+                      ? "Add a provider to start a chat"
+                      : "Ask an organization admin to add a provider"}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button asChild className="w-full">
+                  <Link href={routes.chat.root}>
+                    <BotMessageSquare /> New chat
+                  </Link>
+                </Button>
+              )}
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>

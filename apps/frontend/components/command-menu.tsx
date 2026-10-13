@@ -33,6 +33,7 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { splitPinned } from "@/lib/pinned-agents";
 import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useHasNoProviders } from "@/hooks/use-has-no-providers";
 import { userRoutes, workspaceRoutes } from "@/lib/routes";
 
 /**
@@ -94,6 +95,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
     error: triggersError,
     mutate: mutateTriggers,
   } = useScopedSWR<{ results: Trigger[] }>("triggers", scope);
+  const hasNoProviders = useHasNoProviders(scope);
 
   const triggers = triggersData?.results || [];
 
@@ -155,6 +157,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
+            disabled={hasNoProviders}
             onSelect={() => {
               runCommand(() => router.push(routes.chat.root));
             }}

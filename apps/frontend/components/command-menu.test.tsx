@@ -5,9 +5,11 @@ import {
   mockScopedSWR,
   mutate,
   navigationMock,
+  push,
   renderList,
   resetListHarness,
   swrMock,
+  type ListRead,
 } from "@/lib/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -88,4 +90,26 @@ describe("CommandMenu", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     },
   );
+
+  it("disables New chat once the workspace is known to have no providers", () => {
+    mockScopedSWR({ "/providers": [] });
+    openMenu();
+
+    const item = screen.getByRole("option", { name: "New chat" });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(item);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, ListRead]>([
+    ["loading", { isLoading: true }],
+    ["errored", { error: { status: 500, message: "Server error" } }],
+    ["has providers", [{ id: "p1" }]],
+  ])("opens a new chat while the providers read is %s", (_, read) => {
+    mockScopedSWR({ "/providers": read });
+    openMenu();
+
+    fireEvent.click(screen.getByRole("option", { name: "New chat" }));
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/chat");
+  });
 });
