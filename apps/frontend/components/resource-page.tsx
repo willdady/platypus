@@ -48,16 +48,18 @@ export const ResourcePage = ({
 }: ResourcePageProps) => {
   const layout = resourcePageLayout[variant];
 
+  const heading = <h1 className={layout.title}>{title}</h1>;
+
   const inner = (
     <div className={layout.inner}>
       <BackButton fallbackHref={backFallbackHref} />
       {actions ? (
         <div className="flex items-start justify-between gap-4">
-          <h1 className={layout.title}>{title}</h1>
+          {heading}
           <div className="flex shrink-0 items-center gap-2">{actions}</div>
         </div>
       ) : (
-        <h1 className={layout.title}>{title}</h1>
+        heading
       )}
       {children}
     </div>

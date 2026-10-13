@@ -544,8 +544,8 @@ did that run fail?". Two filters narrow it, and both live in the address bar, so
 filtered view survives a refresh and can be sent to a colleague as a link:
 
 - **Trigger** — all Triggers, or one of them. **View runs** on a Trigger's
-  three-dot menu, or beside the title of the Edit Trigger page, opens the page
-  already filtered to it.
+  three-dot menu, or beside the title of the **Edit Trigger** page, opens the
+  page already filtered to it.
 - **Status** — all, or one of Pending, Running, Success, Failed, Cancelled,
   Suppressed.
 
@@ -588,10 +588,11 @@ The Inbound poll and the `trigger_run.*` Webhook events give the reason as a
 fixed code: `not_found`, `factory_failed`, `misconfigured`, `unauthorized` or
 `unreachable`.
 
-Each run's identifier isn't shown on the row. Instead every row's three-dot
-menu offers **Copy run id**. Use it when a run fails and you need to find that run's log lines: backend logs are
-keyed by the run id, so copying it here and pasting it into your log query is
-how you cross-reference a failed run against what happened behind the scenes.
+Each run's identifier isn't shown on the row. Instead every row's three-dot menu
+offers **Copy run id**. Use it when a run fails and you need to find that run's
+log lines: backend logs are keyed by the run id, so copying it here and pasting
+it into your log query is how you cross-reference a failed run against what
+happened behind the scenes.
 
 ### Inspect a run
 

@@ -199,7 +199,7 @@ export const TriggerRunRow = ({
   const toolCallCount =
     stats?.toolCalls.reduce((sum, tc) => sum + tc.count, 0) ?? 0;
 
-  const content = (
+  const rowBody = (
     <div className="flex items-center gap-4 justify-between">
       {/* `min-w-0` down the left column: a flex item's minimum is otherwise
           its content's, so a long Trigger name, an error message or the stats
@@ -383,7 +383,7 @@ export const TriggerRunRow = ({
   );
 
   if (!isLink) {
-    return <div className="p-4">{content}</div>;
+    return <div className="p-4">{rowBody}</div>;
   }
 
   return (
@@ -391,7 +391,7 @@ export const TriggerRunRow = ({
       className="block p-4 transition-colors hover:bg-accent/50"
       href={triggerRunDetailHref(orgId, workspaceId, run.id)}
     >
-      {content}
+      {rowBody}
     </Link>
   );
 };
