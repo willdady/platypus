@@ -72,10 +72,11 @@ When writing:
 
 `apps/docs/content/docs-contract.test.ts` mechanically pins the claims with a
 single authoritative source (env tables, webhook events, core Plugin names,
-field limits, internal links, heading anchors) and runs in the CI gate. It is a
-floor, not a gate — it cannot see the ~150 UI labels. For what needs judgement,
-ask the user to run `/docs-audit`; the skill is user-invoked only, so you cannot
-start it yourself.
+field limits, internal links, heading anchors) and runs in the CI gate. A
+number with a unit in docs prose must be pinned there or listed in its
+`UNPINNED_NUMBERS` with a reason. Beyond that it is a floor, not a gate — it
+cannot see the ~150 UI labels. For what needs judgement, ask the user to run
+`/docs-audit`; the skill is user-invoked only, so you cannot start it yourself.
 
 ## Git Branch Standards
 

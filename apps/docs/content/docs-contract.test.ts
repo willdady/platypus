@@ -14,9 +14,11 @@
  *
  * Known limits, stated so nobody mistakes this for coverage:
  *
- * - It only checks what someone encoded. The ~150 bolded UI labels across
- *   `building-with-platypus/` have no anchor at all — rename a button and
- *   nothing here complains. A green suite is not a correct docs site.
+ * - It only checks what someone encoded, with one ratchet: a number with a
+ *   unit in prose must be pinned or listed in UNPINNED_NUMBERS with a reason.
+ *   The ~150 bolded UI labels across `building-with-platypus/` have no anchor
+ *   at all — rename a button and nothing here complains. A green suite is not
+ *   a correct docs site.
  * - Text-matching MDX is brittle in boring ways. Dashes are normalised and
  *   thousands separators stripped before comparison, but a rewritten sentence
  *   can still move a claim out from under its anchor. When that happens the
@@ -429,6 +431,37 @@ const envExampleValue = (
   return undefined;
 };
 
+type NumericDefault = {
+  name: string;
+  line: number;
+  value: number;
+  gloss?: string;
+  /** The Default cell as written, e.g. "`300000` (5 minutes)". */
+  cell: string;
+};
+
+/** Every row on the backend page whose Default cell is a number. */
+const backendNumericDefaults = (): NumericDefault[] => {
+  const found: NumericDefault[] = [];
+  for (const table of markdownTables(readDoc(BACKEND_REFERENCE_PAGE))) {
+    const column = table.header.indexOf("Default");
+    if (table.header[0] !== "Variable" || column === -1) continue;
+    table.rows.forEach((row, index) => {
+      const name = firstCodeSpan(row[0]);
+      const cell = row[column]?.match(/^`(\d+)`(?: \(([^)]+)\))?$/);
+      if (!name || !cell) return;
+      found.push({
+        name,
+        line: table.line + 2 + index,
+        value: Number(cell[1]),
+        gloss: cell[2],
+        cell: cell[0],
+      });
+    });
+  }
+  return found;
+};
+
 describe("environment variables", () => {
   type Declaration = { origin: string; pages: string[] };
   const declared = new Map<string, Declaration>();
@@ -552,28 +585,7 @@ describe("environment variables", () => {
   });
 
   describe("numeric defaults on the backend page", () => {
-    type NumericDefault = {
-      name: string;
-      line: number;
-      value: number;
-      gloss?: string;
-    };
-    const numericDefaults: NumericDefault[] = [];
-    for (const table of markdownTables(readDoc(BACKEND_REFERENCE_PAGE))) {
-      const column = table.header.indexOf("Default");
-      if (table.header[0] !== "Variable" || column === -1) continue;
-      table.rows.forEach((row, index) => {
-        const name = firstCodeSpan(row[0]);
-        const cell = row[column]?.match(/^`(\d+)`(?: \(([^)]+)\))?$/);
-        if (!name || !cell) return;
-        numericDefaults.push({
-          name,
-          line: table.line + 2 + index,
-          value: Number(cell[1]),
-          gloss: cell[2],
-        });
-      });
-    }
+    const numericDefaults = backendNumericDefaults();
     const at = (line: number) =>
       `apps/docs/content/${BACKEND_REFERENCE_PAGE}:${line}`;
 
@@ -2181,6 +2193,512 @@ describe("schema constants the pages quote", () => {
       }
     },
   );
+});
+
+// --- numbers no entry above pins -------------------------------------------
+
+/**
+ * A number with a time, size, count or percent unit: "45 seconds",
+ * "100,000-character", "five minutes", "70%". Unit-less counts ("at most 10 of
+ * them") are left alone; a pattern that broad would be mostly noise. The
+ * thousands separator may be a comma or a space ("100 000-character").
+ */
+const NUMBER_WITH_UNIT = new RegExp(
+  `\\b(?:\\d{1,3}(?:[, ]\\d{3})+|\\d+(?:\\.\\d+)?|${NUMBER_WORDS.join("|")})` +
+    `(?:[ -](?:seconds?|minutes?|hours?|days?|bytes?|KB|KiB|MB|MiB|GB|GiB|characters?|entry|entries|events?|streams?)\\b|%)`,
+  "gi",
+);
+
+/** Fold whitespace so a phrase still matches after a page reflows. */
+const fold = (text: string): string => text.replace(/\s+/g, " ");
+
+/**
+ * Every number with a unit in a page's prose that does not sit inside one of
+ * `pinned` — the phrases the entries above check on this page. Fenced and
+ * inline code are skipped: a snippet is not a claim.
+ */
+const unpinnedNumbers = (content: string, pinned: string[]): string[] => {
+  const prose = fold(withoutCodeFences(content));
+  const ranges = [...prose.matchAll(/`[^`]*`/g)].map(
+    (code): [number, number] => [code.index, code.index + code[0].length],
+  );
+  for (const pin of pinned.map(fold)) {
+    for (
+      let at = prose.indexOf(pin);
+      at !== -1;
+      at = prose.indexOf(pin, at + 1)
+    ) {
+      ranges.push([at, at + pin.length]);
+    }
+  }
+  return [...prose.matchAll(NUMBER_WITH_UNIT)]
+    .filter(
+      ({ index }) => !ranges.some(([from, to]) => index >= from && index < to),
+    )
+    .map((match) => match[0]);
+};
+
+type PagePhrase = { file: string; phrase: string };
+
+/**
+ * What each entry above checks: the page it reads and the phrase it expects
+ * there. Derived from those entries rather than kept as a second list, so a new
+ * pin clears its number below on its own.
+ */
+const pinnedPhrases = (): PagePhrase[] => {
+  const closerMs = readIntegerConstant(CLOSER_SOURCE, "CLOSER_TIMEOUT_MS");
+  return [
+    ...BACKEND_CONSTANTS.flatMap(({ source, name, phrase, files }) => {
+      const value = readIntegerConstant(source, name);
+      return value === undefined
+        ? []
+        : files.map((file) => ({ file, phrase: phrase(value) }));
+    }),
+    ...SCHEMA_CONSTANTS.flatMap(({ value, phrase, files }) =>
+      files.map((file) => ({ file, phrase: phrase(value) })),
+    ),
+    ...CLOSER_TIMEOUT_SURFACES.filter(({ file }) =>
+      file.startsWith("apps/docs/content/"),
+    ).flatMap(({ file, phrase }) =>
+      closerMs === undefined
+        ? []
+        : [
+            {
+              file: file.slice("apps/docs/content/".length),
+              phrase: phrase(closerMs / 1_000),
+            },
+          ],
+    ),
+    ...NAMING_CAPS.flatMap(({ value, surfaces }) =>
+      surfaces.flatMap((file) => [
+        { file, phrase: `${value} character` },
+        { file, phrase: `${value}-character` },
+      ]),
+    ),
+    // Only the numbers in the claim's block that equal a bound it checks — a
+    // token lifetime sharing the bullet with a name limit is not pinned by it.
+    ...LIMIT_CLAIMS.flatMap(({ doc, anchor, expected }) =>
+      [
+        ...fold(blockContaining(readDoc(doc), anchor)?.text ?? "").matchAll(
+          NUMBER_WITH_UNIT,
+        ),
+      ]
+        .filter((match) =>
+          [expected.min, expected.max].includes(
+            Number(match[0].match(/^[\d, ]+/)?.[0].replace(/[, ]/g, "")),
+          ),
+        )
+        .map((match) => ({ file: doc, phrase: match[0] })),
+    ),
+    ...backendNumericDefaults()
+      .filter(({ gloss }) => gloss !== undefined)
+      .map(({ cell }) => ({ file: BACKEND_REFERENCE_PAGE, phrase: cell })),
+  ];
+};
+
+/**
+ * Numbers with a unit that no entry above pins, each with why it is left
+ * unchecked. Keyed by page and phrase, not line, so editing a page around one
+ * does not break it. Only illustrative, external, or checked-accurate numbers
+ * belong here — including one pinned on another page but restated on this
+ * one. A wrong number is fixed or pinned instead.
+ */
+const UNPINNED_NUMBERS: (PagePhrase & { reason: string })[] = [
+  {
+    file: "administering/index.mdx",
+    phrase: "7 days",
+    reason:
+      "Expiring soon threshold; EXPIRING_SOON_DAYS, pinned on the A2A page",
+  },
+  {
+    file: "building-with-platypus/a2a-endpoints.mdx",
+    phrase: "1 MiB",
+    reason: "A2A_MAX_BODY_BYTES default, pinned on the backend reference page",
+  },
+  {
+    file: "building-with-platypus/a2a-endpoints.mdx",
+    phrase: "365 days",
+    reason:
+      "token lifetime option from BEARER_TOKEN_EXPIRY_DAYS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/a2a-endpoints.mdx",
+    phrase: "30 days",
+    reason:
+      "token expiry reminder in bearer-token.ts dueReminder; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/a2a-endpoints.mdx",
+    phrase: "30-day",
+    reason:
+      "token lifetime option from BEARER_TOKEN_EXPIRY_DAYS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/a2a-endpoints.mdx",
+    phrase: "7 days",
+    reason:
+      "token expiry reminder at EXPIRING_SOON_DAYS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/a2a-endpoints.mdx",
+    phrase: "7-day",
+    reason:
+      "token expiry reminder at EXPIRING_SOON_DAYS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/board-digest.mdx",
+    phrase: "three days",
+    reason:
+      "illustrative threshold from the example Skill text on the same page",
+  },
+  {
+    file: "building-with-platypus/boards.mdx",
+    phrase: "one entry",
+    reason: "behaviour, not a limit: one history entry per write",
+  },
+  {
+    file: "building-with-platypus/chat.mdx",
+    phrase: "33%",
+    reason: "illustrative context-meter reading (42K of 128K)",
+  },
+  {
+    file: "building-with-platypus/chat.mdx",
+    phrase: "7 days",
+    reason: "the sidebar's Last 7 days group; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/mcp.mdx",
+    phrase: "20 seconds",
+    reason: "TOOL_SET_RESOLVE_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/mcp.mdx",
+    phrase: "64 characters",
+    reason: "TOOL_NAME_PATTERN's {1,64}; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/mcp.mdx",
+    phrase: "one minute",
+    reason: "FETCH_FAILURE_SKIP_WINDOW_MS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/skills.mdx",
+    phrase: "1 MiB",
+    reason: "SKILL_FILE_READ_MAX_BYTES; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/skills.mdx",
+    phrase: "10 MiB",
+    reason: "SKILL_ZIP_MAX_BYTES; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/skills.mdx",
+    phrase: "16 KiB",
+    reason: "SKILL_FRONTMATTER_MAX_BYTES; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/skills.mdx",
+    phrase: "25 MiB",
+    reason: "SKILL_BUNDLE_MAX_UNPACKED_BYTES; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/skills.mdx",
+    phrase: "two entries",
+    reason: "prose about duplicate paths, not a limit",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "20 seconds",
+    reason: "TOOL_SET_RESOLVE_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "30 days",
+    reason:
+      "token expiry reminder in bearer-token.ts dueReminder; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "30 minutes",
+    reason:
+      "a Simple Frequency option in the Trigger form; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "30-day",
+    reason:
+      "token lifetime option from BEARER_TOKEN_EXPIRY_DAYS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "365 days",
+    reason:
+      "token lifetime option from BEARER_TOKEN_EXPIRY_DAYS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "5 seconds",
+    reason: "event-trigger DEBOUNCE_MS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "64 KiB",
+    reason:
+      "INBOUND_TRIGGER_MAX_BODY_BYTES default, pinned on the backend reference page",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "7 days",
+    reason:
+      "Expiring soon and the expiry reminder, both EXPIRING_SOON_DAYS; accurate, not yet pinned here",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "7-day",
+    reason:
+      "token expiry reminder at EXPIRING_SOON_DAYS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/triggers.mdx",
+    phrase: "one day",
+    reason: 'prose ("from one day to the next"), not a limit',
+  },
+  {
+    file: "building-with-platypus/webhooks.mdx",
+    phrase: "10 seconds",
+    reason: "webhook-delivery TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "building-with-platypus/webhooks.mdx",
+    phrase: "one event",
+    reason: "behaviour, not a limit: Mark all as read sends one bulk event",
+  },
+  {
+    file: "extending/sandbox-backends.mdx",
+    phrase: "25 MiB",
+    reason: "SANDBOX_TRANSFER_MAX_BYTES, pinned on the Sandboxes concept page",
+  },
+  {
+    file: "extending/sandbox-backends.mdx",
+    phrase: "60 seconds",
+    reason: "DEFAULT_SHELL_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "extending/tool-sets.mdx",
+    phrase: "20 seconds",
+    reason: "TOOL_SET_RESOLVE_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "extending/web-search-backends.mdx",
+    phrase: "100 000-character",
+    reason: "MAX_READ_URL_SLICE_CHARS; accurate, not yet pinned",
+  },
+  {
+    file: "extending/web-search-backends.mdx",
+    phrase: "240 seconds",
+    reason:
+      "derived: two calls at MAX_WEB_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "extending/your-first-plugin.mdx",
+    phrase: "32-character",
+    reason:
+      "MAX_PLUGIN_TOOL_NAME_LENGTH quoted in a log line, pinned on the Tool sets page",
+  },
+  {
+    file: "getting-started/index.mdx",
+    phrase: "30 seconds",
+    reason: "derived: the backend's 1+2+4+8+16s Postgres retry backoff",
+  },
+  {
+    file: "reference/backend-configuration.mdx",
+    phrase: "10 seconds",
+    reason: "Docker's default stop grace period, not ours",
+  },
+  {
+    file: "reference/backend-configuration.mdx",
+    phrase: "15 seconds",
+    reason: "RUN_HEARTBEAT_INTERVAL_MS; accurate, not yet pinned",
+  },
+  {
+    file: "reference/backend-configuration.mdx",
+    phrase: "32-character",
+    reason: "better-auth's secret-length warning, not ours",
+  },
+  {
+    file: "reference/backend-configuration.mdx",
+    phrase: "65 minutes",
+    reason:
+      "derived: TRIGGER_PER_RUN_TIMEOUT_MS plus RECOVERY_STALE_BUFFER_MS defaults",
+  },
+  {
+    file: "reference/backend-configuration.mdx",
+    phrase: "8 characters",
+    reason: "MIN_ADMIN_PASSWORD_LENGTH; accurate, not yet pinned",
+  },
+  {
+    file: "reference/backend-configuration.mdx",
+    phrase: "8 seconds",
+    reason: "SHUTDOWN_DRAIN_MS; accurate, not yet pinned",
+  },
+  {
+    file: "reference/backend-configuration.mdx",
+    phrase: "five-minute",
+    reason:
+      'RECOVERY_STALE_BUFFER_MS, pinned on the same page as "five minutes"',
+  },
+  {
+    file: "self-hosting/configuration.mdx",
+    phrase: "20 seconds",
+    reason: "TOOL_SET_RESOLVE_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "self-hosting/docker-compose.mdx",
+    phrase: "24-character",
+    reason:
+      "the installer's generated password length; accurate, not yet pinned",
+  },
+  {
+    file: "self-hosting/docker-compose.mdx",
+    phrase: "8 characters",
+    reason: "MIN_ADMIN_PASSWORD_LENGTH; accurate, not yet pinned",
+  },
+  {
+    file: "self-hosting/production.mdx",
+    phrase: "10 seconds",
+    reason: "better-auth's default rate-limit window, not ours",
+  },
+  {
+    file: "self-hosting/production.mdx",
+    phrase: "10-seconds",
+    reason: "better-auth's default rate-limit window, not ours",
+  },
+  {
+    file: "self-hosting/production.mdx",
+    phrase: "60 seconds",
+    reason: "better-auth's default rate-limit window, not ours",
+  },
+  {
+    file: "self-hosting/production.mdx",
+    phrase: "ten seconds",
+    reason: "better-auth's default rate-limit window, not ours",
+  },
+  {
+    file: "self-hosting/providers-and-auth.mdx",
+    phrase: "One entry",
+    reason: "form-field guidance, not a limit",
+  },
+  {
+    file: "self-hosting/sandbox.mdx",
+    phrase: "30 seconds",
+    reason: "the Docker sandbox's READ_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "self-hosting/sandbox.mdx",
+    phrase: "60 seconds",
+    reason: "the SSH sandbox's IDLE_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "self-hosting/sandbox.mdx",
+    phrase: "600 seconds",
+    reason: "MAX_SHELL_TIMEOUT_MS; accurate, not yet pinned",
+  },
+  {
+    file: "self-hosting/users-and-access.mdx",
+    phrase: "7 days",
+    reason: "session expiresIn in the auth config; accurate, not yet pinned",
+  },
+];
+
+describe("numbers with units on the docs pages", () => {
+  const pinned = pinnedPhrases();
+  const allowlisted = (file: string, phrase: string) =>
+    UNPINNED_NUMBERS.some(
+      (entry) => entry.file === file && entry.phrase === phrase,
+    );
+  const found: PagePhrase[] = DOCS.flatMap((file) =>
+    unpinnedNumbers(
+      readDoc(file),
+      pinned.filter((pin) => pin.file === file).map(({ phrase }) => phrase),
+    ).map((phrase) => ({ file, phrase })),
+  );
+
+  it("are each pinned or allowlisted with a reason", () => {
+    expectNoViolations(
+      found
+        .filter(({ file, phrase }) => !allowlisted(file, phrase))
+        .map(
+          ({ file, phrase }) =>
+            `apps/docs/content/${file} states "${phrase}", which nothing checks against the code.\n` +
+            `Pin it to its source in this file, or add it to UNPINNED_NUMBERS with the reason it needs no pin.`,
+        ),
+    );
+  });
+
+  it("keeps UNPINNED_NUMBERS to numbers a page still states, unpinned", () => {
+    expectNoViolations(
+      UNPINNED_NUMBERS.filter(
+        (entry) =>
+          !found.some(
+            ({ file, phrase }) =>
+              file === entry.file && phrase === entry.phrase,
+          ),
+      ).map(
+        ({ file, phrase }) =>
+          `UNPINNED_NUMBERS lists "${phrase}" on apps/docs/content/${file}, but that page no longer states it unpinned.\n` +
+          `Remove the entry.`,
+      ),
+    );
+  });
+
+  it("gives every UNPINNED_NUMBERS entry a reason", () => {
+    expectNoViolations(
+      UNPINNED_NUMBERS.filter(({ reason }) => reason.trim() === "").map(
+        ({ file, phrase }) =>
+          `UNPINNED_NUMBERS lists "${phrase}" on apps/docs/content/${file} with no reason.\n` +
+          `Say why it needs no pin: illustrative, external, or checked against its source.`,
+      ),
+    );
+  });
+});
+
+describe("unpinnedNumbers", () => {
+  it("finds a number with a unit in prose", () => {
+    expect(unpinnedNumbers("Retries after 45 seconds.", [])).toEqual([
+      "45 seconds",
+    ]);
+  });
+
+  it("reads number words, thousands separators and hyphenated units", () => {
+    expect(
+      unpinnedNumbers(
+        "Wait five minutes for a 100,000-character page or a 100 000-character one, 70% full.",
+        [],
+      ),
+    ).toEqual([
+      "five minutes",
+      "100,000-character",
+      "100 000-character",
+      "70%",
+    ]);
+  });
+
+  it("skips fenced code and inline code", () => {
+    expect(
+      unpinnedNumbers(
+        "```\nRetries after 45 seconds.\n```\nSet `45 seconds`.",
+        [],
+      ),
+    ).toEqual([]);
+  });
+
+  it("skips a number inside a pinned phrase, even across a line wrap", () => {
+    expect(
+      unpinnedNumbers("It waits up to\n**30 seconds** then 45 seconds.", [
+        "waits up to **30 seconds**",
+      ]),
+    ).toEqual(["45 seconds"]);
+  });
 });
 
 // --- docker image tags -------------------------------------------------------
