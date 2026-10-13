@@ -79,7 +79,7 @@ you change the auth configuration, regenerate it, then treat the result as a
 normal schema change and continue from step 2:
 
 ```bash
-pnpm --dir apps/backend dlx @better-auth/cli@latest generate \
+pnpm --dir apps/backend dlx @better-auth/cli@1.4.21 generate \
   --config ./src/auth.ts --output ./src/db/auth-schema.ts --yes
 ```
 
