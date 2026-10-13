@@ -9,11 +9,13 @@ import {
   Clock,
   Copy,
   Database,
+  EllipsisVertical,
   Footprints,
   Gauge,
-  ListTree,
+  List,
   Loader2,
   MessageSquare,
+  Pencil,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -28,6 +30,12 @@ import {
 } from "@platypus/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -162,10 +170,12 @@ const formatDuration = (run: TriggerRunWithTrigger) => {
 
 /**
  * One run in the workspace-wide Trigger runs list. The list mixes runs from
- * every Trigger, so the row names — and links to — the Trigger it came from;
- * everything else is the per-run detail an Operator already reads. The same
- * row heads the run detail page, which turns `linkToDetail` off so the row
- * does not offer a link to the page it is already on.
+ * every Trigger, so the row names the Trigger it came from; everything else is
+ * the per-run detail an Operator already reads. In the list the whole row is
+ * the link to the run, as a Workspace home Trigger card is to its Trigger, and
+ * the ⋮ menu holds the rest. The same row heads the run detail page, which
+ * turns `linkToDetail` off: the row is then no link, and its menu gains a way
+ * back to the Trigger's other runs.
  */
 export const TriggerRunRow = ({
   run,
@@ -176,199 +186,212 @@ export const TriggerRunRow = ({
   run: TriggerRunWithTrigger;
   orgId: string;
   workspaceId: string;
-  /** Whether the row offers **View run**. Off on the run's own page. */
+  /** Whether the row links to the run's page. Off on that page itself. */
   linkToDetail?: boolean;
 }) => {
   const stats = run.stats as TriggerRunStats | null | undefined;
 
+  const routes = workspaceRoutes(orgId, workspaceId);
   const handleCopyRunId = () => copyWithToast(run.id);
+  // A suppressed firing never ran, so it has no timeline to open.
+  const isLink = linkToDetail && run.status !== "suppressed";
 
   const toolCallCount =
     stats?.toolCalls.reduce((sum, tc) => sum + tc.count, 0) ?? 0;
 
-  return (
-    <div className="p-4">
-      <div className="flex items-center gap-4 justify-between">
-        {/* `min-w-0` down the left column: a flex item's minimum is otherwise
+  const content = (
+    <div className="flex items-center gap-4 justify-between">
+      {/* `min-w-0` down the left column: a flex item's minimum is otherwise
           its content's, so a long Trigger name, an error message or the stats
           line would widen the column past the row and push the actions off
           the right edge on a phone. */}
-        <div className="flex min-w-0 items-center gap-4">
-          {statusBadge(run.status)}
-          <div className="min-w-0">
-            <Link
-              className="font-medium hover:underline break-words"
-              href={workspaceRoutes(orgId, workspaceId).triggers.detail(
-                run.triggerId,
-              )}
-            >
-              {run.triggerName}
-            </Link>
-            <p className="text-sm">{formatDateTime(run.startedAt)}</p>
+      <div className="flex min-w-0 items-center gap-4">
+        {statusBadge(run.status)}
+        <div className="min-w-0">
+          <p className="font-medium break-words">{run.triggerName}</p>
+          <p className="text-sm">{formatDateTime(run.startedAt)}</p>
+          <p className="text-sm text-muted-foreground">
+            {formatRelativeTime(run.startedAt)}
+          </p>
+          {run.eventType && (
             <p className="text-sm text-muted-foreground">
-              {formatRelativeTime(run.startedAt)}
+              Event: {run.eventType}
             </p>
-            {run.eventType && (
-              <p className="text-sm text-muted-foreground">
-                Event: {run.eventType}
-              </p>
-            )}
-            {run.completedAt && (
-              <p className="text-sm text-muted-foreground">
-                Duration: {formatDuration(run)}
-              </p>
-            )}
-            {stats && (
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+          )}
+          {run.completedAt && (
+            <p className="text-sm text-muted-foreground">
+              Duration: {formatDuration(run)}
+            </p>
+          )}
+          {stats && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <Footprints className="h-3 w-3" />
+                {stats.steps} step{stats.steps !== 1 ? "s" : ""}
+              </span>
+              {stats.toolCalls.length > 0 ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
+                      <Wrench className="h-3 w-3" />
+                      {toolCallCount} tool call
+                      {toolCallCount !== 1 ? "s" : ""}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <ul className="text-left">
+                      {stats.toolCalls.map((tc) => (
+                        <li key={tc.name}>
+                          {tc.name} &times;{tc.count}
+                        </li>
+                      ))}
+                    </ul>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
                 <span className="flex items-center gap-1 whitespace-nowrap">
-                  <Footprints className="h-3 w-3" />
-                  {stats.steps} step{stats.steps !== 1 ? "s" : ""}
+                  <Wrench className="h-3 w-3" />0 tool calls
                 </span>
-                {stats.toolCalls.length > 0 ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                        <Wrench className="h-3 w-3" />
-                        {toolCallCount} tool call
-                        {toolCallCount !== 1 ? "s" : ""}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <ul className="text-left">
-                        {stats.toolCalls.map((tc) => (
-                          <li key={tc.name}>
-                            {tc.name} &times;{tc.count}
-                          </li>
-                        ))}
-                      </ul>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <span className="flex items-center gap-1 whitespace-nowrap">
-                    <Wrench className="h-3 w-3" />0 tool calls
-                  </span>
-                )}
-                {/* Cached input is a breakdown of the in figure above, which
+              )}
+              {/* Cached input is a breakdown of the in figure above, which
                   already includes it — never subtracted (issue #734). A tooltip
                   on a cache icon so the token line stays as tight as it was:
                   absent means the Provider reported no cache detail, which is
                   never rendered as zero. */}
-                {stats.cacheReadTokens !== undefined ||
-                stats.cacheWriteTokens !== undefined ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                        <MessageSquare className="h-3 w-3" />
-                        {formatTokens(stats.inputTokens)} in /{" "}
-                        {formatTokens(stats.outputTokens)} out
-                        <Database className="h-3 w-3 text-muted-foreground" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <ul className="text-left">
-                        {cachedTokenBreakdown(stats, formatTokens).map(
-                          (line) => (
-                            <li key={line}>{line}</li>
-                          ),
-                        )}
-                      </ul>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <span className="flex items-center gap-1 whitespace-nowrap">
-                    <MessageSquare className="h-3 w-3" />
-                    {formatTokens(stats.inputTokens)} in /{" "}
-                    {formatTokens(stats.outputTokens)} out
-                  </span>
-                )}
-                {/* How full the context got on the run's LAST step, which is a
+              {stats.cacheReadTokens !== undefined ||
+              stats.cacheWriteTokens !== undefined ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
+                      <MessageSquare className="h-3 w-3" />
+                      {formatTokens(stats.inputTokens)} in /{" "}
+                      {formatTokens(stats.outputTokens)} out
+                      <Database className="h-3 w-3 text-muted-foreground" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <ul className="text-left">
+                      {cachedTokenBreakdown(stats, formatTokens).map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="flex items-center gap-1 whitespace-nowrap">
+                  <MessageSquare className="h-3 w-3" />
+                  {formatTokens(stats.inputTokens)} in /{" "}
+                  {formatTokens(stats.outputTokens)} out
+                </span>
+              )}
+              {/* How full the context got on the run's LAST step, which is a
                   different quantity from the cross-step sums above (ADR-0018).
                   Absent where the Provider reported no usage — occupancy is
                   then unknown and nothing is estimated. */}
-                {stats.contextOccupancy !== undefined && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                        <Gauge className="h-3 w-3" />
-                        {formatTokens(stats.contextOccupancy)} context
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      Tokens the conversation filled on the final step
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-            )}
-            {stats?.truncatedByTokenLimit && (
-              <TurnNotice className="mt-1">{RUN_CUT_SHORT_NOTICE}</TurnNotice>
-            )}
-            {stats?.stoppedAtStepLimit && (
-              <TurnNotice className="mt-1">{RUN_STEP_LIMIT_NOTICE}</TurnNotice>
-            )}
-            {/* Warnings, never a status: a run that went without some of its
+              {stats.contextOccupancy !== undefined && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
+                      <Gauge className="h-3 w-3" />
+                      {formatTokens(stats.contextOccupancy)} context
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Tokens the conversation filled on the final step
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          )}
+          {stats?.truncatedByTokenLimit && (
+            <TurnNotice className="mt-1">{RUN_CUT_SHORT_NOTICE}</TurnNotice>
+          )}
+          {stats?.stoppedAtStepLimit && (
+            <TurnNotice className="mt-1">{RUN_STEP_LIMIT_NOTICE}</TurnNotice>
+          )}
+          {/* Warnings, never a status: a run that went without some of its
               tools, or whose tool calls failed, can still end `success`
               (#1184). Nothing extra for a clean run. */}
-            {(run.unloadedToolSets.length > 0 || run.failedToolCalls > 0) && (
-              <div role="group" aria-label={RUN_WARNINGS_LABEL}>
-                {run.unloadedToolSets.map((unloaded) => (
-                  <TurnNotice key={unloaded.toolSetId} className="mt-1">
-                    {unloadedToolSetNotice(unloaded)}
-                  </TurnNotice>
-                ))}
-                {run.failedToolCalls > 0 && (
-                  <TurnNotice className="mt-1">
-                    {failedToolCallsNotice(run.failedToolCalls)}
-                  </TurnNotice>
-                )}
-              </div>
-            )}
-            {run.status === "suppressed" && (
-              <TurnNotice className="mt-1">{RUN_SUPPRESSED_NOTICE}</TurnNotice>
-            )}
-            {run.errorMessage && (
-              <p className="text-sm text-destructive mt-1 break-words">
-                {run.errorMessage}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center shrink-0">
-          {/* A suppressed firing never ran, so it has no timeline to open. */}
-          {linkToDetail && run.status !== "suppressed" && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  className="text-muted-foreground"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="View run"
-                  asChild
-                >
-                  <Link href={triggerRunDetailHref(orgId, workspaceId, run.id)}>
-                    <ListTree className="h-4 w-4" />
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>View run</TooltipContent>
-            </Tooltip>
+          {(run.unloadedToolSets.length > 0 || run.failedToolCalls > 0) && (
+            <div role="group" aria-label={RUN_WARNINGS_LABEL}>
+              {run.unloadedToolSets.map((unloaded) => (
+                <TurnNotice key={unloaded.toolSetId} className="mt-1">
+                  {unloadedToolSetNotice(unloaded)}
+                </TurnNotice>
+              ))}
+              {run.failedToolCalls > 0 && (
+                <TurnNotice className="mt-1">
+                  {failedToolCallsNotice(run.failedToolCalls)}
+                </TurnNotice>
+              )}
+            </div>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                className="text-muted-foreground"
-                variant="ghost"
-                size="icon"
-                aria-label="Copy run id"
-                onClick={handleCopyRunId}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Copy run id</TooltipContent>
-          </Tooltip>
+          {run.status === "suppressed" && (
+            <TurnNotice className="mt-1">{RUN_SUPPRESSED_NOTICE}</TurnNotice>
+          )}
+          {run.errorMessage && (
+            <p className="text-sm text-destructive mt-1 break-words">
+              {run.errorMessage}
+            </p>
+          )}
         </div>
       </div>
+      <div className="flex items-center shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              className="cursor-pointer text-muted-foreground"
+              variant="ghost"
+              size="icon"
+              aria-label={`Actions for ${run.triggerName} run`}
+              // Inside the row's link: opening the menu must not open the run.
+              onClick={(e) => e.preventDefault()}
+            >
+              <EllipsisVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          {/* Portalled, but React still bubbles its clicks to the row link. */}
+          <DropdownMenuContent onClick={(e) => e.preventDefault()}>
+            <DropdownMenuItem asChild>
+              <Link
+                className="cursor-pointer"
+                href={routes.triggers.detail(run.triggerId)}
+              >
+                <Pencil /> Edit trigger
+              </Link>
+            </DropdownMenuItem>
+            {!linkToDetail && (
+              <DropdownMenuItem asChild>
+                <Link
+                  className="cursor-pointer"
+                  href={routes.triggerRuns.forTrigger(run.triggerId)}
+                >
+                  <List /> View trigger&apos;s runs
+                </Link>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onSelect={handleCopyRunId}
+            >
+              <Copy /> Copy run id
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
+  );
+
+  if (!isLink) {
+    return <div className="p-4">{content}</div>;
+  }
+
+  return (
+    <Link
+      className="block p-4 transition-colors hover:bg-accent/50"
+      href={triggerRunDetailHref(orgId, workspaceId, run.id)}
+    >
+      {content}
+    </Link>
   );
 };

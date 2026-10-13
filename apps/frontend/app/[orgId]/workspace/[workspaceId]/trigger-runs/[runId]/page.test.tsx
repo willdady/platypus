@@ -70,6 +70,12 @@ import TriggerRunDetailPage, {
   RUN_DETAIL_POLL_MS,
 } from "./page";
 import { RUN_TIMELINE_EMPTY_NOTICE } from "@/components/run-timeline";
+import {
+  installRadixPointerPolyfills,
+  openDropdownMenu,
+} from "@/lib/test-utils";
+
+installRadixPointerPolyfills();
 
 const T0 = 1_767_258_000_000;
 
@@ -169,8 +175,30 @@ describe("TriggerRunDetailPage", () => {
     expect(state.urls[0]).toBe(
       "https://backend.example/organizations/org-1/workspaces/ws-1/trigger-runs/run-1",
     );
-    // The row heading the page does not link to the page it is on.
-    expect(screen.queryByLabelText("View run")).not.toBeInTheDocument();
+    // The row heading the page does not link to the page it is on, nor does
+    // its Trigger name link anywhere.
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("offers the Trigger, its other runs and the run id from the header's menu", async () => {
+    state.responses = [{ run: run(), events: [] }];
+
+    await renderPage();
+    await poll();
+    openDropdownMenu();
+
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
+    ).toEqual(["Edit trigger", "View trigger's runs", "Copy run id"]);
+    expect(
+      screen.getByRole("menuitem", { name: "Edit trigger" }),
+    ).toHaveAttribute("href", "/org-1/workspace/ws-1/triggers/trigger-1");
+    expect(
+      screen.getByRole("menuitem", { name: "View trigger's runs" }),
+    ).toHaveAttribute(
+      "href",
+      "/org-1/workspace/ws-1/trigger-runs?triggerId=trigger-1",
+    );
   });
 
   it("polls incrementally from below its oldest running event, and folds the patch in", async () => {

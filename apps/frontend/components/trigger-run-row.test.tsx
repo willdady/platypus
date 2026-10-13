@@ -1,11 +1,19 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import type { TriggerRunWithTrigger } from "@platypus/schemas";
 import {
   TriggerRunRow,
   triggerRunDetailHref,
   RUN_WARNINGS_LABEL,
 } from "./trigger-run-row";
+import {
+  installRadixPointerPolyfills,
+  openDropdownMenu,
+} from "@/lib/test-utils";
+
+installRadixPointerPolyfills();
 
 const run = (
   over: Partial<TriggerRunWithTrigger> = {},
@@ -27,16 +35,31 @@ const run = (
 });
 
 describe("TriggerRunRow", () => {
-  it("links to the run's own page", () => {
+  it("makes the whole row a link to the run's own page", () => {
     render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
 
-    expect(screen.getByLabelText("View run")).toHaveAttribute(
+    const row = screen.getByText("Nightly digest").closest("a");
+    expect(row).toHaveAttribute(
       "href",
-      triggerRunDetailHref("org-1", "ws-1", "run-1"),
+      "/org-1/workspace/ws-1/trigger-runs/run-1",
     );
     expect(triggerRunDetailHref("org-1", "ws-1", "run-1")).toBe(
       "/org-1/workspace/ws-1/trigger-runs/run-1",
     );
+  });
+
+  it("names the Trigger as plain text, never a link of its own", () => {
+    render(
+      <TriggerRunRow
+        run={run()}
+        orgId="org-1"
+        workspaceId="ws-1"
+        linkToDetail={false}
+      />,
+    );
+
+    expect(screen.getByText("Nightly digest").closest("a")).toBeNull();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("offers no page for a suppressed firing, which never ran", () => {
@@ -48,21 +71,91 @@ describe("TriggerRunRow", () => {
       />,
     );
 
-    expect(screen.queryByLabelText("View run")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("hides the link when told it is already on the run's page", () => {
-    render(
-      <TriggerRunRow
-        run={run()}
-        orgId="org-1"
-        workspaceId="ws-1"
-        linkToDetail={false}
-      />,
-    );
+  it("keeps no standalone icon actions on the row", () => {
+    render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
 
     expect(screen.queryByLabelText("View run")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Copy run id")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Copy run id")).not.toBeInTheDocument();
+  });
+
+  describe("the row's actions menu", () => {
+    const menuItems = () =>
+      screen.getAllByRole("menuitem").map((item) => item.textContent?.trim());
+
+    it("offers Edit trigger then Copy run id in the list", () => {
+      render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
+      openDropdownMenu();
+
+      expect(menuItems()).toEqual(["Edit trigger", "Copy run id"]);
+      expect(
+        screen.getByRole("menuitem", { name: "Edit trigger" }),
+      ).toHaveAttribute("href", "/org-1/workspace/ws-1/triggers/trigger-1");
+    });
+
+    it("is named for the run's Trigger", () => {
+      render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
+
+      expect(
+        screen.getByRole("button", { name: "Actions for Nightly digest run" }),
+      ).toBeInTheDocument();
+    });
+
+    it("offers the same items on a suppressed firing's row", () => {
+      render(
+        <TriggerRunRow
+          run={run({ status: "suppressed" })}
+          orgId="org-1"
+          workspaceId="ws-1"
+        />,
+      );
+      openDropdownMenu();
+
+      expect(menuItems()).toEqual(["Edit trigger", "Copy run id"]);
+    });
+
+    it("adds View trigger's runs on the run's own page", () => {
+      render(
+        <TriggerRunRow
+          run={run()}
+          orgId="org-1"
+          workspaceId="ws-1"
+          linkToDetail={false}
+        />,
+      );
+      openDropdownMenu();
+
+      expect(menuItems()).toEqual([
+        "Edit trigger",
+        "View trigger's runs",
+        "Copy run id",
+      ]);
+      expect(
+        screen.getByRole("menuitem", { name: "View trigger's runs" }),
+      ).toHaveAttribute(
+        "href",
+        "/org-1/workspace/ws-1/trigger-runs?triggerId=trigger-1",
+      );
+    });
+
+    it("does not open the run when the menu is opened or used", () => {
+      render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
+      const trigger = screen.getByRole("button", {
+        name: "Actions for Nightly digest run",
+      });
+
+      openDropdownMenu();
+      const copy = screen.getByRole("menuitem", { name: "Copy run id" });
+      const choosing = createEvent.click(copy);
+      fireEvent(copy, choosing);
+      expect(choosing.defaultPrevented).toBe(true);
+
+      const opening = createEvent.click(trigger);
+      fireEvent(trigger, opening);
+      expect(opening.defaultPrevented).toBe(true);
+    });
   });
 
   // #647: someone stopped it, nothing faulted — so it is not drawn as a failure.
