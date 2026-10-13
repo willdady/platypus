@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.20.0](https://github.com/willdady/platypus/compare/v3.19.0...v3.20.0) (2026-10-13)
+
+
+### Features
+
+* **backend:** tell A2A clients when a completed Task's reply was cut short ([#1422](https://github.com/willdady/platypus/issues/1422)) ([75621b7](https://github.com/willdady/platypus/commit/75621b73ddfe0a641d425a9b5a55f7f1cdbffd75))
+* flag A2A endpoints with no live tokens ([#1421](https://github.com/willdady/platypus/issues/1421)) ([8dcf0ef](https://github.com/willdady/platypus/commit/8dcf0efd3b02fa36acfa1d459001e07e88f86705))
+* **frontend:** divide the Pinned agents group from the rest ([#1426](https://github.com/willdady/platypus/issues/1426)) ([50d9727](https://github.com/willdady/platypus/commit/50d972762c5378d2a77e8e619abd70bc9aad2747))
+* **frontend:** filter the Workspace home Skills list by name and by agent ([#1418](https://github.com/willdady/platypus/issues/1418)) ([b64c3bd](https://github.com/willdady/platypus/commit/b64c3bd2fa3764675fa7463513689ab7e3b4de8f))
+* **frontend:** render mermaid diagrams in Chat ([#1411](https://github.com/willdady/platypus/issues/1411)) ([7bc2f10](https://github.com/willdady/platypus/commit/7bc2f1042a5570cfd1113c7834d6f30afcc30fdc))
+* **frontend:** standardise empty states with EmptyCard and ListState ([#1429](https://github.com/willdady/platypus/issues/1429)) ([f9f4f8d](https://github.com/willdady/platypus/commit/f9f4f8dfbe80d34113e2d1bc89c2ee86ec936e1b))
+* **frontend:** syntax-highlight code blocks in Chat ([#1412](https://github.com/willdady/platypus/issues/1412)) ([ab0127c](https://github.com/willdady/platypus/commit/ab0127c4d6fc455bbb15ede922a5552d8f12bd60))
+* pin Agents in a Workspace ([#1417](https://github.com/willdady/platypus/issues/1417)) ([4225532](https://github.com/willdady/platypus/commit/4225532645c293691e8c33a9a5269f685f5a1053))
+
+
+### Bug Fixes
+
+* **backend:** refuse symlink zip entries regardless of made-by OS ([#1415](https://github.com/willdady/platypus/issues/1415)) ([bb19965](https://github.com/willdady/platypus/commit/bb199659bb1ebed0c8d991ff4e730691786a7e85))
+* **frontend:** align Trigger card badges with Skill cards and hide empty filters ([#1427](https://github.com/willdady/platypus/issues/1427)) ([b2ee5d5](https://github.com/willdady/platypus/commit/b2ee5d57f45f3498c1f4b2fe64a10995de1e025c))
+* **frontend:** block Skill delete while agent changes are unsaved ([#1413](https://github.com/willdady/platypus/issues/1413)) ([579d188](https://github.com/willdady/platypus/commit/579d188fa9da4454bb297109b41cbe498e2e87ba))
+* **frontend:** disable New chat when the workspace has no providers ([#1431](https://github.com/willdady/platypus/issues/1431)) ([c4b5c1e](https://github.com/willdady/platypus/commit/c4b5c1e138cc847a4f91286a64e7bf56da1b4e5c))
+* **frontend:** keep a Trigger timezone the User picked before the session loads ([#1414](https://github.com/willdady/platypus/issues/1414)) ([b6c294a](https://github.com/willdady/platypus/commit/b6c294a8a89f2fb9f3821695a7d4001956269e1a))
+* **frontend:** show one clear button on the Chat and Skill search inputs ([#1425](https://github.com/willdady/platypus/issues/1425)) ([9f03309](https://github.com/willdady/platypus/commit/9f03309982382af5ca62edbeb4ee27f5283a5226))
+* **frontend:** stop the Trigger timezone test timing out on CI ([#1419](https://github.com/willdady/platypus/issues/1419)) ([eef4ef5](https://github.com/willdady/platypus/commit/eef4ef512f65dbf141568b92852396f5dd4b2405))
+
 ## [3.19.0](https://github.com/willdady/platypus/compare/v3.18.0...v3.19.0) (2026-10-11)
 
 
