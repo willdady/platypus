@@ -47,9 +47,11 @@ The **Auth** dropdown controls the credential fields:
 - **None** — no authentication.
 - **Bearer** — reveals a **Bearer Token** field; sent as an `Authorization`
   header on every request.
-- **OAuth** — reveals OAuth fields: **Client ID**, **Client Secret** (leave blank
-  if the server supports dynamic client registration), and **OAuth Scopes** (a
-  space-separated list — required by some providers, e.g. Google).
+- **OAuth** — reveals OAuth fields: **Client ID**, **Client Secret** and
+  **OAuth Scopes** (a space-separated list — required by some providers, e.g.
+  Google). Leave both **Client ID** and **Client Secret** blank to use the
+  server's dynamic client registration; registration runs only when **Client
+  ID** is empty. Fill in **Client ID** alone for a public client.
 
 ### Add custom headers (optional)
 
@@ -61,13 +63,14 @@ Under **Custom Headers**, add any extra HTTP headers to send with every request
 ### Authorize and test
 
 - For **OAuth** servers, an authorization panel shows the status (**Not
-  authorized** / **Authorized**). Click **Authorize** to complete the OAuth flow;
-  use **Re-authorize** or **Revoke** later as needed. Changing an OAuth MCP's
+  authorized** / **Authorized**). Click **Authorize** to complete the OAuth flow
+  — it saves the MCP first, including any credentials you just entered. Use **Re-authorize** or **Revoke** later as needed. Changing an OAuth MCP's
   **URL** also clears its **Client ID**, **Client Secret** and authorization —
   re-enter them and click **Authorize** again.
 - Click **Test connection** to verify the server responds — on success it lists
   the tools the server exposes, already shown under the namespaced names
-  described below. Then **Save** (**Update** on an MCP that already exists).
+  described below. On an **OAuth** MCP the button stays disabled until the MCP
+  is saved and **Authorized**. Then **Save** (**Update** on an MCP that already exists).
 
 ## How an MCP resolves to a tool set
 
@@ -102,9 +105,10 @@ so the next turn lists them fresh.
 <Callout type="warning">
   An **Authorized** panel means Platypus holds a token, not that the server
   still accepts it. The symptom is an Agent that quietly stops using an MCP's
-  tools: nothing in the Chat says the MCP was dropped. Open the MCP and click
-  **Test connection**. If it fails, click **Re-authorize**, or replace the
-  Bearer token or header.
+  tools: nothing in the Chat says the MCP was dropped. A Trigger run does record
+  it, as a [run warning](/building-with-platypus/triggers#run-warnings). Open
+  the MCP and click **Test connection**. If it fails, click **Re-authorize**, or
+  replace the Bearer token or header.
 </Callout>
 
 ### Tool names are namespaced by MCP

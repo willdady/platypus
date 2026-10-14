@@ -22,6 +22,12 @@ You'll find Triggers in the **Triggers** section of your Workspace. The list
 shows every type; pick **Cron**, **Event** or **Inbound** in the menu above it,
 which reads **All types** by default, to see only that type.
 
+Each card in the list carries badges beside its name: its type (**Cron**,
+**Event** or **Inbound**), **One-off** for a One-off Trigger, **Fired** once a
+One-off has fired, and **Disabled** for a Trigger that is switched off. An
+Inbound card also lists the Trigger's inputs and flags its token: **Token
+expiring soon**, **Expired** or **No token**.
+
 ## Create a Trigger
 
 <Steps>
@@ -57,8 +63,8 @@ editing a Trigger shows the zone it was saved with. A **Next Run Preview** shows
 Trigger** to run once, at the first time the schedule names.
 
 A One-off Trigger is spent once it fires. It stays switched off for good: you
-cannot re-enable it or change its schedule, only rename or delete it, so its
-form greys out the schedule and **Enabled**. To run it again, create a new one.
+cannot re-enable it or change its schedule, so its form greys out the schedule
+and **Enabled**. Every other field stays editable, and you can delete it. To run it again, create a new one.
 A fired One-off Trigger drops out of the Triggers list and the Workspace home
 count; switch on **Show fired** above the list to see it. **Show fired** is greyed out while the list shows only **Event** or
 **Inbound** Triggers, since only a Cron Trigger can be a One-off. It is deleted, together with its run, **7 days** after that run ends,
@@ -370,7 +376,7 @@ already had into a wait.
 
 A `404` does not say why. An unknown Trigger, a missing, wrong, revoked or
 expired token, a disabled Trigger, a Workspace the Organization hasn't allowed,
-a Workspace Owner who has left the Organization or is banned, and a Trigger of
+a banned Workspace Owner, and a Trigger of
 another type all get the same answer, so a caller without the token learns
 nothing about what exists. Look at **Last rejected** on the
 Trigger to see that calls are being refused.
@@ -513,8 +519,7 @@ ended in an error. A clean run answers `[]` and `0`.
 Polling is for short-term checks. It goes through the same check as a call, so
 it answers `404` once the run is pruned from run history, and also as soon as
 the token is regenerated, revoked or expired, the Trigger is disabled, the
-Organization stops allowing the Workspace, or the Workspace Owner leaves the
-Organization or is banned. A refused poll is not logged and
+Organization stops allowing the Workspace, or the Workspace Owner is banned. A refused poll is not logged and
 does not move **Last rejected**.
 
 To hear when a run ends without polling, subscribe a
@@ -534,7 +539,7 @@ linking to it. Older runs are pruned per Trigger, keeping at least its newest
 To see whether a Trigger is failing, you don't need this page: every Trigger in
 the Workspace home list shows a **Last run** line with how long ago its newest
 run started, followed by an icon for that run's status: green for success, red
-for a failure. Hover the time for the exact date, or the icon for the status. A Trigger that
+for a failure or a _Suppressed_ firing. Hover the time for the exact date, or the icon for the status. A Trigger that
 has never run shows no Last run line. The list refreshes when you return to the
 tab, so a _Running_ status there can lag behind the run.
 
@@ -687,17 +692,20 @@ Operator can search, whose `reason` says why — see [the inbound call
 log](/reference/backend-configuration#the-inbound-call-log).
 
 A Trigger runs as its Workspace Owner, so none of the Workspace's Triggers runs
-once the Owner can no longer act: they have left the Organization, or a Super
-Admin has banned them. A scheduled or event Trigger whose time comes then
-records no run, and its schedule moves on as if it had run. An Inbound call is
-refused with a `404`, and a call accepted just before the ban ends its run
-_Failed_. Removing the Owner from the Organization also switches every one of
-their Triggers off, and inviting them back does not switch them on again —
-the Owner has to. A ban switches nothing off: a ban with an expiry stops
+while a Super Admin has banned the Owner. A scheduled or event Trigger whose
+time comes then records no run, and its schedule moves on as if it had run. An
+Inbound call is refused with a `404`, and a call accepted just before the ban
+ends its run _Failed_. A ban switches nothing off: a ban with an expiry stops
 counting once it runs out, and the Triggers act again without being switched
-back on. A Super Admin who owns a
-Workspace keeps its Triggers running without being a member of the
-Organization, but not while banned.
+back on. A Super Admin who owns a Workspace keeps its Triggers running without
+being a member of the Organization, but not while banned.
+
+A member who owns Workspaces can't be removed from the Organization until each
+one is transferred to a new Owner or deleted.
+[Transferring a Workspace](/administering/workspaces#transferring-a-workspace)
+switches off every Trigger in it, revokes every Inbound token, and cancels any
+accepted Inbound call still waiting to start. The new Owner switches back on the
+Triggers they want and issues new tokens; until then, nothing runs as them.
 
 ## When a run stops early
 

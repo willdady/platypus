@@ -70,7 +70,8 @@ Platypus reads the Skill from `SKILL.md`:
 - Every other frontmatter key, such as `license` or `compatibility`, is kept
   as-is and shown read-only on the Skill. Platypus doesn't act on them.
 - Every other file in the zip is stored with the Skill at its path inside the
-  folder. `__MACOSX/` and `.DS_Store` are ignored.
+  folder. `__MACOSX/` and `.DS_Store` entries aren't stored, but they still
+  count toward the entry and size limits below.
 
 Importing always creates a new Skill. If a Skill with that name already exists
 in the Workspace (or, for a Shared Skill, in the Organization), the import is
@@ -86,7 +87,9 @@ refused — use **Replace bundle** on the existing Skill instead.
 | Frontmatter              | 16 KiB, and a YAML mapping |
 
 A zip is also refused if any entry has an absolute path, a `..` segment or a
-backslash, if it contains a symlink, or if two entries name the same path. A zip
+backslash, if it contains a symlink or an encrypted entry, if an entry is
+compressed with anything other than Deflate (or stored uncompressed), or if two
+entries name the same path. A zip
 inside the zip is stored as an ordinary file. Any problem rejects the whole
 import with a message naming it, and nothing is saved.
 
@@ -94,7 +97,7 @@ import with a message naming it, and nothing is saved.
 
 Open a Skill to see its **Bundle** card:
 
-- **Files** lists every bundled file other than `SKILL.md`, with its size.
+- It lists every bundled file other than `SKILL.md`, with its size.
   Files are view-only; download one to read it.
 - **Frontmatter** shows the keys kept from the imported `SKILL.md`.
 - **Export** downloads the Skill as a zip: a folder named after the Skill
@@ -207,17 +210,9 @@ Skills it uses, or **Unattached** to find the Skills no Agent uses yet.
 
 ## How `loadSkill` surfaces a Skill
 
-When an Agent has Skills attached, Platypus injects just their names and
-descriptions into the Agent's instructions, like:
-
-```xml
-<skills>
-  <skill name="write-release-note">Draft a release note from a list of merged PRs…</skill>
-</skills>
-```
-
-along with guidance to **use the `loadSkill` tool** when a request matches one.
-The model then calls `loadSkill` with the Skill's name, and the tool returns that
+When an Agent has Skills attached, Platypus puts just their names and
+descriptions into the Agent's instructions, with guidance to **use the
+`loadSkill` tool** when a request matches one. The model then calls `loadSkill` with the Skill's name, and the tool returns that
 Skill's full **body** — which the model reads before responding. Nothing in the
 body costs context until the moment it's actually needed.
 
@@ -248,6 +243,9 @@ A Skill lives at exactly one scope:
   **Organization** badge and are read-only in your Workspace: you can attach
   them to your Agents and the Agent can `loadSkill` them, but only an Org Admin
   can edit the Skill itself.
+
+An Org Admin can turn a Workspace Skill into a Shared one with **Promote to
+organization** in the Skill's menu — see [Promote](/concepts/sharing#promote).
 
 <Callout type="info">
   An Agent can load only the Skills attached to it — including a Shared Skill,

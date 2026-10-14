@@ -46,8 +46,9 @@ writing anything long, so you don't restate what Platypus already supplies.
 
 Open the **Model** dropdown and pick a model. Models are grouped under each
 **Provider** available in your Workspace. If a model you expect is missing, no
-available Provider has it enabled — that's an Org Admin setting (see
-[Providers & models](/concepts/providers)).
+available Provider has it enabled — ask whoever manages that Provider: an Org
+Admin by default, or the Workspace Owner where an Org Admin has let them manage
+their own (see [Providers & models](/concepts/providers)).
 
 A model listed under a name that isn't a vendor model id — `fast`, say — has
 been given a [Model alias](/concepts/providers#model-aliases). Pick it and the
@@ -64,6 +65,9 @@ button then reads **Update**.
 
 </Steps>
 
+A Shared Agent, badged **Organization** in the list, opens read-only in a
+Workspace. Edit or delete it from **Organization settings**.
+
 <Callout type="info">
   Selecting an Agent on a Chat replaces choosing a Provider and model by hand —
   the Agent already carries those choices.
@@ -75,8 +79,8 @@ button then reads **Update**.
   only exists on a Chat where you picked a Provider and model directly. Select
   an Agent and the button is gone, because everything it would edit lives on the
   Agent. To try a different temperature or a different prompt for one
-  conversation, either use a direct Provider and model, or copy the Agent and
-  edit the copy. See
+  conversation, either use a direct Provider and model, or **Clone** the Agent
+  and edit the copy. See
   [Chat](/building-with-platypus/chat#per-chat-settings-and-when-they-exist).
 </Callout>
 
@@ -201,7 +205,7 @@ Everything else is absent:
 ### When a Sub-Agent can't run
 
 Selecting a Sub-Agent in the form is not a guarantee it will be there at run
-time. Each one is resolved and built fresh on every turn, and four things stop
+time. Each one is resolved and built fresh on every turn, and these things stop
 it:
 
 - The Sub-Agent is **not available in this Workspace** — it was deleted, or it
@@ -290,7 +294,8 @@ is refused, naming each Trigger — delete those Triggers or switch them to
 another Agent first. A deleted Agent is also removed from every other Agent's
 **Sub-Agents** card, and its [A2A endpoints](/building-with-platypus/a2a-endpoints#deleting)
 are deleted with it, tokens included — any outside client calling them stops
-working, with no warning.
+working, with no warning. Every [Notification](/building-with-platypus/notifications)
+the Agent posted is deleted too.
 
 ## Where to next
 
