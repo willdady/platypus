@@ -50,6 +50,7 @@ import {
   Sparkles,
   Trash2,
   TriangleAlert,
+  Unlink,
   UserRound,
 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
@@ -112,8 +113,7 @@ const UserInvocableBadge = ({ skill }: { skill: SkillWithScope }) => {
 // with an "N agent(s)" count whose tooltip lists the agents, or a warning when
 // the Skill is attached to no agents. Rendered for both workspace-scoped and
 // attached org-scoped (Shared) Skills (#296). The trigger uses preventDefault
-// (not stopPropagation) so the card's own click — navigation or opening the
-// manage dialog — still fires.
+// so tapping the count does not follow the card's link.
 const SkillAgentsIndicator = ({ agents }: { agents: Agent[] }) => (
   <div className="mt-1 text-xs text-muted-foreground">
     {agents.length > 0 ? (
@@ -363,13 +363,11 @@ export const SkillsList = ({
             const agentCount = skillAgents.length;
 
             if (isOrgScopedInWorkspace) {
+              // Like a Shared Agent: a plain card, with Detach named in its
+              // menu rather than behind the card's own click.
               return (
                 <li key={skill.id}>
-                  <Item
-                    variant="outline"
-                    className="h-full cursor-pointer"
-                    onClick={() => orgSkillDetach.open(skill)}
-                  >
+                  <Item variant="outline" className="h-full">
                     <ItemContent>
                       <div className="flex items-center gap-2">
                         <ItemTitle>{skill.name}</ItemTitle>
@@ -385,9 +383,41 @@ export const SkillsList = ({
                       </ItemDescription>
                       <SkillAgentsIndicator agents={skillAgents} />
                     </ItemContent>
-                    <ItemActions>
-                      <Pencil className="size-4" />
-                    </ItemActions>
+                    {canAttach && (
+                      <ItemActions>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              className="cursor-pointer text-muted-foreground"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Actions for ${skill.name}`}
+                            >
+                              <EllipsisVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem asChild>
+                              <Link
+                                className="cursor-pointer"
+                                href={orgRoutes(orgId).settings.skillDetail(
+                                  skill.id,
+                                )}
+                              >
+                                <Pencil /> Edit in org settings
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() => orgSkillDetach.open(skill)}
+                            >
+                              <Unlink /> Detach
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </ItemActions>
+                    )}
                   </Item>
                 </li>
               );
@@ -498,12 +528,11 @@ export const SkillsList = ({
 
       <DetachSharedDialog
         detach={orgSkillDetach}
-        title="Organization Skill"
+        title="Detach shared skill"
         description={(selected) => (
           <>
-            The skill <strong>{selected.name}</strong> is managed at the
-            organization level. It can only be edited from the organization
-            settings.
+            Detach <strong>{selected.name}</strong> from this workspace? The
+            shared skill itself is not deleted; it just stops appearing here.
           </>
         )}
         canDetach={canAttach}

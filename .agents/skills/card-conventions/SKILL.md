@@ -1,0 +1,71 @@
+---
+name: card-conventions
+description: Card and ⋮ menu conventions for Platypus frontend lists — what clicking a card opens, the ⋮ menu order, Shared items, and Clone. Use when adding or changing a list, card or ⋮ menu in apps/frontend.
+---
+
+# Frontend Card Conventions
+
+The Workspace home's Agents, Boards, Dashboards, Triggers and Skills cards are
+the reference implementation; a new card list reads the same way.
+
+## What clicking a card opens
+
+**A card opens the item's main view, unless it carries an explicit primary
+button.** The primary button is then the card's one action, and the card
+itself stays a plain, non-clickable surface.
+
+| Item      | Card click opens                  | Why                                             |
+| --------- | --------------------------------- | ----------------------------------------------- |
+| Agent     | nothing — **New chat** is primary | the visible button is the main action           |
+| Board     | the board                         | its main view                                   |
+| Dashboard | the dashboard                     | its main view                                   |
+| Trigger   | its runs, filtered to it          | the runs are what a Trigger produces            |
+| Skill     | Edit                              | it has no view beyond its settings              |
+
+An item with no view beyond its settings opens Edit. Edit always lives in the
+⋮ menu too, so it is reachable from every card.
+
+## The ⋮ menu order
+
+```
+Edit
+item-specific (Pin, Promote to organization, Manage attachments, …)
+Clone
+Enable / Disable
+───────── separator
+Delete
+```
+
+Skip the items that do not apply and keep the rest in this order. Delete is
+always last, alone below the separator, in the destructive style.
+
+## Shared items
+
+A Shared resource attached to a Workspace (`scope: "organization"`) is locked
+there. Its card gets a ⋮ menu with:
+
+- **Edit in org settings**, linking to the item in the organization settings,
+  only for a User who can manage Shared resources (`canManageSharedResource`);
+- the item-specific items that still apply (Pin);
+- separator, then **Detach**, in Delete's place.
+
+Detach is always a named menu item that opens the shared Detach dialog
+(`DetachSharedDialog`). A Shared card's own click opens its main view if it has
+one, and otherwise does nothing. When the User has no items to offer, the card
+has no ⋮ button at all.
+
+## Icons and badges
+
+Every action lives in the ⋮ menu; a card shows no pencil or other bare action
+icon. A disabled item shows a Disabled badge in its title row — the secondary
+`Badge` with the `Pause` icon, as Trigger cards draw it.
+
+## Clone
+
+Clone is done in the browser: copy the item's fields, drop its identity
+(`id`, timestamps, `scope`), and send a normal create. There is no backend
+clone route.
+
+- The copy is named `<name> (copy)`, editable in the Clone dialog.
+- Tokens and other issued credentials are never copied.
+- After the create, go to the copy's edit page.

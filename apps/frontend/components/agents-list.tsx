@@ -222,7 +222,7 @@ export const AgentsList = ({
 
   const handleCloneClick = (agent: Agent) => {
     setAgentToClone(agent);
-    setCloneName(`${agent.name} (Copy)`);
+    setCloneName(`${agent.name} (copy)`);
     setCloneError(null);
     setCloneDialogOpen(true);
   };
@@ -314,42 +314,46 @@ export const AgentsList = ({
     );
   }
 
+  // Every card menu runs Edit → item-specific → Clone → separator → Delete
+  // (the `card-conventions` skill); a Shared Agent's Detach takes Delete's place.
   const renderMenuItems = (agent: AgentWithScope) => {
     const isOrgScoped = agent.scope === "organization";
-    return (
-      <>
-        {canPin && (
+    const pinItem = canPin && (
+      <DropdownMenuItem
+        className="cursor-pointer"
+        onSelect={() => handleTogglePin(agent)}
+      >
+        {agent.isPinned ? (
           <>
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onSelect={() => handleTogglePin(agent)}
-            >
-              {agent.isPinned ? (
-                <>
-                  <PinOff /> Unpin
-                </>
-              ) : (
-                <>
-                  <Pin /> Pin
-                </>
-              )}
-            </DropdownMenuItem>
-            {(!isOrgScoped || canManageShared) && <DropdownMenuSeparator />}
+            <PinOff /> Unpin
+          </>
+        ) : (
+          <>
+            <Pin /> Pin
           </>
         )}
-        {isOrgScoped ? (
-          // A Shared Agent is locked in the Workspace; only an Org Admin can
-          // open it in the org settings editor or detach it here (ADR-0007).
-          canManageShared && (
+      </DropdownMenuItem>
+    );
+
+    if (isOrgScoped) {
+      // A Shared Agent is locked in the Workspace; only an Org Admin can
+      // open it in the org settings editor or detach it here (ADR-0007).
+      return (
+        <>
+          {canManageShared && (
+            <DropdownMenuItem asChild>
+              <Link
+                className="cursor-pointer"
+                href={orgRoutes(orgId).settings.agentDetail(agent.id)}
+              >
+                <Pencil /> Edit in org settings
+              </Link>
+            </DropdownMenuItem>
+          )}
+          {pinItem}
+          {canManageShared && (
             <>
-              <DropdownMenuItem asChild>
-                <Link
-                  className="cursor-pointer"
-                  href={orgRoutes(orgId).settings.agentDetail(agent.id)}
-                >
-                  <Pencil /> Edit in org settings
-                </Link>
-              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer"
                 onSelect={() => orgAgentDetach.open(agent)}
@@ -357,40 +361,43 @@ export const AgentsList = ({
                 <Unlink /> Detach
               </DropdownMenuItem>
             </>
-          )
-        ) : (
-          <>
-            <DropdownMenuItem asChild>
-              <Link
-                className="cursor-pointer"
-                href={routes.agents.detail(agent.id)}
-              >
-                <Pencil /> Edit
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onSelect={() => handleCloneClick(agent)}
-            >
-              <Copy /> Clone
-            </DropdownMenuItem>
-            {canManageShared && (
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => promote.open(agent)}
-              >
-                <ArrowUpFromLine /> Promote to organization
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="cursor-pointer text-destructive focus:text-destructive"
-              onSelect={() => handleDeleteClick(agent)}
-            >
-              <Trash2 /> Delete
-            </DropdownMenuItem>
-          </>
+          )}
+        </>
+      );
+    }
+
+    return (
+      <>
+        <DropdownMenuItem asChild>
+          <Link
+            className="cursor-pointer"
+            href={routes.agents.detail(agent.id)}
+          >
+            <Pencil /> Edit
+          </Link>
+        </DropdownMenuItem>
+        {pinItem}
+        {canManageShared && (
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onSelect={() => promote.open(agent)}
+          >
+            <ArrowUpFromLine /> Promote to organization
+          </DropdownMenuItem>
         )}
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={() => handleCloneClick(agent)}
+        >
+          <Copy /> Clone
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="cursor-pointer text-destructive focus:text-destructive"
+          onSelect={() => handleDeleteClick(agent)}
+        >
+          <Trash2 /> Delete
+        </DropdownMenuItem>
       </>
     );
   };

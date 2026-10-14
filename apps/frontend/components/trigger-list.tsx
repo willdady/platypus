@@ -44,7 +44,6 @@ import {
   Pencil,
   Trash2,
   Pause,
-  List,
   TriangleAlert,
   CalendarClock,
   CircleCheck,
@@ -320,7 +319,8 @@ export const TriggerList = ({
         {shown.map((trigger) => (
           <li key={trigger.id}>
             <Item variant="outline" className="h-full cursor-pointer" asChild>
-              <Link href={routes.triggers.detail(trigger.id)}>
+              {/* The card opens the Trigger's runs; Edit is in the menu. */}
+              <Link href={routes.triggerRuns.forTrigger(trigger.id)}>
                 <ItemContent>
                   <div className="flex items-center gap-2">
                     <ItemTitle>{trigger.name}</ItemTitle>
@@ -434,14 +434,6 @@ export const TriggerList = ({
                           href={routes.triggers.detail(trigger.id)}
                         >
                           <Pencil /> Edit
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link
-                          className="cursor-pointer"
-                          href={routes.triggerRuns.forTrigger(trigger.id)}
-                        >
-                          <List /> View runs
                         </Link>
                       </DropdownMenuItem>
                       {/* A fired One-off is spent: it cannot be re-armed. */}
