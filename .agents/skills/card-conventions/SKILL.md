@@ -1,6 +1,6 @@
 ---
 name: card-conventions
-description: Card and ⋮ menu conventions for Platypus frontend lists — what clicking a card opens, the ⋮ menu order, Shared items, and Clone. Use when adding or changing a list, card or ⋮ menu in apps/frontend.
+description: Card conventions for Platypus frontend lists. Use when adding or changing a list, card or ⋮ menu in apps/frontend.
 ---
 
 # Frontend Card Conventions
@@ -36,8 +36,8 @@ Enable / Disable
 Delete
 ```
 
-Skip the items that do not apply and keep the rest in this order. Delete is
-always last, alone below the separator, in the destructive style.
+Skip the items that do not apply and keep the rest in this order. Delete
+takes the destructive style.
 
 ## Shared items
 
@@ -56,16 +56,16 @@ has no ⋮ button at all.
 
 ## Icons and badges
 
-Every action lives in the ⋮ menu; a card shows no pencil or other bare action
-icon. A disabled item shows a Disabled badge in its title row — the secondary
-`Badge` with the `Pause` icon, as Trigger cards draw it.
+Every action lives in the ⋮ menu, so the card itself carries only content and
+badges. A disabled item shows a Disabled badge in its title row — the secondary
+`Badge` with the `Pause` icon and the word Disabled, as Trigger cards draw it.
 
 ## Clone
 
-Clone is done in the browser: copy the item's fields, drop its identity
-(`id`, timestamps, `scope`), and send a normal create. There is no backend
-clone route.
+Clone (Agents today) runs in the browser: take the item's fields, drop its
+identity (`id`, timestamps, `scope`), and send the ordinary create request.
 
-- The copy is named `<name> (copy)`, editable in the Clone dialog.
-- Tokens and other issued credentials are never copied.
-- After the create, go to the copy's edit page.
+- The clone is named `<name> (copy)`, editable in the Clone dialog.
+- Tokens and other issued credentials stay with the original; a clone that
+  needs one gets its own.
+- After the create, go to the clone's edit page.

@@ -314,8 +314,8 @@ export const AgentsList = ({
     );
   }
 
-  // Every card menu runs Edit → item-specific → Clone → separator → Delete
-  // (the `card-conventions` skill); a Shared Agent's Detach takes Delete's place.
+  // The ⋮ order is the `card-conventions` skill's: Edit → item-specific →
+  // Clone → separator → Delete; a Shared Agent's Detach takes Delete's place.
   const renderMenuItems = (agent: AgentWithScope) => {
     const isOrgScoped = agent.scope === "organization";
     const pinItem = canPin && (

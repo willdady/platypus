@@ -18,6 +18,7 @@ import {
   mutate,
   toastError,
   toastInfo,
+  menuItemLabels,
 } from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -348,9 +349,6 @@ describe("AgentsList list states", () => {
 });
 
 describe("AgentsList menu", () => {
-  const menuItems = () =>
-    screen.getAllByRole("menuitem").map((item) => item.textContent?.trim());
-
   afterEach(() => {
     authState.ownsWorkspace = undefined;
   });
@@ -361,7 +359,7 @@ describe("AgentsList menu", () => {
     renderAgents([workspaceAgent]);
     openDropdownMenu();
 
-    expect(menuItems()).toEqual([
+    expect(menuItemLabels()).toEqual([
       "Edit",
       "Pin",
       "Promote to organization",
@@ -376,6 +374,6 @@ describe("AgentsList menu", () => {
     renderAgents([orgAgent]);
     openDropdownMenu();
 
-    expect(menuItems()).toEqual(["Edit in org settings", "Pin", "Detach"]);
+    expect(menuItemLabels()).toEqual(["Edit in org settings", "Pin", "Detach"]);
   });
 });

@@ -13,6 +13,7 @@ import {
   stubRejectedSave,
   mutate,
   toastError,
+  menuItemLabels,
 } from "@/lib/list-test-harness";
 import { openDropdownMenu, selectOption } from "@/lib/test-utils";
 
@@ -466,8 +467,6 @@ describe("TriggerList card", () => {
     renderTriggers([cronTrigger]);
     openDropdownMenu();
 
-    expect(
-      screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
-    ).toEqual(["Edit", "Disable", "Delete"]);
+    expect(menuItemLabels()).toEqual(["Edit", "Disable", "Delete"]);
   });
 });

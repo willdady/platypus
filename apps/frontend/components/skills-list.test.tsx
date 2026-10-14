@@ -15,6 +15,7 @@ import {
   toastError,
   toastInfo,
   authState,
+  menuItemLabels,
 } from "@/lib/list-test-harness";
 import { openDropdownMenu, selectOption } from "@/lib/test-utils";
 
@@ -56,9 +57,6 @@ function renderOrgSkills(skills: SkillWithScope[], menuItem?: string) {
   return renderList(<SkillsList orgId="org1" />, menuItem);
 }
 
-const menuItems = () =>
-  screen.getAllByRole("menuitem").map((item) => item.textContent?.trim());
-
 beforeEach(resetListHarness);
 
 afterEach(() => {
@@ -69,7 +67,7 @@ afterEach(() => {
 // --- Tests -------------------------------------------------------------------
 
 describe("SkillsList detach", () => {
-  it("surfaces the backend's reason and keeps the row when detach is refused", async () => {
+  it("surfaces the backend's reason and keeps the dialog open when detach is refused", async () => {
     const fetchMock = stubRejectedSave("This skill is in use by an agent", 409);
 
     renderSkills([orgSkill], "Detach");
@@ -105,7 +103,7 @@ describe("SkillsList shared skill card", () => {
     renderSkills([orgSkill]);
     openDropdownMenu();
 
-    expect(menuItems()).toEqual(["Edit in org settings", "Detach"]);
+    expect(menuItemLabels()).toEqual(["Edit in org settings", "Detach"]);
     expect(
       screen.getByRole("menuitem", { name: "Edit in org settings" }),
     ).toHaveAttribute("href", "/org1/settings/skills/s1");
