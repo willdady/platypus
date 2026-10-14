@@ -21,6 +21,9 @@ import {
 } from "@/components/ui/collapsible";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
+import { SearchInput } from "@/components/search-input";
+import { ListState } from "@/components/list-state";
+import { defaultFilter } from "cmdk";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { AgentFormSkeleton } from "@/components/agent-form-skeleton";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
@@ -163,7 +166,16 @@ const AgentForm = ({
   const { data: skillsData, isLoading: skillsLoading } = useScopedSWR<{
     results: Skill[];
   }>("skills", scope);
-  const skills = skillsData?.results || [];
+  const skills = [...(skillsData?.results || [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const [skillQuery, setSkillQuery] = useState("");
+  const query = skillQuery.trim();
+  // View-only: hidden Skills keep their place in formData.skillIds. cmdk's
+  // scorer is called directly, as on the workspace home Skills list.
+  const shownSkills = skills.filter(
+    (skill) => !query || defaultFilter(skill.name, query) > 0,
+  );
 
   // Fetch agents for Sub-Agent selection, unless the page handed them in
   const { data: agentsData, isLoading: agentsLoading } = useScopedSWR<{
@@ -733,39 +745,53 @@ const AgentForm = ({
               <CardTitle>Skills</CardTitle>
             </CardHeader>
             <CardContent>
-              <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {skills.map((skill) => (
-                  <Field key={skill.id} orientation="horizontal">
-                    <Switch
-                      id={`skill-${skill.id}`}
-                      className="cursor-pointer"
-                      checked={formData.skillIds.includes(skill.id)}
-                      onCheckedChange={(checked) => {
-                        setFormData((prevData) => {
-                          const newSkillIds = checked
-                            ? [...prevData.skillIds, skill.id]
-                            : prevData.skillIds.filter(
-                                (id: string) => id !== skill.id,
-                              );
-                          return {
-                            ...prevData,
-                            skillIds: newSkillIds,
-                          };
-                        });
-                      }}
-                      disabled={isSubmitting || readOnly}
-                    />
-                    <FieldLabel htmlFor={`skill-${skill.id}`}>
-                      <div className="flex flex-col">
-                        <p>{skill.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {skill.description}
-                        </p>
-                      </div>
-                    </FieldLabel>
-                  </Field>
-                ))}
-              </FieldGroup>
+              <SearchInput
+                placeholder="Search skills…"
+                aria-label="Search skills"
+                value={skillQuery}
+                onValueChange={setSkillQuery}
+                className="mb-4 w-full sm:w-64"
+                disabled={isSubmitting}
+              />
+              {shownSkills.length === 0 ? (
+                <ListState variant="empty">
+                  No skills match your search.
+                </ListState>
+              ) : (
+                <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {shownSkills.map((skill) => (
+                    <Field key={skill.id} orientation="horizontal">
+                      <Switch
+                        id={`skill-${skill.id}`}
+                        className="cursor-pointer"
+                        checked={formData.skillIds.includes(skill.id)}
+                        onCheckedChange={(checked) => {
+                          setFormData((prevData) => {
+                            const newSkillIds = checked
+                              ? [...prevData.skillIds, skill.id]
+                              : prevData.skillIds.filter(
+                                  (id: string) => id !== skill.id,
+                                );
+                            return {
+                              ...prevData,
+                              skillIds: newSkillIds,
+                            };
+                          });
+                        }}
+                        disabled={isSubmitting || readOnly}
+                      />
+                      <FieldLabel htmlFor={`skill-${skill.id}`}>
+                        <div className="flex flex-col">
+                          <p>{skill.name}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-6">
+                            {skill.description}
+                          </p>
+                        </div>
+                      </FieldLabel>
+                    </Field>
+                  ))}
+                </FieldGroup>
+              )}
             </CardContent>
           </Card>
         )}

@@ -416,3 +416,129 @@ describe("AgentForm loading gate", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 });
+
+describe("AgentForm Skills search", () => {
+  const skills = [
+    { id: "s2", name: "Writing", description: "Write well" },
+    { id: "s1", name: "Analysis", description: "Analyse data" },
+    { id: "s3", name: "Research", description: "Find sources" },
+  ];
+
+  beforeEach(() => {
+    resetFormHarness();
+    registerSwrData();
+    setDataFor("/skills", { results: skills });
+  });
+
+  const skillSwitchIds = () =>
+    screen
+      .queryAllByRole("switch")
+      .filter((el) => el.id.startsWith("skill-"))
+      .map((el) => el.id);
+
+  it("renders the Skills alphabetically, with clamped descriptions", () => {
+    renderCreateForm();
+
+    expect(skillSwitchIds()).toEqual(["skill-s1", "skill-s3", "skill-s2"]);
+    expect(screen.getByText("Write well")).toHaveClass("line-clamp-6");
+  });
+
+  it("narrows the switches by name, and restores them when cleared", () => {
+    renderCreateForm();
+    const search = screen.getByRole("searchbox", { name: "Search skills" });
+
+    fireEvent.change(search, { target: { value: "writ" } });
+    expect(skillSwitchIds()).toEqual(["skill-s2"]);
+
+    fireEvent.change(search, { target: { value: "" } });
+    expect(skillSwitchIds()).toEqual(["skill-s1", "skill-s3", "skill-s2"]);
+  });
+
+  it("says so when the search matches nothing", () => {
+    renderCreateForm();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search skills" }), {
+      target: { value: "zzzz" },
+    });
+
+    expect(skillSwitchIds()).toEqual([]);
+    expect(
+      screen.getByText("No skills match your search."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders no Skills card when the Workspace has no Skills", () => {
+    setDataFor("/skills", { results: [] });
+    renderCreateForm();
+
+    expect(screen.queryByText("Skills")).toBeNull();
+    expect(
+      screen.queryByRole("searchbox", { name: "Search skills" }),
+    ).toBeNull();
+  });
+
+  it("keeps a selected Skill in skillIds on Save after the search hides it", async () => {
+    setDataFor("/agents/a1", {
+      id: "a1",
+      name: "Bot",
+      description: "A helpful bot",
+      instructions: "Be helpful",
+      providerId: "p1",
+      modelId: "gpt-4o",
+      maxSteps: 5,
+      skillIds: [],
+    });
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        agentId="a1"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Bot")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(document.getElementById("skill-s2")!);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search skills" }), {
+      target: { value: "analysis" },
+    });
+    expect(skillSwitchIds()).toEqual(["skill-s1"]);
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.skillIds).toEqual(["s2"]);
+  });
+
+  it("keeps the search usable on a read-only Shared Agent", async () => {
+    setDataFor("/agents/a1", {
+      id: "a1",
+      name: "Bot",
+      providerId: "p1",
+      modelId: "gpt-4o",
+      maxSteps: 5,
+      scope: "organization",
+    });
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        agentId="a1"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Bot")).toBeInTheDocument(),
+    );
+
+    expect(
+      screen.getByRole("searchbox", { name: "Search skills" }),
+    ).toBeEnabled();
+    expect(document.getElementById("skill-s1")).toBeDisabled();
+  });
+});
