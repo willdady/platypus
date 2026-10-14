@@ -98,7 +98,10 @@ export const ChatSettingsDialog = ({
   };
 
   return (
-    <DialogContent className="sm:max-w-[600px]" showCloseButton={false}>
+    <DialogContent
+      className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
+      showCloseButton={false}
+    >
       <DialogHeader>
         <DialogTitle>Chat Settings</DialogTitle>
         <DialogDescription>
@@ -114,6 +117,7 @@ export const ChatSettingsDialog = ({
             value={instructions}
             onChange={(e) => onInstructionsChange(e.target.value)}
             rows={3}
+            className="max-h-[15em] resize-none"
           />
           <FieldDescription>
             How the assistant should behave in this chat. Platypus builds the
