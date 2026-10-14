@@ -1,0 +1,151 @@
+---
+title: Docker adapter
+description: Run each Workspace's Sandbox as a container on the host's Docker daemon — enablement, socket permissions, and network allowlists.
+---
+
+import { Callout } from "nextra/components";
+
+# Docker adapter
+
+The Docker adapter (`backend: "docker"`) spawns one container per Workspace via
+the host's Docker daemon, accessed by **bind-mounting `/var/run/docker.sock`**
+into the backend container.
+
+<Callout type="error">
+  Mounting the Docker socket grants the backend container **effective root on
+  the host**. Use the Docker adapter only on single-node, single-operator
+  deployments (your laptop, a personal VPS). Do **not** enable it on a host you
+  share with anyone you don't trust, and never in a multi-tenant or
+  hostile-tenant environment.
+</Callout>
+
+This page is for the **Operator** and **Org Admin** who stand up the Docker
+backend. For what a Sandbox is, its environment variables, and who can configure
+it, see [Sandbox infrastructure](/self-hosting/sandbox).
+
+## Enabling it
+
+Because of that, the adapter is **off by default** and gated two ways:
+
+1. Plugin enablement. The adapter ships as the core Plugin `@platypus/docker`,
+   which has to be in `PLATYPUS_PLUGINS`. Without it the `"docker"` backend type
+   isn't registered at all (so you can't create un-runnable Sandbox rows).
+2. An opt-in compose overlay, `compose.sandbox.yaml`, which adds the socket mount
+   and lists the Plugin.
+
+Enable it by composing the overlay alongside the default stack:
+
+```bash
+docker compose -f compose.yaml -f compose.sandbox.yaml up
+```
+
+<Callout type="warning">
+  **The overlay replaces `PLATYPUS_PLUGINS`; it does not merge.** Whatever list
+  you put in `.env` is discarded, silently. Edit the list **inside
+  `compose.sandbox.yaml`** to your deployment's complete gate-able set — see
+  [Configuration → Plugins](/self-hosting/configuration#plugins).
+</Callout>
+
+## Socket permissions
+
+The backend runs as an unprivileged account, uid 1001, and the mounted socket
+keeps the ownership it has on the host, usually `root:docker` with a group id
+that differs from one distribution to the next. You do not normally have to do
+anything about this: the container starts as root, adds its account to whichever
+group owns the socket, and only then drops to uid 1001. The socket itself is
+never changed.
+
+If you pin the container to a user yourself (a `user:` key in `compose.yaml`,
+`docker run --user`, or a Kubernetes `runAsUser`), the container can no longer do
+that, so grant the group membership at the container level instead:
+
+```yaml
+services:
+  backend:
+    user: "1001:1001"
+    group_add:
+      - "999" # the gid of /var/run/docker.sock on the host: stat -c %g /var/run/docker.sock
+```
+
+Each container is spawned with fixed resource and security limits — a process
+cap (`PidsLimit`), a memory ceiling, and `no-new-privileges` — to contain
+runaway or hostile workloads. These are hardcoded in the adapter, not
+configurable per Sandbox.
+
+A command that hits its timeout, or whose Chat is stopped, is killed in the
+container along with the processes it started, including ones it sent to the
+background. The tool reports exit code `124` for a timeout. A file read is
+killed the same way after **30 seconds**, or as soon as its Chat is stopped. A
+process that clears its own environment (for
+example with `env -i`) is not tracked and keeps running.
+
+<Callout type="warning">
+  A container created by an earlier release has no init process to clean up
+  after a killed command, so its process cap still fills over time and commands
+  start failing. Delete the Sandbox and create it again to get a container with
+  one, the same way as [applying changed
+  reachability](#applying-changed-reachability). Deleting the Sandbox also
+  removes its files.
+</Callout>
+
+Horizontally-scaled deployments **cannot** use this adapter: sandbox state lives
+on a single host's Docker daemon, so each backend replica would have its own.
+Pick a remote backend such as the [SSH adapter](/self-hosting/sandbox/ssh)
+instead.
+
+## Host reachability: default-deny + admin-curated allowlists
+
+A new Sandbox can reach **no host service** until reachability is explicitly
+granted — the safe, default-deny posture. Reachability is expressed as two
+per-Sandbox fields on the Docker adapter, both defaulting to empty:
+
+- **`networks`** — Docker networks the sandbox container attaches to (reaches
+  other _containers_).
+- **`extraHosts`** — host-gateway aliases (reaches non-containerized _host_
+  processes, e.g. a bare-metal Ollama or internal proxy).
+
+The authority chain is honest and runs top-down:
+
+- The **Operator** declares the eligible set at deployment time via
+  `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG_DOCKER` — a
+  JSON array set at the deployment layer, _not_ an in-app screen.
+- An **Org Admin** selects a per-Sandbox subset of that allowlist. Submissions
+  are validated server-side against the allowlist; out-of-allowlist entries are
+  rejected.
+- A **Workspace Owner** cannot change reachability at all (a non-admin Owner gets
+  a 403).
+
+## Applying changed reachability
+
+Reachability is fixed at container creation. The adapter reuses whatever
+container already exists for the Workspace — starting it if it is stopped — and
+only reads `networks` and `extraHosts` when it creates a new one. So saving a
+changed allowlist has **no effect on a running sandbox**, and there is no
+"Recreate now" button or "pending" badge in the app to tell you so. On an
+existing Sandbox the screen offers **Save** and **Delete**, nothing else.
+
+Two ways to make a change take:
+
+1. **Delete the Sandbox and create it again.** Deleting the row fires the
+   adapter's `destroy()`, which removes the container and its volume; the next
+   tool call provisions a fresh container with the new reachability. Changing
+   the **backend** on an existing row does the same thing — it is a
+   destroy-then-update.
+2. **Remove the container out of band**, leaving the row alone:
+   `docker rm -f platypus-sandbox-<workspaceId>`. The named volume
+   `platypus-sandbox-vol-<workspaceId>` survives, so the sandbox filesystem
+   comes back with the container.
+
+<Callout type="error">
+  **Deleting a Sandbox destroys its data.** The Docker adapter's `destroy()`
+  removes the container *and* the named volume backing `/workspace`. Everything
+  an Agent built in that sandbox is gone, and there is no undo. If you only need
+  new reachability, prefer option 2 above, which preserves the volume.
+</Callout>
+
+<Callout type="warning">
+  The "Platypus database stays unreachable from sandboxes" property holds only
+  as long as the database's network is **not** in the allowlist. It's an outcome
+  of your allowlist configuration, not a structural guarantee — don't add the
+  database network.
+</Callout>

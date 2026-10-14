@@ -2589,17 +2589,17 @@ const UNPINNED_NUMBERS: (PagePhrase & { reason: string })[] = [
     reason: "form-field guidance, not a limit",
   },
   {
-    file: "self-hosting/sandbox.mdx",
+    file: "self-hosting/sandbox/docker.mdx",
     phrase: "30 seconds",
     reason: "the Docker sandbox's READ_TIMEOUT_MS; accurate, not yet pinned",
   },
   {
-    file: "self-hosting/sandbox.mdx",
+    file: "self-hosting/sandbox/ssh.mdx",
     phrase: "60 seconds",
     reason: "the SSH sandbox's IDLE_TIMEOUT_MS; accurate, not yet pinned",
   },
   {
-    file: "self-hosting/sandbox.mdx",
+    file: "self-hosting/sandbox/ssh.mdx",
     phrase: "600 seconds",
     reason: "MAX_SHELL_TIMEOUT_MS; accurate, not yet pinned",
   },
