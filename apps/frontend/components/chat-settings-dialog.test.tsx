@@ -57,6 +57,19 @@ describe("ChatSettingsDialog", () => {
     expect(helper).not.toHaveTextContent(/Skills|Sub-Agents/);
   });
 
+  // Issue #1440: `field-sizing-content` lets the field grow to fit pasted
+  // text, so both it and the dialog need a height cap to stay on screen.
+  // jsdom computes no layout, so the classes are all a test can see.
+  it("caps the Instructions field and the dialog height", () => {
+    renderDialog();
+
+    expect(screen.getByLabelText("Instructions")).toHaveClass("max-h-[15em]");
+    expect(screen.getByRole("dialog")).toHaveClass(
+      "max-h-[90vh]",
+      "overflow-y-auto",
+    );
+  });
+
   // Issue #539: the per-chat step ceiling lives beside the sampling settings,
   // labelled like the Agent form's field.
   it("renders a Max steps input", () => {
