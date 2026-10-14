@@ -207,7 +207,7 @@ export const TriggerRunRow = ({
           content's, so a long Trigger name, an error message or the stats
           line would widen the column past the row and push the actions off
           the right edge. */}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="font-medium break-words">{run.triggerName}</p>
         <div className="my-1 flex">{statusBadge(run.status)}</div>
         <p className="text-sm">{formatDateTime(run.startedAt)}</p>
@@ -255,10 +255,10 @@ export const TriggerRunRow = ({
               </span>
             )}
             {/* Cached input is a breakdown of the in figure above, which
-                  already includes it — never subtracted (issue #734). A tooltip
-                  on a cache icon so the token line stays as tight as it was:
-                  absent means the Provider reported no cache detail, which is
-                  never rendered as zero. */}
+                already includes it — never subtracted (issue #734). A tooltip
+                on a cache icon so the token line stays as tight as it was:
+                absent means the Provider reported no cache detail, which is
+                never rendered as zero. */}
             {stats.cacheReadTokens !== undefined ||
             stats.cacheWriteTokens !== undefined ? (
               <Tooltip>
@@ -286,9 +286,9 @@ export const TriggerRunRow = ({
               </span>
             )}
             {/* How full the context got on the run's LAST step, which is a
-                  different quantity from the cross-step sums above (ADR-0018).
-                  Absent where the Provider reported no usage — occupancy is
-                  then unknown and nothing is estimated. */}
+                different quantity from the cross-step sums above (ADR-0018).
+                Absent where the Provider reported no usage — occupancy is
+                then unknown and nothing is estimated. */}
             {stats.contextOccupancy !== undefined && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -311,8 +311,8 @@ export const TriggerRunRow = ({
           <TurnNotice className="mt-1">{RUN_STEP_LIMIT_NOTICE}</TurnNotice>
         )}
         {/* Warnings, never a status: a run that went without some of its
-              tools, or whose tool calls failed, can still end `success`
-              (#1184). Nothing extra for a clean run. */}
+            tools, or whose tool calls failed, can still end `success`
+            (#1184). Nothing extra for a clean run. */}
         {(run.unloadedToolSets.length > 0 || run.failedToolCalls > 0) && (
           <div role="group" aria-label={RUN_WARNINGS_LABEL}>
             {run.unloadedToolSets.map((unloaded) => (

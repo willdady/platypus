@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export const TriggerRunRowSkeleton = () => (
   <div className="p-4">
     <div className="flex items-center gap-4 justify-between">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex h-6 items-center">
           <Skeleton className="h-4 w-36" />
         </div>
