@@ -25,7 +25,7 @@ it, see [Sandbox infrastructure](/self-hosting/sandbox).
 
 ## Enabling it
 
-Because of that, the adapter is **off by default** and gated two ways:
+Because the socket mount grants root, the adapter is **off by default** and gated two ways:
 
 1. Plugin enablement. The adapter ships as the core Plugin `@platypus/docker`,
    which has to be in `PLATYPUS_PLUGINS`. Without it the `"docker"` backend type
@@ -66,6 +66,8 @@ services:
     group_add:
       - "999" # the gid of /var/run/docker.sock on the host: stat -c %g /var/run/docker.sock
 ```
+
+## Limits and timeouts
 
 Each container is spawned with fixed resource and security limits — a process
 cap (`PidsLimit`), a memory ceiling, and `no-new-privileges` — to contain
@@ -149,3 +151,10 @@ Two ways to make a change take:
   of your allowlist configuration, not a structural guarantee — don't add the
   database network.
 </Callout>
+
+## Where to next
+
+- [Sandbox infrastructure](/self-hosting/sandbox#workspace-default-environment-variables)
+  — the environment variables every Sandbox carries, and who can change them.
+- [Configuration → Plugins](/self-hosting/configuration#plugins) — the complete
+  `PLATYPUS_PLUGINS` list the overlay replaces.
