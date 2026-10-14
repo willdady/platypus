@@ -30,7 +30,9 @@ From your Workspace, go to the **Boards** section and click **Create board**.
   from a fixed palette) that you can later apply to cards. Use **Add label** for
   each, and the delete button to remove one.
 
-Save to create the board. You can edit the name, description, and labels anytime
+Save to create the board. It starts with three columns — **To Do**,
+**In Progress** and **Done** — which you rename, move or delete like any other.
+You can edit the name, description, and labels anytime
 from the board's **Settings** (the gear icon).
 
 </Steps>
@@ -47,7 +49,7 @@ The board view scrolls horizontally across its **columns**. From here you:
 
 - **Add columns** with the dashed **Add column** button at the end of the row.
   Column names must be unique on the board.
-  A column's three-dot menu holds exactly four items: **Move column left**,
+  A column's three-dot menu holds four items: **Move column left**,
   **Move column right**, **Edit** (which is where you rename it), and
   **Delete**. **Delete** refuses a column that still holds cards — move or
   delete them first.
@@ -99,7 +101,9 @@ set lets an Agent:
   with a label the board doesn't have is refused, but an edit or bulk edit drops
   the unknown label and reports success, so the Agent believes it applied it.
   Tell it to read the board's labels first and use their ids, rather than
-  inventing one.
+  inventing one. Comments are the exception the other way: you can edit or
+  delete only your own comments, but an Agent can edit or delete any comment on
+  a card, yours included.
 </Callout>
 
 This is what makes boards a two-way surface: you arrange the work, and an Agent

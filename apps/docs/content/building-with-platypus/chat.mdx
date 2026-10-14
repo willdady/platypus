@@ -16,7 +16,7 @@ Most of the screen explains itself. This page covers the parts that don't.
 ## Choosing what answers you
 
 Click the model selector in the prompt input. Under **Agents** are the Agents in
-your Workspace; under each Provider's name are its enabled models. Picking an
+your Workspace, with any you've pinned in a **Pinned** group above them; under each Provider's name are its enabled models. Picking an
 Agent replaces picking a Provider and model — the Agent already carries both,
 plus its Instructions, tools and Skills.
 
@@ -297,8 +297,7 @@ one after another.
   **A blank line is not a zero.** The panel only shows what it actually has a
   reading for — a Provider that doesn't report token usage means no token
   figures, not `0`. If nothing at all is available, the **(i)** button doesn't
-  appear. Chats from before your deployment was upgraded show no button unless
-  they happen to carry Tool timing from an earlier update.
+  appear.
 </Callout>
 
 The panel fills in once the reply has finished; it does not update while the
@@ -401,7 +400,8 @@ Where a **Context window** is declared, a long turn that reads a lot of pages
 or files gets one piece of automatic help: once the meter above reaches
 **70%**, older results from a small set of read-only tools stop being sent to
 the model, from earlier turns as well as this one. That set covers a handful of built-in reads — web search,
-reading a URL, reading a file or listing a directory in a Sandbox — plus any
+reading a URL, reading a file or listing a directory in a Sandbox, reading a
+Skill's bundled files — plus any
 MCP tool whose server declares it read-only (see
 [MCP](/building-with-platypus/mcp)). An MCP server that declares nothing gets
 no benefit from this for that tool. The four most recent results stay; every
@@ -425,7 +425,7 @@ above.
 
 ## Fixing a conversation instead of restarting it
 
-Hover a message for its actions:
+Each message's actions sit beneath it:
 
 | Action         | On                                | Does                                              |
 | -------------- | --------------------------------- | ------------------------------------------------- |
@@ -550,7 +550,8 @@ Press **⌘K** (**Ctrl+K** on Windows and Linux) anywhere in a Workspace to open
 the command palette. Type to filter.
 
 It offers **Actions** (creating things and jumping to settings screens), then
-your **Agents**, **Boards** and **Triggers** by name. Selecting an Agent
+your **Pinned agents**, then the rest of your **Agents**, **Boards** and
+**Triggers** by name. Selecting an Agent
 opens a new Chat already set to it. **Docs** opens this documentation site in a
 new tab. If your Agents, Boards or Triggers fail to load, the palette shows
 **Couldn't load agents. Retry** (or boards, or triggers) in their place; select

@@ -24,20 +24,20 @@ You'll find Webhooks under **Workspace settings → Webhooks**.
 
 A Webhook subscribes to one or more events. The available events are:
 
-| Event                    | Fires when                                                    |
-| ------------------------ | ------------------------------------------------------------- |
-| `card.created`           | A card is added to a [Board](/building-with-platypus/boards). |
-| `card.updated`           | A card's fields, column, or position change.                  |
-| `card.moved`             | A card's column changes — fires alongside `card.updated`.     |
-| `card.deleted`           | A card is deleted; not sent when its column or board is.      |
-| `notification.created`   | An Agent posts a notification.                                |
-| `notification.updated`   | A notification is edited.                                     |
-| `notification.read`      | A notification is marked read.                                |
-| `notification.dismissed` | A notification is dismissed.                                  |
-| `trigger_run.succeeded`  | A Trigger run ends `success`.                                 |
-| `trigger_run.failed`     | A Trigger run ends `failed`, including a run that timed out.  |
-| `trigger_run.cancelled`  | A Trigger run ends `cancelled` — someone stopped it.          |
-| `trigger_run.suppressed` | The run-rate breaker drops a firing, so no Agent ran.         |
+| Event                    | Fires when                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `card.created`           | A card is added to a [Board](/building-with-platypus/boards).                                                |
+| `card.updated`           | A card's fields, column, or position change.                                                                 |
+| `card.moved`             | A card's column changes — fires alongside `card.updated`.                                                    |
+| `card.deleted`           | A card is deleted; not sent when its column or board is.                                                     |
+| `notification.created`   | An Agent posts a notification.                                                                               |
+| `notification.updated`   | A notification is edited.                                                                                    |
+| `notification.read`      | A notification is marked read.                                                                               |
+| `notification.dismissed` | A notification is dismissed.                                                                                 |
+| `trigger_run.succeeded`  | A Trigger run ends `success`.                                                                                |
+| `trigger_run.failed`     | A Trigger run ends `failed`, including a run that timed out.                                                 |
+| `trigger_run.cancelled`  | A Trigger run ends `cancelled` — someone stopped it, the server shut down, or the Workspace was transferred. |
+| `trigger_run.suppressed` | The run-rate breaker drops a firing, so no Agent ran.                                                        |
 
 The form groups them under **Notifications**, **Cards** and **Trigger runs**.
 Every event starts selected on a new Webhook; turn off the ones you don't want.
@@ -75,6 +75,9 @@ The create form does **not** show it. Saving returns you to the Webhooks list;
 open the Webhook again and the **Signing Secret** field appears, with buttons to
 reveal, copy, and **Regenerate** it. The secret was generated at save time — a
 create form that showed you nothing hasn't failed.
+
+**Regenerate** invalidates the current secret immediately, so a receiver still
+verifying with the old one rejects every delivery until you update it.
 
 </Steps>
 
@@ -423,27 +426,29 @@ A `trigger_run.suppressed` never ran, so it has no `completedAt`:
 }
 ```
 
-| Field              | Description                                                                                                                                                                                                   |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `runId`            | The run. For an Inbound Trigger, the same id the call returned.                                                                                                                                               |
-| `status`           | `success`, `failed`, `cancelled` or `suppressed`.                                                                                                                                                             |
-| `startedAt`        | When the run started — for `suppressed`, when the firing was dropped.                                                                                                                                         |
-| `completedAt`      | When the run ended. `null` for `suppressed`, since nothing ran.                                                                                                                                               |
-| `errorMessage`     | Why a `failed` run failed, for a person to read — don't match on it; `null` otherwise.                                                                                                                        |
-| `triggerId`        | The Trigger that fired.                                                                                                                                                                                       |
-| `triggerName`      | The Trigger's name when the run ended.                                                                                                                                                                        |
-| `triggerType`      | `cron`, `event` or `inbound`.                                                                                                                                                                                 |
-| `agentId`          | The Agent the Trigger runs.                                                                                                                                                                                   |
-| `eventType`        | For an Event Trigger, the event that fired it; `null` otherwise.                                                                                                                                              |
-| `entityId`         | The card or notification an Event Trigger ran for, or an Inbound Trigger's record; or `null`.                                                                                                                 |
-| `unloadedToolSets` | The Agent's Tool sets and MCPs that loaded no tools for the run, each with `toolSetId`, `name` and `reason` — see [run warnings](/building-with-platypus/triggers#run-warnings). Empty when every one loaded. |
-| `failedToolCalls`  | How many of the run's tool calls ended in an error. `0` for `suppressed`.                                                                                                                                     |
+| Field              | Description                                                                                                                                                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runId`            | The run. For an Inbound Trigger, the same id the call returned.                                                                                                                                                                                           |
+| `status`           | `success`, `failed`, `cancelled` or `suppressed`.                                                                                                                                                                                                         |
+| `startedAt`        | When the run started — for `suppressed`, when the firing was dropped.                                                                                                                                                                                     |
+| `completedAt`      | When the run ended. `null` for `suppressed`, since nothing ran.                                                                                                                                                                                           |
+| `errorMessage`     | Why a `failed` run failed, for a person to read — don't match on it; `null` otherwise.                                                                                                                                                                    |
+| `triggerId`        | The Trigger that fired.                                                                                                                                                                                                                                   |
+| `triggerName`      | The Trigger's name when the run ended.                                                                                                                                                                                                                    |
+| `triggerType`      | `cron`, `event` or `inbound`.                                                                                                                                                                                                                             |
+| `agentId`          | The Agent the Trigger runs.                                                                                                                                                                                                                               |
+| `eventType`        | For an Event Trigger, the event that fired it; `null` otherwise.                                                                                                                                                                                          |
+| `entityId`         | The card or notification an Event Trigger ran for, or an Inbound Trigger's record; or `null`.                                                                                                                                                             |
+| `unloadedToolSets` | The Agent's Tool sets and MCPs that loaded no tools for the run, each with `toolSetId`, `name` (`null` when the Tool set no longer exists) and `reason` — see [run warnings](/building-with-platypus/triggers#run-warnings). Empty when every one loaded. |
+| `failedToolCalls`  | How many of the run's tool calls ended in an error. `0` for `suppressed`.                                                                                                                                                                                 |
 
 The Agent's output is never sent — no final answer, no stats, no event data.
 Read those in [run history](/building-with-platypus/triggers#review-run-history).
 
-A run that was still going when the server restarted is failed once it has
-been running for longer than the run timeout, with `errorMessage` set to
+When the server is stopped cleanly, it cancels the runs it is holding, so they
+end `cancelled`; the `trigger_run.cancelled` event is usually lost as the process
+exits. A run that was still going when the server crashed is failed only once it
+is a little older than the run timeout, with `errorMessage` set to
 `Server restarted during execution`, and sends `trigger_run.failed` then — not
 when the server comes back up. A run whose Trigger is deleted while it is
 running sends nothing.
