@@ -50,10 +50,12 @@ Go to **Workspace settings → A2A endpoints** and click **Add endpoint**.
   an attached Shared Agent. You can't change it later.
 - **Name** — what callers see as the agent's name, up to 100 characters.
   Picking the Agent fills in its name, unless you've already typed one. Left
-  blank, the Agent's name is used.
+  blank, the Agent's name is copied in when you save. Either way it's copied
+  once: renaming the Agent later doesn't change it.
 - **Description** — what callers see in place of the Agent's description, up to
   1000 characters. Picking the Agent fills in its description, unless you've
-  already typed one. Left blank, the Agent's description is used. Rewrite it
+  already typed one. Left blank, the Agent's description is copied in when you
+  save, and like **Name** it doesn't follow later edits to the Agent. Rewrite it
   for outsiders: the Agent's description is written for you and for other
   Agents.
 - **Enabled** — when off, the endpoint answers every call with **Not Found**.
@@ -101,6 +103,9 @@ the expired token is refused. Both times update at most once a minute.
   `contextId` or list them with `ListTasks`. Handing it to a different client
   hands over the old client's history. To give a different client a fresh
   start, delete the token and add a new one.
+- **Push URLs don't carry over.** A [push URL](#push-notifications) registered
+  on a Task the old value started is never called. The client reads those Tasks
+  with `GetTask` instead.
 - **No active tokens** shows next to an endpoint on the **A2A endpoints** list
   when no client can call it: it has no tokens, or every one has expired. Open
   the endpoint and add a token, or regenerate an expired one, then give it to
@@ -125,12 +130,12 @@ The card carries the endpoint's **Name** and **Description**, says the client
 authenticates with an HTTP bearer token, names the address the client sends
 requests to, says the endpoint offers streaming and push notifications, and
 lists one skill built from the same Name and Description, tagged `chat`. It
-never carries the Agent's own description, Tool sets or Skills. A client may
+carries nothing else about the Agent: not its instructions, Tool sets or Skills. A client may
 cache the card for up to five minutes, so a change to the Name or Description
 can take that long to reach it.
 
 An endpoint that is disabled or deleted, in a Workspace the Organization doesn't
-allow, or whose Workspace Owner has left the Organization or been banned answers
+allow, or whose Workspace Owner has been banned answers
 **Not Found**, exactly like one that never existed. A Super Admin who owns the
 Workspace keeps its endpoints answering without being a member of the
 Organization, but not while banned. A ban with an expiry stops counting once it
@@ -286,8 +291,8 @@ server-sent events instead of polling.
 - A message the endpoint refuses (a file part, a Chat with a run still going)
   is answered with a plain JSON-RPC error, not a stream.
 - **Following has a limit.** Your Operator caps how many streams can follow
-  Tasks at once, 100 unless they change it, and each token can hold at most 10
-  of them. The stream that started a run doesn't count, but `SubscribeToTask`,
+  Tasks at once on each backend instance, 100 unless they change it, and each
+  token can hold at most 10 of them per instance. The stream that started a run doesn't count, but `SubscribeToTask`,
   a retried `SendStreamingMessage`, and a retried `SendMessage` that waits for
   its Task do. One past the cap gets `429 Too Many Requests` with a
   `Retry-After` header. The client closes a stream it no longer needs, or
@@ -334,7 +339,7 @@ registered.
 - **A Task that has already ended** when a URL is registered on it is pushed
   straight away, so a run that finishes before the client registers is not
   missed.
-- **A run lost to a server crash** ends `failed` within about a minute, once
+- **A run lost to a server crash** ends `failed` within a couple of minutes, once
   Platypus notices it has gone quiet, and that is pushed like any other end. A
   run stopped by a server shutting down cleanly ends `canceled`. An end that
   a crash kept from being pushed is pushed within about a minute. A crash in
@@ -350,8 +355,9 @@ registered.
 - **Delivery works like a [Webhook](/building-with-platypus/webhooks#delivery-and-retries)'s**,
   with the same timeout and retries.
 - **Push URLs must be public.** Platypus never pushes to a loopback,
-  cloud-metadata or private-network address, unless your Operator
-  allows private networks for clients on their own network. Any `http` or
+  cloud-metadata or private-network address. Your Operator can allow private
+  networks for clients on their own network, but that never unlocks loopback or
+  cloud-metadata addresses. Any `http` or
   `https` URL is accepted when it is registered; one that leads somewhere not
   allowed is skipped when the Task ends, so check your URL is reachable from
   the internet.
@@ -418,8 +424,10 @@ Memories** off.
 - Deleting the Agent deletes its endpoints and their tokens.
 - Detaching a Shared Agent from the Workspace deletes the Workspace's endpoints
   for it, and their tokens.
-- Running Tasks on an endpoint deleted with its Agent, or whose Workspace
-  Owner leaves the Organization or is banned, are canceled within a few
+- Transferring the Workspace to a new Owner deletes every token on its
+  endpoints and stops their clients' work at once.
+- Running Tasks on an endpoint deleted with its Agent or with a detached
+  Shared Agent, or whose Workspace Owner is banned, are canceled within a few
   seconds rather than at once.
 - A Chat stays when its endpoint or token is deleted, still labelled with the
   token's name. No client can reach it or its Tasks over A2A again, not even

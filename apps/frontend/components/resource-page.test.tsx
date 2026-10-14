@@ -70,4 +70,32 @@ describe("ResourcePage", () => {
 
     expect(container.querySelector(".w-lg")).toBeInTheDocument();
   });
+
+  it("renders the actions beside the title", () => {
+    render(
+      <ResourcePage
+        backFallbackHref="/somewhere"
+        title="Edit Thing"
+        actions={<button>View runs</button>}
+      >
+        <div>content</div>
+      </ResourcePage>,
+    );
+
+    const heading = screen.getByRole("heading", { name: "Edit Thing" });
+    expect(heading.parentElement).toContainElement(
+      screen.getByRole("button", { name: "View runs" }),
+    );
+  });
+
+  it("leaves the title on its own without actions", () => {
+    render(
+      <ResourcePage backFallbackHref="/somewhere" title="Edit Thing">
+        <div>content</div>
+      </ResourcePage>,
+    );
+
+    const heading = screen.getByRole("heading", { name: "Edit Thing" });
+    expect(heading.previousElementSibling).toHaveTextContent("Back");
+  });
 });
