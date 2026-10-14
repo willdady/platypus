@@ -81,6 +81,14 @@ verifying with the old one rejects every delivery until you update it.
 
 </Steps>
 
+## Manage your Webhooks
+
+Each card in **Workspace settings → Webhooks** shows the Webhook's name and URL,
+with a **Disabled** badge when it is off. Clicking a card opens it for editing.
+Its three-dot menu has **Edit**, **Enable** or **Disable**, and **Delete**.
+Disabling keeps the URL, signing secret and events, so turn a Webhook off
+rather than deleting it when you mean to pause it.
+
 ## The payload
 
 Platypus sends a `POST` request with `Content-Type: application/json`. The body

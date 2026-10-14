@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentType, type ReactNode } from "react";
-import { Building, Pencil, Plus } from "lucide-react";
+import { Building, Plus } from "lucide-react";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useAuth } from "@/components/auth-provider";
@@ -11,9 +11,10 @@ import {
   type DelegatableResourceType,
   type WorkspaceDelegationFlags,
 } from "@/lib/authorization";
-import { type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope } from "@/lib/api-write";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { useSharedDetach } from "@/hooks/use-shared-resource-actions";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { ListError } from "./list-state";
 import {
   ButtonRowSkeleton,
@@ -21,6 +22,8 @@ import {
   LoadingRegion,
 } from "./list-skeletons";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
+import { DeleteConfirmDialog } from "./delete-confirm-dialog";
+import { RowActionsMenu } from "./row-actions-menu";
 import { Button } from "./ui/button";
 import {
   AttachSharedAction,
@@ -32,6 +35,10 @@ interface ScopedResource {
   readonly id: string;
   readonly name: string;
   readonly scope?: "organization" | "workspace";
+  /** A Provider's type. */
+  readonly providerType?: string;
+  /** An MCP server's URL. */
+  readonly url?: string;
 }
 
 interface EmptyStateProps {
@@ -46,8 +53,10 @@ export interface ResourceListLabels {
   readonly add: string;
   /** Attach CTA: "Attach shared provider" / "Attach shared MCP". */
   readonly attach: string;
-  /** Detach dialog title: "Organization Provider" / "Organization MCP". */
+  /** Detach dialog title: "Detach shared provider" / "Detach shared MCP server". */
   readonly detachTitle: string;
+  /** Delete dialog title: "Delete Provider" / "Delete MCP server". */
+  readonly deleteTitle: string;
   /** The resource named mid-sentence: "provider" / "MCP server". */
   readonly noun: string;
   /** The resource named in a fetch failure: "providers" / "MCP servers". */
@@ -64,6 +73,8 @@ export interface ResourceListConfig {
   /** The Workspace delegation flag granting self-management (ADR-0006). */
   readonly delegationFlag: keyof WorkspaceDelegationFlags;
   readonly labels: ResourceListLabels;
+  /** The row field shown on the card's second line: a Provider's type, an MCP server's URL. */
+  readonly secondLine: "providerType" | "url";
   /** Rendered when the list has no resources, holding whichever Add / Attach buttons the caller gets. */
   readonly emptyState: ComponentType<EmptyStateProps>;
 }
@@ -101,6 +112,13 @@ export const ResourceList = ({
     mutate,
   });
 
+  const deleteFlow = useDeleteFlow<ScopedResource>({
+    mutate,
+    guidanceOnForbidden: true,
+    delete: (resource, url) =>
+      writeEntity(url, config.entity, scope, { id: resource.id }),
+  });
+
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
   const canAttach = canManageSharedResource(actor, workspaceId);
@@ -122,7 +140,7 @@ export const ResourceList = ({
     // offers this caller, so neither pops in when the read lands.
     return (
       <LoadingRegion label={`Loading ${config.labels.plural}`}>
-        <ItemRowsSkeleton badge={Boolean(workspaceId)} />
+        <ItemRowsSkeleton badge={Boolean(workspaceId)} secondLine />
         <ButtonRowSkeleton
           widths={[
             ...(canManage ? ["w-32"] : []),
@@ -188,33 +206,60 @@ export const ResourceList = ({
           const isOrgScopedInWorkspace =
             workspaceId && resource.scope === "organization";
 
-          const row = (
-            <>
-              <ItemContent>
-                <div className="flex items-center gap-2">
-                  <ItemTitle>{resource.name}</ItemTitle>
-                  {resource.scope === "organization" && <OrganizationBadge />}
-                </div>
-              </ItemContent>
-              <ItemActions>
-                <Pencil className="size-4" />
-              </ItemActions>
-            </>
+          const content = (
+            <ItemContent>
+              <div className="flex items-center gap-2">
+                <ItemTitle>{resource.name}</ItemTitle>
+                {resource.scope === "organization" && <OrganizationBadge />}
+              </div>
+              <p className="text-sm text-muted-foreground truncate">
+                {resource[config.secondLine]}
+              </p>
+            </ItemContent>
           );
 
           return (
             <li key={resource.id} className="mb-2">
               {isOrgScopedInWorkspace ? (
-                <Item
-                  variant="outline"
-                  onClick={() => detach.open(resource)}
-                  className="cursor-pointer"
-                >
-                  {row}
+                // Locked here (ADR-0007): a plain card, with Detach named in
+                // its menu rather than behind the card's own click.
+                <Item variant="outline">
+                  {content}
+                  {canAttach && (
+                    <ItemActions>
+                      <RowActionsMenu
+                        name={resource.name}
+                        edit={{
+                          href: `${orgSettingsRoot}/${resource.id}`,
+                          label: "Edit in org settings",
+                        }}
+                        remove={{
+                          kind: "detach",
+                          onSelect: () => detach.open(resource),
+                        }}
+                      />
+                    </ItemActions>
+                  )}
                 </Item>
               ) : (
                 <Item variant="outline" asChild>
-                  <Link href={settingsHref(resource.id)}>{row}</Link>
+                  <Link href={settingsHref(resource.id)}>
+                    {content}
+                    <ItemActions>
+                      <RowActionsMenu
+                        name={resource.name}
+                        edit={{ href: settingsHref(resource.id) }}
+                        remove={
+                          canManage
+                            ? {
+                                kind: "delete",
+                                onSelect: () => deleteFlow.request(resource),
+                              }
+                            : undefined
+                        }
+                      />
+                    </ItemActions>
+                  </Link>
                 </Item>
               )}
             </li>
@@ -227,13 +272,22 @@ export const ResourceList = ({
         title={config.labels.detachTitle}
         description={(selected) => (
           <>
-            The {config.labels.noun} <strong>{selected.name}</strong> is managed
-            at the organization level. It can only be edited from the
-            organization settings.
+            Detach <strong>{selected.name}</strong> from this workspace? The
+            shared {config.labels.noun} itself is not deleted; it just stops
+            appearing here.
           </>
         )}
         canDetach={canAttach}
         orgSettingsHref={(selected) => `${orgSettingsRoot}/${selected.id}`}
+      />
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
+        title={config.labels.deleteTitle}
+        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This action cannot be undone.`}
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
       />
     </>
   );

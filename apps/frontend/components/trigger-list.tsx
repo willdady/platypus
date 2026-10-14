@@ -25,6 +25,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { DisabledBadge } from "@/components/disabled-badge";
+import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -59,11 +61,9 @@ import {
   triggerTypeSchema,
 } from "@platypus/schemas";
 import Link from "next/link";
-import { useBackendUrl } from "@/components/auth-provider";
 import { formatDateTime } from "@/lib/format-date";
 import { formatRelativeTime } from "@/lib/relative-time";
 import cronstrue from "cronstrue";
-import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -173,10 +173,7 @@ export const TriggerList = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const backendUrl = useBackendUrl();
   const routes = workspaceRoutes(orgId, workspaceId);
-  const [triggerToToggle, setTriggerToToggle] = useState<Trigger | null>(null);
-  const [isToggling, setIsToggling] = useState(false);
   const [showFired, setShowFired] = useState(false);
   const [typeFilter, setTypeFilter] = useState<TriggerType | typeof ALL>(ALL);
 
@@ -216,28 +213,11 @@ export const TriggerList = ({
       writeEntity(url, "triggers", scope, { id: trigger.id }),
   });
 
-  const handleToggleEnabled = async (trigger: Trigger) => {
-    if (!backendUrl) return;
-
-    setTriggerToToggle(trigger);
-    setIsToggling(true);
-    try {
-      const outcome = await writeEntity(backendUrl, "triggers", scope, {
-        id: trigger.id,
-        data: { enabled: !trigger.enabled },
-      });
-      if (outcome.outcome === "success") {
-        mutate();
-      } else {
-        toast.error(outcome.message);
-      }
-    } catch {
-      toast.error("Failed to toggle trigger");
-    } finally {
-      setIsToggling(false);
-      setTriggerToToggle(null);
-    }
-  };
+  const toggle = useEnabledToggle<Trigger>({
+    entity: "triggers",
+    scope,
+    mutate,
+  });
 
   if (isLoading && !triggersData) {
     return (
@@ -341,12 +321,7 @@ export const TriggerList = ({
                         Fired
                       </Badge>
                     ) : (
-                      !trigger.enabled && (
-                        <Badge variant="secondary" className="text-xs">
-                          <Pause />
-                          Disabled
-                        </Badge>
-                      )
+                      !trigger.enabled && <DisabledBadge />
                     )}
                   </div>
                   {trigger.description && (
@@ -440,10 +415,8 @@ export const TriggerList = ({
                       {!trigger.firedAt && (
                         <DropdownMenuItem
                           className="cursor-pointer"
-                          onSelect={() => handleToggleEnabled(trigger)}
-                          disabled={
-                            isToggling && triggerToToggle?.id === trigger.id
-                          }
+                          onSelect={() => void toggle.toggle(trigger)}
+                          disabled={toggle.togglingId === trigger.id}
                         >
                           {trigger.enabled ? (
                             <>

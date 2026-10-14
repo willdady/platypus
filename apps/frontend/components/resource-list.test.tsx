@@ -13,7 +13,10 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   mutate,
+  menuItemLabels,
+  confirmDialog,
 } from "@/lib/list-test-harness";
+import { openDropdownMenu } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -39,6 +42,7 @@ const orgProvider = {
 const orgMcp = {
   id: "m1",
   name: "Shared MCP",
+  url: "https://shared.example.com/mcp",
   scope: "organization",
 } as unknown as ScopedResource;
 
@@ -52,6 +56,7 @@ const workspaceProvider = {
 const workspaceMcp = {
   id: "m2",
   name: "Local MCP",
+  url: "https://local.example.com/mcp",
   scope: "workspace",
 } as unknown as ScopedResource;
 
@@ -68,6 +73,8 @@ const RESOURCES: {
   workspaceItem: ScopedResource;
   dialogTitle: string;
   fetchErrorNoun: string;
+  /** What the card's second line shows for `workspaceItem`. */
+  secondLine: string;
 }[] = [
   {
     name: "provider",
@@ -78,8 +85,9 @@ const RESOURCES: {
     delegationFlag: "providerSelfManagement",
     item: orgProvider,
     workspaceItem: workspaceProvider,
-    dialogTitle: "Organization Provider",
+    dialogTitle: "Detach shared provider",
     fetchErrorNoun: "providers",
+    secondLine: "OpenAI",
   },
   {
     name: "MCP",
@@ -90,8 +98,9 @@ const RESOURCES: {
     delegationFlag: "mcpSelfManagement",
     item: orgMcp,
     workspaceItem: workspaceMcp,
-    dialogTitle: "Organization MCP",
+    dialogTitle: "Detach shared MCP server",
     fetchErrorNoun: "MCP servers",
+    secondLine: "https://local.example.com/mcp",
   },
 ];
 
@@ -116,6 +125,7 @@ describe.each(RESOURCES)(
     workspaceItem,
     dialogTitle,
     fetchErrorNoun,
+    secondLine,
   }) => {
     /** Renders the Workspace surface with `rows` in the list. */
     const renderRows = (rows: ScopedResource[]) => {
@@ -225,9 +235,70 @@ describe.each(RESOURCES)(
       expect(screen.queryByText(/configured/)).not.toBeInTheDocument();
     });
 
-    it("points the detach dialog's Org settings link at the organization page", () => {
+    it("shows the row's second line under its name", () => {
+      renderRows([workspaceItem]);
+
+      expect(screen.getByText(secondLine)).toBeInTheDocument();
+    });
+
+    it("gives a workspace row Edit, then Delete", () => {
+      renderRows([workspaceItem]);
+      openDropdownMenu();
+
+      expect(menuItemLabels()).toEqual(["Edit", "Delete"]);
+    });
+
+    it("gives a row the caller can't manage only Edit", () => {
+      authState.actor = "workspace-owner";
+      authState.workspaceDelegation = { [delegationFlag]: false };
+      renderRows([workspaceItem]);
+      openDropdownMenu();
+
+      expect(menuItemLabels()).toEqual(["Edit"]);
+    });
+
+    it("deletes a workspace row after confirmation and revalidates", async () => {
+      const fetchMock = stubAcceptedSave();
+      renderRows([workspaceItem]);
+      openDropdownMenu();
+      fireEvent.click(screen.getByText("Delete"));
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      await confirmDialog("Delete");
+
+      await waitFor(() => expect(mutate).toHaveBeenCalled());
+      expect(fetchMock).toHaveBeenCalledWith(
+        `http://test/organizations/org1/workspaces/ws1/${entity}/${workspaceItem.id}`,
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+
+    it("gives a Shared row Edit in org settings, then Detach, and no click action", () => {
       renderRows([item]);
       fireEvent.click(screen.getByText(item.name));
+      expect(screen.queryByText(dialogTitle)).not.toBeInTheDocument();
+      expect(screen.getByText(item.name).closest("a")).toBeNull();
+
+      openDropdownMenu();
+      expect(menuItemLabels()).toEqual(["Edit in org settings", "Detach"]);
+      expect(
+        screen.getByRole("menuitem", { name: /Edit in org settings/ }),
+      ).toHaveAttribute("href", `/org1/${settingsPath}/${item.id}`);
+    });
+
+    it("gives a Shared row no menu when the caller can't manage Shared resources", () => {
+      authState.actor = "workspace-owner";
+      renderRows([item]);
+
+      expect(
+        screen.queryByRole("button", { name: `Actions for ${item.name}` }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("points the detach dialog's Org settings link at the organization page", () => {
+      renderRows([item]);
+      openDropdownMenu();
+      fireEvent.click(screen.getByText("Detach"));
 
       expect(
         screen.getByRole("link", { name: /Org settings/ }),
@@ -238,7 +309,8 @@ describe.each(RESOURCES)(
       const fetchMock = stubAcceptedSave();
 
       renderRows([item]);
-      fireEvent.click(screen.getByText(item.name));
+      openDropdownMenu();
+      fireEvent.click(screen.getByText("Detach"));
       fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
 
       await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -256,7 +328,8 @@ describe.each(RESOURCES)(
       );
 
       renderRows([item]);
-      fireEvent.click(screen.getByText(item.name));
+      openDropdownMenu();
+      fireEvent.click(screen.getByText("Detach"));
       fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
 
       await waitFor(() =>
