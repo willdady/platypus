@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Network, Pencil, Plus } from "lucide-react";
+import { Network, Plus } from "lucide-react";
 import type { A2aEndpointListItem } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { Button } from "./ui/button";
@@ -11,6 +11,12 @@ import { ListError } from "./list-state";
 import { EmptyCard } from "@/components/empty-card";
 
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DisabledBadge } from "@/components/disabled-badge";
+import { RowActionsMenu } from "@/components/row-actions-menu";
+import { writeEntity } from "@/lib/api-write";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
 import { workspaceRoutes } from "@/lib/routes";
 import {
   ButtonSkeleton,
@@ -35,9 +41,21 @@ const A2aEndpointsList = ({
   const routes = workspaceRoutes(orgId, workspaceId);
   const { ownsWorkspace } = useAuth();
 
+  const scope = { orgId, workspaceId };
   const { data, error, isLoading, mutate } = useScopedSWR<{
     results: A2aEndpointListItem[];
-  }>("a2a-endpoints", { orgId, workspaceId });
+  }>("a2a-endpoints", scope);
+
+  const deleteFlow = useDeleteFlow<A2aEndpointListItem>({
+    mutate,
+    delete: (endpoint, url) =>
+      writeEntity(url, "a2a-endpoints", scope, { id: endpoint.id }),
+  });
+  const toggle = useEnabledToggle<A2aEndpointListItem>({
+    entity: "a2a-endpoints",
+    scope,
+    mutate,
+  });
 
   if (isLoading) {
     return (
@@ -92,7 +110,7 @@ const A2aEndpointsList = ({
                 <ItemContent>
                   <div className="flex items-center gap-2">
                     <ItemTitle>{endpoint.name}</ItemTitle>
-                    {!endpoint.enabled && <StatusBadge>Disabled</StatusBadge>}
+                    {!endpoint.enabled && <DisabledBadge />}
                     {endpoint.liveTokenCount === 0 && (
                       <StatusBadge>No active tokens</StatusBadge>
                     )}
@@ -102,7 +120,31 @@ const A2aEndpointsList = ({
                   </p>
                 </ItemContent>
                 <ItemActions>
-                  <Pencil className="size-4" />
+                  {/* Only the Owner writes an endpoint; anyone else gets Edit,
+                      which opens the form read-only. */}
+                  <RowActionsMenu
+                    name={endpoint.name}
+                    edit={{
+                      href: routes.settings.a2aEndpointDetail(endpoint.id),
+                    }}
+                    toggle={
+                      ownsWorkspace
+                        ? {
+                            enabled: endpoint.enabled,
+                            onSelect: () => void toggle.toggle(endpoint),
+                            disabled: toggle.togglingId === endpoint.id,
+                          }
+                        : undefined
+                    }
+                    remove={
+                      ownsWorkspace
+                        ? {
+                            kind: "delete",
+                            onSelect: () => deleteFlow.request(endpoint),
+                          }
+                        : undefined
+                    }
+                  />
                 </ItemActions>
               </Link>
             </Item>
@@ -110,6 +152,20 @@ const A2aEndpointsList = ({
         ))}
       </ul>
       {addButton}
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
+        title="Delete A2A endpoint"
+        description={
+          <>
+            Delete <strong>{deleteFlow.target?.name}</strong>? Its URL and every
+            one of its tokens stop working straight away.
+          </>
+        }
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
+      />
     </>
   );
 };

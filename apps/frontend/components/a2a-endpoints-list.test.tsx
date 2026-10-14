@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import {
   authMock,
   authState,
@@ -8,7 +8,11 @@ import {
   mutate,
   resetListHarness,
   renderList,
+  menuItemLabels,
+  confirmDialog,
+  stubAcceptedSave,
 } from "@/lib/list-test-harness";
+import { openDropdownMenu } from "@/lib/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -123,5 +127,52 @@ describe("A2aEndpointsList", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();
+  });
+
+  it("gives the Owner Edit, Enable, then Delete", () => {
+    mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] });
+    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Edit", "Enable", "Delete"]);
+  });
+
+  it("gives anyone else only Edit, which opens the form read-only", () => {
+    asOwner(false);
+    mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] });
+    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Edit"]);
+  });
+
+  it("enables a disabled endpoint from the menu", async () => {
+    const fetchMock = stubAcceptedSave();
+    mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] });
+    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />, "Enable");
+
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/workspaces/ws1/a2a-endpoints/ep-1",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ enabled: true }),
+      }),
+    );
+  });
+
+  it("deletes after confirmation and revalidates", async () => {
+    const fetchMock = stubAcceptedSave();
+    mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] });
+    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />, "Delete");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    await confirmDialog("Delete");
+
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/workspaces/ws1/a2a-endpoints/ep-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 });

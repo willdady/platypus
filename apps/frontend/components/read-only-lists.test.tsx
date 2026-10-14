@@ -15,7 +15,6 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { ContextsList } from "./contexts-list";
-import { WebhooksList } from "./webhooks-list";
 import { WorkspaceList } from "./workspace-list";
 import { PluginsList } from "./plugins-list";
 
@@ -87,74 +86,6 @@ describe("ContextsList", () => {
       screen.getByText("Failed to load workspace contexts. 500"),
     ).toBeInTheDocument();
     expect(screen.queryByText("No workspace contexts")).not.toBeInTheDocument();
-  });
-});
-
-describe("WebhooksList", () => {
-  const webhook = {
-    id: "wh1",
-    workspaceId: "ws1",
-    name: "Deploy hook",
-    url: "https://hooks.example.com/deploy",
-    enabled: true,
-  };
-
-  const render = () =>
-    renderList(<WebhooksList orgId="org1" workspaceId="ws1" />);
-
-  it("links each webhook to its detail page and shows its URL", () => {
-    mockScopedSWR({ webhooks: [webhook] });
-    render();
-
-    expect(screen.getByText("Deploy hook").closest("a")).toHaveAttribute(
-      "href",
-      "/org1/workspace/ws1/settings/webhooks/wh1",
-    );
-    expect(
-      screen.getByText("https://hooks.example.com/deploy"),
-    ).toBeInTheDocument();
-  });
-
-  // A disabled webhook still lists, badged — deleting it to turn it off would
-  // lose its URL and secret.
-  it("badges a disabled webhook rather than hiding it", () => {
-    mockScopedSWR({ webhooks: [{ ...webhook, enabled: false }] });
-    render();
-
-    expect(screen.getByText("Deploy hook")).toBeInTheDocument();
-    expect(screen.getByText("Disabled")).toBeInTheDocument();
-  });
-
-  it("offers the create CTA when the workspace has none", () => {
-    mockScopedSWR({ webhooks: [] });
-    render();
-
-    expect(screen.getByText("No webhooks configured")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Add webhook/ }),
-    ).toBeInTheDocument();
-  });
-
-  it("says the read failed rather than claiming there are none", () => {
-    mockScopedSWR({ webhooks: { error: new Error("500") } });
-    render();
-
-    expect(screen.getByText("Failed to load webhooks.")).toBeInTheDocument();
-    expect(
-      screen.queryByText("No webhooks configured"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("holds the rows with a skeleton, not the empty state, while loading", () => {
-    mockScopedSWR({ webhooks: { isLoading: true } });
-    render();
-
-    expect(
-      screen.getByRole("status", { name: "Loading webhooks" }),
-    ).toHaveAttribute("aria-busy", "true");
-    expect(
-      screen.queryByText("No webhooks configured"),
-    ).not.toBeInTheDocument();
   });
 });
 

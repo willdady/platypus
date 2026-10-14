@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { DisabledBadge } from "@/components/disabled-badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -341,12 +342,7 @@ export const TriggerList = ({
                         Fired
                       </Badge>
                     ) : (
-                      !trigger.enabled && (
-                        <Badge variant="secondary" className="text-xs">
-                          <Pause />
-                          Disabled
-                        </Badge>
-                      )
+                      !trigger.enabled && <DisabledBadge />
                     )}
                   </div>
                   {trigger.description && (
