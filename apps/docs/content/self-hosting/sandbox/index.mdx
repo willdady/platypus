@@ -1,0 +1,82 @@
+---
+title: Sandbox infrastructure
+asIndexPage: true
+description: What a Sandbox is, choosing between the Docker and SSH backends, and the environment variables and permissions every Sandbox shares.
+---
+
+import { Callout } from "nextra/components";
+
+# Sandbox infrastructure
+
+A **Sandbox** is a configured, isolated execution environment registered on a
+[Workspace](/concepts), giving agents shell and filesystem tools that run inside
+it. The Sandbox interface is pluggable so different backends — local container,
+remote VM, hosted sandbox-as-a-service — can be contributed. Platypus ships two
+reference backends: **Docker** (one container per Workspace on the local daemon)
+and **SSH** (attach to a pre-existing, operator-owned host). Neither is enabled by
+default — each is turned on by listing its Plugin in `PLATYPUS_PLUGINS`.
+
+This page is for the **Operator** and **Org Admin** who stand up and curate that
+infrastructure.
+
+## Sandbox backends
+
+A Workspace has **at most one Sandbox**, and you choose which backend runs it. You
+configure it much as you configure a Provider: pick the backend, fill in its
+settings, save.
+
+Files and environment variables **persist between Chat turns**. That is what makes
+the Sandbox worth having — an Agent can install something in one turn and use it
+in the next, so build-and-test work survives longer than a single reply.
+
+Adding a new backend (Modal, E2B, Daytona, a custom VM) means implementing the
+fixed Sandbox contract; see
+[Extending → Sandbox backends](/extending/sandbox-backends) for
+custom backends.
+
+## Choosing a backend
+
+- **[Docker adapter](/self-hosting/sandbox/docker)** — one container per
+  Workspace on the local Docker daemon, with default-deny network allowlists.
+  Single-node, single-operator deployments only.
+- **[SSH adapter](/self-hosting/sandbox/ssh)** — attaches to a host you already
+  run. The one option for horizontally-scaled deployments.
+
+## Workspace-default environment variables
+
+A Sandbox carries workspace-default environment variables that are merged into
+every shell execution **on the server, without transiting the model**. The
+motivating case is API keys (`OPENAI_API_KEY`, `GITHUB_TOKEN`, …): agent-written
+code can call third-party services without the secret values ever appearing in
+the prompt, tool-call transcripts, or logs. The model is shown the key _names_
+only.
+
+The env is split into two tiers to match the authorization model:
+
+- **`adminEnv`** — Org-Admin-managed. Secrets the Workspace Owner can read the
+  names of but cannot change or override.
+- **`userEnv`** — Workspace-Owner-managed. The Owner's own secrets, set without
+  an admin round-trip.
+
+At execution time, precedence is `adminEnv` ▸ `userEnv` ▸ the model's per-call
+`env` (highest wins) — so an Owner can never override an admin-pinned key, and
+the model's values stay lowest. Changing env takes effect on the next shell
+execution; the container is not recreated.
+
+## Who can configure what
+
+Sandboxes are credential- and reach-bearing, so configuration is **Org
+Admin-managed and never delegatable** to a Workspace Owner. Within a Sandbox the
+gate is field-level: `backend`, `credentials`, `networks`, `extraHosts`,
+`adminEnv`, and creation are admin-only, while `name` and `userEnv` stay
+Owner-editable.
+
+## Next steps
+
+- [Extending → Sandbox backends](/extending/sandbox-backends) — implement a
+  custom Sandbox backend against the
+  `SandboxBackend` interface.
+- [Configuration & environment](/self-hosting/configuration) — where the sandbox
+  env vars sit among the rest of the deployment config.
+- [Providers & authentication](/self-hosting/providers-and-auth) — the role
+  ladder these admin-only gates rest on.
