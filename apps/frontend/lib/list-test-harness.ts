@@ -146,6 +146,13 @@ export function renderList(ui: ReactElement, menuItem?: string) {
   return result;
 }
 
+/** The open dropdown menu's items, in order, by their visible text. */
+export function menuItemLabels() {
+  return screen
+    .getAllByRole("menuitem")
+    .map((item) => item.textContent?.trim());
+}
+
 /**
  * Confirms the open dialog by clicking its button. `await`s the button, so it
  * also covers the surfaces that check something over the wire (an attachment

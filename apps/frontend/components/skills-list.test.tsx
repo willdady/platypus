@@ -14,8 +14,10 @@ import {
   mutate,
   toastError,
   toastInfo,
+  authState,
+  menuItemLabels,
 } from "@/lib/list-test-harness";
-import { selectOption } from "@/lib/test-utils";
+import { openDropdownMenu, selectOption } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -55,9 +57,6 @@ function renderOrgSkills(skills: SkillWithScope[], menuItem?: string) {
   return renderList(<SkillsList orgId="org1" />, menuItem);
 }
 
-const openDetachDialog = () =>
-  fireEvent.click(screen.getByText("Shared Skill"));
-
 beforeEach(resetListHarness);
 
 afterEach(() => {
@@ -68,11 +67,10 @@ afterEach(() => {
 // --- Tests -------------------------------------------------------------------
 
 describe("SkillsList detach", () => {
-  it("surfaces the backend's reason and keeps the row when detach is refused", async () => {
+  it("surfaces the backend's reason and keeps the dialog open when detach is refused", async () => {
     const fetchMock = stubRejectedSave("This skill is in use by an agent", 409);
 
-    renderSkills([orgSkill]);
-    openDetachDialog();
+    renderSkills([orgSkill], "Detach");
     await confirmDialog(/Detach/);
 
     await waitFor(() =>
@@ -82,7 +80,7 @@ describe("SkillsList detach", () => {
     );
 
     expect(mutate).not.toHaveBeenCalled();
-    expect(screen.getByText("Organization Skill")).toBeInTheDocument();
+    expect(screen.getByText("Detach shared skill")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/attachments/skill/s1",
       expect.objectContaining({ method: "DELETE" }),
@@ -92,12 +90,40 @@ describe("SkillsList detach", () => {
   it("revalidates and closes the dialog when detach succeeds", async () => {
     stubAcceptedSave();
 
-    renderSkills([orgSkill]);
-    openDetachDialog();
+    renderSkills([orgSkill], "Detach");
     await confirmDialog(/Detach/);
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
-    expect(screen.queryByText("Organization Skill")).not.toBeInTheDocument();
+    expect(screen.queryByText("Detach shared skill")).not.toBeInTheDocument();
+  });
+});
+
+describe("SkillsList shared skill card", () => {
+  it("offers Edit in org settings and Detach in its menu", () => {
+    renderSkills([orgSkill]);
+    openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Edit in org settings", "Detach"]);
+    expect(
+      screen.getByRole("menuitem", { name: "Edit in org settings" }),
+    ).toHaveAttribute("href", "/org1/settings/skills/s1");
+  });
+
+  it("does not open Detach when the card is clicked", () => {
+    renderSkills([orgSkill]);
+    fireEvent.click(screen.getByText("Shared Skill"));
+
+    expect(screen.queryByText("Detach shared skill")).not.toBeInTheDocument();
+  });
+
+  it("offers no menu to a user who cannot manage Shared resources", () => {
+    authState.actor = "member";
+
+    renderSkills([orgSkill]);
+
+    expect(
+      screen.queryByRole("button", { name: "Actions for Shared Skill" }),
+    ).not.toBeInTheDocument();
   });
 });
 

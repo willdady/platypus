@@ -18,6 +18,7 @@ import {
   mutate,
   toastError,
   toastInfo,
+  menuItemLabels,
 } from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -27,6 +28,7 @@ vi.mock("next/navigation", () => navigationMock);
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
+import { openDropdownMenu } from "@/lib/test-utils";
 import { AgentsList } from "./agents-list";
 
 // --- Fixtures ----------------------------------------------------------------
@@ -142,6 +144,14 @@ describe("AgentsList delete", () => {
 });
 
 describe("AgentsList clone", () => {
+  it("names the copy after the original", () => {
+    renderAgents([workspaceAgent], "Clone");
+
+    expect(
+      screen.getByDisplayValue("Workspace Agent (copy)"),
+    ).toBeInTheDocument();
+  });
+
   it("navigates to the new agent on success", async () => {
     const fetchMock = stubAcceptedSave({ id: "a3", name: "Cloned" }, 201);
 
@@ -335,5 +345,35 @@ describe("AgentsList list states", () => {
     renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText(/Failed to load/i)).toBeInTheDocument();
+  });
+});
+
+describe("AgentsList menu", () => {
+  afterEach(() => {
+    authState.ownsWorkspace = undefined;
+  });
+
+  it("orders an agent's menu Edit, its own items, Clone, then Delete", () => {
+    authState.ownsWorkspace = true;
+
+    renderAgents([workspaceAgent]);
+    openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual([
+      "Edit",
+      "Pin",
+      "Promote to organization",
+      "Clone",
+      "Delete",
+    ]);
+  });
+
+  it("orders a shared agent's menu Edit in org settings, Pin, then Detach", () => {
+    authState.ownsWorkspace = true;
+
+    renderAgents([orgAgent]);
+    openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Edit in org settings", "Pin", "Detach"]);
   });
 });

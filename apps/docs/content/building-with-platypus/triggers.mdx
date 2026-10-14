@@ -230,8 +230,8 @@ same Card or Notification. Once it has run its cap inside a rolling window,
 further firings are dropped before the Agent starts: no model call, no tokens,
 no writes. Each dropped firing is still recorded, as a run marked _Suppressed_
 with a line saying no Agent was started. Find them with the **Suppressed**
-status filter in [run history](#review-run-history), or from the Trigger's own
-**View runs**.
+status filter in [run history](#review-run-history), or by clicking the
+Trigger's card.
 
 An Inbound Trigger is always under the same ceiling, counted per value of its
 [record key](#the-record-key), or across the whole Trigger when none is marked.
@@ -548,9 +548,10 @@ Trigger runs is for history and detail: "what fired here recently?" and "why
 did that run fail?". Two filters narrow it, and both live in the address bar, so a
 filtered view survives a refresh and can be sent to a colleague as a link:
 
-- **Trigger** — all Triggers, or one of them. **View runs** on a Trigger's
-  three-dot menu, or beside the title of the **Edit Trigger** page, opens the
-  page already filtered to it.
+- **Trigger** — all Triggers, or one of them. Clicking a Trigger's card on the
+  Workspace home, or **View runs** beside the title of the **Edit Trigger** page,
+  opens the page already filtered to it. To change the Trigger instead, choose
+  **Edit** from the card's three-dot menu.
 - **Status** — all, or one of Pending, Running, Success, Failed, Cancelled,
   Suppressed.
 

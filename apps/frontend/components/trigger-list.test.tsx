@@ -13,8 +13,9 @@ import {
   stubRejectedSave,
   mutate,
   toastError,
+  menuItemLabels,
 } from "@/lib/list-test-harness";
-import { selectOption } from "@/lib/test-utils";
+import { openDropdownMenu, selectOption } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -449,5 +450,23 @@ describe("TriggerList last run", () => {
         name: "Failed",
       }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("TriggerList card", () => {
+  it("opens the trigger's runs when the card is clicked", () => {
+    renderTriggers([cronTrigger]);
+
+    expect(screen.getByRole("link", { name: /Nightly job/ })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/trigger-runs?triggerId=t1",
+    );
+  });
+
+  it("orders its menu Edit, Enable/Disable, then Delete, with no View runs", () => {
+    renderTriggers([cronTrigger]);
+    openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Edit", "Disable", "Delete"]);
   });
 });

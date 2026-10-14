@@ -280,6 +280,14 @@ The explicit reference that makes a Shared resource appear inside a Workspace. A
 **Promote**:
 The Org-Admin action that re-scopes a Workspace-private resource to Organization scope, turning it into a Shared resource and auto-attaching its origin Workspace. The resource becomes Org-Admin-governed.
 
+**Detach**:
+Removing a Shared resource's Attachment from one Workspace. The Shared resource itself, and its Attachments to other Workspaces, are untouched.
+_Avoid_: delete, unshare, remove (for a Shared resource).
+
+**Clone**:
+Making an independent, Workspace-owned copy of an Agent, with no link back to the original.
+_Avoid_: duplicate, copy, fork.
+
 **Blueprint**:
 A named, Organization-scoped macro that, applied to a Workspace, both creates the Attachments for a chosen set of Shared resources (Tier 1) and sets the Workspace's pointer-settings — task/memory Providers and a default Context (Tier 2) — in one step. Run once at provisioning (or re-run on demand), never a live link. A Tier 2 Provider must also be one the Blueprint attaches. Editing a Blueprint affects only later applications; already-provisioned Workspaces are unchanged. The primary tool for provisioning a ready-to-use Workspace during onboarding.
 _Avoid_: template, policy, group.
