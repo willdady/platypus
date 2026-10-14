@@ -149,7 +149,7 @@ const TriggerRunDetailPage = ({
           // before the session resolves included — never a blank page.
           <div className="space-y-6" aria-label="Loading trigger run">
             <div className="border rounded-lg">
-              <TriggerRunRowSkeleton linkToDetail={false} />
+              <TriggerRunRowSkeleton />
             </div>
             <section>
               <div className="flex h-5 items-center mb-2">

@@ -527,8 +527,9 @@ best-effort and can be lost.
 **Trigger runs** is one page per Workspace, not a tab inside the Trigger
 editor. Open it from **Trigger runs** in the Triggers section of the Workspace
 home page, or from the command menu. Recent runs from every Trigger in the
-Workspace are there, newest first, each row naming the Trigger it came from and
-linking to it. Older runs are pruned per Trigger, keeping at least its newest
+Workspace are there, newest first, each row naming the Trigger it came from.
+Click a row to open that run. To edit its Trigger, choose **Edit trigger** from
+the row's three-dot menu. Older runs are pruned per Trigger, keeping at least its newest
 **Max Runs to Keep** — see [What a run does](#what-a-run-does).
 
 To see whether a Trigger is failing, you don't need this page: every Trigger in
@@ -543,7 +544,8 @@ did that run fail?". Two filters narrow it, and both live in the address bar, so
 filtered view survives a refresh and can be sent to a colleague as a link:
 
 - **Trigger** — all Triggers, or one of them. **View runs** on a Trigger's
-  three-dot menu opens the page already filtered to it.
+  three-dot menu, or beside the title of the **Edit Trigger** page, opens the
+  page already filtered to it.
 - **Status** — all, or one of Pending, Running, Success, Failed, Cancelled,
   Suppressed.
 
@@ -586,19 +588,21 @@ The Inbound poll and the `trigger_run.*` Webhook events give the reason as a
 fixed code: `not_found`, `factory_failed`, `misconfigured`, `unauthorized` or
 `unreachable`.
 
-Each run's identifier isn't shown on the row. Instead every run offers a
-**Copy run id** control. Use it
-when a run fails and you need to find that run's log lines: backend logs are
-keyed by the run id, so copying it here and pasting it into your log query is
-how you cross-reference a failed run against what happened behind the scenes.
+Each run's identifier isn't shown on the row. Instead every row's three-dot menu
+offers **Copy run id**. Use it when a run fails and you need to find that run's
+log lines: backend logs are keyed by the run id, so copying it here and pasting
+it into your log query is how you cross-reference a failed run against what
+happened behind the scenes.
 
 ### Inspect a run
 
-**View run** on a row opens the run's own page: the same row at the top, then
+Clicking a row opens the run's own page: the same row at the top, then
 the run's **Timeline**, then the **Response** — the final text the Agent
 produced, which is the first thing to read when you want to know what a
 headless run concluded. A _Suppressed_ row has no page to open, because no
-Agent ran.
+Agent ran; its three-dot menu still works. On the run's page, the row's
+three-dot menu adds **View trigger's runs**, which goes back to Trigger runs
+filtered to that Trigger.
 
 The timeline answers "where did this run's time go?". It is a waterfall: one
 line per thing the Agent did, laid out against the run's whole span, so a long

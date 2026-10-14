@@ -90,11 +90,17 @@ import {
   RUN_STEP_LIMIT_NOTICE,
 } from "@/components/turn-notice";
 import { RUN_SUPPRESSED_NOTICE } from "@/components/trigger-run-row";
-import { installResizeObserverStub, selectOption } from "@/lib/test-utils";
+import {
+  installRadixPointerPolyfills,
+  installResizeObserverStub,
+  openDropdownMenu,
+  selectOption,
+} from "@/lib/test-utils";
 
 // Radix Tooltip content measures itself on focus, which jsdom has no
-// ResizeObserver for.
+// ResizeObserver for. The row's ⋮ menu needs the pointer polyfills.
 installResizeObserverStub();
+installRadixPointerPolyfills();
 
 const stats = (overrides?: Partial<TriggerRunStats>): TriggerRunStats => ({
   steps: 1,
@@ -154,7 +160,7 @@ beforeEach(() => {
 // The point of the page: one list answering "what fired in this workspace?",
 // which per-trigger pages could only answer one trigger at a time.
 describe("Trigger runs list", () => {
-  it("lists runs from every trigger, each naming and linking its own", async () => {
+  it("lists runs from every trigger, each row naming its Trigger and opening its run", async () => {
     await renderRuns([
       run(),
       run({
@@ -164,15 +170,26 @@ describe("Trigger runs list", () => {
       }),
     ]);
 
-    const nightly = screen.getByRole("link", { name: "Nightly digest" });
-    expect(nightly).toHaveAttribute(
+    expect(screen.getByText("Nightly digest").closest("a")).toHaveAttribute(
       "href",
-      "/org-1/workspace/ws-1/triggers/trigger-1",
+      "/org-1/workspace/ws-1/trigger-runs/run-1",
     );
-    expect(screen.getByRole("link", { name: "Card watcher" })).toHaveAttribute(
+    expect(screen.getByText("Card watcher").closest("a")).toHaveAttribute(
       "href",
-      "/org-1/workspace/ws-1/triggers/trigger-2",
+      "/org-1/workspace/ws-1/trigger-runs/run-2",
     );
+  });
+
+  it("edits a row's Trigger from its menu", async () => {
+    await renderRuns([run()]);
+    openDropdownMenu();
+
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
+    ).toEqual(["Edit trigger", "Copy run id"]);
+    expect(
+      screen.getByRole("menuitem", { name: "Edit trigger" }),
+    ).toHaveAttribute("href", "/org-1/workspace/ws-1/triggers/trigger-1");
   });
 
   it("keeps the heading static whatever the filters say", async () => {
@@ -321,9 +338,7 @@ describe("Trigger runs empty states", () => {
     state.error = new Error("Bad Request");
     await renderRuns([run()]);
 
-    expect(
-      screen.getByRole("link", { name: "Nightly digest" }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Nightly digest")).toBeInTheDocument();
   });
 
   it("clears every filter from the URL", async () => {
@@ -398,7 +413,7 @@ describe("Trigger runs paging", () => {
     await renderPage();
 
     expect(state.keys[1]).toContain("offset=50");
-    expect(screen.getByRole("link", { name: "Card watcher" })).toBeVisible();
+    expect(screen.getByText("Card watcher")).toBeVisible();
   });
 });
 
@@ -412,6 +427,18 @@ describe("Trigger runs suppression", () => {
 
     expect(screen.getByText("Suppressed")).toBeInTheDocument();
     expect(screen.getByText(RUN_SUPPRESSED_NOTICE)).toBeInTheDocument();
+  });
+
+  it("does not link a suppressed firing, which has no run to open, but keeps its menu", async () => {
+    await renderRuns([
+      run({ status: "suppressed", stats: null, completedAt: null }),
+    ]);
+
+    expect(screen.getByText("Nightly digest").closest("a")).toBeNull();
+    openDropdownMenu();
+    expect(
+      screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
+    ).toEqual(["Edit trigger", "Copy run id"]);
   });
 
   it("leaves a run that happened without the suppression notice", async () => {
@@ -568,21 +595,24 @@ describe("Trigger runs copy-run-id control", () => {
     expect(screen.queryByText("run-1")).toBeNull();
   });
 
-  it("exposes an accessible name and a matching tooltip", async () => {
+  it("offers the copy in the row's menu, not as an icon of its own", async () => {
     await renderRuns([run()]);
 
-    const button = screen.getByRole("button", { name: "Copy run id" });
-    expect(button).toBeInTheDocument();
-
-    fireEvent.focus(button);
-    expect(await screen.findAllByText("Copy run id")).not.toHaveLength(0);
+    expect(
+      screen.queryByRole("button", { name: "Copy run id" }),
+    ).not.toBeInTheDocument();
+    openDropdownMenu();
+    expect(
+      screen.getByRole("menuitem", { name: "Copy run id" }),
+    ).toBeInTheDocument();
   });
 
   it("copies the full run id and shows a success toast", async () => {
     await renderRuns([run()]);
 
+    openDropdownMenu();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Copy run id" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
     });
 
     expect(writeText).toHaveBeenCalledWith("run-1");
@@ -597,8 +627,9 @@ describe("Trigger runs copy-run-id control", () => {
     });
     await renderRuns([run()]);
 
+    openDropdownMenu();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Copy run id" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
     });
 
     expect(toastErrorSpy).toHaveBeenCalledWith("Failed to copy to clipboard");

@@ -3,16 +3,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 /**
  * The loading placeholder for one `TriggerRunRow`, laid out on the same
  * frame — status badge, the Trigger name, start time (absolute and
- * relative), duration and the stats line, then the icon actions — so the
+ * relative), duration and the stats line, then the ⋮ menu — so the
  * rows land without shifting. Each text line is a box of the line's own
  * height holding a shorter bar, which is how the loaded text reads.
  */
-export const TriggerRunRowSkeleton = ({
-  linkToDetail = true,
-}: {
-  /** Mirrors the row's own prop: off drops the **View run** action. */
-  linkToDetail?: boolean;
-}) => (
+export const TriggerRunRowSkeleton = () => (
   <div className="p-4">
     <div className="flex items-center gap-4 justify-between">
       <div className="flex min-w-0 items-center gap-4">
@@ -36,11 +31,6 @@ export const TriggerRunRowSkeleton = ({
         </div>
       </div>
       <div className="flex items-center shrink-0">
-        {linkToDetail && (
-          <div className="flex size-9 items-center justify-center">
-            <Skeleton className="size-4" />
-          </div>
-        )}
         <div className="flex size-9 items-center justify-center">
           <Skeleton className="size-4" />
         </div>

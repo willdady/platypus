@@ -8,6 +8,8 @@ export type ResourcePageProps = {
   title: string;
   children: ReactNode;
   variant?: ResourcePageVariant;
+  /** Page-level actions drawn beside the title, e.g. a link elsewhere. */
+  actions?: ReactNode;
 };
 
 const narrowTitleClass = "text-2xl mb-4 font-bold";
@@ -42,13 +44,23 @@ export const ResourcePage = ({
   title,
   children,
   variant = "bare",
+  actions,
 }: ResourcePageProps) => {
   const layout = resourcePageLayout[variant];
+
+  const heading = <h1 className={layout.title}>{title}</h1>;
 
   const inner = (
     <div className={layout.inner}>
       <BackButton fallbackHref={backFallbackHref} />
-      <h1 className={layout.title}>{title}</h1>
+      {actions ? (
+        <div className="flex items-start justify-between gap-4">
+          {heading}
+          <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        </div>
+      ) : (
+        heading
+      )}
       {children}
     </div>
   );
