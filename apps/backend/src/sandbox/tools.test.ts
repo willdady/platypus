@@ -369,3 +369,179 @@ describe("fsDownload", () => {
     ).rejects.toThrow(/25 MiB/);
   });
 });
+
+describe("fsView", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3]);
+
+  const viewing = (
+    file: { path: string; bytes: Uint8Array },
+    fileTypes: string[] = ["image/*", "application/pdf"],
+  ) => {
+    const { mocks } = makeBackend();
+    mocks.fsList.mockResolvedValue({
+      entries: [
+        {
+          path: file.path.split("/").pop(),
+          type: "file",
+          size: file.bytes.length,
+        },
+      ],
+      truncated: false,
+    });
+    const fsReadBytes = vi.fn().mockResolvedValue(file.bytes);
+    const backend = { ...mocks, fsReadBytes } as unknown as SandboxBackend;
+    const tools = createSandboxTools(backend, ctx, {}, () =>
+      Promise.resolve({ passthroughFileTypes: fileTypes }),
+    );
+    return { tools, mocks, fsReadBytes };
+  };
+
+  /** Run the tool, then build what the model would receive for that call. */
+  const view = async (
+    tools: ReturnType<typeof createSandboxTools>,
+    path: string,
+  ) => {
+    const output = await callExecute(tools, "fsView", { path });
+    const modelOutput = await tools.fsView.toModelOutput!({
+      toolCallId: "test",
+      input: { path },
+      output,
+    });
+    return { output, modelOutput };
+  };
+
+  it("is offered only when the backend implements fsReadBytes", () => {
+    expect(createSandboxTools(makeBackend().backend, ctx)).not.toHaveProperty(
+      "fsView",
+    );
+    expect(viewing({ path: "a.png", bytes: PNG }).tools).toHaveProperty(
+      "fsView",
+    );
+  });
+
+  it("returns only the path, size and media type — never the bytes", async () => {
+    const { tools, fsReadBytes } = viewing({
+      path: "out/chart.png",
+      bytes: PNG,
+    });
+    const { output } = await view(tools, "out/chart.png");
+    expect(output).toEqual({
+      path: "out/chart.png",
+      size: PNG.length,
+      mediaType: "image/png",
+    });
+    expect(fsReadBytes).toHaveBeenCalledWith(
+      ctx,
+      { path: "out/chart.png", maxBytes: 25 * 1024 * 1024 },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
+  });
+
+  it("sends a native file as a text part naming it, then the file", async () => {
+    const { tools } = viewing({ path: "chart.png", bytes: PNG });
+    const { modelOutput } = await view(tools, "chart.png");
+    expect(modelOutput).toEqual({
+      type: "content",
+      value: [
+        { type: "text", text: "`chart.png` (image/png, 8 B) attached below." },
+        {
+          type: "file",
+          data: { type: "data", data: PNG },
+          mediaType: "image/png",
+          filename: "chart.png",
+        },
+      ],
+    });
+  });
+
+  it("sends a native PDF as is, without extracting it", async () => {
+    const pdf = new TextEncoder().encode("%PDF-not-really");
+    const { tools } = viewing({ path: "doc.pdf", bytes: pdf });
+    const { modelOutput } = await view(tools, "doc.pdf");
+    expect(modelOutput).toMatchObject({
+      type: "content",
+      value: [
+        { type: "text" },
+        { type: "file", mediaType: "application/pdf", data: { data: pdf } },
+      ],
+    });
+  });
+
+  it("inlines a text file the model does not take natively", async () => {
+    const { tools } = viewing(
+      { path: "notes.md", bytes: new TextEncoder().encode("# hi") },
+      [],
+    );
+    const { modelOutput } = await view(tools, "notes.md");
+    expect(modelOutput).toEqual({
+      type: "content",
+      value: [
+        {
+          type: "text",
+          text: "`notes.md` (text/markdown, 4 B) attached below.",
+        },
+        { type: "text", text: "[file: notes.md]\n\n```\n# hi\n```" },
+      ],
+    });
+  });
+
+  it("sends extracted text for a PDF the model does not take natively", async () => {
+    const { tools } = viewing(
+      { path: "scan.pdf", bytes: new TextEncoder().encode("not a real pdf") },
+      [],
+    );
+    const { modelOutput } = await view(tools, "scan.pdf");
+    // The bytes are not a parseable PDF, so extraction reports no text — what
+    // matters is that it went down the extraction path rather than native.
+    expect(modelOutput).toEqual({
+      type: "content",
+      value: [
+        {
+          type: "text",
+          text: "`scan.pdf` (application/pdf, 14 B) attached below.",
+        },
+        {
+          type: "text",
+          text: "[no readable text could be extracted from scan.pdf — it may be a scanned or image-only document]",
+        },
+      ],
+    });
+  });
+
+  it("errors on a file type the model cannot read", async () => {
+    const { tools } = viewing({ path: "chart.png", bytes: PNG }, []);
+    await expect(
+      callExecute(tools, "fsView", { path: "chart.png" }),
+    ).rejects.toThrow(/cannot read image\/png/i);
+  });
+
+  it("gives an unknown extension a generic media type", async () => {
+    const { tools } = viewing({ path: "blob.xyz", bytes: PNG }, [
+      "application/octet-stream",
+    ]);
+    const { output } = await view(tools, "blob.xyz");
+    expect(output).toMatchObject({ mediaType: "application/octet-stream" });
+  });
+
+  it("errors on a missing path, a directory, or a file over the bound", async () => {
+    const { tools, mocks } = viewing({ path: "a.png", bytes: PNG });
+    mocks.fsList.mockResolvedValueOnce({ entries: [], truncated: false });
+    await expect(
+      callExecute(tools, "fsView", { path: "a.png" }),
+    ).rejects.toThrow(/no such file/i);
+    mocks.fsList.mockResolvedValueOnce({
+      entries: [{ path: "out", type: "dir" }],
+      truncated: false,
+    });
+    await expect(callExecute(tools, "fsView", { path: "out" })).rejects.toThrow(
+      /directory/i,
+    );
+    mocks.fsList.mockResolvedValueOnce({
+      entries: [{ path: "a.png", type: "file", size: 25 * 1024 * 1024 + 1 }],
+      truncated: false,
+    });
+    await expect(
+      callExecute(tools, "fsView", { path: "a.png" }),
+    ).rejects.toThrow(/25 MiB/);
+  });
+});

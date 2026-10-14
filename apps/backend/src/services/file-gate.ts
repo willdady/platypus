@@ -228,6 +228,30 @@ const omittedFilePlaceholder = (
 };
 
 /**
+ * The text a model is sent in place of a file it does not take natively: a
+ * text file inlined, or a PDF/DOCX extracted (capped and annotated), or a
+ * placeholder when extraction finds nothing. Shared by the send-time
+ * normalizer and the Sandbox's `fsView` Tool, so the two read a file the same
+ * way.
+ */
+export const fileTextForModel = async (
+  bytes: Uint8Array,
+  file: { mediaType?: string; filename?: string },
+  outcome: "text" | "extract",
+  options: { maxExtractedTextChars?: number } = {},
+): Promise<string> => {
+  if (outcome === "text") {
+    return annotateInlinedText(file.filename, new TextDecoder().decode(bytes));
+  }
+  const extracted = await extractDocumentText(bytes, file, {
+    maxChars: options.maxExtractedTextChars,
+  });
+  return extracted.status === "ok"
+    ? annotateExtractedText(file.filename, extracted)
+    : omittedFilePlaceholder(file.filename, extracted.status).text;
+};
+
+/**
  * Rewrite non-native file parts into content the model can read. Runs at send
  * time, after file URLs are inlined (so `data:` bytes are available):
  *
@@ -277,27 +301,12 @@ export const normalizeFileParts = async (
               : part;
           }
 
-          if (outcome === "text") {
+          if (outcome === "text" || outcome === "extract") {
             if (!bytes)
               return omittedFilePlaceholder(part.filename, "unavailable");
-            const content = new TextDecoder().decode(bytes);
             return {
               type: "text" as const,
-              text: annotateInlinedText(part.filename, content),
-            };
-          }
-
-          if (outcome === "extract") {
-            if (!bytes)
-              return omittedFilePlaceholder(part.filename, "unavailable");
-            const extracted = await extractDocumentText(bytes, part, {
-              maxChars: options.maxExtractedTextChars,
-            });
-            if (extracted.status !== "ok")
-              return omittedFilePlaceholder(part.filename, extracted.status);
-            return {
-              type: "text" as const,
-              text: annotateExtractedText(part.filename, extracted),
+              text: await fileTextForModel(bytes, part, outcome, options),
             };
           }
 

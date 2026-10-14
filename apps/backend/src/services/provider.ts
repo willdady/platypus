@@ -4,7 +4,13 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import type { LanguageModel, EmbeddingModel, Tool } from "ai";
+import {
+  wrapLanguageModel,
+  type LanguageModel,
+  type EmbeddingModel,
+  type Tool,
+} from "ai";
+import { toolResultFilesMiddleware } from "./tool-result-files.ts";
 import type { ConcreteModelId, Provider } from "@platypus/schemas";
 
 /**
@@ -86,6 +92,18 @@ const withOpenRouterAttribution = (
   return { ...OPENROUTER_ATTRIBUTION_HEADERS, ...own };
 };
 
+/**
+ * For a Provider path whose adapter cannot be trusted with a file inside a tool
+ * result: the files move into a `user` message after the tool results
+ * (ADR-0038). OpenAI on Chat Completions JSON-stringifies them; OpenRouter's
+ * `/chat/completions` is unverified for them upstream, and carries files in a
+ * `user` message either way.
+ */
+const withToolResultFilesMoved = (
+  model: Exclude<LanguageModel, string>,
+): LanguageModel =>
+  wrapLanguageModel({ model, middleware: toolResultFilesMiddleware });
+
 export const openProvider = (provider: Provider): OpenedProvider => {
   switch (provider.providerType) {
     case "OpenAI": {
@@ -127,7 +145,8 @@ export const openProvider = (provider: Provider): OpenedProvider => {
           })
         : undefined;
       return {
-        languageModel: (id) => (compat ? compat.chatModel(id) : sdk(id)),
+        languageModel: (id) =>
+          compat ? withToolResultFilesMoved(compat.chatModel(id)) : sdk(id),
         embeddingModel: (id) => sdk.embeddingModel(id),
         searchTools: () => ({
           web_search: sdk.tools.webSearch({
@@ -145,7 +164,7 @@ export const openProvider = (provider: Provider): OpenedProvider => {
         extraBody: provider.extraBody ?? undefined,
       });
       return {
-        languageModel: (id) => sdk(id),
+        languageModel: (id) => withToolResultFilesMoved(sdk(id)),
         embeddingModel: (id) => sdk.textEmbeddingModel(id),
         searchTools: () => ({ web_search: sdk.tools.webSearch({}) }),
       };
