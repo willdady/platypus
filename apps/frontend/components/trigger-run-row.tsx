@@ -201,140 +201,140 @@ export const TriggerRunRow = ({
 
   const rowBody = (
     <div className="flex items-center gap-4 justify-between">
-      {/* `min-w-0` down the left column: a flex item's minimum is otherwise
-          its content's, so a long Trigger name, an error message or the stats
+      {/* Two columns: text, then actions. The badge sits under the name
+          rather than in a column of its own, which squeezed the text on a
+          phone (#1410). `min-w-0`: a flex item's minimum is otherwise its
+          content's, so a long Trigger name, an error message or the stats
           line would widen the column past the row and push the actions off
-          the right edge on a phone. */}
-      <div className="flex min-w-0 items-center gap-4">
-        {statusBadge(run.status)}
-        <div className="min-w-0">
-          <p className="font-medium break-words">{run.triggerName}</p>
-          <p className="text-sm">{formatDateTime(run.startedAt)}</p>
+          the right edge. */}
+      <div className="min-w-0">
+        <p className="font-medium break-words">{run.triggerName}</p>
+        <div className="my-1 flex">{statusBadge(run.status)}</div>
+        <p className="text-sm">{formatDateTime(run.startedAt)}</p>
+        <p className="text-sm text-muted-foreground">
+          {formatRelativeTime(run.startedAt)}
+        </p>
+        {run.eventType && (
           <p className="text-sm text-muted-foreground">
-            {formatRelativeTime(run.startedAt)}
+            Event: {run.eventType}
           </p>
-          {run.eventType && (
-            <p className="text-sm text-muted-foreground">
-              Event: {run.eventType}
-            </p>
-          )}
-          {run.completedAt && (
-            <p className="text-sm text-muted-foreground">
-              Duration: {formatDuration(run)}
-            </p>
-          )}
-          {stats && (
-            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+        )}
+        {run.completedAt && (
+          <p className="text-sm text-muted-foreground">
+            Duration: {formatDuration(run)}
+          </p>
+        )}
+        {stats && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <Footprints className="h-3 w-3" />
+              {stats.steps} step{stats.steps !== 1 ? "s" : ""}
+            </span>
+            {stats.toolCalls.length > 0 ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
+                    <Wrench className="h-3 w-3" />
+                    {toolCallCount} tool call
+                    {toolCallCount !== 1 ? "s" : ""}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <ul className="text-left">
+                    {stats.toolCalls.map((tc) => (
+                      <li key={tc.name}>
+                        {tc.name} &times;{tc.count}
+                      </li>
+                    ))}
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
               <span className="flex items-center gap-1 whitespace-nowrap">
-                <Footprints className="h-3 w-3" />
-                {stats.steps} step{stats.steps !== 1 ? "s" : ""}
+                <Wrench className="h-3 w-3" />0 tool calls
               </span>
-              {stats.toolCalls.length > 0 ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                      <Wrench className="h-3 w-3" />
-                      {toolCallCount} tool call
-                      {toolCallCount !== 1 ? "s" : ""}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <ul className="text-left">
-                      {stats.toolCalls.map((tc) => (
-                        <li key={tc.name}>
-                          {tc.name} &times;{tc.count}
-                        </li>
-                      ))}
-                    </ul>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="flex items-center gap-1 whitespace-nowrap">
-                  <Wrench className="h-3 w-3" />0 tool calls
-                </span>
-              )}
-              {/* Cached input is a breakdown of the in figure above, which
+            )}
+            {/* Cached input is a breakdown of the in figure above, which
                   already includes it — never subtracted (issue #734). A tooltip
                   on a cache icon so the token line stays as tight as it was:
                   absent means the Provider reported no cache detail, which is
                   never rendered as zero. */}
-              {stats.cacheReadTokens !== undefined ||
-              stats.cacheWriteTokens !== undefined ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                      <MessageSquare className="h-3 w-3" />
-                      {formatTokens(stats.inputTokens)} in /{" "}
-                      {formatTokens(stats.outputTokens)} out
-                      <Database className="h-3 w-3 text-muted-foreground" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <ul className="text-left">
-                      {cachedTokenBreakdown(stats, formatTokens).map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="flex items-center gap-1 whitespace-nowrap">
-                  <MessageSquare className="h-3 w-3" />
-                  {formatTokens(stats.inputTokens)} in /{" "}
-                  {formatTokens(stats.outputTokens)} out
-                </span>
-              )}
-              {/* How full the context got on the run's LAST step, which is a
+            {stats.cacheReadTokens !== undefined ||
+            stats.cacheWriteTokens !== undefined ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
+                    <MessageSquare className="h-3 w-3" />
+                    {formatTokens(stats.inputTokens)} in /{" "}
+                    {formatTokens(stats.outputTokens)} out
+                    <Database className="h-3 w-3 text-muted-foreground" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <ul className="text-left">
+                    {cachedTokenBreakdown(stats, formatTokens).map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <MessageSquare className="h-3 w-3" />
+                {formatTokens(stats.inputTokens)} in /{" "}
+                {formatTokens(stats.outputTokens)} out
+              </span>
+            )}
+            {/* How full the context got on the run's LAST step, which is a
                   different quantity from the cross-step sums above (ADR-0018).
                   Absent where the Provider reported no usage — occupancy is
                   then unknown and nothing is estimated. */}
-              {stats.contextOccupancy !== undefined && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                      <Gauge className="h-3 w-3" />
-                      {formatTokens(stats.contextOccupancy)} context
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Tokens the conversation filled on the final step
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          )}
-          {stats?.truncatedByTokenLimit && (
-            <TurnNotice className="mt-1">{RUN_CUT_SHORT_NOTICE}</TurnNotice>
-          )}
-          {stats?.stoppedAtStepLimit && (
-            <TurnNotice className="mt-1">{RUN_STEP_LIMIT_NOTICE}</TurnNotice>
-          )}
-          {/* Warnings, never a status: a run that went without some of its
+            {stats.contextOccupancy !== undefined && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
+                    <Gauge className="h-3 w-3" />
+                    {formatTokens(stats.contextOccupancy)} context
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Tokens the conversation filled on the final step
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
+        {stats?.truncatedByTokenLimit && (
+          <TurnNotice className="mt-1">{RUN_CUT_SHORT_NOTICE}</TurnNotice>
+        )}
+        {stats?.stoppedAtStepLimit && (
+          <TurnNotice className="mt-1">{RUN_STEP_LIMIT_NOTICE}</TurnNotice>
+        )}
+        {/* Warnings, never a status: a run that went without some of its
               tools, or whose tool calls failed, can still end `success`
               (#1184). Nothing extra for a clean run. */}
-          {(run.unloadedToolSets.length > 0 || run.failedToolCalls > 0) && (
-            <div role="group" aria-label={RUN_WARNINGS_LABEL}>
-              {run.unloadedToolSets.map((unloaded) => (
-                <TurnNotice key={unloaded.toolSetId} className="mt-1">
-                  {unloadedToolSetNotice(unloaded)}
-                </TurnNotice>
-              ))}
-              {run.failedToolCalls > 0 && (
-                <TurnNotice className="mt-1">
-                  {failedToolCallsNotice(run.failedToolCalls)}
-                </TurnNotice>
-              )}
-            </div>
-          )}
-          {run.status === "suppressed" && (
-            <TurnNotice className="mt-1">{RUN_SUPPRESSED_NOTICE}</TurnNotice>
-          )}
-          {run.errorMessage && (
-            <p className="text-sm text-destructive mt-1 break-words">
-              {run.errorMessage}
-            </p>
-          )}
-        </div>
+        {(run.unloadedToolSets.length > 0 || run.failedToolCalls > 0) && (
+          <div role="group" aria-label={RUN_WARNINGS_LABEL}>
+            {run.unloadedToolSets.map((unloaded) => (
+              <TurnNotice key={unloaded.toolSetId} className="mt-1">
+                {unloadedToolSetNotice(unloaded)}
+              </TurnNotice>
+            ))}
+            {run.failedToolCalls > 0 && (
+              <TurnNotice className="mt-1">
+                {failedToolCallsNotice(run.failedToolCalls)}
+              </TurnNotice>
+            )}
+          </div>
+        )}
+        {run.status === "suppressed" && (
+          <TurnNotice className="mt-1">{RUN_SUPPRESSED_NOTICE}</TurnNotice>
+        )}
+        {run.errorMessage && (
+          <p className="text-sm text-destructive mt-1 break-words">
+            {run.errorMessage}
+          </p>
+        )}
       </div>
       <div className="flex items-center shrink-0">
         <DropdownMenu>
