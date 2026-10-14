@@ -158,6 +158,24 @@ describe("TriggerRunRow", () => {
     });
   });
 
+  // #1410: no badge column squeezing the text on a phone.
+  it("shows the status under the Trigger name, before the start time, in the same column", () => {
+    render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
+
+    const name = screen.getByText("Nightly digest");
+    const badge = screen.getByText("Success");
+    const relative = screen.getByText(/ago$/);
+    const column = name.parentElement!;
+    expect(column).toContainElement(badge);
+    expect(column).toContainElement(relative);
+    expect(name.compareDocumentPosition(badge)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(badge.compareDocumentPosition(relative)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   // #647: someone stopped it, nothing faulted — so it is not drawn as a failure.
   it("labels a cancelled run Cancelled, without an error", () => {
     render(
