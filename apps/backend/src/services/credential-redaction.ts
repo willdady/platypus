@@ -114,6 +114,8 @@ export const sanitizeMcpResponse = (record: McpRecord) => {
     oauthClientSecret,
     oauthTokenExpiresAt,
     oauthScope,
+    oauthAuthorizationServer,
+    oauthClientDynamicallyRegistered,
     lastKnownToolListing,
     lastKnownToolListingFetchedAt,
     lastFetchFailedAt,

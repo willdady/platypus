@@ -2364,6 +2364,8 @@ describe("chat-execution", () => {
       lastFetchFailedAt: null,
       oauthClientId: null,
       oauthClientSecret: null,
+      oauthClientDynamicallyRegistered: false,
+      oauthAuthorizationServer: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -2523,6 +2525,8 @@ describe("chat-execution", () => {
       lastFetchFailedAt: null,
       oauthClientId: null,
       oauthClientSecret: null,
+      oauthClientDynamicallyRegistered: false,
+      oauthAuthorizationServer: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

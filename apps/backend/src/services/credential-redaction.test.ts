@@ -115,6 +115,11 @@ describe("read models", () => {
     oauthClientSecret: "oauth-client",
     oauthScope: "read",
     oauthTokenExpiresAt: new Date(0),
+    oauthAuthorizationServer: {
+      authorizationServerUrl: "https://auth.example.com/",
+      tokenEndpoint: "https://auth.example.com/token",
+    },
+    oauthClientDynamicallyRegistered: true,
     lastKnownToolListing: { tools: [] },
     lastKnownToolListingFetchedAt: new Date(0),
     lastFetchFailedAt: new Date(0),
@@ -133,6 +138,8 @@ describe("read models", () => {
     expect(out).not.toHaveProperty("lastKnownToolListing");
     expect(out).not.toHaveProperty("lastKnownToolListingFetchedAt");
     expect(out).not.toHaveProperty("lastFetchFailedAt");
+    expect(out).not.toHaveProperty("oauthAuthorizationServer");
+    expect(out).not.toHaveProperty("oauthClientDynamicallyRegistered");
   });
 
   it("strips both secret classes when credentials are not revealed", () => {

@@ -1,11 +1,32 @@
-import type { OAuthClientProvider } from "@ai-sdk/mcp";
+import {
+  auth as mcpAuth,
+  type OAuthAuthorizationServerInformation,
+  type OAuthClientProvider,
+  type OAuthTokens,
+} from "@ai-sdk/mcp";
 import { nanoid } from "nanoid";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import { frontendBaseUrl } from "../base-urls.ts";
 import { mcp as mcpTable, mcpOauthState } from "../db/schema.ts";
 
 export type McpRecord = typeof mcpTable.$inferSelect;
+
+/** Fields to null-out when clearing OAuth tokens. */
+export const OAUTH_TOKEN_CLEAR_FIELDS = {
+  oauthAccessToken: null,
+  oauthRefreshToken: null,
+  oauthTokenExpiresAt: null,
+  oauthScope: null,
+  oauthAuthorizationServer: null,
+} as const;
+
+/** Fields to reset when dropping the OAuth client registration. */
+export const OAUTH_CLIENT_CLEAR_FIELDS = {
+  oauthClientId: null,
+  oauthClientSecret: null,
+  oauthClientDynamicallyRegistered: false,
+} as const;
 
 /** Cached callback URL (depends only on env vars, so computed once). */
 let _cachedCallbackUrl: string | undefined;
@@ -109,19 +130,29 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     };
   }
 
-  async tokens() {
-    // Re-read from DB to get latest tokens (important for token refresh)
+  /** This MCP's OAuth columns, re-read so a refresh sees the latest tokens. */
+  private async oauthRow() {
     const records = await db
       .select({
         oauthAccessToken: mcpTable.oauthAccessToken,
         oauthRefreshToken: mcpTable.oauthRefreshToken,
         oauthTokenExpiresAt: mcpTable.oauthTokenExpiresAt,
         oauthScope: mcpTable.oauthScope,
+        oauthClientId: mcpTable.oauthClientId,
+        oauthClientSecret: mcpTable.oauthClientSecret,
+        oauthClientDynamicallyRegistered:
+          mcpTable.oauthClientDynamicallyRegistered,
+        oauthAuthorizationServer: mcpTable.oauthAuthorizationServer,
       })
       .from(mcpTable)
       .where(eq(mcpTable.id, this.mcpRecord.id))
       .limit(1);
-    const record = records[0];
+    return records[0];
+  }
+
+  async tokens() {
+    const record = await this.oauthRow();
+    this._refreshTokenRead = record?.oauthRefreshToken ?? undefined;
     if (!record?.oauthAccessToken) return undefined;
 
     return {
@@ -139,13 +170,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     };
   }
 
-  async saveTokens(tokens: {
-    access_token: string;
-    token_type: string;
-    refresh_token?: string;
-    expires_in?: number;
-    scope?: string;
-  }) {
+  async saveTokens(tokens: OAuthTokens) {
     await db
       .update(mcpTable)
       .set({
@@ -155,31 +180,42 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
           ? new Date(Date.now() + tokens.expires_in * 1000)
           : null,
         oauthScope: tokens.scope ?? null,
+        // The library tags every token response with the server that issued
+        // it; that is the record a later refresh is checked against.
+        ...(tokens.authorization_server &&
+          tokens.token_endpoint && {
+            oauthAuthorizationServer: {
+              issuer: tokens.issuer,
+              authorizationServerUrl: tokens.authorization_server,
+              tokenEndpoint: tokens.token_endpoint,
+            },
+          }),
         updatedAt: new Date(),
       })
-      .where(eq(mcpTable.id, this.mcpRecord.id));
+      .where(
+        // A refresh writes only over the sign-in it refreshed: a sign-out or
+        // Client ID change since must not get the old client's tokens back.
+        // A code exchange read no tokens and starts a new sign-in.
+        this._refreshTokenRead
+          ? this.sameSignIn(this._refreshTokenRead)
+          : eq(mcpTable.id, this.mcpRecord.id),
+      );
+  }
+
+  /** This MCP, while it still holds the sign-in `refreshToken` belongs to. */
+  private sameSignIn(refreshToken: string) {
+    return and(
+      eq(mcpTable.id, this.mcpRecord.id),
+      eq(mcpTable.oauthRefreshToken, refreshToken),
+    );
   }
 
   async clientInformation() {
-    const records = await db
-      .select({
-        oauthClientId: mcpTable.oauthClientId,
-        oauthClientSecret: mcpTable.oauthClientSecret,
-      })
-      .from(mcpTable)
-      .where(eq(mcpTable.id, this.mcpRecord.id))
-      .limit(1);
-    const record = records[0];
-    if (!record?.oauthClientId) return undefined;
-
-    return {
-      client_id: record.oauthClientId,
-      ...(record.oauthClientSecret && {
-        client_secret: record.oauthClientSecret,
-      }),
-    };
+    return toClientInformation(await this.oauthRow());
   }
 
+  // Only called after dynamic client registration: an Operator-entered client
+  // is written by mcp-write, never by the library.
   async saveClientInformation(clientInfo: {
     client_id: string;
     client_secret?: string;
@@ -189,9 +225,119 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
       .set({
         oauthClientId: clientInfo.client_id,
         oauthClientSecret: clientInfo.client_secret ?? null,
+        oauthClientDynamicallyRegistered: true,
         updatedAt: new Date(),
       })
       .where(eq(mcpTable.id, this.mcpRecord.id));
+  }
+
+  async isClientInformationDynamicallyRegistered() {
+    return (await this.oauthRow())?.oauthClientDynamicallyRegistered ?? false;
+  }
+
+  // The library only invalidates after a refresh or code exchange failed. Only
+  // the refresh token this provider read and failed with is dropped: a
+  // concurrent request may already have rotated it, and a callback's failed
+  // code exchange (read no tokens) leaves the MCP's sign-in alone.
+  async invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier") {
+    if (scope === "verifier" || !this._refreshTokenRead) return;
+    await db
+      .update(mcpTable)
+      .set({
+        ...(scope !== "client" && OAUTH_TOKEN_CLEAR_FIELDS),
+        ...(scope !== "tokens" && OAUTH_CLIENT_CLEAR_FIELDS),
+        updatedAt: new Date(),
+      })
+      .where(this.sameSignIn(this._refreshTokenRead));
+  }
+
+  // @ai-sdk/mcp refuses the code exchange and token refresh without a record
+  // of the authorization server they belong to.
+  async authorizationServerInformation() {
+    // A callback is checked against the server its own sign-in started with.
+    if (this._stateForLookup) {
+      const states = await db
+        .select({ info: mcpOauthState.authorizationServer })
+        .from(mcpOauthState)
+        .where(eq(mcpOauthState.id, this._stateForLookup))
+        .limit(1);
+      return states[0]?.info ?? undefined;
+    }
+    const record = await this.oauthRow();
+    if (record?.oauthAuthorizationServer)
+      return record.oauthAuthorizationServer;
+    if (record?.oauthRefreshToken)
+      return this.adoptAuthorizationServer(record, record.oauthRefreshToken);
+    return undefined;
+  }
+
+  async saveAuthorizationServerInformation(
+    info: OAuthAuthorizationServerInformation,
+  ) {
+    // Bound to this sign-in, not to the MCP: saveTokens() records it on the MCP
+    // once the code exchange succeeds.
+    await db
+      .update(mcpOauthState)
+      .set({ authorizationServer: info })
+      .where(eq(mcpOauthState.id, this.state()));
+  }
+
+  validateAuthorizationServerURL(_serverUrl: string | URL, url: string | URL) {
+    this._authorizationServerUrl = new URL(url).href;
+  }
+
+  /**
+   * Rows authorized before @ai-sdk/mcp 2.0.57 hold a refresh token but no
+   * record, and the library will not refresh without one. Adopt what discovery
+   * reports now (the trust those tokens already had) for the authorization
+   * server this auth() call already discovered and vetted, read by the
+   * library's own metadata discovery through a throwaway sign-in started at
+   * that server, and kept only when it agrees with that server.
+   */
+  // ponytail: one-off backfill; delete once no OAuth MCP with a refresh token has a NULL oauth_authorization_server.
+  private async adoptAuthorizationServer(
+    record: OAuthClientColumns,
+    refreshToken: string,
+  ) {
+    const client = toClientInformation(record);
+    if (!client || !this._authorizationServerUrl) return undefined;
+    let adopted: OAuthAuthorizationServerInformation | undefined;
+    // A failure is thrown, not answered with undefined: undefined makes the
+    // library drop the tokens, and a network blip must not sign the MCP out.
+    await mcpAuth(
+      {
+        redirectUrl: this.callbackUrl,
+        clientMetadata: this.clientMetadata,
+        clientInformation: () => client,
+        tokens: () => undefined,
+        saveTokens: () => {},
+        codeVerifier: () => "",
+        saveCodeVerifier: () => {},
+        redirectToAuthorization: () => {},
+        // The resource belongs to the MCP, not to this throwaway sign-in.
+        validateResourceURL: () => Promise.resolve(undefined),
+        saveAuthorizationServerInformation: (info) => {
+          adopted = info;
+        },
+      },
+      { serverUrl: this._authorizationServerUrl, fetchFn: oauthFetchFn },
+    );
+    if (
+      !adopted ||
+      adopted.authorizationServerUrl !== this._authorizationServerUrl
+    ) {
+      return undefined;
+    }
+    // Only onto the sign-in it was discovered for: one that finished meanwhile
+    // already holds its own record, and the refresh token in hand is spent.
+    // Refreshing with it anyway would trip reuse detection and revoke the new
+    // sign-in too.
+    const updated = await db
+      .update(mcpTable)
+      .set({ oauthAuthorizationServer: adopted })
+      .where(this.sameSignIn(refreshToken))
+      .returning({ id: mcpTable.id });
+    return updated.length ? adopted : undefined;
   }
 
   redirectToAuthorization(authorizationUrl: URL) {
@@ -272,4 +418,30 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   private _pendingCodeVerifier?: string;
   private _generatedState?: string;
   private _stateForLookup?: string;
+  private _authorizationServerUrl?: string;
+  private _refreshTokenRead?: string;
 }
+
+type OAuthClientColumns = Pick<
+  McpRecord,
+  "oauthClientId" | "oauthClientSecret" | "oauthAuthorizationServer"
+>;
+
+const toClientInformation = (record: OAuthClientColumns | undefined) => {
+  if (!record?.oauthClientId) return undefined;
+
+  const server = record.oauthAuthorizationServer;
+  return {
+    client_id: record.oauthClientId,
+    ...(record.oauthClientSecret && {
+      client_secret: record.oauthClientSecret,
+    }),
+    // Lets the library check, before reusing this client, that discovery
+    // still points at the server it was used with.
+    ...(server && {
+      issuer: server.issuer,
+      authorization_server: server.authorizationServerUrl,
+      token_endpoint: server.tokenEndpoint,
+    }),
+  };
+};

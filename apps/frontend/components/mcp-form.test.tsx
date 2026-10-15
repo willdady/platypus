@@ -239,9 +239,29 @@ describe("McpForm save payload", () => {
       name: "Docs",
       url: "http://mcp.test",
       authType: "OAuth",
-      oauthClientId: "client-id",
+      // Unedited, so not sent: a sign-in may have registered a newer one.
       oauthRequestedScope: "calendar email",
     });
+  });
+
+  it("sends a Client ID the user edited", async () => {
+    setData({
+      id: "m1",
+      name: "Docs",
+      url: "http://mcp.test",
+      authType: "OAuth",
+      oauthClientId: "client-id",
+    } as unknown as MCP);
+    const fetchMock = stubAcceptedSave({ id: "m1" });
+    render(<McpForm orgId="org1" mcpId="m1" />);
+
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "new-client" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedBody(fetchMock)).toMatchObject({ oauthClientId: "new-client" });
   });
 });
 
@@ -364,6 +384,60 @@ describe("McpForm OAuth", () => {
       "http://test/organizations/org1/workspaces/ws1/mcps/m1",
       "http://test/organizations/org1/workspaces/ws1/mcps/m1/oauth/authorize?force=true",
     ]);
+  });
+
+  // Authorize saves without leaving the form, and its sign-in may register a
+  // new client; saving the same Client ID edit again would sign the MCP out.
+  it("does not resend a Client ID edit that Authorize already saved", async () => {
+    const fetchMock = stubSaveSequence(
+      { status: 200, body: { id: "m1" } },
+      { status: 200, body: { alreadyAuthorized: true } },
+      { status: 200, body: { id: "m1" } },
+    );
+    renderOAuthMcp(true);
+
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Re-authorize" }));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Already authorized"),
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      oauthClientId: "",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(savedBody(fetchMock)).not.toHaveProperty("oauthClientId");
+  });
+
+  // A new URL clears the client server-side while the form stays open; the
+  // field must show that, and re-entering the same Client ID must be sent.
+  it("shows the Client ID a URL change cleared, and sends it when re-entered", async () => {
+    const fetchMock = stubSaveSequence(
+      { status: 200, body: { id: "m1", oauthClientId: null } },
+      { status: 200, body: { alreadyAuthorized: true } },
+      { status: 200, body: { id: "m1", oauthClientId: "client-id" } },
+    );
+    renderOAuthMcp(true);
+
+    fireEvent.change(screen.getByLabelText("URL"), {
+      target: { value: "http://moved.test" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Re-authorize" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Client ID")).toHaveValue(""),
+    );
+
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "client-id" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(savedBody(fetchMock)).toMatchObject({ oauthClientId: "client-id" });
   });
 
   // The form polls the popup until it closes. That poll belongs to the form:

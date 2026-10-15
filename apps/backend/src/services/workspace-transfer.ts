@@ -24,6 +24,7 @@ import { deleteStoredPrefix } from "../storage/utils.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 import { revokedTokenFields } from "./bearer-token.ts";
+import { OAUTH_TOKEN_CLEAR_FIELDS } from "./mcp-oauth-provider.ts";
 import { isBanned } from "./owner-membership.ts";
 
 export type WorkspaceTransferInput = {
@@ -190,10 +191,7 @@ export const applyWorkspaceTransfer = async (
     .update(mcpTable)
     .set({
       bearerToken: null,
-      oauthAccessToken: null,
-      oauthRefreshToken: null,
-      oauthTokenExpiresAt: null,
-      oauthScope: null,
+      ...OAUTH_TOKEN_CLEAR_FIELDS,
       updatedAt: now,
     })
     .where(eq(mcpTable.workspaceId, workspaceId));

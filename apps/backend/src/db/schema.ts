@@ -17,7 +17,10 @@ import type {
   KanbanCardHistoryChange,
   UnloadedToolSet,
 } from "@platypus/schemas";
-import type { ListToolsResult } from "@ai-sdk/mcp";
+import type {
+  ListToolsResult,
+  OAuthAuthorizationServerInformation,
+} from "@ai-sdk/mcp";
 
 // Custom vector type without fixed dimensions — allows variable-dimension vectors per workspace
 const unboundVector = customType<{
@@ -422,6 +425,18 @@ export const mcp = pgTable(
     oauthRequestedScope: t.text("oauth_requested_scope"),
     oauthClientId: t.text("oauth_client_id"),
     oauthClientSecret: t.text("oauth_client_secret"),
+    // Set when @ai-sdk/mcp registered `oauthClientId` itself (dynamic client
+    // registration), so it may drop and re-register it; an Operator-entered
+    // client is never dropped.
+    oauthClientDynamicallyRegistered: t
+      .boolean("oauth_client_dynamically_registered")
+      .notNull()
+      .default(false),
+    // The authorization server the stored tokens and client belong to, written
+    // with each token response. @ai-sdk/mcp refuses to refresh without it.
+    oauthAuthorizationServer: t
+      .jsonb("oauth_authorization_server")
+      .$type<OAuthAuthorizationServerInformation>(),
     // The Last-known tool listing (ADR-0029, issue #635): the raw `tools/list`
     // result of the most recent successful fetch, served when a turn's fetch
     // fails. `json`, not `jsonb` — `jsonb` re-sorts object keys, and the served
@@ -463,6 +478,11 @@ export const mcpOauthState = pgTable(
       .notNull()
       .references(() => mcp.id, { onDelete: "cascade" }),
     codeVerifier: t.text("code_verifier").notNull(),
+    // The authorization server this sign-in started against; its callback is
+    // checked against this one, not against a sign-in started later.
+    authorizationServer: t
+      .jsonb("authorization_server")
+      .$type<OAuthAuthorizationServerInformation>(),
     redirectUri: t.text("redirect_uri").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     expiresAt: t.timestamp("expires_at").notNull(),

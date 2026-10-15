@@ -8,7 +8,10 @@ import { mcpCreateSchema, mcpUpdateSchema } from "@platypus/schemas";
 import type { ScopeContext } from "../scope.ts";
 import { NotFoundError } from "../errors.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
-import { OAUTH_TOKEN_CLEAR_FIELDS } from "./mcp-connection.ts";
+import {
+  OAUTH_CLIENT_CLEAR_FIELDS,
+  OAUTH_TOKEN_CLEAR_FIELDS,
+} from "./mcp-oauth-provider.ts";
 import { assertMcpSlugAvailable, deriveMcpSlug } from "./mcp-namespace.ts";
 import {
   orgScopedWhere,
@@ -97,6 +100,40 @@ const CONNECTION_FIELDS = [
 ] as const satisfies ReadonlyArray<keyof McpUpdateFields & keyof McpRow>;
 
 /**
+ * The OAuth columns a save resets, spread after the saved fields so it wins
+ * over them. Tokens are issued to one client at one server, so a new URL or
+ * Client ID needs a new sign-in.
+ */
+const oauthResetPatch = (existing: McpRow, fields: McpUpdateFields) => {
+  // The old client belongs to the old server too; one entered in this same
+  // save is for the new server and is kept.
+  if (existing.url !== fields.url) {
+    return {
+      ...OAUTH_TOKEN_CLEAR_FIELDS,
+      ...OAUTH_CLIENT_CLEAR_FIELDS,
+      ...(fields.oauthClientId !== undefined && {
+        oauthClientId: fields.oauthClientId,
+      }),
+      ...(fields.oauthClientSecret !== undefined && {
+        oauthClientSecret: fields.oauthClientSecret,
+      }),
+    };
+  }
+  // The form sends "" for no client ID, which the row may hold as null.
+  const clientIdChanged =
+    fields.oauthClientId !== undefined &&
+    (fields.oauthClientId || null) !== (existing.oauthClientId || null);
+  if (!clientIdChanged) return {};
+  return {
+    ...OAUTH_TOKEN_CLEAR_FIELDS,
+    oauthClientDynamicallyRegistered: false,
+    // A blank secret field means "keep", but the kept secret belonged to the
+    // old client.
+    ...(fields.oauthClientSecret === undefined && { oauthClientSecret: null }),
+  };
+};
+
+/**
  * Updates an MCP at the given scope. Throws `NotFoundError` when the MCP is
  * not visible at this scope, and (Workspace scope only) `LockedError` when it
  * is a Shared MCP edited only on the Organization surface (ADR-0007). If the
@@ -104,7 +141,7 @@ const CONNECTION_FIELDS = [
  * server-specific and would otherwise be sent to whatever server now sits at
  * the new URL — while the DCR/static `oauthClientId`/`oauthClientSecret` are
  * also cleared, matching what both routes did inline before this module
- * existed.
+ * existed. A changed `oauthClientId` clears the tokens as well.
  */
 export async function updateMcp(
   scope: McpScope,
@@ -133,7 +170,6 @@ export async function updateMcp(
     orgId = scope.orgId;
   }
 
-  const urlChanged = existing.url !== fields.url;
   // A different endpoint or credential can mean a different tool list, so the
   // Last-known tool listing is only good for the connection it was fetched
   // over (ADR-0029). An omitted field is left as it is by the write, so it is
@@ -154,11 +190,7 @@ export async function updateMcp(
     .set({
       ...fields,
       slug,
-      ...(urlChanged && {
-        ...OAUTH_TOKEN_CLEAR_FIELDS,
-        oauthClientId: null,
-        oauthClientSecret: null,
-      }),
+      ...oauthResetPatch(existing, fields),
       ...(connectionChanged && {
         lastKnownToolListing: null,
         lastKnownToolListingFetchedAt: null,

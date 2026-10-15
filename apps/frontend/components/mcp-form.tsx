@@ -145,6 +145,10 @@ const McpForm = ({
   };
   useEffect(() => stopPopupPoll, []);
   const [isRevoking, setIsRevoking] = useState(false);
+  // The Client ID the form was seeded with or last saved; only an edit of it
+  // is saved. A sign-in may since have registered a client this form never
+  // saw, and saving the stale value over it would sign the MCP out.
+  const seededClientId = useRef("");
 
   const router = useRouter();
 
@@ -173,7 +177,11 @@ const McpForm = ({
     handleChange: onFieldChange,
     toFieldChange: toFieldChangeBase,
     submit,
-  } = useEntityForm<McpFormData, { id: string }, McpRecord>({
+  } = useEntityForm<
+    McpFormData,
+    { id: string; oauthClientId?: string | null },
+    McpRecord
+  >({
     initialData: {
       name: "",
       url: "",
@@ -202,6 +210,9 @@ const McpForm = ({
         value,
       })),
     }),
+    onSeed: (mcp) => {
+      seededClientId.current = mcp.oauthClientId || "";
+    },
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => ({
       // Scope discriminator — the backend routes also enforce this from the
@@ -212,7 +223,11 @@ const McpForm = ({
       headers: buildHeadersObject(),
       authType: data.authType,
       bearerToken: data.authType === "Bearer" ? data.bearerToken : undefined,
-      oauthClientId: data.authType === "OAuth" ? data.oauthClientId : undefined,
+      oauthClientId:
+        data.authType === "OAuth" &&
+        data.oauthClientId !== seededClientId.current
+          ? data.oauthClientId
+          : undefined,
       oauthClientSecret:
         data.authType === "OAuth" && data.oauthClientSecret
           ? data.oauthClientSecret
@@ -280,6 +295,14 @@ const McpForm = ({
    */
   const saveMcp = async (): Promise<string | null> => {
     const saved = await submit({ silent: true });
+    // The form stays open after Authorize's save, so it takes the Client ID
+    // the backend stored, not the one it sent: a new URL clears the client
+    // while the field still shows it.
+    if (saved) {
+      const stored = saved.oauthClientId ?? "";
+      seededClientId.current = stored;
+      setFormData((prev) => ({ ...prev, oauthClientId: stored }));
+    }
     return saved?.id ?? null;
   };
 

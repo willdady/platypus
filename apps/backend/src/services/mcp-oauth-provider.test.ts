@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { auth as mcpAuth } from "@ai-sdk/mcp";
 import { mockNanoid } from "../test-setup.ts";
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import {
@@ -7,6 +8,11 @@ import {
   oauthFetchFn,
   type McpRecord,
 } from "./mcp-oauth-provider.ts";
+
+vi.mock("@ai-sdk/mcp", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@ai-sdk/mcp")>()),
+  auth: vi.fn(),
+}));
 
 const CALLBACK = "http://localhost:3001/oauth/mcp/callback";
 
@@ -249,6 +255,27 @@ describe("mcp-oauth-provider", () => {
         );
       });
 
+      it("does not write a refresh back over a sign-out made meanwhile", async () => {
+        const fake = world({ oauthAccessToken: "a", oauthRefreshToken: "r" });
+        const p = provider();
+        await p.tokens();
+        Object.assign(row(fake, "mcp", "mcp-1")!, {
+          oauthAccessToken: null,
+          oauthRefreshToken: null,
+        });
+
+        await p.saveTokens({
+          access_token: "a2",
+          refresh_token: "r2",
+          token_type: "bearer",
+        });
+
+        expect(row(fake, "mcp", "mcp-1")).toMatchObject({
+          oauthAccessToken: null,
+          oauthRefreshToken: null,
+        });
+      });
+
       it("clears the optional token fields a refresh does not return", async () => {
         const fake = world({
           oauthRefreshToken: "old",
@@ -301,6 +328,251 @@ describe("mcp-oauth-provider", () => {
           oauthClientSecret: null,
         });
         expect(row(fake, "mcp", "mcp-2")?.oauthClientId).toBe("other-client");
+      });
+    });
+
+    describe("authorization server information", () => {
+      const info = {
+        issuer: "https://auth.example.com",
+        authorizationServerUrl: "https://auth.example.com/",
+        tokenEndpoint: "https://auth.example.com/token",
+      };
+
+      it("binds a started sign-in's record to its state, not to the MCP", async () => {
+        const fake = world();
+        const starter = provider();
+        await starter.saveState(starter.state());
+
+        await starter.saveAuthorizationServerInformation(info);
+
+        expect(
+          row(fake, "mcp_oauth_state", starter.state())?.authorizationServer,
+        ).toEqual(info);
+        expect(row(fake, "mcp", "mcp-1")?.oauthAuthorizationServer).toBe(
+          undefined,
+        );
+        const callback = provider();
+        callback.setStateForLookup(starter.state());
+        await expect(
+          callback.authorizationServerInformation(),
+        ).resolves.toEqual(info);
+      });
+
+      it("records the server each token response came from", async () => {
+        const fake = world();
+
+        await provider().saveTokens({
+          access_token: "a",
+          token_type: "bearer",
+          issuer: info.issuer,
+          authorization_server: info.authorizationServerUrl,
+          token_endpoint: info.tokenEndpoint,
+        });
+
+        expect(row(fake, "mcp", "mcp-1")?.oauthAuthorizationServer).toEqual(
+          info,
+        );
+        expect(
+          row(fake, "mcp", "mcp-2")?.oauthAuthorizationServer,
+        ).toBeUndefined();
+        await expect(
+          provider().authorizationServerInformation(),
+        ).resolves.toEqual(info);
+      });
+
+      it("hands the record to the library with the client", async () => {
+        world({ oauthClientId: "client-1", oauthAuthorizationServer: info });
+        await expect(provider().clientInformation()).resolves.toEqual({
+          client_id: "client-1",
+          issuer: info.issuer,
+          authorization_server: info.authorizationServerUrl,
+          token_endpoint: info.tokenEndpoint,
+        });
+      });
+
+      it("returns undefined before authorization has started", async () => {
+        world();
+        await expect(
+          provider().authorizationServerInformation(),
+        ).resolves.toBeUndefined();
+      });
+
+      describe("for a row authorized before the record existed", () => {
+        const legacy = { oauthClientId: "client-1", oauthRefreshToken: "r" };
+
+        // What auth() reports for the current server, via a throwaway sign-in.
+        const discovers = (found: typeof info | Error) =>
+          vi.mocked(mcpAuth).mockImplementationOnce(async (stub) => {
+            if (found instanceof Error) throw found;
+            await stub.saveAuthorizationServerInformation?.(found);
+            return "REDIRECT";
+          });
+
+        const refreshing = (authorizationServerUrl: string) => {
+          const p = provider();
+          p.validateAuthorizationServerURL(
+            "http://mcp.example.com",
+            authorizationServerUrl,
+          );
+          return p;
+        };
+
+        it("adopts what discovery reports when it matches this auth() call", async () => {
+          const fake = world(legacy);
+          discovers(info);
+
+          await expect(
+            refreshing(
+              info.authorizationServerUrl,
+            ).authorizationServerInformation(),
+          ).resolves.toEqual(info);
+          expect(row(fake, "mcp", "mcp-1")?.oauthAuthorizationServer).toEqual(
+            info,
+          );
+          // Started at the server this auth() call found, not re-discovered
+          // from the MCP without the resource metadata URL that call had.
+          expect(vi.mocked(mcpAuth).mock.calls[0][1].serverUrl).toBe(
+            info.authorizationServerUrl,
+          );
+        });
+
+        it("neither overwrites nor refreshes over a sign-in that finished during discovery", async () => {
+          const fake = world(legacy);
+          const newer = { ...info, tokenEndpoint: "https://new.example.com/t" };
+          vi.mocked(mcpAuth).mockImplementationOnce(async (stub) => {
+            Object.assign(row(fake, "mcp", "mcp-1")!, {
+              oauthRefreshToken: "r2",
+              oauthAuthorizationServer: newer,
+            });
+            await stub.saveAuthorizationServerInformation?.(info);
+            return "REDIRECT";
+          });
+
+          // undefined, so the library does not refresh with the spent token.
+          await expect(
+            refreshing(
+              info.authorizationServerUrl,
+            ).authorizationServerInformation(),
+          ).resolves.toBeUndefined();
+
+          expect(row(fake, "mcp", "mcp-1")?.oauthAuthorizationServer).toEqual(
+            newer,
+          );
+        });
+
+        it("adopts nothing when discovery disagrees", async () => {
+          const fake = world(legacy);
+          discovers(info);
+
+          await expect(
+            refreshing(
+              "https://elsewhere.example.com/",
+            ).authorizationServerInformation(),
+          ).resolves.toBeUndefined();
+          expect(
+            row(fake, "mcp", "mcp-1")?.oauthAuthorizationServer,
+          ).toBeUndefined();
+        });
+
+        // undefined would make the library drop the tokens over a network blip.
+        it("fails the refresh, keeping the tokens, when discovery fails", async () => {
+          const fake = world(legacy);
+          discovers(new Error("offline"));
+
+          await expect(
+            refreshing(
+              info.authorizationServerUrl,
+            ).authorizationServerInformation(),
+          ).rejects.toThrow("offline");
+          expect(row(fake, "mcp", "mcp-1")).toMatchObject(legacy);
+        });
+      });
+    });
+
+    describe("dynamic client registration", () => {
+      it("marks a client the library saved as dynamically registered", async () => {
+        const fake = world();
+        await expect(
+          provider().isClientInformationDynamicallyRegistered(),
+        ).resolves.toBe(false);
+
+        await provider().saveClientInformation({ client_id: "dcr" });
+
+        expect(row(fake, "mcp", "mcp-1")).toMatchObject({
+          oauthClientId: "dcr",
+          oauthClientDynamicallyRegistered: true,
+        });
+        await expect(
+          provider().isClientInformationDynamicallyRegistered(),
+        ).resolves.toBe(true);
+      });
+    });
+
+    describe("invalidateCredentials", () => {
+      const signedIn = {
+        oauthAccessToken: "a",
+        oauthRefreshToken: "r",
+        oauthAuthorizationServer: { tokenEndpoint: "t" },
+        oauthClientId: "c",
+        oauthClientSecret: "s",
+        oauthClientDynamicallyRegistered: true,
+      };
+
+      it.each([
+        ["tokens", { oauthAccessToken: null, oauthClientId: "c" }],
+        ["client", { oauthAccessToken: "a", oauthClientId: null }],
+        [
+          "all",
+          {
+            oauthAccessToken: null,
+            oauthRefreshToken: null,
+            oauthAuthorizationServer: null,
+            oauthClientId: null,
+            oauthClientSecret: null,
+            oauthClientDynamicallyRegistered: false,
+          },
+        ],
+        ["verifier", signedIn],
+      ] as const)("drops %s on this MCP only", async (scope, expected) => {
+        const fake = world(signedIn);
+        const p = provider();
+        await p.tokens();
+
+        await p.invalidateCredentials(scope);
+
+        expect(row(fake, "mcp", "mcp-1")).toMatchObject(expected);
+        expect(row(fake, "mcp", "mcp-2")).toMatchObject({
+          oauthAccessToken: "other-access",
+          oauthClientId: "other-client",
+        });
+      });
+
+      it("keeps tokens a concurrent refresh already rotated", async () => {
+        const fake = world(signedIn);
+        const p = provider();
+        await p.tokens();
+        await provider().saveTokens({
+          access_token: "a2",
+          refresh_token: "r2",
+          token_type: "bearer",
+        });
+
+        await p.invalidateCredentials("tokens");
+
+        expect(row(fake, "mcp", "mcp-1")).toMatchObject({
+          oauthAccessToken: "a2",
+          oauthRefreshToken: "r2",
+        });
+      });
+
+      it("keeps the sign-in when a callback's code exchange fails", async () => {
+        const fake = world(signedIn);
+        const p = provider();
+        p.setStateForLookup("state-1");
+
+        await p.invalidateCredentials("tokens");
+
+        expect(row(fake, "mcp", "mcp-1")).toMatchObject(signedIn);
       });
     });
 

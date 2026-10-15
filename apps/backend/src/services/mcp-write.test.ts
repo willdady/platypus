@@ -132,6 +132,36 @@ describe("mcp write model", () => {
         oauthScope: null,
         oauthClientId: null,
         oauthClientSecret: null,
+        oauthAuthorizationServer: null,
+      });
+    });
+
+    it("keeps a client entered for the new URL in the same save", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          {
+            id: "mcp-1",
+            workspaceId: "ws-1",
+            url: "http://old.example.com",
+            oauthClientId: "old-client",
+          },
+        ]) // requireWorkspaceMutable
+        .mockResolvedValueOnce([]); // assertMcpSlugAvailable
+      mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
+
+      await updateMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1", {
+        ...updateFields(),
+        url: "http://new.example.com",
+        oauthClientId: "new-client",
+        oauthClientSecret: "new-secret",
+      });
+
+      const set = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(set).toMatchObject({
+        oauthAccessToken: null,
+        oauthClientId: "new-client",
+        oauthClientSecret: "new-secret",
+        oauthClientDynamicallyRegistered: false,
       });
     });
 
@@ -155,6 +185,75 @@ describe("mcp write model", () => {
       const set = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(set).not.toHaveProperty("oauthAccessToken");
       expect(set).not.toHaveProperty("oauthClientId");
+    });
+
+    it.each([
+      ["a new client ID", "old-client", "new-client", true],
+      ["the same client ID", "old-client", "old-client", false],
+      ["an empty client ID over none", null, "", false],
+    ])(
+      "clears the OAuth tokens for %s",
+      async (_label, stored, sent, cleared) => {
+        mockDb.limit
+          .mockResolvedValueOnce([
+            {
+              id: "mcp-1",
+              workspaceId: "ws-1",
+              url: "http://mcp.example.com",
+              oauthClientId: stored,
+            },
+          ])
+          .mockResolvedValueOnce([]);
+        mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
+
+        await updateMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1", {
+          ...updateFields(),
+          url: "http://mcp.example.com",
+          oauthClientId: sent,
+        });
+
+        const set = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+        if (cleared) {
+          expect(set).toMatchObject({
+            oauthAccessToken: null,
+            oauthRefreshToken: null,
+            oauthAuthorizationServer: null,
+            oauthClientId: sent,
+            // No secret sent: the stored one belonged to the old client.
+            oauthClientSecret: null,
+            oauthClientDynamicallyRegistered: false,
+          });
+        } else {
+          expect(set).not.toHaveProperty("oauthAccessToken");
+          expect(set).not.toHaveProperty("oauthClientSecret");
+          expect(set).not.toHaveProperty("oauthClientDynamicallyRegistered");
+        }
+      },
+    );
+
+    it("keeps a secret sent with a new client ID", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          {
+            id: "mcp-1",
+            workspaceId: "ws-1",
+            url: "http://mcp.example.com",
+            oauthClientId: "old-client",
+          },
+        ])
+        .mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
+
+      await updateMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1", {
+        ...updateFields(),
+        oauthClientId: "new-client",
+        oauthClientSecret: "new-secret",
+      });
+
+      expect(mockDb.set.mock.calls[0][0]).toMatchObject({
+        oauthClientId: "new-client",
+        oauthClientSecret: "new-secret",
+      });
     });
 
     describe("the Last-known tool listing (ADR-0029)", () => {

@@ -872,8 +872,10 @@ const mcpBaseSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
   authType: z.enum(["None", "Bearer", "OAuth"]),
   bearerToken: z.string().optional(),
-  oauthClientId: z.string().optional(),
-  oauthClientSecret: z.string().optional(),
+  // Trimmed: a pasted client ID or secret often carries a stray space, which
+  // the authorization server then rejects as an unknown client.
+  oauthClientId: z.string().trim().optional(),
+  oauthClientSecret: z.string().trim().optional(),
   oauthRequestedScope: z.string().max(1024).optional(),
   oauthAuthorized: z.boolean().optional(),
   createdAt: z.date(),

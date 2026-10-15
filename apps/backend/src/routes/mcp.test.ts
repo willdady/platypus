@@ -616,6 +616,7 @@ describe("MCP Routes", () => {
           return Promise.resolve("REDIRECT");
         },
       );
+      mockDb.returning.mockResolvedValueOnce([{ ...mcpRecord }]); // token-clear UPDATE
 
       const res = await app.request(`${authorizeUrl}?force=true`, {
         method: "POST",
@@ -637,10 +638,13 @@ describe("MCP Routes", () => {
         }),
       );
 
-      // DCR/static client credentials are deliberately preserved
-      const setPayload = mockDb.set.mock.calls[0][0];
-      expect(setPayload).not.toHaveProperty("oauthClientId");
-      expect(setPayload).not.toHaveProperty("oauthClientSecret");
+      // The token clear leaves the client alone; only a dynamically registered
+      // one is dropped, by its own guarded UPDATE (see mcp-connection.test.ts).
+      const tokenClear = mockDb.set.mock.calls
+        .map(([payload]) => payload as Record<string, unknown>)
+        .find((payload) => "oauthAccessToken" in payload);
+      expect(tokenClear).not.toHaveProperty("oauthClientId");
+      expect(tokenClear).not.toHaveProperty("oauthClientSecret");
     });
 
     it("no force flag: leaves token columns untouched when SDK silently refreshes", async () => {

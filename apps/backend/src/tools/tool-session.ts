@@ -13,6 +13,7 @@ import {
 import type { mcp as mcpTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { CORE_BUILTIN_OWNER, getToolSetPlugin } from "../plugins/registry.ts";
+import { openMcpClient } from "../services/mcp-client.ts";
 import { buildMcpTransportConfig } from "../services/mcp-oauth-provider.ts";
 import { normalizeToolResults } from "../services/tool-result.ts";
 import {
@@ -500,9 +501,7 @@ export const openToolSession = async (
       scope: mcp.organizationId ? "org" : "ws",
     } as const;
     const openClient = async (): Promise<OpenMcpClient> => {
-      const client = await createMCPClient({
-        transport: buildMcpTransportConfig(mcp),
-      });
+      const client = await openMcpClient(buildMcpTransportConfig(mcp));
       // Once only, so a connection closed early — abandoned by a fetch that
       // failed on it — is not closed a second time by dispose.
       let closing: Promise<void> | undefined;

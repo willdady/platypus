@@ -67,10 +67,21 @@ Under **Custom Headers**, add any extra HTTP headers to send with every request
   — it saves the MCP first, including any credentials you just entered. Use **Re-authorize** or **Revoke** later as needed. Changing an OAuth MCP's
   **URL** also clears its **Client ID**, **Client Secret** and authorization —
   re-enter them and click **Authorize** again.
+- Changing the **Client ID** clears the authorization, and the stored **Client
+  Secret** too unless you enter a new one in the same save. Click **Authorize**
+  again.
+- **Re-authorize** keeps a **Client ID** you entered.
 - Click **Test connection** to verify the server responds — on success it lists
   the tools the server exposes, already shown under the namespaced names
   described below. On an **OAuth** MCP the button stays disabled until the MCP
   is saved and **Authorized**. Then **Save** (**Update** on an MCP that already exists).
+
+<Callout type="warning">
+  If the server's sign-in page rejects the client as unknown or invalid, and you
+  did not enter the **Client ID** shown yourself, Platypus is still sending one
+  the server issued earlier. Clear the **Client ID** field and click
+  **Authorize**: Platypus saves the change and the server issues a new one.
+</Callout>
 
 ## How an MCP resolves to a tool set
 

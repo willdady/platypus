@@ -259,6 +259,7 @@ describe("prepareChatTurn on the Drizzle-backed queries", () => {
       transport: expect.objectContaining({
         url: "https://mcp-mine.example.com",
       }) as unknown,
+      protocolVersionDiscovery: false,
     });
     await turn.dispose();
   });

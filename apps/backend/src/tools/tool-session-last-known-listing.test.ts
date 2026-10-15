@@ -82,7 +82,10 @@ const fakeTransport = (): MCPTransport => {
   return transport;
 };
 
-vi.mock("../services/mcp-oauth-provider.ts", () => ({
+vi.mock("../services/mcp-oauth-provider.ts", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../services/mcp-oauth-provider.ts")
+  >()),
   buildMcpTransportConfig: () => fakeTransport(),
 }));
 

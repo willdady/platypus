@@ -221,6 +221,29 @@ describe("MCP Schema", () => {
     },
   );
 
+  it.each([
+    [
+      "create",
+      mcpCreateSchema,
+      { name: "Test MCP", workspaceId: "ws-1", url: base.url },
+    ],
+    ["update", mcpUpdateSchema, { name: "Test MCP", url: base.url }],
+  ] as const)(
+    "trims a pasted OAuth client ID and secret on the %s schema",
+    (_, schema, body) => {
+      const parsed = schema.parse({
+        ...body,
+        authType: "OAuth",
+        oauthClientId: "Ov23ctclient ",
+        oauthClientSecret: "\tsecret\n",
+      });
+      expect(parsed).toMatchObject({
+        oauthClientId: "Ov23ctclient",
+        oauthClientSecret: "secret",
+      });
+    },
+  );
+
   it("requires the stored mcpId to test an OAuth MCP", () => {
     const oauth = { url: base.url, authType: "OAuth" };
     expect(mcpTestSchema.safeParse(oauth).success).toBe(false);

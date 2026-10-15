@@ -631,6 +631,13 @@
       "when": 1791769465910,
       "tag": "0089_workspace_agent_pin",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1791902837424,
+      "tag": "0090_mcp_oauth_authorization_server",
+      "breakpoints": true
     }
   ]
 }
