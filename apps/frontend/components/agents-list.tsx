@@ -244,11 +244,15 @@ export const AgentsList = ({
   const togglePin = useMutation(async (agent: AgentWithScope) => {
     if (!backendUrl) return;
     setPinningId(agent.id);
-    const outcome = await writeAt(
-      scopedUrl(backendUrl, `agents/${agent.id}/pin`, scope),
-      { method: agent.isPinned ? "DELETE" : "PUT" },
-    );
-    setPinningId(null);
+    let outcome;
+    try {
+      outcome = await writeAt(
+        scopedUrl(backendUrl, `agents/${agent.id}/pin`, scope),
+        { method: agent.isPinned ? "DELETE" : "PUT" },
+      );
+    } finally {
+      setPinningId(null);
+    }
     if (outcome.outcome !== "success") {
       toast.error(outcome.message);
       return;
