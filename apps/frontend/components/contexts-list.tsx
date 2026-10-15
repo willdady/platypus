@@ -58,7 +58,7 @@ const ContextsList = ({ className }: { className?: string }) => {
     return (
       <EmptyCard
         icon={<Folder />}
-        title="No workspace contexts"
+        title="No workspace contexts yet"
         action={
           <Button asChild>
             <Link href={userRoutes.createContext}>

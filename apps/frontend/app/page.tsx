@@ -83,7 +83,7 @@ export default function Home() {
           <div className="flex-1 flex flex-col items-center justify-center p-8">
             <EmptyCard
               icon={<Building />}
-              title="No organizations found"
+              title="No organizations yet"
               description="Get started by creating your first organization to manage your workspaces and agents."
               action={
                 <Button asChild>
