@@ -235,6 +235,71 @@ describe("ProviderForm model rows", () => {
     );
   });
 
+  // The field was rendered from the parsed list, so `image/png,` parsed to
+  // `["image/png"]`, rendered back without its comma, and a second type could
+  // never be typed. What the reader typed has to stay in the field.
+  it("keeps a typed trailing comma in Native file types", () => {
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
+
+    fireEvent.change(screen.getByLabelText("Native file types"), {
+      target: { value: "image/png," },
+    });
+
+    expect(screen.getByLabelText("Native file types")).toHaveValue(
+      "image/png,",
+    );
+  });
+
+  it("sends each comma-separated native file type as its own entry", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
+    fireEvent.change(screen.getByLabelText("Native file types"), {
+      target: { value: "image/png, application/pdf" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].passthroughFileTypes).toEqual([
+      "image/png",
+      "application/pdf",
+    ]);
+  });
+
+  // An empty list means "use the provider-type default", so a field holding
+  // nothing but separators must not store an empty-string type.
+  it("sends no native file types when the field holds only separators", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
+    fireEvent.change(screen.getByLabelText("Native file types"), {
+      target: { value: " , ," },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].passthroughFileTypes).toEqual([]);
+  });
+
+  // Rows are keyed by index, so the typed text of a removed row lands on its
+  // neighbour. That neighbour must show its own types, not the removed row's.
+  it("shows a row its own native file types after the row above it is removed", () => {
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: ["image/*"] },
+      { id: "claude", passthroughFileTypes: ["application/pdf"] },
+    ]);
+
+    fireEvent.change(screen.getAllByLabelText("Native file types")[0], {
+      target: { value: "image/png," },
+    });
+    fireEvent.click(screen.getByLabelText("Remove model 1"));
+
+    expect(screen.getByLabelText("Model ID")).toHaveValue("claude");
+    expect(screen.getByLabelText("Native file types")).toHaveValue(
+      "application/pdf",
+    );
+  });
+
   // Same rule as the file-handling pair: a ceiling someone declared must not be
   // hidden behind a collapsed section where the next reader won't find it.
   it("opens a row whose only Advanced setting is a declared output ceiling", () => {
