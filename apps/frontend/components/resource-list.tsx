@@ -103,7 +103,8 @@ export const ResourceList = ({
   config: ResourceListConfig;
 }) => {
   const { actor, workspaceDelegation } = useAuth();
-  const [toManage, setToManage] = useState<ScopedResource | null>(null);
+  const [resourceToManage, setResourceToManage] =
+    useState<ScopedResource | null>(null);
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -294,7 +295,7 @@ export const ResourceList = ({
                                 {
                                   label: "Manage attachments",
                                   icon: <Share2 />,
-                                  onSelect: () => setToManage(resource),
+                                  onSelect: () => setResourceToManage(resource),
                                 },
                               ]
                             : undefined
@@ -320,14 +321,14 @@ export const ResourceList = ({
         })}
       </ul>
       {actions}
-      {toManage && (
+      {resourceToManage && (
         <ManageAttachmentsDialog
           orgId={orgId}
           resourceType={config.resourceType}
-          resourceId={toManage.id}
-          resourceName={toManage.name}
+          resourceId={resourceToManage.id}
+          resourceName={resourceToManage.name}
           open
-          onOpenChange={(open) => !open && setToManage(null)}
+          onOpenChange={(open) => !open && setResourceToManage(null)}
         />
       )}
       <DetachSharedDialog
@@ -355,7 +356,7 @@ export const ResourceList = ({
       <DeleteBlockedDialog
         guard={deleteGuard}
         noun={config.labels.noun}
-        onManage={setToManage}
+        onManage={setResourceToManage}
       />
     </>
   );
