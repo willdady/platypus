@@ -22,6 +22,10 @@ beforeEach(() => {
   }) as unknown as typeof window.matchMedia;
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 function getFileInput() {
   return screen.getByLabelText("Upload files") as HTMLInputElement;
 }
@@ -312,9 +316,12 @@ describe("PromptInput initialAttachments", () => {
     // A newly attached file is held as a `blob:` URL and read back through
     // fetch on submit; jsdom serves no blob URLs, so the read is stubbed with
     // the Blob it would have returned.
-    global.fetch = vi.fn().mockResolvedValue({
-      blob: async () => new Blob(["hi"], { type: "text/plain" }),
-    }) as unknown as typeof global.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        blob: async () => new Blob(["hi"], { type: "text/plain" }),
+      }),
+    );
     const onSubmit = vi.fn();
     render(
       <PromptInput initialAttachments={[seededPdf]} onSubmit={onSubmit}>
