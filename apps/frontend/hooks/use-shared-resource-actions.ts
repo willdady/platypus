@@ -213,7 +213,11 @@ export function useSharedDeleteGuard<T extends NamedResource>({
   );
 
   const request = async (item: T) => {
-    if (!backendUrl) return;
+    // Nothing to ask yet: the delete flow, and the backend's own 409, decide.
+    if (!backendUrl) {
+      onAllowed(item);
+      return;
+    }
     let count: number;
     try {
       const info: { results?: unknown[] } = await fetcher(
