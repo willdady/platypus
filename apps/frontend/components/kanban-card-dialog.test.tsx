@@ -146,6 +146,50 @@ describe("KanbanCardDialog comment double submit", () => {
     await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
   });
 
+  it("sends one comment delete for a double click", async () => {
+    comments = [existingComment];
+    const { fetchMock, resolve } = stubPendingSave();
+    renderDialog();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Delete comment by Bob/ }),
+    );
+    const deleteButtons = await screen.findAllByRole("button", {
+      name: "Delete",
+    });
+    const confirm = deleteButtons[deleteButtons.length - 1];
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(confirm).toHaveTextContent("Deleting...");
+    // The card's own Delete waits on its own guard, not this one.
+    expect(
+      screen.getAllByRole("button", { name: /Delete/ })[0],
+    ).not.toHaveTextContent("Deleting...");
+    resolve();
+    await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
+  });
+
+  it("labels only the comment write in flight as pending", async () => {
+    comments = [existingComment];
+    const { resolve } = stubPendingSave({ id: "cm2" });
+    renderDialog();
+
+    fireEvent.change(screen.getByPlaceholderText("Add a comment..."), {
+      target: { value: "A new comment" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Commenting..." }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /^Delete comment by Bob/ }),
+    ).toHaveTextContent(/^Delete$/);
+    resolve();
+  });
+
   it("sends one comment edit for a double click", async () => {
     comments = [existingComment];
     const { fetchMock, resolve } = stubPendingSave({ id: "cm1" });

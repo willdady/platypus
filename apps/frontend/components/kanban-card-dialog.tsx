@@ -420,7 +420,7 @@ function CommentsSection({
   onDeleteComment,
   onStartEditComment,
   onCancelEditComment,
-  commentPending,
+  commentAction,
 }: {
   className?: string;
   comments: KanbanCardComment[];
@@ -434,8 +434,11 @@ function CommentsSection({
   onDeleteComment: (commentId: string) => void;
   onStartEditComment: (comment: KanbanCardComment) => void;
   onCancelEditComment: () => void;
-  /** A comment write is in flight; its buttons wait for it. */
-  commentPending: boolean;
+  /**
+   * The comment write in flight — `add`, `edit:<id>` or `delete:<id>` — or
+   * null. Every comment button waits for it; only its own reads as pending.
+   */
+  commentAction: string | null;
 }) {
   return (
     <div className={className}>
@@ -464,9 +467,11 @@ function CommentsSection({
                     <Button
                       size="sm"
                       onClick={() => onSaveComment(comment.id)}
-                      disabled={!editingCommentBody.trim() || commentPending}
+                      disabled={!editingCommentBody.trim() || !!commentAction}
                     >
-                      {commentPending ? "Saving..." : "Save"}
+                      {commentAction === `edit:${comment.id}`
+                        ? "Saving..."
+                        : "Save"}
                     </Button>
                     <Button
                       size="sm"
@@ -508,9 +513,11 @@ function CommentsSection({
                           size="sm"
                           className="w-full"
                           onClick={() => onDeleteComment(comment.id)}
-                          disabled={commentPending}
+                          disabled={!!commentAction}
                         >
-                          {commentPending ? "Deleting..." : "Delete"}
+                          {commentAction === `delete:${comment.id}`
+                            ? "Deleting..."
+                            : "Delete"}
                         </Button>
                       </PopoverContent>
                     </Popover>
@@ -531,9 +538,9 @@ function CommentsSection({
         <Button
           size="sm"
           onClick={onAddComment}
-          disabled={!newCommentBody.trim() || commentPending}
+          disabled={!newCommentBody.trim() || !!commentAction}
         >
-          {commentPending ? "Commenting..." : "Comment"}
+          {commentAction === "add" ? "Commenting..." : "Comment"}
         </Button>
       </div>
     </div>
@@ -808,12 +815,30 @@ export function KanbanCardDialog({
 
   // One guard per kind of write, so a double click sends nothing twice. The
   // card's Save and Delete share one: neither makes sense while the other runs.
-  const cardWrite = useMutation(async (write: () => Promise<void> | void) => {
-    await write();
-  });
-  const commentWrite = useMutation(async (write: () => Promise<void>) => {
-    await write();
-  });
+  // Each also records which action is in flight, so only that button reads as
+  // pending while every one it guards is disabled.
+  const [cardAction, setCardAction] = useState<"save" | "delete" | null>(null);
+  const cardWrite = useMutation(
+    async (action: "save" | "delete", write: () => Promise<void> | void) => {
+      setCardAction(action);
+      try {
+        await write();
+      } finally {
+        setCardAction(null);
+      }
+    },
+  );
+  const [commentAction, setCommentAction] = useState<string | null>(null);
+  const commentWrite = useMutation(
+    async (action: string, write: () => Promise<void>) => {
+      setCommentAction(action);
+      try {
+        await write();
+      } finally {
+        setCommentAction(null);
+      }
+    },
+  );
 
   if (!card) return null;
 
@@ -859,7 +884,7 @@ export function KanbanCardDialog({
   const commentsEntity = `boards/${boardId}/cards/${card.id}/comments`;
 
   const handleAddComment = () =>
-    commentWrite.run(async () => {
+    commentWrite.run("add", async () => {
       if (!newCommentBody.trim() || !backendUrl) return;
       const outcome = await writeEntity(
         backendUrl,
@@ -876,7 +901,7 @@ export function KanbanCardDialog({
     });
 
   const handleEditComment = (commentId: string) =>
-    commentWrite.run(async () => {
+    commentWrite.run(`edit:${commentId}`, async () => {
       if (!editingCommentBody.trim() || !backendUrl) return;
       const outcome = await writeEntity(
         backendUrl,
@@ -893,7 +918,7 @@ export function KanbanCardDialog({
     });
 
   const handleDeleteComment = (commentId: string) =>
-    commentWrite.run(async () => {
+    commentWrite.run(`delete:${commentId}`, async () => {
       if (!backendUrl) return;
       const outcome = await writeEntity(
         backendUrl,
@@ -985,7 +1010,7 @@ export function KanbanCardDialog({
                 onDeleteComment={handleDeleteComment}
                 onStartEditComment={startEditingComment}
                 onCancelEditComment={cancelEditingComment}
-                commentPending={commentWrite.pending}
+                commentAction={commentAction}
               />
             </TabsContent>
             <TabsContent
@@ -1029,7 +1054,7 @@ export function KanbanCardDialog({
                 onDeleteComment={handleDeleteComment}
                 onStartEditComment={startEditingComment}
                 onCancelEditComment={cancelEditingComment}
-                commentPending={commentWrite.pending}
+                commentAction={commentAction}
               />
               <div className="mt-6">
                 <KanbanCardHistory
@@ -1079,16 +1104,18 @@ export function KanbanCardDialog({
                 variant="destructive"
                 size="sm"
                 className="w-full"
-                onClick={() => void cardWrite.run(() => onDelete(card.id))}
+                onClick={() =>
+                  void cardWrite.run("delete", () => onDelete(card.id))
+                }
                 disabled={cardWrite.pending}
               >
-                {cardWrite.pending ? "Deleting..." : "Delete"}
+                {cardAction === "delete" ? "Deleting..." : "Delete"}
               </Button>
             </PopoverContent>
           </Popover>
           <Button
             onClick={() =>
-              void cardWrite.run(() =>
+              void cardWrite.run("save", () =>
                 onSave(card.id, {
                   title,
                   body,
@@ -1105,7 +1132,7 @@ export function KanbanCardDialog({
             }
             disabled={!title.trim() || cardWrite.pending}
           >
-            {cardWrite.pending ? "Saving..." : "Save"}
+            {cardAction === "save" ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
