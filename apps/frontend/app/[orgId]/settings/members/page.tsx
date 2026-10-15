@@ -66,7 +66,11 @@ const OrgMembersPage = () => {
       ) : error && !data ? (
         <ListError error={error} subject="members" onRetry={() => mutate()} />
       ) : data?.results.length === 0 ? (
-        <EmptyCard icon={<Users />} title="No members found" />
+        <EmptyCard
+          icon={<Users />}
+          title="No members yet"
+          description="People join this organization by accepting an invitation. Send one from Invitations."
+        />
       ) : (
         <MembersList
           orgId={orgId}

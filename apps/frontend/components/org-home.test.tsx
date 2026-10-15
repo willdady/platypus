@@ -56,3 +56,14 @@ describe.each([
     },
   );
 });
+
+describe("OrgHome empty state", () => {
+  it("titles the empty state per ui-conventions", () => {
+    auth.actor = "org-admin";
+    auth.orgMembership = { role: "admin" };
+    reads.workspaces = [];
+    render(<OrgHome orgId="org1" />);
+
+    expect(screen.getByText("No workspaces yet")).toBeInTheDocument();
+  });
+});

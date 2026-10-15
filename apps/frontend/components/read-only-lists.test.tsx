@@ -55,14 +55,14 @@ describe("ContextsList", () => {
     });
     renderList(<ContextsList />);
 
-    expect(screen.getByText("No workspace contexts")).toBeInTheDocument();
+    expect(screen.getByText("No workspace contexts yet")).toBeInTheDocument();
   });
 
   it("offers the create CTA when there are none", () => {
     mockScopedSWR({ contexts: [] });
     renderList(<ContextsList />);
 
-    expect(screen.getByText("No workspace contexts")).toBeInTheDocument();
+    expect(screen.getByText("No workspace contexts yet")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Add workspace context/ }),
     ).toBeInTheDocument();
@@ -75,7 +75,9 @@ describe("ContextsList", () => {
     expect(
       screen.getByLabelText("Loading workspace contexts"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("No workspace contexts")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No workspace contexts yet"),
+    ).not.toBeInTheDocument();
   });
 
   it("says the read failed rather than rendering nothing", () => {
@@ -85,7 +87,9 @@ describe("ContextsList", () => {
     expect(
       screen.getByText("Failed to load workspace contexts. 500"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("No workspace contexts")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No workspace contexts yet"),
+    ).not.toBeInTheDocument();
   });
 });
 

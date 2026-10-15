@@ -77,7 +77,7 @@ export function OrgHome({ orgId }: { orgId: string }) {
       ) : (
         <EmptyCard
           icon={<FolderClosed />}
-          title="No workspaces found"
+          title="No workspaces yet"
           description={
             canCreate
               ? "Create your first workspace in this organization to start building agents."
