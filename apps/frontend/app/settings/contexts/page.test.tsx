@@ -90,6 +90,27 @@ describe("ContextsPage global context field", () => {
   });
 });
 
+describe("ContextsPage revalidation", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("keeps what the user is typing when the contexts revalidate", () => {
+    swrState.response = WARM;
+    const { rerender } = render(<ContextsPage />);
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "half-typed" },
+    });
+    // A focus revalidation: a new array identity holding the same row.
+    swrState.response = {
+      ...WARM,
+      data: { results: [...WARM.data.results.map((c) => ({ ...c }))] },
+    };
+    rerender(<ContextsPage />);
+
+    expect(screen.getByRole("textbox")).toHaveValue("half-typed");
+  });
+});
+
 describe("ContextsPage saving the global context", () => {
   const NONE = { ...WARM, data: { results: [] } };
 

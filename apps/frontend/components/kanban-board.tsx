@@ -27,7 +27,7 @@ import {
 import { motion } from "motion/react";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import Link from "next/link";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import type {
   KanbanBoardState,
@@ -105,8 +105,6 @@ export function KanbanBoard({
     [orgId, workspaceId],
   );
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
 
   const baseUrl = joinUrl(
     backendUrl,
@@ -171,8 +169,6 @@ export function KanbanBoard({
   // target column locally — reading the source from there would send the
   // target as `expectedColumnId` and refuse every cross-column move.
   const dragOriginColumnRef = useRef<string | null>(null);
-  const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
 
   // Add column dialog state
   const [addColumnDialogOpen, setAddColumnDialogOpen] = useState(false);
@@ -227,51 +223,52 @@ export function KanbanBoard({
   // devices.
   const isDesktop = useMediaQuery(FINE_POINTER_QUERY);
 
-  const updateCardIdParam = useCallback(
-    (cardId: string | null) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (cardId) {
-        params.set("cardId", cardId);
-      } else {
-        params.delete("cardId");
-      }
-      const qs = params.toString();
-      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
+  // The `?cardId` param is the one record of which card is open: clicking a
+  // card writes it, closing clears it, and a shared link arrives with it. The
+  // card itself is looked up from the polled columns on every render, so the
+  // open dialog always shows the board's latest copy.
+  //
+  // `history.replaceState` rather than `router.replace`: Next keeps
+  // `useSearchParams` in step with it, and it opens the dialog without a
+  // round-trip. A relative `?…` URL keeps the path, base path included.
+  const updateCardIdParam = useCallback((cardId: string | null) => {
+    const params = new URLSearchParams(window.location.search);
+    if (cardId) {
+      params.set("cardId", cardId);
+    } else {
+      params.delete("cardId");
+    }
+    const qs = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      qs ? `?${qs}` : window.location.pathname,
+    );
+  }, []);
+
+  const openCardId = searchParams.get("cardId");
+  const selectedCard = useMemo(
+    () =>
+      openCardId
+        ? (columns
+            .flatMap((col) => col.cards)
+            .find((c) => c.id === openCardId) ?? null)
+        : null,
+    [columns, openCardId],
   );
+
+  // A link to a card the board no longer has opens nothing; drop the param so
+  // the URL doesn't keep claiming a card is open.
+  useEffect(() => {
+    if (data && openCardId && !selectedCard) updateCardIdParam(null);
+  }, [data, openCardId, selectedCard, updateCardIdParam]);
 
   // Stable across drag frames so the memoized columns and cards it is passed
   // through are not re-rendered on every drag-over update.
   const handleCardClick = useCallback(
-    (card: KanbanCard) => {
-      setSelectedCard(card);
-      setDialogOpen(true);
-      updateCardIdParam(card.id);
-    },
+    (card: KanbanCard) => updateCardIdParam(card.id),
     [updateCardIdParam],
   );
-
-  // Open card dialog from URL query param on initial data load. Runs once when
-  // data first arrives, reads the URL, and may navigate (updateCardIdParam) —
-  // genuine effect work, so opening the dialog via setState here is intended.
-  const deepLinkHandledRef = useRef(false);
-  useEffect(() => {
-    if (deepLinkHandledRef.current || !data) return;
-    deepLinkHandledRef.current = true;
-    const cardId = searchParams.get("cardId");
-    if (!cardId) return;
-    const card = data.columns
-      .flatMap((col) => col.cards)
-      .find((c) => c.id === cardId);
-    if (card) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSelectedCard(card);
-      setDialogOpen(true);
-    } else {
-      updateCardIdParam(null);
-    }
-  }, [data, searchParams, updateCardIdParam]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
@@ -695,11 +692,7 @@ export function KanbanBoard({
         toast.error(updateOutcome.message);
         return;
       }
-      const closeDialog = () => {
-        setDialogOpen(false);
-        setSelectedCard(null);
-        updateCardIdParam(null);
-      };
+      const closeDialog = () => updateCardIdParam(null);
       if (!targetColumnId || targetColumnId === column.id) {
         closeDialog();
         await mutate();
@@ -720,8 +713,8 @@ export function KanbanBoard({
           `Your changes were saved, but the card was not moved. ${result.message}`,
         );
       }
-      // A failed move stays open to retry. A conflict closes: the refetch
-      // would otherwise reseed the dialog from its stale open-time snapshot.
+      // A failed move stays open to retry. A conflict closes: the card has
+      // moved on elsewhere, so there is nothing left to retry.
       if (result.outcome !== "failed") closeDialog();
     },
     [
@@ -749,8 +742,6 @@ export function KanbanBoard({
         { id: cardId },
       );
       if (outcome.outcome === "success") {
-        setDialogOpen(false);
-        setSelectedCard(null);
         updateCardIdParam(null);
         await mutate();
       } else {
@@ -1150,13 +1141,9 @@ export function KanbanBoard({
               )?.id ?? null)
             : null
         }
-        open={dialogOpen}
+        open={!!selectedCard}
         onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) {
-            setSelectedCard(null);
-            updateCardIdParam(null);
-          }
+          if (!open) updateCardIdParam(null);
         }}
         onSave={handleCardSave}
         onDelete={handleCardDelete}

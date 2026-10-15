@@ -364,3 +364,19 @@ describe("SandboxSettings save", () => {
     ]);
   });
 });
+
+describe("SandboxSettings revalidation", () => {
+  it("keeps an unsaved edit when the same sandbox revalidates", () => {
+    authState.actor = "org-admin";
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    const { rerender } = renderSettings();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Edited box" },
+    });
+    mockReads({ sandbox: { data: { ...DOCKER_SANDBOX } } });
+    rerender(<SandboxSettings orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByLabelText("Name")).toHaveValue("Edited box");
+  });
+});
