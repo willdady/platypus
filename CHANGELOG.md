@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.21.0](https://github.com/willdady/platypus/compare/v3.20.0...v3.21.0) (2026-10-15)
+
+
+### Features
+
+* **backend:** add fsView to the Sandbox Tool set so the model can see a file ([#1449](https://github.com/willdady/platypus/issues/1449)) ([c6b233b](https://github.com/willdady/platypus/commit/c6b233b600281a0d8c09eb2386846c2031050d1f))
+* **frontend:** ⋮ menu, Disabled badge and second line for Workspace settings lists ([#1447](https://github.com/willdady/platypus/issues/1447)) ([2eef1a0](https://github.com/willdady/platypus/commit/2eef1a047b8aaf748fe12e9e01029bf24034bc91))
+* **frontend:** manage attachments for org-surface Providers and MCP servers ([#1455](https://github.com/willdady/platypus/issues/1455)) ([002f10e](https://github.com/willdady/platypus/commit/002f10eb15661d9dd92017e9b50f6c6ef8e01225))
+* **frontend:** move the Trigger run status badge under the Trigger name ([#1444](https://github.com/willdady/platypus/issues/1444)) ([b2eced0](https://github.com/willdady/platypus/commit/b2eced045730deb44365b8da4de30b016bb3c1ce))
+* **frontend:** one click rule and ⋮ order for Workspace home cards ([#1437](https://github.com/willdady/platypus/issues/1437)) ([03edf8e](https://github.com/willdady/platypus/commit/03edf8e125b7a6f9128ef95a16b8c30b2c5e233f))
+* **frontend:** open a Trigger run from its row and move its actions into a menu ([#1436](https://github.com/willdady/platypus/issues/1436)) ([5596097](https://github.com/willdady/platypus/commit/559609718f8398749d7f7b20ddee26820991cb0a))
+* **frontend:** put a model row's number limits side by side ([#1454](https://github.com/willdady/platypus/issues/1454)) ([7404426](https://github.com/willdady/platypus/commit/7404426586c538717b885f74d00cd679e7895b7b))
+* **frontend:** search and sort the Agent form's Skills card, clamp descriptions ([#1445](https://github.com/willdady/platypus/issues/1445)) ([16cc9dc](https://github.com/willdady/platypus/commit/16cc9dc9a6386bc8157a587954fe68b0df32fafb))
+* **frontend:** show each provider's model id in Workspace settings provider selects ([#1456](https://github.com/willdady/platypus/issues/1456)) ([fbdea11](https://github.com/willdady/platypus/commit/fbdea118f2a487b9ec410cc004e68afcb61da738))
+
+
+### Bug Fixes
+
+* **frontend:** keep the Chat Settings dialog on screen when Instructions is long ([#1443](https://github.com/willdady/platypus/issues/1443)) ([ef94962](https://github.com/willdady/platypus/commit/ef94962c1f04cec0c1ae9d9854c992f3b09550c7))
+* **frontend:** keep typed commas in a model row's Native file types field ([#1453](https://github.com/willdady/platypus/issues/1453)) ([a326ec0](https://github.com/willdady/platypus/commit/a326ec08fdda6239fb806dbcd05375e61544c497))
+* restore MCP OAuth sign-in, token refresh and connection on @ai-sdk/mcp 2.0.57 ([#1433](https://github.com/willdady/platypus/issues/1433)) ([f8912da](https://github.com/willdady/platypus/commit/f8912da97c51b40beb48c839253044c22f640326))
+
 ## [3.20.0](https://github.com/willdady/platypus/compare/v3.19.0...v3.20.0) (2026-10-13)
 
 
