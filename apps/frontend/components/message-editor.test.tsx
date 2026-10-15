@@ -34,7 +34,10 @@ beforeEach(() => {
   recognition = installSpeechRecognition();
 });
 
-afterEach(uninstallSpeechRecognition);
+afterEach(() => {
+  uninstallSpeechRecognition();
+  vi.unstubAllGlobals();
+});
 
 const provider = {
   id: "p1",
@@ -110,9 +113,12 @@ describe("MessageEditor", () => {
   });
 
   it("attaches a file added while editing", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      blob: async () => new Blob(["hi"], { type: "text/plain" }),
-    }) as unknown as typeof global.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        blob: async () => new Blob(["hi"], { type: "text/plain" }),
+      }),
+    );
     const { onSubmit } = renderEditor();
 
     const input = screen.getByLabelText("Upload files") as HTMLInputElement;
