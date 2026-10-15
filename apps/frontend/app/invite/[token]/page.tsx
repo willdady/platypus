@@ -1,5 +1,6 @@
 "use client";
 
+import { appRoutes, withBasePath, workspaceRoutes } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
@@ -45,7 +46,7 @@ export default function InviteTokenPage() {
   const [redeemToken] = useState(token);
 
   useEffect(() => {
-    window.history.replaceState(null, "", "/invite");
+    window.history.replaceState(null, "", withBasePath(appRoutes.invite));
   }, []);
 
   const { data, error, isLoading } = useSWR<InvitationLinkResolution>(
@@ -67,7 +68,7 @@ export default function InviteTokenPage() {
     organizationId,
     workspaceId,
   }: InvitationAcceptResult) =>
-    router.push(`/${organizationId}/workspace/${workspaceId}`);
+    router.push(workspaceRoutes(organizationId, workspaceId).root);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();

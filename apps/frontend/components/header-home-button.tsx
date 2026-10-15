@@ -1,3 +1,4 @@
+import { appRoutes } from "@/lib/routes";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Home } from "lucide-react";
@@ -11,7 +12,7 @@ export function HeaderHomeButton() {
       aria-label="Home"
       asChild
     >
-      <Link href="/">
+      <Link href={appRoutes.home}>
         <Home className="size-4" />
       </Link>
     </Button>

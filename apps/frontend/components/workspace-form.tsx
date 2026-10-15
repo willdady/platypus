@@ -54,7 +54,7 @@ import {
   TextareaSkeleton,
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { orgRoutes, withBasePath, workspaceRoutes } from "@/lib/routes";
 
 interface WorkspaceFormProps {
   orgId: string;
@@ -214,7 +214,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
       // `organization-form.tsx`. The Workspace this view is scoped to is
       // gone, and a client-side transition would keep the app shell (and its
       // cached payload for the deleted Workspace) alive around it.
-      window.location.href = orgRoutes(orgId).root;
+      window.location.href = withBasePath(orgRoutes(orgId).root);
     },
     onError: (message, _outcome, { close }) => {
       toast.error(message);

@@ -1,5 +1,6 @@
 "use client";
 
+import { appRoutes } from "@/lib/routes";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
@@ -37,7 +38,7 @@ export default function SignUpPage() {
         return;
       }
 
-      router.push("/");
+      router.push(appRoutes.home);
     } catch {
       setError("An unexpected error occurred");
     } finally {
@@ -127,7 +128,10 @@ export default function SignUpPage() {
 
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/sign-in" className="text-primary hover:underline">
+          <Link
+            href={appRoutes.signIn}
+            className="text-primary hover:underline"
+          >
             Sign in
           </Link>
         </p>

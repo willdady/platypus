@@ -1,5 +1,6 @@
 "use client";
 
+import { appRoutes } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
@@ -20,7 +21,7 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (user) router.push("/");
+    if (user) router.push(appRoutes.home);
   }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,7 +40,7 @@ export default function SignInPage() {
         return;
       }
 
-      router.push("/");
+      router.push(appRoutes.home);
     } catch {
       setError("An unexpected error occurred");
     } finally {
@@ -100,7 +101,10 @@ export default function SignInPage() {
         {signUpOpen && (
           <p className="text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link href="/sign-up" className="text-primary hover:underline">
+            <Link
+              href={appRoutes.signUp}
+              className="text-primary hover:underline"
+            >
               Sign up
             </Link>
           </p>

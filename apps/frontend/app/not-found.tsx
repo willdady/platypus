@@ -1,3 +1,4 @@
+import { appRoutes } from "@/lib/routes";
 import Link from "next/link";
 import { FileQuestion } from "lucide-react";
 
@@ -14,7 +15,7 @@ export default function NotFound() {
         description="The page you are looking for does not exist or has been moved."
         action={
           <Button asChild>
-            <Link href="/">Go back home</Link>
+            <Link href={appRoutes.home}>Go back home</Link>
           </Button>
         }
       />
