@@ -118,12 +118,15 @@ export const ItemRowsSkeleton = ({
   rows = 3,
   badge = false,
   secondLine = false,
+  extra,
 }: {
   rows?: number;
   /** A pill beside the title on the first row (the Organization badge). */
   badge?: boolean;
   /** A `text-sm` line under the title (a webhook's URL). */
   secondLine?: boolean;
+  /** Anything the row carries under its lines: a "Shared with" badge. */
+  extra?: ReactNode;
 }) => (
   <ul className="mb-4">
     {Array.from({ length: rows }, (_, i) => (
@@ -135,6 +138,7 @@ export const ItemRowsSkeleton = ({
               {badge && i === 0 && <BadgeSkeleton className="w-24" />}
             </div>
             {secondLine && <SkeletonLine className="w-64 max-w-full" />}
+            {extra}
           </ItemContent>
           <ItemActions>
             <Skeleton className="size-4" />

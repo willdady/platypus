@@ -1,32 +1,39 @@
 "use client";
 
-import { type ComponentType, type ReactNode } from "react";
-import { Building, Plus } from "lucide-react";
+import { type ComponentType, type ReactNode, useState } from "react";
+import { Building, Plus, Share2 } from "lucide-react";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useAuth } from "@/components/auth-provider";
 import {
   canConfigureWorkspaceResource,
+  canManageOrgSharedResource,
   canManageSharedResource,
   type DelegatableResourceType,
   type WorkspaceDelegationFlags,
 } from "@/lib/authorization";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
-import { useSharedDetach } from "@/hooks/use-shared-resource-actions";
+import {
+  useSharedDeleteGuard,
+  useSharedDetach,
+} from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { ListError } from "./list-state";
 import {
   ButtonRowSkeleton,
   ItemRowsSkeleton,
   LoadingRegion,
+  SkeletonLine,
 } from "./list-skeletons";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { DeleteConfirmDialog } from "./delete-confirm-dialog";
+import { ManageAttachmentsDialog, SharedWithBadge } from "./manage-sharing";
 import { RowActionsMenu } from "./row-actions-menu";
 import { Button } from "./ui/button";
 import {
   AttachSharedAction,
+  DeleteBlockedDialog,
   DetachSharedDialog,
 } from "./shared-resource-actions";
 
@@ -96,6 +103,8 @@ export const ResourceList = ({
   config: ResourceListConfig;
 }) => {
   const { actor, workspaceDelegation } = useAuth();
+  const [resourceToManage, setResourceToManage] =
+    useState<ScopedResource | null>(null);
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -119,9 +128,23 @@ export const ResourceList = ({
       writeEntity(url, config.entity, scope, { id: resource.id }),
   });
 
+  // On the Organization surface a Shared resource can't be deleted while
+  // attached (ADR-0007); the guard explains the blocker up front instead of
+  // sending a delete the backend is guaranteed to refuse. Inside a Workspace
+  // there is nothing to check — the row is either private or a locked card.
+  const deleteGuard = useSharedDeleteGuard<ScopedResource>({
+    resourceType: config.resourceType,
+    scope,
+    onAllowed: deleteFlow.request,
+  });
+
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
   const canAttach = canManageSharedResource(actor, workspaceId);
+  // Where an org-scoped resource is attached is managed from the Organization
+  // surface only, by an Org Admin — as for Skills and Agents.
+  const canManageAttachments =
+    !workspaceId && canManageOrgSharedResource(actor);
 
   // Workspace-scoped config is admin-only unless the workspace delegates it
   // (ADR-0006), resolved once by the auth module off the Workspace's own
@@ -140,7 +163,15 @@ export const ResourceList = ({
     // offers this caller, so neither pops in when the read lands.
     return (
       <LoadingRegion label={`Loading ${config.labels.plural}`}>
-        <ItemRowsSkeleton badge={Boolean(workspaceId)} secondLine />
+        <ItemRowsSkeleton
+          badge={Boolean(workspaceId)}
+          secondLine
+          extra={
+            canManageAttachments && (
+              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
+            )
+          }
+        />
         <ButtonRowSkeleton
           widths={[
             ...(canManage ? ["w-32"] : []),
@@ -215,6 +246,15 @@ export const ResourceList = ({
               <p className="text-sm text-muted-foreground truncate">
                 {resource[config.secondLine]}
               </p>
+              {canManageAttachments && (
+                <div className="mt-1">
+                  <SharedWithBadge
+                    orgId={orgId}
+                    resourceType={config.resourceType}
+                    resourceId={resource.id}
+                  />
+                </div>
+              )}
             </ItemContent>
           );
 
@@ -249,11 +289,25 @@ export const ResourceList = ({
                       <RowActionsMenu
                         name={resource.name}
                         edit={{ href: settingsHref(resource.id) }}
+                        actions={
+                          canManageAttachments
+                            ? [
+                                {
+                                  label: "Manage attachments",
+                                  icon: <Share2 />,
+                                  onSelect: () => setResourceToManage(resource),
+                                },
+                              ]
+                            : undefined
+                        }
                         remove={
                           canManage
                             ? {
                                 kind: "delete",
-                                onSelect: () => deleteFlow.request(resource),
+                                onSelect: () =>
+                                  workspaceId
+                                    ? deleteFlow.request(resource)
+                                    : deleteGuard.request(resource),
                               }
                             : undefined
                         }
@@ -267,6 +321,16 @@ export const ResourceList = ({
         })}
       </ul>
       {actions}
+      {resourceToManage && (
+        <ManageAttachmentsDialog
+          orgId={orgId}
+          resourceType={config.resourceType}
+          resourceId={resourceToManage.id}
+          resourceName={resourceToManage.name}
+          open
+          onOpenChange={(open) => !open && setResourceToManage(null)}
+        />
+      )}
       <DetachSharedDialog
         detach={detach}
         title={config.labels.detachTitle}
@@ -288,6 +352,11 @@ export const ResourceList = ({
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}
+      />
+      <DeleteBlockedDialog
+        guard={deleteGuard}
+        noun={config.labels.noun}
+        onManage={setResourceToManage}
       />
     </>
   );
