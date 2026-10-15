@@ -8,7 +8,14 @@ import {
   getSandboxBackendPlugin,
 } from "../plugins/registry.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
-import { createSandboxTools } from "../sandbox/tools.ts";
+import { createSandboxTools, type ModelFileReading } from "../sandbox/tools.ts";
+import { resolveScoped } from "../services/scoped-resource.ts";
+import {
+  maxExtractedTextCharsForModel,
+  passthroughFileTypesForModel,
+  resolveModelId,
+} from "../services/model-capability.ts";
+import type { Provider } from "@platypus/schemas";
 import { normalizeToolResults } from "../services/tool-result.ts";
 import { logger } from "../logger.ts";
 import {
@@ -494,6 +501,37 @@ export const MEMORY_TOOLSET_ID = "memory";
 // warning log). See ADR-0001 / ADR-0002.
 export const SANDBOX_TOOLSET_ID = "sandbox";
 
+/**
+ * How the Agent this session serves reads files, for `fsView`. Read from the
+ * Agent row on the Tool's first call rather than handed in: a Tool-set factory
+ * sees only the published context, and `agentId` on it is already the right
+ * Agent — the delegate's own on a Sub-Agent's session. Resolved the way a
+ * generation plan resolves the model, so the two cannot disagree. A row that no
+ * longer resolves cannot be running this turn; it reads as no native types.
+ */
+const modelFileReading = async (
+  agentId: string,
+  scope: { orgId: string; workspaceId: string },
+): Promise<ModelFileReading> => {
+  const none = { passthroughFileTypes: [] };
+  const agent = await resolveScoped(db, "agent", agentId, scope);
+  if (!agent) return none;
+  const found = await resolveScoped(
+    db,
+    "provider",
+    agent.row.providerId,
+    scope,
+  );
+  if (!found) return none;
+  const provider = found.row as Provider;
+  const modelId = resolveModelId(provider, agent.row.modelId);
+  if (!modelId) return none;
+  return {
+    passthroughFileTypes: passthroughFileTypesForModel(provider, modelId),
+    maxExtractedTextChars: maxExtractedTextCharsForModel(provider, modelId),
+  };
+};
+
 // Registered through `composeToolSet` like every plugin contribution — a core
 // built-in is a Tool set on the same terms, and its factory reads a row and
 // builds an adapter's tools, so it earns the same guard.
@@ -509,7 +547,13 @@ registerToolSet(
       category: "Sandbox",
       description:
         "Shell and filesystem access inside the workspace's configured sandbox",
-      tools: async ({ workspaceId, orgId, userId, registerCloser }) => {
+      tools: async ({
+        workspaceId,
+        orgId,
+        userId,
+        agentId,
+        registerCloser,
+      }) => {
         const rows = await db
           .select()
           .from(sandboxTable)
@@ -586,6 +630,7 @@ registerToolSet(
           backend,
           { orgId, workspaceId, userId },
           workspaceEnv,
+          () => modelFileReading(agentId, { orgId, workspaceId }),
         );
       },
     },

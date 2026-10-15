@@ -101,7 +101,8 @@ beforeAll(async () => {
 
   // `sandbox`: the five tools are static per backend, not data-dependent, so a
   // stub backend/ctx (no DB) still yields the real names.
-  const stubBackend = {} as unknown as SandboxBackend;
+  // With `fsReadBytes`, so the two tools gated on it are enumerated too.
+  const stubBackend = { fsReadBytes: () => {} } as unknown as SandboxBackend;
   const stubCtx = {} as unknown as SandboxContext;
   Object.keys(createSandboxTools(stubBackend, stubCtx)).forEach((n) =>
     names.add(n),
@@ -145,6 +146,11 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
   fetchUrl: true,
   fsRead: true,
   fsList: true,
+  // The model can view the file again; the saved result is metadata anyway.
+  fsView: true,
+
+  // Not clearable: a download button's result is tiny, and is the User's.
+  fsDownload: false,
 
   // Not clearable: mutating.
   fsWrite: false,

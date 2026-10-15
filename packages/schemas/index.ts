@@ -1259,7 +1259,7 @@ export const CONTEXT_WINDOW_MAX = 10_000_000;
  * sub-Agent delegation (its result is the point of the call, not disposable
  * page content), and `loadSkill` (its result is instructions the model is
  * meant to keep following, not data to discard). `readSkillFile` is clearable:
- * the model can read the bundled file again.
+ * the model can read the bundled file again, as `fsView` can view its file.
  *
  * This is the core half of clearability, not the whole of it: an MCP tool
  * whose server declares `readOnlyHint` is also clearable (ADR-0021, issue
@@ -1273,6 +1273,7 @@ export const CLEARABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "fetchUrl",
   "fsRead",
   "fsList",
+  "fsView",
   "readSkillFile",
 ]);
 

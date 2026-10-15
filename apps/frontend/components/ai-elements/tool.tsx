@@ -23,6 +23,7 @@ import {
   ChevronDownIcon,
   CircleIcon,
   ClockIcon,
+  EyeIcon,
   EyeOffIcon,
   FileIcon,
   FilePenIcon,
@@ -141,6 +142,7 @@ const toolToToolSet: Record<string, string> = {
   fsEdit: "sandbox",
   fsList: "sandbox",
   fsDownload: "sandbox",
+  fsView: "sandbox",
 };
 
 // Per-tool icon overrides, used when a single toolset has visually distinct
@@ -162,6 +164,7 @@ const toolIcons: Record<string, LucideIcon> = {
   fsEdit: FilePenIcon,
   fsList: FolderIcon,
   fsDownload: FileDownIcon,
+  fsView: EyeIcon,
 };
 
 /** One icon per toolset, matching the workspace home page. */

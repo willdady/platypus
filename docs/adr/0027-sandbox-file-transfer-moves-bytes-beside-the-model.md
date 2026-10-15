@@ -100,3 +100,10 @@ File part. The Workspace home page's transfer card is removed; where a backend
 lacks `fsWriteBytes` the composer hides the item rather than saying the backend
 doesn't support file transfer. The routes, the bound and `fsDownload` are
 unchanged.
+
+## Amended by ADR-0038
+
+The rejection of byte-returning model Tools is amended by ADR-0038: `fsView`
+sends a Sandbox file to the model for one turn, so it can see an image or PDF it
+made. Its saved result is metadata only, and Sandbox content is still never
+written to backend storage.

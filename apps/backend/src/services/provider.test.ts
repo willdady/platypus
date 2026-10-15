@@ -369,10 +369,10 @@ describe("openProvider", () => {
           ...config,
         }),
       );
-      expect(opened.languageModel(concrete("model-1"))).toEqual({
-        modelId: "model-1",
-        _sentinel: true,
-      });
+      // Reached through the SDK's own model; OpenRouter's comes back wrapped
+      // (tool-result files move into a user message), so the call is the proof.
+      opened.languageModel(concrete("model-1"));
+      expect(sdk.instance).toHaveBeenCalledWith("model-1");
       expect(opened.embeddingModel?.(concrete("embed-1"))).toEqual(embedding);
       expect(Object.hasOwn(opened, "embeddingModel")).toBe(!!embedding);
       expect(opened.searchTools?.()).toEqual(search);

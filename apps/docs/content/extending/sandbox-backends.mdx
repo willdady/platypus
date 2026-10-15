@@ -121,8 +121,9 @@ backend. There is no fallback through `fsRead` or `fsWrite`. The two members are
 independent, so a backend can implement `fsReadBytes` alone.
 
 Implement `fsReadBytes` and Agents on your backend also get `fsDownload`, a tool
-that offers the User a file as a download button. Platypus builds it on top of
-`fsList` and `fsReadBytes`; there is nothing more to implement.
+that offers the User a file as a download button, and `fsView`, a tool that
+shows the model a file such as an image it generated. Platypus builds both on
+top of `fsList` and `fsReadBytes`; there is nothing more to implement.
 
 ## The signal your tool methods get
 
