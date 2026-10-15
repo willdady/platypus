@@ -235,7 +235,12 @@ export const ChatMessage = memo(function ChatMessage({
   const messageAgent = messageAgentId
     ? agents.find((a) => a.id === messageAgentId)
     : undefined;
-  const assistantAvatar =
+  // Every text and image part carries the avatar, but only the first names
+  // the agent: a screen reader would otherwise repeat it before each part.
+  const firstAvatarPart = message.parts?.findIndex(
+    (part) => part.type === "text" || isImageFilePart(part),
+  );
+  const assistantAvatar = (partIndex: number) =>
     message.role === "assistant" &&
     (messageAgent?.avatarUrl ? (
       // Agent avatar URL is user-supplied (arbitrary host); not routable
@@ -243,7 +248,7 @@ export const ChatMessage = memo(function ChatMessage({
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={messageAgent.avatarUrl}
-        alt={messageAgent.name}
+        alt={partIndex === firstAvatarPart ? messageAgent.name : ""}
         className="size-6 rounded-full object-cover"
       />
     ) : (
@@ -303,7 +308,7 @@ export const ChatMessage = memo(function ChatMessage({
           <Message
             key={`${message.id}-${i}`}
             from={message.role}
-            avatar={assistantAvatar}
+            avatar={assistantAvatar(i)}
           >
             <MessageContent className="max-w-full">
               <MessageResponse>{textPart.text}</MessageResponse>
@@ -454,7 +459,7 @@ export const ChatMessage = memo(function ChatMessage({
           <Message
             key={`${message.id}-${i}`}
             from={message.role}
-            avatar={assistantAvatar}
+            avatar={assistantAvatar(i)}
           >
             <MessageContent className="max-w-full">
               {/* Generated/uploaded image served from a backend or data: URL;

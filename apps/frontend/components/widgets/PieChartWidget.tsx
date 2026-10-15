@@ -95,8 +95,9 @@ export function PieChartWidget({
           <div className="flex items-center justify-between">
             <Label className="text-xs">Segments</Label>
             <button
+              type="button"
               onClick={handleAddSegment}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Plus className="h-3 w-3" /> Add segment
             </button>
@@ -140,9 +141,10 @@ export function PieChartWidget({
               />
               {segments.length > 1 && (
                 <button
+                  type="button"
                   aria-label="Remove segment"
                   onClick={() => handleRemoveSegment(s.id)}
-                  className="text-muted-foreground hover:text-destructive shrink-0"
+                  className="text-muted-foreground hover:text-destructive shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-3 w-3" />
                 </button>

@@ -472,7 +472,7 @@ const AgentForm = ({
             <button
               type="button"
               onClick={() => avatarInputRef.current?.click()}
-              className="relative group cursor-pointer flex"
+              className="relative group cursor-pointer flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               disabled={isSubmitting || readOnly}
             >
               <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
@@ -501,7 +501,7 @@ const AgentForm = ({
               <button
                 type="button"
                 onClick={handleAvatarDelete}
-                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-destructive whitespace-nowrap"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-destructive whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 disabled={isSubmitting || readOnly}
               >
                 <X className="w-4 h-4" />

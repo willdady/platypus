@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Bell, Mail, Bot, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -175,113 +175,138 @@ export function NotificationsDropdown({
                 const isExpanded = expandedId === notif.id;
                 const href = sourceHref(notif.source);
                 return (
-                  <div
-                    key={notif.id}
-                    className="group/notif flex items-start gap-3 p-3 cursor-pointer hover:bg-accent rounded-sm relative"
-                    onClick={() => handleNotificationClick(notif)}
-                  >
-                    <Avatar className="size-7 shrink-0 mt-0.5">
-                      {notif.agentAvatarUrl ? (
-                        <AvatarImage
-                          src={notif.agentAvatarUrl}
-                          alt={notif.agentName ?? "Platypus"}
-                        />
-                      ) : null}
-                      <AvatarFallback>
-                        <Bot className="size-3.5" />
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground truncate">
-                          {/* Null on a Notification Platypus itself posted. */}
-                          {notif.agentName ?? "Platypus"}
-                        </span>
-                        {!notif.isRead && (
-                          <span className="size-2 rounded-full bg-primary shrink-0" />
-                        )}
-                      </div>
-                      {notif.title && (
-                        <div className="text-sm font-medium truncate">
-                          {notif.title}
+                  <Fragment key={notif.id}>
+                    {/* A menu item, so the arrow keys reach it. Enter expands it
+                      (and marks it read) without closing the menu; Delete
+                      dismisses it. */}
+                    <DropdownMenuItem
+                      className="group/notif flex items-start gap-3 p-3 cursor-pointer rounded-sm relative"
+                      textValue={notif.title ?? notif.agentName ?? "Platypus"}
+                      aria-expanded={isExpanded}
+                      aria-keyshortcuts="Delete"
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        handleNotificationClick(notif);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Delete") return;
+                        event.preventDefault();
+                        handleDismiss(notif.id);
+                      }}
+                    >
+                      <Avatar className="size-7 shrink-0 mt-0.5">
+                        {notif.agentAvatarUrl ? (
+                          <AvatarImage
+                            src={notif.agentAvatarUrl}
+                            alt={notif.agentName ?? "Platypus"}
+                          />
+                        ) : null}
+                        <AvatarFallback>
+                          <Bot className="size-3.5" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground truncate">
+                            {/* Null on a Notification Platypus itself posted. */}
+                            {notif.agentName ?? "Platypus"}
+                          </span>
+                          {!notif.isRead && (
+                            <>
+                              <span
+                                aria-hidden="true"
+                                className="size-2 rounded-full bg-primary shrink-0"
+                              />
+                              <span className="sr-only">Unread</span>
+                            </>
+                          )}
                         </div>
-                      )}
-                      {/* A link click, and any click in its confirmation
+                        {notif.title && (
+                          <div className="text-sm font-medium truncate">
+                            {notif.title}
+                          </div>
+                        )}
+                        {/* A link click, and any click in its confirmation
                           (portalled out of this DOM, but still bubbling
                           through React), must not toggle the row; a click on
                           the text itself still does. */}
-                      <div
-                        onClick={(e) => {
-                          const target = e.target as Element;
-                          if (
-                            !e.currentTarget.contains(target) ||
-                            target.closest("button")
-                          ) {
-                            e.stopPropagation();
-                          }
-                        }}
-                        className={`text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary [&_ul]:m-0 [&_ol]:m-0 [&_li]:py-0 ${isExpanded ? "" : "line-clamp-2"}`}
-                      >
-                        <Markdown
-                          allowedElements={[
-                            "p",
-                            "a",
-                            "strong",
-                            "em",
-                            "code",
-                            "ul",
-                            "ol",
-                            "li",
-                          ]}
-                          // Anything else keeps its text, just unstyled.
-                          unwrapDisallowed
-                        >
-                          {notif.body}
-                        </Markdown>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-muted-foreground">
-                          {formatRelativeTime(notif.createdAt)}
-                        </span>
-                        <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground">
-                          {isExpanded ? (
-                            <>
-                              Show less
-                              <ChevronUp className="size-3" />
-                            </>
-                          ) : (
-                            <>
-                              Show more
-                              <ChevronDown className="size-3" />
-                            </>
-                          )}
-                        </span>
-                        {href && (
-                          <Link
-                            href={href}
-                            className="text-xs text-primary hover:underline"
-                            onClick={(e) => {
+                        <div
+                          onClick={(e) => {
+                            const target = e.target as Element;
+                            if (
+                              !e.currentTarget.contains(target) ||
+                              target.closest("button")
+                            ) {
                               e.stopPropagation();
-                              if (!notif.isRead) handleMarkAsRead(notif.id);
-                              setIsOpen(false);
-                            }}
+                            }
+                          }}
+                          className={`text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary [&_ul]:m-0 [&_ol]:m-0 [&_li]:py-0 ${isExpanded ? "" : "line-clamp-2"}`}
+                        >
+                          <Markdown
+                            allowedElements={[
+                              "p",
+                              "a",
+                              "strong",
+                              "em",
+                              "code",
+                              "ul",
+                              "ol",
+                              "li",
+                            ]}
+                            // Anything else keeps its text, just unstyled.
+                            unwrapDisallowed
                           >
-                            Open
-                          </Link>
-                        )}
+                            {notif.body}
+                          </Markdown>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-muted-foreground">
+                            {formatRelativeTime(notif.createdAt)}
+                          </span>
+                          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground">
+                            {isExpanded ? (
+                              <>
+                                Show less
+                                <ChevronUp className="size-3" />
+                              </>
+                            ) : (
+                              <>
+                                Show more
+                                <ChevronDown className="size-3" />
+                              </>
+                            )}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <button
-                      className="absolute top-2 right-2 p-0.5 rounded-sm hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDismiss(notif.id);
-                      }}
-                      aria-label="Dismiss notification"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        className="absolute top-2 right-2 p-0.5 rounded-sm hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDismiss(notif.id);
+                        }}
+                        aria-label="Dismiss notification"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </DropdownMenuItem>
+                    {/* Its own item, so a keyboard can reach it too. */}
+                    {href && (
+                      <DropdownMenuItem
+                        asChild
+                        className="ml-10 mb-1 w-fit px-2 py-0.5 text-xs text-primary cursor-pointer"
+                      >
+                        <Link
+                          href={href}
+                          onClick={() => {
+                            if (!notif.isRead) handleMarkAsRead(notif.id);
+                          }}
+                        >
+                          Open
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                  </Fragment>
                 );
               })}
               {notifications.length > 0 && invitations.length > 0 && (

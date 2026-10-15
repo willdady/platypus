@@ -200,7 +200,7 @@ export const ManageAttachmentsDialog = ({
                   aria-label={`Detach ${a.workspaceName}`}
                   disabled={busyId === a.workspaceId}
                   onClick={() => toggle(a.workspaceId, true)}
-                  className="cursor-pointer rounded-sm hover:text-destructive disabled:opacity-50"
+                  className="cursor-pointer rounded-sm hover:text-destructive disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="size-3" />
                 </button>

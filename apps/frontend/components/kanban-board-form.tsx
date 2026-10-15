@@ -201,7 +201,7 @@ export function KanbanBoardForm({
                     type="button"
                     title={c.name}
                     onClick={() => handleLabelColorChange(label.id, c.value)}
-                    className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110"
+                    className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     style={{
                       backgroundColor: c.value,
                       borderColor:

@@ -839,6 +839,27 @@ describe("KanbanBoard open card", () => {
     expect(window.location.search).toBe("");
   });
 
+  it("tells a screen reader how the keyboard moves and opens a card", () => {
+    renderBoard();
+
+    const card = screen.getByRole("button", { name: /A card/ });
+    const instructions = document.getElementById(
+      card.getAttribute("aria-describedby")!,
+    );
+    expect(instructions).toHaveTextContent(/press space to pick it up/i);
+    expect(instructions).toHaveTextContent(/press enter to open it/i);
+  });
+
+  it("opens a card on Enter", async () => {
+    renderBoard();
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /A card/ }), {
+      key: "Enter",
+    });
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
   it("opens the card a ?cardId link names", async () => {
     window.history.replaceState(null, "", "?cardId=card-1");
     renderBoard();

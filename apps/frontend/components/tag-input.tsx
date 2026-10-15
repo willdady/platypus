@@ -85,7 +85,7 @@ export function TagInput({
                 type="button"
                 onClick={() => removeTag(tag)}
                 disabled={disabled}
-                className="rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none cursor-pointer"
+                className="rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none cursor-pointer"
               >
                 <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                 <span className="sr-only">Remove {tag}</span>

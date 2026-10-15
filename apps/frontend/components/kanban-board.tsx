@@ -13,6 +13,7 @@ import {
   DragStartEvent,
   DragEndEvent,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   TouchSensor,
   useSensor,
@@ -23,6 +24,7 @@ import {
   SortableContext,
   horizontalListSortingStrategy,
   arrayMove,
+  sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { motion } from "motion/react";
 import { PullToRefresh } from "@/components/pull-to-refresh";
@@ -89,6 +91,25 @@ const POINTER_SENSOR_OPTIONS = {
 const TOUCH_SENSOR_OPTIONS = {
   activationConstraint: { delay: 250, tolerance: 5 },
 } as const;
+
+// Space alone picks an item up: Enter is a card's "open", as a click is.
+const KEYBOARD_SENSOR_OPTIONS = {
+  coordinateGetter: sortableKeyboardCoordinates,
+  keyboardCodes: {
+    start: ["Space"],
+    cancel: ["Escape"],
+    end: ["Space", "Enter"],
+  },
+};
+
+// dnd-kit's default instructions offer Enter to pick up, which here opens the
+// card instead.
+const DND_ACCESSIBILITY = {
+  screenReaderInstructions: {
+    draggable:
+      "To move this item, press space to pick it up, use the arrow keys to move it, then press space again to drop it, or escape to cancel. On a card, press enter to open it.",
+  },
+};
 
 export function KanbanBoard({
   boardId,
@@ -273,6 +294,7 @@ export function KanbanBoard({
   const sensors = useSensors(
     useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
     useSensor(TouchSensor, TOUCH_SENSOR_OPTIONS),
+    useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
   );
 
   const columnIdsKey = columns.map((c) => c.id).join("\n");
@@ -833,7 +855,10 @@ export function KanbanBoard({
         <div className="flex items-center gap-4 min-w-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors cursor-pointer min-w-0 max-w-[300px]">
+              <button
+                type="button"
+                className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors cursor-pointer min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 <span className="truncate">{data.board.name}</span>
                 <ChevronDown className="h-4 w-4 shrink-0" />
               </button>
@@ -881,6 +906,7 @@ export function KanbanBoard({
         </Link>
       </div>
       <DndContext
+        accessibility={DND_ACCESSIBILITY}
         sensors={sensors}
         collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
@@ -911,8 +937,9 @@ export function KanbanBoard({
               ))}
             </SortableContext>
             <button
+              type="button"
               onClick={handleAddColumn}
-              className="flex flex-col items-center justify-center w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+              className="flex flex-col items-center justify-center w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Plus className="h-8 w-8" />
               <span className="text-sm">Add column</span>

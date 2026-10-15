@@ -1,5 +1,6 @@
 "use client";
 
+import { TurnAnnouncer } from "./turn-announcer";
 import {
   Conversation,
   ConversationContent,
@@ -715,9 +716,12 @@ export const Chat = ({
     <div
       className={`relative size-full flex flex-col overflow-hidden h-full ${messages.length === 0 ? "justify-center" : ""}`}
     >
+      {/* The transcript is a live log; marked busy while a reply streams so
+          screen readers wait for it rather than reading every token. */}
       <Conversation
         className={`overflow-y-hidden ${messages.length === 0 ? "flex-none" : ""}`}
         data-conversation
+        aria-busy={isTurnInFlight(effectiveStatus)}
       >
         <ConversationContent>
           <div className="flex justify-center">
@@ -773,6 +777,7 @@ export const Chat = ({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
+      <TurnAnnouncer status={effectiveStatus} />
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center min-w-0">
           <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
