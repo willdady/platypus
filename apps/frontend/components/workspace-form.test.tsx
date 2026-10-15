@@ -15,7 +15,7 @@ import {
   stubAcceptedSave,
   savedBody,
 } from "@/lib/form-test-harness";
-import { installResizeObserverStub } from "@/lib/test-utils";
+import { installResizeObserverStub, selectOption } from "@/lib/test-utils";
 
 vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
@@ -97,6 +97,57 @@ describe("WorkspaceForm secondary reads", () => {
 
     expect(screen.getByLabelText("Loading workspace")).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  });
+});
+
+describe("WorkspaceForm provider selects", () => {
+  beforeEach(() => {
+    resetFormHarness();
+    installResizeObserverStub();
+    setDataFor(WORKSPACE_KEY, RESEARCH);
+    setDataFor(`${WORKSPACE_KEY}/providers`, {
+      results: [
+        {
+          id: "p1",
+          name: "OpenRouter",
+          taskModelId: "openai/gpt-4o-mini",
+          memoryExtractionModelId: "openai/gpt-4o",
+          embeddingModelId: "openai/text-embedding-3-small",
+        },
+      ],
+    });
+  });
+
+  it("names each provider with the model its slot runs against, in the list and the trigger", async () => {
+    renderForm();
+
+    await selectOption(
+      screen.getByRole("combobox", { name: "Memory Embedding Provider" }),
+      "OpenRouter (openai/text-embedding-3-small)",
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Memory Embedding Provider" }),
+    ).toHaveTextContent("OpenRouter (openai/text-embedding-3-small)");
+    expect(
+      screen.getByRole("combobox", { name: "Memory Extraction Provider" }),
+    ).toHaveTextContent("Disabled");
+  });
+
+  it("names a provider without a model id for the slot on its own, with no brackets", async () => {
+    setDataFor(`${WORKSPACE_KEY}/providers`, {
+      results: [{ id: "p1", name: "OpenRouter", taskModelId: "" }],
+    });
+    renderForm();
+
+    await selectOption(
+      screen.getByRole("combobox", { name: "Task Model Provider" }),
+      "OpenRouter",
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Task Model Provider" }),
+    ).toHaveTextContent(/^OpenRouter$/);
   });
 });
 

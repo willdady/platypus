@@ -33,6 +33,7 @@ import {
   CONTEXT_MAX_LENGTH,
 } from "@platypus/schemas";
 import { retractFieldError } from "@/lib/form-errors";
+import { providerModelLabel } from "@/lib/provider-model-label";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   FieldSkeleton,
@@ -452,7 +453,7 @@ const BlueprintForm = ({
             <SelectItem value="none">Leave unset</SelectItem>
             {attachedProviders.map((provider) => (
               <SelectItem key={provider.id} value={provider.id}>
-                {provider.name}
+                {providerModelLabel(provider, "task")}
               </SelectItem>
             ))}
           </FormSelectField>
@@ -478,7 +479,7 @@ const BlueprintForm = ({
             <SelectItem value="none">Leave unset</SelectItem>
             {memoryExtractionProviders.map((provider) => (
               <SelectItem key={provider.id} value={provider.id}>
-                {provider.name}
+                {providerModelLabel(provider, "memoryExtraction")}
               </SelectItem>
             ))}
           </FormSelectField>
@@ -504,7 +505,7 @@ const BlueprintForm = ({
             <SelectItem value="none">Leave unset</SelectItem>
             {memoryEmbeddingProviders.map((provider) => (
               <SelectItem key={provider.id} value={provider.id}>
-                {provider.name}
+                {providerModelLabel(provider, "embedding")}
               </SelectItem>
             ))}
           </FormSelectField>
