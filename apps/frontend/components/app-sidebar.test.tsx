@@ -306,6 +306,26 @@ describe("AppSidebar workspace switcher", () => {
     return screen.getByRole("menu");
   };
 
+  it("lists Workspaces by name without reordering the cached results", () => {
+    installRadixPointerPolyfills();
+    const workspaces = {
+      results: [
+        { id: "ws2", name: "Beta", organizationId: "org1" },
+        { id: "ws1", name: "Alpha", organizationId: "org1" },
+      ],
+    };
+    setRead("", "organizations/org1", { id: "org1", name: "Acme" });
+    setRead("", "workspaces", workspaces);
+    renderSidebar();
+
+    const names = within(openSwitcher())
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent?.trim())
+      .filter((name) => name === "Alpha" || name === "Beta");
+    expect(names).toEqual(["Alpha", "Beta"]);
+    expect(workspaces.results.map((w) => w.name)).toEqual(["Beta", "Alpha"]);
+  });
+
   it.each([
     ["the Operator", "operator", true],
     ["an Org Admin", "org-admin", true],

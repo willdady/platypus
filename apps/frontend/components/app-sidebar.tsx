@@ -207,7 +207,7 @@ export function AppSidebar() {
   const shownChatList =
     settledChatList?.scopeKey === chatListScopeKey ? settledChatList : null;
 
-  const workspaces = (data?.results ?? []).sort((a, b) =>
+  const workspaces = [...(data?.results ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
   const chats = shownChatList?.data.results ?? [];

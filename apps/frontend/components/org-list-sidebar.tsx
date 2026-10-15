@@ -36,7 +36,7 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   // one pulsing forever.
   const isReady = !!data || !!error;
 
-  const organizations = (data?.results || []).sort((a, b) =>
+  const organizations = [...(data?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
 
