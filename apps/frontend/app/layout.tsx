@@ -1,3 +1,4 @@
+import { withBasePath } from "@/lib/routes";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
     title: "Platypus",
   },
   icons: {
-    apple: "/icon-192x192.png",
+    apple: withBasePath("/icon-192x192.png"),
   },
 };
 

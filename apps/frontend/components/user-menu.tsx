@@ -1,5 +1,6 @@
 "use client";
 
+import { appRoutes } from "@/lib/routes";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { LogOut, User } from "lucide-react";
@@ -22,7 +23,7 @@ export function UserMenu() {
 
   const handleSignOut = async () => {
     await authClient.signOut();
-    router.push("/sign-in");
+    router.push(appRoutes.signIn);
   };
 
   if (!user) {

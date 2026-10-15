@@ -12,7 +12,7 @@ import { EmptyCard } from "@/components/empty-card";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { orgRoutes } from "@/lib/routes";
+import { appRoutes, orgRoutes } from "@/lib/routes";
 
 const Spinner = () => (
   <Loader2
@@ -87,7 +87,7 @@ export default function Home() {
               description="Get started by creating your first organization to manage your workspaces and agents."
               action={
                 <Button asChild>
-                  <Link href="/create">
+                  <Link href={appRoutes.createOrganization}>
                     <Plus /> Create organization
                   </Link>
                 </Button>

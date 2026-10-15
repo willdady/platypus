@@ -24,7 +24,7 @@ import { useRouter } from "next/navigation";
 import { type Organization } from "@platypus/schemas";
 import { ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH } from "@platypus/schemas";
 import { toast } from "sonner";
-import { orgRoutes } from "@/lib/routes";
+import { appRoutes, orgRoutes, withBasePath } from "@/lib/routes";
 
 interface OrganizationFormProps {
   classNames?: string;
@@ -94,8 +94,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
       // payload and SWR entries for the deleted Org included, which the
       // surrounding layout would go on rendering. Reloading rebuilds
       // everything from a server that now agrees the Org is gone.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = `/`;
+      window.location.href = withBasePath(appRoutes.home);
     },
     onError: (message, _outcome, { close }) => {
       toast.error(message);

@@ -1,6 +1,15 @@
 // @vitest-environment node
-import { describe, it, expect } from "vitest";
-import { orgRoutes, workspaceRoutes, userRoutes } from "./routes";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import {
+  appRoutes,
+  invitationLink,
+  orgRoutes,
+  userRoutes,
+  withBasePath,
+  workspaceRoutes,
+} from "./routes";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("orgRoutes", () => {
   const routes = orgRoutes("org1");
@@ -219,5 +228,57 @@ describe("userRoutes", () => {
   it("builds the workspace-context create and detail paths", () => {
     expect(userRoutes.createContext).toBe("/settings/contexts/create");
     expect(userRoutes.contextDetail("wc1")).toBe("/settings/contexts/wc1");
+  });
+});
+
+describe("appRoutes", () => {
+  it("builds the app-level paths outside any Organization", () => {
+    expect(appRoutes.home).toBe("/");
+    expect(appRoutes.signIn).toBe("/sign-in");
+    expect(appRoutes.signUp).toBe("/sign-up");
+    expect(appRoutes.createOrganization).toBe("/create");
+    expect(appRoutes.invite).toBe("/invite");
+    expect(appRoutes.inviteToken("tok_1")).toBe("/invite/tok_1");
+  });
+
+  it("encodes an invitation token as one path segment", () => {
+    expect(appRoutes.inviteToken("a/b?c")).toBe("/invite/a%2Fb%3Fc");
+  });
+});
+
+describe("withBasePath", () => {
+  it("returns the path unchanged when no base path is set", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "");
+    expect(withBasePath("/")).toBe("/");
+    expect(withBasePath("/org1/settings")).toBe("/org1/settings");
+  });
+
+  it("prefixes the base path", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/platypus-app");
+    expect(withBasePath("/invite")).toBe("/platypus-app/invite");
+    expect(withBasePath("/icon-192x192.png")).toBe(
+      "/platypus-app/icon-192x192.png",
+    );
+  });
+
+  it("maps the root to the base path itself, with no trailing slash", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/platypus-app");
+    expect(withBasePath("/")).toBe("/platypus-app");
+  });
+});
+
+describe("invitationLink", () => {
+  it("builds an absolute link at the root", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "");
+    expect(invitationLink("https://chat.example.com", "tok_1")).toBe(
+      "https://chat.example.com/invite/tok_1",
+    );
+  });
+
+  it("builds an absolute link under the base path", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/platypus-app");
+    expect(invitationLink("https://chat.example.com", "tok_1")).toBe(
+      "https://chat.example.com/platypus-app/invite/tok_1",
+    );
   });
 });

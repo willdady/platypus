@@ -12,7 +12,7 @@ import { EmptyCard } from "@/components/empty-card";
 import { Button } from "@/components/ui/button";
 import { OctagonX, Home, Building } from "lucide-react";
 import Link from "next/link";
-import { orgRoutes } from "@/lib/routes";
+import { appRoutes, orgRoutes } from "@/lib/routes";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
 
 interface ProtectedRouteProps {
@@ -114,7 +114,7 @@ export function ProtectedRoute({
   // there is none.
   useEffect(() => {
     if (!isAuthLoading && !user && !accessReadError) {
-      router.push("/sign-in");
+      router.push(appRoutes.signIn);
     }
   }, [user, isAuthLoading, accessReadError, router]);
 

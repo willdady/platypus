@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { useBackendUrl } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
-import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import {
+  appRoutes,
+  orgRoutes,
+  withBasePath,
+  workspaceRoutes,
+} from "@/lib/routes";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -78,7 +83,7 @@ export const OAuthCallbackHandler = ({
               data.mcpId,
             )
           : orgRoutes(data.orgId).settings.mcpDetail(data.mcpId);
-        window.location.replace(mcpEditPath);
+        window.location.replace(withBasePath(mcpEditPath));
         return;
       }
 
@@ -111,7 +116,7 @@ export const OAuthCallbackHandler = ({
         <Button
           variant="outline"
           className="cursor-pointer"
-          onClick={() => router.push("/")}
+          onClick={() => router.push(appRoutes.home)}
         >
           Back to Home
         </Button>

@@ -13,6 +13,36 @@
  * functions (`chat.detail(id)`); static ones are plain strings.
  */
 
+/**
+ * Prefix an app path with the deployment's `BASE_PATH`.
+ *
+ * `next/link` and the router add the base path themselves, so this is only for
+ * the places they don't reach: `window.location`, `history`, absolute URLs
+ * handed to someone else, and metadata such as the manifest. Read at call time
+ * so tests can stub it; Next inlines `NEXT_PUBLIC_BASE_PATH` at build.
+ */
+export function withBasePath(path: string): string {
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  if (!basePath) return path;
+  return path === "/" ? basePath : `${basePath}${path}`;
+}
+
+/** App-level pages outside any Organization. */
+export const appRoutes = {
+  home: "/",
+  signIn: "/sign-in",
+  signUp: "/sign-up",
+  createOrganization: "/create",
+  /** The bare invite address an invitation page scrubs its token down to. */
+  invite: "/invite",
+  inviteToken: (token: string) => `/invite/${encodeURIComponent(token)}`,
+} as const;
+
+/** The absolute invitation link to hand to an invitee. */
+export function invitationLink(origin: string, token: string): string {
+  return `${origin}${withBasePath(appRoutes.inviteToken(token))}`;
+}
+
 /** Organization-scoped pages: the org root, workspace creation, and settings. */
 export function orgRoutes(orgId: string) {
   const settings = `/${orgId}/settings`;

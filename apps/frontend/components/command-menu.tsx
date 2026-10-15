@@ -34,7 +34,7 @@ import { splitPinned } from "@/lib/pinned-agents";
 import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
-import { userRoutes, workspaceRoutes } from "@/lib/routes";
+import { appRoutes, userRoutes, workspaceRoutes } from "@/lib/routes";
 
 /**
  * What a group shows when its read failed: a Retry item in place of the rows,
@@ -149,7 +149,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           <CommandItem
             className="cursor-pointer"
             onSelect={() => {
-              runCommand(() => router.push("/"));
+              runCommand(() => router.push(appRoutes.home));
             }}
           >
             <ArrowLeftRight />

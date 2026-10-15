@@ -18,7 +18,7 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { scopedUrl } from "@/lib/api-write";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization } from "@platypus/schemas";
-import { orgRoutes } from "@/lib/routes";
+import { appRoutes, orgRoutes } from "@/lib/routes";
 
 interface OrgListSidebarProps {
   currentOrgId: string;
@@ -96,7 +96,7 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
             <SidebarMenuItem>
               {isReady ? (
                 <SidebarMenuButton asChild>
-                  <Link href="/create">
+                  <Link href={appRoutes.createOrganization}>
                     <Plus className="size-4" />
                     <span>Add organization</span>
                   </Link>

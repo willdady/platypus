@@ -1,5 +1,6 @@
 "use client";
 
+import { invitationLink } from "@/lib/routes";
 import { useParams } from "next/navigation";
 import { InvitationForm } from "@/components/invitation-form";
 import { EmptyCard } from "@/components/empty-card";
@@ -64,7 +65,7 @@ const OrgInvitationsPage = () => {
   // once accepted/declined/expired the token no longer resolves to anything,
   // so there is nothing useful left to copy.
   const handleCopyLink = async (token: string) => {
-    const link = `${window.location.origin}/invite/${token}`;
+    const link = invitationLink(window.location.origin, token);
     await copyWithToast(
       link,
       "Invitation link copied",
