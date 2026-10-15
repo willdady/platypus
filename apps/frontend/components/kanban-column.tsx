@@ -98,8 +98,9 @@ function ColumnContent({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
+              type="button"
               aria-label={`Actions for ${column.name}`}
-              className="p-1 hover:bg-muted rounded"
+              className="p-1 hover:bg-muted rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreVertical className="h-4 w-4" />

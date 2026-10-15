@@ -196,6 +196,61 @@ describe("NotificationsDropdown feed", () => {
   });
 });
 
+describe("NotificationsDropdown keyboard", () => {
+  const renderFeed = () => {
+    feeds["/notifications"] = { results: [unread] };
+    feeds["/unread-count"] = { count: 1 };
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+    openDropdownMenu();
+  };
+  const row = () => screen.getByRole("menuitem", { name: /Nightly digest/ });
+
+  it("makes each notification a menu item the arrow keys reach", () => {
+    renderFeed();
+
+    expect(row()).toBeInTheDocument();
+  });
+
+  it("says a notification is unread in words, not just a dot", () => {
+    renderFeed();
+
+    expect(within(row()).getByText("Unread")).toHaveClass("sr-only");
+  });
+
+  it("expands and marks read on Enter, keeping the menu open", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    renderFeed();
+
+    fireEvent.keyDown(row(), { key: "Enter" });
+
+    expect(screen.getByText("Show less")).toBeInTheDocument();
+    expect(row()).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${NOTIFICATIONS_URL}/n1/read`,
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("dismisses the focused notification on Delete", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    renderFeed();
+
+    expect(row()).toHaveAttribute("aria-keyshortcuts", "Delete");
+    fireEvent.keyDown(row(), { key: "Delete" });
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${NOTIFICATIONS_URL}/n1`,
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
+  });
+});
+
 describe("NotificationsDropdown body", () => {
   const renderBody = (body: string) => {
     feeds["/notifications"] = { results: [{ ...unread, body }] };
@@ -281,7 +336,7 @@ describe("NotificationsDropdown source link", () => {
   ])("links a notification from %o to its page", (source, href) => {
     renderWithSource(source);
 
-    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
+    expect(screen.getByRole("menuitem", { name: "Open" })).toHaveAttribute(
       "href",
       href,
     );
@@ -291,7 +346,7 @@ describe("NotificationsDropdown source link", () => {
     renderWithSource(null);
 
     expect(
-      screen.queryByRole("link", { name: "Open" }),
+      screen.queryByRole("menuitem", { name: "Open" }),
     ).not.toBeInTheDocument();
   });
 
@@ -300,7 +355,7 @@ describe("NotificationsDropdown source link", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderWithSource({ kind: "chat", chatId: "chat-1" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Open" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(

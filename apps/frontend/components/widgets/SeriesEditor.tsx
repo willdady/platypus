@@ -74,8 +74,9 @@ export function SeriesEditor({
         <div className="flex items-center justify-between">
           <Label className="text-xs">Series</Label>
           <button
+            type="button"
             onClick={handleAddSeries}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Plus className="h-3 w-3" /> Add series
           </button>
@@ -105,9 +106,10 @@ export function SeriesEditor({
               />
               {series.length > 1 && (
                 <button
+                  type="button"
                   aria-label="Remove series"
                   onClick={() => handleRemoveSeries(s.id)}
-                  className="text-muted-foreground hover:text-destructive"
+                  className="text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-3 w-3" />
                 </button>

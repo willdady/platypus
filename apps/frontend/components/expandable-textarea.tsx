@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "motion/react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Textarea } from "./ui/textarea";
 import { FieldError, FieldLabel } from "./ui/field";
 import { Button } from "./ui/button";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "./ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "@/lib/utils";
 
 interface ExpandableTextareaProps extends React.ComponentProps<
@@ -34,229 +34,157 @@ function ExpandableTextarea({
     "write",
   );
   const [draftValue, setDraftValue] = React.useState("");
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  // Mirror draftValue into a ref so commitDraft reads the latest value even
-  // from the Escape-key effect's stale closure. Updated in an effect rather
-  // than during render (refs must not be written during render).
-  const draftRef = React.useRef(draftValue);
-  React.useEffect(() => {
-    draftRef.current = draftValue;
-  }, [draftValue]);
+  const expandButtonRef = React.useRef<HTMLButtonElement>(null);
 
-  const commitDraft = React.useCallback(() => {
-    if (onChange && draftRef.current !== value) {
+  const commitDraft = () => {
+    if (onChange && draftValue !== value) {
       const event = {
-        target: { value: draftRef.current, id: id ?? "" },
+        target: { value: draftValue, id: id ?? "" },
       } as React.ChangeEvent<HTMLTextAreaElement>;
       onChange(event);
     }
-  }, [onChange, value, id]);
-
-  const closeExpanded = React.useCallback(() => {
-    commitDraft();
-    setActiveTab("write");
-    setIsExpanded(false);
-  }, [commitDraft]);
+  };
 
   const openExpanded = () => {
     setDraftValue(typeof value === "string" ? value : "");
+    setActiveTab("write");
     setIsExpanded(true);
   };
 
-  const toggleExpand = () => {
-    if (isExpanded) {
-      closeExpanded();
-    } else {
-      openExpanded();
-    }
+  // Every way out — Collapse, Escape, a click outside — keeps the draft.
+  const handleOpenChange = (open: boolean) => {
+    if (open) return;
+    commitDraft();
+    setIsExpanded(false);
   };
 
-  React.useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isExpanded) {
-        closeExpanded();
-      }
-    };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [isExpanded, closeExpanded]);
+  const renderCounter = (text: unknown) =>
+    (maxLength !== undefined || error) && (
+      <div className="flex justify-between mt-1">
+        {error ? <FieldError>{error}</FieldError> : <div />}
+        {maxLength !== undefined && (
+          <p className="text-xs text-muted-foreground">
+            {typeof text === "string" ? text.length : 0}/{maxLength}
+          </p>
+        )}
+      </div>
+    );
 
-  const displayValue = isExpanded ? draftValue : value;
-  const currentLength =
-    typeof displayValue === "string" ? displayValue.length : 0;
-
-  const renderTextarea = (expanded: boolean) => (
-    <Textarea
-      className={cn(
-        "resize-none",
-        expanded ? "h-full min-h-[300px]" : "min-h-16 max-h-[15em]",
-        className,
-      )}
-      maxLength={maxLength}
-      value={expanded ? draftValue : value}
-      onChange={expanded ? (e) => setDraftValue(e.target.value) : onChange}
-      id={id}
-      ref={expanded ? textareaRef : undefined}
-      {...props}
-    />
+  const expandButton = expandable && (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="size-6 cursor-pointer text-muted-foreground"
+      onClick={openExpanded}
+      ref={expandButtonRef}
+    >
+      <Maximize2 className="size-3.5" />
+      <span className="sr-only">Expand</span>
+    </Button>
   );
 
-  const counterElement = (maxLength !== undefined || error) && (
-    <div className="flex justify-between mt-1">
-      {error ? <FieldError>{error}</FieldError> : <div />}
-      {maxLength !== undefined && (
-        <p className="text-xs text-muted-foreground">
-          {currentLength}/{maxLength}
-        </p>
-      )}
-    </div>
-  );
+  const title = label || "Full Screen Editor";
 
   return (
     <>
       <div className="relative w-full group flex flex-col">
-        {label && !isExpanded && (
+        {label && (
           <div className="flex justify-between items-center mb-2">
             <FieldLabel htmlFor={id}>{label}</FieldLabel>
-            {expandable && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-6 cursor-pointer text-muted-foreground"
-                onClick={toggleExpand}
-              >
-                <Maximize2 className="size-3.5" />
-                <span className="sr-only">Expand</span>
-              </Button>
-            )}
+            {expandButton}
           </div>
         )}
-        {!isExpanded && (
-          <div className="w-full relative">
-            {renderTextarea(false)}
-            {!label && expandable && (
-              <div className="absolute top-2 right-2 flex gap-1">
+        <div className="w-full relative">
+          <Textarea
+            className={cn("resize-none min-h-16 max-h-[15em]", className)}
+            maxLength={maxLength}
+            value={value}
+            onChange={onChange}
+            id={id}
+            {...props}
+          />
+          {!label && expandButton && (
+            <div className="absolute top-2 right-2 flex gap-1">
+              {expandButton}
+            </div>
+          )}
+          {renderCounter(value)}
+        </div>
+      </div>
+
+      {expandable && (
+        <Dialog open={isExpanded} onOpenChange={handleOpenChange}>
+          <DialogContent
+            showCloseButton={false}
+            aria-describedby={undefined}
+            // Opened without a Dialog.Trigger, so Radix has nowhere to send
+            // focus back to; return it to Expand.
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              expandButtonRef.current?.focus();
+            }}
+            className="flex flex-col gap-0 w-full max-w-5xl sm:max-w-5xl h-full max-h-[80vh] p-4"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <DialogTitle className="text-sm font-medium text-muted-foreground">
+                {title}
+              </DialogTitle>
+              <DialogClose asChild>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className="size-6 cursor-pointer text-muted-foreground"
-                  onClick={toggleExpand}
                 >
-                  <Maximize2 className="size-3.5" />
-                  <span className="sr-only">Expand</span>
+                  <Minimize2 className="size-3.5" />
+                  <span className="sr-only">Collapse</span>
                 </Button>
-              </div>
-            )}
-            {counterElement}
-          </div>
-        )}
-        {isExpanded && (
-          <div className="invisible">
-            {label && (
-              <div className="flex justify-between items-center mb-2">
-                <FieldLabel htmlFor={id}>{label}</FieldLabel>
-                <div className="size-6" />
-              </div>
-            )}
-            {renderTextarea(false)}
-            {counterElement}
-          </div>
-        )}
-      </div>
-
-      {expandable &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {isExpanded && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8">
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
-                  onClick={toggleExpand}
+              </DialogClose>
+            </div>
+            <Tabs
+              value={activeTab}
+              onValueChange={(tab) => setActiveTab(tab as "write" | "preview")}
+              className="flex-1 min-h-0 flex flex-col"
+            >
+              <TabsList className="h-auto self-start mb-2 p-0.5">
+                <TabsTrigger value="write" className="px-2 py-0.5 text-xs">
+                  Write
+                </TabsTrigger>
+                <TabsTrigger value="preview" className="px-2 py-0.5 text-xs">
+                  Preview
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="write" className="mt-0 flex-1 min-h-0">
+                <Textarea
+                  className={cn("resize-none h-full min-h-[300px]", className)}
+                  maxLength={maxLength}
+                  value={draftValue}
+                  onChange={(e) => setDraftValue(e.target.value)}
+                  id={id ? `${id}-expanded` : undefined}
+                  aria-label={title}
+                  {...props}
                 />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  onAnimationComplete={() => {
-                    if (isExpanded) {
-                      textareaRef.current?.focus();
-                    }
-                  }}
-                  className="relative w-full max-w-5xl h-full max-h-[80vh] bg-background rounded-lg border shadow-2xl flex flex-col p-4"
-                >
-                  <div className="flex justify-between items-center mb-2">
-                    <div className="text-sm font-medium text-muted-foreground">
-                      {label || "Full Screen Editor"}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-6 cursor-pointer text-muted-foreground"
-                      onClick={toggleExpand}
-                    >
-                      <Minimize2 className="size-3.5" />
-                      <span className="sr-only">Collapse</span>
-                    </Button>
+              </TabsContent>
+              <TabsContent
+                value="preview"
+                className="mt-0 flex-1 min-h-0 overflow-y-auto rounded-md border bg-transparent px-3 py-2"
+              >
+                {draftValue.length > 0 ? (
+                  <div className="[overflow-wrap:anywhere]">
+                    <Markdown>{draftValue}</Markdown>
                   </div>
-                  <div className="flex gap-1 mb-2">
-                    <button
-                      type="button"
-                      className={cn(
-                        "px-2 py-0.5 text-xs font-medium rounded cursor-pointer",
-                        activeTab === "write"
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => setActiveTab("write")}
-                    >
-                      Write
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "px-2 py-0.5 text-xs font-medium rounded cursor-pointer",
-                        activeTab === "preview"
-                          ? "bg-muted text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      onClick={() => setActiveTab("preview")}
-                    >
-                      Preview
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    {activeTab === "write" ? (
-                      renderTextarea(true)
-                    ) : (
-                      <div className="h-full overflow-y-auto rounded-md border bg-transparent px-3 py-2">
-                        {draftValue.length > 0 ? (
-                          <div className="[overflow-wrap:anywhere]">
-                            <Markdown>{draftValue}</Markdown>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            Nothing to preview
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {counterElement}
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>,
-          document.body,
-        )}
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Nothing to preview
+                  </p>
+                )}
+              </TabsContent>
+            </Tabs>
+            {renderCounter(draftValue)}
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }

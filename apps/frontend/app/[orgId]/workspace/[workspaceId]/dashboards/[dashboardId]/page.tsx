@@ -155,8 +155,9 @@ const WidgetTile = memo(function WidgetTile({
         <div className="flex items-center gap-1 shrink-0">
           {widget.type === "text" && !editMode && (
             <button
+              type="button"
               aria-label="Expand widget"
-              className="hidden md:flex items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              className="hidden md:flex items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => onExpand(widget.id)}
             >
@@ -166,9 +167,10 @@ const WidgetTile = memo(function WidgetTile({
           <Tooltip delayDuration={500}>
             <TooltipTrigger asChild onMouseDown={(e) => e.stopPropagation()}>
               <button
+                type="button"
                 aria-label="Widget details"
                 className={cn(
-                  "hidden items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors",
+                  "hidden items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   !editMode && "md:flex",
                 )}
               >
@@ -633,7 +635,10 @@ const DashboardPage = ({
         <div className="flex items-center gap-4 min-w-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors cursor-pointer min-w-0 max-w-[300px]">
+              <button
+                type="button"
+                className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors cursor-pointer min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 <span className="truncate">{dashboard.name}</span>
                 <ChevronDown className="h-4 w-4 shrink-0" />
               </button>

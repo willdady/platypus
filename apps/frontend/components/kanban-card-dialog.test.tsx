@@ -187,6 +187,26 @@ describe("KanbanCardDialog edit comment", () => {
   });
 });
 
+describe("KanbanCardDialog comment actions", () => {
+  it("names each comment's Edit and Delete after the comment they act on", () => {
+    comments = [
+      existingComment,
+      { ...existingComment, id: "cm2", createdByName: "Carol" },
+    ];
+    renderDialog();
+
+    expect(
+      screen.getByRole("button", { name: /^Edit comment by Bob/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Edit comment by Carol/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Delete comment by Carol/ }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("KanbanCardDialog delete comment", () => {
   it("surfaces the backend's reason and does not revalidate when the delete is refused", async () => {
     comments = [existingComment];

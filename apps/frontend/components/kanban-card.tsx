@@ -14,6 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { cn } from "@/lib/utils";
+import { readableTextColor } from "@/lib/color";
+
+/** Words for a due-date status, so it isn't carried by colour alone. */
+const DUE_DATE_PREFIX = {
+  overdue: "Overdue: due",
+  "due-soon": "Due soon:",
+  normal: "Due",
+} as const;
 
 function getDueDateStatus(dueDate: string): "overdue" | "due-soon" | "normal" {
   const now = new Date();
@@ -72,6 +80,7 @@ const KanbanCardComponentInner = function KanbanCardComponent({
     (p) => p.value === card.priority,
   );
   const priorityColor = priorityConfig?.color ?? null;
+  const priorityLabel = priorityColor ? priorityConfig?.label : null;
 
   const resolvedAssignees = (card.resolvedAssignees ??
     []) as KanbanResolvedAssignee[];
@@ -95,15 +104,30 @@ const KanbanCardComponentInner = function KanbanCardComponent({
         priorityColor ? { ...style, borderLeftColor: priorityColor } : style
       }
       onClick={() => onCardClick(card)}
+      // Enter opens the card, as a click does. Space is left to dnd-kit's
+      // keyboard sensor, which picks the card up to move it.
+      onKeyDown={(event) => {
+        if (draggable) listeners?.onKeyDown?.(event);
+        if (event.key === "Enter" && !event.repeat) {
+          event.preventDefault();
+          onCardClick(card);
+        }
+      }}
     >
       <p className="text-sm font-medium">{card.title}</p>
+      {priorityLabel && (
+        <span className="sr-only">Priority: {priorityLabel}</span>
+      )}
       {cardLabels.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {cardLabels.map((label) => (
             <Badge
               key={label.id}
               className="border-0"
-              style={{ backgroundColor: label.color }}
+              style={{
+                backgroundColor: label.color,
+                color: readableTextColor(label.color),
+              }}
             >
               {label.name}
             </Badge>
@@ -118,13 +142,21 @@ const KanbanCardComponentInner = function KanbanCardComponent({
             <div
               className={cn(
                 "flex items-center gap-1 text-xs",
-                dueDateStatus === "overdue" && "text-red-500",
-                dueDateStatus === "due-soon" && "text-amber-500",
+                dueDateStatus === "overdue" && "text-red-600 dark:text-red-400",
+                dueDateStatus === "due-soon" &&
+                  "text-amber-700 dark:text-amber-400",
                 dueDateStatus === "normal" && "text-muted-foreground",
               )}
             >
-              <Calendar className="size-3" />
-              <span>{formatDueDate(dueDateStr)}</span>
+              <Calendar className="size-3" aria-hidden="true" />
+              <span>
+                {dueDateStatus && (
+                  <span className="sr-only">
+                    {DUE_DATE_PREFIX[dueDateStatus]}{" "}
+                  </span>
+                )}
+                {formatDueDate(dueDateStr)}
+              </span>
             </div>
           )}
           {card.commentCount > 0 && (

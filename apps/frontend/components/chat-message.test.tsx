@@ -64,6 +64,21 @@ describe("ChatMessage agent attribution", () => {
     expect(avatar).toHaveAttribute("src", "https://example.com/agent-1.png");
   });
 
+  it("names the agent once per message, not on every part's avatar", () => {
+    const { container } = renderMessage({
+      ...assistantMessage({ agentId: "agent-1" }),
+      parts: [
+        { type: "text", text: "First" },
+        { type: "text", text: "Second" },
+      ],
+    });
+
+    expect(screen.getAllByAltText("Research Agent")).toHaveLength(1);
+    expect(
+      container.querySelectorAll('img[src="https://example.com/agent-1.png"]'),
+    ).toHaveLength(2);
+  });
+
   // A direct provider/model run carries no attribution; an agentId that no
   // longer resolves (deleted agent) has to degrade the same way.
   it.each([

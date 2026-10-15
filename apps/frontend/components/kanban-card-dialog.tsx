@@ -398,6 +398,11 @@ function CardDetailsPane({
   );
 }
 
+// Who wrote a comment and when, so each comment's Edit and Delete are told
+// apart by a screen reader rather than all reading "Edit" and "Delete".
+const commentLabel = (comment: KanbanCardComment) =>
+  `${comment.createdByName ?? "Unknown"}, ${formatRelativeTime(comment.createdAt)}`;
+
 // The comment list and composer. Shared by both layouts.
 function CommentsSection({
   className,
@@ -476,14 +481,20 @@ function CommentsSection({
                   </div>
                   <div className="flex gap-2">
                     <button
-                      className="text-xs text-muted-foreground hover:text-foreground"
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => onStartEditComment(comment)}
+                      aria-label={`Edit comment by ${commentLabel(comment)}`}
                     >
                       Edit
                     </button>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <button className="text-xs text-muted-foreground hover:text-destructive">
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-label={`Delete comment by ${commentLabel(comment)}`}
+                        >
                           Delete
                         </button>
                       </PopoverTrigger>
