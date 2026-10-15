@@ -5,6 +5,7 @@ import {
   FieldDescription,
   FieldError,
 } from "@/components/ui/field";
+import { formFieldIds } from "@/components/form-field-ids";
 import { Textarea } from "@/components/ui/textarea";
 
 export type FormTextareaFieldProps = {
@@ -41,6 +42,7 @@ export const FormTextareaField = ({
   className,
   textareaClassName,
 }: FormTextareaFieldProps) => {
+  const ids = formFieldIds(name, { description, error });
   return (
     <Field className={className} data-invalid={!!error}>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
@@ -54,10 +56,15 @@ export const FormTextareaField = ({
         rows={rows}
         maxLength={maxLength}
         aria-invalid={!!error}
+        aria-describedby={ids.describedBy}
         className={textareaClassName}
       />
-      {description && <FieldDescription>{description}</FieldDescription>}
-      {error && <FieldError>{error}</FieldError>}
+      {description && (
+        <FieldDescription id={ids.descriptionId}>
+          {description}
+        </FieldDescription>
+      )}
+      {error && <FieldError id={ids.errorId}>{error}</FieldError>}
     </Field>
   );
 };

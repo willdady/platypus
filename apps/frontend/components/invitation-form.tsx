@@ -113,7 +113,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       }}
       className="space-y-4 border p-4 rounded-lg bg-muted/30"
     >
-      <h3 className="font-semibold">Invite User to Organization</h3>
+      <h2 className="font-semibold">Invite User to Organization</h2>
       <FieldSet>
         <FieldGroup className="gap-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

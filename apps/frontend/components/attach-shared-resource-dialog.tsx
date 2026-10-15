@@ -102,7 +102,11 @@ const AttachSharedResourceDialog = ({
             Choose one to make it available here.
           </DialogDescription>
         </DialogHeader>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
         {isLoading ? (
           // Rows shaped like the loaded ones, in place of the false "none
           // available" while the list is still loading.

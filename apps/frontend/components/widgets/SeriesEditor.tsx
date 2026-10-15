@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +37,7 @@ export function SeriesEditor({
   onSeriesChange,
   onSave,
 }: Props) {
+  const id = useId();
   const handleAddSeries = () =>
     onSeriesChange([...series, { id: genId(), label: "", values: [] }]);
 
@@ -45,16 +47,22 @@ export function SeriesEditor({
   return (
     <div className="flex flex-col gap-2 p-3 h-full overflow-auto">
       <div className="space-y-1">
-        <Label className="text-xs">Name</Label>
+        <Label htmlFor={`${id}-name`} className="text-xs">
+          Name
+        </Label>
         <Input
+          id={`${id}-name`}
           value={title}
           onChange={(e) => onTitleChange(e.target.value)}
           className="h-7 text-sm"
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Y-axis label (optional)</Label>
+        <Label htmlFor={`${id}-y-axis-label`} className="text-xs">
+          Y-axis label (optional)
+        </Label>
         <Input
+          id={`${id}-y-axis-label`}
           value={yAxisLabel}
           onChange={(e) => onYAxisLabelChange(e.target.value)}
           placeholder="Revenue ($)"
@@ -62,17 +70,25 @@ export function SeriesEditor({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Categories (comma-separated)</Label>
+        <Label htmlFor={`${id}-categories`} className="text-xs">
+          Categories (comma-separated)
+        </Label>
         <Input
+          id={`${id}-categories`}
           value={categoriesText}
           onChange={(e) => onCategoriesTextChange(e.target.value)}
           placeholder="Jan, Feb, Mar"
           className="h-7 text-sm"
         />
       </div>
-      <div className="space-y-2">
+      <div role="group" aria-labelledby={`${id}-series`} className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-xs">Series</Label>
+          <span
+            id={`${id}-series`}
+            className="text-xs leading-none font-medium"
+          >
+            Series
+          </span>
           <button
             type="button"
             onClick={handleAddSeries}

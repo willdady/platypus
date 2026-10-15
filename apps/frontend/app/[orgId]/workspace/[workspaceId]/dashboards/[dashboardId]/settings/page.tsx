@@ -133,7 +133,11 @@ const DashboardSettingsPage = ({
               placeholder="Optional description"
             />
           </div>
-          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+          {saveError && (
+            <p role="alert" className="text-sm text-destructive">
+              {saveError}
+            </p>
+          )}
           <div className="flex gap-2">
             <Button
               type="submit"

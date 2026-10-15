@@ -853,6 +853,7 @@ export function KanbanBoard({
     >
       <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
         <div className="flex items-center gap-4 min-w-0">
+          <h1 className="sr-only">{data.board.name}</h1>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -1033,8 +1034,13 @@ export function KanbanBoard({
                 />
               </div>
               {labels.length > 0 && (
-                <div>
-                  <Label>Labels</Label>
+                <div role="group" aria-labelledby="new-card-labels-label">
+                  <p
+                    id="new-card-labels-label"
+                    className="flex items-center gap-2 text-sm leading-none font-medium"
+                  >
+                    Labels
+                  </p>
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {labels.map((label) => {
                       const isActive = newCardLabelIds.includes(label.id);

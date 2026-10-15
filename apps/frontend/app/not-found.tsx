@@ -1,3 +1,4 @@
+import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { appRoutes } from "@/lib/routes";
 import Link from "next/link";
 import { FileQuestion } from "lucide-react";
@@ -7,7 +8,10 @@ import { EmptyCard } from "@/components/empty-card";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <main
+      id={MAIN_CONTENT_ID}
+      className="flex min-h-screen items-center justify-center p-4"
+    >
       <EmptyCard
         className="max-w-md"
         icon={<FileQuestion />}
@@ -19,6 +23,6 @@ export default function NotFound() {
           </Button>
         }
       />
-    </div>
+    </main>
   );
 }

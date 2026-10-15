@@ -240,15 +240,16 @@ const A2aEndpointForm = ({
               }
               disabled={isSubmitting || readOnly}
             />
-            <FieldLabel htmlFor="includeMemories">
-              <div className="flex flex-col">
-                <p>Include Memories</p>
-                <p className="text-xs text-muted-foreground">
-                  Add your recent memory summaries to the agent&apos;s system
-                  prompt on this endpoint&apos;s runs. Leave off if anyone other
-                  than you holds a token.
-                </p>
-              </div>
+            <FieldLabel
+              htmlFor="includeMemories"
+              className="flex-col items-stretch gap-0"
+            >
+              <p>Include Memories</p>
+              <p className="text-xs text-muted-foreground">
+                Add your recent memory summaries to the agent&apos;s system
+                prompt on this endpoint&apos;s runs. Leave off if anyone other
+                than you holds a token.
+              </p>
             </FieldLabel>
           </Field>
 
@@ -262,15 +263,16 @@ const A2aEndpointForm = ({
               }
               disabled={isSubmitting || readOnly}
             />
-            <FieldLabel htmlFor="extractMemories">
-              <div className="flex flex-col">
-                <p>Extract Memories</p>
-                <p className="text-xs text-muted-foreground">
-                  Let this endpoint&apos;s chats feed your memories, including
-                  turns you add to them yourself. Leave off if anyone other than
-                  you holds a token.
-                </p>
-              </div>
+            <FieldLabel
+              htmlFor="extractMemories"
+              className="flex-col items-stretch gap-0"
+            >
+              <p>Extract Memories</p>
+              <p className="text-xs text-muted-foreground">
+                Let this endpoint&apos;s chats feed your memories, including
+                turns you add to them yourself. Leave off if anyone other than
+                you holds a token.
+              </p>
             </FieldLabel>
           </Field>
 

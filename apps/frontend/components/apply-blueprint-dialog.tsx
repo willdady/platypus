@@ -138,7 +138,10 @@ export const ApplyBlueprintDialog = ({
         )}
 
         {error && (
-          <div className="py-2 px-4 bg-destructive/10 text-destructive text-sm rounded">
+          <div
+            role="alert"
+            className="py-2 px-4 bg-destructive/10 text-destructive text-sm rounded"
+          >
             {error}
           </div>
         )}

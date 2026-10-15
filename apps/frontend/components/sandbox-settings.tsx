@@ -20,6 +20,7 @@ import {
   FieldGroup,
   FieldLabel,
   FieldSet,
+  FieldTitle,
 } from "@/components/ui/field";
 import {
   Select,
@@ -699,8 +700,11 @@ const SandboxSettings = ({
           {/* Host reachability (ADR-0005) — admin-only, docker backend only. */}
           {canConfigure && isDocker && (
             <>
-              <Field data-invalid={!!validationErrors.networks}>
-                <FieldLabel>Networks</FieldLabel>
+              <Field
+                aria-labelledby="sandbox-networks-label"
+                data-invalid={!!validationErrors.networks}
+              >
+                <FieldTitle id="sandbox-networks-label">Networks</FieldTitle>
                 <FieldDescription>
                   Docker networks this sandbox may attach to. The list is
                   declared by the operator in the deployment&apos;s plugin
@@ -753,8 +757,13 @@ const SandboxSettings = ({
                 )}
               </Field>
 
-              <Field data-invalid={!!validationErrors.config}>
-                <FieldLabel>Extra hosts</FieldLabel>
+              <Field
+                aria-labelledby="sandbox-extra-hosts-label"
+                data-invalid={!!validationErrors.config}
+              >
+                <FieldTitle id="sandbox-extra-hosts-label">
+                  Extra hosts
+                </FieldTitle>
                 <FieldDescription>
                   Extra <span className="font-mono">hostname → target</span>{" "}
                   entries added to the container (target is an IP or{" "}
@@ -898,9 +907,13 @@ const SandboxSettings = ({
               </Field>
 
               <Field>
-                <FieldLabel htmlFor={keyStored ? undefined : "ssh-private-key"}>
-                  Private key
-                </FieldLabel>
+                {/* Once stored there is no control to label, only the status
+                    row, so the caption drops to plain text. */}
+                {keyStored ? (
+                  <FieldTitle>Private key</FieldTitle>
+                ) : (
+                  <FieldLabel htmlFor="ssh-private-key">Private key</FieldLabel>
+                )}
                 {keyStored ? (
                   <div className="flex items-center justify-between gap-2 rounded-md border border-input px-3 py-2 text-sm">
                     <span className="flex items-center gap-2">
@@ -976,8 +989,13 @@ const SandboxSettings = ({
 
           {/* Admin-managed env (ADR-0006). */}
           {canConfigure && (
-            <Field data-invalid={!!validationErrors.adminEnv}>
-              <FieldLabel>Admin environment variables</FieldLabel>
+            <Field
+              aria-labelledby="sandbox-admin-env-label"
+              data-invalid={!!validationErrors.adminEnv}
+            >
+              <FieldTitle id="sandbox-admin-env-label">
+                Admin environment variables
+              </FieldTitle>
               <FieldDescription>
                 Org-admin-managed. Merged into every shell command and take
                 precedence over workspace-owner variables. Kept server-side,
@@ -1002,8 +1020,13 @@ const SandboxSettings = ({
           )}
 
           {/* Owner-managed env (ADR-0006). Visible/editable to owner + admin. */}
-          <Field data-invalid={!!validationErrors.userEnv}>
-            <FieldLabel>Environment variables</FieldLabel>
+          <Field
+            aria-labelledby="sandbox-user-env-label"
+            data-invalid={!!validationErrors.userEnv}
+          >
+            <FieldTitle id="sandbox-user-env-label">
+              Environment variables
+            </FieldTitle>
             <FieldDescription>
               Merged into every shell command the agent runs in this sandbox.
               Values are kept server-side and never sent to the model. Cannot

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { Widget } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ export function ImageWidget({
   onSave: (data: object, title: string) => void;
 }) {
   const data = widget.data as { url: string } | null | undefined;
+  const id = useId();
   const [title, setTitle] = useState(widget.title);
   const [url, setUrl] = useState(data?.url ?? "");
 
@@ -28,16 +29,22 @@ export function ImageWidget({
     return (
       <div className="flex flex-col gap-2 p-3 h-full">
         <div className="space-y-1">
-          <Label className="text-xs">Name</Label>
+          <Label htmlFor={`${id}-name`} className="text-xs">
+            Name
+          </Label>
           <Input
+            id={`${id}-name`}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="h-7 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Image URL</Label>
+          <Label htmlFor={`${id}-url`} className="text-xs">
+            Image URL
+          </Label>
           <Input
+            id={`${id}-url`}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://… or data:image/…"

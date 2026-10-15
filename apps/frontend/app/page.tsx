@@ -1,5 +1,6 @@
 "use client";
 
+import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import type { Organization } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -65,7 +66,11 @@ export default function Home() {
       <ProtectedRoute>
         <div className="min-h-screen flex flex-col">
           <Header />
-          <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <main
+            id={MAIN_CONTENT_ID}
+            className="flex-1 flex flex-col items-center justify-center p-8"
+          >
+            <h1 className="sr-only">Organizations</h1>
             <EmptyCard
               icon={<Building />}
               title="No organizations yet"
@@ -78,7 +83,7 @@ export default function Home() {
                 </Button>
               }
             />
-          </div>
+          </main>
         </div>
       </ProtectedRoute>
     );

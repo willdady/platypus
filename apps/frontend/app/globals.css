@@ -186,3 +186,18 @@
 .react-grid-item.react-grid-placeholder {
   background: var(--primary) !important;
 }
+
+/* Honour the OS "reduce motion" setting for CSS animations and transitions:
+   Tailwind's animate-*, tw-animate-css's enter and exit, and every transition.
+   Near-zero rather than none, so animationend and transitionend still fire for
+   the components that wait on them. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

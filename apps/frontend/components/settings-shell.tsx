@@ -1,3 +1,4 @@
+import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { type ReactNode } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Header } from "@/components/header";
@@ -24,6 +25,11 @@ export interface SettingsColumnsProps {
   menuWidth?: MenuWidth;
   /** Padding and spacing for the content column — the one axis that genuinely differs per surface. */
   contentClassName?: string;
+  /**
+   * Render the content column as the page's `<main>`. Off where an outer
+   * shell already provides one (the Workspace settings sit inside it).
+   */
+  isMain?: boolean;
 }
 
 /**
@@ -38,7 +44,9 @@ export function SettingsColumns({
   columnWidth = "wide",
   menuWidth = "narrow",
   contentClassName,
+  isMain = false,
 }: SettingsColumnsProps) {
+  const Content = isMain ? "main" : "div";
   return (
     <div
       className={cn(
@@ -54,7 +62,8 @@ export function SettingsColumns({
       >
         {menu}
       </div>
-      <div
+      <Content
+        id={isMain ? MAIN_CONTENT_ID : undefined}
         className={cn(
           "flex-1 min-w-0",
           menuWidthClass[menuWidth].offset,
@@ -62,7 +71,7 @@ export function SettingsColumns({
         )}
       >
         {children}
-      </div>
+      </Content>
     </div>
   );
 }
@@ -82,7 +91,7 @@ export function SettingsShell({ headerLeft, ...columns }: SettingsShellProps) {
       <div className="h-dvh flex flex-col w-full overflow-hidden">
         <Header leftContent={headerLeft} />
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
-          <SettingsColumns {...columns} />
+          <SettingsColumns {...columns} isMain />
           <div className="h-1 shrink-0" />
         </div>
       </div>

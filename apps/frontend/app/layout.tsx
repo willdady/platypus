@@ -1,3 +1,4 @@
+import { SkipLink } from "@/components/skip-link";
 import { withBasePath } from "@/lib/routes";
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
@@ -8,6 +9,7 @@ import "./globals.css";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/auth-provider";
+import { MotionProvider } from "@/components/motion-provider";
 import { ClipboardFallback } from "@/lib/clipboard";
 
 const geistSans = Geist({
@@ -92,6 +94,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-dvh overflow-hidden`}
       >
+        <SkipLink />
         <Suspense>
           <RuntimeAuthProvider>
             <ThemeProvider
@@ -100,9 +103,11 @@ export default function RootLayout({
               enableSystem
               disableTransitionOnChange
             >
-              {children}
-              <Toaster position="top-right" />
-              <ClipboardFallback />
+              <MotionProvider>
+                {children}
+                <Toaster position="top-right" />
+                <ClipboardFallback />
+              </MotionProvider>
             </ThemeProvider>
           </RuntimeAuthProvider>
         </Suspense>

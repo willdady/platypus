@@ -1,5 +1,6 @@
 "use client";
 
+import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { appRoutes } from "@/lib/routes";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -47,7 +48,10 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <main
+      id={MAIN_CONTENT_ID}
+      className="flex min-h-screen items-center justify-center"
+    >
       <div className="w-full max-w-md space-y-8 p-8">
         {/* The Operator requires an invitation (#550, ADR-0019): say so rather
             than offer a form the backend would refuse. The route stays — a 404
@@ -76,7 +80,10 @@ export default function SignUpPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+                <div
+                  role="alert"
+                  className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
+                >
                   {error}
                 </div>
               )}
@@ -136,6 +143,6 @@ export default function SignUpPage() {
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

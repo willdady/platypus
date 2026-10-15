@@ -15,7 +15,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldTitle } from "@/components/ui/field";
 import { SelectItem } from "@/components/ui/select";
 import { FormSelectField } from "@/components/form-select-field";
 import { FieldSkeleton } from "@/components/form-skeleton";
@@ -155,8 +155,10 @@ export const OrgGateAccess = ({
       </FormSelectField>
 
       {gate === "selected" && (
-        <Field>
-          <FieldLabel>Allowed workspaces</FieldLabel>
+        <Field aria-labelledby="org-gate-allowed-workspaces-label">
+          <FieldTitle id="org-gate-allowed-workspaces-label">
+            Allowed workspaces
+          </FieldTitle>
           <FieldDescription>{copy.allowedDescription}</FieldDescription>
           {data.workspaces.length === 0 ? (
             <p className="text-sm text-muted-foreground">

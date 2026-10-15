@@ -339,267 +339,273 @@ export function AppSidebar() {
   return (
     <>
       <Sidebar>
-        <SidebarHeader>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="h-auto py-2">
-                    <div className="flex flex-col flex-1 items-start leading-none">
-                      {/* Placeholders keep the button's height and width
+        <nav aria-label="Workspace" className="flex min-h-0 flex-1 flex-col">
+          <SidebarHeader>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <SidebarMenuButton className="h-auto py-2">
+                      <div className="flex flex-col flex-1 items-start leading-none">
+                        {/* Placeholders keep the button's height and width
                           steady until the names land. `text-xs` carries a
                           16px line box, so the bar is padded out to it. */}
-                      {!orgData && isOrgLoading ? (
-                        <Skeleton
-                          data-testid="org-name-skeleton"
-                          className="mt-0.5 mb-1.5 h-3 w-24"
-                        />
-                      ) : (
-                        <span className="text-xs text-muted-foreground mb-1">
-                          {orgData?.name}
-                        </span>
-                      )}
-                      <div className="flex items-center gap-2 w-full">
-                        <FolderOpen className="size-4 shrink-0" />
-                        {!currentWorkspace && isWorkspacesLoading ? (
+                        {!orgData && isOrgLoading ? (
                           <Skeleton
-                            data-testid="workspace-name-skeleton"
-                            className="h-3.5 w-28"
+                            data-testid="org-name-skeleton"
+                            className="mt-0.5 mb-1.5 h-3 w-24"
                           />
                         ) : (
-                          <span className="font-medium">
-                            {currentWorkspace?.name}
+                          <span className="text-xs text-muted-foreground mb-1">
+                            {orgData?.name}
                           </span>
                         )}
-                        <ChevronsUpDown className="ml-auto size-4 shrink-0" />
+                        <div className="flex items-center gap-2 w-full">
+                          <FolderOpen className="size-4 shrink-0" />
+                          {!currentWorkspace && isWorkspacesLoading ? (
+                            <Skeleton
+                              data-testid="workspace-name-skeleton"
+                              className="h-3.5 w-28"
+                            />
+                          ) : (
+                            <span className="font-medium">
+                              {currentWorkspace?.name}
+                            </span>
+                          )}
+                          <ChevronsUpDown className="ml-auto size-4 shrink-0" />
+                        </div>
                       </div>
-                    </div>
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-56 bg-sidebar-panel"
-                  align="start"
-                  side={isMobile ? "bottom" : "right"}
-                >
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">
-                    Workspaces
-                  </DropdownMenuLabel>
-                  <DropdownMenuGroup>
-                    {workspaces.map((workspace) => {
-                      const href = workspaceRoutes(
-                        workspace.organizationId,
-                        workspace.id,
-                      ).root;
-                      return (
-                        <DropdownMenuItem key={workspace.id} asChild>
-                          <Link className="cursor-pointer" href={href}>
-                            {pathname.startsWith(href) ? (
-                              <FolderOpen />
-                            ) : (
-                              <FolderClosed />
-                            )}{" "}
-                            {workspace.name}
+                    </SidebarMenuButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    className="w-56 bg-sidebar-panel"
+                    align="start"
+                    side={isMobile ? "bottom" : "right"}
+                  >
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      Workspaces
+                    </DropdownMenuLabel>
+                    <DropdownMenuGroup>
+                      {workspaces.map((workspace) => {
+                        const href = workspaceRoutes(
+                          workspace.organizationId,
+                          workspace.id,
+                        ).root;
+                        return (
+                          <DropdownMenuItem key={workspace.id} asChild>
+                            <Link className="cursor-pointer" href={href}>
+                              {pathname.startsWith(href) ? (
+                                <FolderOpen />
+                              ) : (
+                                <FolderClosed />
+                              )}{" "}
+                              {workspace.name}
+                            </Link>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      {/* ADR-0008: Workspace creation is org-admin-only. */}
+                      {canCreateWorkspace(actor) && (
+                        <DropdownMenuItem asChild>
+                          <Link
+                            className="cursor-pointer"
+                            href={org.createWorkspace}
+                          >
+                            <Plus /> Add workspace
                           </Link>
                         </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
-                    {/* ADR-0008: Workspace creation is org-admin-only. */}
-                    {canCreateWorkspace(actor) && (
+                      )}
                       <DropdownMenuItem asChild>
-                        <Link
-                          className="cursor-pointer"
-                          href={org.createWorkspace}
-                        >
-                          <Plus /> Add workspace
+                        <Link className="cursor-pointer" href={org.root}>
+                          <ArrowLeftRight /> Switch org
                         </Link>
                       </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem asChild>
-                      <Link className="cursor-pointer" href={org.root}>
-                        <ArrowLeftRight /> Switch org
-                      </Link>
-                    </DropdownMenuItem>
-                    {canOpenOrgSettings(actor) && (
-                      <DropdownMenuItem asChild>
-                        <Link
-                          className="cursor-pointer"
-                          href={org.settings.root}
-                        >
-                          <Settings /> Organization settings
-                        </Link>
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              {hasNoProviders ? (
-                <Tooltip>
-                  {/* A disabled button fires no pointer or focus events, so
-                      the wrapper is what opens the tooltip. */}
-                  <TooltipTrigger asChild>
-                    <span tabIndex={0} className="block">
-                      <Button disabled className="w-full">
-                        <BotMessageSquare /> New chat
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {canAddProvider
-                      ? "Add a provider to start a chat"
-                      : "Ask an organization admin to add a provider"}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button asChild className="w-full">
-                  <Link href={routes.chat.root}>
-                    <BotMessageSquare /> New chat
-                  </Link>
-                </Button>
-              )}
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarHeader>
-        <SidebarSeparator className="mx-0 mt-1" />
-        <div className="px-2 py-2">
-          <SearchInput
-            placeholder="Search chats..."
-            value={searchInput}
-            onValueChange={setSearchInput}
-            inputClassName="h-8"
-          />
-        </div>
-        <div className="relative min-h-0 flex flex-col flex-1 overflow-hidden">
-          <SidebarContent className="pb-16">
-            {!shownChatList && isChatListLoading && <ChatHistorySkeleton />}
-            {/* Names the search the shown list answered, not the one in
-                flight, so a pending search never reads as "no matches". */}
-            {chatGroups.length === 0 && shownChatList?.search && (
-              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No chats match &ldquo;{shownChatList.search}&rdquo;
-              </div>
-            )}
-            {chatGroups.map((group) => (
-              <SidebarGroup key={group.label}>
-                <SidebarGroupLabel>
-                  <group.icon className="mr-2 h-4 w-4" />
-                  {group.label}
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {group.chats.map((chat) => (
-                      <SidebarMenuItem key={chat.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <SidebarMenuButton
-                            asChild
-                            isActive={pathname.startsWith(
-                              routes.chat.detail(chat.id),
-                            )}
+                      {canOpenOrgSettings(actor) && (
+                        <DropdownMenuItem asChild>
+                          <Link
+                            className="cursor-pointer"
+                            href={org.settings.root}
                           >
-                            <Link href={routes.chat.detail(chat.id)}>
-                              {chat.status === "running" && (
-                                <Loader2
-                                  className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
-                                  aria-label="Run in progress"
-                                />
+                            <Settings /> Organization settings
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                {hasNoProviders ? (
+                  <Tooltip>
+                    {/* A disabled button fires no pointer or focus events, so
+                      the wrapper is what opens the tooltip. */}
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0} className="block">
+                        <Button disabled className="w-full">
+                          <BotMessageSquare /> New chat
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {canAddProvider
+                        ? "Add a provider to start a chat"
+                        : "Ask an organization admin to add a provider"}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button asChild className="w-full">
+                    <Link href={routes.chat.root}>
+                      <BotMessageSquare /> New chat
+                    </Link>
+                  </Button>
+                )}
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarHeader>
+          <SidebarSeparator className="mx-0 mt-1" />
+          <div className="px-2 py-2">
+            <SearchInput
+              placeholder="Search chats..."
+              value={searchInput}
+              onValueChange={setSearchInput}
+              inputClassName="h-8"
+            />
+          </div>
+          <div className="relative min-h-0 flex flex-col flex-1 overflow-hidden">
+            <SidebarContent className="pb-16">
+              {!shownChatList && isChatListLoading && <ChatHistorySkeleton />}
+              {/* Names the search the shown list answered, not the one in
+                flight, so a pending search never reads as "no matches". */}
+              {chatGroups.length === 0 && shownChatList?.search && (
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  No chats match &ldquo;{shownChatList.search}&rdquo;
+                </div>
+              )}
+              {chatGroups.map((group) => (
+                <SidebarGroup key={group.label}>
+                  <SidebarGroupLabel>
+                    <group.icon className="mr-2 h-4 w-4" />
+                    {group.label}
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {group.chats.map((chat) => (
+                        <SidebarMenuItem key={chat.id}>
+                          <div className="flex items-center justify-between w-full">
+                            <SidebarMenuButton
+                              asChild
+                              isActive={pathname.startsWith(
+                                routes.chat.detail(chat.id),
                               )}
-                              {chat.a2aClientName && (
-                                <Network
-                                  className="h-3 w-3 shrink-0 text-muted-foreground"
-                                  role="img"
-                                  aria-label={`Over A2A from ${chat.a2aClientName}`}
-                                >
-                                  <title>{`Over A2A from ${chat.a2aClientName}`}</title>
-                                </Network>
-                              )}
-                              <p className="truncate">{chat.title}</p>
-                            </Link>
-                          </SidebarMenuButton>
-                          {(canChange ||
-                            (chat.tags && chat.tags.length > 0)) && (
-                            <DropdownMenu modal={false}>
-                              <DropdownMenuTrigger asChild>
-                                <SidebarMenuAction
-                                  className="cursor-pointer text-muted-foreground"
-                                  aria-label="Chat options"
-                                >
-                                  <EllipsisVertical className="h-4 w-4" />
-                                </SidebarMenuAction>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                className="max-w-3xs"
-                                side="right"
-                                align="start"
-                              >
-                                {canChange && (
-                                  <>
-                                    <DropdownMenuItem
-                                      className="cursor-pointer"
-                                      onSelect={() => handleTogglePin(chat.id)}
-                                      disabled={isTogglingPin}
-                                    >
-                                      {chat.isPinned ? (
-                                        <>
-                                          <PinOff className="h-4 w-4" /> Unpin
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Pin className="h-4 w-4" /> Pin
-                                        </>
-                                      )}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="cursor-pointer"
-                                      onSelect={() => {
-                                        setRenameChatId(chat.id);
-                                        setRenameTitle(chat.title);
-                                        setRenameTags(chat.tags ?? []);
-                                        setRenameValidationErrors({});
-                                      }}
-                                    >
-                                      <Pencil className="h-4 w-4" /> Edit
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="cursor-pointer"
-                                      onSelect={() => setDeleteChatId(chat.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4" /> Delete
-                                    </DropdownMenuItem>
-                                  </>
+                            >
+                              <Link href={routes.chat.detail(chat.id)}>
+                                {chat.status === "running" && (
+                                  <Loader2
+                                    className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
+                                    aria-label="Run in progress"
+                                  />
                                 )}
-                                {chat.tags && chat.tags.length > 0 && (
-                                  <>
-                                    {canChange && <DropdownMenuSeparator />}
-                                    <DropdownMenuGroup className="flex flex-wrap p-1 gap-1">
-                                      {chat.tags.map((tag: string) => (
-                                        <Badge
-                                          key={tag}
-                                          className="cursor-default"
-                                          variant="secondary"
-                                        >
-                                          {tag}
-                                        </Badge>
-                                      ))}
-                                    </DropdownMenuGroup>
-                                  </>
+                                {chat.a2aClientName && (
+                                  <Network
+                                    className="h-3 w-3 shrink-0 text-muted-foreground"
+                                    role="img"
+                                    aria-label={`Over A2A from ${chat.a2aClientName}`}
+                                  >
+                                    <title>{`Over A2A from ${chat.a2aClientName}`}</title>
+                                  </Network>
                                 )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            ))}
-          </SidebarContent>
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-sidebar to-transparent" />
-        </div>
+                                <p className="truncate">{chat.title}</p>
+                              </Link>
+                            </SidebarMenuButton>
+                            {(canChange ||
+                              (chat.tags && chat.tags.length > 0)) && (
+                              <DropdownMenu modal={false}>
+                                <DropdownMenuTrigger asChild>
+                                  <SidebarMenuAction
+                                    className="cursor-pointer text-muted-foreground"
+                                    aria-label="Chat options"
+                                  >
+                                    <EllipsisVertical className="h-4 w-4" />
+                                  </SidebarMenuAction>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  className="max-w-3xs"
+                                  side="right"
+                                  align="start"
+                                >
+                                  {canChange && (
+                                    <>
+                                      <DropdownMenuItem
+                                        className="cursor-pointer"
+                                        onSelect={() =>
+                                          handleTogglePin(chat.id)
+                                        }
+                                        disabled={isTogglingPin}
+                                      >
+                                        {chat.isPinned ? (
+                                          <>
+                                            <PinOff className="h-4 w-4" /> Unpin
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Pin className="h-4 w-4" /> Pin
+                                          </>
+                                        )}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="cursor-pointer"
+                                        onSelect={() => {
+                                          setRenameChatId(chat.id);
+                                          setRenameTitle(chat.title);
+                                          setRenameTags(chat.tags ?? []);
+                                          setRenameValidationErrors({});
+                                        }}
+                                      >
+                                        <Pencil className="h-4 w-4" /> Edit
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="cursor-pointer"
+                                        onSelect={() =>
+                                          setDeleteChatId(chat.id)
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4" /> Delete
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                  {chat.tags && chat.tags.length > 0 && (
+                                    <>
+                                      {canChange && <DropdownMenuSeparator />}
+                                      <DropdownMenuGroup className="flex flex-wrap p-1 gap-1">
+                                        {chat.tags.map((tag: string) => (
+                                          <Badge
+                                            key={tag}
+                                            className="cursor-default"
+                                            variant="secondary"
+                                          >
+                                            {tag}
+                                          </Badge>
+                                        ))}
+                                      </DropdownMenuGroup>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              ))}
+            </SidebarContent>
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-sidebar to-transparent" />
+          </div>
+        </nav>
       </Sidebar>
 
       {/* Rename Chat Dialog */}
@@ -649,8 +655,9 @@ export function AppSidebar() {
             </Field>
 
             <Field data-invalid={!!renameValidationErrors.tags}>
-              <FieldLabel>Tags</FieldLabel>
+              <FieldLabel htmlFor="tags">Tags</FieldLabel>
               <TagInput
+                id="tags"
                 value={renameTags}
                 onChange={setRenameTags}
                 disabled={isRenaming}

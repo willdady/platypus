@@ -229,7 +229,9 @@ export function NotificationsDropdown({
                         {/* A link click, and any click in its confirmation
                           (portalled out of this DOM, but still bubbling
                           through React), must not toggle the row; a click on
-                          the text itself still does. */}
+                          the text itself still does. Only stops propagation,
+                          so it needs no keyboard twin. */}
+                        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
                         <div
                           onClick={(e) => {
                             const target = e.target as Element;

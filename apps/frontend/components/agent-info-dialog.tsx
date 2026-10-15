@@ -8,7 +8,6 @@ import {
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { Label } from "./ui/label";
 import {
   Collapsible,
   CollapsibleContent,
@@ -62,32 +61,34 @@ export const AgentInfoDialog = ({
       </DialogHeader>
       <div className="grid gap-4 py-4 min-h-0 overflow-y-auto -mx-6 px-6">
         <div className="grid gap-2">
-          <Label>Provider</Label>
+          <p className="text-sm leading-none font-medium">Provider</p>
           <div className="text-sm bg-muted p-2 rounded cursor-default">
             {provider?.name || "Unknown"}
           </div>
         </div>
         <div className="grid gap-2">
-          <Label>Model</Label>
+          <p className="text-sm leading-none font-medium">Model</p>
           <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
             {agent.modelId}
           </div>
         </div>
         <div className="grid gap-2">
-          <Label>Instructions</Label>
+          <p className="text-sm leading-none font-medium">Instructions</p>
           <div className="text-sm bg-muted p-2 rounded whitespace-pre-wrap break-words overflow-hidden cursor-default">
             {agent.instructions || "No instructions set"}
           </div>
         </div>
         <div className="grid gap-2">
-          <Label>Max Steps</Label>
+          <p className="text-sm leading-none font-medium">Max Steps</p>
           <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
             {agent.maxSteps ?? "Not set"}
           </div>
         </div>
         {agent.inputPlaceholder && (
           <div className="grid gap-2">
-            <Label>Input Placeholder</Label>
+            <p className="text-sm leading-none font-medium">
+              Input Placeholder
+            </p>
             <div className="text-sm bg-muted p-2 rounded cursor-default">
               {agent.inputPlaceholder}
             </div>
@@ -97,7 +98,7 @@ export const AgentInfoDialog = ({
           agent.toolSetIds &&
           agent.toolSetIds.length > 0 && (
             <div className="grid gap-2">
-              <Label>Tools</Label>
+              <p className="text-sm leading-none font-medium">Tools</p>
               <div className="flex flex-wrap gap-2">
                 {agent.toolSetIds.map((id) => {
                   const toolSet = toolSets.find((ts) => ts.id === id);
@@ -116,7 +117,7 @@ export const AgentInfoDialog = ({
           )}
         {skills.length > 0 && agent.skillIds && agent.skillIds.length > 0 && (
           <div className="grid gap-2">
-            <Label>Skills</Label>
+            <p className="text-sm leading-none font-medium">Skills</p>
             <div className="flex flex-wrap gap-2">
               {agent.skillIds.map((id) => {
                 const skill = skills.find((s) => s.id === id);
@@ -137,7 +138,7 @@ export const AgentInfoDialog = ({
           agent.subAgentIds &&
           agent.subAgentIds.length > 0 && (
             <div className="grid gap-2">
-              <Label>Sub-Agents</Label>
+              <p className="text-sm leading-none font-medium">Sub-Agents</p>
               <div className="flex flex-wrap gap-2">
                 {agent.subAgentIds.map((id) => {
                   const subAgent = agents.find((a) => a.id === id);
@@ -172,37 +173,41 @@ export const AgentInfoDialog = ({
           <CollapsibleContent className="mb-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Temperature</Label>
+                <p className="text-sm leading-none font-medium">Temperature</p>
                 <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
                   {agent.temperature ?? "Not set"}
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>Seed</Label>
+                <p className="text-sm leading-none font-medium">Seed</p>
                 <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
                   {agent.seed ?? "Not set"}
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>Top-p</Label>
+                <p className="text-sm leading-none font-medium">Top-p</p>
                 <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
                   {agent.topP ?? "Not set"}
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>Top-k</Label>
+                <p className="text-sm leading-none font-medium">Top-k</p>
                 <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
                   {agent.topK ?? "Not set"}
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>Presence Penalty</Label>
+                <p className="text-sm leading-none font-medium">
+                  Presence Penalty
+                </p>
                 <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
                   {agent.presencePenalty ?? "Not set"}
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>Frequency Penalty</Label>
+                <p className="text-sm leading-none font-medium">
+                  Frequency Penalty
+                </p>
                 <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
                   {agent.frequencyPenalty ?? "Not set"}
                 </div>

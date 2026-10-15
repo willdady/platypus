@@ -211,7 +211,10 @@ export default function InviteTokenPage() {
           </p>
         </div>
         {formError && (
-          <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+          <div
+            role="alert"
+            className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
+          >
             {formError}
           </div>
         )}
@@ -242,7 +245,10 @@ export default function InviteTokenPage() {
         className="space-y-4"
       >
         {formError && (
-          <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+          <div
+            role="alert"
+            className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
+          >
             {formError}
           </div>
         )}

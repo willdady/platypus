@@ -38,6 +38,7 @@ export function OrgHome({ orgId }: { orgId: string }) {
 
   return (
     <div className="space-y-6">
+      <h1 className="sr-only">Workspaces</h1>
       {!isReady ? (
         <div className="space-y-4">
           <WorkspaceList orgId={orgId} />

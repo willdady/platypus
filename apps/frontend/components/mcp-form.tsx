@@ -7,6 +7,7 @@ import {
   FieldSet,
   FieldDescription,
   FieldError,
+  FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { FormTextField } from "@/components/form-text-field";
@@ -634,9 +635,13 @@ const McpForm = ({
           )}
 
           {/* Custom Headers */}
-          <div className="space-y-3">
+          <div
+            role="group"
+            aria-labelledby="mcp-headers-label"
+            className="space-y-3"
+          >
             <div className="space-y-1">
-              <FieldLabel>Custom Headers</FieldLabel>
+              <FieldTitle id="mcp-headers-label">Custom Headers</FieldTitle>
               <FieldDescription>
                 Optional HTTP headers sent with every request to the MCP server.
               </FieldDescription>

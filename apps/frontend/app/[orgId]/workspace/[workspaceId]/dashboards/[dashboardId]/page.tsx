@@ -814,12 +814,12 @@ const DashboardPage = ({
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Type</Label>
+              <Label htmlFor="new-widget-type">Type</Label>
               <Select
                 value={newWidgetType}
                 onValueChange={(v) => setNewWidgetType(v as WidgetType)}
               >
-                <SelectTrigger>
+                <SelectTrigger id="new-widget-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -838,8 +838,9 @@ const DashboardPage = ({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Title</Label>
+              <Label htmlFor="new-widget-title">Title</Label>
               <Input
+                id="new-widget-title"
                 value={newWidgetTitle}
                 onChange={(e) => setNewWidgetTitle(e.target.value)}
                 placeholder="Widget title"

@@ -123,7 +123,7 @@ export function ChangePasswordDialog({
                 revealLabel="new password"
               />
               {validationError && (
-                <p className="text-sm text-destructive mt-1">
+                <p role="alert" className="text-sm text-destructive mt-1">
                   {validationError}
                 </p>
               )}

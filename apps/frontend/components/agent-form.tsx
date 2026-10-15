@@ -721,13 +721,14 @@ const AgentForm = ({
                             }}
                             disabled={isSubmitting || readOnly}
                           />
-                          <FieldLabel htmlFor={toolSet.id}>
-                            <div className="flex flex-col">
-                              <p>{toolSet.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {toolSet.description}
-                              </p>
-                            </div>
+                          <FieldLabel
+                            htmlFor={toolSet.id}
+                            className="flex-col items-stretch gap-0"
+                          >
+                            <p>{toolSet.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {toolSet.description}
+                            </p>
                           </FieldLabel>
                         </Field>
                       ))}
@@ -780,13 +781,14 @@ const AgentForm = ({
                         }}
                         disabled={isSubmitting || readOnly}
                       />
-                      <FieldLabel htmlFor={`skill-${skill.id}`}>
-                        <div className="flex flex-col">
-                          <p>{skill.name}</p>
-                          <p className="text-xs text-muted-foreground line-clamp-6">
-                            {skill.description}
-                          </p>
-                        </div>
+                      <FieldLabel
+                        htmlFor={`skill-${skill.id}`}
+                        className="flex-col items-stretch gap-0"
+                      >
+                        <p>{skill.name}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-6">
+                          {skill.description}
+                        </p>
                       </FieldLabel>
                     </Field>
                   ))}

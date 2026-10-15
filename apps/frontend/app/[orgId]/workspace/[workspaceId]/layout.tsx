@@ -1,3 +1,4 @@
+import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { serverBackendUrl } from "@/lib/env";
 import { cache } from "react";
 import { notFound } from "next/navigation";
@@ -76,7 +77,7 @@ export default async function WorkspaceLayout({
 
   return (
     <ProtectedRoute requireOrgAccess requireWorkspaceAccess>
-      <SidebarInset className="min-w-0">
+      <SidebarInset id={MAIN_CONTENT_ID} className="min-w-0">
         <Header
           bordered={false}
           leftContent={

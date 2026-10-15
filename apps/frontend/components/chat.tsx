@@ -24,6 +24,7 @@ import {
   Skill,
   nextTurnOccupancy,
   type Sandbox,
+  UNTITLED_CHAT_TITLE,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import { joinUrl, optionalFetcher } from "@/lib/utils";
@@ -716,6 +717,11 @@ export const Chat = ({
     <div
       className={`relative size-full flex flex-col overflow-hidden h-full ${messages.length === 0 ? "justify-center" : ""}`}
     >
+      <h1 className="sr-only">
+        {chatData?.title && chatData.title !== UNTITLED_CHAT_TITLE
+          ? chatData.title
+          : "New chat"}
+      </h1>
       {/* The transcript is a live log; marked busy while a reply streams so
           screen readers wait for it rather than reading every token. */}
       <Conversation

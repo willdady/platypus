@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import type { Widget } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ export function MetricWidget({
     | { value: number; label: string; unit?: string; change?: string }
     | null
     | undefined;
+  const id = useId();
   const [title, setTitle] = useState(widget.title);
   const [value, setValue] = useState(String(data?.value ?? ""));
   const [label, setLabel] = useState(data?.label ?? "");
@@ -63,8 +64,11 @@ export function MetricWidget({
     return (
       <div className="flex flex-col gap-2 p-3 h-full overflow-auto">
         <div className="space-y-1">
-          <Label className="text-xs">Name</Label>
+          <Label htmlFor={`${id}-name`} className="text-xs">
+            Name
+          </Label>
           <Input
+            id={`${id}-name`}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="h-7 text-sm"
@@ -72,8 +76,11 @@ export function MetricWidget({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
-            <Label className="text-xs">Value</Label>
+            <Label htmlFor={`${id}-value`} className="text-xs">
+              Value
+            </Label>
             <Input
+              id={`${id}-value`}
               type="number"
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -81,8 +88,11 @@ export function MetricWidget({
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Unit</Label>
+            <Label htmlFor={`${id}-unit`} className="text-xs">
+              Unit
+            </Label>
             <Input
+              id={`${id}-unit`}
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
               placeholder="%, $, …"
@@ -91,16 +101,22 @@ export function MetricWidget({
           </div>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Label</Label>
+          <Label htmlFor={`${id}-label`} className="text-xs">
+            Label
+          </Label>
           <Input
+            id={`${id}-label`}
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             className="h-7 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Change indicator</Label>
+          <Label htmlFor={`${id}-change`} className="text-xs">
+            Change indicator
+          </Label>
           <Input
+            id={`${id}-change`}
             value={change}
             onChange={(e) => setChange(e.target.value)}
             placeholder="+5% vs last week"

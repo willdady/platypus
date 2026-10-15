@@ -1,5 +1,6 @@
 "use client";
 
+import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Home, Search } from "lucide-react";
@@ -23,7 +24,7 @@ export default function WorkspaceLoading() {
   }>();
 
   return (
-    <SidebarInset className="min-w-0">
+    <SidebarInset id={MAIN_CONTENT_ID} className="min-w-0">
       <Header
         bordered={false}
         leftContent={
