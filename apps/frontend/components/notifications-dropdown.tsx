@@ -155,7 +155,7 @@ export function NotificationsDropdown({
         >
           <Bell className="h-5 w-5" />
           {totalCount > 0 && (
-            <span className="absolute -top-0 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">
+            <span className="absolute -top-0 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground dark:bg-destructive/60">
               {totalCount}
             </span>
           )}
