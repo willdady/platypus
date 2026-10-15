@@ -57,6 +57,7 @@ import {
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
+import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import {
@@ -185,11 +186,10 @@ const ModelRow = ({
   );
 
   // The trigger and the number input read one value, so they cannot disagree.
-  // Model rows are keyed by index, so removing a row shifts the state above
-  // onto its neighbour; folding the stored value back in means a shifted row
-  // holding an unlisted size still renders the input holding it, rather than a
-  // "Custom" trigger beside no input at all — which would leave a declared
-  // window invisible and uneditable until reload.
+  // Folding the stored value back in means a row holding an unlisted size
+  // always renders the input holding it, rather than a "Custom" trigger beside
+  // no input at all — which would leave a declared window invisible and
+  // uneditable until reload.
   const storedContextWindowOption = optionForContextWindow(model.contextWindow);
   const contextWindowOption =
     customContextWindow || storedContextWindowOption === CONTEXT_WINDOW_CUSTOM
@@ -213,9 +213,8 @@ const ModelRow = ({
 
   // The input holds the text as typed, not the parsed list: rendering from the
   // list would drop a trailing comma the moment it was typed, so a second type
-  // could never be entered. The list stays what is stored. Model rows are keyed
-  // by index, so removing a row shifts this text onto its neighbour; text that
-  // no longer parses to the stored list is stale and gives way to the list.
+  // could never be entered. The list stays what is stored; text that no longer
+  // parses to the stored list is stale and gives way to the list.
   const storedFileTypesText = model.passthroughFileTypes.join(", ");
   const [fileTypesText, setFileTypesText] = useState(storedFileTypesText);
   const typedFileTypes = parsePassthroughTypes(fileTypesText);
@@ -849,6 +848,16 @@ const ProviderForm = ({
   );
   const modelIdsError = hasRowError ? undefined : validationErrors.modelIds;
 
+  // A stable client-side key per model row, held beside `modelIds` rather than
+  // on it so it never reaches the payload. `ModelRow` keeps local state (the
+  // open Advanced panel, typed file types), and an index key would hand that
+  // state to the neighbour whenever a row above it is removed. Rebuilt whenever
+  // the counts disagree, which is how a freshly seeded record arrives.
+  const [modelRowKeys, setModelRowKeys] = useState<string[]>([]);
+  if (modelRowKeys.length !== formData.modelIds.length) {
+    setModelRowKeys(formData.modelIds.map(() => nanoid()));
+  }
+
   const updateModel = (index: number, patch: Partial<ModelConfigView>) => {
     clearModelIdsError();
     setFormData((prev) => ({
@@ -869,6 +878,7 @@ const ProviderForm = ({
       // description.
       modelIds: [...prev.modelIds, { id: "", passthroughFileTypes: [] }],
     }));
+    setModelRowKeys((prev) => [...prev, nanoid()]);
   };
 
   const removeModel = (index: number) => {
@@ -877,6 +887,7 @@ const ProviderForm = ({
       ...prev,
       modelIds: prev.modelIds.filter((_, i) => i !== index),
     }));
+    setModelRowKeys((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Placeholder for the native-file-types input: the provider-type default an
@@ -1044,7 +1055,7 @@ const ProviderForm = ({
               )}
               {formData.modelIds.map((model, index) => (
                 <ModelRow
-                  key={index}
+                  key={modelRowKeys[index] ?? index}
                   model={model}
                   index={index}
                   disabled={isSubmitting || isReadOnly}
