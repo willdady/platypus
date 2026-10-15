@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import { X } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useTimeout } from "@/hooks/use-timeout";
 
 interface TagInputProps {
+  /** The text input's id, for a label's `htmlFor`. */
+  id?: string;
   value: string[];
   onChange: (tags: string[]) => void;
   placeholder?: string;
@@ -22,6 +24,7 @@ const KEBAB_CASE_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_TAGS = 5;
 
 export function TagInput({
+  id,
   value = [],
   onChange,
   placeholder = "Add tag...",
@@ -64,6 +67,10 @@ export function TagInput({
     }
   };
 
+  // A duplicate flashes the tag it matched. Opacity isn't one of the
+  // properties MotionConfig's reducedMotion stills, so the blink checks itself.
+  const reduceMotion = useReducedMotion();
+
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex flex-wrap gap-2">
@@ -71,7 +78,7 @@ export function TagInput({
           <motion.div
             key={tag}
             animate={
-              flashingTag === tag
+              flashingTag === tag && !reduceMotion
                 ? {
                     opacity: [1, 0, 1, 0, 1],
                   }
@@ -95,6 +102,7 @@ export function TagInput({
         ))}
       </div>
       <Input
+        id={id}
         value={inputValue}
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}

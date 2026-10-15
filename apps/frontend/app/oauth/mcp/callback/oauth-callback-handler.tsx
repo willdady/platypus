@@ -133,7 +133,9 @@ export const OAuthCallbackHandler = ({
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-12">
-        <p className="text-destructive">{error}</p>
+        <p role="alert" className="text-destructive">
+          {error}
+        </p>
         <Button
           variant="outline"
           className="cursor-pointer"

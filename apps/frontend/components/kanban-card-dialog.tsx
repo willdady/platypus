@@ -370,6 +370,9 @@ function CardDetailsPane({
   children: ReactNode;
 }) {
   return (
+    // onBlur is delegated focusout from the title and body fields inside, not
+    // an interaction with this wrapper.
+    // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       className={cn("flex flex-col min-h-0 flex-1", className)}
       onBlur={onBlur}

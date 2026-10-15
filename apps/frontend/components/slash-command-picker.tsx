@@ -57,6 +57,9 @@ export const SlashCommandPicker = ({
             role="listbox"
           >
             {items.map((item) => (
+              // Options never take focus: the composer owns the keyboard via
+              // aria-activedescendant, so a click is the only direct input.
+              // eslint-disable-next-line jsx-a11y/click-events-have-key-events
               <li
                 aria-selected={item.name === activeName}
                 className={cn(

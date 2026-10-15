@@ -106,7 +106,9 @@ export const DetachSharedDialog = <T extends NamedResource>({
         </DialogDescription>
       </DialogHeader>
       {detach.error && (
-        <p className="text-sm text-destructive">{detach.error}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {detach.error}
+        </p>
       )}
       <DialogFooter>
         <Button variant="outline" onClick={detach.close}>
@@ -190,7 +192,9 @@ export const PromoteSharedDialog = <T extends NamedResource>({
         </div>
       )}
       {promote.error && promote.blockers.length === 0 && (
-        <p className="text-sm text-destructive">{promote.error}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {promote.error}
+        </p>
       )}
       <DialogFooter>
         <Button variant="outline" onClick={promote.close}>

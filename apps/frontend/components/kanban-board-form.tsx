@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { FormTextField } from "@/components/form-text-field";
 import { FormTextareaField } from "@/components/form-textarea-field";
 import { Button } from "@/components/ui/button";
-import { FieldLabel } from "@/components/ui/field";
+import { FieldTitle } from "@/components/ui/field";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
 import {
@@ -181,8 +181,12 @@ export function KanbanBoardForm({
           error={validationErrors.description}
         />
 
-        <div className="space-y-2">
-          <FieldLabel>Labels</FieldLabel>
+        <div
+          role="group"
+          aria-labelledby="kanban-board-labels-label"
+          className="space-y-2"
+        >
+          <FieldTitle id="kanban-board-labels-label">Labels</FieldTitle>
           {labels.map((label) => (
             <div key={label.id} className="flex items-center gap-2">
               <Input

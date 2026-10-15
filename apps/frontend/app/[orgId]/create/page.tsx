@@ -1,3 +1,4 @@
+import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { WorkspaceWizard } from "@/components/workspace-wizard";
 import { ResourcePage } from "@/components/resource-page";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -13,7 +14,7 @@ const WorkspaceCreatePage = async ({
   return (
     <ProtectedRoute requireOrgAccess requireOrgAdmin>
       {/* No shell wraps this page, and the body doesn't scroll. */}
-      <div className="h-dvh overflow-y-auto pb-4">
+      <main id={MAIN_CONTENT_ID} className="h-dvh overflow-y-auto pb-4">
         <ResourcePage
           backFallbackHref={orgRoutes(orgId).root}
           title="Create Workspace"
@@ -21,7 +22,7 @@ const WorkspaceCreatePage = async ({
         >
           <WorkspaceWizard orgId={orgId} />
         </ResourcePage>
-      </div>
+      </main>
     </ProtectedRoute>
   );
 };

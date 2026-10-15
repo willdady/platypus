@@ -1,5 +1,6 @@
 "use client";
 
+import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { appRoutes } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -49,7 +50,10 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <main
+      id={MAIN_CONTENT_ID}
+      className="flex min-h-screen items-center justify-center"
+    >
       <div className="w-full max-w-md space-y-8 p-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Sign in to Platypus</h1>
@@ -60,7 +64,10 @@ export default function SignInPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+            <div
+              role="alert"
+              className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
+            >
               {error}
             </div>
           )}
@@ -110,6 +117,6 @@ export default function SignInPage() {
           </p>
         )}
       </div>
-    </div>
+    </main>
   );
 }

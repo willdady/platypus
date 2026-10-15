@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Image from "next/image";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import type {
@@ -78,6 +78,7 @@ export function WeatherWidget({
   onSave: (data: object, title: string) => void;
 }) {
   const data = widget.data as WeatherWidgetData | null | undefined;
+  const id = useId();
   const [title, setTitle] = useState(widget.title);
   const [location, setLocation] = useState(data?.location ?? "");
   const [date, setDate] = useState(
@@ -110,16 +111,22 @@ export function WeatherWidget({
     return (
       <div className="flex flex-col gap-2 p-3 h-full overflow-auto">
         <div className="space-y-1">
-          <Label className="text-xs">Name</Label>
+          <Label htmlFor={`${id}-name`} className="text-xs">
+            Name
+          </Label>
           <Input
+            id={`${id}-name`}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="h-7 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Location</Label>
+          <Label htmlFor={`${id}-location`} className="text-xs">
+            Location
+          </Label>
           <Input
+            id={`${id}-location`}
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             placeholder="Melbourne, AU"
@@ -127,8 +134,11 @@ export function WeatherWidget({
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Date</Label>
+          <Label htmlFor={`${id}-date`} className="text-xs">
+            Date
+          </Label>
           <Input
+            id={`${id}-date`}
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
@@ -136,12 +146,14 @@ export function WeatherWidget({
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Condition</Label>
+          <Label htmlFor={`${id}-condition`} className="text-xs">
+            Condition
+          </Label>
           <Select
             value={condition}
             onValueChange={(v) => setCondition(v as WeatherCondition)}
           >
-            <SelectTrigger className="h-7 text-sm">
+            <SelectTrigger id={`${id}-condition`} className="h-7 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -154,8 +166,11 @@ export function WeatherWidget({
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Description</Label>
+          <Label htmlFor={`${id}-description`} className="text-xs">
+            Description
+          </Label>
           <Input
+            id={`${id}-description`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Partly cloudy with a light breeze"
@@ -164,8 +179,11 @@ export function WeatherWidget({
         </div>
         <div className="grid grid-cols-3 gap-2">
           <div className="space-y-1">
-            <Label className="text-xs">Temp (°C)</Label>
+            <Label htmlFor={`${id}-temperature`} className="text-xs">
+              Temp (°C)
+            </Label>
             <Input
+              id={`${id}-temperature`}
               type="number"
               value={temperatureC}
               onChange={(e) => setTemperatureC(e.target.value)}
@@ -173,8 +191,11 @@ export function WeatherWidget({
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">High (°C)</Label>
+            <Label htmlFor={`${id}-high`} className="text-xs">
+              High (°C)
+            </Label>
             <Input
+              id={`${id}-high`}
               type="number"
               value={highC}
               onChange={(e) => setHighC(e.target.value)}
@@ -182,8 +203,11 @@ export function WeatherWidget({
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Low (°C)</Label>
+            <Label htmlFor={`${id}-low`} className="text-xs">
+              Low (°C)
+            </Label>
             <Input
+              id={`${id}-low`}
               type="number"
               value={lowC}
               onChange={(e) => setLowC(e.target.value)}
@@ -192,9 +216,11 @@ export function WeatherWidget({
           </div>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Temperature unit</Label>
+          <Label htmlFor={`${id}-unit`} className="text-xs">
+            Temperature unit
+          </Label>
           <Select value={unit} onValueChange={(v) => setUnit(v as "C" | "F")}>
-            <SelectTrigger className="h-7 text-sm">
+            <SelectTrigger id={`${id}-unit`} className="h-7 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

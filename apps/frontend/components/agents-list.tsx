@@ -671,7 +671,9 @@ export const AgentsList = ({
             }}
           />
           {cloneError && (
-            <p className="text-destructive text-sm">{cloneError}</p>
+            <p role="alert" className="text-destructive text-sm">
+              {cloneError}
+            </p>
           )}
           <DialogFooter>
             <Button

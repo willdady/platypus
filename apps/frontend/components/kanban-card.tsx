@@ -94,6 +94,9 @@ const KanbanCardComponentInner = function KanbanCardComponent({
     <div
       ref={setNodeRef}
       {...attributes}
+      // dnd-kit's attributes carry the same role; spelled out for the linter,
+      // which cannot see through the spread.
+      role="button"
       {...(draggable ? listeners : {})}
       className={cn(
         "border rounded-lg bg-card p-3 shadow-sm",

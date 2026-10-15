@@ -10,7 +10,7 @@ import {
   type A2aEndpoint,
   type A2aToken,
 } from "@platypus/schemas";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldTitle } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -150,8 +150,8 @@ export const A2aTokens = ({
         />
       )}
 
-      <Field>
-        <FieldLabel>Tokens</FieldLabel>
+      <Field aria-labelledby="a2a-tokens-label">
+        <FieldTitle id="a2a-tokens-label">Tokens</FieldTitle>
         <FieldDescription>
           Give each client its own token, so you can delete one without breaking
           the others. You get a notification 30 and 7 days before a token

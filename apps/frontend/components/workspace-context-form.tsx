@@ -8,6 +8,7 @@ import {
   FieldLabel,
   FieldGroup,
   FieldSet,
+  FieldTitle,
 } from "@/components/ui/field";
 import {
   Select,
@@ -241,14 +242,14 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
             {contextId ? (
               <>
                 <Field>
-                  <FieldLabel>Organization</FieldLabel>
+                  <FieldTitle>Organization</FieldTitle>
                   <div className="text-sm text-muted-foreground">
                     {(contextData as { organizationName?: string })
                       ?.organizationName || "\u00A0"}
                   </div>
                 </Field>
                 <Field>
-                  <FieldLabel>Workspace</FieldLabel>
+                  <FieldTitle>Workspace</FieldTitle>
                   <div className="text-sm text-muted-foreground">
                     {(contextData as { workspaceName?: string })
                       ?.workspaceName || "\u00A0"}

@@ -5,6 +5,7 @@ import {
   FieldDescription,
   FieldError,
 } from "@/components/ui/field";
+import { formFieldIds } from "@/components/form-field-ids";
 import { Input } from "@/components/ui/input";
 
 export type FormTextFieldProps = {
@@ -52,6 +53,7 @@ export const FormTextField = ({
   step,
   maxLength,
 }: FormTextFieldProps) => {
+  const ids = formFieldIds(name, { description, error });
   return (
     <Field className={className} data-invalid={!!error}>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
@@ -65,20 +67,25 @@ export const FormTextField = ({
         required={required}
         autoFocus={autoFocus}
         aria-invalid={!!error}
+        aria-describedby={ids.describedBy}
         className={inputClassName}
         min={min}
         max={max}
         step={step}
         maxLength={maxLength}
       />
-      {description && <FieldDescription>{description}</FieldDescription>}
+      {description && (
+        <FieldDescription id={ids.descriptionId}>
+          {description}
+        </FieldDescription>
+      )}
       {trailing ? (
         <div className="flex justify-between mt-1">
-          {error ? <FieldError>{error}</FieldError> : <div />}
+          {error ? <FieldError id={ids.errorId}>{error}</FieldError> : <div />}
           {trailing}
         </div>
       ) : (
-        error && <FieldError>{error}</FieldError>
+        error && <FieldError id={ids.errorId}>{error}</FieldError>
       )}
     </Field>
   );

@@ -8,6 +8,7 @@ import {
   FieldLegend,
   FieldDescription,
   FieldError,
+  FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -377,8 +378,11 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             )}
           </Field>
 
-          <Field data-invalid={!!validationErrors.events}>
-            <FieldLabel>Events</FieldLabel>
+          <Field
+            aria-labelledby="webhook-events-label"
+            data-invalid={!!validationErrors.events}
+          >
+            <FieldTitle id="webhook-events-label">Events</FieldTitle>
             <FieldDescription className="mb-3">
               Select which events trigger webhook delivery.
             </FieldDescription>
@@ -411,9 +415,12 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
           {isEditMode && webhook && (
             <Field>
-              <FieldLabel>Signing Secret</FieldLabel>
+              <FieldLabel htmlFor="webhook-signing-secret">
+                Signing Secret
+              </FieldLabel>
               <div className="flex items-center gap-2">
                 <Input
+                  id="webhook-signing-secret"
                   type={showSecret ? "text" : "password"}
                   value={webhook.signingSecret}
                   readOnly
@@ -460,8 +467,11 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             </Field>
           )}
 
-          <Field data-invalid={!!validationErrors.headers}>
-            <FieldLabel>Custom Headers</FieldLabel>
+          <Field
+            aria-labelledby="webhook-headers-label"
+            data-invalid={!!validationErrors.headers}
+          >
+            <FieldTitle id="webhook-headers-label">Custom Headers</FieldTitle>
             <FieldDescription className="mb-3">
               Additional headers to include with each webhook request.
             </FieldDescription>

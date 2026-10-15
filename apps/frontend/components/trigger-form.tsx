@@ -7,6 +7,7 @@ import {
   FieldSet,
   FieldDescription,
   FieldError,
+  FieldTitle,
 } from "@/components/ui/field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
@@ -841,13 +842,16 @@ const TriggerForm = ({
         <FieldGroup>
           {/* Trigger Type Selector */}
           <Field>
-            <FieldLabel>Trigger Type</FieldLabel>
+            <FieldLabel htmlFor="trigger-type">Trigger Type</FieldLabel>
             <Select
               value={triggerType}
               onValueChange={(value) => setTriggerType(value as TriggerType)}
               disabled={isSubmitting || !!triggerId}
             >
-              <SelectTrigger disabled={isSubmitting || !!triggerId}>
+              <SelectTrigger
+                id="trigger-type"
+                disabled={isSubmitting || !!triggerId}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -939,8 +943,10 @@ const TriggerForm = ({
                     </p>
                   )}
                   {/* Schedule Mode Toggle */}
-                  <Field>
-                    <FieldLabel>Schedule Mode</FieldLabel>
+                  <Field aria-labelledby="trigger-schedule-mode-label">
+                    <FieldTitle id="trigger-schedule-mode-label">
+                      Schedule Mode
+                    </FieldTitle>
                     <ButtonGroup>
                       <Button
                         type="button"
@@ -977,7 +983,9 @@ const TriggerForm = ({
                   {scheduleMode === "simple" && (
                     <>
                       <Field>
-                        <FieldLabel>Frequency</FieldLabel>
+                        <FieldLabel htmlFor="trigger-frequency">
+                          Frequency
+                        </FieldLabel>
                         <Select
                           value={simpleSchedule.frequency}
                           onValueChange={(value) =>
@@ -988,7 +996,10 @@ const TriggerForm = ({
                           }
                           disabled={scheduleLocked}
                         >
-                          <SelectTrigger disabled={scheduleLocked}>
+                          <SelectTrigger
+                            id="trigger-frequency"
+                            disabled={scheduleLocked}
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1021,7 +1032,9 @@ const TriggerForm = ({
                           <div className="flex gap-4">
                             {simpleSchedule.frequency !== "hourly" && (
                               <Field className="flex-1">
-                                <FieldLabel>Hour</FieldLabel>
+                                <FieldLabel htmlFor="trigger-hour">
+                                  Hour
+                                </FieldLabel>
                                 <Select
                                   value={simpleSchedule.hour}
                                   onValueChange={(value) =>
@@ -1032,7 +1045,10 @@ const TriggerForm = ({
                                   }
                                   disabled={scheduleLocked}
                                 >
-                                  <SelectTrigger disabled={scheduleLocked}>
+                                  <SelectTrigger
+                                    id="trigger-hour"
+                                    disabled={scheduleLocked}
+                                  >
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -1052,7 +1068,9 @@ const TriggerForm = ({
                             )}
 
                             <Field className="flex-1">
-                              <FieldLabel>Minute</FieldLabel>
+                              <FieldLabel htmlFor="trigger-minute">
+                                Minute
+                              </FieldLabel>
                               <Select
                                 value={simpleSchedule.minute}
                                 onValueChange={(value) =>
@@ -1063,7 +1081,10 @@ const TriggerForm = ({
                                 }
                                 disabled={scheduleLocked}
                               >
-                                <SelectTrigger disabled={scheduleLocked}>
+                                <SelectTrigger
+                                  id="trigger-minute"
+                                  disabled={scheduleLocked}
+                                >
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1085,7 +1106,9 @@ const TriggerForm = ({
 
                       {simpleSchedule.frequency === "weekly" && (
                         <Field>
-                          <FieldLabel>Day of Week</FieldLabel>
+                          <FieldLabel htmlFor="trigger-day-of-week">
+                            Day of Week
+                          </FieldLabel>
                           <Select
                             value={simpleSchedule.dayOfWeek}
                             onValueChange={(value) =>
@@ -1096,7 +1119,10 @@ const TriggerForm = ({
                             }
                             disabled={scheduleLocked}
                           >
-                            <SelectTrigger disabled={scheduleLocked}>
+                            <SelectTrigger
+                              id="trigger-day-of-week"
+                              disabled={scheduleLocked}
+                            >
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1114,7 +1140,9 @@ const TriggerForm = ({
 
                       {simpleSchedule.frequency === "monthly" && (
                         <Field>
-                          <FieldLabel>Day of Month</FieldLabel>
+                          <FieldLabel htmlFor="trigger-day-of-month">
+                            Day of Month
+                          </FieldLabel>
                           <Select
                             value={simpleSchedule.dayOfMonth}
                             onValueChange={(value) =>
@@ -1125,7 +1153,10 @@ const TriggerForm = ({
                             }
                             disabled={scheduleLocked}
                           >
-                            <SelectTrigger disabled={scheduleLocked}>
+                            <SelectTrigger
+                              id="trigger-day-of-month"
+                              disabled={scheduleLocked}
+                            >
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1189,7 +1220,7 @@ const TriggerForm = ({
 
                   {nextRunPreview && isCronValid && (
                     <Field>
-                      <FieldLabel>Next Run Preview</FieldLabel>
+                      <FieldTitle>Next Run Preview</FieldTitle>
                       <div className="text-sm text-muted-foreground p-2 bg-muted rounded-md">
                         {nextRunPreview}
                       </div>
@@ -1206,13 +1237,14 @@ const TriggerForm = ({
                       }
                       disabled={scheduleLocked}
                     />
-                    <FieldLabel htmlFor="isOneOff">
-                      <div className="flex flex-col">
-                        <p>One-off Trigger</p>
-                        <p className="text-xs text-muted-foreground">
-                          Run once and then disable
-                        </p>
-                      </div>
+                    <FieldLabel
+                      htmlFor="isOneOff"
+                      className="flex-col items-stretch gap-0"
+                    >
+                      <p>One-off Trigger</p>
+                      <p className="text-xs text-muted-foreground">
+                        Run once and then disable
+                      </p>
                     </FieldLabel>
                   </Field>
                 </>
@@ -1220,8 +1252,8 @@ const TriggerForm = ({
 
               {/* Event-specific fields */}
               {triggerType === "event" && (
-                <Field>
-                  <FieldLabel>Events</FieldLabel>
+                <Field aria-labelledby="trigger-events-label">
+                  <FieldTitle id="trigger-events-label">Events</FieldTitle>
                   <FieldDescription>
                     Select the events that will trigger this agent.
                   </FieldDescription>
@@ -1252,7 +1284,9 @@ const TriggerForm = ({
                 selectedEvents.some((e) => e.startsWith("card.")) && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field>
-                      <FieldLabel>Only cards in this Board</FieldLabel>
+                      <FieldLabel htmlFor="trigger-filter-board">
+                        Only cards in this Board
+                      </FieldLabel>
                       <Select
                         value={filterBoardId || "__all__"}
                         onValueChange={(value) => {
@@ -1261,7 +1295,10 @@ const TriggerForm = ({
                         }}
                         disabled={isSubmitting}
                       >
-                        <SelectTrigger disabled={isSubmitting}>
+                        <SelectTrigger
+                          id="trigger-filter-board"
+                          disabled={isSubmitting}
+                        >
                           <SelectValue placeholder="All boards" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1276,7 +1313,9 @@ const TriggerForm = ({
                     </Field>
                     {filterBoardId && (
                       <Field>
-                        <FieldLabel>Only cards in this Column</FieldLabel>
+                        <FieldLabel htmlFor="trigger-filter-column">
+                          Only cards in this Column
+                        </FieldLabel>
                         <Select
                           value={filterColumnId || "__all__"}
                           onValueChange={(value) =>
@@ -1284,7 +1323,10 @@ const TriggerForm = ({
                           }
                           disabled={isSubmitting}
                         >
-                          <SelectTrigger disabled={isSubmitting}>
+                          <SelectTrigger
+                            id="trigger-filter-column"
+                            disabled={isSubmitting}
+                          >
                             <SelectValue placeholder="All columns" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1304,10 +1346,10 @@ const TriggerForm = ({
               {/* Changed-fields filter — only meaningful against card.updated */}
               {triggerType === "event" &&
                 selectedEvents.includes("card.updated") && (
-                  <Field>
-                    <FieldLabel>
+                  <Field aria-labelledby="trigger-changed-fields-label">
+                    <FieldTitle id="trigger-changed-fields-label">
                       Only when these fields change (card.updated)
-                    </FieldLabel>
+                    </FieldTitle>
                     <FieldDescription>
                       Only fire on a card update when one of these fields
                       actually changed. Leave all off to fire on any change.
@@ -1338,8 +1380,11 @@ const TriggerForm = ({
               {/* Inbound-specific fields (ADR-0030) */}
               {triggerType === "inbound" && (
                 <>
-                  <Field data-invalid={inboundConfigErrors.length > 0}>
-                    <FieldLabel>Inputs</FieldLabel>
+                  <Field
+                    aria-labelledby="trigger-inputs-label"
+                    data-invalid={inboundConfigErrors.length > 0}
+                  >
+                    <FieldTitle id="trigger-inputs-label">Inputs</FieldTitle>
                     <FieldDescription>
                       The values a caller sends as{" "}
                       <code>{`{ "inputs": { ... } }`}</code>. Every value is a
@@ -1481,7 +1526,7 @@ const TriggerForm = ({
 
                   {triggerId && trigger && (
                     <Field>
-                      <FieldLabel>Token</FieldLabel>
+                      <FieldTitle>Token</FieldTitle>
                       <div className="flex flex-col gap-2 rounded-md border p-3 text-sm">
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant={TOKEN_STATUS_VARIANTS[tokenStatus]}>
@@ -1566,14 +1611,15 @@ const TriggerForm = ({
                   }
                   disabled={isSubmitting}
                 />
-                <FieldLabel htmlFor="search">
-                  <div className="flex flex-col">
-                    <p>Web Search</p>
-                    <p className="text-xs text-muted-foreground">
-                      Web search on the resolved provider — its built-in tool,
-                      or a Web-search backend selected on it
-                    </p>
-                  </div>
+                <FieldLabel
+                  htmlFor="search"
+                  className="flex-col items-stretch gap-0"
+                >
+                  <p>Web Search</p>
+                  <p className="text-xs text-muted-foreground">
+                    Web search on the resolved provider — its built-in tool, or
+                    a Web-search backend selected on it
+                  </p>
                 </FieldLabel>
               </Field>
 
@@ -1587,15 +1633,16 @@ const TriggerForm = ({
                   }
                   disabled={scheduleLocked}
                 />
-                <FieldLabel htmlFor="enabled">
-                  <div className="flex flex-col">
-                    <p>Enabled</p>
-                    <p className="text-xs text-muted-foreground">
-                      {triggerType === "inbound"
-                        ? "Trigger accepts calls. A disabled one refuses them."
-                        : "Trigger will run automatically"}
-                    </p>
-                  </div>
+                <FieldLabel
+                  htmlFor="enabled"
+                  className="flex-col items-stretch gap-0"
+                >
+                  <p>Enabled</p>
+                  <p className="text-xs text-muted-foreground">
+                    {triggerType === "inbound"
+                      ? "Trigger accepts calls. A disabled one refuses them."
+                      : "Trigger will run automatically"}
+                  </p>
                 </FieldLabel>
               </Field>
 
@@ -1630,16 +1677,16 @@ const TriggerForm = ({
                       }
                       disabled={isSubmitting}
                     />
-                    <FieldLabel htmlFor="includeMemories">
-                      <div className="flex flex-col">
-                        <p>Include Memories</p>
-                        <p className="text-xs text-muted-foreground">
-                          Add your recent memory summaries to this
-                          trigger&apos;s system prompt. Off by default, so a run
-                          isn&apos;t influenced by chat activity unrelated to
-                          it.
-                        </p>
-                      </div>
+                    <FieldLabel
+                      htmlFor="includeMemories"
+                      className="flex-col items-stretch gap-0"
+                    >
+                      <p>Include Memories</p>
+                      <p className="text-xs text-muted-foreground">
+                        Add your recent memory summaries to this trigger&apos;s
+                        system prompt. Off by default, so a run isn&apos;t
+                        influenced by chat activity unrelated to it.
+                      </p>
                     </FieldLabel>
                   </Field>
                 </CollapsibleContent>

@@ -112,6 +112,9 @@ function FieldLabel({
   ...props
 }: React.ComponentProps<typeof Label>) {
   return (
+    // A pass-through: `htmlFor` arrives in `props`, and each call site is
+    // linted for it.
+    // eslint-disable-next-line jsx-a11y/label-has-associated-control
     <Label
       data-slot="field-label"
       className={cn(

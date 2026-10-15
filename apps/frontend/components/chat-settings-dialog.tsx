@@ -160,7 +160,7 @@ export const ChatSettingsDialog = ({
                   }
                 />
                 {errors.temperature && (
-                  <p className="text-destructive text-sm">
+                  <p role="alert" className="text-destructive text-sm">
                     {errors.temperature}
                   </p>
                 )}
@@ -181,7 +181,9 @@ export const ChatSettingsDialog = ({
                   }
                 />
                 {errors.seed && (
-                  <p className="text-destructive text-sm">{errors.seed}</p>
+                  <p role="alert" className="text-destructive text-sm">
+                    {errors.seed}
+                  </p>
                 )}
               </div>
               <div className="grid gap-2">
@@ -203,7 +205,9 @@ export const ChatSettingsDialog = ({
                   }
                 />
                 {errors.topP && (
-                  <p className="text-destructive text-sm">{errors.topP}</p>
+                  <p role="alert" className="text-destructive text-sm">
+                    {errors.topP}
+                  </p>
                 )}
               </div>
               <div className="grid gap-2">
@@ -223,7 +227,9 @@ export const ChatSettingsDialog = ({
                   }
                 />
                 {errors.topK && (
-                  <p className="text-destructive text-sm">{errors.topK}</p>
+                  <p role="alert" className="text-destructive text-sm">
+                    {errors.topK}
+                  </p>
                 )}
               </div>
               <div className="grid gap-2">
@@ -245,7 +251,7 @@ export const ChatSettingsDialog = ({
                   }
                 />
                 {errors.presencePenalty && (
-                  <p className="text-destructive text-sm">
+                  <p role="alert" className="text-destructive text-sm">
                     {errors.presencePenalty}
                   </p>
                 )}
@@ -269,7 +275,7 @@ export const ChatSettingsDialog = ({
                   }
                 />
                 {errors.frequencyPenalty && (
-                  <p className="text-destructive text-sm">
+                  <p role="alert" className="text-destructive text-sm">
                     {errors.frequencyPenalty}
                   </p>
                 )}
@@ -287,7 +293,7 @@ export const ChatSettingsDialog = ({
                   onChange={(e) => handleMaxStepsChange(e.target.value)}
                 />
                 {maxStepsInvalid && (
-                  <p className="text-destructive text-sm">
+                  <p role="alert" className="text-destructive text-sm">
                     {CHAT_MAX_STEPS_ERROR}
                   </p>
                 )}

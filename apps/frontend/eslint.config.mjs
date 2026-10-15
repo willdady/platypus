@@ -22,6 +22,20 @@ const eslintConfig = defineConfig([
         "warn",
         { ignoreRestSiblings: true },
       ],
+      // next/core-web-vitals ships only a handful of jsx-a11y rules. These
+      // catch the mouse-only controls and unlabelled fields #1481 found by
+      // hand: a click handler on a non-interactive element with no keyboard
+      // equivalent, and a label tied to nothing.
+      "jsx-a11y/click-events-have-key-events": "error",
+      "jsx-a11y/no-static-element-interactions": "error",
+      "jsx-a11y/label-has-associated-control": [
+        "error",
+        {
+          labelComponents: ["Label", "FieldLabel"],
+          assert: "htmlFor",
+        },
+      ],
+      "jsx-a11y/no-autofocus": "warn",
     },
   },
   // A write (any `fetch` call whose `method` is anything but `"GET"`) must go

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Pie, PieChart, Cell, Label as RechartsLabel } from "recharts";
 import type { Widget, PieChartWidgetData } from "@platypus/schemas";
@@ -35,6 +35,7 @@ export function PieChartWidget({
   onSave: (data: object, title: string) => void;
 }) {
   const data = widget.data as PieChartWidgetData | null | undefined;
+  const id = useId();
   const [title, setTitle] = useState(widget.title);
   const [centerLabel, setCenterLabel] = useState(data?.centerLabel ?? "");
   const [centerSubLabel, setCenterSubLabel] = useState(
@@ -62,8 +63,11 @@ export function PieChartWidget({
     return (
       <div className="flex flex-col gap-2 p-3 h-full overflow-auto">
         <div className="space-y-1">
-          <Label className="text-xs">Name</Label>
+          <Label htmlFor={`${id}-name`} className="text-xs">
+            Name
+          </Label>
           <Input
+            id={`${id}-name`}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="h-7 text-sm"
@@ -71,8 +75,11 @@ export function PieChartWidget({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
-            <Label className="text-xs">Center label (optional)</Label>
+            <Label htmlFor={`${id}-center-label`} className="text-xs">
+              Center label (optional)
+            </Label>
             <Input
+              id={`${id}-center-label`}
               value={centerLabel}
               onChange={(e) => setCenterLabel(e.target.value)}
               placeholder="$12,400"
@@ -81,8 +88,11 @@ export function PieChartWidget({
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Center sub-label (optional)</Label>
+            <Label htmlFor={`${id}-center-sub-label`} className="text-xs">
+              Center sub-label (optional)
+            </Label>
             <Input
+              id={`${id}-center-sub-label`}
               value={centerSubLabel}
               onChange={(e) => setCenterSubLabel(e.target.value)}
               placeholder="Total"
@@ -91,9 +101,18 @@ export function PieChartWidget({
             />
           </div>
         </div>
-        <div className="space-y-2">
+        <div
+          role="group"
+          aria-labelledby={`${id}-segments`}
+          className="space-y-2"
+        >
           <div className="flex items-center justify-between">
-            <Label className="text-xs">Segments</Label>
+            <span
+              id={`${id}-segments`}
+              className="text-xs leading-none font-medium"
+            >
+              Segments
+            </span>
             <button
               type="button"
               onClick={handleAddSegment}

@@ -5,6 +5,7 @@ import {
   FieldDescription,
   FieldError,
 } from "@/components/ui/field";
+import { formFieldIds } from "@/components/form-field-ids";
 import {
   Select,
   SelectContent,
@@ -43,6 +44,7 @@ export const FormSelectField = ({
   className,
   triggerClassName,
 }: FormSelectFieldProps) => {
+  const ids = formFieldIds(name, { description, error });
   return (
     <Field className={className} data-invalid={!!error}>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
@@ -51,14 +53,19 @@ export const FormSelectField = ({
           id={name}
           disabled={disabled}
           aria-invalid={!!error}
+          aria-describedby={ids.describedBy}
           className={triggerClassName}
         >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>{children}</SelectContent>
       </Select>
-      {description && <FieldDescription>{description}</FieldDescription>}
-      {error && <FieldError>{error}</FieldError>}
+      {description && (
+        <FieldDescription id={ids.descriptionId}>
+          {description}
+        </FieldDescription>
+      )}
+      {error && <FieldError id={ids.errorId}>{error}</FieldError>}
     </Field>
   );
 };

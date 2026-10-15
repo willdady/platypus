@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import {
   type CSSProperties,
   type ElementType,
@@ -51,6 +51,16 @@ const ShimmerComponent = ({
   // `as` element type, which never changes for a mounted instance), so it is
   // not a new component created during render despite the rule's heuristic.
   const MotionComponent = getMotionComponent(Component);
+  // The sweep loops forever; under reduced motion the text stays put, still
+  // muted so it reads as in progress.
+  const reduceMotion = useReducedMotion();
+  if (reduceMotion) {
+    return (
+      <Component className={cn("text-muted-foreground", className)}>
+        {children}
+      </Component>
+    );
+  }
 
   return (
     // eslint-disable-next-line react-hooks/static-components -- MotionComponent is module-cached and stable per `as` value
