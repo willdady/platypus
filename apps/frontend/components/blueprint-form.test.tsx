@@ -78,6 +78,8 @@ describe("BlueprintForm Tier 2 provider slots", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "OpenAI" }));
     await selectOption(taskModelSelect(), "OpenAI");
+    // No model id for the slot: the name alone, never empty brackets.
+    expect(taskModelSelect()).toHaveTextContent(/^OpenAI$/);
   };
 
   const save = () =>
@@ -118,5 +120,27 @@ describe("BlueprintForm Tier 2 provider slots", () => {
       items: [],
       taskModelProviderId: null,
     });
+  });
+
+  it("names an attached provider with the model its slot runs against, in the list and the trigger", async () => {
+    setDataFor("/organizations/org1/providers", {
+      results: [
+        {
+          id: "p1",
+          name: "OpenAI",
+          taskModelId: "gpt-4o-mini",
+          memoryExtractionModelId: "gpt-4o",
+        },
+      ],
+    });
+    render(<BlueprintForm orgId="org1" />);
+    fireEvent.click(screen.getByRole("switch", { name: "OpenAI" }));
+
+    const extraction = screen.getByRole("combobox", {
+      name: "Memory extraction provider",
+    });
+    await selectOption(extraction, "OpenAI (gpt-4o)");
+
+    expect(extraction).toHaveTextContent("OpenAI (gpt-4o)");
   });
 });

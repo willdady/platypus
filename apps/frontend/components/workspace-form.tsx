@@ -35,6 +35,7 @@ import {
   WORKSPACE_MAX_DAILY_SUMMARIES_MIN,
 } from "@platypus/schemas";
 import { retractFieldError } from "@/lib/form-errors";
+import { providerModelLabel } from "@/lib/provider-model-label";
 import {
   canManageWorkspaceDelegation,
   canTransferWorkspace,
@@ -284,14 +285,14 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
                 }}
                 disabled={isSubmitting}
               >
-                <SelectTrigger>
+                <SelectTrigger id="taskModelProviderId">
                   <SelectValue placeholder="Select a provider" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None (use chat provider)</SelectItem>
                   {providers.map((provider) => (
                     <SelectItem key={provider.id} value={provider.id}>
-                      {provider.name}
+                      {providerModelLabel(provider, "task")}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -322,7 +323,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
                 }}
                 disabled={isSubmitting}
               >
-                <SelectTrigger>
+                <SelectTrigger id="memoryExtractionProviderId">
                   <SelectValue placeholder="Select a provider" />
                 </SelectTrigger>
                 <SelectContent>
@@ -331,7 +332,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
                     .filter((p) => p.memoryExtractionModelId)
                     .map((provider) => (
                       <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
+                        {providerModelLabel(provider, "memoryExtraction")}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -364,7 +365,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
                 }}
                 disabled={isSubmitting}
               >
-                <SelectTrigger>
+                <SelectTrigger id="memoryEmbeddingProviderId">
                   <SelectValue placeholder="Select a provider" />
                 </SelectTrigger>
                 <SelectContent>
@@ -376,7 +377,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
                     )
                     .map((provider) => (
                       <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
+                        {providerModelLabel(provider, "embedding")}
                       </SelectItem>
                     ))}
                 </SelectContent>
