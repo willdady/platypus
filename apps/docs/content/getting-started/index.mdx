@@ -73,11 +73,11 @@ and configuration hardening — see
 The three failures that account for almost all of them, and what each looks
 like. Run the commands from the `platypus` directory the installer created.
 
-| Symptom                                                                   | Cause                                                                                                                               | Fix                                                                                                                                                                                               |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker compose ps` shows `backend` as **exited**                         | A required variable is unset, first-boot seeding failed, or the backend gave up reaching Postgres after about 30 seconds of retries | `docker compose logs backend` — the last line names the variable, the seeding problem, or the database error. Fix it and `docker compose up -d` again.                                            |
-| `docker compose up` reports **dependency failed to start** for `database` | Postgres never became healthy, so the backend was not started                                                                       | `docker compose logs database`.                                                                                                                                                                   |
-| Port already allocated on `3000` or `4000`                                | Something else on the host holds the port                                                                                           | Stop the other process, or remap the host side in a `compose.override.yaml`. Remapping `3000` means updating `ALLOWED_ORIGINS` and `FRONTEND_URL`; remapping `4000` means updating `BACKEND_URL`. |
+| Symptom                                                                   | Cause                                                                                                                                                                     | Fix                                                                                                                                                                                               |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker compose ps` shows `backend` as **exited**                         | A required variable is unset or malformed, a plugin failed to load, first-boot seeding failed, or the backend gave up reaching Postgres after about 30 seconds of retries | `docker compose logs backend` — the last line names what failed. Fix it and `docker compose up -d` again.                                                                                         |
+| `docker compose up` reports **dependency failed to start** for `database` | Postgres never became healthy, so the backend was not started                                                                                                             | `docker compose logs database`.                                                                                                                                                                   |
+| Port already allocated on `3000` or `4000`                                | Something else on the host holds the port                                                                                                                                 | Stop the other process, or remap the host side in a `compose.override.yaml`. Remapping `3000` means updating `ALLOWED_ORIGINS` and `FRONTEND_URL`; remapping `4000` means updating `BACKEND_URL`. |
 
 You sign in successfully and are immediately signed out again? That is the URL
 variables disagreeing, not a password problem — see
@@ -123,8 +123,7 @@ the **Owner**, and click **Next**.
 A Workspace can't run an agent until it can reach a model, so the next step asks
 for a Provider. Stay on **New provider** and fill in the form:
 
-- **Provider Type** — your AI vendor. Exactly five: OpenAI, OpenRouter,
-  Anthropic, Google, Bedrock. Running Ollama, vLLM or Azure OpenAI? Pick
+- **Provider Type** — your AI vendor. Running Ollama, vLLM or Azure OpenAI? Pick
   **OpenAI** and set **Base URL** — see
   [Supported vendors](/self-hosting/providers-and-auth#supported-vendors).
   Running that model server on this machine while Platypus runs in Docker? See
@@ -142,6 +141,8 @@ for a Provider. Stay on **New provider** and fill in the form:
   for now — every one of them is optional, and you can come back to them.
 - **Task Model ID** — one of the model ids you just added. Platypus uses it to
   name your Chats; left empty, every Chat stays _Untitled_.
+
+Leave the remaining fields empty for now.
 
 Click **Next**. The last step offers a Sandbox; leave **Configure a sandbox**
 off for now and click **Save**. Nothing is created until you do — the Workspace
@@ -168,8 +169,8 @@ later, Tools, Skills, and Sub-Agents) into a reusable preset.
 
 ### Start a Chat and send a message
 
-Open a new Chat from the Workspace, then click the model selector and choose
-your Agent under **Agents** (or pick a Provider + model directly).
+On your Agent's card, click **New chat**. (From any other Chat, pick the Agent
+in the model selector, or pick a Provider + model directly.)
 
 Type a message in the input box and press **Enter**. The assistant's reply
 streams back token by token — that's a **Chat turn** running end to end:
