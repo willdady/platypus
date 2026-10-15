@@ -161,6 +161,21 @@ export function stubRejectedSave(error: unknown, status = 400): Mock {
 }
 
 /**
+ * Stubs global `fetch` with requests that stay in flight until `resolve` is
+ * called, which settles every one of them as an accepted save — for asserting
+ * what the UI does while a write is pending.
+ */
+export function stubPendingSave(body: unknown = {}, status = 200) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(() => released.then(() => jsonResponse(status, body)));
+  vi.stubGlobal("fetch", fetchMock);
+  return { fetchMock, resolve: () => release() };
+}
+
+/**
  * Stubs global `fetch` to resolve each call in turn with the given
  * `{ status, body }` responses — for flows that make more than one request
  * (e.g. a save followed by a dependent, separately-failing write).

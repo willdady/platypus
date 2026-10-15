@@ -43,7 +43,7 @@ vi.mock("swr", () => ({
 }));
 
 import { KanbanCardDialog } from "./kanban-card-dialog";
-import { jsonResponse } from "@/lib/test-utils";
+import { jsonResponse, stubPendingSave } from "@/lib/test-utils";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -124,6 +124,41 @@ describe("KanbanCardDialog add comment", () => {
       expect(toastErrorSpy).toHaveBeenCalledWith("Comment too long"),
     );
     expect(mutateCommentsSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("KanbanCardDialog comment double submit", () => {
+  it("sends one comment for a double click, disabled and labelled while pending", async () => {
+    const { fetchMock, resolve } = stubPendingSave({ id: "cm2" });
+    renderDialog();
+
+    fireEvent.change(screen.getByPlaceholderText("Add a comment..."), {
+      target: { value: "A new comment" },
+    });
+    const submit = screen.getByRole("button", { name: "Comment" });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveTextContent("Commenting...");
+    resolve();
+    await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
+  });
+
+  it("sends one comment edit for a double click", async () => {
+    comments = [existingComment];
+    const { fetchMock, resolve } = stubPendingSave({ id: "cm1" });
+    renderDialog();
+
+    fireEvent.click(screen.getByText("Edit"));
+    const save = screen.getAllByRole("button", { name: "Save" })[0];
+    fireEvent.click(save);
+    fireEvent.click(save);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    resolve();
+    await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
   });
 });
 

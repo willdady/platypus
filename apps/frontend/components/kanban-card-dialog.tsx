@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FocusEventHandler, type ReactNode } from "react";
+import { useMutation } from "@/hooks/use-mutation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Markdown } from "@/components/markdown";
 import { formatDate, formatDateTime } from "@/lib/format-date";
@@ -411,6 +412,7 @@ function CommentsSection({
   onDeleteComment,
   onStartEditComment,
   onCancelEditComment,
+  commentPending,
 }: {
   className?: string;
   comments: KanbanCardComment[];
@@ -424,6 +426,8 @@ function CommentsSection({
   onDeleteComment: (commentId: string) => void;
   onStartEditComment: (comment: KanbanCardComment) => void;
   onCancelEditComment: () => void;
+  /** A comment write is in flight; its buttons wait for it. */
+  commentPending: boolean;
 }) {
   return (
     <div className={className}>
@@ -452,9 +456,9 @@ function CommentsSection({
                     <Button
                       size="sm"
                       onClick={() => onSaveComment(comment.id)}
-                      disabled={!editingCommentBody.trim()}
+                      disabled={!editingCommentBody.trim() || commentPending}
                     >
-                      Save
+                      {commentPending ? "Saving..." : "Save"}
                     </Button>
                     <Button
                       size="sm"
@@ -490,8 +494,9 @@ function CommentsSection({
                           size="sm"
                           className="w-full"
                           onClick={() => onDeleteComment(comment.id)}
+                          disabled={commentPending}
                         >
-                          Delete
+                          {commentPending ? "Deleting..." : "Delete"}
                         </Button>
                       </PopoverContent>
                     </Popover>
@@ -512,9 +517,9 @@ function CommentsSection({
         <Button
           size="sm"
           onClick={onAddComment}
-          disabled={!newCommentBody.trim()}
+          disabled={!newCommentBody.trim() || commentPending}
         >
-          Comment
+          {commentPending ? "Commenting..." : "Comment"}
         </Button>
       </div>
     </div>
@@ -720,8 +725,8 @@ export function KanbanCardDialog({
   columnId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (cardId: string, data: CardSaveData) => void;
-  onDelete: (cardId: string) => void;
+  onSave: (cardId: string, data: CardSaveData) => Promise<void> | void;
+  onDelete: (cardId: string) => Promise<void> | void;
   orgId: string;
   workspaceId: string;
   boardId: string;
@@ -787,6 +792,15 @@ export function KanbanCardDialog({
     },
   );
 
+  // One guard per kind of write, so a double click sends nothing twice. The
+  // card's Save and Delete share one: neither makes sense while the other runs.
+  const cardWrite = useMutation(async (write: () => Promise<void> | void) => {
+    await write();
+  });
+  const commentWrite = useMutation(async (write: () => Promise<void>) => {
+    await write();
+  });
+
   if (!card) return null;
 
   const handleCopyToClipboard = () =>
@@ -830,52 +844,55 @@ export function KanbanCardDialog({
 
   const commentsEntity = `boards/${boardId}/cards/${card.id}/comments`;
 
-  const handleAddComment = async () => {
-    if (!newCommentBody.trim() || !backendUrl) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      commentsEntity,
-      { orgId, workspaceId },
-      { data: { body: newCommentBody.trim() } },
-    );
-    if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
-      return;
-    }
-    setNewCommentBody("");
-    await mutateComments();
-  };
+  const handleAddComment = () =>
+    commentWrite.run(async () => {
+      if (!newCommentBody.trim() || !backendUrl) return;
+      const outcome = await writeEntity(
+        backendUrl,
+        commentsEntity,
+        { orgId, workspaceId },
+        { data: { body: newCommentBody.trim() } },
+      );
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        return;
+      }
+      setNewCommentBody("");
+      await mutateComments();
+    });
 
-  const handleEditComment = async (commentId: string) => {
-    if (!editingCommentBody.trim() || !backendUrl) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      commentsEntity,
-      { orgId, workspaceId },
-      { id: commentId, data: { body: editingCommentBody.trim() } },
-    );
-    if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
-      return;
-    }
-    cancelEditingComment();
-    await mutateComments();
-  };
+  const handleEditComment = (commentId: string) =>
+    commentWrite.run(async () => {
+      if (!editingCommentBody.trim() || !backendUrl) return;
+      const outcome = await writeEntity(
+        backendUrl,
+        commentsEntity,
+        { orgId, workspaceId },
+        { id: commentId, data: { body: editingCommentBody.trim() } },
+      );
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        return;
+      }
+      cancelEditingComment();
+      await mutateComments();
+    });
 
-  const handleDeleteComment = async (commentId: string) => {
-    if (!backendUrl) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      commentsEntity,
-      { orgId, workspaceId },
-      { id: commentId },
-    );
-    if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
-      return;
-    }
-    await mutateComments();
-  };
+  const handleDeleteComment = (commentId: string) =>
+    commentWrite.run(async () => {
+      if (!backendUrl) return;
+      const outcome = await writeEntity(
+        backendUrl,
+        commentsEntity,
+        { orgId, workspaceId },
+        { id: commentId },
+      );
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        return;
+      }
+      await mutateComments();
+    });
 
   const handleDetailsBlur: FocusEventHandler<HTMLDivElement> = (event) => {
     if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -954,6 +971,7 @@ export function KanbanCardDialog({
                 onDeleteComment={handleDeleteComment}
                 onStartEditComment={startEditingComment}
                 onCancelEditComment={cancelEditingComment}
+                commentPending={commentWrite.pending}
               />
             </TabsContent>
             <TabsContent
@@ -997,6 +1015,7 @@ export function KanbanCardDialog({
                 onDeleteComment={handleDeleteComment}
                 onStartEditComment={startEditingComment}
                 onCancelEditComment={cancelEditingComment}
+                commentPending={commentWrite.pending}
               />
               <div className="mt-6">
                 <KanbanCardHistory
@@ -1046,30 +1065,33 @@ export function KanbanCardDialog({
                 variant="destructive"
                 size="sm"
                 className="w-full"
-                onClick={() => onDelete(card.id)}
+                onClick={() => void cardWrite.run(() => onDelete(card.id))}
+                disabled={cardWrite.pending}
               >
-                Delete
+                {cardWrite.pending ? "Deleting..." : "Delete"}
               </Button>
             </PopoverContent>
           </Popover>
           <Button
             onClick={() =>
-              onSave(card.id, {
-                title,
-                body,
-                labelIds: selectedLabelIds,
-                assignees: selectedAssignees,
-                dueDate: selectedDueDate,
-                priority: selectedPriority,
-                ...(selectedColumnId &&
-                  selectedColumnId !== initialColumnId && {
-                    columnId: selectedColumnId,
-                  }),
-              })
+              void cardWrite.run(() =>
+                onSave(card.id, {
+                  title,
+                  body,
+                  labelIds: selectedLabelIds,
+                  assignees: selectedAssignees,
+                  dueDate: selectedDueDate,
+                  priority: selectedPriority,
+                  ...(selectedColumnId &&
+                    selectedColumnId !== initialColumnId && {
+                      columnId: selectedColumnId,
+                    }),
+                }),
+              )
             }
-            disabled={!title.trim()}
+            disabled={!title.trim() || cardWrite.pending}
           >
-            Save
+            {cardWrite.pending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

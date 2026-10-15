@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation } from "@/hooks/use-mutation";
 import { useState } from "react";
 import {
   Item,
@@ -237,18 +238,23 @@ export const AgentsList = ({
     deleteFlow.request(agent);
   };
 
-  const handleTogglePin = async (agent: AgentWithScope) => {
+  // One pin write at a time across the list; only the agent being written
+  // reads as pending.
+  const [pinningId, setPinningId] = useState<string | null>(null);
+  const togglePin = useMutation(async (agent: AgentWithScope) => {
     if (!backendUrl) return;
+    setPinningId(agent.id);
     const outcome = await writeAt(
       scopedUrl(backendUrl, `agents/${agent.id}/pin`, scope),
       { method: agent.isPinned ? "DELETE" : "PUT" },
     );
+    setPinningId(null);
     if (outcome.outcome !== "success") {
       toast.error(outcome.message);
       return;
     }
     mutate();
-  };
+  });
 
   const handleCloneConfirm = async () => {
     if (!agentToClone || !backendUrl) return;
@@ -318,18 +324,20 @@ export const AgentsList = ({
   // Clone → separator → Delete; a Shared Agent's Detach takes Delete's place.
   const renderMenuItems = (agent: AgentWithScope) => {
     const isOrgScoped = agent.scope === "organization";
+    const pinning = pinningId === agent.id;
     const pinItem = canPin && (
       <DropdownMenuItem
         className="cursor-pointer"
-        onSelect={() => handleTogglePin(agent)}
+        onSelect={() => void togglePin.run(agent)}
+        disabled={togglePin.pending}
       >
         {agent.isPinned ? (
           <>
-            <PinOff /> Unpin
+            <PinOff /> {pinning ? "Unpinning..." : "Unpin"}
           </>
         ) : (
           <>
-            <Pin /> Pin
+            <Pin /> {pinning ? "Pinning..." : "Pin"}
           </>
         )}
       </DropdownMenuItem>
