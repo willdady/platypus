@@ -403,55 +403,60 @@ const ModelRow = ({
               />
             </ModelField>
 
-            <ModelField
-              htmlFor={`extracted-chars-${index}`}
-              label="Max extracted text characters"
-              hint="How much extracted document text a single file may add to a turn. Protects a small context window. Leave empty for the default."
-              error={errors.fields.maxExtractedTextChars}
-            >
-              <Input
-                id={`extracted-chars-${index}`}
-                type="number"
-                min={1}
-                placeholder={String(DEFAULT_MAX_EXTRACTED_TEXT_CHARS)}
-                value={model.maxExtractedTextChars ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    maxExtractedTextChars: parsePositiveNumber(e.target.value),
-                  })
-                }
-                disabled={disabled}
-              />
-            </ModelField>
+            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+              <ModelField
+                htmlFor={`extracted-chars-${index}`}
+                label="Max extracted text characters"
+                hint="How much extracted document text a single file may add to a turn. Protects a small context window. Leave empty for the default."
+                error={errors.fields.maxExtractedTextChars}
+              >
+                <Input
+                  id={`extracted-chars-${index}`}
+                  type="number"
+                  min={1}
+                  placeholder={String(DEFAULT_MAX_EXTRACTED_TEXT_CHARS)}
+                  value={model.maxExtractedTextChars ?? ""}
+                  aria-invalid={!!errors.fields.maxExtractedTextChars}
+                  onChange={(e) =>
+                    onChange({
+                      maxExtractedTextChars: parsePositiveNumber(
+                        e.target.value,
+                      ),
+                    })
+                  }
+                  disabled={disabled}
+                />
+              </ModelField>
 
-            <ModelField
-              htmlFor={`max-output-tokens-${index}`}
-              label="Max output tokens"
-              hint={
-                <>
-                  The most this model may produce in a{" "}
-                  <strong>single reply</strong> — a cap on the answer, not the
-                  window. Leave empty to use the vendor’s own default, which may
-                  be well below what the model can actually write.
-                </>
-              }
-              error={errors.fields.maxOutputTokens}
-            >
-              <Input
-                id={`max-output-tokens-${index}`}
-                type="number"
-                min={1}
-                placeholder="Provider default"
-                value={model.maxOutputTokens ?? ""}
-                aria-invalid={!!errors.fields.maxOutputTokens}
-                onChange={(e) =>
-                  onChange({
-                    maxOutputTokens: parsePositiveNumber(e.target.value),
-                  })
+              <ModelField
+                htmlFor={`max-output-tokens-${index}`}
+                label="Max output tokens"
+                hint={
+                  <>
+                    The most this model may produce in a{" "}
+                    <strong>single reply</strong> — a cap on the answer, not the
+                    window. Leave empty to use the vendor’s own default, which
+                    may be well below what the model can actually write.
+                  </>
                 }
-                disabled={disabled}
-              />
-            </ModelField>
+                error={errors.fields.maxOutputTokens}
+              >
+                <Input
+                  id={`max-output-tokens-${index}`}
+                  type="number"
+                  min={1}
+                  placeholder="Provider default"
+                  value={model.maxOutputTokens ?? ""}
+                  aria-invalid={!!errors.fields.maxOutputTokens}
+                  onChange={(e) =>
+                    onChange({
+                      maxOutputTokens: parsePositiveNumber(e.target.value),
+                    })
+                  }
+                  disabled={disabled}
+                />
+              </ModelField>
+            </div>
           </CollapsibleContent>
         </Collapsible>
       </div>

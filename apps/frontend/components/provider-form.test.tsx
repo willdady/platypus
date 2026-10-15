@@ -589,6 +589,13 @@ describe("ProviderForm validation errors on model rows", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByText("Too small")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Max extracted text characters"),
+    ).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Max output tokens")).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
   });
 
   it("opens a collapsed row when the server rejects its output ceiling", async () => {
