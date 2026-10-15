@@ -848,7 +848,9 @@ const DashboardPage = ({
             </div>
           </div>
           {addWidgetError && (
-            <p className="text-sm text-destructive">{addWidgetError}</p>
+            <p role="alert" className="text-sm text-destructive">
+              {addWidgetError}
+            </p>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddWidgetOpen(false)}>
