@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  useState,
-  useCallback,
-  useRef,
-  useEffect,
-  useMemo,
-  useSyncExternalStore,
-} from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   DndContext,
@@ -81,6 +75,8 @@ import { workspaceRoutes } from "@/lib/routes";
 const EMPTY_LABELS: KanbanLabel[] = [];
 
 const noop = () => {};
+
+const FINE_POINTER_QUERY = "(pointer: fine)";
 
 // Module-level so their identity survives re-renders: `useSensor` memoizes on
 // the options object, and a fresh literal here rebuilds the sensor list, the
@@ -227,17 +223,8 @@ export function KanbanBoard({
   }
 
   // Detect desktop via pointer: fine media query to disable drag on touch
-  // devices. useSyncExternalStore subscribes to the media query without a
-  // setState-in-effect and stays SSR-safe (server snapshot is false).
-  const isDesktop = useSyncExternalStore(
-    (onChange) => {
-      const mql = window.matchMedia("(pointer: fine)");
-      mql.addEventListener("change", onChange);
-      return () => mql.removeEventListener("change", onChange);
-    },
-    () => window.matchMedia("(pointer: fine)").matches,
-    () => false,
-  );
+  // devices.
+  const isDesktop = useMediaQuery(FINE_POINTER_QUERY);
 
   const updateCardIdParam = useCallback(
     (cardId: string | null) => {
