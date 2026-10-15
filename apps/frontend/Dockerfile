@@ -84,8 +84,9 @@ ENV PORT=3000
 # https://nextjs.org/docs/pages/api-reference/config/next-config-js/output
 ENV HOSTNAME="0.0.0.0"
 
-# `/` is a static page, so this probes the Next.js server alone, not the
-# backend behind it. Alpine has no curl, so use node's fetch.
+# `/` renders without calling the backend (its data loads in the browser), so
+# this probes the Next.js server alone, not the backend behind it. Alpine has
+# no curl, so use node's fetch.
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
   CMD node -e "fetch('http://localhost:' + (process.env.PORT || 3000) + '/').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 

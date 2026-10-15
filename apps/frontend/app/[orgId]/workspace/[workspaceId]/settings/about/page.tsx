@@ -2,7 +2,7 @@ import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 const AboutPage = () => {
-  const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
+  const version = process.env.APP_VERSION ?? "unknown";
 
   return (
     <div>

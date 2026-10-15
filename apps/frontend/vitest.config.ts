@@ -12,6 +12,8 @@ export default defineConfig({
     execArgv: ["--no-experimental-webstorage"],
     include: ["**/*.test.ts", "**/*.test.tsx"],
     setupFiles: ["./vitest.setup.ts"],
+    // What `lib/env.ts` validates; a real deployment must set it too.
+    env: { BACKEND_URL: "http://localhost:4001" },
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
@@ -21,6 +23,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./"),
+      // Tests run outside React's server condition, where `server-only`
+      // throws on import. Resolve it to the no-op Server Components get.
+      "server-only": path.resolve(
+        __dirname,
+        "node_modules/server-only/empty.js",
+      ),
     },
   },
 });

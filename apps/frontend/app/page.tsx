@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Header } from "@/components/header";
 import { EmptyCard } from "@/components/empty-card";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth } from "@/components/auth-provider";
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { appRoutes, orgRoutes } from "@/lib/routes";
@@ -24,7 +24,6 @@ const Spinner = () => (
 
 export default function Home() {
   const { user, isAuthLoading: isAuthLoadingUser } = useAuth();
-  const backendUrl = useBackendUrl();
   const router = useRouter();
 
   const { data, error, isLoading } = useScopedSWR<{
@@ -39,20 +38,6 @@ export default function Home() {
       router.replace(orgRoutes(organizations[0].id).root);
     }
   }, [organizations, router]);
-
-  if (!backendUrl) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-8">
-        <Alert variant="destructive" className="max-w-md">
-          <AlertCircle />
-          <AlertTitle>Configuration error</AlertTitle>
-          <AlertDescription>
-            The <code>BACKEND_URL</code> environment variable is not set.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
 
   if (isAuthLoadingUser || (user && isLoading)) {
     return (

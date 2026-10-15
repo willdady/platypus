@@ -1,3 +1,4 @@
+import { serverBackendUrl } from "@/lib/env";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -21,8 +22,7 @@ const fetchWorkspace = cache(async function fetchWorkspace(
   orgId: string,
   workspaceId: string,
 ): Promise<{ response: Response; workspace: Workspace | null }> {
-  const backendUrl =
-    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL || "";
+  const backendUrl = serverBackendUrl();
   const headersList = await headers();
   const response = await fetch(
     joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`),
