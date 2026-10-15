@@ -145,8 +145,7 @@ describe("ProviderForm model rows", () => {
     );
   });
 
-  // Rows are keyed by index, so removing one shifts the row above's local state
-  // onto its neighbour. The control has to survive that: a trigger reading
+  // Removing a row must leave its neighbour's control intact: a trigger reading
   // "Custom" beside no input would leave a declared window invisible and
   // uneditable until the page was reloaded.
   it("keeps a Custom value editable after the row above it is removed", () => {
@@ -281,8 +280,8 @@ describe("ProviderForm model rows", () => {
     expect(savedModelIds(fetchMock)[0].passthroughFileTypes).toEqual([]);
   });
 
-  // Rows are keyed by index, so the typed text of a removed row lands on its
-  // neighbour. That neighbour must show its own types, not the removed row's.
+  // The typed text of a removed row must not land on its neighbour, which
+  // shows its own types, not the removed row's.
   it("shows a row its own native file types after the row above it is removed", () => {
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: ["image/*"] },
@@ -391,6 +390,40 @@ describe("ProviderForm model rows", () => {
     // One expanded row means one visible pair of file-handling inputs.
     expect(screen.getAllByLabelText("Native file types")).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Advanced" })).toHaveLength(2);
+  });
+
+  it("keeps a row's open Advanced panel with its model when an earlier row is removed", () => {
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [] },
+      { id: "gpt-4o-mini", passthroughFileTypes: [] },
+      { id: "o3", passthroughFileTypes: [] },
+    ]);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Advanced" })[2]);
+    fireEvent.click(screen.getByLabelText("Remove model 2"));
+
+    const modelIds = screen
+      .getAllByLabelText("Model ID")
+      .map((input) => (input as HTMLInputElement).value);
+    expect(modelIds).toEqual(["gpt-4o", "o3"]);
+    // One open panel, and it belongs to o3, now the second row.
+    expect(screen.getAllByLabelText("Native file types")).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: "Advanced" })[1],
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("keeps the client-side row id out of the saved payload", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    for (const row of savedModelIds(fetchMock)) {
+      expect(Object.keys(row)).not.toContain("key");
+    }
   });
 });
 
