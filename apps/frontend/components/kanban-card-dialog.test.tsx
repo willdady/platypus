@@ -66,12 +66,16 @@ const existingComment: KanbanCardComment = {
   createdAt: new Date("2026-01-01").toISOString(),
 } as unknown as KanbanCardComment;
 
+// Answers the dialog's `max-width` query for a viewport `width` px wide.
 function setViewportWidth(width: number) {
-  Object.defineProperty(window, "innerWidth", {
-    configurable: true,
-    writable: true,
-    value: width,
-  });
+  window.matchMedia = vi.fn((query: string) => {
+    const maxWidth = /max-width:\s*(\d+)px/.exec(query);
+    return {
+      matches: maxWidth ? width <= Number(maxWidth[1]) : false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+  }) as unknown as typeof window.matchMedia;
 }
 
 function renderDialog() {
@@ -98,11 +102,6 @@ afterEach(() => {
   toastErrorSpy.mockClear();
   vi.restoreAllMocks();
   setViewportWidth(1024);
-  window.matchMedia = vi.fn().mockReturnValue({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }) as unknown as typeof window.matchMedia;
 });
 
 // --- Tests -------------------------------------------------------------------
