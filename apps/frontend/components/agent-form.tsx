@@ -76,7 +76,7 @@ import { useSWRConfig } from "swr";
 import { useBackendUrl } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { ToolSetsUnavailableNotice } from "@/components/tool-sets-unavailable-notice";
-import { type ToolSetsFailureReason } from "@/lib/tool-sets-request";
+import type { ToolSetsFailureReason } from "@/lib/tool-sets-request";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 // toolSetIds, skillIds, and subAgentIds are deliberately excluded: this form

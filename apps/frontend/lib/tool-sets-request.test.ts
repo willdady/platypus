@@ -23,13 +23,12 @@ function httpResponse(body: unknown, status = 200) {
 
 describe("fetchToolSets", () => {
   beforeEach(() => {
-    process.env.INTERNAL_BACKEND_URL = "http://backend:4000";
+    vi.stubEnv("INTERNAL_BACKEND_URL", "http://backend:4000");
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.INTERNAL_BACKEND_URL;
-    delete process.env.BACKEND_URL;
+    vi.unstubAllEnvs();
   });
 
   it("returns the tool sets when the request succeeds", async () => {
@@ -93,8 +92,8 @@ describe("fetchToolSets", () => {
   });
 
   it("falls back to BACKEND_URL when no internal URL is configured", async () => {
-    delete process.env.INTERNAL_BACKEND_URL;
-    process.env.BACKEND_URL = "http://localhost:4000";
+    vi.unstubAllEnvs();
+    vi.stubEnv("BACKEND_URL", "http://localhost:4000");
     const spy = stubFetch(() => httpResponse({ results: [] }));
 
     await fetchToolSets("/organizations/o1/tools", cookie);

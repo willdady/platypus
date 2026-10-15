@@ -1,3 +1,4 @@
+import { serverBackendUrl } from "@/lib/env";
 import { cache } from "react";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
@@ -14,8 +15,7 @@ import { ProtectedRoute } from "@/components/protected-route";
 const fetchOrganization = cache(async function fetchOrganization(
   orgId: string,
 ): Promise<Organization | null> {
-  const backendUrl =
-    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL || "";
+  const backendUrl = serverBackendUrl();
   const headersList = await headers();
   // Unlike the workspace shell, a failure here must not break the page: the
   // organization is only a label and the title, so it degrades to null.

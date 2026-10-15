@@ -1,3 +1,4 @@
+import { serverBackendUrl } from "@/lib/env";
 import { type ToolSet } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
 
@@ -32,8 +33,7 @@ export async function fetchToolSets(
   cookie: string,
 ): Promise<ToolSetsResult> {
   // Internal URL for SSR, falling back to BACKEND_URL for local dev.
-  const backendUrl =
-    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL || "";
+  const backendUrl = serverBackendUrl();
 
   let response: Response;
   try {

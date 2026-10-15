@@ -1,5 +1,8 @@
 import { withBasePath } from "@/lib/routes";
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { getEnv } from "@/lib/env";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "next-themes";
@@ -38,17 +41,27 @@ export const viewport: Viewport = {
   ],
 };
 
-// Force dynamic rendering to ensure environment variables are read at runtime
-// and not baked into the static output during build time.
-export const dynamic = "force-dynamic";
+/**
+ * The backend URL is a run-time setting, so it is read per request, behind
+ * `connection()`, rather than baked into a prerendered page. Only this subtree
+ * waits on the request; the document shell around it stays static.
+ */
+async function RuntimeAuthProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  await connection();
+  return (
+    <AuthProvider backendUrl={getEnv().BACKEND_URL}>{children}</AuthProvider>
+  );
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const backendUrl = process.env.BACKEND_URL || "";
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -79,18 +92,20 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-dvh overflow-hidden`}
       >
-        <AuthProvider backendUrl={backendUrl}>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-            <Toaster position="top-right" />
-            <ClipboardFallback />
-          </ThemeProvider>
-        </AuthProvider>
+        <Suspense>
+          <RuntimeAuthProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+              <Toaster position="top-right" />
+              <ClipboardFallback />
+            </ThemeProvider>
+          </RuntimeAuthProvider>
+        </Suspense>
       </body>
     </html>
   );

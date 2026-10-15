@@ -276,15 +276,14 @@ const REMOVED_VARS = new Set<string>([]);
 
 /**
  * Real variables that no `.example.env` ships, so the reference page is their
- * only home. The first two are read by the frontend (`next.config.ts` and the
- * About page) and neither is something a deployment normally sets.
+ * only home. The first is read by the frontend's dev server (`next.config.ts`)
+ * and is not something a deployment normally sets.
  * `NODE_ENV` is set by the backend image, not in `.env`.
  * `PLATYPUS_PLUGIN_CONFIG` is deprecated, so the example files show the
  * per-plugin `PLATYPUS_PLUGIN_CONFIG_<NAME>` form instead.
  */
 const VARS_WITHOUT_ENV_EXAMPLE_ENTRY = new Set([
   "ALLOWED_DEV_ORIGINS",
-  "NEXT_PUBLIC_APP_VERSION",
   "NODE_ENV",
   "PLATYPUS_PLUGIN_CONFIG",
 ]);

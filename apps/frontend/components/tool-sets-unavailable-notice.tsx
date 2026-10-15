@@ -1,6 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { type ToolSetsFailureReason } from "@/lib/tool-sets-request";
+import type { ToolSetsFailureReason } from "@/lib/tool-sets-request";
 
 /**
  * Shown in place of the Tools card when the tool sets couldn't be read.

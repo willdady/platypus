@@ -79,13 +79,13 @@ const pages = [
 
 describe("Agent pages tool set loading", () => {
   beforeEach(() => {
-    process.env.INTERNAL_BACKEND_URL = "http://backend:4000";
+    vi.stubEnv("INTERNAL_BACKEND_URL", "http://backend:4000");
     formProps.current = null;
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.INTERNAL_BACKEND_URL;
+    vi.unstubAllEnvs();
   });
 
   for (const page of pages) {
