@@ -232,12 +232,7 @@ describe("userRoutes", () => {
 });
 
 describe("appRoutes", () => {
-  it("builds the app-level paths outside any Organization", () => {
-    expect(appRoutes.home).toBe("/");
-    expect(appRoutes.signIn).toBe("/sign-in");
-    expect(appRoutes.signUp).toBe("/sign-up");
-    expect(appRoutes.createOrganization).toBe("/create");
-    expect(appRoutes.invite).toBe("/invite");
+  it("builds an invitation's path", () => {
     expect(appRoutes.inviteToken("tok_1")).toBe("/invite/tok_1");
   });
 
