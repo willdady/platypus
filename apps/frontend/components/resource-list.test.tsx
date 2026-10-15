@@ -12,6 +12,7 @@ import {
   renderList,
   stubAcceptedSave,
   stubRejectedSave,
+  stubSaveSequence,
   mutate,
   menuItemLabels,
   confirmDialog,
@@ -319,6 +320,107 @@ describe.each(RESOURCES)(
         expect.objectContaining({ method: "DELETE" }),
       );
       expect(screen.queryByText(dialogTitle)).not.toBeInTheDocument();
+    });
+
+    describe("on the Organization surface", () => {
+      /** Renders the Organization surface with `rows` in the list. */
+      const renderOrgRows = (rows: ScopedResource[], menuItem?: string) => {
+        mockScopedSWR({ [`/${entity}`]: rows });
+        return renderList(<List orgId="org1" />, menuItem);
+      };
+
+      it("gives an Org Admin's row Edit, Manage attachments, then Delete", () => {
+        authState.actor = "org-admin";
+        renderOrgRows([item]);
+        openDropdownMenu();
+
+        expect(menuItemLabels()).toEqual([
+          "Edit",
+          "Manage attachments",
+          "Delete",
+        ]);
+      });
+
+      it("attaches the row to a Workspace from Manage attachments", async () => {
+        authState.actor = "org-admin";
+        const fetchMock = stubAcceptedSave();
+        mockScopedSWR({
+          "/attachments?": [],
+          "/workspaces": [{ id: "ws1", name: "Engineering" }],
+        });
+        renderOrgRows([item], "Manage attachments");
+        fireEvent.click(await screen.findByText("Engineering"));
+
+        await waitFor(() =>
+          expect(fetchMock).toHaveBeenCalledWith(
+            "http://test/organizations/org1/attachments",
+            expect.objectContaining({
+              method: "POST",
+              body: JSON.stringify({
+                resourceType,
+                resourceId: item.id,
+                workspaceId: "ws1",
+              }),
+            }),
+          ),
+        );
+      });
+
+      it("shows an Org Admin how many Workspaces each row is shared with", () => {
+        authState.actor = "org-admin";
+        mockScopedSWR({
+          "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
+        });
+        renderOrgRows([item]);
+
+        expect(screen.getByText("1 workspace")).toBeInTheDocument();
+      });
+
+      it("shows a non-admin neither the badge nor Manage attachments", () => {
+        authState.actor = "member";
+        mockScopedSWR({
+          "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
+        });
+        renderOrgRows([item]);
+
+        expect(screen.queryByText("1 workspace")).not.toBeInTheDocument();
+        openDropdownMenu();
+        expect(menuItemLabels()).toEqual(["Edit", "Delete"]);
+      });
+
+      it("blocks deleting a row still attached to a Workspace, sending no DELETE", async () => {
+        authState.actor = "org-admin";
+        const fetchMock = stubAcceptedSave({ results: [{ id: "att1" }] });
+        renderOrgRows([item], "Delete");
+
+        expect(
+          await screen.findByText(/is shared with 1 workspace\./),
+        ).toBeInTheDocument();
+        expect(fetchMock).toHaveBeenCalledWith(
+          `http://test/organizations/org1/attachments?resourceType=${resourceType}&resourceId=${item.id}`,
+          expect.objectContaining({ credentials: "include" }),
+        );
+        expect(fetchMock).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ method: "DELETE" }),
+        );
+      });
+
+      it("deletes an unattached row after confirmation", async () => {
+        authState.actor = "org-admin";
+        const fetchMock = stubSaveSequence(
+          { status: 200, body: { results: [] } },
+          { status: 200, body: {} },
+        );
+        renderOrgRows([item], "Delete");
+        await confirmDialog("Delete");
+
+        await waitFor(() => expect(mutate).toHaveBeenCalled());
+        expect(fetchMock).toHaveBeenCalledWith(
+          `http://test/organizations/org1/${entity}/${item.id}`,
+          expect.objectContaining({ method: "DELETE" }),
+        );
+      });
     });
 
     it("surfaces the backend's reason and keeps the dialog open when detach is refused", async () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   EllipsisVertical,
@@ -18,24 +19,35 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+/** An item-specific ⋮ entry, such as Manage attachments. */
+export interface RowAction {
+  readonly label: string;
+  readonly icon: ReactNode;
+  readonly onSelect: () => void;
+}
+
 /**
  * A settings-list card's ⋮ menu, in the `card-conventions` order: Edit,
- * Enable/Disable, separator, then Delete — or Detach, for a Shared row. Each
- * item is left out when its prop is; with none, there is no ⋮ at all.
+ * item-specific actions, Enable/Disable, separator, then Delete — or Detach,
+ * for a Shared row. Each item is left out when its prop is; with none, there
+ * is no ⋮ at all.
  */
 export const RowActionsMenu = ({
   name,
   edit,
+  actions = [],
   toggle,
   remove,
 }: {
   /** The row's name, for the ⋮ button's accessible name. */
   name: string;
   edit?: { href: string; label?: string };
+  /** Item-specific entries, shown in order between Edit and Enable/Disable. */
+  actions?: readonly RowAction[];
   toggle?: { enabled: boolean; onSelect: () => void; disabled?: boolean };
   remove?: { kind: "delete" | "detach"; onSelect: () => void };
 }) => {
-  if (!edit && !toggle && !remove) return null;
+  if (!edit && !actions.length && !toggle && !remove) return null;
 
   return (
     <DropdownMenu>
@@ -59,6 +71,15 @@ export const RowActionsMenu = ({
             </Link>
           </DropdownMenuItem>
         )}
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            className="cursor-pointer"
+            onSelect={action.onSelect}
+          >
+            {action.icon} {action.label}
+          </DropdownMenuItem>
+        ))}
         {toggle && (
           <DropdownMenuItem
             className="cursor-pointer"
@@ -78,7 +99,9 @@ export const RowActionsMenu = ({
         )}
         {remove && (
           <>
-            {(edit || toggle) && <DropdownMenuSeparator />}
+            {(edit || actions.length > 0 || toggle) && (
+              <DropdownMenuSeparator />
+            )}
             <DropdownMenuItem
               className={
                 remove.kind === "delete"
