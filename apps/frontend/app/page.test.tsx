@@ -54,7 +54,7 @@ describe("Home", () => {
     expectThemedSpinner();
   });
 
-  it("titles the empty state per ui-conventions when the user has no organizations", () => {
+  it("says there are no organizations yet when the user has none", () => {
     render(<Home />);
     expect(screen.getByText("No organizations yet")).toBeInTheDocument();
   });

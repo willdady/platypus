@@ -58,7 +58,7 @@ describe.each([
 });
 
 describe("OrgHome empty state", () => {
-  it("titles the empty state per ui-conventions", () => {
+  it("says there are no workspaces yet when the organization has none", () => {
     auth.actor = "org-admin";
     auth.orgMembership = { role: "admin" };
     reads.workspaces = [];

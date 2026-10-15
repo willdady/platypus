@@ -59,6 +59,7 @@ const ContextsList = ({ className }: { className?: string }) => {
       <EmptyCard
         icon={<Folder />}
         title="No workspace contexts yet"
+        description="Add a context to tell the AI about you within one workspace, on top of your global context."
         action={
           <Button asChild>
             <Link href={userRoutes.createContext}>
