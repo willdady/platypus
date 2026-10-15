@@ -16,11 +16,20 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { cn } from "@/lib/utils";
 import { readableTextColor } from "@/lib/color";
 
-/** Words for a due-date status, so it isn't carried by colour alone. */
-const DUE_DATE_PREFIX = {
-  overdue: "Overdue: due",
-  "due-soon": "Due soon:",
-  normal: "Due",
+/**
+ * How each due-date status reads: its colour, and the words that carry it for
+ * anyone who can't tell the colours apart.
+ */
+const DUE_DATE_STATUS = {
+  overdue: {
+    prefix: "Overdue: due",
+    className: "text-red-600 dark:text-red-400",
+  },
+  "due-soon": {
+    prefix: "Due soon:",
+    className: "text-amber-700 dark:text-amber-400",
+  },
+  normal: { prefix: "Due", className: "text-muted-foreground" },
 } as const;
 
 function getDueDateStatus(dueDate: string): "overdue" | "due-soon" | "normal" {
@@ -111,7 +120,8 @@ const KanbanCardComponentInner = function KanbanCardComponent({
       // keyboard sensor, which picks the card up to move it.
       onKeyDown={(event) => {
         if (draggable) listeners?.onKeyDown?.(event);
-        if (event.key === "Enter" && !event.repeat) {
+        // Mid-drag, Enter drops the card; it must not open it as well.
+        if (event.key === "Enter" && !event.repeat && !isDragging) {
           event.preventDefault();
           onCardClick(card);
         }
@@ -145,17 +155,14 @@ const KanbanCardComponentInner = function KanbanCardComponent({
             <div
               className={cn(
                 "flex items-center gap-1 text-xs",
-                dueDateStatus === "overdue" && "text-red-600 dark:text-red-400",
-                dueDateStatus === "due-soon" &&
-                  "text-amber-700 dark:text-amber-400",
-                dueDateStatus === "normal" && "text-muted-foreground",
+                dueDateStatus && DUE_DATE_STATUS[dueDateStatus].className,
               )}
             >
               <Calendar className="size-3" aria-hidden="true" />
               <span>
                 {dueDateStatus && (
                   <span className="sr-only">
-                    {DUE_DATE_PREFIX[dueDateStatus]}{" "}
+                    {DUE_DATE_STATUS[dueDateStatus].prefix}{" "}
                   </span>
                 )}
                 {formatDueDate(dueDateStr)}

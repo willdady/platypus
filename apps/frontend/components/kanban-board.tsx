@@ -1,5 +1,6 @@
 "use client";
 
+import { readableTextColor } from "@/lib/color";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useMutation } from "@/hooks/use-mutation";
@@ -1051,7 +1052,10 @@ export function KanbanBoard({
                             "cursor-pointer transition-opacity border-0",
                             !isActive && "opacity-40",
                           )}
-                          style={{ backgroundColor: label.color }}
+                          style={{
+                            backgroundColor: label.color,
+                            color: readableTextColor(label.color),
+                          }}
                           onClick={() =>
                             setNewCardLabelIds((prev) =>
                               prev.includes(label.id)

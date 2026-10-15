@@ -1,5 +1,6 @@
 "use client";
 
+import { readableTextColor } from "@/lib/color";
 import { useState, type FocusEventHandler, type ReactNode } from "react";
 import { useMutation } from "@/hooks/use-mutation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -626,7 +627,10 @@ function CardMetadataSection({
                     "cursor-pointer transition-opacity border-0",
                     !isActive && "opacity-40",
                   )}
-                  style={{ backgroundColor: label.color }}
+                  style={{
+                    backgroundColor: label.color,
+                    color: readableTextColor(label.color),
+                  }}
                   onClick={() => onToggleLabel(label.id)}
                 >
                   {label.name}
