@@ -114,6 +114,7 @@ import { KanbanBoard } from "./kanban-board";
 import {
   selectOption,
   stubAcceptedSave,
+  stubPendingSave,
   stubRejectedSave,
   stubSaveSequence,
 } from "@/lib/test-utils";
@@ -182,6 +183,17 @@ function renderBoard() {
   return render(
     <KanbanBoard boardId="board-1" orgId="org1" workspaceId="ws1" />,
   );
+}
+
+function openColumnMenuItem(columnName: string, itemText: string) {
+  const columnContainer = screen.getByText(columnName).closest(".w-80")!;
+  const trigger = columnContainer.querySelector(
+    'button[aria-haspopup="menu"]',
+  )!;
+  fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
+  fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
+  fireEvent.click(trigger);
+  return screen.findByText(itemText).then((item) => fireEvent.click(item));
 }
 
 // --- Tests -------------------------------------------------------------------
@@ -445,17 +457,6 @@ describe("KanbanBoard transport", () => {
       await waitFor(() => expect(columnOrder()).toEqual(["To Do", "Done"]));
     });
   });
-
-  function openColumnMenuItem(columnName: string, itemText: string) {
-    const columnContainer = screen.getByText(columnName).closest(".w-80")!;
-    const trigger = columnContainer.querySelector(
-      'button[aria-haspopup="menu"]',
-    )!;
-    fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
-    fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
-    fireEvent.click(trigger);
-    return screen.findByText(itemText).then((item) => fireEvent.click(item));
-  }
 
   describe("card drag", () => {
     beforeEach(() => {
@@ -785,6 +786,127 @@ describe("KanbanBoard transport", () => {
       });
     });
   });
+});
+
+describe("KanbanBoard double submit", () => {
+  beforeEach(() => {
+    toastError.mockReset();
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }) as unknown as typeof window.matchMedia;
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.setPointerCapture = vi.fn();
+    boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  async function openPopoverConfirm(triggerName: string) {
+    const trigger = await screen.findByRole("button", { name: triggerName });
+    fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
+    fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
+    fireEvent.click(trigger);
+    const confirms = await screen.findAllByRole("button", {
+      name: triggerName,
+    });
+    return confirms[confirms.length - 1];
+  }
+
+  /** Each gesture opens its dialog and returns the button that submits it. */
+  const SUBMITS: {
+    name: string;
+    /** A column holding cards can't be deleted, so that flow starts empty. */
+    emptyColumn?: boolean;
+    open: () => Promise<HTMLElement>;
+    pendingLabel: string;
+  }[] = [
+    {
+      name: "column create",
+      open: async () => {
+        fireEvent.click(screen.getByRole("button", { name: /add column/i }));
+        fireEvent.change(screen.getByPlaceholderText("Enter column name"), {
+          target: { value: "In Review" },
+        });
+        return screen.getByRole("button", { name: "Add column" });
+      },
+      pendingLabel: "Adding...",
+    },
+    {
+      name: "card create",
+      open: async () => {
+        fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+        fireEvent.change(screen.getByPlaceholderText("Enter card title"), {
+          target: { value: "New task" },
+        });
+        return screen.getByRole("button", { name: "Add card" });
+      },
+      pendingLabel: "Adding...",
+    },
+    {
+      name: "column edit",
+      open: async () => {
+        await openColumnMenuItem("To Do", "Edit");
+        fireEvent.change(
+          await screen.findByPlaceholderText("Enter column name"),
+          { target: { value: "Doing" } },
+        );
+        return screen.getByRole("button", { name: "Save" });
+      },
+      pendingLabel: "Saving...",
+    },
+    {
+      name: "column delete",
+      emptyColumn: true,
+      open: async () => {
+        await openColumnMenuItem("To Do", "Delete");
+        return screen.findByRole("button", { name: "Delete" });
+      },
+      pendingLabel: "Deleting...",
+    },
+    {
+      name: "card save",
+      open: async () => {
+        fireEvent.click(screen.getByText("A card"));
+        return screen.findByRole("button", { name: "Save" });
+      },
+      pendingLabel: "Saving...",
+    },
+    {
+      name: "card delete",
+      open: async () => {
+        fireEvent.click(screen.getByText("A card"));
+        return openPopoverConfirm("Delete");
+      },
+      pendingLabel: "Deleting...",
+    },
+  ];
+
+  it.each(SUBMITS)(
+    "sends one $name request for a double click, disabled and labelled while pending",
+    async ({ open, pendingLabel, emptyColumn }) => {
+      const { fetchMock, resolve } = stubPendingSave({ id: "x" });
+      if (emptyColumn) boardState = makeBoardState([makeColumn()]);
+
+      renderBoard();
+      const submit = await open();
+      fireEvent.click(submit);
+      fireEvent.click(submit);
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      expect(submit).toBeDisabled();
+      expect(submit).toHaveTextContent(pendingLabel);
+
+      await act(async () => resolve());
+      expect(fetchMock).toHaveBeenCalledOnce();
+    },
+  );
 });
 
 describe("KanbanBoard load states", () => {

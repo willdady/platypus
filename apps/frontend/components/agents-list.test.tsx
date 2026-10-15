@@ -28,7 +28,7 @@ vi.mock("next/navigation", () => navigationMock);
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
-import { openDropdownMenu } from "@/lib/test-utils";
+import { openDropdownMenu, stubPendingSave } from "@/lib/test-utils";
 import { AgentsList } from "./agents-list";
 
 // --- Fixtures ----------------------------------------------------------------
@@ -279,6 +279,22 @@ describe("AgentsList pinning", () => {
       "http://test/organizations/org1/workspaces/ws1/agents/a2/pin",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("sends one pin while the first is in flight, however often it is picked", async () => {
+    const { fetchMock, resolve } = stubPendingSave();
+
+    renderAgents([workspaceAgent], "Pin");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+
+    openDropdownMenu();
+    const pending = screen.getByRole("menuitem", { name: /Pinning/ });
+    expect(pending).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(pending);
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    resolve();
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
   });
 
   it("surfaces the backend's reason when a pin is refused", async () => {

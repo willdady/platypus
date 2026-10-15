@@ -17,6 +17,7 @@ import {
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { useState } from "react";
+import { useMutation } from "@/hooks/use-mutation";
 
 const UserInvitationsPage = () => {
   const backendUrl = useBackendUrl();
@@ -29,7 +30,7 @@ const UserInvitationsPage = () => {
   );
   const [isDeclining, setIsDeclining] = useState(false);
 
-  const handleAccept = async (invitationId: string) => {
+  const accept = useMutation(async (invitationId: string) => {
     const result = await writeAt(
       joinUrl(backendUrl, `/users/me/invitations/${invitationId}/accept`),
       { method: "POST" },
@@ -40,7 +41,7 @@ const UserInvitationsPage = () => {
     } else {
       toast.error(result.message);
     }
-  };
+  });
 
   const handleDecline = async () => {
     if (!invitationToDecline) return;
@@ -118,9 +119,11 @@ const UserInvitationsPage = () => {
                 <Button
                   variant="default"
                   className="flex-1 md:flex-none cursor-pointer"
-                  onClick={() => handleAccept(invite.id)}
+                  onClick={() => void accept.run(invite.id)}
+                  disabled={accept.pending}
                 >
-                  <Check className="h-4 w-4" /> Accept
+                  <Check className="h-4 w-4" />{" "}
+                  {accept.pending ? "Accepting..." : "Accept"}
                 </Button>
                 <Button
                   variant="outline"

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useMutation } from "@/hooks/use-mutation";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   DndContext,
@@ -630,6 +631,21 @@ export function KanbanBoard({
     mutate,
   ]);
 
+  // Each dialog's write runs once per submit: a double click or Enter held
+  // down would otherwise create duplicate columns or cards.
+  const addColumn = useMutation(confirmAddColumn);
+  const addCard = useMutation(confirmAddCard);
+  const editColumn = useMutation(confirmEditColumn);
+  const deleteColumn = useMutation(confirmDeleteColumn);
+
+  /** Submits a dialog's form through its guarded write; Enter lands here too. */
+  const submitWith =
+    (mutation: { run: () => Promise<unknown> }) =>
+    (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      void mutation.run();
+    };
+
   const handleMoveColumn = useCallback(
     async (columnId: string, direction: "left" | "right") => {
       const current = columnsRef.current;
@@ -951,27 +967,31 @@ export function KanbanBoard({
           <DialogHeader>
             <DialogTitle>Add Column</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="columnName">Column Name</Label>
-            <Input
-              id="columnName"
-              value={newColumnName}
-              onChange={(e) => setNewColumnName(e.target.value)}
-              placeholder="Enter column name"
-              onKeyDown={(e) => e.key === "Enter" && confirmAddColumn()}
-              className="mt-2"
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddColumnDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={confirmAddColumn}>Add column</Button>
-          </DialogFooter>
+          <form onSubmit={submitWith(addColumn)}>
+            <div className="py-4">
+              <Label htmlFor="columnName">Column Name</Label>
+              <Input
+                id="columnName"
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="Enter column name"
+                className="mt-2"
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddColumnDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={addColumn.pending}>
+                {addColumn.pending ? "Adding..." : "Add column"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -981,58 +1001,62 @@ export function KanbanBoard({
           <DialogHeader>
             <DialogTitle>Add Card</DialogTitle>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div>
-              <Label htmlFor="cardTitle">Card Title</Label>
-              <Input
-                id="cardTitle"
-                value={newCardTitle}
-                onChange={(e) => setNewCardTitle(e.target.value)}
-                placeholder="Enter card title"
-                onKeyDown={(e) => e.key === "Enter" && confirmAddCard()}
-                className="mt-2"
-                autoFocus
-              />
-            </div>
-            {labels.length > 0 && (
+          <form onSubmit={submitWith(addCard)}>
+            <div className="py-4 space-y-4">
               <div>
-                <Label>Labels</Label>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {labels.map((label) => {
-                    const isActive = newCardLabelIds.includes(label.id);
-                    return (
-                      <Badge
-                        key={label.id}
-                        className={cn(
-                          "cursor-pointer transition-opacity border-0",
-                          !isActive && "opacity-40",
-                        )}
-                        style={{ backgroundColor: label.color }}
-                        onClick={() =>
-                          setNewCardLabelIds((prev) =>
-                            prev.includes(label.id)
-                              ? prev.filter((id) => id !== label.id)
-                              : [...prev, label.id],
-                          )
-                        }
-                      >
-                        {label.name}
-                      </Badge>
-                    );
-                  })}
-                </div>
+                <Label htmlFor="cardTitle">Card Title</Label>
+                <Input
+                  id="cardTitle"
+                  value={newCardTitle}
+                  onChange={(e) => setNewCardTitle(e.target.value)}
+                  placeholder="Enter card title"
+                  className="mt-2"
+                  autoFocus
+                />
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddCardDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={confirmAddCard}>Add card</Button>
-          </DialogFooter>
+              {labels.length > 0 && (
+                <div>
+                  <Label>Labels</Label>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {labels.map((label) => {
+                      const isActive = newCardLabelIds.includes(label.id);
+                      return (
+                        <Badge
+                          key={label.id}
+                          className={cn(
+                            "cursor-pointer transition-opacity border-0",
+                            !isActive && "opacity-40",
+                          )}
+                          style={{ backgroundColor: label.color }}
+                          onClick={() =>
+                            setNewCardLabelIds((prev) =>
+                              prev.includes(label.id)
+                                ? prev.filter((id) => id !== label.id)
+                                : [...prev, label.id],
+                            )
+                          }
+                        >
+                          {label.name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddCardDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={addCard.pending}>
+                {addCard.pending ? "Adding..." : "Add card"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1045,26 +1069,30 @@ export function KanbanBoard({
           <DialogHeader>
             <DialogTitle>Edit Column</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="editColumnName">Column Name</Label>
-            <Input
-              id="editColumnName"
-              value={editColumnName}
-              onChange={(e) => setEditColumnName(e.target.value)}
-              placeholder="Enter column name"
-              onKeyDown={(e) => e.key === "Enter" && confirmEditColumn()}
-              className="mt-2"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setEditColumnDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={confirmEditColumn}>Save</Button>
-          </DialogFooter>
+          <form onSubmit={submitWith(editColumn)}>
+            <div className="py-4">
+              <Label htmlFor="editColumnName">Column Name</Label>
+              <Input
+                id="editColumnName"
+                value={editColumnName}
+                onChange={(e) => setEditColumnName(e.target.value)}
+                placeholder="Enter column name"
+                className="mt-2"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditColumnDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={editColumn.pending}>
+                {editColumn.pending ? "Saving..." : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1098,8 +1126,12 @@ export function KanbanBoard({
               {deleteColumnHasCards ? "Close" : "Cancel"}
             </Button>
             {!deleteColumnHasCards && (
-              <Button variant="destructive" onClick={confirmDeleteColumn}>
-                Delete
+              <Button
+                variant="destructive"
+                onClick={() => void deleteColumn.run()}
+                disabled={deleteColumn.pending}
+              >
+                {deleteColumn.pending ? "Deleting..." : "Delete"}
               </Button>
             )}
           </DialogFooter>
