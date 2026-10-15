@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useBackendUrl } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
@@ -32,22 +32,43 @@ const notifyOpenerAndClose = (data: Record<string, unknown>): boolean => {
 export const OAuthCallbackHandler = ({
   code,
   state,
+  error: providerError,
+  errorDescription,
 }: {
   code?: string;
   state?: string;
+  /** The provider's `?error=`, sent instead of a code when it refuses. */
+  error?: string;
+  errorDescription?: string;
 }) => {
   const backendUrl = useBackendUrl();
-  // code/state come from the URL and are fixed for the lifetime of this view,
-  // so the missing-parameter state is derived at init rather than set in an
-  // effect.
-  const missingParams = !code || !state;
-  const [error, setError] = useState<string | null>(
-    missingParams ? "Missing authorization code or state parameter." : null,
-  );
-  const [isProcessing, setIsProcessing] = useState(!missingParams);
+  // The URL params are fixed for the lifetime of this view, so an error they
+  // already carry is derived at init rather than set in an effect. A provider
+  // refusal names its own reason; it is not a missing code.
+  const providerMessage = providerError
+    ? `Authorization was refused: ${errorDescription || providerError}`
+    : null;
+  const initialError =
+    providerMessage ??
+    (!code || !state ? "Missing authorization code or state parameter." : null);
+  const [error, setError] = useState<string | null>(initialError);
+  const [isProcessing, setIsProcessing] = useState(!initialError);
   const router = useRouter();
+  // The code is single-use: a second POST (StrictMode's double effect, or a
+  // `backendUrl` change) fails, and its failure could overwrite the success.
+  const startedRef = useRef(false);
 
   useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    if (providerMessage) {
+      notifyOpenerAndClose({
+        type: OAUTH_MCP_ERROR_EVENT,
+        message: providerMessage,
+      });
+      return;
+    }
     if (!code || !state) {
       return;
     }
@@ -98,7 +119,7 @@ export const OAuthCallbackHandler = ({
     };
 
     exchangeCode();
-  }, [code, state, backendUrl]);
+  }, [code, state, backendUrl, providerMessage]);
 
   if (isProcessing) {
     return (

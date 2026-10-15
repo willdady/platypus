@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useBackendUrl } from "@/components/auth-provider";
 import {
+  attachmentsEntity,
   errorMessage,
   scopedPath,
+  scopedUrl,
   writeEntity,
   type Scope,
 } from "@/lib/api-write";
-import { joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { toast } from "sonner";
 import { useDetachDialog } from "@/hooks/use-detach-dialog";
 
 /** The minimum a row needs to appear in one of the Shared-resource dialogs. */
@@ -190,8 +193,9 @@ export interface DeleteGuard<T> {
 /**
  * A Shared resource can't be deleted while attached (ADR-0007). Check the live
  * attachment count first so the Organization surface explains the blocker up
- * front instead of offering a Delete button that is guaranteed to fail. If the
- * check itself fails we fall through — the backend still guards with a 409.
+ * front instead of offering a Delete button that is guaranteed to fail. A check
+ * that fails says nothing about the attachments, so it is reported rather than
+ * read as "none attached" and handed to a delete the backend would refuse.
  */
 export function useSharedDeleteGuard<T extends NamedResource>({
   resourceType,
@@ -209,24 +213,22 @@ export function useSharedDeleteGuard<T extends NamedResource>({
   );
 
   const request = async (item: T) => {
-    if (backendUrl) {
-      try {
-        const res = await fetch(
-          joinUrl(
-            backendUrl,
-            `${scopedPath("attachments", scope)}?resourceType=${resourceType}&resourceId=${item.id}`,
-          ),
-          { credentials: "include" },
-        );
-        const info = await res.json().catch(() => ({ results: [] }));
-        const count = (info.results ?? []).length;
-        if (count > 0) {
-          setBlocked({ item, count });
-          return;
-        }
-      } catch {
-        // Fall through to the delete flow; the backend still guards it.
-      }
+    if (!backendUrl) return;
+    let count: number;
+    try {
+      const info: { results?: unknown[] } = await fetcher(
+        scopedUrl(backendUrl, attachmentsEntity(resourceType, item.id), scope),
+      );
+      count = (info.results ?? []).length;
+    } catch {
+      toast.error(
+        `Couldn't check where "${item.name}" is attached. Try again.`,
+      );
+      return;
+    }
+    if (count > 0) {
+      setBlocked({ item, count });
+      return;
     }
     onAllowed(item);
   };

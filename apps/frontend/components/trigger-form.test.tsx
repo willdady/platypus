@@ -371,6 +371,43 @@ describe("TriggerForm — record revalidation", () => {
   });
 });
 
+describe("TriggerForm — default agent", () => {
+  const twoAgents = [
+    { id: "agent-1", name: "Agent One" },
+    { id: "agent-2", name: "Agent Two" },
+  ];
+
+  it("keeps the picked agent when the agent list revalidates", async () => {
+    setDataFor("/agents", { results: twoAgents });
+    const { rerender } = render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+
+    await selectOption("Agent One", "Agent Two");
+    setDataFor("/agents", { results: twoAgents.map((a) => ({ ...a })) });
+    rerender(<TriggerForm orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("Agent Two")).toBeInTheDocument();
+    expect(screen.queryByText("Agent One")).toBeNull();
+  });
+
+  it("saves the first agent when the user picks none", async () => {
+    const fetchMock = stubAcceptedSave({ id: "t1" });
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Nightly" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do it" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedBody(fetchMock).agentId).toBe("agent-1");
+  });
+});
+
 describe("TriggerForm loading gate", () => {
   it("holds the form back until the boards land, so a saved filter isn't blank", () => {
     setLoading("/boards");

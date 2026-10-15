@@ -16,13 +16,30 @@ import type {
 // --- Module mocks ------------------------------------------------------------
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
-vi.mock("next/navigation", () => {
-  // Next hands back stable instances between renders; the board's memoized
-  // children rely on that, so the mock must too.
-  const searchParams = new URLSearchParams();
+vi.mock("next/navigation", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  // Next keeps `useSearchParams` in step with `history.replaceState`; the mock
+  // does the same off jsdom's location. Next also hands back stable instances
+  // between renders, which the board's memoized children rely on.
+  const listeners = new Set<() => void>();
+  const nativeReplaceState = window.history.replaceState.bind(window.history);
+  window.history.replaceState = (...args) => {
+    nativeReplaceState(...args);
+    listeners.forEach((listener) => listener());
+  };
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
   const router = { replace, push: vi.fn() };
   return {
-    useSearchParams: () => searchParams,
+    useSearchParams: () => {
+      const search = React.useSyncExternalStore(
+        subscribe,
+        () => window.location.search,
+      );
+      return React.useMemo(() => new URLSearchParams(search), [search]);
+    },
     useRouter: () => router,
     usePathname: () => "/org1/workspace/ws1/boards/board-1",
   };
@@ -197,6 +214,10 @@ function openColumnMenuItem(columnName: string, itemText: string) {
 }
 
 // --- Tests -------------------------------------------------------------------
+
+// The open card lives in the URL, so a dialog a test leaves open must not
+// carry into the next one.
+afterEach(() => window.history.replaceState(null, "", "/"));
 
 describe("KanbanBoard transport", () => {
   beforeEach(() => {
@@ -785,6 +806,71 @@ describe("KanbanBoard transport", () => {
         ).toBeInTheDocument();
       });
     });
+  });
+});
+
+describe("KanbanBoard open card", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/org1/workspace/ws1/boards/board-1");
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }) as unknown as typeof window.matchMedia;
+    boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  const dialog = () => screen.queryByRole("dialog");
+
+  it("names the open card in the URL, and clears it on close", async () => {
+    renderBoard();
+
+    fireEvent.click(screen.getByText("A card"));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get("cardId")).toBe(
+      "card-1",
+    );
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(dialog()).not.toBeInTheDocument());
+    expect(window.location.search).toBe("");
+  });
+
+  it("opens the card a ?cardId link names", async () => {
+    window.history.replaceState(null, "", "?cardId=card-1");
+    renderBoard();
+
+    const open = await screen.findByRole("dialog");
+    expect(within(open).getByText("A card")).toBeInTheDocument();
+  });
+
+  it("drops a ?cardId naming a card the board doesn't have", async () => {
+    window.history.replaceState(null, "", "?cardId=gone");
+    renderBoard();
+
+    await waitFor(() => expect(window.location.search).toBe(""));
+    expect(dialog()).not.toBeInTheDocument();
+  });
+
+  it("shows the open card as the latest poll has it", async () => {
+    const { rerender } = renderBoard();
+    fireEvent.click(screen.getByText("A card"));
+    await screen.findByRole("dialog");
+
+    // A poll lands with the card renamed elsewhere.
+    boardState = makeBoardState([
+      makeColumn({ id: "col-1" }, [
+        makeCard({ title: "Renamed", updatedAt: new Date("2026-01-02") }),
+      ]),
+    ]);
+    rerender(<KanbanBoard boardId="board-1" orgId="org1" workspaceId="ws1" />);
+
+    expect(
+      within(screen.getByRole("dialog")).getByText("Renamed"),
+    ).toBeInTheDocument();
   });
 });
 

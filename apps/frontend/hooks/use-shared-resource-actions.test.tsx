@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { jsonResponse, stubAcceptedSave } from "@/lib/test-utils";
+import {
+  jsonResponse,
+  stubAcceptedSave,
+  stubRejectedSave,
+  toastError,
+  toastMock,
+} from "@/lib/test-utils";
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
 }));
+vi.mock("sonner", () => toastMock);
 
 import {
   usePromoteShared,
@@ -22,6 +29,7 @@ const scope = { orgId: "org1", workspaceId: "ws1" };
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  toastError.mockClear();
 });
 
 describe("usePromoteShared", () => {
@@ -99,17 +107,47 @@ describe("useSharedDeleteGuard", () => {
     return { ...view, onAllowed };
   };
 
-  // The backend still refuses a delete of an attached resource with a 409, so
-  // a failed check must not strand the user without a Delete at all.
-  it("hands the row to the delete flow when the attachment check fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("down")));
+  it("reads the resource's attachment list", async () => {
+    const fetchMock = stubAcceptedSave({ results: [] });
     const { result, onAllowed } = renderGuard();
 
     await act(async () => result.current.request(skill));
 
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/attachments?resourceType=skill&resourceId=s1",
+      expect.objectContaining({ credentials: "include" }),
+    );
     expect(onAllowed).toHaveBeenCalledWith(skill);
-    expect(result.current.blocked).toBeNull();
   });
+
+  // A refused or failed check says nothing about the attachments: reading it
+  // as "none" would go to a delete the backend then refuses.
+  it.each([
+    ["is refused", () => stubRejectedSave("Forbidden", 403)],
+    ["errors", () => stubRejectedSave("Internal error", 500)],
+    [
+      "can't reach the backend",
+      () =>
+        vi.stubGlobal(
+          "fetch",
+          vi.fn().mockRejectedValue(new TypeError("down")),
+        ),
+    ],
+  ])(
+    "says so, rather than offering the delete, when the check %s",
+    async (_label, stub) => {
+      stub();
+      const { result, onAllowed } = renderGuard();
+
+      await act(async () => result.current.request(skill));
+
+      expect(onAllowed).not.toHaveBeenCalled();
+      expect(result.current.blocked).toBeNull();
+      expect(toastError).toHaveBeenCalledWith(
+        expect.stringContaining("Couldn't check"),
+      );
+    },
+  );
 
   it("clears a block once dismissed", async () => {
     stubAcceptedSave({ results: [{ id: "att1" }, { id: "att2" }] });

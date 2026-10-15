@@ -319,35 +319,41 @@ const SandboxSettings = ({
   }>({ open: false, kind: null, message: "" });
   const [isForcing, setIsForcing] = useState(false);
 
-  useResetOnChange(data, () => {
+  const seedFrom = (record: Sandbox) => {
     setIsReplacingKey(false);
-    if (data) {
-      const config = (data.config ?? {}) as {
-        networks?: string[];
-        extraHosts?: string[];
-        host?: string;
-        port?: number;
-        user?: string;
-        rootDir?: string;
-        hostKey?: string;
-      };
-      setFormData({
-        ...DEFAULT_FORM,
-        name: data.name,
-        backend: data.backend,
-        adminEnv: recordToRows(data.adminEnv),
-        userEnv: recordToRows(data.userEnv),
-        networks: config.networks ?? [],
-        extraHosts: extraHostsToRows(config.extraHosts),
-        // SSH config. The key and passphrase stay blank: GET strips them, and an
-        // edit that doesn't enter a new key preserves the stored one.
-        sshHost: config.host ?? "",
-        sshPort: config.port ? String(config.port) : DEFAULT_SSH_PORT,
-        sshUser: config.user ?? "",
-        sshRootDir: config.rootDir ?? "",
-        sshHostKey: config.hostKey ?? "",
-      });
-    }
+    const config = (record.config ?? {}) as {
+      networks?: string[];
+      extraHosts?: string[];
+      host?: string;
+      port?: number;
+      user?: string;
+      rootDir?: string;
+      hostKey?: string;
+    };
+    setFormData({
+      ...DEFAULT_FORM,
+      name: record.name,
+      backend: record.backend,
+      adminEnv: recordToRows(record.adminEnv),
+      userEnv: recordToRows(record.userEnv),
+      networks: config.networks ?? [],
+      extraHosts: extraHostsToRows(config.extraHosts),
+      // SSH config. The key and passphrase stay blank: GET strips them, and an
+      // edit that doesn't enter a new key preserves the stored one.
+      sshHost: config.host ?? "",
+      sshPort: config.port ? String(config.port) : DEFAULT_SSH_PORT,
+      sshUser: config.user ?? "",
+      sshRootDir: config.rootDir ?? "",
+      sshHostKey: config.hostKey ?? "",
+    });
+  };
+
+  // Keyed on the id, not the record: SWR hands back a new object on every
+  // revalidation, and re-seeding on that would overwrite the edit in progress.
+  // A save re-seeds explicitly from what it wrote back.
+  useResetOnChange(data ? data.id : data, () => {
+    setIsReplacingKey(false);
+    if (data) seedFrom(data);
   });
 
   // When creating (no existing record), default the backend to the first
@@ -485,7 +491,8 @@ const SandboxSettings = ({
       const result = await performSave();
       // A draft stays put: the wizard moves on once `write` accepts it.
       if (result.ok && !draft) {
-        await mutate();
+        const saved = await mutate();
+        if (saved) seedFrom(saved);
         toast.success("Sandbox configured");
         setIsConfiguring(false);
       } else if (result.forceRetry) {
@@ -559,7 +566,8 @@ const SandboxSettings = ({
       if (forceDialog.kind === "save") {
         const result = await performSave({ force: true });
         if (result.ok) {
-          await mutate();
+          const saved = await mutate();
+          if (saved) seedFrom(saved);
           toast.success("Sandbox configured");
           setIsConfiguring(false);
           setForceDialog({ open: false, kind: null, message: "" });

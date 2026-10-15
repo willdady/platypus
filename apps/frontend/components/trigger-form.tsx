@@ -449,6 +449,10 @@ const TriggerForm = ({
     results: Agent[];
   }>("agents", scope);
   const agents = useMemo(() => agentsData?.results || [], [agentsData]);
+  // A new Trigger runs on the first agent until the user picks another.
+  // Derived rather than written into the form, so a revalidated agent list
+  // can never overwrite the user's pick.
+  const defaultAgentId = triggerId ? "" : (agents[0]?.id ?? "");
 
   const { data: boardsData, isLoading: boardsLoading } = useScopedSWR<{
     results: KanbanBoard[];
@@ -609,7 +613,7 @@ const TriggerForm = ({
     buildPayload: (data): unknown => {
       const commonFields = {
         workspaceId,
-        agentId: data.agentId,
+        agentId: data.agentId || defaultAgentId,
         name: data.name,
         description: data.description || undefined,
         instruction: data.instruction,
@@ -708,17 +712,6 @@ const TriggerForm = ({
       toast.error(message);
       close();
     },
-  });
-
-  // When creating (no existing trigger), default the agent to the first
-  // available one until the user picks another.
-  useResetOnChange(agents, () => {
-    if (!trigger && agents.length > 0) {
-      setFormData((prev) => ({
-        ...prev,
-        agentId: agents[0].id,
-      }));
-    }
   });
 
   const effectiveCronExpression =
@@ -904,7 +897,7 @@ const TriggerForm = ({
               <FormSelectField
                 label="Agent"
                 name="agentId"
-                value={formData.agentId}
+                value={formData.agentId || defaultAgentId}
                 onValueChange={(value) => setField("agentId", value)}
                 disabled={isSubmitting}
                 placeholder="Select an agent"

@@ -10,6 +10,7 @@ import { type Context } from "@platypus/schemas";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Globe, FolderClosed } from "lucide-react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { ContextsList } from "@/components/contexts-list";
 import { ListError } from "@/components/list-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,13 +44,14 @@ const ContextsPage = () => {
   );
   const [isSavingGlobal, setIsSavingGlobal] = useState(false);
 
-  // Sync server-provided global context into editable local state whenever the
-  // fetched data changes, using React's "adjust state during render" pattern.
-  const [prevContexts, setPrevContexts] = useState(contexts);
-  if (contexts !== prevContexts) {
-    setPrevContexts(contexts);
-    setGlobalContextContent(findGlobalContext(contexts)?.content || "");
-  }
+  // Seed the editor from the global context once it is known, and again only
+  // when a different one arrives (the first save creates it). Keyed on the id,
+  // not the list: a revalidation hands back a new array, and re-seeding on that
+  // would overwrite what the user is typing.
+  useResetOnChange(
+    isLoaded ? (findGlobalContext(contexts)?.id ?? null) : undefined,
+    () => setGlobalContextContent(findGlobalContext(contexts)?.content || ""),
+  );
 
   const handleSaveGlobal = async () => {
     if (!isLoaded) return;
