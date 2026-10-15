@@ -260,7 +260,10 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
               <Field data-invalid={!!validationErrors.workspaceId}>
                 <FieldLabel htmlFor="workspace">Workspace</FieldLabel>
                 {workspacesLoadError ? (
-                  <div className="flex items-center gap-3 text-sm text-destructive">
+                  <div
+                    role="alert"
+                    className="flex items-center gap-3 text-sm text-destructive"
+                  >
                     <span>Couldn&apos;t load your workspaces.</span>
                     <Button
                       type="button"

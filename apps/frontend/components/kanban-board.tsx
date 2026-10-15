@@ -787,7 +787,11 @@ export function KanbanBoard({
   // Only a cold failure replaces the board: a failed background poll keeps the
   // last good state on screen rather than swapping a loaded board for an error.
   if (error && !data) {
-    return <div className="p-4 text-destructive">Failed to load board.</div>;
+    return (
+      <div role="alert" className="p-4 text-destructive">
+        Failed to load board.
+      </div>
+    );
   }
   if (!data) {
     return (
