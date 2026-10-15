@@ -211,6 +211,21 @@ const ModelRow = ({
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
+  // The input holds the text as typed, not the parsed list: rendering from the
+  // list would drop a trailing comma the moment it was typed, so a second type
+  // could never be entered. The list stays what is stored. Model rows are keyed
+  // by index, so removing a row shifts this text onto its neighbour; text that
+  // no longer parses to the stored list is stale and gives way to the list.
+  const storedFileTypesText = model.passthroughFileTypes.join(", ");
+  const [fileTypesText, setFileTypesText] = useState(storedFileTypesText);
+  const typedFileTypes = parsePassthroughTypes(fileTypesText);
+  const typedMatchesStored =
+    typedFileTypes.length === model.passthroughFileTypes.length &&
+    typedFileTypes.every((t, i) => t === model.passthroughFileTypes[i]);
+  const fileTypesInputValue = typedMatchesStored
+    ? fileTypesText
+    : storedFileTypesText;
+
   // Shared by the two numeric Advanced fields. An empty (or nonsense) value
   // means "unset, use the default" rather than 0 — sending 0 would truncate
   // every extracted document to nothing (issue #342), and would cap every reply
@@ -377,12 +392,13 @@ const ModelRow = ({
               <Input
                 id={`passthrough-${index}`}
                 placeholder={fileTypesPlaceholder}
-                value={model.passthroughFileTypes.join(", ")}
-                onChange={(e) =>
+                value={fileTypesInputValue}
+                onChange={(e) => {
+                  setFileTypesText(e.target.value);
                   onChange({
                     passthroughFileTypes: parsePassthroughTypes(e.target.value),
-                  })
-                }
+                  });
+                }}
                 disabled={disabled}
               />
             </ModelField>
