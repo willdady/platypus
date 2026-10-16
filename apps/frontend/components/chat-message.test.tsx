@@ -962,7 +962,7 @@ describe("ChatMessage tool duration", () => {
    * figure comes off the message instead — that second carrier is the one that
    * was broken, leaving the duration blank until the chat was re-fetched and
    * then overwritten out of the database by the next turn. Both must read the
-   * same; `lib/tool-duration.test.ts` covers the formatting itself.
+   * same; `lib/tool-duration.node.test.ts` covers the formatting itself.
    */
   const CARRIERS = [
     [

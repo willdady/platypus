@@ -38,7 +38,7 @@ const openCard = () => fireEvent.click(screen.getByRole("button"));
 describe("WebToolCard duration", () => {
   // Persisted, the figure rides on the part; live, the SDK strips the part's
   // metadata mid-turn and it comes off the message instead. Both must read the
-  // same — `lib/tool-duration.test.ts` covers the formatting itself.
+  // same — `lib/tool-duration.node.test.ts` covers the formatting itself.
   it.each([
     [
       "recorded on the part",
