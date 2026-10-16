@@ -49,7 +49,7 @@ afterEach(() => {
 
 describe("OrgInboundTriggerAccess", () => {
   it("lists no workspaces unless Selected workspaces is chosen", () => {
-    mockScopedSWR({ "/inbound-triggers/access": access() });
+    mockScopedSWR({ "/inbound-triggers/access": access() }, { strict: true });
     renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
     expect(screen.getByRole("combobox")).toHaveTextContent("All workspaces");
@@ -58,12 +58,15 @@ describe("OrgInboundTriggerAccess", () => {
   });
 
   it("shows each workspace's switch under Selected workspaces", () => {
-    mockScopedSWR({
-      "/inbound-triggers/access": access({
-        gate: "selected",
-        workspaces: [workspace({ allowed: true })],
-      }),
-    });
+    mockScopedSWR(
+      {
+        "/inbound-triggers/access": access({
+          gate: "selected",
+          workspaces: [workspace({ allowed: true })],
+        }),
+      },
+      { strict: true },
+    );
     renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
     expect(screen.getByText("Allowed workspaces")).toBeInTheDocument();
@@ -73,7 +76,7 @@ describe("OrgInboundTriggerAccess", () => {
 
   it("warns about a workspace with Inbound Triggers that would be cut off, then saves the gate and switches in one call", async () => {
     const fetchMock = stubAcceptedSave(access().data);
-    mockScopedSWR({ "/inbound-triggers/access": access() });
+    mockScopedSWR({ "/inbound-triggers/access": access() }, { strict: true });
     renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
     await selectOption("All workspaces", "Selected workspaces");
@@ -101,7 +104,7 @@ describe("OrgInboundTriggerAccess", () => {
 
   it("leaves the switches alone when saving another setting", async () => {
     const fetchMock = stubAcceptedSave(access().data);
-    mockScopedSWR({ "/inbound-triggers/access": access() });
+    mockScopedSWR({ "/inbound-triggers/access": access() }, { strict: true });
     renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
     await selectOption("All workspaces", "No workspaces");
@@ -128,7 +131,7 @@ describe("OrgA2aAccess", () => {
 
   it("is off, then saves the A2A gate, warning about endpoints it would cut off", async () => {
     const fetchMock = stubAcceptedSave(a2aAccess);
-    mockScopedSWR({ "/a2a/access": { data: a2aAccess } });
+    mockScopedSWR({ "/a2a/access": { data: a2aAccess } }, { strict: true });
     renderList(<OrgA2aAccess orgId="org1" />);
 
     expect(screen.getByRole("combobox")).toHaveTextContent("No workspaces");

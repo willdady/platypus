@@ -42,7 +42,7 @@ afterEach(() => {
 
 describe("OrgInboundTriggersList", () => {
   it("lists each Inbound Trigger with its Workspace, Owner and token standing", () => {
-    mockScopedSWR({ "/inbound-triggers": [row()] });
+    mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
     renderList(<OrgInboundTriggersList orgId="org1" />);
 
     const [, dataRow] = screen.getAllByRole("row");
@@ -55,7 +55,7 @@ describe("OrgInboundTriggersList", () => {
 
   it("revokes the token the row showed through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "Token revoked" });
-    mockScopedSWR({ "/inbound-triggers": [row()] });
+    mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
     renderList(<OrgInboundTriggersList orgId="org1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
@@ -72,7 +72,10 @@ describe("OrgInboundTriggersList", () => {
   });
 
   it("badges only a token that needs attention, not an active one", () => {
-    mockScopedSWR({ "/inbound-triggers": [row({ tokenStatus: "active" })] });
+    mockScopedSWR(
+      { "/inbound-triggers": [row({ tokenStatus: "active" })] },
+      { strict: true },
+    );
     renderList(<OrgInboundTriggersList orgId="org1" />);
 
     expect(
@@ -84,9 +87,14 @@ describe("OrgInboundTriggersList", () => {
   });
 
   it("offers no revoke for a Trigger that has no token", () => {
-    mockScopedSWR({
-      "/inbound-triggers": [row({ tokenStatus: "none", tokenExpiresAt: null })],
-    });
+    mockScopedSWR(
+      {
+        "/inbound-triggers": [
+          row({ tokenStatus: "none", tokenExpiresAt: null }),
+        ],
+      },
+      { strict: true },
+    );
     renderList(<OrgInboundTriggersList orgId="org1" />);
 
     expect(screen.getByRole("button", { name: "Revoke token" })).toBeDisabled();
@@ -94,7 +102,7 @@ describe("OrgInboundTriggersList", () => {
   });
 
   it("says so when no Workspace has one", () => {
-    mockScopedSWR({ "/inbound-triggers": [] });
+    mockScopedSWR({ "/inbound-triggers": [] }, { strict: true });
     renderList(<OrgInboundTriggersList orgId="org1" />);
 
     expect(

@@ -41,7 +41,7 @@ describe("ContextsList", () => {
   };
 
   it("lists each workspace context under its organization", () => {
-    mockScopedSWR({ contexts: [workspaceContext] });
+    mockScopedSWR({ contexts: [workspaceContext] }, { strict: true });
     renderList(<ContextsList />);
 
     expect(screen.getByText("Engineering")).toBeInTheDocument();
@@ -50,16 +50,19 @@ describe("ContextsList", () => {
 
   // A personal context has no workspace, and this list is the workspace one.
   it("leaves out a context that belongs to no workspace", () => {
-    mockScopedSWR({
-      contexts: [{ id: "ctx2", workspaceId: null, workspaceName: null }],
-    });
+    mockScopedSWR(
+      {
+        contexts: [{ id: "ctx2", workspaceId: null, workspaceName: null }],
+      },
+      { strict: true },
+    );
     renderList(<ContextsList />);
 
     expect(screen.getByText("No workspace contexts yet")).toBeInTheDocument();
   });
 
   it("offers the create CTA when there are none", () => {
-    mockScopedSWR({ contexts: [] });
+    mockScopedSWR({ contexts: [] }, { strict: true });
     renderList(<ContextsList />);
 
     expect(screen.getByText("No workspace contexts yet")).toBeInTheDocument();
@@ -69,7 +72,7 @@ describe("ContextsList", () => {
   });
 
   it("holds the row space with skeletons while the read is in flight", () => {
-    mockScopedSWR({ contexts: { isLoading: true } });
+    mockScopedSWR({ contexts: { isLoading: true } }, { strict: true });
     renderList(<ContextsList />);
 
     expect(
@@ -81,7 +84,7 @@ describe("ContextsList", () => {
   });
 
   it("says the read failed rather than rendering nothing", () => {
-    mockScopedSWR({ contexts: { error: new Error("500") } });
+    mockScopedSWR({ contexts: { error: new Error("500") } }, { strict: true });
     renderList(<ContextsList />);
 
     expect(
@@ -98,9 +101,15 @@ describe("WorkspaceList", () => {
     ({ id, name }) as unknown as Workspace;
 
   it("lists the organization's workspaces by name, sorted", () => {
-    mockScopedSWR({
-      workspaces: [workspace("ws2", "Research"), workspace("ws1", "Delivery")],
-    });
+    mockScopedSWR(
+      {
+        workspaces: [
+          workspace("ws2", "Research"),
+          workspace("ws1", "Delivery"),
+        ],
+      },
+      { strict: true },
+    );
     renderList(<WorkspaceList orgId="org1" />);
 
     const names = screen
@@ -116,7 +125,7 @@ describe("WorkspaceList", () => {
   // Empty and loading both render no links, so the pair is what tells them
   // apart: the skeletons are the whole of the loading state.
   it("renders no rows and no skeletons when the organization has none", () => {
-    mockScopedSWR({ workspaces: [] });
+    mockScopedSWR({ workspaces: [] }, { strict: true });
     const { container } = renderList(<WorkspaceList orgId="org1" />);
 
     expect(screen.queryAllByRole("link")).toHaveLength(0);
@@ -126,7 +135,7 @@ describe("WorkspaceList", () => {
   });
 
   it("holds the row space with skeletons while the read is in flight", () => {
-    mockScopedSWR({ workspaces: { isLoading: true } });
+    mockScopedSWR({ workspaces: { isLoading: true } }, { strict: true });
     const { container } = renderList(<WorkspaceList orgId="org1" />);
 
     expect(
@@ -136,7 +145,10 @@ describe("WorkspaceList", () => {
 
   // The org home page waits on this read, so a silent failure left it blank.
   it("says the read failed rather than rendering nothing", () => {
-    mockScopedSWR({ workspaces: { error: new Error("500") } });
+    mockScopedSWR(
+      { workspaces: { error: new Error("500") } },
+      { strict: true },
+    );
     renderList(<WorkspaceList orgId="org1" />);
 
     expect(screen.getByText(/Failed to load workspaces/)).toBeInTheDocument();
@@ -145,19 +157,22 @@ describe("WorkspaceList", () => {
 
 describe("PluginsList", () => {
   it("names each installed plugin", () => {
-    mockScopedSWR({
-      plugins: [
-        {
-          name: "acme-search",
-          version: "1.2.0",
-          contributions: {
-            toolSets: [],
-            sandboxBackends: [],
-            webBackends: ["searx"],
+    mockScopedSWR(
+      {
+        plugins: [
+          {
+            name: "acme-search",
+            version: "1.2.0",
+            contributions: {
+              toolSets: [],
+              sandboxBackends: [],
+              webBackends: ["searx"],
+            },
           },
-        },
-      ],
-    });
+        ],
+      },
+      { strict: true },
+    );
     renderList(<PluginsList orgId="org1" />);
 
     expect(screen.getByText("acme-search")).toBeInTheDocument();
@@ -166,7 +181,7 @@ describe("PluginsList", () => {
   // Plugins are a deploy-time concern, so the empty state has to send the
   // reader to their operator rather than offer an install button.
   it("points an empty deployment at its operator, not an install flow", () => {
-    mockScopedSWR({ plugins: [] });
+    mockScopedSWR({ plugins: [] }, { strict: true });
     renderList(<PluginsList orgId="org1" />);
 
     expect(screen.getByText("No plugins installed")).toBeInTheDocument();
@@ -176,7 +191,7 @@ describe("PluginsList", () => {
   // No key yet (the session still resolving) reports `isLoading: false` with
   // no data — which is not an empty catalog.
   it("holds a placeholder, not the empty state, until the catalog arrives", () => {
-    mockScopedSWR({ plugins: { data: undefined } });
+    mockScopedSWR({ plugins: { data: undefined } }, { strict: true });
     renderList(<PluginsList orgId="org1" />);
 
     expect(screen.getByLabelText("Loading plugins")).toBeInTheDocument();
@@ -184,7 +199,7 @@ describe("PluginsList", () => {
   });
 
   it("distinguishes a failed catalog read from an empty one", () => {
-    mockScopedSWR({ plugins: { error: new Error("500") } });
+    mockScopedSWR({ plugins: { error: new Error("500") } }, { strict: true });
     renderList(<PluginsList orgId="org1" />);
 
     expect(screen.getByText("Couldn't load plugins")).toBeInTheDocument();

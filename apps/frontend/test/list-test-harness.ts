@@ -86,6 +86,7 @@ function buildResponse(read: ListRead): SwrResponse {
 // `data` identity that list effects key off.
 const responsesByUrlFragment = new Map<string, SwrResponse>();
 let fallbackResponse = buildResponse([]);
+let strict = false;
 
 /**
  * Registers each read the list under test makes, keyed by a fragment of the
@@ -100,9 +101,22 @@ let fallbackResponse = buildResponse([]);
  * ```
  *
  * Any read with no match falls back to an empty list, which is what the
- * secondary lookups a list makes (providers, agent associations) want.
+ * secondary lookups a list makes (providers, agent associations) want. That
+ * also lets a mistyped URL render the empty state and pass, so new tests
+ * should pass `{ strict: true }`: an unmatched read then throws, naming its
+ * key, and every read the list makes has to be registered. A `null` key (a
+ * conditional read switched off) is never a miss. `resetListHarness` turns
+ * strict mode off again.
+ *
+ * ```ts
+ * mockScopedSWR({ "/agents": [agent], "/providers": [] }, { strict: true });
+ * ```
  */
-export function mockScopedSWR(reads: Record<string, ListRead>) {
+export function mockScopedSWR(
+  reads: Record<string, ListRead>,
+  options: { strict?: boolean } = {},
+) {
+  if (options.strict) strict = true;
   for (const [fragment, read] of Object.entries(reads)) {
     responsesByUrlFragment.set(fragment, buildResponse(read));
   }
@@ -115,6 +129,13 @@ export const swrMock = {
     for (const [fragment, response] of responsesByUrlFragment) {
       if (key.includes(fragment)) return response;
     }
+    if (strict) {
+      throw new Error(
+        `swrMock (strict): no read registered for "${key}". Registered: ${
+          [...responsesByUrlFragment.keys()].join(", ") || "none"
+        }`,
+      );
+    }
     return fallbackResponse;
   },
   useSWRConfig: () => ({ mutate }),
@@ -126,6 +147,7 @@ export function resetListHarness() {
   mutate.mockReset();
   responsesByUrlFragment.clear();
   fallbackResponse = buildResponse([]);
+  strict = false;
 }
 
 /**

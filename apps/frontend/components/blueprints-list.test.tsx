@@ -33,7 +33,7 @@ const blueprint: Blueprint = {
 } as unknown as Blueprint;
 
 function renderBlueprints(blueprints: Blueprint[], menuItem?: string) {
-  mockScopedSWR({ "/blueprints": blueprints });
+  mockScopedSWR({ "/blueprints": blueprints }, { strict: true });
   return renderList(<BlueprintsList orgId="org1" />, menuItem);
 }
 
@@ -97,14 +97,17 @@ describe("BlueprintsList list states", () => {
   });
 
   it("surfaces a failed read rather than rendering an empty list", () => {
-    mockScopedSWR({ "/blueprints": { error: new Error("500") } });
+    mockScopedSWR(
+      { "/blueprints": { error: new Error("500") } },
+      { strict: true },
+    );
     renderList(<BlueprintsList orgId="org1" />);
 
     expect(screen.getByText(/Failed to load blueprints/)).toBeInTheDocument();
   });
 
   it("holds the grid with a skeleton, not the empty state, while loading", () => {
-    mockScopedSWR({ "/blueprints": { isLoading: true } });
+    mockScopedSWR({ "/blueprints": { isLoading: true } }, { strict: true });
     renderList(<BlueprintsList orgId="org1" />);
 
     expect(

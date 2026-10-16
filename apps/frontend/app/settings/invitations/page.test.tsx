@@ -37,7 +37,7 @@ afterEach(() => {
 describe("UserInvitationsPage accept", () => {
   it("sends one accept for a double click, disabled and labelled while pending", async () => {
     const { fetchMock, resolve } = stubPendingSave();
-    mockScopedSWR({ "/invitations": [invitation] });
+    mockScopedSWR({ "/invitations": [invitation] }, { strict: true });
     renderList(<UserInvitationsPage />);
 
     const accept = screen.getByRole("button", { name: /Accept/ });

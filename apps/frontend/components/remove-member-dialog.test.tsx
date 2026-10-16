@@ -77,7 +77,10 @@ beforeEach(() => {
 
 describe("RemoveMemberDialog", () => {
   it("is a plain confirmation for a member who owns no Workspaces, and never claims to delete any", async () => {
-    mockScopedSWR({ "/workspaces": [workspace("ws-x", "Nina's", "u-new")] });
+    mockScopedSWR(
+      { "/workspaces": [workspace("ws-x", "Nina's", "u-new")] },
+      { strict: true },
+    );
     const fetchMock = stubAcceptedSave({ message: "ok" });
     renderDialog([olive, nina]);
 
@@ -94,9 +97,12 @@ describe("RemoveMemberDialog", () => {
   });
 
   it("requires a choice for every Workspace the member owns before removing", async () => {
-    mockScopedSWR({
-      "/workspaces": [workspace("ws-a", "Alpha"), workspace("ws-b", "Beta")],
-    });
+    mockScopedSWR(
+      {
+        "/workspaces": [workspace("ws-a", "Alpha"), workspace("ws-b", "Beta")],
+      },
+      { strict: true },
+    );
     const fetchMock = stubAcceptedSave({ message: "ok" });
     renderDialog([olive, nina]);
 
@@ -128,9 +134,12 @@ describe("RemoveMemberDialog", () => {
   });
 
   it("copies the first Workspace's choices to the rest with apply to all", async () => {
-    mockScopedSWR({
-      "/workspaces": [workspace("ws-a", "Alpha"), workspace("ws-b", "Beta")],
-    });
+    mockScopedSWR(
+      {
+        "/workspaces": [workspace("ws-a", "Alpha"), workspace("ws-b", "Beta")],
+      },
+      { strict: true },
+    );
     const fetchMock = stubAcceptedSave({ message: "ok" });
     renderDialog([olive, nina]);
 
@@ -155,7 +164,10 @@ describe("RemoveMemberDialog", () => {
   });
 
   it("offers only Delete when nobody can receive a transfer", async () => {
-    mockScopedSWR({ "/workspaces": [workspace("ws-a", "Alpha")] });
+    mockScopedSWR(
+      { "/workspaces": [workspace("ws-a", "Alpha")] },
+      { strict: true },
+    );
     renderDialog([olive, bea]);
 
     fireEvent.keyDown(actionFor("Alpha"), { key: "ArrowDown" });

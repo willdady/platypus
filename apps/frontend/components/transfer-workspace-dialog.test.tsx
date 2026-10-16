@@ -55,10 +55,13 @@ beforeEach(() => resetListHarness());
 
 describe("TransferWorkspaceAction", () => {
   it("is disabled with an invite hint when nobody can receive the Workspace", () => {
-    mockScopedSWR({
-      "/workspaces/ws-1": { data: workspace },
-      "/members": [memberOf("u-old", "Olive"), memberOf("u-b", "Bea", true)],
-    });
+    mockScopedSWR(
+      {
+        "/workspaces/ws-1": { data: workspace },
+        "/members": [memberOf("u-old", "Olive"), memberOf("u-b", "Bea", true)],
+      },
+      { strict: true },
+    );
     renderAction();
 
     expect(screen.getByRole("button", { name: "Transfer" })).toBeDisabled();
@@ -66,10 +69,13 @@ describe("TransferWorkspaceAction", () => {
   });
 
   it("confirms the consequences, then transfers to the chosen member", async () => {
-    mockScopedSWR({
-      "/workspaces/ws-1": { data: workspace },
-      "/members": [memberOf("u-old", "Olive"), memberOf("u-new", "Nina")],
-    });
+    mockScopedSWR(
+      {
+        "/workspaces/ws-1": { data: workspace },
+        "/members": [memberOf("u-old", "Olive"), memberOf("u-new", "Nina")],
+      },
+      { strict: true },
+    );
     const fetchMock = stubAcceptedSave(workspace);
     renderAction();
 

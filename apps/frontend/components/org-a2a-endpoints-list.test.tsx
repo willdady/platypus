@@ -60,7 +60,10 @@ afterEach(() => {
 
 describe("OrgA2aEndpointsList", () => {
   it("lists each endpoint with its Agent, Workspace and Owner, and its tokens beneath", () => {
-    mockScopedSWR({ "/a2a/endpoints": [endpoint({ enabled: false })] });
+    mockScopedSWR(
+      { "/a2a/endpoints": [endpoint({ enabled: false })] },
+      { strict: true },
+    );
     renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     const [, endpointRow, tokenRow] = screen.getAllByRole("row");
@@ -75,7 +78,7 @@ describe("OrgA2aEndpointsList", () => {
   });
 
   it("shows each token time with its time of day, as the endpoint's own page does", () => {
-    mockScopedSWR({ "/a2a/endpoints": [endpoint()] });
+    mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
     renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     const [, , tokenRow] = screen.getAllByRole("row");
@@ -94,7 +97,7 @@ describe("OrgA2aEndpointsList", () => {
   it("badges only a token that needs attention, not an active one", () => {
     const active = endpoint();
     active.tokens[0].tokenStatus = "active";
-    mockScopedSWR({ "/a2a/endpoints": [active] });
+    mockScopedSWR({ "/a2a/endpoints": [active] }, { strict: true });
     renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     expect(
@@ -104,7 +107,7 @@ describe("OrgA2aEndpointsList", () => {
   });
 
   it("offers revoke and nothing that edits", () => {
-    mockScopedSWR({ "/a2a/endpoints": [endpoint()] });
+    mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
     renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
@@ -115,7 +118,7 @@ describe("OrgA2aEndpointsList", () => {
 
   it("revokes an endpoint through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "A2A endpoint revoked" });
-    mockScopedSWR({ "/a2a/endpoints": [endpoint()] });
+    mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
     renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     await revoke("Revoke endpoint", "Revoke endpoint");
@@ -129,7 +132,7 @@ describe("OrgA2aEndpointsList", () => {
 
   it("revokes the token value the row showed through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "A2A token revoked" });
-    mockScopedSWR({ "/a2a/endpoints": [endpoint()] });
+    mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
     renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     await revoke("Revoke token Telegram", "Revoke token");
@@ -142,7 +145,7 @@ describe("OrgA2aEndpointsList", () => {
   });
 
   it("says so when no Workspace has one", () => {
-    mockScopedSWR({ "/a2a/endpoints": [] });
+    mockScopedSWR({ "/a2a/endpoints": [] }, { strict: true });
     renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     expect(

@@ -63,7 +63,7 @@ afterEach(() => {
 describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
   /** Renders the list with `cards` in it, optionally opening the row menu. */
   const renderCards = (cards: EntityCard[], menuItem?: string) => {
-    mockScopedSWR({ [`/${entity}`]: cards });
+    mockScopedSWR({ [`/${entity}`]: cards }, { strict: true });
     return renderList(<List orgId="org1" workspaceId="ws1" />, menuItem);
   };
 
@@ -120,7 +120,10 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
   });
 
   it("surfaces a failed read rather than rendering an empty list", () => {
-    mockScopedSWR({ [`/${entity}`]: { error: new Error("500") } });
+    mockScopedSWR(
+      { [`/${entity}`]: { error: new Error("500") } },
+      { strict: true },
+    );
     renderList(<List orgId="org1" workspaceId="ws1" />);
 
     expect(
@@ -129,7 +132,7 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
   });
 
   it("shows the loading state while the read is in flight", () => {
-    mockScopedSWR({ [`/${entity}`]: { isLoading: true } });
+    mockScopedSWR({ [`/${entity}`]: { isLoading: true } }, { strict: true });
     renderList(<List orgId="org1" workspaceId="ws1" />);
 
     expect(
