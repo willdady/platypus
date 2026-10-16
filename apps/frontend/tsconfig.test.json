@@ -1,0 +1,19 @@
+{
+  // Test files, test helpers and the Vitest setup file, typechecked with the
+  // Vitest globals. The app's own tsconfig excludes them, so app code that
+  // reaches for `describe` or `vi` fails typecheck.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vitest/globals"],
+    "tsBuildInfoFile": "./tsconfig.test.tsbuildinfo"
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "vitest.setup.ts"
+  ],
+  "exclude": ["node_modules"]
+}

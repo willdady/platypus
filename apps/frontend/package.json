@@ -9,7 +9,7 @@
     "build-docker": "./scripts/build_docker.sh",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
