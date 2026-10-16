@@ -31,23 +31,31 @@ import {
 } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
+/**
+ * A row of `list-users`, read as plain JSON rather than through the auth
+ * client, so its timestamps arrive as strings.
+ */
+export type ListedUser = Omit<User, "createdAt" | "updatedAt"> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
 interface ListUsersResponse {
-  users: User[];
+  users: ListedUser[];
 }
 
 export function UsersList() {
   const backendUrl = useBackendUrl();
   const { user: currentUser } = useAuth();
-  const [changingPasswordUser, setChangingPasswordUser] = useState<User | null>(
-    null,
-  );
+  const [changingPasswordUser, setChangingPasswordUser] =
+    useState<ListedUser | null>(null);
 
   const { data, error, isLoading, mutate } = useSWR<ListUsersResponse>(
     joinUrl(backendUrl, "/auth/admin/list-users"),
     fetcher,
   );
 
-  const deleteFlow = useDeleteFlow<User>({
+  const deleteFlow = useDeleteFlow<ListedUser>({
     mutate,
     delete: (target, url) =>
       writeAt(joinUrl(url, "/auth/admin/remove-user"), {
