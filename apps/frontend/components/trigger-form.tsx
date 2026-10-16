@@ -573,8 +573,7 @@ const TriggerForm = ({
     onSeed: (trigger) => {
       setTriggerType(trigger.type);
       if (trigger.type === "cron") {
-        const cronConfig = trigger.config;
-        const parsed = parseCronExpression(cronConfig.cronExpression);
+        const parsed = parseCronExpression(trigger.config.cronExpression);
         if (parsed) {
           setSimpleSchedule(parsed);
           setScheduleMode("simple");
@@ -582,11 +581,11 @@ const TriggerForm = ({
           setScheduleMode("advanced");
         }
       } else if (trigger.type === "event") {
-        const eventConfig = trigger.config;
-        setSelectedEvents(eventConfig.events);
-        setFilterBoardId(eventConfig.filters?.boardId || "");
-        setFilterColumnId(eventConfig.filters?.columnId || "");
-        setFilterChangedFields(eventConfig.filters?.changedFields || []);
+        const { events, filters } = trigger.config;
+        setSelectedEvents(events);
+        setFilterBoardId(filters?.boardId || "");
+        setFilterColumnId(filters?.columnId || "");
+        setFilterChangedFields(filters?.changedFields || []);
       } else if (trigger.type === "inbound") {
         const inboundConfig = trigger.config;
         setInboundInputs(
