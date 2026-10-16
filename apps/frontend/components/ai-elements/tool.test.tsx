@@ -49,7 +49,7 @@ describe("Tool disclosure", () => {
     const trigger = screen.getByRole("button", { name: /Get card/ });
 
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Body")).toBeNull();
+    expect(screen.queryByText("Body")).not.toBeInTheDocument();
 
     fireEvent.click(trigger);
 

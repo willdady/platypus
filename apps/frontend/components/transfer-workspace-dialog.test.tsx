@@ -61,7 +61,9 @@ describe("TransferWorkspaceAction", () => {
     renderAction();
 
     expect(screen.getByRole("button", { name: "Transfer" })).toBeDisabled();
-    expect(screen.getByRole("link", { name: "Invite someone" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Invite someone" }),
+    ).toBeInTheDocument();
   });
 
   it("confirms the consequences, then transfers to the chosen member", async () => {
@@ -82,13 +84,17 @@ describe("TransferWorkspaceAction", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(screen.getByText(/Olive loses access immediately/)).toBeTruthy();
-    expect(screen.getByText(/Every Trigger is switched off/)).toBeTruthy();
+    expect(
+      screen.getByText(/Olive loses access immediately/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Every Trigger is switched off/),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Boards, cards, Sandbox files and Dashboards are kept/),
-    ).toBeTruthy();
-    expect(screen.getByText("Team OpenAI")).toBeTruthy();
-    expect(screen.queryByText("Shared Anthropic")).toBeNull();
+    ).toBeInTheDocument();
+    expect(screen.getByText("Team OpenAI")).toBeInTheDocument();
+    expect(screen.queryByText("Shared Anthropic")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
 

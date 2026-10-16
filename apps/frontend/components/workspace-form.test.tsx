@@ -208,9 +208,9 @@ describe("WorkspaceForm save", () => {
     expect(screen.getByLabelText("Name")).toHaveValue("Research");
     expect(
       screen.queryByRole("switch", { name: "Owner-managed providers" }),
-    ).toBeNull();
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("switch", { name: "Owner-managed MCP servers" }),
-    ).toBeNull();
+    ).not.toBeInTheDocument();
   });
 });

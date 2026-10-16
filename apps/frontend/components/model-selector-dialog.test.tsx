@@ -80,7 +80,9 @@ describe("ModelSelectorDialog agent groups", () => {
   it("shows only the Agents group when nothing is pinned", () => {
     render(dialog([], [agent("a1", "Triage", false)]));
 
-    expect(screen.queryByRole("group", { name: "Pinned" })).toBeNull();
+    expect(
+      screen.queryByRole("group", { name: "Pinned" }),
+    ).not.toBeInTheDocument();
     expect(namesIn("Agents")).toEqual(["Triage"]);
   });
 });

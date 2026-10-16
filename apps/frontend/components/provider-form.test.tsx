@@ -89,9 +89,15 @@ describe("ProviderForm model rows", () => {
   it("hides the file-handling fields until the row is expanded", () => {
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
 
-    expect(screen.queryByLabelText("Native file types")).toBeNull();
-    expect(screen.queryByLabelText("Max extracted text characters")).toBeNull();
-    expect(screen.queryByLabelText("Max output tokens")).toBeNull();
+    expect(
+      screen.queryByLabelText("Native file types"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Max extracted text characters"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Max output tokens"),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
 
@@ -120,7 +126,9 @@ describe("ProviderForm model rows", () => {
     ]);
 
     expect(screen.getByLabelText("Context window")).toHaveTextContent("128k");
-    expect(screen.queryByLabelText("Context window in tokens")).toBeNull();
+    expect(
+      screen.queryByLabelText("Context window in tokens"),
+    ).not.toBeInTheDocument();
   });
 
   // A proxied model with an unusual capacity comes back in the number input
@@ -516,9 +524,9 @@ describe("ProviderForm validation errors on model rows", () => {
     renderEditForm(threeModels());
     save();
 
-    await waitFor(() =>
-      expect(screen.getByText("Alias 'dup' duplicates")).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Alias 'dup' duplicates"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Alias 'DUP' duplicates")).toBeInTheDocument();
 
     // The message lands on the row that failed, not on its neighbours.
@@ -549,11 +557,9 @@ describe("ProviderForm validation errors on model rows", () => {
     renderEditForm([]);
     save();
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("At least one model is required"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("At least one model is required"),
+    ).toBeInTheDocument();
   });
 
   // The button used to be disabled while any error was outstanding, and errors
@@ -567,9 +573,9 @@ describe("ProviderForm validation errors on model rows", () => {
     renderEditForm(threeModels());
     save();
 
-    await waitFor(() =>
-      expect(screen.getByText("Alias 'dup' duplicates")).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Alias 'dup' duplicates"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
   });
 
@@ -582,16 +588,20 @@ describe("ProviderForm validation errors on model rows", () => {
     renderEditForm(threeModels());
     save();
 
-    await waitFor(() =>
-      expect(screen.getByText("Alias 'dup' duplicates")).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Alias 'dup' duplicates"),
+    ).toBeInTheDocument();
 
     fireEvent.change(screen.getAllByLabelText("Alias")[1], {
       target: { value: "unique" },
     });
 
-    expect(screen.queryByText("Alias 'dup' duplicates")).toBeNull();
-    expect(screen.queryByText("Alias 'DUP' duplicates")).toBeNull();
+    expect(
+      screen.queryByText("Alias 'dup' duplicates"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Alias 'DUP' duplicates"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens a collapsed row when the server rejects a field inside it", async () => {
@@ -603,15 +613,15 @@ describe("ProviderForm validation errors on model rows", () => {
     ]);
 
     renderEditForm([{ id: "a", passthroughFileTypes: [] }]);
-    expect(screen.queryByLabelText("Max extracted text characters")).toBeNull();
+    expect(
+      screen.queryByLabelText("Max extracted text characters"),
+    ).not.toBeInTheDocument();
 
     save();
 
-    await waitFor(() =>
-      expect(
-        screen.getByLabelText("Max extracted text characters"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByLabelText("Max extracted text characters"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Too small")).toBeInTheDocument();
     expect(
       screen.getByLabelText("Max extracted text characters"),
@@ -631,13 +641,15 @@ describe("ProviderForm validation errors on model rows", () => {
     ]);
 
     renderEditForm([{ id: "a", passthroughFileTypes: [] }]);
-    expect(screen.queryByLabelText("Max output tokens")).toBeNull();
+    expect(
+      screen.queryByLabelText("Max output tokens"),
+    ).not.toBeInTheDocument();
 
     save();
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Max output tokens")).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByLabelText("Max output tokens"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Too small: expected number to be >0"),
     ).toBeInTheDocument();
@@ -656,11 +668,9 @@ describe("ProviderForm validation errors on model rows", () => {
     renderEditForm([{ id: "a", passthroughFileTypes: [], contextWindow: 128 }]);
     save();
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("Too small: expected number to be >=1000"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Too small: expected number to be >=1000"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Context window")).toHaveAttribute(
       "aria-invalid",
       "true",

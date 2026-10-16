@@ -62,9 +62,7 @@ describe("AgentForm validation error surfacing", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(screen.getByText("Model is required")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Model is required")).toBeInTheDocument();
 
     // The Model select trigger is marked invalid for assistive tech.
     const trigger = screen.getByRole("combobox");
@@ -94,9 +92,7 @@ describe("AgentForm validation error surfacing", () => {
     const saveButton = screen.getByRole("button", { name: "Save" });
     fireEvent.click(saveButton);
 
-    await waitFor(() =>
-      expect(screen.getByText("Invalid max steps")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Invalid max steps")).toBeInTheDocument();
     // An unshown error must not silently disable the button — but a shown one
     // does, until the user corrects the field.
     expect(saveButton).toBeDisabled();
@@ -109,7 +105,7 @@ describe("AgentForm validation error surfacing", () => {
     await waitFor(() =>
       expect(screen.queryByText("Invalid max steps")).not.toBeInTheDocument(),
     );
-    expect(saveButton).not.toBeDisabled();
+    expect(saveButton).toBeEnabled();
   });
 
   // #571: toolSetIds has no field that retracts its error, so gating Save on
@@ -125,7 +121,7 @@ describe("AgentForm validation error surfacing", () => {
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE),
     );
-    expect(saveButton).not.toBeDisabled();
+    expect(saveButton).toBeEnabled();
   });
 });
 
@@ -189,9 +185,7 @@ describe("AgentForm avatar write partial-success handling", () => {
       />,
     );
 
-    await waitFor(() =>
-      expect(screen.getByDisplayValue("Bot")).toBeInTheDocument(),
-    );
+    expect(await screen.findByDisplayValue("Bot")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Remove/i }));
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
@@ -356,9 +350,7 @@ describe("AgentForm tool set load failure", () => {
       />,
     );
 
-    await waitFor(() =>
-      expect(screen.getByDisplayValue("Bot")).toBeInTheDocument(),
-    );
+    expect(await screen.findByDisplayValue("Bot")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -381,7 +373,9 @@ describe("AgentForm loading gate", () => {
     // A create page waits only on its lists, so it doesn't claim to be
     // loading an agent.
     expect(screen.getByLabelText("Loading form")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
   });
 
   it("holds the form back until the Sub-Agent candidates land", () => {
@@ -389,7 +383,9 @@ describe("AgentForm loading gate", () => {
 
     render(<AgentForm orgId="org1" workspaceId="ws1" toolSets={[]} />);
 
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
   });
 
   it("doesn't wait on an agents read when the page hands the list in", () => {
@@ -455,10 +451,10 @@ describe("AgentForm Skills search", () => {
     setDataFor("/skills", { results: [] });
     renderCreateForm();
 
-    expect(screen.queryByText("Skills")).toBeNull();
+    expect(screen.queryByText("Skills")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("searchbox", { name: "Search skills" }),
-    ).toBeNull();
+    ).not.toBeInTheDocument();
   });
 
   it("keeps a selected Skill in skillIds on Save after the search hides it", async () => {
@@ -482,9 +478,7 @@ describe("AgentForm Skills search", () => {
         agentId="a1"
       />,
     );
-    await waitFor(() =>
-      expect(screen.getByDisplayValue("Bot")).toBeInTheDocument(),
-    );
+    expect(await screen.findByDisplayValue("Bot")).toBeInTheDocument();
 
     fireEvent.click(document.getElementById("skill-s2")!);
     fireEvent.change(screen.getByRole("searchbox", { name: "Search skills" }), {
@@ -516,9 +510,7 @@ describe("AgentForm Skills search", () => {
         agentId="a1"
       />,
     );
-    await waitFor(() =>
-      expect(screen.getByDisplayValue("Bot")).toBeInTheDocument(),
-    );
+    expect(await screen.findByDisplayValue("Bot")).toBeInTheDocument();
 
     expect(
       screen.getByRole("searchbox", { name: "Search skills" }),

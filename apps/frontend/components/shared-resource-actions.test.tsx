@@ -104,9 +104,7 @@ describe.each([
     fireEvent.click(screen.getByRole("button", { name: label }));
     fireEvent.click(screen.getByRole("button", { name: "Attach" }));
 
-    await waitFor(() =>
-      expect(screen.getByText("Already attached")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Already attached")).toBeInTheDocument();
     expect(onAttached).not.toHaveBeenCalled();
   });
 });

@@ -40,7 +40,7 @@ describe("FsDownloadTool", () => {
       />,
     );
 
-    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
   });
 });

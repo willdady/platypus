@@ -44,9 +44,9 @@ describe("OrgAgentsList delete", () => {
 
     renderAgents([sharedAgent], "Delete");
 
-    await waitFor(() =>
-      expect(screen.getByText("Can't delete shared agent")).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Can't delete shared agent"),
+    ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/attachments?resourceType=agent&resourceId=a1",
       expect.objectContaining({ credentials: "include" }),
@@ -63,9 +63,7 @@ describe("OrgAgentsList delete", () => {
     renderAgents([sharedAgent], "Delete");
     await confirmDialog("Delete");
 
-    await waitFor(() =>
-      expect(screen.getByText("Still referenced")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Still referenced")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/agents/a1",

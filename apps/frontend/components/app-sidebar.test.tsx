@@ -115,7 +115,9 @@ describe("AppSidebar New chat", () => {
     setRead("ws1", "providers", { results: [] });
     renderSidebar();
 
-    expect(screen.queryByRole("link", { name: "New chat" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "New chat" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New chat" })).toBeDisabled();
   });
 
@@ -165,7 +167,7 @@ describe("AppSidebar New chat", () => {
       "href",
       "/org1/workspace/ws1/chat",
     );
-    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });
 
@@ -418,9 +420,9 @@ describe("AppSidebar chat actions", () => {
         "button",
         { name: "Chat options" },
       ),
-    ).toBeNull();
+    ).not.toBeInTheDocument();
     const menu = openChatMenu("Tagged chat");
     expect(within(menu).getByText("ops")).toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem")).toBeNull();
+    expect(within(menu).queryByRole("menuitem")).not.toBeInTheDocument();
   });
 });

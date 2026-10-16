@@ -34,7 +34,9 @@ describe("FetchErrorNotice", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Back to Organization" }),
     ).toHaveAttribute("href", "/org1");

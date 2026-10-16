@@ -56,7 +56,7 @@ beforeEach(() => {
 
 async function renderEventTriggerForm() {
   render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-  await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+  expect(await screen.findByText("Agent")).toBeInTheDocument();
 
   // Trigger Type is a Radix Select defaulting to "Cron".
   await selectOption("Cron", "Event");
@@ -67,8 +67,10 @@ describe("TriggerForm — event picker", () => {
     await renderEventTriggerForm();
 
     expect(screen.getByLabelText("card.updated")).toBeInTheDocument();
-    expect(screen.queryByText("Trigger runs")).toBeNull();
-    expect(screen.queryByLabelText("trigger_run.failed")).toBeNull();
+    expect(screen.queryByText("Trigger runs")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("trigger_run.failed"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -78,7 +80,9 @@ describe("TriggerForm — board and column filters", () => {
 
     fireEvent.click(screen.getByLabelText("card.updated"));
 
-    expect(screen.queryByText("Only cards in this Column")).toBeNull();
+    expect(
+      screen.queryByText("Only cards in this Column"),
+    ).not.toBeInTheDocument();
 
     await selectOption("All boards", "Board One");
 
@@ -92,7 +96,7 @@ describe("TriggerForm — changed-fields filter", () => {
 
     expect(
       screen.queryByText("Only when these fields change (card.updated)"),
-    ).toBeNull();
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("card.updated"));
 
@@ -101,7 +105,7 @@ describe("TriggerForm — changed-fields filter", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Assignees")).toBeInTheDocument();
     // card.moved is the event for a Column change.
-    expect(screen.queryByLabelText("Column")).toBeNull();
+    expect(screen.queryByLabelText("Column")).not.toBeInTheDocument();
   });
 
   it("clears the changed-fields filter when card.updated is deselected", async () => {
@@ -142,10 +146,10 @@ describe("TriggerForm — Include Memories", () => {
   it("keeps the control behind a collapsed Advanced settings panel and saves it off", async () => {
     const fetchMock = stubAcceptedSave({ id: "trigger-1" });
     render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
 
     // Collapsed by default, so the switch isn't reachable yet.
-    expect(screen.queryByLabelText(/Include Memories/)).toBeNull();
+    expect(screen.queryByLabelText(/Include Memories/)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "My Trigger" },
@@ -162,7 +166,7 @@ describe("TriggerForm — Include Memories", () => {
   it("saves the opt-in once Advanced settings is expanded and the switch turned on", async () => {
     const fetchMock = stubAcceptedSave({ id: "trigger-1" });
     render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Advanced settings"));
     fireEvent.click(screen.getByLabelText(/Include Memories/));
@@ -185,7 +189,7 @@ describe("TriggerForm — default timezone", () => {
     const fetchMock = stubAcceptedSave({ id: "trigger-1" });
     authState.user = null;
     const { rerender } = render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
 
     authState.user = { id: "u1", timezone: "Pacific/Chatham" };
     rerender(<TriggerForm orgId="org1" workspaceId="ws1" />);
@@ -208,7 +212,7 @@ describe("TriggerForm — default timezone", () => {
     const browserZone = getBrowserTimezone();
     const otherZone = browserZone === "UTC" ? "Asia/Tokyo" : "UTC";
     const { rerender } = render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
 
     // Radix only reports a change, so pick the browser zone back deliberately.
     await selectOption(browserZone, otherZone);
@@ -371,20 +375,20 @@ describe("TriggerForm — default agent", () => {
   it("keeps the picked agent when the agent list revalidates", async () => {
     setDataFor("/agents", { results: twoAgents });
     const { rerender } = render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
 
     await selectOption("Agent One", "Agent Two");
     setDataFor("/agents", { results: twoAgents.map((a) => ({ ...a })) });
     rerender(<TriggerForm orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText("Agent Two")).toBeInTheDocument();
-    expect(screen.queryByText("Agent One")).toBeNull();
+    expect(screen.queryByText("Agent One")).not.toBeInTheDocument();
   });
 
   it("saves the first agent when the user picks none", async () => {
     const fetchMock = stubAcceptedSave({ id: "t1" });
     render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Nightly" },
@@ -406,14 +410,16 @@ describe("TriggerForm loading gate", () => {
     render(<TriggerForm orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByLabelText("Loading trigger")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
   });
 });
 
 describe("TriggerForm — Inbound Triggers", () => {
   async function renderInboundTriggerForm() {
     render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
     await selectOption("Cron", "Inbound");
   }
 
@@ -481,7 +487,9 @@ describe("TriggerForm — Inbound Triggers", () => {
       key: "Escape",
     });
     expect(screen.getByDisplayValue("pit_shown-once")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Close" }),
+    ).not.toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /copied it/i }));

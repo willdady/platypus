@@ -77,9 +77,7 @@ describe("ManageAttachmentsDialog attach", () => {
     renderDialog({ workspaces: [{ id: "ws1", name: "Engineering" }] });
     fireEvent.click(screen.getByText("Engineering"));
 
-    await waitFor(() =>
-      expect(screen.getByText("Already attached")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Already attached")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
   });
 });
@@ -93,9 +91,7 @@ describe("ManageAttachmentsDialog detach", () => {
     });
     fireEvent.click(screen.getByLabelText("Detach Engineering"));
 
-    await waitFor(() =>
-      expect(screen.getByText("Locked elsewhere")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Locked elsewhere")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     // The chip stays — no optimistic removal on a refused detach.
     expect(screen.getByText("Engineering")).toBeInTheDocument();

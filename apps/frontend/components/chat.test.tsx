@@ -512,7 +512,7 @@ describe("Upload to Sandbox", () => {
     ["a backend that cannot upload", { upload: false }],
   ])("is hidden for %s", (_, shape) => {
     renderOn(shape);
-    expect(screen.queryByText("Upload to Sandbox")).toBeNull();
+    expect(screen.queryByText("Upload to Sandbox")).not.toBeInTheDocument();
   });
 
   it("is hidden when the Workspace has no Sandbox", () => {
@@ -529,7 +529,7 @@ describe("Upload to Sandbox", () => {
         initialAgentId="as"
       />,
     );
-    expect(screen.queryByText("Upload to Sandbox")).toBeNull();
+    expect(screen.queryByText("Upload to Sandbox")).not.toBeInTheDocument();
   });
 });
 
@@ -886,46 +886,46 @@ describe("routing a chat error", () => {
 
   it("shows an inline line and no modal when the run is still going", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    const { container, queryByRole } = renderThrough(...DROPPED);
+    const { container } = renderThrough(...DROPPED);
 
-    expect(container.textContent).toMatch(RECOVERING);
-    expect(queryByRole("dialog")).toBeNull();
+    expect(container).toHaveTextContent(RECOVERING);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   // The run finished while the connection was gone, so there is nothing to
   // report and nothing to wait for — the snapshot already holds the answer.
   it("says nothing once the run has finished behind the drop", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    const { container, queryByRole } = renderThrough(...DROPPED);
+    const { container } = renderThrough(...DROPPED);
 
-    expect(container.textContent).not.toMatch(RECOVERING);
-    expect(queryByRole("dialog")).toBeNull();
+    expect(container).not.toHaveTextContent(RECOVERING);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("opens the modal for a run that reached a terminal failed status", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "failed", messages: [] });
-    const { container, getByRole } = renderThrough(...DROPPED);
+    const { container } = renderThrough(...DROPPED);
 
-    expect(getByRole("dialog")).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(RECOVERING);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(RECOVERING);
   });
 
   // Nothing streamed, so the server never took a run: a rejected attachment, a
   // refused submission. The user has to be told.
   it("opens the modal for a request that never established", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    const { container, getByRole } = renderThrough(...REFUSED);
+    const { container } = renderThrough(...REFUSED);
 
-    expect(getByRole("dialog")).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(RECOVERING);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(RECOVERING);
   });
 
   it("says nothing at all while a turn is healthy", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    const { container, queryByRole } = renderChat();
+    const { container } = renderChat();
 
-    expect(container.textContent).not.toMatch(RECOVERING);
-    expect(queryByRole("dialog")).toBeNull();
+    expect(container).not.toHaveTextContent(RECOVERING);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   // Keyed on the error so the modal can be dismissed while the error persists;
@@ -936,7 +936,7 @@ describe("routing a chat error", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss error" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     harness.turn.error = new Error("a second failure");
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
@@ -1069,30 +1069,24 @@ describe("the search toggle", () => {
 describe("turn establishment", () => {
   it("judges a second turn on its own stream, not an earlier turn's", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    const { getByRole } = renderThrough(
-      "submitted",
-      "streaming",
-      "ready",
-      "submitted",
-      "error",
-    );
+    renderThrough("submitted", "streaming", "ready", "submitted", "error");
 
-    expect(getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   // Once established, it stays established while the broken turn sits there:
   // repeated `error` renders must not re-open the modal or drop the answer.
   it("keeps the answer while a broken turn sits there", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    const { container, queryByRole } = renderThrough(
+    const { container } = renderThrough(
       "submitted",
       "streaming",
       "error",
       "error",
     );
 
-    expect(container.textContent).toMatch(/Connection interrupted/);
-    expect(queryByRole("dialog")).toBeNull();
+    expect(container).toHaveTextContent(/Connection interrupted/);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -1101,36 +1095,45 @@ describe("turn establishment", () => {
 describe("holding the composer", () => {
   it("holds it after a stream drops mid-run", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    const { getByPlaceholderText, getByTestId } = renderThrough(...DROPPED);
+    renderThrough(...DROPPED);
 
-    expect(getByPlaceholderText("Run in progress…")).toBeDisabled();
-    expect(getByTestId("submit")).toHaveAttribute("data-status", "streaming");
+    expect(screen.getByPlaceholderText("Run in progress…")).toBeDisabled();
+    expect(screen.getByTestId("submit")).toHaveAttribute(
+      "data-status",
+      "streaming",
+    );
   });
 
   it("holds it for a tab that arrived mid-run", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    const { getByPlaceholderText } = renderChat();
+    renderChat();
 
-    expect(getByPlaceholderText("Run in progress…")).toBeDisabled();
+    expect(screen.getByPlaceholderText("Run in progress…")).toBeDisabled();
   });
 
   // Once the run is over the composer comes back, and the submit button must
   // not keep a failure icon on it — the local status is still `error`.
   it("releases it once the run is over, with no failure on the button", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    const { getByPlaceholderText, getByTestId } = renderThrough(...DROPPED);
+    renderThrough(...DROPPED);
 
     expect(
-      getByPlaceholderText("What would you like to know?"),
-    ).not.toBeDisabled();
-    expect(getByTestId("submit")).toHaveAttribute("data-status", "ready");
+      screen.getByPlaceholderText("What would you like to know?"),
+    ).toBeEnabled();
+    expect(screen.getByTestId("submit")).toHaveAttribute(
+      "data-status",
+      "ready",
+    );
   });
 
   it("keeps the error reading for a turn that actually failed", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "failed", messages: [] });
-    const { getByTestId } = renderThrough(...DROPPED);
+    renderThrough(...DROPPED);
 
-    expect(getByTestId("submit")).toHaveAttribute("data-status", "error");
+    expect(screen.getByTestId("submit")).toHaveAttribute(
+      "data-status",
+      "error",
+    );
   });
 });
 
@@ -1223,7 +1226,7 @@ describe("editing a message", () => {
     openEditOn("u1");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(screen.queryByTestId("editor")).toBeNull();
+    expect(screen.queryByTestId("editor")).not.toBeInTheDocument();
   });
 
   it("edits one message at a time", () => {
@@ -1323,7 +1326,9 @@ describe("starting a turn", () => {
     ];
     renderChat();
 
-    expect(screen.queryByRole("button", { name: "Regenerate a2" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Regenerate a2" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers Regenerate on every reply, not only the last", () => {
@@ -1453,7 +1458,7 @@ describe("switching between Alternatives", () => {
     showing(edited);
 
     expect(screen.getByText("u2b 2/3")).toBeInTheDocument();
-    expect(screen.queryByText(/^a2b /)).toBeNull();
+    expect(screen.queryByText(/^a2b /)).not.toBeInTheDocument();
   });
 
   it.each([
@@ -1919,7 +1924,7 @@ describe("loading", () => {
 
       expect(loadingSkeleton()?.querySelector(".border-input")).toBeTruthy();
       expect(composer()).not.toBeInTheDocument();
-      expect(screen.queryByText(/Read-only mode/)).toBeNull();
+      expect(screen.queryByText(/Read-only mode/)).not.toBeInTheDocument();
     });
 
     it("keeps the docked skeleton over messages that have already landed", () => {

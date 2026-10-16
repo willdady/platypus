@@ -273,7 +273,9 @@ describe("NotificationsDropdown body", () => {
     renderBody("## Title\n\nDetails");
 
     expect(await screen.findByText("Title")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Title" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Title" }),
+    ).not.toBeInTheDocument();
   });
 
   it("confirms a link before opening it, without toggling the entry", async () => {
@@ -293,7 +295,7 @@ describe("NotificationsDropdown body", () => {
       "_blank",
       "noreferrer",
     );
-    expect(screen.queryByText("Show less")).toBeNull();
+    expect(screen.queryByText("Show less")).not.toBeInTheDocument();
     expect(screen.getByText("Nightly digest")).toBeInTheDocument();
   });
 
@@ -307,11 +309,11 @@ describe("NotificationsDropdown body", () => {
     const dialog = screen.getByRole("dialog", { name: "Open external link?" });
     fireEvent.keyDown(dialog, { key: "Escape" });
 
-    expect(screen.queryByRole("dialog", { name: "Open external link?" })).toBe(
-      null,
-    );
+    expect(
+      screen.queryByRole("dialog", { name: "Open external link?" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Nightly digest")).toBeInTheDocument();
-    expect(screen.queryByText("Show less")).toBeNull();
+    expect(screen.queryByText("Show less")).not.toBeInTheDocument();
   });
 });
 

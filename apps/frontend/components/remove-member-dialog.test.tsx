@@ -80,8 +80,8 @@ describe("RemoveMemberDialog", () => {
     const fetchMock = stubAcceptedSave({ message: "ok" });
     renderDialog([olive, nina]);
 
-    expect(screen.queryByText(/delete all/i)).toBeNull();
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByText(/delete all/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     fireEvent.click(removeButton());
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
@@ -167,8 +167,12 @@ describe("RemoveMemberDialog", () => {
     renderDialog([olive, bea]);
 
     fireEvent.keyDown(actionFor("Alpha"), { key: "ArrowDown" });
-    expect(await screen.findByRole("option", { name: "Delete" })).toBeTruthy();
-    expect(screen.queryByRole("option", { name: "Transfer" })).toBeNull();
+    expect(
+      await screen.findByRole("option", { name: "Delete" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "Transfer" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/Invite someone/)).toBeInTheDocument();
   });
 });

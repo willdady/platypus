@@ -88,7 +88,7 @@ describe("ChatMessage agent attribution", () => {
   ] as const)("falls back to the generic bot avatar for %s", (_, metadata) => {
     const { container } = renderMessage(assistantMessage(metadata));
 
-    expect(screen.queryByAltText("Research Agent")).toBeNull();
+    expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
     // The fallback is our own `bg-muted` circle wrapping an icon — asserted
     // via markup we own rather than a lucide-generated class name.
     expect(container.querySelector("div.bg-muted > svg")).not.toBeNull();
@@ -295,8 +295,8 @@ describe("ChatMessage sources from a Web-search backend", () => {
     );
     openSources();
 
-    expect(screen.queryByText("Evil")).toBeNull();
-    expect(screen.queryByText("Data")).toBeNull();
+    expect(screen.queryByText("Evil")).not.toBeInTheDocument();
+    expect(screen.queryByText("Data")).not.toBeInTheDocument();
     expect(screen.getByText("Fine")).toBeInTheDocument();
     // Nothing anywhere carries a rejected URL as a link target.
     expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
@@ -336,7 +336,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
     openToolCard();
 
     expect(screen.getByText(/1 result —/)).toBeInTheDocument();
-    expect(screen.queryByText(/2 results/)).toBeNull();
+    expect(screen.queryByText(/2 results/)).not.toBeInTheDocument();
   });
 
   // Nothing renders above, so nothing is claimed to: the alternative is a count
@@ -352,7 +352,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
     openToolCard();
 
     expect(screen.getByText("0 results")).toBeInTheDocument();
-    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+    expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
   });
 
   it("falls back to the URL when a result carries no usable title", () => {
@@ -425,7 +425,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
       }),
     );
 
-    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+    expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
     openToolCard();
     expect(screen.getByText("Web search is unavailable.")).toBeInTheDocument();
   });
@@ -443,7 +443,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
     openToolCard();
 
     expect(screen.getByText(/2 results/)).toBeInTheDocument();
-    expect(screen.queryByText("Parameters")).toBeNull();
+    expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
   });
 
   // One message can carry both rows: a vendor emits `source-url` parts for
@@ -479,7 +479,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
 
     openToolCard();
     expect(screen.getByText("Searching…")).toBeInTheDocument();
-    expect(screen.queryByText(/0 results/)).toBeNull();
+    expect(screen.queryByText(/0 results/)).not.toBeInTheDocument();
   });
 
   // A denied call is not a running one. The header reports the state; the body
@@ -490,8 +490,8 @@ describe("ChatMessage sources from a Web-search backend", () => {
     );
 
     openToolCard();
-    expect(screen.queryByText("Searching…")).toBeNull();
-    expect(screen.queryByText(/0 results/)).toBeNull();
+    expect(screen.queryByText("Searching…")).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 results/)).not.toBeInTheDocument();
   });
 
   it("shows the card for a call still streaming its input", () => {
@@ -501,7 +501,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
 
     openToolCard();
     expect(screen.getByText("Searching…")).toBeInTheDocument();
-    expect(screen.queryByText("Parameters")).toBeNull();
+    expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
   });
 
   // Restoring the pre-normalization back-compat guess is explicitly out of
@@ -525,7 +525,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
       ],
     } as unknown as PlatypusUIMessage);
 
-    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+    expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
     expect(screen.getByText("Parameters")).toBeInTheDocument();
   });
@@ -570,14 +570,16 @@ describe("ChatMessage and provider-executed web_search", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
     expect(screen.getByText("1 result")).toBeInTheDocument();
-    expect(screen.queryByText(/listed above as sources/)).toBeNull();
-    expect(screen.queryByText("Parameters")).toBeNull();
+    expect(
+      screen.queryByText(/listed above as sources/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
   });
 
   it("lifts no sources out of a native search result", () => {
     renderMessage(nativeSearchMessage());
 
-    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+    expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
   });
 
   // A `source-url` part carries an optional title and Anthropic sends one. Rendering
@@ -636,7 +638,7 @@ describe("ChatMessage and provider-executed web_search", () => {
       ]),
     );
 
-    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+    expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
   });
 
   it("still renders the native citations from source-url parts", () => {
@@ -674,8 +676,8 @@ describe("ChatMessage and provider-executed web_search", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
     expect(screen.getByText("Parameters")).toBeInTheDocument();
-    expect(screen.queryByText("Searching…")).toBeNull();
-    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+    expect(screen.queryByText("Searching…")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
   });
 });
 
@@ -805,8 +807,8 @@ describe("ChatMessage sub-agent tool dispatch", () => {
     // Only the sub-agent card's own labels appear — the generic renderer's
     // "Parameters"/raw "Result" JSON would mean the call rendered twice.
     expect(screen.getByText("Task")).toBeInTheDocument();
-    expect(screen.queryByText("Parameters")).toBeNull();
-    expect(screen.queryByText("Result")).toBeNull();
+    expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
+    expect(screen.queryByText("Result")).not.toBeInTheDocument();
   });
 
   // The new shape: one `delegate` tool for every sub-agent, so the target is
@@ -829,7 +831,7 @@ describe("ChatMessage sub-agent tool dispatch", () => {
     expect(screen.getByText("Research Bot")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Research Bot"));
     expect(screen.getByText("Task")).toBeInTheDocument();
-    expect(screen.queryByText("Parameters")).toBeNull();
+    expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
   });
 });
 
@@ -877,7 +879,7 @@ describe.each(NOTICES)("ChatMessage $name notice", ({ flag, notice }) => {
   ] as const)("renders no notice for %s", (_, metadata) => {
     renderMessage(assistantMessage(metadata));
 
-    expect(screen.queryByText(notice)).toBeNull();
+    expect(screen.queryByText(notice)).not.toBeInTheDocument();
   });
 
   // The flags arrive on separate metadata chunks that merge into one message,
@@ -897,7 +899,7 @@ describe("ChatMessage notices together", () => {
     renderMessage(assistantMessage({ truncatedByTokenLimit: true }));
 
     expect(screen.getByText(CUT_SHORT_NOTICE)).toBeInTheDocument();
-    expect(screen.queryByText(STEP_LIMIT_NOTICE)).toBeNull();
+    expect(screen.queryByText(STEP_LIMIT_NOTICE)).not.toBeInTheDocument();
   });
 
   // Search-unavailable and cut-short answer different questions — how the reply
@@ -1005,6 +1007,8 @@ describe("ChatMessage tool duration", () => {
     const [, fromPart] = CARRIERS[0];
     renderMessage(fromPart(staticToolPart));
 
+    // Exact equality: toHaveTextContent would pass on a substring.
+    // eslint-disable-next-line jest-dom/prefer-to-have-text-content
     expect(screen.getByText(/1\.2s/).textContent).toBe(live);
   });
 
@@ -1016,7 +1020,7 @@ describe("ChatMessage tool duration", () => {
       renderMessage(withToolPart(build()));
 
       expect(screen.getByText("Completed")).toBeInTheDocument();
-      expect(screen.queryByText(/\d+ms|\d+\.\d+s/)).toBeNull();
+      expect(screen.queryByText(/\d+ms|\d+\.\d+s/)).not.toBeInTheDocument();
     },
   );
 });
@@ -1057,7 +1061,9 @@ describe("ChatMessage action bar permissions", () => {
     renderMessage(message, { canSendMessages: false });
 
     for (const action of ["Edit", "Delete", "Regenerate"]) {
-      expect(screen.queryByRole("button", { name: action })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: action }),
+      ).not.toBeInTheDocument();
     }
   });
 
@@ -1082,7 +1088,9 @@ describe("ChatMessage action bar during a turn", () => {
       renderMessage({ ...assistantMessage(), parts: [] }, { status });
 
       for (const action of ["Copy", "Delete", "Regenerate"]) {
-        expect(screen.queryByRole("button", { name: action })).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: action }),
+        ).not.toBeInTheDocument();
       }
     },
   );
@@ -1174,14 +1182,16 @@ describe("ChatMessage Alternatives", () => {
       canSendMessages: false,
     });
 
-    expect(screen.queryByRole("group")).toBeNull();
-    expect(screen.queryByRole("button", { name: /message$/ })).toBeNull();
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /message$/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows no arrows on a message with no Alternatives", () => {
     renderMessage(userMessage());
 
-    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
   });
 
   it.each(["submitted", "streaming"] as const)(
@@ -1207,7 +1217,7 @@ describe("ChatMessage while editing", () => {
     renderMessage(userMessage(), editing);
 
     expect(screen.getByTestId("editor")).toBeInTheDocument();
-    expect(screen.queryByText("Ask")).toBeNull();
+    expect(screen.queryByText("Ask")).not.toBeInTheDocument();
   });
 
   // The edit surface carries its own Save and Cancel; the message's own
@@ -1216,7 +1226,9 @@ describe("ChatMessage while editing", () => {
     renderMessage(userMessage(), editing);
 
     for (const action of ["Edit", "Copy", "Delete"]) {
-      expect(screen.queryByRole("button", { name: action })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: action }),
+      ).not.toBeInTheDocument();
     }
   });
 
@@ -1243,7 +1255,7 @@ describe("ChatMessage while editing", () => {
 
     renderMessage(withImage, editing);
 
-    expect(screen.queryByAltText("shot.png")).toBeNull();
+    expect(screen.queryByAltText("shot.png")).not.toBeInTheDocument();
   });
 });
 
@@ -1276,7 +1288,7 @@ describe("ChatMessage dynamic tool renderer", () => {
     });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.queryByText("Parameters")).toBeNull();
+    expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
 
     fireEvent.click(trigger);
 

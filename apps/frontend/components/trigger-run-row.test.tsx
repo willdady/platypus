@@ -51,7 +51,8 @@ describe("TriggerRunRow", () => {
       />,
     );
 
-    expect(screen.getByText("Nightly digest").closest("a")).toBeNull();
+    const name = screen.getByText("Nightly digest");
+    expect(name.closest("a")).toBeNull();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 

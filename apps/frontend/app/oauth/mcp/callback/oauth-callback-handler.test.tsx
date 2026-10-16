@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { StrictMode } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { stubAcceptedSave, stubRejectedSave } from "@/test/test-utils";
 
 vi.mock("next/navigation", () => ({
@@ -38,7 +38,9 @@ describe("OAuthCallbackHandler", () => {
     );
 
     expect(screen.getByText(/The user denied access/)).toBeInTheDocument();
-    expect(screen.queryByText(/Missing authorization code/)).toBeNull();
+    expect(
+      screen.queryByText(/Missing authorization code/),
+    ).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -51,10 +53,8 @@ describe("OAuthCallbackHandler", () => {
   it("still reports a missing code when the provider sent no error", async () => {
     render(<OAuthCallbackHandler state="s1" />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("Missing authorization code or state parameter."),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Missing authorization code or state parameter."),
+    ).toBeInTheDocument();
   });
 });

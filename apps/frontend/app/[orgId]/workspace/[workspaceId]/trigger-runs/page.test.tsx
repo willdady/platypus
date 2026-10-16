@@ -292,14 +292,16 @@ describe("Trigger runs empty states", () => {
     await renderPage();
 
     expect(screen.getByLabelText("Loading trigger runs")).toBeInTheDocument();
-    expect(screen.queryByText(/No runs yet/)).toBeNull();
+    expect(screen.queryByText(/No runs yet/)).not.toBeInTheDocument();
   });
 
   it("says the workspace has no runs when nothing is filtered", async () => {
     await renderRuns([]);
 
     expect(screen.getByText(/No runs yet/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Clear filters" }),
+    ).not.toBeInTheDocument();
   });
 
   it("says nothing matches, and offers a way out, when a filter is active", async () => {
@@ -307,7 +309,7 @@ describe("Trigger runs empty states", () => {
     await renderRuns([]);
 
     expect(screen.getByText(/No runs match/)).toBeInTheDocument();
-    expect(screen.queryByText(/No runs yet/)).toBeNull();
+    expect(screen.queryByText(/No runs yet/)).not.toBeInTheDocument();
   });
 
   // A rejected filter — a hand-edited or stale URL the endpoint 400s — must not
@@ -319,8 +321,8 @@ describe("Trigger runs empty states", () => {
     await renderRuns([]);
 
     expect(screen.getByText(/Couldn't load runs/)).toBeInTheDocument();
-    expect(screen.queryByText(/No runs match/)).toBeNull();
-    expect(screen.queryByText(/No runs yet/)).toBeNull();
+    expect(screen.queryByText(/No runs match/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No runs yet/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Clear filters" }),
     ).toBeInTheDocument();
@@ -367,7 +369,9 @@ describe("Trigger runs paging", () => {
   it("hides Load more once every run is shown", async () => {
     await renderRuns(fullPage.slice(0, 12));
 
-    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Load more" }),
+    ).not.toBeInTheDocument();
   });
 
   it("asks for the next page and keeps the loaded ones", async () => {
@@ -426,7 +430,8 @@ describe("Trigger runs suppression", () => {
       run({ status: "suppressed", stats: null, completedAt: null }),
     ]);
 
-    expect(screen.getByText("Nightly digest").closest("a")).toBeNull();
+    const name = screen.getByText("Nightly digest");
+    expect(name.closest("a")).toBeNull();
     openDropdownMenu();
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
@@ -436,7 +441,7 @@ describe("Trigger runs suppression", () => {
   it("leaves a run that happened without the suppression notice", async () => {
     await renderRuns([run()]);
 
-    expect(screen.queryByText(RUN_SUPPRESSED_NOTICE)).toBeNull();
+    expect(screen.queryByText(RUN_SUPPRESSED_NOTICE)).not.toBeInTheDocument();
   });
 
   it("offers Suppressed among the status filters", async () => {
@@ -472,8 +477,8 @@ describe("Trigger runs truncation marker", () => {
   it("renders no marker for a run that finished cleanly", async () => {
     await renderRuns([run()]);
 
-    expect(screen.queryByText(RUN_CUT_SHORT_NOTICE)).toBeNull();
-    expect(screen.queryByText(RUN_STEP_LIMIT_NOTICE)).toBeNull();
+    expect(screen.queryByText(RUN_CUT_SHORT_NOTICE)).not.toBeInTheDocument();
+    expect(screen.queryByText(RUN_STEP_LIMIT_NOTICE)).not.toBeInTheDocument();
   });
 
   // The no-progress stop reports itself already: a failed run with its own
@@ -491,7 +496,7 @@ describe("Trigger runs truncation marker", () => {
     expect(
       screen.getByText(/no_progress: tool 'listCards'/),
     ).toBeInTheDocument();
-    expect(screen.queryByText(RUN_STEP_LIMIT_NOTICE)).toBeNull();
+    expect(screen.queryByText(RUN_STEP_LIMIT_NOTICE)).not.toBeInTheDocument();
   });
 });
 
@@ -505,7 +510,7 @@ describe("Trigger runs stats", () => {
   it("shows no occupancy where the Provider reported no usage", async () => {
     await renderRuns([run()]);
 
-    expect(screen.queryByText(/context/)).toBeNull();
+    expect(screen.queryByText(/context/)).not.toBeInTheDocument();
   });
 
   it("keeps the token sums as their own figure beside occupancy", async () => {
@@ -549,8 +554,8 @@ describe("Trigger runs stats", () => {
     it("renders no cache tooltip where the Provider reported no cache detail", async () => {
       await renderRuns([run()]);
 
-      expect(screen.queryByText(/read from cache/)).toBeNull();
-      expect(screen.queryByText(/written to cache/)).toBeNull();
+      expect(screen.queryByText(/read from cache/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/written to cache/)).not.toBeInTheDocument();
     });
   });
 
@@ -583,7 +588,7 @@ describe("Trigger runs copy-run-id control", () => {
   it("never renders the run id as visible text", async () => {
     await renderRuns([run()]);
 
-    expect(screen.queryByText("run-1")).toBeNull();
+    expect(screen.queryByText("run-1")).not.toBeInTheDocument();
   });
 
   it("offers the copy in the row's menu, not as an icon of its own", async () => {

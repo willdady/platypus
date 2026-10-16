@@ -273,11 +273,9 @@ describe("Dashboard editor mutations", () => {
       stubFetch({ layoutPut: true });
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-      await waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: "Edit" }),
-        ).toBeInTheDocument(),
-      );
+      expect(
+        await screen.findByRole("button", { name: "Edit" }),
+      ).toBeInTheDocument();
       expect(mutateDashboard).toHaveBeenCalled();
       expect(toastError).not.toHaveBeenCalled();
     });

@@ -196,13 +196,17 @@ describe("SandboxSettings save", () => {
     });
     renderSettings();
 
-    expect(screen.queryByText("Admin environment variables")).toBeNull();
-    expect(screen.queryByText("Networks")).toBeNull();
+    expect(
+      screen.queryByText("Admin environment variables"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Networks")).not.toBeInTheDocument();
     expect(
       screen.getByText("Managed by admin (read-only):"),
     ).toBeInTheDocument();
     expect(screen.getByDisplayValue("SECRET")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: /Delete/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Delete/ }),
+    ).not.toBeInTheDocument();
 
     save();
 
@@ -256,7 +260,7 @@ describe("SandboxSettings save", () => {
       renderSsh();
 
       expect(screen.getByText("Key stored")).toBeInTheDocument();
-      expect(screen.queryByLabelText("Private key")).toBeNull();
+      expect(screen.queryByLabelText("Private key")).not.toBeInTheDocument();
       save();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -273,8 +277,8 @@ describe("SandboxSettings save", () => {
       renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
 
       expect(screen.getByLabelText("Private key")).toHaveValue("");
-      expect(screen.queryByText("Key stored")).toBeNull();
-      expect(screen.queryByText(/Leave blank to keep/)).toBeNull();
+      expect(screen.queryByText("Key stored")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Leave blank to keep/)).not.toBeInTheDocument();
     });
 
     it("reveals the key field on Replace key, still keeping the stored key if left blank", async () => {
@@ -282,7 +286,7 @@ describe("SandboxSettings save", () => {
       renderSsh();
 
       fireEvent.click(screen.getByRole("button", { name: "Replace key" }));
-      expect(screen.queryByText("Key stored")).toBeNull();
+      expect(screen.queryByText("Key stored")).not.toBeInTheDocument();
       expect(screen.getByLabelText("Private key")).toHaveValue("");
       save();
 

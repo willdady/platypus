@@ -46,9 +46,9 @@ describe("link safety inside a Radix Dialog", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
 
-    expect(screen.queryByRole("dialog", { name: "Open external link?" })).toBe(
-      null,
-    );
+    expect(
+      screen.queryByRole("dialog", { name: "Open external link?" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Card" })).toBeInTheDocument();
   });
 
@@ -59,9 +59,9 @@ describe("link safety inside a Radix Dialog", () => {
 
     fireEvent.keyDown(dialog, { key: "Escape" });
 
-    expect(screen.queryByRole("dialog", { name: "Open external link?" })).toBe(
-      null,
-    );
+    expect(
+      screen.queryByRole("dialog", { name: "Open external link?" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Card" })).toBeInTheDocument();
   });
 
@@ -79,9 +79,9 @@ describe("link safety inside a Radix Dialog", () => {
       "_blank",
       "noreferrer",
     );
-    expect(screen.queryByRole("dialog", { name: "Open external link?" })).toBe(
-      null,
-    );
+    expect(
+      screen.queryByRole("dialog", { name: "Open external link?" }),
+    ).not.toBeInTheDocument();
   });
 
   it("copies the link", async () => {
@@ -105,8 +105,8 @@ describe("link safety inside a Radix Dialog", () => {
     await clickLink("home");
 
     await vi.waitFor(() => expect(open).toHaveBeenCalled());
-    expect(screen.queryByRole("dialog", { name: "Open external link?" })).toBe(
-      null,
-    );
+    expect(
+      screen.queryByRole("dialog", { name: "Open external link?" }),
+    ).not.toBeInTheDocument();
   });
 });

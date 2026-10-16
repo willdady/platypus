@@ -27,7 +27,7 @@ describe("LoadSkillTool", () => {
       screen.getByText("Loading skill: release-notes"),
     ).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("reports a skill the backend could not load as an error, with its message", () => {
@@ -72,7 +72,7 @@ describe("ReadSkillFileTool", () => {
       screen.getByText("Reading skill file: pdf/references/forms.md"),
     ).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("reports a file it could not read as an error, with its message", () => {

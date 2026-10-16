@@ -128,7 +128,7 @@ describe("Composer model picker focus", () => {
     fireEvent.click(openPicker(trigger));
 
     expect(onModelChange).toHaveBeenCalledWith("provider:provider-1:gpt-4o");
-    await waitFor(() => expect(document.activeElement).toBe(textarea));
+    await waitFor(() => expect(textarea).toHaveFocus());
   });
 
   it("returns focus to the textarea when the picker is dismissed without a selection", async () => {
@@ -138,7 +138,7 @@ describe("Composer model picker focus", () => {
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
 
     expect(onModelChange).not.toHaveBeenCalled();
-    await waitFor(() => expect(document.activeElement).toBe(textarea));
+    await waitFor(() => expect(textarea).toHaveFocus());
   });
 
   it("does not pass focus through the trigger button on the way back", async () => {
@@ -149,7 +149,7 @@ describe("Composer model picker focus", () => {
     // focus into it.
     const focused = recordFocus();
     fireEvent.click(item);
-    await waitFor(() => expect(document.activeElement).toBe(textarea));
+    await waitFor(() => expect(textarea).toHaveFocus());
 
     // One move, straight to the textarea. Landing on the trigger first is the
     // regression: on mobile it drops the keyboard before the textarea reopens it.
@@ -188,7 +188,7 @@ describe("Composer model picker focus", () => {
     fireEvent.click(item);
 
     expect(onModelChange).toHaveBeenCalledWith("provider:provider-1:gpt-4o");
-    await waitFor(() => expect(document.activeElement).toBe(textarea));
+    await waitFor(() => expect(textarea).toHaveFocus());
   });
 });
 
@@ -284,7 +284,7 @@ describe("Composer dictation failures", () => {
 
     // A disabled button takes no pointer events, so its tooltip never opens
     // and the reason never reaches anyone.
-    expect(mic).not.toBeDisabled();
+    expect(mic).toBeEnabled();
 
     fireEvent.click(mic);
 
@@ -331,7 +331,7 @@ describe("Composer model picker — unsettled selection", () => {
   it("shows no selection label until the selection resolves", () => {
     renderPicker(false);
 
-    expect(screen.queryByText("Select model")).toBeNull();
+    expect(screen.queryByText("Select model")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Loading selection")).toBeInTheDocument();
   });
 
@@ -339,7 +339,9 @@ describe("Composer model picker — unsettled selection", () => {
     renderPicker(true);
 
     expect(screen.getByText("Select model")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Loading selection")).toBeNull();
+    expect(
+      screen.queryByLabelText("Loading selection"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -390,7 +392,7 @@ describe("Composer model picker — substituted selection", () => {
   it("says nothing when the selection is the one asked for", () => {
     renderWith(undefined);
 
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
 
@@ -420,10 +422,12 @@ describe("Composer Sandbox uploads", () => {
     renderComposer();
     openMenu();
 
-    expect(screen.getByRole("menuitem", { name: /Add photos or files/ }));
+    expect(
+      screen.getByRole("menuitem", { name: /Add photos or files/ }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("menuitem", { name: /Upload to Sandbox/ }),
-    ).toBeNull();
+    ).not.toBeInTheDocument();
   });
 
   it("shows a picked file as a Sandbox chip with no preview", () => {
@@ -433,7 +437,7 @@ describe("Composer Sandbox uploads", () => {
 
     expect(screen.getByText("photo.png")).toBeInTheDocument();
     expect(screen.getByText("Sandbox")).toBeInTheDocument();
-    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
   it("refuses a file over the transfer bound when it is picked", () => {
@@ -444,7 +448,7 @@ describe("Composer Sandbox uploads", () => {
     pickForSandbox(big);
 
     expect(toast.error).toHaveBeenCalled();
-    expect(screen.queryByText("data.csv")).toBeNull();
+    expect(screen.queryByText("data.csv")).not.toBeInTheDocument();
   });
 
   it("locks the Agent picker while a Sandbox chip is held", () => {
@@ -457,7 +461,7 @@ describe("Composer Sandbox uploads", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Remove Sandbox upload" }),
     );
-    expect(picker()).not.toBeDisabled();
+    expect(picker()).toBeEnabled();
   });
 
   it("does not lock the picker for a File part alone", () => {
@@ -468,7 +472,7 @@ describe("Composer Sandbox uploads", () => {
     });
 
     expect(screen.getByText("data.csv")).toBeInTheDocument();
-    expect(trigger).not.toBeDisabled();
+    expect(trigger).toBeEnabled();
   });
 
   // The owner clears the text once a Send succeeds; a failed one must leave

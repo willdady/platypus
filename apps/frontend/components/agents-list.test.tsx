@@ -67,11 +67,9 @@ describe("AgentsList detach", () => {
     renderAgents([orgAgent], "Detach");
     await confirmDialog(/Detach/);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("This agent is a sub-agent elsewhere"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("This agent is a sub-agent elsewhere"),
+    ).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     expect(screen.getByText("Detach shared agent")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
@@ -127,9 +125,7 @@ describe("AgentsList delete", () => {
     renderAgents([workspaceAgent], "Delete");
     await confirmDialog("Delete");
 
-    await waitFor(() =>
-      expect(screen.getByText("Agent is in use")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Agent is in use")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
   });
 });
@@ -164,9 +160,7 @@ describe("AgentsList clone", () => {
     renderAgents([workspaceAgent], "Clone");
     await confirmDialog("Clone");
 
-    await waitFor(() =>
-      expect(screen.getByText("Name already in use")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Name already in use")).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
   });
 });
@@ -186,9 +180,7 @@ describe("AgentsList promote", () => {
     renderAgents([workspaceAgent], "Promote to organization");
     await confirmDialog("Promote");
 
-    await waitFor(() =>
-      expect(screen.getByText("Private Skill")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Private Skill")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/agents/a2/promote",

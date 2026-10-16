@@ -66,11 +66,9 @@ describe("SkillsList detach", () => {
     renderSkills([orgSkill], "Detach");
     await confirmDialog(/Detach/);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("This skill is in use by an agent"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("This skill is in use by an agent"),
+    ).toBeInTheDocument();
 
     expect(mutate).not.toHaveBeenCalled();
     expect(screen.getByText("Detach shared skill")).toBeInTheDocument();
@@ -154,9 +152,7 @@ describe("SkillsList delete", () => {
     renderSkills([workspaceSkill], "Delete");
     await confirmDialog("Delete");
 
-    await waitFor(() =>
-      expect(screen.getByText("Skill is referenced")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Skill is referenced")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/skills/s2",
@@ -186,9 +182,9 @@ describe("SkillsList delete", () => {
 
     renderOrgSkills([orgSkill], "Delete");
 
-    await waitFor(() =>
-      expect(screen.getByText("Can't delete shared skill")).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Can't delete shared skill"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/is shared with 1 workspace\./),
     ).toBeInTheDocument();
@@ -221,9 +217,9 @@ describe("SkillsList promote", () => {
     renderSkills([workspaceSkill], "Promote to organization");
     await confirmDialog("Promote");
 
-    await waitFor(() =>
-      expect(screen.getByText("Network request failed")).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Network request failed"),
+    ).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
   });
 
@@ -233,9 +229,7 @@ describe("SkillsList promote", () => {
     renderSkills([workspaceSkill], "Promote to organization");
     await confirmDialog("Promote");
 
-    await waitFor(() =>
-      expect(screen.getByText("Name already shared")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Name already shared")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/skills/s2/promote",

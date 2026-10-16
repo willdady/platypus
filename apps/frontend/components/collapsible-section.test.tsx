@@ -19,7 +19,7 @@ describe("CollapsibleSection", () => {
   it("starts closed when it has never been toggled", () => {
     renderSection();
 
-    expect(screen.queryByText("Section body")).toBeNull();
+    expect(screen.queryByText("Section body")).not.toBeInTheDocument();
   });
 
   // Read during render, not in an effect: a section restored open paints open
@@ -35,7 +35,7 @@ describe("CollapsibleSection", () => {
     localStorage.setItem(KEY, "false");
     renderSection();
 
-    expect(screen.queryByText("Section body")).toBeNull();
+    expect(screen.queryByText("Section body")).not.toBeInTheDocument();
   });
 
   it("persists a toggle", () => {

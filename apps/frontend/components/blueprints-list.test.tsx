@@ -59,9 +59,7 @@ describe("BlueprintsList delete", () => {
     renderBlueprints([blueprint], "Delete");
     await confirmDialog("Delete");
 
-    await waitFor(() =>
-      expect(screen.getByText("Blueprint is in use")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Blueprint is in use")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
@@ -72,11 +70,11 @@ describe("BlueprintsList delete", () => {
     renderBlueprints([blueprint], "Delete");
     await confirmDialog("Delete");
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("You do not have permission to delete blueprints"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText(
+        "You do not have permission to delete blueprints",
+      ),
+    ).toBeInTheDocument();
     expect(toastInfo).not.toHaveBeenCalled();
     expect(mutate).not.toHaveBeenCalled();
   });

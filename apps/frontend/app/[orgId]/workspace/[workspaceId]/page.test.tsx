@@ -45,7 +45,9 @@ describe("Workspace home", () => {
     expect(
       screen.getByText("Failed to load providers. Server error"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("No providers configured")).toBeNull();
+    expect(
+      screen.queryByText("No providers configured"),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();
@@ -69,9 +71,9 @@ describe("Workspace home", () => {
     const pinned = screen.getByRole("list", { name: "Pinned agents" });
     const rest = screen.getByRole("list", { name: "Agents" });
     expect(within(pinned).getByText("Writer")).toBeInTheDocument();
-    expect(within(pinned).queryByText("Triage")).toBeNull();
+    expect(within(pinned).queryByText("Triage")).not.toBeInTheDocument();
     expect(within(rest).getByText("Triage")).toBeInTheDocument();
-    expect(within(rest).queryByText("Writer")).toBeNull();
+    expect(within(rest).queryByText("Writer")).not.toBeInTheDocument();
     expect(
       pinned.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -88,7 +90,9 @@ describe("Workspace home", () => {
     renderList(<Workspace />);
 
     expect(screen.getByText("Triage")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Pinned" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Pinned" }),
+    ).not.toBeInTheDocument();
   });
 
   it("says the workspace is gone, with the way back, when the read returns none", () => {
@@ -108,7 +112,7 @@ describe("Workspace home", () => {
     renderList(<Workspace />);
 
     expect(screen.getByText("Couldn't load")).toBeInTheDocument();
-    expect(screen.queryByText("Workspace not found")).toBeNull();
+    expect(screen.queryByText("Workspace not found")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();

@@ -159,11 +159,9 @@ describe("WorkspaceContextForm writes", () => {
     await chooseWorkspace();
     submit();
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("You already have a context for this scope"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("You already have a context for this scope"),
+    ).toBeInTheDocument();
     expect(toastError).not.toHaveBeenCalled();
     expect(configuredMutate).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
@@ -176,9 +174,7 @@ describe("WorkspaceContextForm writes", () => {
     await chooseWorkspace();
     submit();
 
-    await waitFor(() =>
-      expect(screen.getByText("Too long")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Too long")).toBeInTheDocument();
     expect(toastError).not.toHaveBeenCalled();
   });
 
@@ -219,11 +215,9 @@ describe("WorkspaceContextForm writes", () => {
     const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
     fireEvent.click(deleteButtons[deleteButtons.length - 1]);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("This context is still in use"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("This context is still in use"),
+    ).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
   });
 });

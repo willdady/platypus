@@ -75,7 +75,7 @@ describe("copyToClipboard", () => {
     expect(await copyToClipboard("tok_123")).toBe(true);
     expect(parent).toBe(dialog);
     // Focus goes back to the button that asked for the copy.
-    expect(document.activeElement).toBe(button);
+    expect(button).toHaveFocus();
     dialog.remove();
   });
 
