@@ -13,8 +13,8 @@ import {
   stubRejectedSave,
   stubSaveSequence,
   savedBody,
-} from "@/lib/form-test-harness";
-import { selectOption } from "@/lib/test-utils";
+} from "@/test/form-test-harness";
+import { selectOption } from "@/test/test-utils";
 import {
   OAUTH_MCP_ERROR_EVENT,
   OAUTH_MCP_SUCCESS_EVENT,

@@ -18,11 +18,11 @@ import {
   installSpeechRecognition,
   uninstallSpeechRecognition,
   setSecureContext,
-} from "@/lib/chat-test-fixtures";
+} from "@/test/chat-test-fixtures";
 import {
   installMatchMediaStub,
   installResizeObserverStub,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 
 vi.mock("sonner", () => ({
   toast: { error: vi.fn() },

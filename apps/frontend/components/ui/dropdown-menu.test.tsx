@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { installRadixPointerPolyfills } from "@/lib/test-utils";
+import { installRadixPointerPolyfills } from "@/test/test-utils";
 
 beforeAll(() => {
   installRadixPointerPolyfills();

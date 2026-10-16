@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { StrictMode } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
-import { stubAcceptedSave, stubRejectedSave } from "@/lib/test-utils";
+import { stubAcceptedSave, stubRejectedSave } from "@/test/test-utils";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),

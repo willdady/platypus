@@ -5,7 +5,7 @@ import {
   swrMock,
   mockScopedSWR,
   resetListHarness,
-} from "@/lib/list-test-harness";
+} from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);

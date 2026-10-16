@@ -9,7 +9,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   mutate,
-} from "@/lib/list-test-harness";
+} from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 

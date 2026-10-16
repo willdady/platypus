@@ -11,8 +11,8 @@ import {
   swrMock,
   toastMock,
   toastSuccess,
-} from "@/lib/list-test-harness";
-import { selectOption } from "@/lib/test-utils";
+} from "@/test/list-test-harness";
+import { selectOption } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("next/navigation", () => navigationMock);

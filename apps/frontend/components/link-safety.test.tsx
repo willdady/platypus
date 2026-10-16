@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { installRadixPointerPolyfills } from "@/lib/test-utils";
+import { installRadixPointerPolyfills } from "@/test/test-utils";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "./markdown";
 

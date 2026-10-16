@@ -12,7 +12,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
-} from "./test-utils";
+} from "@/test/test-utils";
 
 const card = (id: string) => ({ id }) as KanbanCard;
 

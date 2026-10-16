@@ -16,8 +16,26 @@ export default defineConfig({
     env: { BACKEND_URL: "http://localhost:4001" },
     coverage: {
       provider: "v8",
-      reporter: ["text", "json", "html"],
-      exclude: ["node_modules/**", ".next/**", "**/*.test.ts", "**/*.test.tsx"],
+      reporter: ["text", "json", "json-summary", "html"],
+      // Every source file counts, imported by a test or not — without an
+      // `include`, a file no test touches is left out and the total reads
+      // high.
+      include: [
+        "app/**/*.{ts,tsx}",
+        "components/**/*.{ts,tsx}",
+        "hooks/**/*.{ts,tsx}",
+        "lib/**/*.{ts,tsx}",
+        "instrumentation*.ts",
+      ],
+      exclude: ["**/*.test.ts", "**/*.test.tsx", "test/**"],
+      // A ratchet: each is the measured total rounded down. Raise them when
+      // coverage goes up; a change that lowers coverage fails `test:coverage`.
+      thresholds: {
+        statements: 79,
+        branches: 76,
+        functions: 72,
+        lines: 80,
+      },
     },
   },
   resolve: {

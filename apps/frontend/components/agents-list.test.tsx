@@ -19,7 +19,7 @@ import {
   toastError,
   toastInfo,
   menuItemLabels,
-} from "@/lib/list-test-harness";
+} from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -28,7 +28,7 @@ vi.mock("next/navigation", () => navigationMock);
 vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
-import { openDropdownMenu, stubPendingSave } from "@/lib/test-utils";
+import { openDropdownMenu, stubPendingSave } from "@/test/test-utils";
 import { AgentsList } from "./agents-list";
 
 // --- Fixtures ----------------------------------------------------------------

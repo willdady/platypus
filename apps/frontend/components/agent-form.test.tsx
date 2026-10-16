@@ -14,7 +14,7 @@ import {
   setLoading,
   stubRejectedSave,
   stubSaveSequence,
-} from "@/lib/form-test-harness";
+} from "@/test/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 

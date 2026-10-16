@@ -11,8 +11,8 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   savedBody,
-} from "@/lib/form-test-harness";
-import { installResizeObserverStub } from "@/lib/test-utils";
+} from "@/test/form-test-harness";
+import { installResizeObserverStub } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 

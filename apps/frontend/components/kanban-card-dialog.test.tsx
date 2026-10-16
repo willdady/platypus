@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { KanbanCard, KanbanCardComment } from "@platypus/schemas";
-import { installRadixPointerPolyfills } from "@/lib/test-utils";
+import { installRadixPointerPolyfills } from "@/test/test-utils";
 
 beforeAll(() => {
   installRadixPointerPolyfills();
@@ -43,7 +43,7 @@ vi.mock("swr", () => ({
 }));
 
 import { KanbanCardDialog } from "./kanban-card-dialog";
-import { jsonResponse, stubPendingSave } from "@/lib/test-utils";
+import { jsonResponse, stubPendingSave } from "@/test/test-utils";
 
 // --- Helpers -----------------------------------------------------------------
 

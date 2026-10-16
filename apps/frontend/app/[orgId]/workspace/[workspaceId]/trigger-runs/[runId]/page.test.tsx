@@ -73,7 +73,7 @@ import { RUN_TIMELINE_EMPTY_NOTICE } from "@/components/run-timeline";
 import {
   installRadixPointerPolyfills,
   openDropdownMenu,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 
 installRadixPointerPolyfills();
 

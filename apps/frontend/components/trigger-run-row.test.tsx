@@ -11,7 +11,7 @@ import {
 import {
   installRadixPointerPolyfills,
   openDropdownMenu,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 
 installRadixPointerPolyfills();
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { ChangePasswordDialog } from "./change-password-dialog";
-import { jsonResponse } from "@/lib/test-utils";
+import { jsonResponse } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://localhost:3000",

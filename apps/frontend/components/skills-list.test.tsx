@@ -16,8 +16,8 @@ import {
   toastInfo,
   authState,
   menuItemLabels,
-} from "@/lib/list-test-harness";
-import { openDropdownMenu, selectOption } from "@/lib/test-utils";
+} from "@/test/list-test-harness";
+import { openDropdownMenu, selectOption } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 

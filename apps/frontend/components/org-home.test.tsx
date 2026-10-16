@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { installMatchMediaStub } from "@/lib/test-utils";
+import { installMatchMediaStub } from "@/test/test-utils";
 import type { Actor, OrgRole } from "@/lib/authorization";
 
 const auth = vi.hoisted(() => ({

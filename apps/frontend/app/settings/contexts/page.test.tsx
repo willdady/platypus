@@ -6,7 +6,7 @@ import {
   toastError,
   toastMock,
   toastSuccess,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 

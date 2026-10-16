@@ -2,12 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ChatStatus, FileUIPart, PrepareSendMessagesRequest } from "ai";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
-import { reportPdf } from "@/lib/chat-test-fixtures";
+import { reportPdf } from "@/test/chat-test-fixtures";
 import {
   jsonResponse,
   stubAcceptedSave,
   stubRejectedSave,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 import type { AlternativePosition } from "@/lib/chat-alternatives";
 
 type PrepareRequest = PrepareSendMessagesRequest<PlatypusUIMessage>;

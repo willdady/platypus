@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { toastMock, stubSaveSequence } from "@/lib/list-test-harness";
+import { toastMock, stubSaveSequence } from "@/test/list-test-harness";
 
 vi.mock("sonner", () => toastMock);
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, fireEvent } from "@testing-library/react";
 import { Suspense } from "react";
 import type { Dashboard, Widget } from "@platypus/schemas";
-import { installResizeObserverStub } from "@/lib/test-utils";
+import { installResizeObserverStub } from "@/test/test-utils";
 
 const ORG_ID = "org-1";
 const WS_ID = "ws-1";

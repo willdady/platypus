@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import InviteTokenPage from "./page";
-import { jsonResponse } from "@/lib/test-utils";
+import { jsonResponse } from "@/test/test-utils";
 
 const mockPush = vi.fn();
 const mockSignOut = vi.fn();

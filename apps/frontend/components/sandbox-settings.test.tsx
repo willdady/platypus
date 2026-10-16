@@ -12,8 +12,8 @@ import {
   stubAcceptedSave,
   stubSaveSequence,
   toastSuccess,
-} from "@/lib/list-test-harness";
-import { savedBody } from "@/lib/form-test-harness";
+} from "@/test/list-test-harness";
+import { savedBody } from "@/test/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 

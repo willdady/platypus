@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { SelectItem } from "@/components/ui/select";
-import { installRadixPointerPolyfills } from "@/lib/test-utils";
+import { installRadixPointerPolyfills } from "@/test/test-utils";
 import { FormTextField } from "./form-text-field";
 import { FormTextareaField } from "./form-textarea-field";
 import { FormSelectField } from "./form-select-field";

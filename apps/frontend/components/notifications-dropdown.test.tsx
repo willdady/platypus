@@ -19,7 +19,7 @@ import {
   installRadixPointerPolyfills,
   jsonResponse,
   openDropdownMenu,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 
 beforeAll(installRadixPointerPolyfills);
 

@@ -12,7 +12,7 @@ import {
   stubRejectedSave,
   mutate,
   toastSuccess,
-} from "@/lib/list-test-harness";
+} from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 

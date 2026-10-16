@@ -16,7 +16,7 @@ import {
   jsonResponse,
   stubRejectedSave,
   savedBody,
-} from "@/lib/form-test-harness";
+} from "@/test/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 

@@ -11,8 +11,8 @@ import {
   setLoading,
   stubAcceptedSave,
   savedBody,
-} from "@/lib/form-test-harness";
-import { installResizeObserverStub, selectOption } from "@/lib/test-utils";
+} from "@/test/form-test-harness";
+import { installResizeObserverStub, selectOption } from "@/test/test-utils";
 
 vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);

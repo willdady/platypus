@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { FileUIPart, UIMessage } from "ai";
 import { useMessageEditing } from "./use-message-editing";
-import { reportPdf, screenshotPng } from "@/lib/chat-test-fixtures";
+import { reportPdf, screenshotPng } from "@/test/chat-test-fixtures";
 
 /**
  * Editing used to resubmit `{ text }` and nothing else, so a message that

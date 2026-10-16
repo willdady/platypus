@@ -4,7 +4,7 @@ import {
   installSpeechRecognition,
   uninstallSpeechRecognition,
   setSecureContext,
-} from "@/lib/chat-test-fixtures";
+} from "@/test/chat-test-fixtures";
 import { useSpeechToText } from "./use-speech-to-text";
 
 describe("useSpeechToText", () => {

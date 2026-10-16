@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import type { Agent, Provider } from "@platypus/schemas";
 import { ModelSelectorDialog } from "./model-selector-dialog";
-import { installResizeObserverStub } from "@/lib/test-utils";
+import { installResizeObserverStub } from "@/test/test-utils";
 
 const countingProvider = () => {
   let reads = 0;

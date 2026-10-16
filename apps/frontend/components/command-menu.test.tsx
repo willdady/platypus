@@ -10,7 +10,7 @@ import {
   resetListHarness,
   swrMock,
   type ListRead,
-} from "@/lib/list-test-harness";
+} from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("next/navigation", () => navigationMock);
