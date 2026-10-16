@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Provider, Agent, Chat } from "@platypus/schemas";
 import { decodeSelectionReference } from "@/lib/selection-reference";
 import {
@@ -8,44 +8,34 @@ import {
   type StoredSelection,
 } from "@/lib/restore-selection";
 
-/** How long a stored selection is remembered — 24 hours. */
-const STORAGE_TTL_MS = 24 * 60 * 60 * 1000;
-
 /**
- * Reads a selection this browser remembered for a workspace, or `null` when
- * there is none (or it has aged out). Storage may be absent (SSR), blocked, or
+ * Reads the selection this browser remembered for a workspace, or `null` when
+ * there is none. It never expires. Storage may be absent (SSR), blocked, or
  * hold something that is not the shape written below; all of those read as "no
  * stored selection" rather than throwing.
+ *
+ * Values written before the expiry was dropped also carry an `expiresAt`; it
+ * is ignored, so a pick made under the old rule is still restored.
  */
 const readStoredSelection = (key: string): StoredSelection | null => {
   try {
     const item = localStorage.getItem(key);
     if (!item) return null;
-    const stored = JSON.parse(item) as {
-      value: StoredSelection;
-      expiresAt: number;
-    };
-    if (Date.now() > stored.expiresAt) {
-      localStorage.removeItem(key);
-      return null;
-    }
-    return stored.value;
+    const stored = JSON.parse(item) as { value?: StoredSelection } | null;
+    return stored?.value ?? null;
   } catch {
     return null;
   }
 };
 
 /**
- * Persists a selection so the next new Chat in this workspace opens against
- * it. A write that fails (storage full, or blocked) leaves the previous value
- * in place; the selection just won't be remembered.
+ * Persists a pick so the next new Chat in this workspace opens against it. A
+ * write that fails (storage full, or blocked) leaves the previous value in
+ * place; the pick just won't be remembered.
  */
 const writeStoredSelection = (key: string, value: StoredSelection): void => {
   try {
-    localStorage.setItem(
-      key,
-      JSON.stringify({ value, expiresAt: Date.now() + STORAGE_TTL_MS }),
-    );
+    localStorage.setItem(key, JSON.stringify({ value }));
   } catch {
     // Deliberately swallowed: nothing to recover, and nothing to tell the user.
   }
@@ -191,39 +181,39 @@ export const useModelSelection = ({
     : restored?.substitution;
   const isResolved = chosen !== null || restored !== null;
 
-  const handleModelChange = useCallback((value: string) => {
-    const decoded = decodeSelectionReference(value);
-    if (!decoded) return;
-    // Exactly one of "an Agent" or "a Provider's model" is ever selected, so
-    // each choice clears the other side rather than layering over it.
-    setChosen(
-      decoded.type === "agent"
-        ? { agentId: decoded.agentId, modelId: "", providerId: "" }
-        : {
-            agentId: "",
-            providerId: decoded.providerId,
-            modelId: decoded.modelReference,
-          },
-    );
-  }, []);
-
-  // Persist the selection so the next new Chat in this workspace opens against
-  // it (Priority 2 of the ladder). Keyed on the three ids rather than the
-  // selection object: an SWR revalidation hands back new `providers`/`agents`
-  // identities and so a new object, and rewriting the key on each of those
-  // would keep pushing its 24h expiry out for a selection nobody touched.
-  const { agentId, providerId, modelId } = selection;
-  useEffect(() => {
-    if (agentId) {
-      writeStoredSelection(STORAGE_KEY, { type: "agent", id: agentId });
-    } else if (providerId && modelId) {
-      writeStoredSelection(STORAGE_KEY, {
-        type: "provider",
-        providerId,
-        modelId,
-      });
-    }
-  }, [agentId, providerId, modelId, STORAGE_KEY]);
+  // A pick is the only thing remembered as the Workspace's last selection
+  // (Priority 2 of the ladder), so the next new Chat opens against it.
+  // Opening a Chat, restoring a new one, the first-Provider fallback and a
+  // `?agentId=` link all resolve a selection too, but none is a pick: had
+  // they written it, any of them would overwrite the Agent the reader last
+  // chose (issue #1503).
+  const handleModelChange = useCallback(
+    (value: string) => {
+      const decoded = decodeSelectionReference(value);
+      if (!decoded) return;
+      // Exactly one of "an Agent" or "a Provider's model" is ever selected, so
+      // each choice clears the other side rather than layering over it.
+      const stored: StoredSelection =
+        decoded.type === "agent"
+          ? { type: "agent", id: decoded.agentId }
+          : {
+              type: "provider",
+              providerId: decoded.providerId,
+              modelId: decoded.modelReference,
+            };
+      setChosen(
+        stored.type === "agent"
+          ? { agentId: stored.id, modelId: "", providerId: "" }
+          : {
+              agentId: "",
+              providerId: stored.providerId,
+              modelId: stored.modelId,
+            },
+      );
+      writeStoredSelection(STORAGE_KEY, stored);
+    },
+    [STORAGE_KEY],
+  );
 
   return { selection, isResolved, substitution, handleModelChange };
 };

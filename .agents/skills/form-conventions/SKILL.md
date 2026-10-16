@@ -1,6 +1,6 @@
 ---
 name: form-conventions
-description: Post-save conventions for Platypus frontend forms — where a save lands the user, and what the submit button is called. Use when adding or changing a form in apps/frontend, its submit button, or what happens after it saves.
+description: Post-save conventions for Platypus frontend forms — where a save lands the user, what the submit button is called, and how a failed delete is shown. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, or a delete confirm dialog.
 ---
 
 # Frontend Form Conventions
@@ -35,6 +35,21 @@ shape: to the list for a collection member, to the parent otherwise.
 A list is wherever the list actually renders, not a route that looks like one.
 Triggers navigate to the Workspace home because that is where the trigger list
 lives; there is no `triggers/` page.
+
+## When a delete fails
+
+A refused delete is shown **inline, in the confirm dialog, which stays open**.
+The spinner stops and the user can read the message, then retry or cancel.
+This holds for every delete, form or list: use `useEntityDelete` or
+`useDeleteFlow` and pass the error to the dialog. Never toast a failed delete
+and close the dialog.
+
+The one exception is `guidanceOnForbidden`, on both hooks, and it is for
+Shared-resource deletes only. Deleting a Shared resource from a Workspace is
+refused as `forbidden`, and the message only says where the resource is
+managed: guidance, not an error the user can act on in this dialog. With the
+option set, a `forbidden` refusal closes the dialog and shows the message as
+an info toast. Every other refusal still stays inline.
 
 ## What the button says
 

@@ -217,6 +217,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete({
@@ -226,10 +227,6 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     successMessage: "Webhook deleted",
     onSuccess: () =>
       router.push(workspaceRoutes(orgId, workspaceId).settings.webhooks),
-    onError: (message, _outcome, { close }) => {
-      toast.error(message);
-      close();
-    },
   });
 
   const { events, headers } = formData;
@@ -551,6 +548,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
         description="Are you sure you want to delete this webhook? This action cannot be undone."
         onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
 
       <ConfirmDialog

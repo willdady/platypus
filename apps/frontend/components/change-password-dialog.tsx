@@ -12,18 +12,12 @@ import { Button } from "@/components/ui/button";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
 import { useState } from "react";
-import { useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl, type User } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import { toast } from "sonner";
 
-interface User {
-  id: string;
-  email: string;
-  name: string;
-}
-
 interface ChangePasswordDialogProps {
-  user: User;
+  user: Pick<User, "id" | "email" | "name">;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;

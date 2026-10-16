@@ -1,9 +1,9 @@
 import {
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
+  type PlatypusUIMessage,
 } from "@platypus/schemas";
 import { isToolUIPart } from "ai";
-import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 
 /**
  * The client-side mirror of Tool-result clearing's "which results are stale"

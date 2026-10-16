@@ -9,7 +9,7 @@ import {
   useMemo,
 } from "react";
 import { createAuthClient } from "better-auth/react";
-import { inferAdditionalFields } from "better-auth/client/plugins";
+import { adminClient, inferAdditionalFields } from "better-auth/client/plugins";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 import type { Workspace } from "@platypus/schemas";
@@ -25,33 +25,6 @@ interface OrgMembership {
   id: string;
   organizationId: string;
   role: "admin" | "member";
-}
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  emailVerified: boolean;
-  image: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  role: "user" | "admin";
-  banned: boolean | null;
-  banReason: string | null;
-  banExpires: Date | null;
-  /** The User timezone (an IANA name), or null when unset. */
-  timezone?: string | null;
-}
-
-interface Session {
-  id: string;
-  expiresAt: Date;
-  token: string;
-  createdAt: Date;
-  updatedAt: Date;
-  ipAddress: string | null;
-  userAgent: string | null;
-  userId: string;
 }
 
 interface AuthContextType {
@@ -108,15 +81,24 @@ const newAuthClient = (backendUrl: string) =>
   createAuthClient({
     baseURL: backendUrl,
     basePath: "/auth",
-    // Mirrors the backend's user additional fields so `updateUser` accepts them
     plugins: [
+      // Mirrors the backend's user additional fields so `updateUser` accepts them
       inferAdditionalFields({
         user: { timezone: { type: "string", required: false } },
       }),
+      // Types the admin plugin's User fields (`role`, `banned`, …) and its
+      // `authClient.admin.*` actions.
+      adminClient(),
     ],
   });
 
 type AuthClient = ReturnType<typeof newAuthClient>;
+
+type AuthSession = AuthClient["$Infer"]["Session"];
+/** The signed-in User, as better-auth returns it. */
+export type User = AuthSession["user"];
+/** The current session, as better-auth returns it. */
+export type Session = AuthSession["session"];
 
 const getAuthClient = (backendUrl: string) => {
   let client = authClients.get(backendUrl);
@@ -190,8 +172,7 @@ export function AuthProvider({
   }, [refetch, mutateOrgMembership, mutateWorkspace]);
 
   // Computed permissions
-  const isSuperAdmin =
-    (data?.user as unknown as User | undefined)?.role === "admin";
+  const isSuperAdmin = data?.user?.role === "admin";
   // Both sides must be known: while neither has loaded, `undefined ===
   // undefined` would report an owner.
   const ownsWorkspace = !!userId && workspace?.ownerId === userId;
@@ -222,8 +203,8 @@ export function AuthProvider({
   const value = useMemo<AuthContextType>(
     () => ({
       backendUrl,
-      user: (data?.user as unknown as User) ?? null,
-      session: (data?.session as unknown as Session) ?? null,
+      user: data?.user ?? null,
+      session: data?.session ?? null,
       isPending,
       isAuthLoading,
       error,

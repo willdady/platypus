@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { PlatypusUIMessage } from "@platypus/backend/src/types";
+import type { PlatypusUIMessage } from "@platypus/schemas";
 import { clearedToolCallIds } from "./tool-result-clearing";
 
 /**

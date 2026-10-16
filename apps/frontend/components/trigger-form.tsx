@@ -60,9 +60,6 @@ import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   type Trigger,
   type Agent,
-  type CronTriggerConfig,
-  type EventTriggerConfig,
-  type InboundTriggerConfig,
   type Organization,
   type TriggerType,
   type KanbanBoard,
@@ -564,17 +561,10 @@ const TriggerForm = ({
       agentId: trigger.agentId,
       instruction: trigger.instruction,
       cronExpression:
-        trigger.type === "cron"
-          ? (trigger.config as CronTriggerConfig).cronExpression
-          : "0 9 * * *",
+        trigger.type === "cron" ? trigger.config.cronExpression : "0 9 * * *",
       timezone:
-        trigger.type === "cron"
-          ? (trigger.config as CronTriggerConfig).timezone
-          : defaultTimezone,
-      isOneOff:
-        trigger.type === "cron"
-          ? (trigger.config as CronTriggerConfig).isOneOff
-          : false,
+        trigger.type === "cron" ? trigger.config.timezone : defaultTimezone,
+      isOneOff: trigger.type === "cron" ? trigger.config.isOneOff : false,
       enabled: trigger.enabled,
       maxRunsToKeep: trigger.maxRunsToKeep,
       search: trigger.search ?? false,
@@ -583,8 +573,7 @@ const TriggerForm = ({
     onSeed: (trigger) => {
       setTriggerType(trigger.type);
       if (trigger.type === "cron") {
-        const cronConfig = trigger.config as CronTriggerConfig;
-        const parsed = parseCronExpression(cronConfig.cronExpression);
+        const parsed = parseCronExpression(trigger.config.cronExpression);
         if (parsed) {
           setSimpleSchedule(parsed);
           setScheduleMode("simple");
@@ -592,13 +581,13 @@ const TriggerForm = ({
           setScheduleMode("advanced");
         }
       } else if (trigger.type === "event") {
-        const eventConfig = trigger.config as EventTriggerConfig;
-        setSelectedEvents(eventConfig.events);
-        setFilterBoardId(eventConfig.filters?.boardId || "");
-        setFilterColumnId(eventConfig.filters?.columnId || "");
-        setFilterChangedFields(eventConfig.filters?.changedFields || []);
+        const { events, filters } = trigger.config;
+        setSelectedEvents(events);
+        setFilterBoardId(filters?.boardId || "");
+        setFilterColumnId(filters?.columnId || "");
+        setFilterChangedFields(filters?.changedFields || []);
       } else if (trigger.type === "inbound") {
-        const inboundConfig = trigger.config as InboundTriggerConfig;
+        const inboundConfig = trigger.config;
         setInboundInputs(
           inboundConfig.inputs.map((input) => ({
             name: input.name,
@@ -702,6 +691,7 @@ const TriggerForm = ({
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete({
@@ -709,10 +699,6 @@ const TriggerForm = ({
     scope: { orgId, workspaceId },
     id: triggerId,
     onSuccess: () => router.push(workspaceRoutes(orgId, workspaceId).root),
-    onError: (message, _outcome, { close }) => {
-      toast.error(message);
-      close();
-    },
   });
 
   const effectiveCronExpression =
@@ -1719,6 +1705,7 @@ const TriggerForm = ({
         description="Are you sure you want to delete this trigger? This will also delete all run history for this trigger. This action cannot be undone."
         onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
 
       <ConfirmDialog

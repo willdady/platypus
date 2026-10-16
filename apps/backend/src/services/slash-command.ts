@@ -1,12 +1,12 @@
 import { createIdGenerator } from "ai";
-import { SKILL_NAME_SOURCE } from "@platypus/schemas";
+import { SKILL_NAME_SOURCE, type SkillLoadResult } from "@platypus/schemas";
 import { db } from "../index.ts";
 import { LOAD_SKILL_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import { SANDBOX_TOOLSET_ID } from "../tools/index.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { resolveAssignedSkillByName } from "./skill-resolution.ts";
-import { skillLoadResult, type SkillLoadResult } from "./skill-sandbox.ts";
+import { skillLoadResult } from "./skill-sandbox.ts";
 
 /**
  * A user-invoked Skill, named from the chat input.

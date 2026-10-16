@@ -19,26 +19,17 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { UsersList } from "./users-list";
+import type { ListedUser } from "./users-list";
 
 // --- Fixtures ----------------------------------------------------------------
 
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: "user" | "admin";
-  emailVerified: boolean;
-  banned?: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-const target: User = {
+const target: ListedUser = {
   id: "u2",
   email: "sam@example.com",
   name: "Sam",
   role: "user",
   emailVerified: true,
+  banned: false,
   createdAt: "2024-01-01T00:00:00.000Z",
   updatedAt: "2024-01-01T00:00:00.000Z",
 };
@@ -47,7 +38,7 @@ const target: User = {
  * `GET /auth/admin/list-users` answers with `{ users }`, not the
  * `{ results }` every other list returns, so it registers a raw payload.
  */
-function renderUsers(users: User[]) {
+function renderUsers(users: ListedUser[]) {
   mockScopedSWR({ "list-users": { data: { users } } }, { strict: true });
   return renderList(<UsersList />);
 }

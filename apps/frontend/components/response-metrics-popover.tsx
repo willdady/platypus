@@ -1,8 +1,7 @@
 "use client";
 
 import { InfoIcon } from "lucide-react";
-import type { CachedInputTokens } from "@platypus/schemas";
-import type { ChatMessageMetadata } from "@platypus/backend/src/types";
+import type { CachedInputTokens, ChatMessageMetadata } from "@platypus/schemas";
 import { MessageAction } from "./ai-elements/message";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cachedTokenBreakdown } from "@/lib/cached-tokens";

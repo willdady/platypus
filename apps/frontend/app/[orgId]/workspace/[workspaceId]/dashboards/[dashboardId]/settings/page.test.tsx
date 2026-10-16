@@ -142,7 +142,7 @@ describe("DashboardSettingsPage", () => {
       );
     });
 
-    it("reports a refused delete and stays on the page", async () => {
+    it("keeps a refused delete in the dialog, with the backend's message", async () => {
       setDataFor("/dashboards/d1", {
         id: "d1",
         name: "Ops",
@@ -153,13 +153,10 @@ describe("DashboardSettingsPage", () => {
 
       confirmDelete();
 
-      await waitFor(() =>
-        expect(toastError).toHaveBeenCalledWith("Not allowed"),
-      );
+      const dialog = screen.getByRole("dialog");
+      expect(await within(dialog).findByText("Not allowed")).toBeVisible();
+      expect(toastError).not.toHaveBeenCalled();
       expect(push).not.toHaveBeenCalled();
-      await waitFor(() =>
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-      );
     });
   });
 });

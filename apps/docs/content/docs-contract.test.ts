@@ -56,7 +56,7 @@ import {
   TOOL_NAME_PATTERN,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
-  triggerSchema,
+  triggerBaseSchema,
   eventTriggerEventSchema,
   webhookEventDataSchemas,
   webhookEventSchema,
@@ -1599,8 +1599,8 @@ const LIMIT_CLAIMS: LimitClaim[] = [
   {
     doc: "building-with-platypus/triggers.mdx",
     anchor: "**Instruction** — the message sent to the Agent",
-    source: "packages/schemas/index.ts (triggerSchema.instruction)",
-    expected: { max: stringField(triggerSchema, "instruction").max },
+    source: "packages/schemas/index.ts (triggerBaseSchema.instruction)",
+    expected: { max: stringField(triggerBaseSchema, "instruction").max },
   },
   {
     doc: "administering/workspaces.mdx",
@@ -2125,13 +2125,6 @@ const BACKEND_CONSTANTS = [
         : `at most once every ${ms / 60_000} minutes`,
     files: ["building-with-platypus/a2a-endpoints.mdx"],
     cost: "A Workspace Owner checking whether a token is still in use reads its last-used time as fresher than it is.",
-  },
-  {
-    source: "apps/frontend/hooks/use-model-selection.ts",
-    name: "STORAGE_TTL_MS",
-    phrase: (ms: number) => `for up to ${ms / 3_600_000} hours`,
-    files: ["building-with-platypus/chat.mdx"],
-    cost: "A User expects a new Chat to open on their last pick after it has already been forgotten.",
   },
 ] as const;
 

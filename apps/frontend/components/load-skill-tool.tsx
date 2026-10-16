@@ -2,7 +2,7 @@
 
 import { SparklesIcon } from "lucide-react";
 import type { ToolUIPart } from "ai";
-import { type CustomUITools } from "@platypus/backend/src/types";
+import { type CustomUITools } from "@platypus/schemas";
 import {
   ToolStatus,
   toolRowClassName,

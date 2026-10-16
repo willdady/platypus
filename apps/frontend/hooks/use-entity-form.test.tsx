@@ -5,6 +5,8 @@ import {
   swrMock,
   configuredMutate,
   toastSuccess,
+  toastError,
+  toastInfo,
   resetFormHarness,
   setData,
   setDataFor,
@@ -301,30 +303,61 @@ describe("useEntityDelete lifecycle", () => {
     expect(result.current.isDeleting).toBe(false);
   });
 
-  it("lets a caller close the dialog on a forbidden delete", async () => {
+  it("keeps a forbidden delete inline by default", async () => {
     stubRejectedSave("Managed elsewhere", 403);
-    let closed = false;
 
-    const { result } = renderHook(() =>
-      useEntityDelete({
-        entity: "skills",
-        scope: { orgId: "org1" },
-        id: "s1",
-        onError: (_message, _outcome, controls) => {
-          controls.close();
-          closed = true;
-        },
-      }),
-    );
-
+    const { result } = renderDelete();
     act(() => result.current.openDeleteDialog());
-
     await act(async () => {
       await result.current.handleDelete();
     });
 
-    expect(closed).toBe(true);
+    expect(result.current.isDeleteDialogOpen).toBe(true);
+    expect(result.current.deleteError).toBe("Managed elsewhere");
+    expect(result.current.isDeleting).toBe(false);
+    expect(toastInfo).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("closes a forbidden delete with a guidance toast when opted in", async () => {
+    stubRejectedSave("Managed elsewhere", 403);
+
+    const { result } = renderDelete({ guidanceOnForbidden: true });
+    act(() => result.current.openDeleteDialog());
+    await act(async () => {
+      await result.current.handleDelete();
+    });
+
+    expect(toastInfo).toHaveBeenCalledWith("Managed elsewhere");
+    expect(toastError).not.toHaveBeenCalled();
     expect(result.current.isDeleteDialogOpen).toBe(false);
     expect(result.current.deleteError).toBeNull();
+    expect(result.current.isDeleting).toBe(false);
+  });
+
+  it("keeps any other refusal inline even when opted in", async () => {
+    stubRejectedSave("Still referenced", 409);
+
+    const { result } = renderDelete({ guidanceOnForbidden: true });
+    act(() => result.current.openDeleteDialog());
+    await act(async () => {
+      await result.current.handleDelete();
+    });
+
+    expect(result.current.isDeleteDialogOpen).toBe(true);
+    expect(result.current.deleteError).toBe("Still referenced");
+    expect(toastInfo).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
   });
 });
+
+function renderDelete(options: { guidanceOnForbidden?: boolean } = {}) {
+  return renderHook(() =>
+    useEntityDelete({
+      entity: "skills",
+      scope: { orgId: "org1" },
+      id: "s1",
+      ...options,
+    }),
+  );
+}

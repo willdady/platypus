@@ -1,6 +1,10 @@
 "use client";
 
 import type { ToolUIPart } from "ai";
+import type {
+  SubAgentActivity,
+  SubAgentActivityEntry,
+} from "@platypus/schemas";
 import { ActivityRow, type ActivityRowEntry } from "./activity-row";
 import { TurnNotice } from "./turn-notice";
 import {
@@ -12,20 +16,6 @@ import { Shimmer } from "./ai-elements/shimmer";
 import { Tool, ToolContent, ToolHeader } from "./ai-elements/tool";
 import { toolCallDurationMs } from "@/lib/tool-duration";
 import { useMemo } from "react";
-
-type SubAgentActivityEntry = {
-  type: "tool-call" | "thinking" | "generating" | "failed";
-  toolName?: string;
-  status: "running" | "completed" | "error";
-  error?: string;
-};
-
-type SubAgentActivity = {
-  entries: SubAgentActivityEntry[];
-  text?: string;
-  truncatedByTokenLimit?: true;
-  stoppedAtStepLimit?: true;
-};
 
 /**
  * What the person reading a delegated run is told when the Sub-Agent stopped at

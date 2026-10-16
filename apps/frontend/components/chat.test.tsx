@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ChatStatus, FileUIPart, PrepareSendMessagesRequest } from "ai";
-import type { PlatypusUIMessage } from "@platypus/backend/src/types";
+import type { PlatypusUIMessage } from "@platypus/schemas";
 import { reportPdf } from "@/test/chat-test-fixtures";
 import {
   jsonResponse,

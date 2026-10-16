@@ -7,6 +7,7 @@ import { writeEntity, type Scope, type WriteOutcome } from "@/lib/api-write";
 import {
   applyDeleteOutcome,
   applyWriteOutcome,
+  toastGuidanceOrError,
   type ApplyWriteOutcomeOptions,
 } from "@/lib/apply-write-outcome";
 import {
@@ -337,15 +338,6 @@ export function useEntityForm<
   };
 }
 
-export interface DeleteControls {
-  /** Closes the dialog and stops the spinner. */
-  close: () => void;
-  /** Shows `message` in the dialog, keeping it open. */
-  setError: (message: string | null) => void;
-  /** Stops the spinner, leaving the dialog open. */
-  stopLoading: () => void;
-}
-
 export interface UseEntityDeleteOptions<TResult> {
   entity: string;
   scope: Scope;
@@ -355,15 +347,14 @@ export interface UseEntityDeleteOptions<TResult> {
   successMessage?: Message;
   onSuccess?: (data: TResult) => void | Promise<void>;
   /**
-   * Overrides the default failure handling — the default shows the message in
-   * the dialog and leaves it open. `controls` closes the dialog, sets the
-   * dialog error, or stops the spinner without closing.
+   * Treats a `forbidden` refusal as guidance rather than a failure — an info
+   * toast, dialog closed. For Shared-resource deletes only (#570): the
+   * backend's message says where the resource is managed, which is nothing
+   * the user can act on in this dialog. Defaults to false, where a forbidden
+   * delete stays inline like every other refusal. Same rule as
+   * `useDeleteFlow`'s option of the same name.
    */
-  onError?: (
-    message: string,
-    outcome: WriteOutcome<TResult>,
-    controls: DeleteControls,
-  ) => void;
+  guidanceOnForbidden?: boolean;
   /** Replaces `writeEntity`, for a delete that isn't a scoped collection member. */
   write?: () => Promise<WriteOutcome<TResult>>;
 }
@@ -390,7 +381,7 @@ export function useEntityDelete<TResult = unknown>({
   id,
   successMessage,
   onSuccess,
-  onError,
+  guidanceOnForbidden = false,
   write,
 }: UseEntityDeleteOptions<TResult>): UseEntityDeleteResult {
   const backendUrl = useBackendUrl();
@@ -421,19 +412,13 @@ export function useEntityDelete<TResult = unknown>({
         await onSuccess?.(data);
       },
       onError: (message, outcome) => {
-        if (onError) {
-          onError(message, outcome, {
-            close: () => {
-              setIsDeleteDialogOpen(false);
-              setIsDeleting(false);
-            },
-            setError: setDeleteError,
-            stopLoading: () => setIsDeleting(false),
-          });
-          return;
-        }
-        setDeleteError(message);
         setIsDeleting(false);
+        if (guidanceOnForbidden && outcome.outcome === "forbidden") {
+          setIsDeleteDialogOpen(false);
+          toastGuidanceOrError(message, outcome);
+        } else {
+          setDeleteError(message);
+        }
       },
     });
   }, [
@@ -443,7 +428,7 @@ export function useEntityDelete<TResult = unknown>({
     id,
     successMessage,
     onSuccess,
-    onError,
+    guidanceOnForbidden,
     write,
     mutate,
   ]);

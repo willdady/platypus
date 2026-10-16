@@ -202,6 +202,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete<Workspace>({
@@ -215,10 +216,6 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
       // gone, and a client-side transition would keep the app shell (and its
       // cached payload for the deleted Workspace) alive around it.
       window.location.href = withBasePath(orgRoutes(orgId).root);
-    },
-    onError: (message, _outcome, { close }) => {
-      toast.error(message);
-      close();
     },
   });
 
@@ -550,6 +547,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
           confirmPhrase="Delete workspace"
           onConfirm={handleDelete}
           loading={isDeleting}
+          error={deleteError}
         />
       </div>
     </DetailFormState>

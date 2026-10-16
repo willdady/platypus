@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEntityForm } from "@/hooks/use-entity-form";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FooterSkeleton } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,11 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useBackendUrl } from "@/components/auth-provider";
-import { writeEntity } from "@/lib/api-write";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import type { Dashboard } from "@platypus/schemas";
-import { toast } from "sonner";
 import { workspaceRoutes } from "@/lib/routes";
 
 const DashboardSettingsPage = ({
@@ -30,12 +27,9 @@ const DashboardSettingsPage = ({
 }) => {
   const { orgId, workspaceId, dashboardId } = use(params);
   const routes = workspaceRoutes(orgId, workspaceId);
-  const backendUrl = useBackendUrl();
   const router = useRouter();
 
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   const {
     record: dashboard,
@@ -70,23 +64,19 @@ const DashboardSettingsPage = ({
     await submit();
   };
 
-  const handleDelete = async () => {
-    if (!backendUrl) return;
-    setDeleting(true);
-    const outcome = await writeEntity(
-      backendUrl,
-      "dashboards",
-      { orgId, workspaceId },
-      { id: dashboardId },
-    );
-    if (outcome.outcome === "success") {
-      router.push(routes.root);
-    } else {
-      toast.error(outcome.message);
-      setDeleting(false);
-      setDeleteOpen(false);
-    }
-  };
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    deleteError,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "dashboards",
+    scope: { orgId, workspaceId },
+    id: dashboardId,
+    onSuccess: () => router.push(routes.root),
+  });
 
   return (
     <ResourcePage
@@ -141,15 +131,15 @@ const DashboardSettingsPage = ({
           <div className="flex gap-2">
             <Button
               type="submit"
-              disabled={saving || deleting || !formData.name.trim()}
+              disabled={saving || isDeleting || !formData.name.trim()}
             >
               Save
             </Button>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setDeleteOpen(true)}
-              disabled={saving || deleting}
+              onClick={openDeleteDialog}
+              disabled={saving || isDeleting}
             >
               <Trash2 /> Delete
             </Button>
@@ -157,9 +147,9 @@ const DashboardSettingsPage = ({
         </form>
       </DetailFormState>
 
-      <ConfirmDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
+      <EntityDeleteDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
         title="Delete Dashboard"
         description={
           <>
@@ -168,12 +158,10 @@ const DashboardSettingsPage = ({
             and all of its widgets.
           </>
         }
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         confirmPhrase="delete dashboard"
-        loadingLabel="Deleting..."
         onConfirm={handleDelete}
-        loading={deleting}
+        loading={isDeleting}
+        error={deleteError}
       />
     </ResourcePage>
   );

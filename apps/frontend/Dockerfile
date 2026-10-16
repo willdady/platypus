@@ -22,7 +22,6 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json .npmrc ./
 COPY patches ./patches
 # Copy package.json files for all workspaces
 COPY apps/frontend/package.json ./apps/frontend/
-COPY apps/backend/package.json ./apps/backend/
 COPY packages/schemas/package.json ./packages/schemas/
 COPY packages/plugin-sdk/package.json ./packages/plugin-sdk/
 
@@ -42,7 +41,6 @@ RUN npm install -g corepack@$COREPACK_VERSION && corepack enable pnpm
 COPY --from=deps app/ ./
 # Copy source code for frontend and its dependencies
 COPY apps/frontend ./apps/frontend
-COPY apps/backend ./apps/backend
 COPY packages/schemas ./packages/schemas
 COPY packages/plugin-sdk ./packages/plugin-sdk
 

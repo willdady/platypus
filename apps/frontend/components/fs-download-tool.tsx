@@ -3,7 +3,7 @@
 import { DownloadIcon, FileDownIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import type { ToolUIPart } from "ai";
-import { type CustomUITools } from "@platypus/backend/src/types";
+import { type CustomUITools } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { scopedUrl } from "@/lib/api-write";

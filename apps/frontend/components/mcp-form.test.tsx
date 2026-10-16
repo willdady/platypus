@@ -103,6 +103,32 @@ describe("McpForm locked delete", () => {
       ),
     );
     expect(toast.error).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps any other refused delete in the dialog", async () => {
+    setData({
+      id: "m1",
+      name: "Docs",
+      url: "http://mcp.test",
+      authType: "None",
+    } as unknown as MCP);
+    stubRejectedSave("Still used by an Agent", 409);
+
+    render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+
+    expect(
+      await screen.findByText("Still used by an Agent"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.info).not.toHaveBeenCalled();
   });
 });
 

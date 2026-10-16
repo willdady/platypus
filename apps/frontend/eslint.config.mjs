@@ -71,6 +71,29 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // The frontend never compiles backend source: the Chat UI message contract
+  // it shares with the backend lives in `@platypus/schemas` (#1505).
+  {
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@platypus/backend", "@platypus/backend/*"],
+              message:
+                "The frontend must not import backend source; shared types live in @platypus/schemas.",
+            },
+            {
+              regex: "^(\\.\\./)+(apps/)?backend(/|$)",
+              message:
+                "The frontend must not import backend source; shared types live in @platypus/schemas.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Test files: Vitest, Testing Library and jest-dom rules.
   {
     files: TEST_FILES,

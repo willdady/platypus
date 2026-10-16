@@ -350,6 +350,7 @@ const AgentForm = ({
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete<Agent>({
@@ -357,10 +358,7 @@ const AgentForm = ({
     scope,
     id: agentId,
     onSuccess: () => router.push(doneHref),
-    onError: (message, outcome, { close }) => {
-      toastGuidanceOrError(message, outcome);
-      close();
-    },
+    guidanceOnForbidden: true,
   });
 
   // Initialize with first provider's first model once providers are loaded
@@ -954,6 +952,7 @@ const AgentForm = ({
         description="Are you sure you want to delete this agent? This action cannot be undone."
         onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
     </div>
   );

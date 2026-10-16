@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
-import type { ChatStatus as RunStatus } from "@platypus/schemas";
+import type {
+  ChatStatus as RunStatus,
+  PlatypusUIMessage,
+} from "@platypus/schemas";
 import type { ChatStatus as TurnStatus } from "ai";
-import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 import {
   CHAT_POLL_INTERVAL_MS,
   chatPollIntervalMs,

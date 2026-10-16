@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
+    "target": "ES2022",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
@@ -22,10 +22,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"],
-      "@platypus/backend/src/types": ["../backend/src/types.ts"]
-    },
-    "types": ["vitest/globals"]
+      "@/*": ["./*"]
+    }
   },
   "include": [
     "next-env.d.ts",
@@ -35,5 +33,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "test/**",
+    "vitest.setup.ts"
+  ]
 }

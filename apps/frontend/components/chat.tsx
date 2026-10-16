@@ -25,8 +25,8 @@ import {
   nextTurnOccupancy,
   type Sandbox,
   UNTITLED_CHAT_TITLE,
+  type PlatypusUIMessage,
 } from "@platypus/schemas";
-import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import { cn, joinUrl, optionalFetcher } from "@/lib/utils";
 import {
   chatPollIntervalMs,

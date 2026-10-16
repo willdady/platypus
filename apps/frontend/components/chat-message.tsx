@@ -1,5 +1,4 @@
 import { Fragment, memo, type ReactNode } from "react";
-import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import {
   Message,
   MessageContent,
@@ -30,13 +29,20 @@ import {
 import {
   DynamicToolUIPart,
   FileUIPart,
+  ReasoningUIPart,
   SourceUrlUIPart,
   TextUIPart,
   ToolUIPart,
   isToolUIPart,
   type ChatStatus,
 } from "ai";
-import { Agent, formatFileSize, isPresentableUrl } from "@platypus/schemas";
+import {
+  Agent,
+  formatFileSize,
+  isPresentableUrl,
+  type CustomUITools,
+  type PlatypusUIMessage,
+} from "@platypus/schemas";
 import {
   isImageAttachment,
   messageSandboxUploads,
@@ -95,9 +101,30 @@ export const SEARCH_UNAVAILABLE_NOTICE =
 
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
-const isLoadSkillPart = (part: MessagePart) => part.type === "tool-loadSkill";
+/** A tool part of a Chat message, typed by `CustomUITools`. */
+type MessageToolPart = ToolUIPart<CustomUITools>;
 
-const isReadSkillFilePart = (part: MessagePart) =>
+type PartOfType<T extends MessagePart["type"]> = Extract<
+  MessagePart,
+  { type: T }
+>;
+
+const isTextPart = (part: MessagePart): part is TextUIPart =>
+  part.type === "text";
+
+const isReasoningPart = (part: MessagePart): part is ReasoningUIPart =>
+  part.type === "reasoning";
+
+const isDynamicToolPart = (part: MessagePart): part is DynamicToolUIPart =>
+  part.type === "dynamic-tool";
+
+const isLoadSkillPart = (
+  part: MessagePart,
+): part is PartOfType<"tool-loadSkill"> => part.type === "tool-loadSkill";
+
+const isReadSkillFilePart = (
+  part: MessagePart,
+): part is PartOfType<"tool-readSkillFile"> =>
   part.type === "tool-readSkillFile";
 
 /**
@@ -106,16 +133,18 @@ const isReadSkillFilePart = (part: MessagePart) =>
  * dispatcher hold, permanently — stored messages are never rewritten, so this
  * predicate matches the old shape IN ADDITION to the new one, for ever.
  */
-const isSubAgentToolPart = (part: MessagePart) =>
+const isSubAgentToolPart = (part: MessagePart): part is MessageToolPart =>
   isToolUIPart(part) &&
   (part.type === "tool-delegate" || part.type.startsWith("tool-delegateTo"));
 
 // A failed download has nothing to offer, so it falls through to the generic
 // renderer as an ordinary tool error.
-const isFsDownloadPart = (part: MessagePart) =>
+const isFsDownloadPart = (
+  part: MessagePart,
+): part is Exclude<PartOfType<"tool-fsDownload">, { state: "output-error" }> =>
   part.type === "tool-fsDownload" && part.state !== "output-error";
 
-const isWebToolPart = (part: MessagePart) =>
+const isWebToolPart = (part: MessagePart): part is MessageToolPart =>
   isToolUIPart(part) && isNormalizedWebToolPart(part);
 
 /**
@@ -146,17 +175,30 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
  * repeat what the specialised card (and, for search, the Sources row above
  * the parts loop) already shows.
  */
-export const isGenericToolPart = (part: MessagePart) =>
+export const isGenericToolPart = (part: MessagePart): part is MessageToolPart =>
   isToolUIPart(part) &&
   !specializedToolMatchers.some((matches) => matches(part));
 
-const isImageFilePart = (part: MessagePart) =>
-  part.type === "file" && isImageAttachment(part as FileUIPart);
+const isImageFilePart = (part: MessagePart): part is FileUIPart =>
+  part.type === "file" && isImageAttachment(part);
 
 interface PartRenderer {
   matches: (part: MessagePart) => boolean;
   render: (part: MessagePart, i: number) => ReactNode;
 }
+
+/**
+ * Pairs a type guard with a renderer that takes the part it guards, so
+ * `render` needs no cast. The guard runs again inside `render`, which keeps
+ * the entry honest if it is ever called for a part `matches` did not claim.
+ */
+const partRenderer = <P extends MessagePart>(
+  matches: (part: MessagePart) => part is P,
+  render: (part: P, i: number) => ReactNode,
+): PartRenderer => ({
+  matches,
+  render: (part, i) => (matches(part) ? render(part, i) : null),
+});
 
 interface ChatMessageProps {
   /** The message object to render */
@@ -305,185 +347,125 @@ export const ChatMessage = memo(function ChatMessage({
   // reordered freely — the first (and only) match wins regardless of
   // position.
   const partRenderers: PartRenderer[] = [
-    {
-      matches: (part) => part.type === "text",
-      render: (part, i) => {
-        const textPart = part as TextUIPart;
-        return (
-          <Message
-            key={`${message.id}-${i}`}
-            from={message.role}
-            avatar={assistantAvatar(i)}
-          >
-            <MessageContent className="max-w-full">
-              <MessageResponse>{textPart.text}</MessageResponse>
-            </MessageContent>
-          </Message>
-        );
-      },
-    },
-    {
-      matches: (part) => part.type === "reasoning",
-      render: (part, i) => {
-        const reasoningPart = part as Extract<
-          MessagePart,
-          { type: "reasoning" }
-        >;
-        return (
-          <Reasoning
-            key={`${message.id}-${i}`}
-            isStreaming={
-              status === "streaming" &&
-              i === (message.parts?.length ?? 0) - 1 &&
-              isLastMessage
-            }
-            defaultOpen={false}
-          >
-            <ReasoningTrigger className="cursor-pointer" />
-            <ReasoningContent>{reasoningPart.text}</ReasoningContent>
-          </Reasoning>
-        );
-      },
-    },
-    {
-      matches: (part) => part.type === "dynamic-tool",
-      render: (part, i) => {
-        const toolPart = part as DynamicToolUIPart;
-        return (
-          <Tool key={`${message.id}-${i}`}>
-            {/* An MCP tool's name is its identity — namespace and all — so it
+    partRenderer(isTextPart, (textPart, i) => (
+      <Message
+        key={`${message.id}-${i}`}
+        from={message.role}
+        avatar={assistantAvatar(i)}
+      >
+        <MessageContent className="max-w-full">
+          <MessageResponse>{textPart.text}</MessageResponse>
+        </MessageContent>
+      </Message>
+    )),
+    partRenderer(isReasoningPart, (reasoningPart, i) => (
+      <Reasoning
+        key={`${message.id}-${i}`}
+        isStreaming={
+          status === "streaming" &&
+          i === (message.parts?.length ?? 0) - 1 &&
+          isLastMessage
+        }
+        defaultOpen={false}
+      >
+        <ReasoningTrigger className="cursor-pointer" />
+        <ReasoningContent>{reasoningPart.text}</ReasoningContent>
+      </Reasoning>
+    )),
+    partRenderer(isDynamicToolPart, (toolPart, i) => (
+      <Tool key={`${message.id}-${i}`}>
+        {/* An MCP tool's name is its identity — namespace and all — so it
             is shown verbatim rather than humanised (issue #691 is why it has
             to truncate). */}
-            <ToolHeader
-              state={toolPart.state}
-              type={toolPart.type}
-              title={toolPart.toolName}
-              durationMs={toolCallDurationMs(
-                toolPart.toolMetadata,
-                message.metadata,
-                toolPart.toolCallId,
-              )}
+        <ToolHeader
+          state={toolPart.state}
+          type={toolPart.type}
+          title={toolPart.toolName}
+          durationMs={toolCallDurationMs(
+            toolPart.toolMetadata,
+            message.metadata,
+            toolPart.toolCallId,
+          )}
+        />
+        <ToolContent>
+          <ToolInput input={toolPart.input} />
+          <ToolOutput output={toolPart.output} errorText={toolPart.errorText} />
+        </ToolContent>
+      </Tool>
+    )),
+    partRenderer(isLoadSkillPart, (part, i) => (
+      <LoadSkillTool key={`${message.id}-${i}`} toolPart={part} />
+    )),
+    partRenderer(isReadSkillFilePart, (part, i) => (
+      <ReadSkillFileTool key={`${message.id}-${i}`} toolPart={part} />
+    )),
+    partRenderer(isWebToolPart, (part, i) => (
+      <WebToolCard
+        key={`${message.id}-${i}`}
+        toolPart={part}
+        messageMetadata={message.metadata}
+        cleared={staleToolCallIds?.has(part.toolCallId)}
+      />
+    )),
+    partRenderer(isSubAgentToolPart, (part, i) => (
+      <SubAgentTool
+        key={`${message.id}-${i}`}
+        toolPart={part}
+        messageMetadata={message.metadata}
+      />
+    )),
+    partRenderer(isFsDownloadPart, (part, i) => (
+      <FsDownloadTool key={`${message.id}-${i}`} toolPart={part} />
+    )),
+    partRenderer(isGenericToolPart, (toolPart, i) => {
+      const toolInput = toolPart.input as Record<string, unknown> | undefined;
+      const toolLabel = (toolInput?.label ?? toolInput?.name) as
+        string | undefined;
+      return (
+        <Tool key={`${message.id}-${i}`}>
+          <ToolHeader
+            state={toolPart.state}
+            type={toolPart.type}
+            label={toolLabel}
+            durationMs={toolCallDurationMs(
+              toolPart.toolMetadata,
+              message.metadata,
+              toolPart.toolCallId,
+            )}
+            cleared={staleToolCallIds?.has(toolPart.toolCallId)}
+          />
+          <ToolContent>
+            <ToolInput input={toolPart.input} />
+            <ToolOutput
+              output={toolPart.output}
+              errorText={toolPart.errorText}
             />
-            <ToolContent>
-              <ToolInput input={toolPart.input} />
-              <ToolOutput
-                output={toolPart.output}
-                errorText={toolPart.errorText}
-              />
-            </ToolContent>
-          </Tool>
-        );
-      },
-    },
-    {
-      matches: isLoadSkillPart,
-      render: (part, i) => (
-        <LoadSkillTool
-          key={`${message.id}-${i}`}
-          toolPart={part as Extract<MessagePart, { type: "tool-loadSkill" }>}
-        />
-      ),
-    },
-    {
-      matches: isReadSkillFilePart,
-      render: (part, i) => (
-        <ReadSkillFileTool
-          key={`${message.id}-${i}`}
-          toolPart={
-            part as Extract<MessagePart, { type: "tool-readSkillFile" }>
-          }
-        />
-      ),
-    },
-    {
-      matches: isWebToolPart,
-      render: (part, i) => (
-        <WebToolCard
-          key={`${message.id}-${i}`}
-          toolPart={part as ToolUIPart}
-          messageMetadata={message.metadata}
-          cleared={staleToolCallIds?.has((part as ToolUIPart).toolCallId)}
-        />
-      ),
-    },
-    {
-      matches: isSubAgentToolPart,
-      render: (part, i) => (
-        <SubAgentTool
-          key={`${message.id}-${i}`}
-          toolPart={part as ToolUIPart}
-          messageMetadata={message.metadata}
-        />
-      ),
-    },
-    {
-      matches: isFsDownloadPart,
-      render: (part, i) => (
-        <FsDownloadTool
-          key={`${message.id}-${i}`}
-          toolPart={part as Extract<MessagePart, { type: "tool-fsDownload" }>}
-        />
-      ),
-    },
-    {
-      matches: isGenericToolPart,
-      render: (part, i) => {
-        const toolPart = part as ToolUIPart;
-        const toolInput = toolPart.input as Record<string, unknown> | undefined;
-        const toolLabel = (toolInput?.label ?? toolInput?.name) as
-          string | undefined;
-        return (
-          <Tool key={`${message.id}-${i}`}>
-            <ToolHeader
-              state={toolPart.state}
-              type={toolPart.type}
-              label={toolLabel}
-              durationMs={toolCallDurationMs(
-                toolPart.toolMetadata,
-                message.metadata,
-                toolPart.toolCallId,
-              )}
-              cleared={staleToolCallIds?.has(toolPart.toolCallId)}
-            />
-            <ToolContent>
-              <ToolInput input={toolPart.input} />
-              <ToolOutput
-                output={toolPart.output}
-                errorText={toolPart.errorText}
-              />
-            </ToolContent>
-          </Tool>
-        );
-      },
-    },
-    {
-      matches: isImageFilePart,
-      render: (part, i) => {
-        const filePart = part as FileUIPart;
-        return (
-          <Message
-            key={`${message.id}-${i}`}
-            from={message.role}
-            avatar={assistantAvatar(i)}
-          >
-            <MessageContent className="max-w-full">
-              {/* Generated/uploaded image served from a backend or data: URL;
+          </ToolContent>
+        </Tool>
+      );
+    }),
+    partRenderer(isImageFilePart, (filePart, i) => (
+      <Message
+        key={`${message.id}-${i}`}
+        from={message.role}
+        avatar={assistantAvatar(i)}
+      >
+        <MessageContent className="max-w-full">
+          {/* Generated/uploaded image served from a backend or data: URL;
               not routable through the Next image optimizer. Its size is
               unknown until it loads. Lazy further up the transcript; the
               newest message's is the one being looked at. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={filePart.url}
-                alt={filePart.filename || "Generated image"}
-                className="max-w-full rounded-lg border"
-                loading={isLastMessage ? "eager" : "lazy"}
-                decoding="async"
-              />
-            </MessageContent>
-          </Message>
-        );
-      },
-    },
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={filePart.url}
+            alt={filePart.filename || "Generated image"}
+            className="max-w-full rounded-lg border"
+            loading={isLastMessage ? "eager" : "lazy"}
+            decoding="async"
+          />
+        </MessageContent>
+      </Message>
+    )),
   ];
 
   const isTurnInFlight = isInFlight(status);

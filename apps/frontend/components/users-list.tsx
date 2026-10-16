@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Shield, User as UserIcon, KeyRound, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth, useBackendUrl, type User } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
@@ -31,34 +31,31 @@ import {
 } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: "user" | "admin";
-  emailVerified: boolean;
-  banned?: boolean;
+/**
+ * A row of `list-users`, read as plain JSON rather than through the auth
+ * client, so its timestamps arrive as strings.
+ */
+export type ListedUser = Omit<User, "createdAt" | "updatedAt"> & {
   createdAt: string;
   updatedAt: string;
-}
+};
 
 interface ListUsersResponse {
-  users: User[];
+  users: ListedUser[];
 }
 
 export function UsersList() {
   const backendUrl = useBackendUrl();
   const { user: currentUser } = useAuth();
-  const [changingPasswordUser, setChangingPasswordUser] = useState<User | null>(
-    null,
-  );
+  const [changingPasswordUser, setChangingPasswordUser] =
+    useState<ListedUser | null>(null);
 
   const { data, error, isLoading, mutate } = useSWR<ListUsersResponse>(
     joinUrl(backendUrl, "/auth/admin/list-users"),
     fetcher,
   );
 
-  const deleteFlow = useDeleteFlow<User>({
+  const deleteFlow = useDeleteFlow<ListedUser>({
     mutate,
     delete: (target, url) =>
       writeAt(joinUrl(url, "/auth/admin/remove-user"), {

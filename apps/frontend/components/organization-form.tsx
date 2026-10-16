@@ -80,6 +80,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete({
@@ -95,10 +96,6 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
       // surrounding layout would go on rendering. Reloading rebuilds
       // everything from a server that now agrees the Org is gone.
       window.location.href = withBasePath(appRoutes.home);
-    },
-    onError: (message, _outcome, { close }) => {
-      toast.error(message);
-      close();
     },
   });
 
@@ -180,6 +177,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
           confirmPhrase="Delete organization"
           onConfirm={handleDelete}
           loading={isDeleting}
+          error={deleteError}
         />
       </div>
     </DetailFormState>
