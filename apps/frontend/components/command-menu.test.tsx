@@ -16,8 +16,8 @@ vi.mock("swr", () => swrMock);
 
 import { CommandMenu } from "./command-menu";
 
-const openMenu = () => {
-  renderList(<CommandMenu orgId="org1" workspaceId="ws1" />);
+const openMenu = async () => {
+  await renderList(<CommandMenu orgId="org1" workspaceId="ws1" />);
   act(() => {
     fireEvent.keyDown(document, { key: "k", metaKey: true });
   });
@@ -28,21 +28,21 @@ beforeEach(() => {
 });
 
 describe("CommandMenu", () => {
-  it("lists the workspace's agents", () => {
+  it("lists the workspace's agents", async () => {
     mockScopedSWR({ "/agents": [{ id: "a1", name: "Researcher" }] });
-    openMenu();
+    await openMenu();
 
     expect(screen.getByText("Researcher")).toBeInTheDocument();
   });
 
-  it("lists pinned agents first, in their own group", () => {
+  it("lists pinned agents first, in their own group", async () => {
     mockScopedSWR({
       "/agents": [
         { id: "a1", name: "Researcher", isPinned: false },
         { id: "a2", name: "Writer", isPinned: true },
       ],
     });
-    openMenu();
+    await openMenu();
 
     const pinned = screen.getByRole("group", { name: "Pinned agents" });
     const rest = screen.getByRole("group", { name: "Agents" });
@@ -61,9 +61,9 @@ describe("CommandMenu", () => {
     ).toBeTruthy();
   });
 
-  it("shows no Pinned agents group when nothing is pinned", () => {
+  it("shows no Pinned agents group when nothing is pinned", async () => {
     mockScopedSWR({ "/agents": [{ id: "a1", name: "Researcher" }] });
-    openMenu();
+    await openMenu();
 
     expect(
       screen.queryByRole("group", { name: "Pinned agents" }),
@@ -72,11 +72,11 @@ describe("CommandMenu", () => {
 
   it.each(["agents", "boards", "triggers"])(
     "offers to retry a failed %s read rather than dropping the group",
-    (subject) => {
+    async (subject) => {
       mockScopedSWR({
         [`/${subject}`]: { error: { status: 500, message: "Server error" } },
       });
-      openMenu();
+      await openMenu();
 
       const retry = screen.getByRole("option", {
         name: `Couldn't load ${subject}. Retry`,
@@ -89,9 +89,9 @@ describe("CommandMenu", () => {
     },
   );
 
-  it("disables New chat once the workspace is known to have no providers", () => {
+  it("disables New chat once the workspace is known to have no providers", async () => {
     mockScopedSWR({ "/providers": [] });
-    openMenu();
+    await openMenu();
 
     const item = screen.getByRole("option", { name: "New chat" });
     expect(item).toHaveAttribute("aria-disabled", "true");
@@ -103,9 +103,9 @@ describe("CommandMenu", () => {
     ["loading", { isLoading: true }],
     ["errored", { error: { status: 500, message: "Server error" } }],
     ["has providers", [{ id: "p1" }]],
-  ])("opens a new chat while the providers read is %s", (_, read) => {
+  ])("opens a new chat while the providers read is %s", async (_, read) => {
     mockScopedSWR({ "/providers": read });
-    openMenu();
+    await openMenu();
 
     fireEvent.click(screen.getByRole("option", { name: "New chat" }));
     expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/chat");

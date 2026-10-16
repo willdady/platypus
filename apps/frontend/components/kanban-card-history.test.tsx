@@ -14,8 +14,8 @@ vi.mock("swr", () => swrMock);
 
 import { KanbanCardHistory } from "./kanban-card-history";
 
-const openHistory = () => {
-  renderList(
+const openHistory = async () => {
+  await renderList(
     <KanbanCardHistory
       orgId="org1"
       workspaceId="ws1"
@@ -29,21 +29,21 @@ const openHistory = () => {
 beforeEach(() => resetListHarness());
 
 describe("KanbanCardHistory", () => {
-  it("says so when the card has no recorded changes", () => {
+  it("says so when the card has no recorded changes", async () => {
     mockScopedSWR({ "/history": [] }, { strict: true });
-    openHistory();
+    await openHistory();
 
     expect(screen.getByText("No changes recorded yet.")).toBeInTheDocument();
   });
 
-  it("shows a failed read as an error with a retry, not as loading or empty", () => {
+  it("shows a failed read as an error with a retry, not as loading or empty", async () => {
     mockScopedSWR(
       {
         "/history": { error: { status: 500, message: "Server error" } },
       },
       { strict: true },
     );
-    openHistory();
+    await openHistory();
 
     expect(
       screen.getByText("Failed to load history. Server error"),

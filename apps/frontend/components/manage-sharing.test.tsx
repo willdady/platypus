@@ -54,7 +54,7 @@ describe("ManageAttachmentsDialog attach", () => {
   it("POSTs the attachment and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
 
-    renderDialog({ workspaces: [{ id: "ws1", name: "Engineering" }] });
+    await renderDialog({ workspaces: [{ id: "ws1", name: "Engineering" }] });
     fireEvent.click(screen.getByText("Engineering"));
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -74,7 +74,7 @@ describe("ManageAttachmentsDialog attach", () => {
   it("surfaces the backend's reason inline and does not revalidate when attach is refused", async () => {
     stubRejectedSave("Already attached", 409);
 
-    renderDialog({ workspaces: [{ id: "ws1", name: "Engineering" }] });
+    await renderDialog({ workspaces: [{ id: "ws1", name: "Engineering" }] });
     fireEvent.click(screen.getByText("Engineering"));
 
     expect(await screen.findByText("Already attached")).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe("ManageAttachmentsDialog detach", () => {
   it("surfaces the backend's reason inline and does not revalidate when detach is refused", async () => {
     stubRejectedSave("Locked elsewhere", 403);
 
-    renderDialog({
+    await renderDialog({
       attached: [{ workspaceId: "ws1", workspaceName: "Engineering" }],
     });
     fireEvent.click(screen.getByLabelText("Detach Engineering"));
@@ -99,12 +99,12 @@ describe("ManageAttachmentsDialog detach", () => {
 });
 
 describe("loading states", () => {
-  it("shows a placeholder, not a false empty, while the dialog's reads load", () => {
+  it("shows a placeholder, not a false empty, while the dialog's reads load", async () => {
     mockScopedSWR({
       "/attachments?": { isLoading: true },
       "/workspaces": { isLoading: true },
     });
-    renderList(
+    await renderList(
       <ManageAttachmentsDialog
         orgId="org1"
         resourceType="agent"
@@ -123,9 +123,9 @@ describe("loading states", () => {
     expect(screen.queryByText("No workspaces found.")).not.toBeInTheDocument();
   });
 
-  it('shows the badge\'s placeholder, not "0 workspaces", while its read loads', () => {
+  it('shows the badge\'s placeholder, not "0 workspaces", while its read loads', async () => {
     mockScopedSWR({ "/attachments?": { isLoading: true } });
-    renderList(
+    await renderList(
       <SharedWithBadge orgId="org1" resourceType="agent" resourceId="a1" />,
     );
 
@@ -135,8 +135,8 @@ describe("loading states", () => {
     expect(screen.queryByText(/workspaces?$/)).not.toBeInTheDocument();
   });
 
-  it("shows the badge's count once loaded", () => {
-    renderList(
+  it("shows the badge's count once loaded", async () => {
+    await renderList(
       <SharedWithBadge orgId="org1" resourceType="agent" resourceId="a1" />,
     );
 

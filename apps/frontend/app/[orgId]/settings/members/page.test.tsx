@@ -22,18 +22,18 @@ import OrgMembersPage from "./page";
 beforeEach(() => resetListHarness());
 
 describe("OrgMembersPage", () => {
-  it("says so when the organization has no members", () => {
+  it("says so when the organization has no members", async () => {
     mockScopedSWR({ "/members": [] });
-    renderList(<OrgMembersPage />);
+    await renderList(<OrgMembersPage />);
 
     expect(screen.getByText("No members yet")).toBeInTheDocument();
   });
 
-  it("shows a failed read as an error with a retry, not as no members", () => {
+  it("shows a failed read as an error with a retry, not as no members", async () => {
     mockScopedSWR({
       "/members": { error: { status: 500, message: "Server error" } },
     });
-    renderList(<OrgMembersPage />);
+    await renderList(<OrgMembersPage />);
 
     expect(
       screen.getByText("Failed to load members. Server error"),

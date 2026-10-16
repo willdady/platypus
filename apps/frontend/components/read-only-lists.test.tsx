@@ -35,30 +35,30 @@ describe("ContextsList", () => {
     organizationName: "Acme",
   };
 
-  it("lists each workspace context under its organization", () => {
+  it("lists each workspace context under its organization", async () => {
     mockScopedSWR({ contexts: [workspaceContext] }, { strict: true });
-    renderList(<ContextsList />);
+    await renderList(<ContextsList />);
 
     expect(screen.getByText("Engineering")).toBeInTheDocument();
     expect(screen.getByText("Acme")).toBeInTheDocument();
   });
 
   // A personal context has no workspace, and this list is the workspace one.
-  it("leaves out a context that belongs to no workspace", () => {
+  it("leaves out a context that belongs to no workspace", async () => {
     mockScopedSWR(
       {
         contexts: [{ id: "ctx2", workspaceId: null, workspaceName: null }],
       },
       { strict: true },
     );
-    renderList(<ContextsList />);
+    await renderList(<ContextsList />);
 
     expect(screen.getByText("No workspace contexts yet")).toBeInTheDocument();
   });
 
-  it("offers the create CTA when there are none", () => {
+  it("offers the create CTA when there are none", async () => {
     mockScopedSWR({ contexts: [] }, { strict: true });
-    renderList(<ContextsList />);
+    await renderList(<ContextsList />);
 
     expect(screen.getByText("No workspace contexts yet")).toBeInTheDocument();
     expect(
@@ -66,9 +66,9 @@ describe("ContextsList", () => {
     ).toBeInTheDocument();
   });
 
-  it("holds the row space with skeletons while the read is in flight", () => {
+  it("holds the row space with skeletons while the read is in flight", async () => {
     mockScopedSWR({ contexts: { isLoading: true } }, { strict: true });
-    renderList(<ContextsList />);
+    await renderList(<ContextsList />);
 
     expect(
       screen.getByLabelText("Loading workspace contexts"),
@@ -78,9 +78,9 @@ describe("ContextsList", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says the read failed rather than rendering nothing", () => {
+  it("says the read failed rather than rendering nothing", async () => {
     mockScopedSWR({ contexts: { error: new Error("500") } }, { strict: true });
-    renderList(<ContextsList />);
+    await renderList(<ContextsList />);
 
     expect(
       screen.getByText("Failed to load workspace contexts. 500"),
@@ -95,7 +95,7 @@ describe("WorkspaceList", () => {
   const workspace = (id: string, name: string) =>
     ({ id, name }) as unknown as Workspace;
 
-  it("lists the organization's workspaces by name, sorted", () => {
+  it("lists the organization's workspaces by name, sorted", async () => {
     mockScopedSWR(
       {
         workspaces: [
@@ -105,7 +105,7 @@ describe("WorkspaceList", () => {
       },
       { strict: true },
     );
-    renderList(<WorkspaceList orgId="org1" />);
+    await renderList(<WorkspaceList orgId="org1" />);
 
     const names = screen
       .getAllByRole("link")
@@ -119,9 +119,9 @@ describe("WorkspaceList", () => {
 
   // Empty and loading both render no links, so the pair is what tells them
   // apart: the skeletons are the whole of the loading state.
-  it("renders no rows and no skeletons when the organization has none", () => {
+  it("renders no rows and no skeletons when the organization has none", async () => {
     mockScopedSWR({ workspaces: [] }, { strict: true });
-    const { container } = renderList(<WorkspaceList orgId="org1" />);
+    const { container } = await renderList(<WorkspaceList orgId="org1" />);
 
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(
@@ -129,9 +129,9 @@ describe("WorkspaceList", () => {
     );
   });
 
-  it("holds the row space with skeletons while the read is in flight", () => {
+  it("holds the row space with skeletons while the read is in flight", async () => {
     mockScopedSWR({ workspaces: { isLoading: true } }, { strict: true });
-    const { container } = renderList(<WorkspaceList orgId="org1" />);
+    const { container } = await renderList(<WorkspaceList orgId="org1" />);
 
     expect(
       container.querySelectorAll('[data-slot="skeleton"]').length,
@@ -139,19 +139,19 @@ describe("WorkspaceList", () => {
   });
 
   // The org home page waits on this read, so a silent failure left it blank.
-  it("says the read failed rather than rendering nothing", () => {
+  it("says the read failed rather than rendering nothing", async () => {
     mockScopedSWR(
       { workspaces: { error: new Error("500") } },
       { strict: true },
     );
-    renderList(<WorkspaceList orgId="org1" />);
+    await renderList(<WorkspaceList orgId="org1" />);
 
     expect(screen.getByText(/Failed to load workspaces/)).toBeInTheDocument();
   });
 });
 
 describe("PluginsList", () => {
-  it("names each installed plugin", () => {
+  it("names each installed plugin", async () => {
     mockScopedSWR(
       {
         plugins: [
@@ -168,16 +168,16 @@ describe("PluginsList", () => {
       },
       { strict: true },
     );
-    renderList(<PluginsList orgId="org1" />);
+    await renderList(<PluginsList orgId="org1" />);
 
     expect(screen.getByText("acme-search")).toBeInTheDocument();
   });
 
   // Plugins are a deploy-time concern, so the empty state has to send the
   // reader to their operator rather than offer an install button.
-  it("points an empty deployment at its operator, not an install flow", () => {
+  it("points an empty deployment at its operator, not an install flow", async () => {
     mockScopedSWR({ plugins: [] }, { strict: true });
-    renderList(<PluginsList orgId="org1" />);
+    await renderList(<PluginsList orgId="org1" />);
 
     expect(screen.getByText("No plugins installed")).toBeInTheDocument();
     expect(screen.getByText("PLATYPUS_PLUGINS")).toBeInTheDocument();
@@ -185,17 +185,17 @@ describe("PluginsList", () => {
 
   // No key yet (the session still resolving) reports `isLoading: false` with
   // no data — which is not an empty catalog.
-  it("holds a placeholder, not the empty state, until the catalog arrives", () => {
+  it("holds a placeholder, not the empty state, until the catalog arrives", async () => {
     mockScopedSWR({ plugins: { data: undefined } }, { strict: true });
-    renderList(<PluginsList orgId="org1" />);
+    await renderList(<PluginsList orgId="org1" />);
 
     expect(screen.getByLabelText("Loading plugins")).toBeInTheDocument();
     expect(screen.queryByText("No plugins installed")).not.toBeInTheDocument();
   });
 
-  it("distinguishes a failed catalog read from an empty one", () => {
+  it("distinguishes a failed catalog read from an empty one", async () => {
     mockScopedSWR({ plugins: { error: new Error("500") } }, { strict: true });
-    renderList(<PluginsList orgId="org1" />);
+    await renderList(<PluginsList orgId="org1" />);
 
     expect(screen.getByText("Couldn't load plugins")).toBeInTheDocument();
     expect(screen.queryByText("No plugins installed")).not.toBeInTheDocument();

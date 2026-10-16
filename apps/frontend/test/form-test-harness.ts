@@ -6,6 +6,7 @@ import { resetSharedSpies } from "./test-utils";
 // import to reach for.
 export {
   jsonResponse,
+  setupUser,
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
@@ -39,16 +40,13 @@ export {
  * `resetFormHarness` and `setData`/`setDataFor` are for.
  *
  * Usage — the `vi.mock` calls stay in the test file itself, as literal
- * calls, so Vitest's hoisting can find them:
+ * calls, so Vitest's hoisting can find them. `next/navigation` and `sonner`
+ * are already mocked with the same spies by `vitest.setup.ts`:
  *
  * ```ts
- * import {
- *   navigationMock, authMock, toastMock, swrMock,
- * } from "@/test/form-test-harness";
+ * import { authMock, swrMock } from "@/test/form-test-harness";
  *
- * vi.mock("next/navigation", () => navigationMock);
  * vi.mock("@/components/auth-provider", () => authMock);
- * vi.mock("sonner", () => toastMock);
  * vi.mock("swr", () => swrMock);
  * ```
  */

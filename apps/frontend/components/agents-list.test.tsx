@@ -64,7 +64,7 @@ describe("AgentsList detach", () => {
       409,
     );
 
-    renderAgents([orgAgent], "Detach");
+    await renderAgents([orgAgent], "Detach");
     await confirmDialog(/Detach/);
 
     expect(
@@ -81,7 +81,7 @@ describe("AgentsList detach", () => {
   it("revalidates and closes the dialog when detach succeeds", async () => {
     stubAcceptedSave();
 
-    renderAgents([orgAgent], "Detach");
+    await renderAgents([orgAgent], "Detach");
     await confirmDialog(/Detach/);
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -93,7 +93,7 @@ describe("AgentsList delete", () => {
   it("deletes the workspace-scoped agent through the request module", async () => {
     const fetchMock = stubAcceptedSave();
 
-    renderAgents([workspaceAgent], "Delete");
+    await renderAgents([workspaceAgent], "Delete");
     await confirmDialog("Delete");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -106,7 +106,7 @@ describe("AgentsList delete", () => {
   it("shows the backend's guidance, not an error, when delete is refused because the agent is Shared", async () => {
     stubRejectedSave("This agent is managed at the organization level", 403);
 
-    renderAgents([workspaceAgent], "Delete");
+    await renderAgents([workspaceAgent], "Delete");
     await confirmDialog("Delete");
 
     await waitFor(() =>
@@ -122,7 +122,7 @@ describe("AgentsList delete", () => {
   it("surfaces the backend's reason inline when delete fails for another reason", async () => {
     stubRejectedSave("Agent is in use", 409);
 
-    renderAgents([workspaceAgent], "Delete");
+    await renderAgents([workspaceAgent], "Delete");
     await confirmDialog("Delete");
 
     expect(await screen.findByText("Agent is in use")).toBeInTheDocument();
@@ -131,8 +131,8 @@ describe("AgentsList delete", () => {
 });
 
 describe("AgentsList clone", () => {
-  it("names the copy after the original", () => {
-    renderAgents([workspaceAgent], "Clone");
+  it("names the copy after the original", async () => {
+    await renderAgents([workspaceAgent], "Clone");
 
     expect(
       screen.getByDisplayValue("Workspace Agent (copy)"),
@@ -142,7 +142,7 @@ describe("AgentsList clone", () => {
   it("navigates to the new agent on success", async () => {
     const fetchMock = stubAcceptedSave({ id: "a3", name: "Cloned" }, 201);
 
-    renderAgents([workspaceAgent], "Clone");
+    await renderAgents([workspaceAgent], "Clone");
     await confirmDialog("Clone");
 
     await waitFor(() =>
@@ -157,7 +157,7 @@ describe("AgentsList clone", () => {
   it("surfaces the backend's reason when clone fails", async () => {
     stubRejectedSave("Name already in use", 409);
 
-    renderAgents([workspaceAgent], "Clone");
+    await renderAgents([workspaceAgent], "Clone");
     await confirmDialog("Clone");
 
     expect(await screen.findByText("Name already in use")).toBeInTheDocument();
@@ -177,7 +177,7 @@ describe("AgentsList promote", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    renderAgents([workspaceAgent], "Promote to organization");
+    await renderAgents([workspaceAgent], "Promote to organization");
     await confirmDialog("Promote");
 
     expect(await screen.findByText("Private Skill")).toBeInTheDocument();
@@ -212,8 +212,8 @@ describe("AgentsList pinning", () => {
     delete authState.ownsWorkspace;
   });
 
-  it("groups pinned agents above the rest, each sorted by name", () => {
-    renderAgents([
+  it("groups pinned agents above the rest, each sorted by name", async () => {
+    await renderAgents([
       agent("a1", "Zed", true),
       agent("a2", "Mia"),
       agent("a3", "Abe", true),
@@ -226,8 +226,8 @@ describe("AgentsList pinning", () => {
     expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
-  it("shows no Pinned group when nothing is pinned", () => {
-    renderAgents([agent("a2", "Mia"), agent("a4", "Bob")]);
+  it("shows no Pinned group when nothing is pinned", async () => {
+    await renderAgents([agent("a2", "Mia"), agent("a4", "Bob")]);
 
     expect(
       screen.queryByRole("heading", { name: "Pinned" }),
@@ -243,7 +243,7 @@ describe("AgentsList pinning", () => {
     authState.actor = "workspace-owner";
     const fetchMock = stubAcceptedSave();
 
-    renderAgents([target], "Pin");
+    await renderAgents([target], "Pin");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -255,7 +255,7 @@ describe("AgentsList pinning", () => {
   it("lets the Owner unpin a pinned agent", async () => {
     const fetchMock = stubAcceptedSave();
 
-    renderAgents([agent("a2", "Mia", true)], "Unpin");
+    await renderAgents([agent("a2", "Mia", true)], "Unpin");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -267,10 +267,10 @@ describe("AgentsList pinning", () => {
   it("sends one pin while the first is in flight, however often it is picked", async () => {
     const { fetchMock, resolve } = stubPendingSave();
 
-    renderAgents([workspaceAgent], "Pin");
+    await renderAgents([workspaceAgent], "Pin");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
 
-    openDropdownMenu();
+    await openDropdownMenu();
     const pending = screen.getByRole("menuitem", { name: /Pinning/ });
     expect(pending).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(pending);
@@ -283,7 +283,7 @@ describe("AgentsList pinning", () => {
   it("surfaces the backend's reason when a pin is refused", async () => {
     stubRejectedSave("Agent not found", 404);
 
-    renderAgents([workspaceAgent], "Pin");
+    await renderAgents([workspaceAgent], "Pin");
 
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith("Agent not found"),
@@ -292,10 +292,10 @@ describe("AgentsList pinning", () => {
 
   // The backend refuses a pin from anyone but the Workspace Owner, an Org
   // Admin included, so offering it would only produce an error.
-  it("offers a non-owner no Pin or Unpin", () => {
+  it("offers a non-owner no Pin or Unpin", async () => {
     authState.ownsWorkspace = false;
 
-    renderAgents([agent("a2", "Mia", true), agent("a4", "Bob")]);
+    await renderAgents([agent("a2", "Mia", true), agent("a4", "Bob")]);
     for (const trigger of screen.getAllByRole("button", {
       name: /Actions for/,
     })) {
@@ -313,8 +313,8 @@ describe("AgentsList pinning", () => {
 });
 
 describe("AgentsList list states", () => {
-  it("shows the empty state when the workspace has no agents", () => {
-    renderAgents([]);
+  it("shows the empty state when the workspace has no agents", async () => {
+    await renderAgents([]);
 
     expect(screen.getByText("No agents yet")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Create agent/ })).toHaveAttribute(
@@ -323,12 +323,12 @@ describe("AgentsList list states", () => {
     );
   });
 
-  it("holds the card grid with a skeleton while the read is in flight", () => {
+  it("holds the card grid with a skeleton while the read is in flight", async () => {
     mockScopedSWR({
       "/agents": { isLoading: true },
       "/providers": [provider],
     });
-    renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
 
     expect(
       screen.getByRole("status", { name: "Loading agents" }),
@@ -336,12 +336,12 @@ describe("AgentsList list states", () => {
     expect(screen.queryByText("No agents yet")).not.toBeInTheDocument();
   });
 
-  it("surfaces a failed read rather than rendering an empty list", () => {
+  it("surfaces a failed read rather than rendering an empty list", async () => {
     mockScopedSWR({
       "/agents": { error: new Error("500") },
       "/providers": [provider],
     });
-    renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText(/Failed to load/i)).toBeInTheDocument();
   });
@@ -352,11 +352,11 @@ describe("AgentsList menu", () => {
     authState.ownsWorkspace = undefined;
   });
 
-  it("orders an agent's menu Edit, its own items, Clone, then Delete", () => {
+  it("orders an agent's menu Edit, its own items, Clone, then Delete", async () => {
     authState.ownsWorkspace = true;
 
-    renderAgents([workspaceAgent]);
-    openDropdownMenu();
+    await renderAgents([workspaceAgent]);
+    await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual([
       "Edit",
@@ -367,11 +367,11 @@ describe("AgentsList menu", () => {
     ]);
   });
 
-  it("orders a shared agent's menu Edit in org settings, Pin, then Detach", () => {
+  it("orders a shared agent's menu Edit in org settings, Pin, then Detach", async () => {
     authState.ownsWorkspace = true;
 
-    renderAgents([orgAgent]);
-    openDropdownMenu();
+    await renderAgents([orgAgent]);
+    await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual(["Edit in org settings", "Pin", "Detach"]);
   });

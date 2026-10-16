@@ -174,7 +174,7 @@ describe("Trigger runs list", () => {
 
   it("edits a row's Trigger from its menu", async () => {
     await renderRuns([run()]);
-    openDropdownMenu();
+    await openDropdownMenu();
 
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
@@ -432,7 +432,7 @@ describe("Trigger runs suppression", () => {
 
     const name = screen.getByText("Nightly digest");
     expect(name.closest("a")).toBeNull();
-    openDropdownMenu();
+    await openDropdownMenu();
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
     ).toEqual(["Edit trigger", "Copy run id"]);
@@ -574,9 +574,16 @@ describe("Trigger runs stats", () => {
 describe("Trigger runs copy-run-id control", () => {
   const writeText = vi.fn();
 
+  // Defined, not assigned, and only once the menu is open: each user-event
+  // session installs its own getter-only clipboard on the navigator.
+  const stubClipboard = () =>
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
   beforeEach(() => {
     writeText.mockReset().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
     vi.stubGlobal("isSecureContext", true);
   });
 
@@ -597,7 +604,7 @@ describe("Trigger runs copy-run-id control", () => {
     expect(
       screen.queryByRole("button", { name: "Copy run id" }),
     ).not.toBeInTheDocument();
-    openDropdownMenu();
+    await openDropdownMenu();
     expect(
       screen.getByRole("menuitem", { name: "Copy run id" }),
     ).toBeInTheDocument();
@@ -606,7 +613,8 @@ describe("Trigger runs copy-run-id control", () => {
   it("copies the full run id and shows a success toast", async () => {
     await renderRuns([run()]);
 
-    openDropdownMenu();
+    await openDropdownMenu();
+    stubClipboard();
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
     });
@@ -623,7 +631,8 @@ describe("Trigger runs copy-run-id control", () => {
     });
     await renderRuns([run()]);
 
-    openDropdownMenu();
+    await openDropdownMenu();
+    stubClipboard();
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
     });

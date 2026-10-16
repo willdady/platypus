@@ -71,28 +71,28 @@ beforeEach(resetListHarness);
 // --- Tests -------------------------------------------------------------------
 
 describe("SandboxSettings loading", () => {
-  it("shows the form's placeholder while the sandbox read loads", () => {
+  it("shows the form's placeholder while the sandbox read loads", async () => {
     mockReads({ sandbox: { isLoading: true } });
-    renderSettings();
+    await renderSettings();
 
     expect(screen.getByLabelText("Loading sandbox")).toBeInTheDocument();
     expect(screen.queryByText("No sandbox configured")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
   });
 
-  it("shows the placeholder while the backends read loads", () => {
+  it("shows the placeholder while the backends read loads", async () => {
     mockReads({ sandbox: { data: null }, backends: { isLoading: true } });
-    renderSettings();
+    await renderSettings();
 
     expect(screen.getByLabelText("Loading sandbox")).toBeInTheDocument();
   });
 
-  it("shows a networks placeholder, not a false 'none declared', while the allowlist loads", () => {
+  it("shows a networks placeholder, not a false 'none declared', while the allowlist loads", async () => {
     mockReads({
       sandbox: { data: DOCKER_SANDBOX },
       networks: { isLoading: true },
     });
-    renderSettings();
+    await renderSettings();
 
     expect(screen.getByLabelText("Loading networks")).toBeInTheDocument();
     expect(
@@ -100,19 +100,19 @@ describe("SandboxSettings loading", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says no networks are declared once the empty allowlist loads", () => {
+  it("says no networks are declared once the empty allowlist loads", async () => {
     mockReads({ sandbox: { data: DOCKER_SANDBOX } });
-    renderSettings();
+    await renderSettings();
 
     expect(
       screen.getByText("No networks declared by the operator."),
     ).toBeInTheDocument();
   });
 
-  it("shows the Empty card once loaded with no sandbox", () => {
+  it("shows the Empty card once loaded with no sandbox", async () => {
     authState.actor = "member";
     mockReads({ sandbox: { data: null } });
-    renderSettings();
+    await renderSettings();
 
     expect(screen.getByText("No sandbox configured")).toBeInTheDocument();
   });
@@ -122,7 +122,7 @@ describe("SandboxSettings save", () => {
   it("creates the first sandbox on the first registered backend", async () => {
     const fetchMock = stubAcceptedSave({});
     mockReads({ sandbox: { data: null } });
-    renderSettings();
+    await renderSettings();
 
     fireEvent.click(screen.getByRole("button", { name: /Configure sandbox/ }));
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -163,7 +163,7 @@ describe("SandboxSettings save", () => {
       },
       networks: ["bridge-a"],
     });
-    renderSettings();
+    await renderSettings();
 
     fireEvent.click(
       screen.getByRole("switch", { name: "Attach network bridge-a" }),
@@ -194,7 +194,7 @@ describe("SandboxSettings save", () => {
         data: { ...DOCKER_SANDBOX, adminEnv: { SECRET: "" }, userEnv: {} },
       },
     });
-    renderSettings();
+    await renderSettings();
 
     expect(
       screen.queryByText("Admin environment variables"),
@@ -218,13 +218,13 @@ describe("SandboxSettings save", () => {
     });
   });
 
-  it("refuses to save a duplicate env key", () => {
+  it("refuses to save a duplicate env key", async () => {
     authState.actor = "workspace-owner";
     const fetchMock = stubAcceptedSave({});
     mockReads({
       sandbox: { data: { ...DOCKER_SANDBOX, userEnv: { FOO: "1" } } },
     });
-    renderSettings();
+    await renderSettings();
 
     fireEvent.click(screen.getByRole("button", { name: "Add variable" }));
     fireEvent.change(screen.getByLabelText("KEY 2"), {
@@ -246,18 +246,18 @@ describe("SandboxSettings save", () => {
       config: { host: "ssh.example.com", port: 2222, user: "platypus" },
       hasCredentials: true,
     };
-    const renderSsh = (sandbox: object = SSH_SANDBOX) => {
+    const renderSsh = async (sandbox: object = SSH_SANDBOX) => {
       mockReads({
         sandbox: { data: sandbox },
         backends: [{ backend: "ssh", name: "SSH" }],
       });
-      renderSettings();
+      await renderSettings();
     };
     const passphrase = () => screen.getByLabelText("Key passphrase (optional)");
 
     it("shows a stored key as stored, and keeps it on a save that leaves it alone", async () => {
       const fetchMock = stubAcceptedSave({});
-      renderSsh();
+      await renderSsh();
 
       expect(screen.getByText("Key stored")).toBeInTheDocument();
       expect(screen.queryByLabelText("Private key")).not.toBeInTheDocument();
@@ -273,8 +273,8 @@ describe("SandboxSettings save", () => {
       });
     });
 
-    it("shows a plain key field, with no stored state, when no key is stored", () => {
-      renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
+    it("shows a plain key field, with no stored state, when no key is stored", async () => {
+      await renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
 
       expect(screen.getByLabelText("Private key")).toHaveValue("");
       expect(screen.queryByText("Key stored")).not.toBeInTheDocument();
@@ -283,7 +283,7 @@ describe("SandboxSettings save", () => {
 
     it("reveals the key field on Replace key, still keeping the stored key if left blank", async () => {
       const fetchMock = stubAcceptedSave({});
-      renderSsh();
+      await renderSsh();
 
       fireEvent.click(screen.getByRole("button", { name: "Replace key" }));
       expect(screen.queryByText("Key stored")).not.toBeInTheDocument();
@@ -294,8 +294,8 @@ describe("SandboxSettings save", () => {
       expect(savedBody(fetchMock)).not.toHaveProperty("credentials");
     });
 
-    it("enables the passphrase only while a new key is entered, clearing it with the key", () => {
-      renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
+    it("enables the passphrase only while a new key is entered, clearing it with the key", async () => {
+      await renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
 
       expect(passphrase()).toBeDisabled();
       fireEvent.change(screen.getByLabelText("Private key"), {
@@ -312,7 +312,7 @@ describe("SandboxSettings save", () => {
 
     it("sends a replacement key with its passphrase and optional pins", async () => {
       const fetchMock = stubAcceptedSave({});
-      renderSsh();
+      await renderSsh();
 
       fireEvent.click(screen.getByRole("button", { name: "Replace key" }));
       fireEvent.change(screen.getByLabelText("Private key"), {
@@ -352,7 +352,7 @@ describe("SandboxSettings save", () => {
       { status: 200, body: {} },
     );
     mockReads({ sandbox: { data: DOCKER_SANDBOX } });
-    renderSettings();
+    await renderSettings();
 
     save();
     fireEvent.click(
@@ -370,10 +370,10 @@ describe("SandboxSettings save", () => {
 });
 
 describe("SandboxSettings revalidation", () => {
-  it("keeps an unsaved edit when the same sandbox revalidates", () => {
+  it("keeps an unsaved edit when the same sandbox revalidates", async () => {
     authState.actor = "org-admin";
     mockReads({ sandbox: { data: DOCKER_SANDBOX } });
-    const { rerender } = renderSettings();
+    const { rerender } = await renderSettings();
 
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Edited box" },

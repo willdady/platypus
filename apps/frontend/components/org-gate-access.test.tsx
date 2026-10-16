@@ -42,16 +42,16 @@ const sentBody = (fetchMock: ReturnType<typeof stubAcceptedSave>) =>
 beforeEach(resetListHarness);
 
 describe("OrgInboundTriggerAccess", () => {
-  it("lists no workspaces unless Selected workspaces is chosen", () => {
+  it("lists no workspaces unless Selected workspaces is chosen", async () => {
     mockScopedSWR({ "/inbound-triggers/access": access() }, { strict: true });
-    renderList(<OrgInboundTriggerAccess orgId="org1" />);
+    await renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
     expect(screen.getByRole("combobox")).toHaveTextContent("All workspaces");
     expect(screen.queryByText("Allowed workspaces")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("shows each workspace's switch under Selected workspaces", () => {
+  it("shows each workspace's switch under Selected workspaces", async () => {
     mockScopedSWR(
       {
         "/inbound-triggers/access": access({
@@ -61,7 +61,7 @@ describe("OrgInboundTriggerAccess", () => {
       },
       { strict: true },
     );
-    renderList(<OrgInboundTriggerAccess orgId="org1" />);
+    await renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
     expect(screen.getByText("Allowed workspaces")).toBeInTheDocument();
     expect(screen.getByText("Dana Owner")).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe("OrgInboundTriggerAccess", () => {
   it("warns about a workspace with Inbound Triggers that would be cut off, then saves the gate and switches in one call", async () => {
     const fetchMock = stubAcceptedSave(access().data);
     mockScopedSWR({ "/inbound-triggers/access": access() }, { strict: true });
-    renderList(<OrgInboundTriggerAccess orgId="org1" />);
+    await renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
     await selectOption("All workspaces", "Selected workspaces");
     expect(
@@ -99,7 +99,7 @@ describe("OrgInboundTriggerAccess", () => {
   it("leaves the switches alone when saving another setting", async () => {
     const fetchMock = stubAcceptedSave(access().data);
     mockScopedSWR({ "/inbound-triggers/access": access() }, { strict: true });
-    renderList(<OrgInboundTriggerAccess orgId="org1" />);
+    await renderList(<OrgInboundTriggerAccess orgId="org1" />);
 
     await selectOption("All workspaces", "No workspaces");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -126,7 +126,7 @@ describe("OrgA2aAccess", () => {
   it("is off, then saves the A2A gate, warning about endpoints it would cut off", async () => {
     const fetchMock = stubAcceptedSave(a2aAccess);
     mockScopedSWR({ "/a2a/access": { data: a2aAccess } }, { strict: true });
-    renderList(<OrgA2aAccess orgId="org1" />);
+    await renderList(<OrgA2aAccess orgId="org1" />);
 
     expect(screen.getByRole("combobox")).toHaveTextContent("No workspaces");
 

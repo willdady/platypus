@@ -35,9 +35,9 @@ const row = (over: Record<string, unknown> = {}) => ({
 beforeEach(resetListHarness);
 
 describe("OrgInboundTriggersList", () => {
-  it("lists each Inbound Trigger with its Workspace, Owner and token standing", () => {
+  it("lists each Inbound Trigger with its Workspace, Owner and token standing", async () => {
     mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
-    renderList(<OrgInboundTriggersList orgId="org1" />);
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
 
     const [, dataRow] = screen.getAllByRole("row");
     expect(within(dataRow).getByText("Ready for AI")).toBeInTheDocument();
@@ -50,7 +50,7 @@ describe("OrgInboundTriggersList", () => {
   it("revokes the token the row showed through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "Token revoked" });
     mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
-    renderList(<OrgInboundTriggersList orgId="org1" />);
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
     const buttons = await screen.findAllByRole("button", {
@@ -65,12 +65,12 @@ describe("OrgInboundTriggersList", () => {
     );
   });
 
-  it("badges only a token that needs attention, not an active one", () => {
+  it("badges only a token that needs attention, not an active one", async () => {
     mockScopedSWR(
       { "/inbound-triggers": [row({ tokenStatus: "active" })] },
       { strict: true },
     );
-    renderList(<OrgInboundTriggersList orgId="org1" />);
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
 
     expect(
       screen.getByRole("columnheader", { name: "Expires" }),
@@ -80,7 +80,7 @@ describe("OrgInboundTriggersList", () => {
     expect(screen.queryByText(/Expires \d/)).not.toBeInTheDocument();
   });
 
-  it("offers no revoke for a Trigger that has no token", () => {
+  it("offers no revoke for a Trigger that has no token", async () => {
     mockScopedSWR(
       {
         "/inbound-triggers": [
@@ -89,15 +89,15 @@ describe("OrgInboundTriggersList", () => {
       },
       { strict: true },
     );
-    renderList(<OrgInboundTriggersList orgId="org1" />);
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
 
     expect(screen.getByRole("button", { name: "Revoke token" })).toBeDisabled();
     expect(screen.getByText("No token")).toBeInTheDocument();
   });
 
-  it("says so when no Workspace has one", () => {
+  it("says so when no Workspace has one", async () => {
     mockScopedSWR({ "/inbound-triggers": [] }, { strict: true });
-    renderList(<OrgInboundTriggersList orgId="org1" />);
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
 
     expect(
       screen.getByText(

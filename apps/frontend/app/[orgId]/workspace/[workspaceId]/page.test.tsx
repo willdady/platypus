@@ -28,19 +28,19 @@ const workspaceRead = { "/workspaces/ws1": { data: WORKSPACE } };
 beforeEach(() => resetListHarness());
 
 describe("Workspace home", () => {
-  it("offers to add a provider when the workspace has none", () => {
+  it("offers to add a provider when the workspace has none", async () => {
     mockScopedSWR({ "/providers": [], ...workspaceRead });
-    renderList(<Workspace />);
+    await renderList(<Workspace />);
 
     expect(screen.getByText("No providers configured")).toBeInTheDocument();
   });
 
-  it("shows a failed providers read as an error with a retry, not as no providers", () => {
+  it("shows a failed providers read as an error with a retry, not as no providers", async () => {
     mockScopedSWR({
       "/providers": { error: { status: 500, message: "Server error" } },
       ...workspaceRead,
     });
-    renderList(<Workspace />);
+    await renderList(<Workspace />);
 
     expect(
       screen.getByText("Failed to load providers. Server error"),
@@ -53,7 +53,7 @@ describe("Workspace home", () => {
     expect(mutate).toHaveBeenCalled();
   });
 
-  it("shows pinned agents in their own group above the rest", () => {
+  it("shows pinned agents in their own group above the rest", async () => {
     const agent = (id: string, name: string, isPinned: boolean) => ({
       id,
       name,
@@ -66,7 +66,7 @@ describe("Workspace home", () => {
       "/providers": [{ id: "p1", name: "OpenAI" }],
       ...workspaceRead,
     });
-    renderList(<Workspace />);
+    await renderList(<Workspace />);
 
     const pinned = screen.getByRole("list", { name: "Pinned agents" });
     const rest = screen.getByRole("list", { name: "Agents" });
@@ -79,7 +79,7 @@ describe("Workspace home", () => {
     ).toBeTruthy();
   });
 
-  it("shows no Pinned group when no agent is pinned", () => {
+  it("shows no Pinned group when no agent is pinned", async () => {
     mockScopedSWR({
       "/agents": [
         { id: "a1", name: "Triage", description: "desc", isPinned: false },
@@ -87,7 +87,7 @@ describe("Workspace home", () => {
       "/providers": [{ id: "p1", name: "OpenAI" }],
       ...workspaceRead,
     });
-    renderList(<Workspace />);
+    await renderList(<Workspace />);
 
     expect(screen.getByText("Triage")).toBeInTheDocument();
     expect(
@@ -95,9 +95,9 @@ describe("Workspace home", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says the workspace is gone, with the way back, when the read returns none", () => {
+  it("says the workspace is gone, with the way back, when the read returns none", async () => {
     mockScopedSWR({ "/workspaces/ws1": { data: undefined } });
-    renderList(<Workspace />);
+    await renderList(<Workspace />);
 
     expect(screen.getByText("Workspace not found")).toBeInTheDocument();
     expect(
@@ -105,11 +105,11 @@ describe("Workspace home", () => {
     ).toHaveAttribute("href", "/org1");
   });
 
-  it("shows a failed workspace read as an error with a retry, not as not found", () => {
+  it("shows a failed workspace read as an error with a retry, not as not found", async () => {
     mockScopedSWR({
       "/workspaces/ws1": { error: { status: 500, message: "Server error" } },
     });
-    renderList(<Workspace />);
+    await renderList(<Workspace />);
 
     expect(screen.getByText("Couldn't load")).toBeInTheDocument();
     expect(screen.queryByText("Workspace not found")).not.toBeInTheDocument();

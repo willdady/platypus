@@ -1,10 +1,13 @@
 import { vi, type Mock } from "vitest";
-import { fireEvent, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 /**
- * The spies and module mocks both harnesses hand to `vi.mock`. They live here
- * rather than in either harness because a form and a list stub the same three
- * modules the same way; only the data-fetching mock differs between them.
+ * The spies and module mocks both harnesses hand to `vi.mock`, and that
+ * `vitest.setup.ts` installs as every file's default `next/navigation` and
+ * `sonner` mocks. They live here rather than in either harness because a form
+ * and a list stub the same modules the same way; only the data-fetching mock
+ * differs between them.
  *
  * These are plain module-level values, not something a factory builds:
  * `vi.mock("sonner", () => toastMock)` is hoisted above everything local, so
@@ -53,17 +56,24 @@ export function resetSharedSpies() {
   authState.workspaceDelegation = null;
 }
 
+/**
+ * A user-event session for one interaction. user-event drives the full
+ * pointer, focus and keyboard sequence a real browser does, so a control that
+ * is disabled, covered or `pointer-events: none` refuses the gesture instead of
+ * reacting as a bare `fireEvent` would. New tests reach for this over
+ * `fireEvent`.
+ */
+export function setupUser() {
+  return userEvent.setup();
+}
+
 /** Opens the first closed Radix DropdownMenu trigger found in the document. */
-export function openDropdownMenu() {
+export async function openDropdownMenu() {
   const trigger = document.querySelector('[aria-haspopup="menu"]');
   if (!trigger) {
     throw new Error("No dropdown menu trigger found in the document");
   }
-  // Our DropdownMenu trigger only opens on pointerdown for a mouse; jsdom
-  // leaves `pointerType` empty, so the tap has to be completed with a click.
-  fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
-  fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
-  fireEvent.click(trigger, { button: 0 });
+  await setupUser().click(trigger);
 }
 
 /**
@@ -71,8 +81,8 @@ export function openDropdownMenu() {
  * the value the closed trigger is currently reading (several of our Select
  * triggers have no accessible name, so the current value is all there is).
  *
- * Keyboard rather than pointer: Radix opens on ArrowDown without the pointer
- * capture jsdom lacks.
+ * Keyboard rather than pointer, as a keyboard user would: focus the trigger,
+ * open it with ArrowDown, and click the option.
  */
 export async function selectOption(from: string | HTMLElement, option: string) {
   const combobox =
@@ -82,9 +92,10 @@ export async function selectOption(from: string | HTMLElement, option: string) {
   if (!combobox) {
     throw new Error(`No select reading "${String(from)}" found`);
   }
-  fireEvent.keyDown(combobox, { key: "ArrowDown" });
-  const item = await screen.findByRole("option", { name: option });
-  fireEvent.keyDown(item, { key: "Enter" });
+  const user = setupUser();
+  combobox.focus();
+  await user.keyboard("{ArrowDown}");
+  await user.click(await screen.findByRole("option", { name: option }));
 }
 
 /**

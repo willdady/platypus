@@ -129,8 +129,8 @@ describe.each(RESOURCES)(
       return renderList(<List orgId="org1" workspaceId="ws1" />);
     };
 
-    it("links each workspace row to its workspace settings page", () => {
-      renderRows([workspaceItem]);
+    it("links each workspace row to its workspace settings page", async () => {
+      await renderRows([workspaceItem]);
 
       expect(screen.getByText(workspaceItem.name).closest("a")).toHaveAttribute(
         "href",
@@ -138,8 +138,8 @@ describe.each(RESOURCES)(
       );
     });
 
-    it("links the create CTA to the workspace create page", () => {
-      renderRows([item]);
+    it("links the create CTA to the workspace create page", async () => {
+      await renderRows([item]);
 
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
         "href",
@@ -147,10 +147,10 @@ describe.each(RESOURCES)(
       );
     });
 
-    it("offers a delegated Workspace Owner the create page when the workspace has none", () => {
+    it("offers a delegated Workspace Owner the create page when the workspace has none", async () => {
       authState.actor = "workspace-owner";
       authState.workspaceDelegation = { [delegationFlag]: true };
-      renderRows([]);
+      await renderRows([]);
 
       expect(screen.getByText(/^No .* configured$/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
@@ -159,10 +159,10 @@ describe.each(RESOURCES)(
       );
     });
 
-    it("offers a non-delegated Workspace Owner no create CTA when the workspace has none", () => {
+    it("offers a non-delegated Workspace Owner no create CTA when the workspace has none", async () => {
       authState.actor = "workspace-owner";
       authState.workspaceDelegation = { [delegationFlag]: false };
-      renderRows([]);
+      await renderRows([]);
 
       expect(
         screen.getByText(/Ask an organization admin to add one/),
@@ -172,9 +172,9 @@ describe.each(RESOURCES)(
       ).not.toBeInTheDocument();
     });
 
-    it("offers an Org Admin both create and attach when the workspace has none", () => {
+    it("offers an Org Admin both create and attach when the workspace has none", async () => {
       authState.actor = "org-admin";
-      renderRows([]);
+      await renderRows([]);
 
       expect(screen.getByText(/^No .* configured$/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
@@ -186,10 +186,10 @@ describe.each(RESOURCES)(
       ).toBeInTheDocument();
     });
 
-    it("shows the Organization's empty card with its create CTA when it has none", () => {
+    it("shows the Organization's empty card with its create CTA when it has none", async () => {
       authState.actor = "org-admin";
       mockScopedSWR({ [`/${entity}`]: [] });
-      renderList(<List orgId="org1" />);
+      await renderList(<List orgId="org1" />);
 
       expect(screen.getByText(/^No .* configured$/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
@@ -201,7 +201,7 @@ describe.each(RESOURCES)(
       ).not.toBeInTheDocument();
     });
 
-    it("renders a fetch failure rather than swallowing it", () => {
+    it("renders a fetch failure rather than swallowing it", async () => {
       mockScopedSWR({
         [`/${entity}`]: {
           error: {
@@ -210,7 +210,7 @@ describe.each(RESOURCES)(
           },
         },
       });
-      renderList(<List orgId="org1" workspaceId="ws1" />);
+      await renderList(<List orgId="org1" workspaceId="ws1" />);
 
       expect(
         screen.getByText(`Failed to load ${fetchErrorNoun}. Server exploded`),
@@ -219,10 +219,10 @@ describe.each(RESOURCES)(
 
     // Rows and the caller's own Add / Attach buttons, so neither pops in —
     // and nothing clickable until the read lands.
-    it("holds the rows and action buttons with a skeleton while loading", () => {
+    it("holds the rows and action buttons with a skeleton while loading", async () => {
       authState.actor = "org-admin";
       mockScopedSWR({ [`/${entity}`]: { isLoading: true } });
-      renderList(<List orgId="org1" workspaceId="ws1" />);
+      await renderList(<List orgId="org1" workspaceId="ws1" />);
 
       expect(
         screen.getByRole("status", { name: `Loading ${fetchErrorNoun}` }),
@@ -231,42 +231,42 @@ describe.each(RESOURCES)(
       expect(screen.queryByText(/configured/)).not.toBeInTheDocument();
     });
 
-    it("shows the row's second line under its name", () => {
-      renderRows([workspaceItem]);
+    it("shows the row's second line under its name", async () => {
+      await renderRows([workspaceItem]);
 
       expect(screen.getByText(secondLine)).toBeInTheDocument();
     });
 
     // A long URL is cut off with an ellipsis inside the card, so the full
     // value stays readable on hover.
-    it("truncates the row's second line, keeping the full value on hover", () => {
-      renderRows([workspaceItem]);
+    it("truncates the row's second line, keeping the full value on hover", async () => {
+      await renderRows([workspaceItem]);
 
       const line = screen.getByText(secondLine);
       expect(line).toHaveClass("truncate");
       expect(line).toHaveAttribute("title", secondLine);
     });
 
-    it("gives a workspace row Edit, then Delete", () => {
-      renderRows([workspaceItem]);
-      openDropdownMenu();
+    it("gives a workspace row Edit, then Delete", async () => {
+      await renderRows([workspaceItem]);
+      await openDropdownMenu();
 
       expect(menuItemLabels()).toEqual(["Edit", "Delete"]);
     });
 
-    it("gives a row the caller can't manage only Edit", () => {
+    it("gives a row the caller can't manage only Edit", async () => {
       authState.actor = "workspace-owner";
       authState.workspaceDelegation = { [delegationFlag]: false };
-      renderRows([workspaceItem]);
-      openDropdownMenu();
+      await renderRows([workspaceItem]);
+      await openDropdownMenu();
 
       expect(menuItemLabels()).toEqual(["Edit"]);
     });
 
     it("deletes a workspace row after confirmation and revalidates", async () => {
       const fetchMock = stubAcceptedSave();
-      renderRows([workspaceItem]);
-      openDropdownMenu();
+      await renderRows([workspaceItem]);
+      await openDropdownMenu();
       fireEvent.click(screen.getByText("Delete"));
 
       expect(fetchMock).not.toHaveBeenCalled();
@@ -279,32 +279,32 @@ describe.each(RESOURCES)(
       );
     });
 
-    it("gives a Shared row Edit in org settings, then Detach, and no click action", () => {
-      renderRows([item]);
+    it("gives a Shared row Edit in org settings, then Detach, and no click action", async () => {
+      await renderRows([item]);
       fireEvent.click(screen.getByText(item.name));
       expect(screen.queryByText(dialogTitle)).not.toBeInTheDocument();
       const name = screen.getByText(item.name);
       expect(name.closest("a")).toBeNull();
 
-      openDropdownMenu();
+      await openDropdownMenu();
       expect(menuItemLabels()).toEqual(["Edit in org settings", "Detach"]);
       expect(
         screen.getByRole("menuitem", { name: /Edit in org settings/ }),
       ).toHaveAttribute("href", `/org1/${settingsPath}/${item.id}`);
     });
 
-    it("gives a Shared row no menu when the caller can't manage Shared resources", () => {
+    it("gives a Shared row no menu when the caller can't manage Shared resources", async () => {
       authState.actor = "workspace-owner";
-      renderRows([item]);
+      await renderRows([item]);
 
       expect(
         screen.queryByRole("button", { name: `Actions for ${item.name}` }),
       ).not.toBeInTheDocument();
     });
 
-    it("points the detach dialog's Org settings link at the organization page", () => {
-      renderRows([item]);
-      openDropdownMenu();
+    it("points the detach dialog's Org settings link at the organization page", async () => {
+      await renderRows([item]);
+      await openDropdownMenu();
       fireEvent.click(screen.getByText("Detach"));
 
       expect(
@@ -315,8 +315,8 @@ describe.each(RESOURCES)(
     it("detaches through the request module and revalidates on success", async () => {
       const fetchMock = stubAcceptedSave();
 
-      renderRows([item]);
-      openDropdownMenu();
+      await renderRows([item]);
+      await openDropdownMenu();
       fireEvent.click(screen.getByText("Detach"));
       fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
 
@@ -335,10 +335,10 @@ describe.each(RESOURCES)(
         return renderList(<List orgId="org1" />, menuItem);
       };
 
-      it("gives an Org Admin's row Edit, Manage attachments, then Delete", () => {
+      it("gives an Org Admin's row Edit, Manage attachments, then Delete", async () => {
         authState.actor = "org-admin";
-        renderOrgRows([item]);
-        openDropdownMenu();
+        await renderOrgRows([item]);
+        await openDropdownMenu();
 
         expect(menuItemLabels()).toEqual([
           "Edit",
@@ -354,7 +354,7 @@ describe.each(RESOURCES)(
           "/attachments?": [],
           "/workspaces": [{ id: "ws1", name: "Engineering" }],
         });
-        renderOrgRows([item], "Manage attachments");
+        await renderOrgRows([item], "Manage attachments");
         fireEvent.click(await screen.findByText("Engineering"));
 
         await waitFor(() =>
@@ -372,32 +372,32 @@ describe.each(RESOURCES)(
         );
       });
 
-      it("shows an Org Admin how many Workspaces each row is shared with", () => {
+      it("shows an Org Admin how many Workspaces each row is shared with", async () => {
         authState.actor = "org-admin";
         mockScopedSWR({
           "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
         });
-        renderOrgRows([item]);
+        await renderOrgRows([item]);
 
         expect(screen.getByText("1 workspace")).toBeInTheDocument();
       });
 
-      it("shows a non-admin neither the badge nor Manage attachments", () => {
+      it("shows a non-admin neither the badge nor Manage attachments", async () => {
         authState.actor = "member";
         mockScopedSWR({
           "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
         });
-        renderOrgRows([item]);
+        await renderOrgRows([item]);
 
         expect(screen.queryByText("1 workspace")).not.toBeInTheDocument();
-        openDropdownMenu();
+        await openDropdownMenu();
         expect(menuItemLabels()).toEqual(["Edit", "Delete"]);
       });
 
       it("blocks deleting a row still attached to a Workspace, sending no DELETE", async () => {
         authState.actor = "org-admin";
         const fetchMock = stubAcceptedSave({ results: [{ id: "att1" }] });
-        renderOrgRows([item], "Delete");
+        await renderOrgRows([item], "Delete");
 
         expect(
           await screen.findByText(/is shared with 1 workspace\./),
@@ -418,7 +418,7 @@ describe.each(RESOURCES)(
           { status: 200, body: { results: [] } },
           { status: 200, body: {} },
         );
-        renderOrgRows([item], "Delete");
+        await renderOrgRows([item], "Delete");
         await confirmDialog("Delete");
 
         await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -435,8 +435,8 @@ describe.each(RESOURCES)(
         409,
       );
 
-      renderRows([item]);
-      openDropdownMenu();
+      await renderRows([item]);
+      await openDropdownMenu();
       fireEvent.click(screen.getByText("Detach"));
       fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
 
