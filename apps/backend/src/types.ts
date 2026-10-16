@@ -12,6 +12,11 @@ import type { createFsDownloadTool } from "./sandbox/tools.ts";
 // assertions below keep it honest: each custom-UI tool's inferred type must
 // equal its contract entry exactly, so changing a tool's input or output fails
 // `pnpm typecheck` here until the contract is updated to match.
+//
+// `loadSkill` is the one partial guard: its execute is annotated with the
+// contract's own `SkillLoadResult`, because inference subtype-reduces that
+// union to its first member and the assertion could never pass. Its input,
+// and its `{ error }` branch, are still checked.
 export type {
   ChatMessageMetadata,
   CustomUITools,
