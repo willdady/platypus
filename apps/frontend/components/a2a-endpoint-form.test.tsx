@@ -1,6 +1,12 @@
 import type { ComponentProps } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   authMock,
   authState,
@@ -9,7 +15,10 @@ import {
   resetFormHarness,
   setDataFor,
   stubAcceptedSave,
+  stubRejectedSave,
   savedBody,
+  toastError,
+  toastSuccess,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
 import { formatDateTime } from "@/lib/format-date";
@@ -349,5 +358,49 @@ describe("A2aEndpointForm", () => {
     expect(
       screen.queryByRole("button", { name: "Regenerate token Hermes" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("A2aTokens delete", () => {
+  const renderTokens = () => {
+    const mutate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <A2aTokens
+        orgId="org1"
+        endpoint={
+          endpoint as unknown as ComponentProps<typeof A2aTokens>["endpoint"]
+        }
+        mutate={mutate}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete token Hermes" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    return { mutate, dialog };
+  };
+
+  it("deletes a token, says so and rereads the endpoint", async () => {
+    stubAcceptedSave({});
+    const { mutate } = renderTokens();
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Token deleted"),
+    );
+    expect(mutate).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps a refused delete in the dialog, with the backend's message", async () => {
+    stubRejectedSave("Token is locked", 409);
+    const { mutate, dialog } = renderTokens();
+
+    expect(await within(dialog).findByText("Token is locked")).toBeVisible();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 });

@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Trash2, Mail, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
-import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { formatDate } from "@/lib/format-date";
 import { Badge } from "@/components/ui/badge";
@@ -35,11 +34,10 @@ import {
   SkeletonLine,
   TableSkeleton,
 } from "@/components/list-skeletons";
-import { useState } from "react";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 const OrgInvitationsPage = () => {
   const { orgId } = useParams<{ orgId: string }>();
-  const backendUrl = useBackendUrl();
   const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
     organizationEntity(orgId),
     {},
@@ -56,10 +54,12 @@ const OrgInvitationsPage = () => {
     (blueprintsData?.results ?? []).map((b) => [b.id, b.name]),
   );
 
-  const [invitationToDelete, setInvitationToDelete] = useState<string | null>(
-    null,
-  );
-  const [isDeleting, setIsDeleting] = useState(false);
+  const invitationDelete = useDeleteFlow<string>({
+    delete: (id, backendUrl) =>
+      writeEntity(backendUrl, "invitations", { orgId }, { id }),
+    mutate,
+    onSuccess: () => toast.success("Invitation deleted"),
+  });
 
   // Available for the whole time an Invitation is pending (#549, ADR-0019) --
   // once accepted/declined/expired the token no longer resolves to anything,
@@ -71,26 +71,6 @@ const OrgInvitationsPage = () => {
       "Invitation link copied",
       "Could not copy the invitation link",
     );
-  };
-
-  const handleDelete = async () => {
-    if (!invitationToDelete) return;
-
-    setIsDeleting(true);
-    const outcome = await writeEntity(
-      backendUrl,
-      "invitations",
-      { orgId },
-      { id: invitationToDelete },
-    );
-    if (outcome.outcome === "success") {
-      toast.success("Invitation deleted");
-      mutate();
-      setInvitationToDelete(null);
-    } else {
-      toast.error(outcome.message);
-    }
-    setIsDeleting(false);
   };
 
   const getStatusBadge = (status: string) => {
@@ -247,7 +227,7 @@ const OrgInvitationsPage = () => {
                           size="icon"
                           aria-label={`Delete invitation for ${invite.email}`}
                           className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
-                          onClick={() => setInvitationToDelete(invite.id)}
+                          onClick={() => invitationDelete.request(invite.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -262,15 +242,16 @@ const OrgInvitationsPage = () => {
       </div>
 
       <ConfirmDialog
-        open={!!invitationToDelete}
-        onOpenChange={(open) => !open && setInvitationToDelete(null)}
+        open={invitationDelete.open}
+        onOpenChange={(open) => !open && invitationDelete.close()}
         title="Delete Invitation"
         description="Are you sure you want to delete this invitation? This action cannot be undone."
         confirmLabel="Delete"
         loadingLabel="Deleting..."
         confirmVariant="destructive"
-        onConfirm={handleDelete}
-        loading={isDeleting}
+        onConfirm={invitationDelete.confirm}
+        loading={invitationDelete.deleting}
+        error={invitationDelete.error}
       />
     </div>
   );

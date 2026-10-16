@@ -30,6 +30,7 @@ import { scopedUrl, writeAt } from "@/lib/api-write";
 import { a2aCardUrl } from "@/lib/a2a-endpoint";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import { ListState } from "@/components/list-state";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 /** The anchor a new endpoint's page opens at, so its first token is next. */
 export const ACCESS_SECTION_ID = "access";
@@ -61,8 +62,6 @@ export const A2aTokens = ({
   );
   const [isIssuing, setIsIssuing] = useState(false);
   const [issued, setIssued] = useState<string | null>(null);
-  const [tokenToDelete, setTokenToDelete] = useState<A2aToken | null>(null);
-  const [isDeletingToken, setIsDeletingToken] = useState(false);
   const [tokenToRegenerate, setTokenToRegenerate] = useState<A2aToken | null>(
     null,
   );
@@ -102,21 +101,12 @@ export const A2aTokens = ({
     setIsIssuing(false);
   };
 
-  const deleteToken = async () => {
-    if (!tokenToDelete) return;
-    setIsDeletingToken(true);
-    const outcome = await writeAt(`${tokensUrl}/${tokenToDelete.id}`, {
-      method: "DELETE",
-    });
-    if (outcome.outcome === "success") {
-      toast.success("Token deleted");
-      await mutate();
-    } else {
-      toast.error(outcome.message);
-    }
-    setTokenToDelete(null);
-    setIsDeletingToken(false);
-  };
+  const tokenDelete = useDeleteFlow<A2aToken>({
+    delete: (token) =>
+      writeAt(`${tokensUrl}/${token.id}`, { method: "DELETE" }),
+    mutate,
+    onSuccess: () => toast.success("Token deleted"),
+  });
 
   const regenerateToken = async () => {
     if (!tokenToRegenerate) return;
@@ -200,7 +190,7 @@ export const A2aTokens = ({
                       size="icon"
                       aria-label={`Delete token ${token.name}`}
                       className="cursor-pointer"
-                      onClick={() => setTokenToDelete(token)}
+                      onClick={() => tokenDelete.request(token)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -254,14 +244,15 @@ export const A2aTokens = ({
       </Field>
 
       <ConfirmDialog
-        open={tokenToDelete !== null}
-        onOpenChange={(open) => !open && setTokenToDelete(null)}
+        open={tokenDelete.open}
+        onOpenChange={(open) => !open && tokenDelete.close()}
         title="Delete token"
-        description={`The client using "${tokenToDelete?.name}" stops getting in straight away.`}
+        description={`The client using "${tokenDelete.target?.name}" stops getting in straight away.`}
         confirmLabel="Delete"
         confirmVariant="destructive"
-        onConfirm={deleteToken}
-        loading={isDeletingToken}
+        onConfirm={tokenDelete.confirm}
+        loading={tokenDelete.deleting}
+        error={tokenDelete.error}
       />
 
       <ConfirmDialog

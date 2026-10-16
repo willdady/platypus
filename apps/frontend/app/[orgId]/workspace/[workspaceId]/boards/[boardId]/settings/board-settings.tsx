@@ -1,17 +1,13 @@
 "use client";
 
-import { use, useState } from "react";
-import { useSWRConfig } from "swr";
+import { use } from "react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useEntityDelete } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import type { KanbanBoard } from "@platypus/schemas";
-import { writeEntity } from "@/lib/api-write";
-import { applyDeleteOutcome } from "@/lib/apply-write-outcome";
-import { useBackendUrl } from "@/components/auth-provider";
 import { ResourcePage } from "@/components/resource-page";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { toast } from "sonner";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { workspaceRoutes } from "@/lib/routes";
 
 const BoardSettingsPage = ({
@@ -21,11 +17,7 @@ const BoardSettingsPage = ({
 }) => {
   const { orgId, workspaceId, boardId } = use(params);
   const routes = workspaceRoutes(orgId, workspaceId);
-  const backendUrl = useBackendUrl();
   const router = useRouter();
-  const { mutate: globalMutate } = useSWRConfig();
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // The same key the form reads through, so one request serves both.
   const { data: board } = useScopedSWR<KanbanBoard>(`boards/${boardId}`, {
@@ -33,25 +25,19 @@ const BoardSettingsPage = ({
     workspaceId,
   });
 
-  const handleDeleteConfirm = async () => {
-    setIsDeleting(true);
-    const result = await writeEntity(
-      backendUrl,
-      "boards",
-      { orgId, workspaceId },
-      { id: boardId },
-    );
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => router.push(routes.root),
-      onError: (message) => {
-        toast.error(message);
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      },
-    });
-  };
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    deleteError,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "boards",
+    scope: { orgId, workspaceId },
+    id: boardId,
+    onSuccess: () => router.push(routes.root),
+  });
 
   return (
     <ResourcePage
@@ -63,11 +49,11 @@ const BoardSettingsPage = ({
         orgId={orgId}
         workspaceId={workspaceId}
         boardId={boardId}
-        onDelete={() => setIsDeleteDialogOpen(true)}
+        onDelete={openDeleteDialog}
         isDeleting={isDeleting}
       />
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Board"
@@ -78,12 +64,10 @@ const BoardSettingsPage = ({
             data.
           </>
         }
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         confirmPhrase="delete board"
-        loadingLabel="Deleting..."
-        onConfirm={handleDeleteConfirm}
+        onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
     </ResourcePage>
   );
