@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
@@ -539,7 +539,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
           )}
         </div>
 
-        <EntityDeleteDialog
+        <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
           title="Delete Workspace"

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
 import {
@@ -169,7 +169,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
           onDelete={openDeleteDialog}
         />
 
-        <EntityDeleteDialog
+        <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
           title="Delete Organization"
