@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   render,
   screen,
@@ -7,9 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   push,
   resetFormHarness,
@@ -20,9 +18,7 @@ import {
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 // The create form never keys a fetch off a webhook id, so SWR never loads
 // real data here — the harness's default (unset) response is `undefined`.
 vi.mock("swr", () => swrMock);
@@ -67,10 +63,6 @@ describe("WebhookForm event picker", () => {
 describe("WebhookForm validation error surfacing", () => {
   beforeEach(() => {
     resetFormHarness();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   it("saves, shows the rejected events error, then saves again once corrected", async () => {

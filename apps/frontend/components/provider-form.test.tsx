@@ -1,10 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Provider } from "@platypus/schemas";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   setData,
   setDataFor,
@@ -18,9 +16,7 @@ import { selectOption } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 // The form makes two reads: the Provider being edited, and the
 // `GET /organizations/:orgId/web-backends` catalog. The harness keys its
 // responses off the request URL suffix so the catalog read does not get
@@ -62,11 +58,6 @@ beforeEach(() => {
   // built-in search option, where the Provider has one) for every test that
   // predates the catalog.
   setDataFor("/web-backends", { results: [] });
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 // --- Tests -------------------------------------------------------------------

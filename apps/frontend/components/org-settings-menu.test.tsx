@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
@@ -21,15 +21,6 @@ function renderMenu(organizationName?: string) {
 // --- Tests -------------------------------------------------------------------
 
 describe("OrgSettingsMenu organization heading", () => {
-  beforeAll(() => {
-    // jsdom has no matchMedia; SidebarProvider subscribes to it via useIsMobile.
-    window.matchMedia = vi.fn().mockReturnValue({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }) as unknown as typeof window.matchMedia;
-  });
-
   it("shows the organization name resolved by the layout", () => {
     renderMenu("Acme Corp");
 

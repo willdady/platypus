@@ -1,12 +1,7 @@
 import { vi, type Mock } from "vitest";
 import { render, fireEvent, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import {
-  installRadixPointerPolyfills,
-  installResizeObserverStub,
-  openDropdownMenu,
-  resetSharedSpies,
-} from "./test-utils";
+import { openDropdownMenu, resetSharedSpies } from "./test-utils";
 
 // Lists stub the same `fetch` shapes forms do, so the write helpers come from
 // the same place; re-exported here so a list test has one import to reach for.
@@ -152,14 +147,11 @@ export function resetListHarness() {
 
 /**
  * Renders a list, optionally opening the row's dropdown menu and picking
- * `menuItem` — the three lines every row-action test starts with. The Radix
- * pointer polyfills the menu needs are installed here rather than left to a
- * `beforeAll` each file has to remember — along with the ResizeObserver
- * stub cmdk needs, for the lists that offer a Command palette.
+ * `menuItem` — the three lines every row-action test starts with. The
+ * pointer and ResizeObserver polyfills the menu and cmdk need come from
+ * `vitest.setup.ts`.
  */
 export function renderList(ui: ReactElement, menuItem?: string) {
-  installRadixPointerPolyfills();
-  installResizeObserverStub();
   const result = render(ui);
   if (menuItem !== undefined) {
     openDropdownMenu();

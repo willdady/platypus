@@ -1,12 +1,4 @@
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  beforeEach,
-  afterEach,
-} from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   act,
   fireEvent,
@@ -15,13 +7,8 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import {
-  installRadixPointerPolyfills,
-  jsonResponse,
-  openDropdownMenu,
-} from "@/test/test-utils";
 
-beforeAll(installRadixPointerPolyfills);
+import { jsonResponse, openDropdownMenu } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
@@ -72,8 +59,6 @@ beforeEach(() => {
   mutate.mockReset();
   toastError.mockReset();
 });
-
-afterEach(() => vi.unstubAllGlobals());
 
 const NOTIFICATIONS_URL =
   "http://test/organizations/org1/workspaces/ws1/notifications";

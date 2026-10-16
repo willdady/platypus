@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Skill } from "@platypus/schemas";
 import {
   authMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -22,7 +21,6 @@ import { openDropdownMenu, selectOption } from "@/test/test-utils";
 // --- Module mocks ------------------------------------------------------------
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { SkillsList } from "./skills-list";
@@ -58,11 +56,6 @@ function renderOrgSkills(skills: SkillWithScope[], menuItem?: string) {
 }
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 // --- Tests -------------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { WriteOutcome } from "@/lib/api-write";
 
@@ -32,10 +32,6 @@ function setup(
   );
   return { result, perform, mutate, onSuccess };
 }
-
-afterEach(() => {
-  vi.clearAllMocks();
-});
 
 describe("useDeleteFlow", () => {
   it("starts closed with no error", () => {

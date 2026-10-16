@@ -1,11 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   authMock,
-  toastMock,
   swrMock,
   authState,
-  navigationMock,
   refresh,
   toastSuccess,
   resetFormHarness,
@@ -15,11 +13,9 @@ import {
   stubAcceptedSave,
   savedBody,
 } from "@/test/form-test-harness";
-import { installResizeObserverStub, selectOption } from "@/test/test-utils";
+import { selectOption } from "@/test/test-utils";
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { WorkspaceForm } from "./workspace-form";
@@ -39,10 +35,6 @@ const RESEARCH = {
 
 const save = () =>
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("WorkspaceForm record read", () => {
   beforeEach(() => resetFormHarness());
@@ -103,7 +95,6 @@ describe("WorkspaceForm secondary reads", () => {
 describe("WorkspaceForm provider selects", () => {
   beforeEach(() => {
     resetFormHarness();
-    installResizeObserverStub();
     setDataFor(WORKSPACE_KEY, RESEARCH);
     setDataFor(`${WORKSPACE_KEY}/providers`, {
       results: [
@@ -155,7 +146,6 @@ describe("WorkspaceForm save", () => {
   beforeEach(() => resetFormHarness());
 
   it("sends the edited settings, with an unset provider as null, and refreshes", async () => {
-    installResizeObserverStub();
     setDataFor(WORKSPACE_KEY, RESEARCH);
     const fetchMock = stubAcceptedSave(RESEARCH);
     renderForm();

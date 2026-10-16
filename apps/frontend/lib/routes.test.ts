@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   appRoutes,
   invitationLink,
@@ -8,8 +8,6 @@ import {
   withBasePath,
   workspaceRoutes,
 } from "./routes";
-
-afterEach(() => vi.unstubAllEnvs());
 
 describe("orgRoutes", () => {
   const routes = orgRoutes("org1");

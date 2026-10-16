@@ -11,21 +11,6 @@ import {
   PromptInputTextarea,
 } from "./prompt-input";
 
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
-
-beforeEach(() => {
-  // jsdom has no matchMedia; PromptInputTextarea subscribes to it via useIsMobile.
-  window.matchMedia = vi.fn().mockReturnValue({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }) as unknown as typeof window.matchMedia;
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
 function getFileInput() {
   return screen.getByLabelText("Upload files") as HTMLInputElement;
 }
@@ -471,7 +456,6 @@ describe("PromptInput blob-URL lifecycle", () => {
   afterEach(() => {
     URL.createObjectURL = originals.createObjectURL;
     URL.revokeObjectURL = originals.revokeObjectURL;
-    vi.unstubAllGlobals();
   });
 
   const fileA = () => new File(["a"], "a.txt", { type: "text/plain" });

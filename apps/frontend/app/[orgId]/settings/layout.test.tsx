@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "session=1" }),
@@ -8,8 +8,6 @@ import { generateMetadata } from "./layout";
 
 const metadataFor = () =>
   generateMetadata({ params: Promise.resolve({ orgId: "org1" }) });
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("OrgSettingsLayout metadata", () => {
   it("names the Organization in the title of every settings page", async () => {

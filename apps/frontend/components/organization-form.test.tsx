@@ -1,9 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   push,
   toastSuccess,
@@ -15,9 +13,7 @@ import {
   savedBody,
 } from "@/test/form-test-harness";
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { OrganizationForm } from "./organization-form";
@@ -62,7 +58,6 @@ describe("OrganizationForm record read", () => {
 
 describe("OrganizationForm create", () => {
   beforeEach(() => resetFormHarness());
-  afterEach(() => vi.unstubAllGlobals());
 
   it("creates the organization and opens it", async () => {
     const fetchMock = stubAcceptedSave({ id: "org9", name: "Acme" });

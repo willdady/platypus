@@ -4,7 +4,6 @@ import {
   authMock,
   mockScopedSWR,
   mutate,
-  navigationMock,
   push,
   renderList,
   resetListHarness,
@@ -13,7 +12,6 @@ import {
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("swr", () => swrMock);
 
 import { CommandMenu } from "./command-menu";
@@ -27,8 +25,6 @@ const openMenu = () => {
 
 beforeEach(() => {
   resetListHarness();
-  // cmdk scrolls the selected item into view, which jsdom doesn't implement.
-  Element.prototype.scrollIntoView = vi.fn();
 });
 
 describe("CommandMenu", () => {

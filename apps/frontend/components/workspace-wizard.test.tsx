@@ -1,10 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   authMock,
-  toastMock,
   swrMock,
-  navigationMock,
   push,
   resetFormHarness,
   setDataFor,
@@ -13,9 +11,7 @@ import {
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { WorkspaceWizard } from "./workspace-wizard";
@@ -42,7 +38,6 @@ beforeEach(() => {
     results: [{ id: "shared-1", name: "Shared OpenAI" }],
   });
 });
-afterEach(() => vi.unstubAllGlobals());
 
 describe("WorkspaceWizard", () => {
   it("stays on the first step until the workspace has a valid name", () => {

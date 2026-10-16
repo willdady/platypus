@@ -53,43 +53,6 @@ export function resetSharedSpies() {
   authState.workspaceDelegation = null;
 }
 
-/**
- * Radix's DropdownMenu opens on pointerdown and grabs pointer capture,
- * neither of which jsdom implements. Call once (e.g. in `beforeAll`) before
- * rendering anything that uses a Radix DropdownMenu/Select/etc.
- */
-export function installRadixPointerPolyfills() {
-  Element.prototype.hasPointerCapture = () => false;
-  Element.prototype.releasePointerCapture = () => {};
-  Element.prototype.scrollIntoView = () => {};
-}
-
-/**
- * jsdom has no ResizeObserver; cmdk's Command palette and the chart surfaces
- * subscribe to one on mount. Assigned rather than `vi.stubGlobal`-ed, so a
- * test file's `vi.unstubAllGlobals()` does not take it away again.
- */
-export function installResizeObserverStub() {
-  window.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-}
-
-/**
- * jsdom has no matchMedia; `PromptInputTextarea` subscribes to it for the
- * mobile Enter-inserts-a-newline branch. Reports no match, which is the
- * desktop branch every test here wants.
- */
-export function installMatchMediaStub() {
-  window.matchMedia = (() => ({
-    matches: false,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  })) as unknown as typeof window.matchMedia;
-}
-
 /** Opens the first closed Radix DropdownMenu trigger found in the document. */
 export function openDropdownMenu() {
   const trigger = document.querySelector('[aria-haspopup="menu"]');
@@ -109,9 +72,7 @@ export function openDropdownMenu() {
  * triggers have no accessible name, so the current value is all there is).
  *
  * Keyboard rather than pointer: Radix opens on ArrowDown without the pointer
- * capture jsdom lacks. `scrollIntoView` is stubbed only for the duration of
- * the interaction — Radix calls it while positioning the list, and a caller
- * may have its own stub installed that this must not clobber.
+ * capture jsdom lacks.
  */
 export async function selectOption(from: string | HTMLElement, option: string) {
   const combobox =
@@ -121,15 +82,9 @@ export async function selectOption(from: string | HTMLElement, option: string) {
   if (!combobox) {
     throw new Error(`No select reading "${String(from)}" found`);
   }
-  const scrollIntoView = Element.prototype.scrollIntoView;
-  Element.prototype.scrollIntoView = () => {};
-  try {
-    fireEvent.keyDown(combobox, { key: "ArrowDown" });
-    const item = await screen.findByRole("option", { name: option });
-    fireEvent.keyDown(item, { key: "Enter" });
-  } finally {
-    Element.prototype.scrollIntoView = scrollIntoView;
-  }
+  fireEvent.keyDown(combobox, { key: "ArrowDown" });
+  const item = await screen.findByRole("option", { name: option });
+  fireEvent.keyDown(item, { key: "Enter" });
 }
 
 /**

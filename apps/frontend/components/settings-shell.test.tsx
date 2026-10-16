@@ -1,14 +1,5 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-
-beforeAll(() => {
-  // jsdom has no matchMedia; SidebarProvider subscribes to it via useIsMobile.
-  window.matchMedia = vi.fn().mockReturnValue({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }) as unknown as typeof window.matchMedia;
-});
 
 vi.mock("@/components/header", () => ({
   Header: ({ leftContent }: { leftContent?: React.ReactNode }) => (

@@ -70,12 +70,7 @@ import TriggerRunDetailPage, {
   RUN_DETAIL_POLL_MS,
 } from "./trigger-run";
 import { RUN_TIMELINE_EMPTY_NOTICE } from "@/components/run-timeline";
-import {
-  installRadixPointerPolyfills,
-  openDropdownMenu,
-} from "@/test/test-utils";
-
-installRadixPointerPolyfills();
+import { openDropdownMenu } from "@/test/test-utils";
 
 const T0 = 1_767_258_000_000;
 

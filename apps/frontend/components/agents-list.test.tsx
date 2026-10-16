@@ -3,8 +3,6 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { Agent, Provider } from "@platypus/schemas";
 import {
   authMock,
-  navigationMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   authState,
@@ -24,8 +22,6 @@ import {
 // --- Module mocks ------------------------------------------------------------
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("next/navigation", () => navigationMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { openDropdownMenu, stubPendingSave } from "@/test/test-utils";
@@ -58,11 +54,6 @@ function renderAgents(agents: AgentWithScope[], menuItem?: string) {
 }
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 // --- Tests -------------------------------------------------------------------
 

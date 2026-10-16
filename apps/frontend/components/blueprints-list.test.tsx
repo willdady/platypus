@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import type { Blueprint } from "@platypus/schemas";
 import {
   authMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -18,7 +17,6 @@ import {
 // --- Module mocks ------------------------------------------------------------
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { BlueprintsList } from "./blueprints-list";
@@ -38,11 +36,6 @@ function renderBlueprints(blueprints: Blueprint[], menuItem?: string) {
 }
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 // --- Tests -------------------------------------------------------------------
 

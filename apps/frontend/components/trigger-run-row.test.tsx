@@ -1,6 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
-
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+import { describe, it, expect } from "vitest";
 import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import type { TriggerRunWithTrigger } from "@platypus/schemas";
 import {
@@ -8,12 +6,7 @@ import {
   triggerRunDetailHref,
   RUN_WARNINGS_LABEL,
 } from "./trigger-run-row";
-import {
-  installRadixPointerPolyfills,
-  openDropdownMenu,
-} from "@/test/test-utils";
-
-installRadixPointerPolyfills();
+import { openDropdownMenu } from "@/test/test-utils";
 
 const run = (
   over: Partial<TriggerRunWithTrigger> = {},

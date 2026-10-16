@@ -1,12 +1,8 @@
-import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { installRadixPointerPolyfills } from "@/test/test-utils";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "./markdown";
-
-beforeAll(installRadixPointerPolyfills);
-afterEach(() => vi.unstubAllGlobals());
 
 // A Kanban card: Markdown inside a modal Radix Dialog.
 const Card = ({ body }: { body: string }) => {

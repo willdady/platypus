@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import type { Workspace } from "@platypus/schemas";
 import {
@@ -26,11 +26,6 @@ import { PluginsList } from "./plugins-list";
  */
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 describe("ContextsList", () => {
   const workspaceContext = {

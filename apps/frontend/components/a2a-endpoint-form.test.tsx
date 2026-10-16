@@ -1,11 +1,9 @@
 import type { ComponentProps } from "react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
-  navigationMock,
   authMock,
   authState,
-  toastMock,
   swrMock,
   push,
   resetFormHarness,
@@ -16,14 +14,12 @@ import {
 import { selectOption } from "@/test/test-utils";
 import { formatDateTime } from "@/lib/format-date";
 
-vi.mock("next/navigation", () => navigationMock);
 // The backend URL a test may blank, to stand for one not configured yet.
 const backend = vi.hoisted(() => ({ url: "http://test" }));
 vi.mock("@/components/auth-provider", () => ({
   ...authMock,
   useBackendUrl: () => backend.url,
 }));
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { A2aEndpointForm } from "./a2a-endpoint-form";
@@ -68,11 +64,6 @@ beforeEach(() => {
       { id: "agent-2", name: "Scout", description: "Finds things" },
     ],
   });
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 describe("A2aEndpointForm", () => {

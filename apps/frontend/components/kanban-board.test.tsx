@@ -238,10 +238,6 @@ describe("KanbanBoard transport", () => {
     Element.prototype.setPointerCapture = vi.fn();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   /**
    * Every dialog on the board is the same pair of claims — an accepted write
    * goes to the right endpoint and closes the dialog, a refused one names the
@@ -820,8 +816,6 @@ describe("KanbanBoard open card", () => {
     boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
   });
 
-  afterEach(() => vi.restoreAllMocks());
-
   const dialog = () => screen.queryByRole("dialog");
 
   it("names the open card in the URL, and clears it on close", async () => {
@@ -908,11 +902,6 @@ describe("KanbanBoard double submit", () => {
     Element.prototype.releasePointerCapture = vi.fn();
     Element.prototype.setPointerCapture = vi.fn();
     boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   async function openPopoverConfirm(triggerName: string) {
@@ -1029,7 +1018,6 @@ describe("KanbanBoard load states", () => {
   afterEach(() => {
     boardLoaded = true;
     boardError = undefined;
-    vi.restoreAllMocks();
   });
 
   it("shows the placeholder until the board has loaded", () => {

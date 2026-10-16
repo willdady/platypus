@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
   authMock,
-  toastMock,
   swrMock,
   toastError,
   toastSuccess,
@@ -12,12 +11,10 @@ import {
   stubRejectedSave,
   savedBody,
 } from "@/test/form-test-harness";
-import { installResizeObserverStub } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { InvitationForm } from "./invitation-form";
@@ -39,11 +36,6 @@ beforeEach(() => {
   resetFormHarness();
   // The form never has any Blueprints to offer in these tests.
   setData({ results: [] });
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 // --- Tests -------------------------------------------------------------------
@@ -112,7 +104,6 @@ describe("InvitationForm Blueprints", () => {
     });
     const fetchMock = stubAcceptedSave({ id: "inv-1" }, 201);
     // Radix's Switch measures itself.
-    installResizeObserverStub();
     renderForm();
 
     fireEvent.click(screen.getByRole("switch", { name: "Alpha" }));

@@ -1,18 +1,6 @@
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { KanbanCard, KanbanCardComment } from "@platypus/schemas";
-import { installRadixPointerPolyfills } from "@/test/test-utils";
-
-beforeAll(() => {
-  installRadixPointerPolyfills();
-  // The dialog picks a mobile/desktop layout off this; force desktop so only
-  // one copy of the comments section renders.
-  window.matchMedia = vi.fn().mockReturnValue({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }) as unknown as typeof window.matchMedia;
-});
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -100,7 +88,6 @@ afterEach(() => {
   comments = [];
   mutateCommentsSpy.mockClear();
   toastErrorSpy.mockClear();
-  vi.restoreAllMocks();
   setViewportWidth(1024);
 });
 

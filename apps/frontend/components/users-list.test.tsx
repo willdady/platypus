@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import {
   authMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -17,7 +16,6 @@ import {
 // --- Module mocks ------------------------------------------------------------
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { UsersList } from "./users-list";
@@ -64,11 +62,6 @@ async function confirmDelete() {
 }
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 // --- Tests -------------------------------------------------------------------
 

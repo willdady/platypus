@@ -1,17 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   resetFormHarness,
   setDataFor,
 } from "@/test/form-test-harness";
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 // The bundle card loads its own files; not under test here.
 vi.mock("@/components/skill-bundle", () => ({ SkillBundleCard: () => null }));

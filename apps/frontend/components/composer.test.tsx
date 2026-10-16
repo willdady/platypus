@@ -19,10 +19,6 @@ import {
   uninstallSpeechRecognition,
   setSecureContext,
 } from "@/test/chat-test-fixtures";
-import {
-  installMatchMediaStub,
-  installResizeObserverStub,
-} from "@/test/test-utils";
 
 vi.mock("sonner", () => ({
   toast: { error: vi.fn() },
@@ -119,11 +115,6 @@ const recordFocus = () => {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  installMatchMediaStub();
-  installResizeObserverStub();
-  // cmdk scrolls the active item into view.
-  Element.prototype.scrollIntoView = () => {};
   setSecureContext(true);
   recognition = installSpeechRecognition();
 });

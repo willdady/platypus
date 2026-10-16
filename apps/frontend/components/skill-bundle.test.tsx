@@ -3,14 +3,12 @@ import { render, screen } from "@testing-library/react";
 import type { Skill } from "@platypus/schemas";
 import {
   authMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { SkillBundleCard } from "./skill-bundle";

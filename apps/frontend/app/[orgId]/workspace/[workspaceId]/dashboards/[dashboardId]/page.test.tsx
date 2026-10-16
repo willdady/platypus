@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   act,
   render,
@@ -8,7 +8,6 @@ import {
 } from "@testing-library/react";
 import { Suspense } from "react";
 import type { Dashboard, Widget } from "@platypus/schemas";
-import { installResizeObserverStub } from "@/test/test-utils";
 
 const ORG_ID = "org-1";
 const WS_ID = "ws-1";
@@ -224,12 +223,6 @@ describe("Dashboard editor mutations", () => {
     mutateDashboard.mockClear();
     toastError.mockClear();
     toastInfo.mockClear();
-    installResizeObserverStub();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   // The worst of the five: closing the editor unconditionally makes a failed

@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import {
   authMock,
   swrMock,
-  toastMock,
   mockScopedSWR,
   resetListHarness,
   renderList,
@@ -18,16 +17,10 @@ import { openDropdownMenu } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
-vi.mock("sonner", () => toastMock);
 
 import { WebhooksList } from "./webhooks-list";
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 describe("WebhooksList", () => {
   const webhook = {

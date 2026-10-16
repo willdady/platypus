@@ -8,7 +8,6 @@ import {
   renderList,
   resetListHarness,
   swrMock,
-  toastMock,
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -16,7 +15,6 @@ vi.mock("next/navigation", () => ({
   ...navigationMock,
   useParams: () => ({ orgId: "org1", workspaceId: "ws1" }),
 }));
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import Workspace from "./page";

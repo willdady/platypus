@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import {
   authMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -13,7 +12,6 @@ import {
 import { selectOption } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { OrgA2aAccess, OrgInboundTriggerAccess } from "./org-gate-access";
@@ -42,10 +40,6 @@ const sentBody = (fetchMock: ReturnType<typeof stubAcceptedSave>) =>
   JSON.parse(fetchMock.mock.calls[0][1].body as string);
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("OrgInboundTriggerAccess", () => {
   it("lists no workspaces unless Selected workspaces is chosen", () => {

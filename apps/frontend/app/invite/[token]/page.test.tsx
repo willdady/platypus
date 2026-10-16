@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import InviteTokenPage from "./page";
 import { jsonResponse } from "@/test/test-utils";
@@ -81,14 +81,9 @@ describe("InviteTokenPage", () => {
   let tokenCounter = 0;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     mockUser = null;
     mockToken = `tok_${++tokenCounter}`;
     window.history.replaceState(null, "", `/invite/${mockToken}`);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
   it("scrubs the token from the visible URL on mount", () => {

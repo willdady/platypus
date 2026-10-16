@@ -4,19 +4,15 @@ import type { OrgMemberListItem, Provider } from "@platypus/schemas";
 import {
   authMock,
   mockScopedSWR,
-  navigationMock,
   renderList,
   resetListHarness,
   stubAcceptedSave,
   swrMock,
-  toastMock,
   toastSuccess,
 } from "@/test/list-test-harness";
 import { selectOption } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("next/navigation", () => navigationMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { TransferWorkspaceAction } from "./transfer-workspace-dialog";

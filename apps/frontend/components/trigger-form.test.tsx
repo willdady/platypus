@@ -1,9 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   setDataFor,
   setLoading,
@@ -18,9 +16,7 @@ import { getBrowserTimezone } from "@/lib/timezones";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 // The real list is every IANA zone (~420); opening the Timezone select renders
 // all of them, which pushed a two-pick test past the 5s timeout on CI. These
@@ -56,11 +52,6 @@ beforeEach(() => {
   resetFormHarness();
   setDataFor("/agents", { results: agents });
   setDataFor("/boards", { results: boards });
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.clearAllMocks();
 });
 
 async function renderEventTriggerForm() {

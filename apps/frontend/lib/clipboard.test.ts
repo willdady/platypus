@@ -28,7 +28,6 @@ const setExecCommand = (impl: (command: string) => boolean) =>
   });
 
 afterEach(() => {
-  vi.restoreAllMocks();
   setClipboard(null);
 });
 

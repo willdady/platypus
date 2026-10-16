@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import type { Agent } from "@platypus/schemas";
 import {
@@ -35,11 +35,6 @@ function renderAgents(agents: Agent[], menuItem?: string) {
 }
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 // --- Tests -------------------------------------------------------------------
 

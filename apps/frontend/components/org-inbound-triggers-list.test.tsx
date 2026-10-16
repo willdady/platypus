@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   authMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -12,7 +11,6 @@ import {
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { OrgInboundTriggersList } from "./org-inbound-triggers-list";
@@ -35,10 +33,6 @@ const row = (over: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("OrgInboundTriggersList", () => {
   it("lists each Inbound Trigger with its Workspace, Owner and token standing", () => {

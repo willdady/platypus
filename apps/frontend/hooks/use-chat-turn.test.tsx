@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { UIMessage } from "ai";
 import {
@@ -6,15 +6,12 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   toastError,
-  toastMock,
 } from "@/test/test-utils";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
 import type { ModelSelection } from "@/hooks/use-model-selection";
 import { CHAT_MAX_STEPS_ERROR, CHAT_SELECTION_ERROR } from "@/lib/chat-turn";
 import { reportPdf } from "@/test/chat-test-fixtures";
 import { useChatTurn } from "./use-chat-turn";
-
-vi.mock("sonner", () => toastMock);
 
 /**
  * A Chat turn starts from the composer, Regenerate and a resent edit, and all
@@ -87,7 +84,6 @@ const starts: [string, (turn: Turn) => boolean][] = [
 ];
 
 beforeEach(() => resetSharedSpies());
-afterEach(() => vi.unstubAllGlobals());
 
 describe("useChatTurn refusing a turn", () => {
   it.each(starts)(

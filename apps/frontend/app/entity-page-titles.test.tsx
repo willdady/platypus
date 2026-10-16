@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "better-auth.session_token=abc" }),
@@ -8,8 +8,6 @@ import { generateMetadata as agentMetadata } from "./[orgId]/workspace/[workspac
 import { generateMetadata as triggerMetadata } from "./[orgId]/workspace/[workspaceId]/triggers/[triggerId]/page";
 
 import { generateMetadata as orgHomeMetadata } from "./[orgId]/(home)/page";
-
-afterEach(() => vi.unstubAllGlobals());
 
 const pages = [
   {

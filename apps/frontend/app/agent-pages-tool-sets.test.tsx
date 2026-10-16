@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render } from "@testing-library/react";
 
 // The Agent form itself is exercised in components/agent-form.test.tsx. Here it
@@ -81,11 +81,6 @@ describe("Agent pages tool set loading", () => {
   beforeEach(() => {
     vi.stubEnv("INTERNAL_BACKEND_URL", "http://backend:4000");
     formProps.current = null;
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
   });
 
   for (const page of pages) {

@@ -22,7 +22,6 @@ import { jsonResponse } from "@/test/test-utils";
 
 afterEach(() => {
   orgRows = [];
-  vi.restoreAllMocks();
 });
 
 // --- Tests -------------------------------------------------------------------

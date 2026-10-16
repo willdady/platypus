@@ -1,10 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor, act } from "@testing-library/react";
 import type { InvitationListItem } from "@platypus/schemas";
 import {
   authMock,
-  navigationMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -14,8 +12,6 @@ import {
 import { stubPendingSave } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("next/navigation", () => navigationMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import UserInvitationsPage from "./page";
@@ -28,11 +24,6 @@ const invitation = {
 } as unknown as InvitationListItem;
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 describe("UserInvitationsPage accept", () => {
   it("sends one accept for a double click, disabled and labelled while pending", async () => {

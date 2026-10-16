@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { StrictMode } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import { stubAcceptedSave, stubRejectedSave } from "@/test/test-utils";
@@ -11,11 +11,6 @@ vi.mock("@/components/auth-provider", () => ({
 }));
 
 import { OAuthCallbackHandler } from "./oauth-callback-handler";
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 describe("OAuthCallbackHandler", () => {
   it("posts the single-use code once, even under StrictMode", async () => {

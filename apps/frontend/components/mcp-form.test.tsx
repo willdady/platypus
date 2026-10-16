@@ -2,9 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { MCP } from "@platypus/schemas";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   setData,
   setError,
@@ -22,9 +20,7 @@ import {
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { McpForm } from "./mcp-form";
@@ -35,7 +31,6 @@ import { toast } from "sonner";
 describe("McpForm secret reveal", () => {
   afterEach(() => {
     resetFormHarness();
-    vi.restoreAllMocks();
   });
 
   it("toggles the bearer token between masked and revealed", () => {
@@ -82,7 +77,6 @@ describe("McpForm secret reveal", () => {
 describe("McpForm locked delete", () => {
   afterEach(() => {
     resetFormHarness();
-    vi.restoreAllMocks();
   });
 
   it("shows the backend's guidance, not an error toast, when the MCP is Shared", async () => {
@@ -115,7 +109,6 @@ describe("McpForm locked delete", () => {
 describe("McpForm record revalidation", () => {
   afterEach(() => {
     resetFormHarness();
-    vi.restoreAllMocks();
   });
 
   it("keeps an unsaved edit when the OAuth status flips underneath it", () => {
@@ -145,7 +138,6 @@ describe("McpForm record revalidation", () => {
 describe("McpForm detail read failures", () => {
   afterEach(() => {
     resetFormHarness();
-    vi.restoreAllMocks();
   });
 
   it("shows a not-found state with the way back when the MCP is gone", () => {
@@ -175,8 +167,6 @@ describe("McpForm detail read failures", () => {
 describe("McpForm save payload", () => {
   afterEach(() => {
     resetFormHarness();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   // A stored bearer token must not ride along once Auth no longer uses it,
@@ -268,8 +258,6 @@ describe("McpForm save payload", () => {
 describe("McpForm test connection", () => {
   afterEach(() => {
     resetFormHarness();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   const renderBearerMcp = () => {
@@ -331,8 +319,6 @@ describe("McpForm test connection", () => {
 describe("McpForm OAuth", () => {
   afterEach(() => {
     resetFormHarness();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   const renderOAuthMcp = (oauthAuthorized: boolean) => {
