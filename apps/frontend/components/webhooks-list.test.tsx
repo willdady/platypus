@@ -54,6 +54,17 @@ describe("WebhooksList", () => {
     ).toBeInTheDocument();
   });
 
+  // A long URL is cut off with an ellipsis inside the card, so the full URL
+  // stays readable on hover.
+  it("truncates the URL, keeping the full URL on hover", () => {
+    mockScopedSWR({ webhooks: [webhook] });
+    render();
+
+    const url = screen.getByText("https://hooks.example.com/deploy");
+    expect(url).toHaveClass("truncate");
+    expect(url).toHaveAttribute("title", "https://hooks.example.com/deploy");
+  });
+
   // A disabled webhook still lists, badged — deleting it to turn it off would
   // lose its URL and secret.
   it("badges a disabled webhook rather than hiding it", () => {

@@ -242,6 +242,16 @@ describe.each(RESOURCES)(
       expect(screen.getByText(secondLine)).toBeInTheDocument();
     });
 
+    // A long URL is cut off with an ellipsis inside the card, so the full
+    // value stays readable on hover.
+    it("truncates the row's second line, keeping the full value on hover", () => {
+      renderRows([workspaceItem]);
+
+      const line = screen.getByText(secondLine);
+      expect(line).toHaveClass("truncate");
+      expect(line).toHaveAttribute("title", secondLine);
+    });
+
     it("gives a workspace row Edit, then Delete", () => {
       renderRows([workspaceItem]);
       openDropdownMenu();
