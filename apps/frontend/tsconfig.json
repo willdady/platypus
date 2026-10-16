@@ -22,8 +22,7 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"],
-      "@platypus/backend/src/types": ["../backend/src/types.ts"]
+      "@/*": ["./*"]
     },
     "types": ["vitest/globals"]
   },

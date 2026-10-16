@@ -1,6 +1,9 @@
-import type { Chat, ChatStatus as RunStatus } from "@platypus/schemas";
+import type {
+  Chat,
+  ChatStatus as RunStatus,
+  PlatypusUIMessage,
+} from "@platypus/schemas";
 import type { ChatStatus as TurnStatus } from "ai";
-import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 
 /**
  * Recovering a Chat turn whose stream was cut (issue #648).

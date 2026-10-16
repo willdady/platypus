@@ -13,6 +13,7 @@ import {
   readStoredSkillFile,
   type SkillFileRow,
 } from "./skill-bundle.ts";
+import type { SkillLoadResult } from "@platypus/schemas";
 import type { Database } from "./scoped-resource.ts";
 import type { SkillRow } from "./skill.ts";
 import { resolveOwned } from "./workspace-resource.ts";
@@ -179,18 +180,6 @@ const copySkillToSandbox = async (
     await backend?.close?.();
   }
 };
-
-/** What `loadSkill` returns, and what a slash command seeds. */
-export type SkillLoadResult =
-  | { name: string; body: string }
-  | {
-      name: string;
-      body: string;
-      files: { path: string; isText: boolean }[];
-      /** Where the Sandbox copy is, when the Skill was copied into one. */
-      directory?: string;
-      note: string;
-    };
 
 const READ_SKILL_FILE_NOTE =
   "Read a text file with the readSkillFile tool, passing its path relative to the skill's root.";

@@ -13,6 +13,10 @@ import { renderSecurityGuardrails } from "../security-prompt.ts";
 import { actorUserId, workspaceScopeForSubAgent } from "../scope.ts";
 import { wrapToolsWithActivity } from "../services/tool-activity.ts";
 import type { PlatypusUIMessage } from "../types.ts";
+import type {
+  SubAgentActivity,
+  SubAgentActivityEntry,
+} from "@platypus/schemas";
 import { DELEGATE_TOOL_NAME } from "./turn-tool-names.ts";
 
 /**
@@ -23,37 +27,6 @@ import { DELEGATE_TOOL_NAME } from "./turn-tool-names.ts";
 export type LoadedSubAgentTools = {
   tools: Record<string, Tool>;
   readOnlyToolNames: ReadonlySet<string>;
-};
-
-/**
- * Activity log entry for a sub-agent's execution.
- */
-type SubAgentActivityEntry = {
-  type: "tool-call" | "thinking" | "generating" | "failed";
-  toolName?: string;
-  status: "running" | "completed" | "error";
-  error?: string;
-};
-
-/**
- * Activity log yielded by a sub-agent tool during execution.
- */
-export type SubAgentActivity = {
-  entries: SubAgentActivityEntry[];
-  text?: string;
-  /**
-   * Set when the sub-agent's terminal finish hit its model's output ceiling, so
-   * `text` is a fragment. Named as the run path names the same fact on a Chat
-   * message, because it is the same fact one level down.
-   */
-  truncatedByTokenLimit?: true;
-  /**
-   * Set when the sub-agent's model loop was stopped at its step ceiling with the
-   * model still asking to continue, so `text` is whatever it had produced by
-   * then — often a tool result and no answer. The sibling of the flag above, and
-   * named the same way the run path names it on a Chat message.
-   */
-  stoppedAtStepLimit?: true;
 };
 
 /**

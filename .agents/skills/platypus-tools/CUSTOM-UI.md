@@ -32,8 +32,14 @@ Done when the tool draws your card and no JSON block follows it.
 ## Typed input and output
 
 A part's `input` and `output` are `unknown` until the tool is listed in the
-backend's custom-UI tools type. Listing it there is what buys the narrowing,
-and matching the literal part type then needs no cast.
+custom-UI tools type in `@platypus/schemas`. Listing it there is what buys the
+narrowing, and matching the literal part type then needs no cast.
+
+The entry is written by hand, `{ input; output }` including any error branch,
+because the frontend must not compile backend source. Add a matching
+equality assertion in the backend's types module: it fails typecheck whenever
+the tool's inferred shape and the hand-written entry differ, in either
+direction.
 
 Only core tools with bespoke UI belong there. Plugin- and MCP-contributed tools
 are not known at compile time, so their renderers take the generic tool part

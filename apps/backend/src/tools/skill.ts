@@ -6,6 +6,7 @@ import {
   findSkillFileByPath,
   readStoredSkillFile,
 } from "../services/skill-bundle.ts";
+import type { SkillLoadResult } from "@platypus/schemas";
 import { skillLoadResult } from "../services/skill-sandbox.ts";
 import { normaliseBundlePath } from "../services/skill-bundle-format.ts";
 import type { RowOf } from "../services/scoped-resource.ts";
@@ -59,7 +60,10 @@ export const createLoadSkillTool = (
     inputSchema: z.object({
       name: z.string().describe("The kebab-case name of the skill to load"),
     }),
-    execute: async ({ name }: { name: string }, { abortSignal }) => {
+    execute: async (
+      { name }: { name: string },
+      { abortSignal },
+    ): Promise<SkillLoadResult | { error: string }> => {
       const found = await resolveForModel(
         name,
         orgId,

@@ -1,5 +1,4 @@
 import { Fragment, memo, type ReactNode } from "react";
-import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import {
   Message,
   MessageContent,
@@ -36,7 +35,12 @@ import {
   isToolUIPart,
   type ChatStatus,
 } from "ai";
-import { Agent, formatFileSize, isPresentableUrl } from "@platypus/schemas";
+import {
+  Agent,
+  formatFileSize,
+  isPresentableUrl,
+  type PlatypusUIMessage,
+} from "@platypus/schemas";
 import {
   isImageAttachment,
   messageSandboxUploads,

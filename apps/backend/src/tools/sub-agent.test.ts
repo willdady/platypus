@@ -12,7 +12,7 @@ import {
   SUB_AGENT_STEP_LIMIT_NOTE,
   SUB_AGENT_TRUNCATION_NOTE,
 } from "./sub-agent.ts";
-import type { SubAgentActivity } from "./sub-agent.ts";
+import type { SubAgentActivity } from "@platypus/schemas";
 import { DELEGATE_TOOL_NAME } from "./turn-tool-names.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { orgScope, workspaceScope, type WorkspaceScope } from "../scope.ts";

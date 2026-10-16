@@ -4,8 +4,8 @@ import {
   WEB_TOOL_NORMALIZED_KEY,
   type Agent,
   type NormalizedWebToolResult,
+  type PlatypusUIMessage,
 } from "@platypus/schemas";
-import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 import { setErrorReporter } from "@/lib/error-reporting";
 
 import {
