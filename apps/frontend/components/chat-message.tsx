@@ -57,6 +57,7 @@ import type { AlternativePosition } from "@/lib/chat-alternatives";
 import { isTurnInFlight as isInFlight } from "@/lib/chat-recovery";
 import { ResponseMetricsPopover } from "./response-metrics-popover";
 import { TurnNotice } from "./turn-notice";
+import { MessagePartBoundary } from "./message-part-boundary";
 import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
 import { FsDownloadTool } from "./fs-download-tool";
@@ -541,7 +542,13 @@ export const ChatMessage = memo(function ChatMessage({
       )}
       {message.parts?.map((part, i) => {
         const renderer = partRenderers.find((r) => r.matches(part));
-        return renderer ? renderer.render(part, i) : null;
+        return renderer ? (
+          <MessagePartBoundary
+            key={`${message.id}-${i}`}
+            resetKey={part}
+            render={() => renderer.render(part, i)}
+          />
+        ) : null;
       })}
       {/* How the reply was produced, then how it ended — both rows render when
       both apply, in that order. */}

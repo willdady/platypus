@@ -1,33 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { RouteError } from "@/components/route-error";
 
-export default function GlobalError({
+/**
+ * Catches a page outside any shell that has its own boundary. The Workspace
+ * and Organization settings segments each have one, so an error there keeps
+ * the sidebar and header.
+ */
+export default function RootError({
   error,
   retry,
 }: {
   error: Error & { digest?: string };
-  /**
-   * Re-fetches and re-renders the segment. `reset` would only re-render it,
-   * so an error a Server Component threw on a failed read would come
-   * straight back.
-   */
   retry: () => void;
 }) {
-  useEffect(() => {
-    console.error("Unhandled error:", error);
-  }, [error]);
-
-  return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-4">
-      <h2 className="text-xl font-semibold">Something went wrong</h2>
-      <p className="text-muted-foreground text-sm">
-        An unexpected error occurred. Please try again.
-      </p>
-      <Button onClick={() => retry()} variant="outline">
-        Try again
-      </Button>
-    </div>
-  );
+  return <RouteError error={error} retry={retry} source="segment" />;
 }

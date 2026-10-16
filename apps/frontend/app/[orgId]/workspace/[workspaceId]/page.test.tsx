@@ -93,6 +93,16 @@ describe("Workspace home", () => {
     expect(screen.queryByRole("heading", { name: "Pinned" })).toBeNull();
   });
 
+  it("says the workspace is gone, with the way back, when the read returns none", () => {
+    mockScopedSWR({ "/workspaces/ws1": { data: undefined } });
+    renderList(<Workspace />);
+
+    expect(screen.getByText("Workspace not found")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Back to Organization" }),
+    ).toHaveAttribute("href", "/org1");
+  });
+
   it("shows a failed workspace read as an error with a retry, not as not found", () => {
     mockScopedSWR({
       "/workspaces/ws1": { error: { status: 500, message: "Server error" } },
