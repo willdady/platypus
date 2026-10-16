@@ -66,7 +66,7 @@ describe("TriggerList delete", () => {
   it("deletes through the request module and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
 
-    renderTriggers([cronTrigger], "Delete");
+    await renderTriggers([cronTrigger], "Delete");
     await confirmDialog("Delete");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -79,7 +79,7 @@ describe("TriggerList delete", () => {
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
     stubRejectedSave("Trigger is in use", 409);
 
-    renderTriggers([cronTrigger], "Delete");
+    await renderTriggers([cronTrigger], "Delete");
     await confirmDialog("Delete");
 
     expect(await screen.findByText("Trigger is in use")).toBeInTheDocument();
@@ -93,7 +93,7 @@ describe("TriggerList toggle enabled", () => {
   it("PUTs the flipped enabled flag and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
 
-    renderTriggers([cronTrigger], "Disable");
+    await renderTriggers([cronTrigger], "Disable");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -108,7 +108,7 @@ describe("TriggerList toggle enabled", () => {
   it("surfaces the backend's reason and does not flip when the toggle is refused", async () => {
     stubRejectedSave("Trigger is running", 409);
 
-    renderTriggers([cronTrigger], "Disable");
+    await renderTriggers([cronTrigger], "Disable");
 
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith("Trigger is running"),
@@ -118,8 +118,8 @@ describe("TriggerList toggle enabled", () => {
 });
 
 describe("TriggerList cron schedule", () => {
-  it("describes the schedule in plain English with the next run", () => {
-    renderTriggers([scheduledTrigger]);
+  it("describes the schedule in plain English with the next run", async () => {
+    await renderTriggers([scheduledTrigger]);
 
     expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
     expect(
@@ -127,14 +127,14 @@ describe("TriggerList cron schedule", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the raw expression reachable as a tooltip", () => {
-    renderTriggers([scheduledTrigger]);
+  it("keeps the raw expression reachable as a tooltip", async () => {
+    await renderTriggers([scheduledTrigger]);
 
     expect(screen.getByTitle("0 0 * * *")).toBeInTheDocument();
   });
 
-  it("falls back to the raw expression when cron cannot be parsed", () => {
-    renderTriggers([
+  it("falls back to the raw expression when cron cannot be parsed", async () => {
+    await renderTriggers([
       {
         ...scheduledTrigger,
         config: { cronExpression: "nonsense", timezone: "UTC" },
@@ -144,15 +144,15 @@ describe("TriggerList cron schedule", () => {
     expect(screen.getByText("nonsense")).toBeInTheDocument();
   });
 
-  it("describes the schedule without a next run when the trigger is disabled", () => {
-    renderTriggers([{ ...scheduledTrigger, enabled: false } as Trigger]);
+  it("describes the schedule without a next run when the trigger is disabled", async () => {
+    await renderTriggers([{ ...scheduledTrigger, enabled: false } as Trigger]);
 
     expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
     expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
   });
 
-  it("describes the schedule without a next run when none is scheduled", () => {
-    renderTriggers([{ ...scheduledTrigger, nextRunAt: null } as Trigger]);
+  it("describes the schedule without a next run when none is scheduled", async () => {
+    await renderTriggers([{ ...scheduledTrigger, nextRunAt: null } as Trigger]);
 
     expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
     expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
@@ -161,8 +161,8 @@ describe("TriggerList cron schedule", () => {
 
 describe("TriggerList list states", () => {
   // No controls with nothing to filter.
-  it("says so, without controls, when the workspace has no triggers", () => {
-    renderTriggers([]);
+  it("says so, without controls, when the workspace has no triggers", async () => {
+    await renderTriggers([]);
 
     expect(screen.getByText("No triggers yet.")).toBeInTheDocument();
 
@@ -176,7 +176,7 @@ describe("TriggerList list states", () => {
 
   // Fired One-offs are hidden by default; Show fired must stay reachable.
   it("keeps the controls when only fired One-offs exist, and Show fired lists them", async () => {
-    renderTriggers([
+    await renderTriggers([
       {
         ...cronTrigger,
         enabled: false,
@@ -193,16 +193,16 @@ describe("TriggerList list states", () => {
     expect(screen.getByText("Nightly job")).toBeInTheDocument();
   });
 
-  it("surfaces a failed read rather than rendering an empty list", () => {
+  it("surfaces a failed read rather than rendering an empty list", async () => {
     mockScopedSWR({ "/triggers": { error: new Error("500") } });
-    renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
+    await renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText(/Failed to load triggers/)).toBeInTheDocument();
   });
 
-  it("holds the grid with a skeleton while the read is in flight", () => {
+  it("holds the grid with a skeleton while the read is in flight", async () => {
     mockScopedSWR({ "/triggers": { isLoading: true } });
-    renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
+    await renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
 
     expect(
       screen.getByRole("status", { name: "Loading triggers" }),
@@ -211,11 +211,11 @@ describe("TriggerList list states", () => {
 
   // A revalidation keeps the list it has rather than flashing to the
   // skeleton and back.
-  it("keeps the list it has while a re-read is in flight", () => {
+  it("keeps the list it has while a re-read is in flight", async () => {
     mockScopedSWR({
       "/triggers": { data: { results: [cronTrigger] }, isLoading: true },
     });
-    renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
+    await renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText("Nightly job")).toBeInTheDocument();
     expect(
@@ -242,8 +242,8 @@ describe("TriggerList inbound triggers", () => {
       ...over,
     }) as unknown as Trigger;
 
-  it("renders an Inbound Trigger with its own badge and its inputs, not as an Event Trigger", () => {
-    renderTriggers([inboundTrigger()]);
+  it("renders an Inbound Trigger with its own badge and its inputs, not as an Event Trigger", async () => {
+    await renderTriggers([inboundTrigger()]);
 
     expect(screen.getByText("Inbound")).toBeInTheDocument();
     expect(screen.queryByText("Event")).not.toBeInTheDocument();
@@ -251,14 +251,14 @@ describe("TriggerList inbound triggers", () => {
     expect(screen.queryByText(/Called from outside/)).not.toBeInTheDocument();
   });
 
-  it("draws no summary line for an input-less Trigger with a healthy token", () => {
-    renderTriggers([inboundTrigger({ config: { inputs: [] } })]);
+  it("draws no summary line for an input-less Trigger with a healthy token", async () => {
+    await renderTriggers([inboundTrigger({ config: { inputs: [] } })]);
 
     expect(screen.queryByText(/Inputs:|Token/)).not.toBeInTheDocument();
   });
 
-  it("flags a trigger whose token was revoked or has expired", () => {
-    renderTriggers([
+  it("flags a trigger whose token was revoked or has expired", async () => {
+    await renderTriggers([
       inboundTrigger({
         id: "t3",
         name: "Revoked",
@@ -287,8 +287,8 @@ describe("TriggerList type filter", () => {
     config: { events: ["card.created"] },
   } as unknown as Trigger;
 
-  it("lists every type until one is picked", () => {
-    renderTriggers([cronTrigger, eventTrigger]);
+  it("lists every type until one is picked", async () => {
+    await renderTriggers([cronTrigger, eventTrigger]);
 
     expect(
       screen.getByRole("combobox", { name: "Filter by type" }),
@@ -297,7 +297,7 @@ describe("TriggerList type filter", () => {
   });
 
   it("narrows the list to the chosen type", async () => {
-    renderTriggers([cronTrigger, eventTrigger]);
+    await renderTriggers([cronTrigger, eventTrigger]);
 
     await act(async () => {
       await selectOption("All types", "Event");
@@ -309,7 +309,7 @@ describe("TriggerList type filter", () => {
   });
 
   it("disables Show fired for the types that never fire", async () => {
-    renderTriggers([cronTrigger, eventTrigger]);
+    await renderTriggers([cronTrigger, eventTrigger]);
     const showFired = screen.getByRole("switch", { name: "Show fired" });
 
     await act(async () => {
@@ -325,7 +325,7 @@ describe("TriggerList type filter", () => {
 
   // A filter that matches nothing must say so, and leave the way back visible.
   it("says nothing matches and keeps the controls when no trigger has the type", async () => {
-    renderTriggers([cronTrigger]);
+    await renderTriggers([cronTrigger]);
 
     await act(async () => {
       await selectOption("All types", "Inbound");
@@ -360,8 +360,8 @@ describe("TriggerList last run", () => {
       "Last run:",
     )?.parentElement ?? null;
 
-  it("shows every type's last run status and when it started", () => {
-    renderTriggers([
+  it("shows every type's last run status and when it started", async () => {
+    await renderTriggers([
       ran({ ...cronTrigger }),
       ran(
         {
@@ -398,8 +398,8 @@ describe("TriggerList last run", () => {
     expect(screen.getAllByTitle(`formatted:${startedAt}`)).toHaveLength(3);
   });
 
-  it("shows no last run line for a trigger that has never run", () => {
-    renderTriggers([
+  it("shows no last run line for a trigger that has never run", async () => {
+    await renderTriggers([
       { ...cronTrigger, lastRunStatus: null, lastRunStartedAt: null },
     ]);
 
@@ -407,7 +407,7 @@ describe("TriggerList last run", () => {
   });
 
   it("keeps Fired in a fired One-off's title row and its status on the last run line", async () => {
-    renderTriggers([
+    await renderTriggers([
       ran(
         {
           ...cronTrigger,
@@ -432,8 +432,8 @@ describe("TriggerList last run", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows both Disabled and the failure for a disabled trigger", () => {
-    renderTriggers([ran({ ...cronTrigger, enabled: false }, "failed")]);
+  it("shows both Disabled and the failure for a disabled trigger", async () => {
+    await renderTriggers([ran({ ...cronTrigger, enabled: false }, "failed")]);
 
     expect(screen.getByText("Disabled")).toBeInTheDocument();
     expect(
@@ -445,8 +445,8 @@ describe("TriggerList last run", () => {
 });
 
 describe("TriggerList card", () => {
-  it("opens the trigger's runs when the card is clicked", () => {
-    renderTriggers([cronTrigger]);
+  it("opens the trigger's runs when the card is clicked", async () => {
+    await renderTriggers([cronTrigger]);
 
     expect(screen.getByRole("link", { name: /Nightly job/ })).toHaveAttribute(
       "href",
@@ -454,9 +454,9 @@ describe("TriggerList card", () => {
     );
   });
 
-  it("orders its menu Edit, Enable/Disable, then Delete, with no View runs", () => {
-    renderTriggers([cronTrigger]);
-    openDropdownMenu();
+  it("orders its menu Edit, Enable/Disable, then Delete, with no View runs", async () => {
+    await renderTriggers([cronTrigger]);
+    await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual(["Edit", "Disable", "Delete"]);
   });

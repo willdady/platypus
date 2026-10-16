@@ -42,7 +42,7 @@ describe("OrgAgentsList delete", () => {
   it("blocks delete and reports the attachment count when the agent is still attached", async () => {
     const fetchMock = stubAcceptedSave({ results: [{ id: "att1" }] });
 
-    renderAgents([sharedAgent], "Delete");
+    await renderAgents([sharedAgent], "Delete");
 
     expect(
       await screen.findByText("Can't delete shared agent"),
@@ -60,7 +60,7 @@ describe("OrgAgentsList delete", () => {
       { status: 409, body: { error: "Still referenced" } },
     );
 
-    renderAgents([sharedAgent], "Delete");
+    await renderAgents([sharedAgent], "Delete");
     await confirmDialog("Delete");
 
     expect(await screen.findByText("Still referenced")).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe("OrgAgentsList delete", () => {
       { status: 200, body: {} },
     );
 
-    renderAgents([sharedAgent], "Delete");
+    await renderAgents([sharedAgent], "Delete");
     await confirmDialog("Delete");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -85,24 +85,24 @@ describe("OrgAgentsList delete", () => {
 });
 
 describe("OrgAgentsList list states", () => {
-  it("shows the empty state when the organization shares no agents", () => {
-    renderAgents([]);
+  it("shows the empty state when the organization shares no agents", async () => {
+    await renderAgents([]);
 
     expect(screen.getByText(/No shared agents yet/i)).toBeInTheDocument();
   });
 
-  it("surfaces a failed read rather than rendering an empty list", () => {
+  it("surfaces a failed read rather than rendering an empty list", async () => {
     mockScopedSWR({ "/agents": { error: new Error("500") } });
-    renderList(<OrgAgentsList orgId="org1" />);
+    await renderList(<OrgAgentsList orgId="org1" />);
 
     expect(
       screen.getByText(/Failed to load shared agents/),
     ).toBeInTheDocument();
   });
 
-  it("holds the grid with a skeleton, not the empty state, while loading", () => {
+  it("holds the grid with a skeleton, not the empty state, while loading", async () => {
     mockScopedSWR({ "/agents": { isLoading: true } });
-    renderList(<OrgAgentsList orgId="org1" />);
+    await renderList(<OrgAgentsList orgId="org1" />);
 
     expect(
       screen.getByRole("status", { name: "Loading shared agents" }),

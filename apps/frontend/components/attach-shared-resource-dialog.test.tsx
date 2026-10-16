@@ -36,9 +36,9 @@ beforeEach(resetListHarness);
 // --- Tests -------------------------------------------------------------------
 
 describe("AttachSharedResourceDialog", () => {
-  it("shows a placeholder, not a false empty, while the list loads", () => {
+  it("shows a placeholder, not a false empty, while the list loads", async () => {
     mockScopedSWR({ "/skills": { isLoading: true } }, { strict: true });
-    renderDialog();
+    await renderDialog();
 
     expect(screen.getByLabelText("Loading shared skills")).toBeInTheDocument();
     expect(
@@ -46,24 +46,24 @@ describe("AttachSharedResourceDialog", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says none are available once loaded with nothing unattached", () => {
+  it("says none are available once loaded with nothing unattached", async () => {
     mockScopedSWR(
       { "/skills": [{ id: "s1", name: "Research" }] },
       { strict: true },
     );
-    renderDialog(["s1"]);
+    await renderDialog(["s1"]);
 
     expect(
       screen.getByText("No shared skills available to attach."),
     ).toBeInTheDocument();
   });
 
-  it("lists the unattached resources once loaded", () => {
+  it("lists the unattached resources once loaded", async () => {
     mockScopedSWR(
       { "/skills": [{ id: "s1", name: "Research" }] },
       { strict: true },
     );
-    renderDialog();
+    await renderDialog();
 
     expect(screen.getByText("Research")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();

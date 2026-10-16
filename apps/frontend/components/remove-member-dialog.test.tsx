@@ -78,7 +78,7 @@ describe("RemoveMemberDialog", () => {
       { strict: true },
     );
     const fetchMock = stubAcceptedSave({ message: "ok" });
-    renderDialog([olive, nina]);
+    await renderDialog([olive, nina]);
 
     expect(screen.queryByText(/delete all/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("RemoveMemberDialog", () => {
       { strict: true },
     );
     const fetchMock = stubAcceptedSave({ message: "ok" });
-    renderDialog([olive, nina]);
+    await renderDialog([olive, nina]);
 
     expect(removeButton()).toBeDisabled();
     await selectOption(actionFor("Alpha"), "Transfer");
@@ -137,7 +137,7 @@ describe("RemoveMemberDialog", () => {
       { strict: true },
     );
     const fetchMock = stubAcceptedSave({ message: "ok" });
-    renderDialog([olive, nina]);
+    await renderDialog([olive, nina]);
 
     await selectOption(actionFor("Alpha"), "Transfer");
     await selectOption(
@@ -164,7 +164,7 @@ describe("RemoveMemberDialog", () => {
       { "/workspaces": [workspace("ws-a", "Alpha")] },
       { strict: true },
     );
-    renderDialog([olive, bea]);
+    await renderDialog([olive, bea]);
 
     fireEvent.keyDown(actionFor("Alpha"), { key: "ArrowDown" });
     expect(

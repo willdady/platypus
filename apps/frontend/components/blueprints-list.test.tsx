@@ -43,7 +43,7 @@ describe("BlueprintsList delete", () => {
   it("deletes through the request module and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
 
-    renderBlueprints([blueprint], "Delete");
+    await renderBlueprints([blueprint], "Delete");
     await confirmDialog("Delete");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -56,7 +56,7 @@ describe("BlueprintsList delete", () => {
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
     stubRejectedSave("Blueprint is in use", 409);
 
-    renderBlueprints([blueprint], "Delete");
+    await renderBlueprints([blueprint], "Delete");
     await confirmDialog("Delete");
 
     expect(await screen.findByText("Blueprint is in use")).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe("BlueprintsList delete", () => {
   it("surfaces a forbidden refusal inline like any other failure", async () => {
     stubRejectedSave("You do not have permission to delete blueprints", 403);
 
-    renderBlueprints([blueprint], "Delete");
+    await renderBlueprints([blueprint], "Delete");
     await confirmDialog("Delete");
 
     expect(
@@ -81,25 +81,25 @@ describe("BlueprintsList delete", () => {
 });
 
 describe("BlueprintsList list states", () => {
-  it("shows the empty state when the organization has no blueprints", () => {
-    renderBlueprints([]);
+  it("shows the empty state when the organization has no blueprints", async () => {
+    await renderBlueprints([]);
 
     expect(screen.getByText(/No blueprints yet/i)).toBeInTheDocument();
   });
 
-  it("surfaces a failed read rather than rendering an empty list", () => {
+  it("surfaces a failed read rather than rendering an empty list", async () => {
     mockScopedSWR(
       { "/blueprints": { error: new Error("500") } },
       { strict: true },
     );
-    renderList(<BlueprintsList orgId="org1" />);
+    await renderList(<BlueprintsList orgId="org1" />);
 
     expect(screen.getByText(/Failed to load blueprints/)).toBeInTheDocument();
   });
 
-  it("holds the grid with a skeleton, not the empty state, while loading", () => {
+  it("holds the grid with a skeleton, not the empty state, while loading", async () => {
     mockScopedSWR({ "/blueprints": { isLoading: true } }, { strict: true });
-    renderList(<BlueprintsList orgId="org1" />);
+    await renderList(<BlueprintsList orgId="org1" />);
 
     expect(
       screen.getByRole("status", { name: "Loading blueprints" }),

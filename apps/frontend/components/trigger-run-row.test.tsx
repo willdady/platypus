@@ -79,9 +79,9 @@ describe("TriggerRunRow", () => {
     const menuItems = () =>
       screen.getAllByRole("menuitem").map((item) => item.textContent?.trim());
 
-    it("offers Edit trigger then Copy run id in the list", () => {
+    it("offers Edit trigger then Copy run id in the list", async () => {
       render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
-      openDropdownMenu();
+      await openDropdownMenu();
 
       expect(menuItems()).toEqual(["Edit trigger", "Copy run id"]);
       expect(
@@ -97,7 +97,7 @@ describe("TriggerRunRow", () => {
       ).toBeInTheDocument();
     });
 
-    it("offers the same items on a suppressed firing's row", () => {
+    it("offers the same items on a suppressed firing's row", async () => {
       render(
         <TriggerRunRow
           run={run({ status: "suppressed" })}
@@ -105,12 +105,12 @@ describe("TriggerRunRow", () => {
           workspaceId="ws-1"
         />,
       );
-      openDropdownMenu();
+      await openDropdownMenu();
 
       expect(menuItems()).toEqual(["Edit trigger", "Copy run id"]);
     });
 
-    it("adds View trigger's runs on the run's own page", () => {
+    it("adds View trigger's runs on the run's own page", async () => {
       render(
         <TriggerRunRow
           run={run()}
@@ -119,7 +119,7 @@ describe("TriggerRunRow", () => {
           linkToDetail={false}
         />,
       );
-      openDropdownMenu();
+      await openDropdownMenu();
 
       expect(menuItems()).toEqual([
         "Edit trigger",
@@ -134,13 +134,13 @@ describe("TriggerRunRow", () => {
       );
     });
 
-    it("does not open the run when the menu is opened or used", () => {
+    it("does not open the run when the menu is opened or used", async () => {
       render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
       const trigger = screen.getByRole("button", {
         name: "Actions for Nightly digest run",
       });
 
-      openDropdownMenu();
+      await openDropdownMenu();
       const copy = screen.getByRole("menuitem", { name: "Copy run id" });
       const choosing = createEvent.click(copy);
       fireEvent(copy, choosing);

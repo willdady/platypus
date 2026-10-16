@@ -50,7 +50,7 @@ const renderAction = () =>
 beforeEach(() => resetListHarness());
 
 describe("TransferWorkspaceAction", () => {
-  it("is disabled with an invite hint when nobody can receive the Workspace", () => {
+  it("is disabled with an invite hint when nobody can receive the Workspace", async () => {
     mockScopedSWR(
       {
         "/workspaces/ws-1": { data: workspace },
@@ -58,7 +58,7 @@ describe("TransferWorkspaceAction", () => {
       },
       { strict: true },
     );
-    renderAction();
+    await renderAction();
 
     expect(screen.getByRole("button", { name: "Transfer" })).toBeDisabled();
     expect(
@@ -75,7 +75,7 @@ describe("TransferWorkspaceAction", () => {
       { strict: true },
     );
     const fetchMock = stubAcceptedSave(workspace);
-    renderAction();
+    await renderAction();
 
     fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
     await selectOption(

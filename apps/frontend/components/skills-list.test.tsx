@@ -63,7 +63,7 @@ describe("SkillsList detach", () => {
   it("surfaces the backend's reason and keeps the dialog open when detach is refused", async () => {
     const fetchMock = stubRejectedSave("This skill is in use by an agent", 409);
 
-    renderSkills([orgSkill], "Detach");
+    await renderSkills([orgSkill], "Detach");
     await confirmDialog(/Detach/);
 
     expect(
@@ -81,7 +81,7 @@ describe("SkillsList detach", () => {
   it("revalidates and closes the dialog when detach succeeds", async () => {
     stubAcceptedSave();
 
-    renderSkills([orgSkill], "Detach");
+    await renderSkills([orgSkill], "Detach");
     await confirmDialog(/Detach/);
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -90,9 +90,9 @@ describe("SkillsList detach", () => {
 });
 
 describe("SkillsList shared skill card", () => {
-  it("offers Edit in org settings and Detach in its menu", () => {
-    renderSkills([orgSkill]);
-    openDropdownMenu();
+  it("offers Edit in org settings and Detach in its menu", async () => {
+    await renderSkills([orgSkill]);
+    await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual(["Edit in org settings", "Detach"]);
     expect(
@@ -100,17 +100,17 @@ describe("SkillsList shared skill card", () => {
     ).toHaveAttribute("href", "/org1/settings/skills/s1");
   });
 
-  it("does not open Detach when the card is clicked", () => {
-    renderSkills([orgSkill]);
+  it("does not open Detach when the card is clicked", async () => {
+    await renderSkills([orgSkill]);
     fireEvent.click(screen.getByText("Shared Skill"));
 
     expect(screen.queryByText("Detach shared skill")).not.toBeInTheDocument();
   });
 
-  it("offers no menu to a user who cannot manage Shared resources", () => {
+  it("offers no menu to a user who cannot manage Shared resources", async () => {
     authState.actor = "member";
 
-    renderSkills([orgSkill]);
+    await renderSkills([orgSkill]);
 
     expect(
       screen.queryByRole("button", { name: "Actions for Shared Skill" }),
@@ -119,8 +119,8 @@ describe("SkillsList shared skill card", () => {
 });
 
 describe("SkillsList invocation badge", () => {
-  it("badges a user-invocable-only Skill but not a model-visible one", () => {
-    renderSkills([
+  it("badges a user-invocable-only Skill but not a model-visible one", async () => {
+    await renderSkills([
       {
         ...workspaceSkill,
         id: "user-only",
@@ -134,8 +134,8 @@ describe("SkillsList invocation badge", () => {
     expect(screen.getByText("Workspace Skill")).toBeInTheDocument();
   });
 
-  it("badges a Skill that needs a Sandbox, Shared or not", () => {
-    renderSkills([
+  it("badges a Skill that needs a Sandbox, Shared or not", async () => {
+    await renderSkills([
       { ...orgSkill, needsSandbox: true },
       { ...workspaceSkill, id: "scripts", name: "Scripts", needsSandbox: true },
       workspaceSkill,
@@ -149,7 +149,7 @@ describe("SkillsList delete", () => {
   it("surfaces the backend's reason and leaves the skill in place when delete fails", async () => {
     const fetchMock = stubRejectedSave("Skill is referenced", 409);
 
-    renderSkills([workspaceSkill], "Delete");
+    await renderSkills([workspaceSkill], "Delete");
     await confirmDialog("Delete");
 
     expect(await screen.findByText("Skill is referenced")).toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("SkillsList delete", () => {
   it("shows the backend's guidance, not an inline error, when delete is refused because the skill is Shared", async () => {
     stubRejectedSave("This skill is managed at the organization level", 403);
 
-    renderSkills([workspaceSkill], "Delete");
+    await renderSkills([workspaceSkill], "Delete");
     await confirmDialog("Delete");
 
     await waitFor(() =>
@@ -180,7 +180,7 @@ describe("SkillsList delete", () => {
   it("blocks delete and reports the attachment count when the skill is still attached", async () => {
     const fetchMock = stubAcceptedSave({ results: [{ id: "att1" }] });
 
-    renderOrgSkills([orgSkill], "Delete");
+    await renderOrgSkills([orgSkill], "Delete");
 
     expect(
       await screen.findByText("Can't delete shared skill"),
@@ -197,7 +197,7 @@ describe("SkillsList delete", () => {
   it("deletes from the org-scoped path on the Organization surface (no workspaceId)", async () => {
     const fetchMock = stubAcceptedSave();
 
-    renderOrgSkills([orgSkill], "Delete");
+    await renderOrgSkills([orgSkill], "Delete");
     // The Organization surface checks the live attachment count (a GET)
     // before opening the confirm dialog.
     await confirmDialog("Delete");
@@ -214,7 +214,7 @@ describe("SkillsList promote", () => {
   it("reports an unreachable backend rather than leaving the dialog silent", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
 
-    renderSkills([workspaceSkill], "Promote to organization");
+    await renderSkills([workspaceSkill], "Promote to organization");
     await confirmDialog("Promote");
 
     expect(
@@ -226,7 +226,7 @@ describe("SkillsList promote", () => {
   it("surfaces the backend's reason when promote fails", async () => {
     const fetchMock = stubRejectedSave("Name already shared", 409);
 
-    renderSkills([workspaceSkill], "Promote to organization");
+    await renderSkills([workspaceSkill], "Promote to organization");
     await confirmDialog("Promote");
 
     expect(await screen.findByText("Name already shared")).toBeInTheDocument();
@@ -247,8 +247,8 @@ describe("SkillsList filters", () => {
       target: { value: text },
     });
 
-  it("narrows the list to the skills whose name fuzzily matches the search", () => {
-    renderSkills([
+  it("narrows the list to the skills whose name fuzzily matches the search", async () => {
+    await renderSkills([
       skillNamed("a", "write-release-note"),
       skillNamed("b", "triage-issue"),
     ]);
@@ -259,8 +259,8 @@ describe("SkillsList filters", () => {
     expect(screen.queryByText("triage-issue")).not.toBeInTheDocument();
   });
 
-  it("clears the search with its clear button", () => {
-    renderSkills([
+  it("clears the search with its clear button", async () => {
+    await renderSkills([
       skillNamed("a", "write-release-note"),
       skillNamed("b", "triage-issue"),
     ]);
@@ -274,8 +274,8 @@ describe("SkillsList filters", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says no skills match, rather than none exist, when the filters exclude every skill", () => {
-    renderSkills([skillNamed("a", "write-release-note")]);
+  it("says no skills match, rather than none exist, when the filters exclude every skill", async () => {
+    await renderSkills([skillNamed("a", "write-release-note")]);
 
     search("zzz");
 
@@ -285,8 +285,8 @@ describe("SkillsList filters", () => {
     expect(screen.queryByText(/No skills yet/i)).not.toBeInTheDocument();
   });
 
-  it("offers no filters on the Organization surface", () => {
-    renderOrgSkills([orgSkill]);
+  it("offers no filters on the Organization surface", async () => {
+    await renderOrgSkills([orgSkill]);
 
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
@@ -313,7 +313,7 @@ describe("SkillsList filters", () => {
       ["alpha", "bravo", "charlie"].filter((name) => screen.queryByText(name));
 
     it("shows only the skills attached to the chosen agent", async () => {
-      renderWithAgents();
+      await renderWithAgents();
 
       await selectOption("Any agent", "Triager");
 
@@ -321,7 +321,7 @@ describe("SkillsList filters", () => {
     });
 
     it("shows only the skills attached to no agent when Unattached is chosen", async () => {
-      renderWithAgents();
+      await renderWithAgents();
 
       await selectOption("Any agent", "Unattached");
 
@@ -329,7 +329,7 @@ describe("SkillsList filters", () => {
     });
 
     it("falls back to any agent when the chosen agent no longer uses a listed skill", async () => {
-      const { rerender } = renderWithAgents();
+      const { rerender } = await renderWithAgents();
       await selectOption("Any agent", "Triager");
 
       mockScopedSWR({
@@ -346,7 +346,7 @@ describe("SkillsList filters", () => {
     });
 
     it("offers only agents attached to a listed skill", async () => {
-      renderWithAgents();
+      await renderWithAgents();
 
       fireEvent.keyDown(
         screen.getByRole("combobox", { name: "Filter by agent" }),
@@ -367,8 +367,8 @@ describe("SkillsList filters", () => {
 });
 
 describe("SkillsList list states", () => {
-  it("shows the empty state, without filter controls, when the workspace has no skills", () => {
-    renderSkills([]);
+  it("shows the empty state, without filter controls, when the workspace has no skills", async () => {
+    await renderSkills([]);
 
     expect(screen.getByText(/No skills yet/i)).toBeInTheDocument();
     expect(
@@ -379,16 +379,16 @@ describe("SkillsList list states", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("surfaces a failed read rather than rendering an empty list", () => {
+  it("surfaces a failed read rather than rendering an empty list", async () => {
     mockScopedSWR({ "/skills": { error: new Error("500") } });
-    renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText(/Failed to load skills/)).toBeInTheDocument();
   });
 
-  it("holds the grid with a skeleton, not the empty state, while loading", () => {
+  it("holds the grid with a skeleton, not the empty state, while loading", async () => {
     mockScopedSWR({ "/skills": { isLoading: true } });
-    renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
 
     expect(
       screen.getByRole("status", { name: "Loading skills" }),

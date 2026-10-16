@@ -53,12 +53,12 @@ const revoke = async (name: string, label: string) => {
 beforeEach(resetListHarness);
 
 describe("OrgA2aEndpointsList", () => {
-  it("lists each endpoint with its Agent, Workspace and Owner, and its tokens beneath", () => {
+  it("lists each endpoint with its Agent, Workspace and Owner, and its tokens beneath", async () => {
     mockScopedSWR(
       { "/a2a/endpoints": [endpoint({ enabled: false })] },
       { strict: true },
     );
-    renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     const [, endpointRow, tokenRow] = screen.getAllByRole("row");
     expect(within(endpointRow).getByText("Support desk")).toBeInTheDocument();
@@ -71,9 +71,9 @@ describe("OrgA2aEndpointsList", () => {
     expect(within(tokenRow).getByText("Never")).toBeInTheDocument();
   });
 
-  it("shows each token time with its time of day, as the endpoint's own page does", () => {
+  it("shows each token time with its time of day, as the endpoint's own page does", async () => {
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
-    renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     const [, , tokenRow] = screen.getAllByRole("row");
     for (const at of [
@@ -88,11 +88,11 @@ describe("OrgA2aEndpointsList", () => {
     }
   });
 
-  it("badges only a token that needs attention, not an active one", () => {
+  it("badges only a token that needs attention, not an active one", async () => {
     const active = endpoint();
     active.tokens[0].tokenStatus = "active";
     mockScopedSWR({ "/a2a/endpoints": [active] }, { strict: true });
-    renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     expect(
       screen.getByRole("columnheader", { name: "Expires" }),
@@ -100,9 +100,9 @@ describe("OrgA2aEndpointsList", () => {
     expect(screen.queryByText("Active")).not.toBeInTheDocument();
   });
 
-  it("offers revoke and nothing that edits", () => {
+  it("offers revoke and nothing that edits", async () => {
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
-    renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Revoke endpoint",
@@ -113,7 +113,7 @@ describe("OrgA2aEndpointsList", () => {
   it("revokes an endpoint through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "A2A endpoint revoked" });
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
-    renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     await revoke("Revoke endpoint", "Revoke endpoint");
 
@@ -127,7 +127,7 @@ describe("OrgA2aEndpointsList", () => {
   it("revokes the token value the row showed through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "A2A token revoked" });
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
-    renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     await revoke("Revoke token Telegram", "Revoke token");
 
@@ -138,9 +138,9 @@ describe("OrgA2aEndpointsList", () => {
     );
   });
 
-  it("says so when no Workspace has one", () => {
+  it("says so when no Workspace has one", async () => {
     mockScopedSWR({ "/a2a/endpoints": [] }, { strict: true });
-    renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
     expect(
       screen.getByText(/No workspace in this organization has an A2A endpoint/),

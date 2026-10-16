@@ -63,16 +63,16 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
   };
 
   /** Opens the delete dialog and types the phrase that enables its button. */
-  const armDelete = (cards: EntityCard[]) => {
-    renderCards(cards, "Delete");
+  const armDelete = async (cards: EntityCard[]) => {
+    await renderCards(cards, "Delete");
     fireEvent.change(
       screen.getByPlaceholderText(`Type '${confirmPhrase}' to confirm`),
       { target: { value: confirmPhrase } },
     );
   };
 
-  it("renders each card as a link to its detail page", () => {
-    renderCards([card]);
+  it("renders each card as a link to its detail page", async () => {
+    await renderCards([card]);
 
     expect(screen.getByText("Revenue").closest("a")).toHaveAttribute(
       "href",
@@ -84,7 +84,7 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
   it("deletes through the request module and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
 
-    armDelete([card]);
+    await armDelete([card]);
     await confirmDialog("Delete");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -97,7 +97,7 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
     stubRejectedSave(`This ${entity} is in use`, 409);
 
-    armDelete([card]);
+    await armDelete([card]);
     await confirmDialog("Delete");
 
     expect(
@@ -108,27 +108,27 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
-  it("says when the workspace has none", () => {
-    renderCards([]);
+  it("says when the workspace has none", async () => {
+    await renderCards([]);
 
     expect(screen.getByText(/^No .* yet\.$/)).toBeInTheDocument();
   });
 
-  it("surfaces a failed read rather than rendering an empty list", () => {
+  it("surfaces a failed read rather than rendering an empty list", async () => {
     mockScopedSWR(
       { [`/${entity}`]: { error: new Error("500") } },
       { strict: true },
     );
-    renderList(<List orgId="org1" workspaceId="ws1" />);
+    await renderList(<List orgId="org1" workspaceId="ws1" />);
 
     expect(
       screen.getByText(new RegExp(`Failed to load ${entity}`)),
     ).toBeInTheDocument();
   });
 
-  it("shows the loading state while the read is in flight", () => {
+  it("shows the loading state while the read is in flight", async () => {
     mockScopedSWR({ [`/${entity}`]: { isLoading: true } }, { strict: true });
-    renderList(<List orgId="org1" workspaceId="ws1" />);
+    await renderList(<List orgId="org1" workspaceId="ws1" />);
 
     expect(
       screen.getByRole("status", { name: `Loading ${entity}` }),

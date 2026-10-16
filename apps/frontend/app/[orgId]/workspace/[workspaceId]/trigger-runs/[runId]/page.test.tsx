@@ -180,7 +180,7 @@ describe("TriggerRunDetailPage", () => {
 
     await renderPage();
     await poll();
-    openDropdownMenu();
+    await openDropdownMenu();
 
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),

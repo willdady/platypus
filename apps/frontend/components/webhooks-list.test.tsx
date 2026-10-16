@@ -34,9 +34,9 @@ describe("WebhooksList", () => {
   const render = () =>
     renderList(<WebhooksList orgId="org1" workspaceId="ws1" />);
 
-  it("links each webhook to its detail page and shows its URL", () => {
+  it("links each webhook to its detail page and shows its URL", async () => {
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
-    render();
+    await render();
 
     expect(screen.getByText("Deploy hook").closest("a")).toHaveAttribute(
       "href",
@@ -49,9 +49,9 @@ describe("WebhooksList", () => {
 
   // A long URL is cut off with an ellipsis inside the card, so the full URL
   // stays readable on hover.
-  it("truncates the URL, keeping the full URL on hover", () => {
+  it("truncates the URL, keeping the full URL on hover", async () => {
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
-    render();
+    await render();
 
     const url = screen.getByText("https://hooks.example.com/deploy");
     expect(url).toHaveClass("truncate");
@@ -60,20 +60,20 @@ describe("WebhooksList", () => {
 
   // A disabled webhook still lists, badged — deleting it to turn it off would
   // lose its URL and secret.
-  it("badges a disabled webhook rather than hiding it", () => {
+  it("badges a disabled webhook rather than hiding it", async () => {
     mockScopedSWR(
       { webhooks: [{ ...webhook, enabled: false }] },
       { strict: true },
     );
-    render();
+    await render();
 
     expect(screen.getByText("Deploy hook")).toBeInTheDocument();
     expect(screen.getByText("Disabled")).toBeInTheDocument();
   });
 
-  it("offers the create CTA when the workspace has none", () => {
+  it("offers the create CTA when the workspace has none", async () => {
     mockScopedSWR({ webhooks: [] }, { strict: true });
-    render();
+    await render();
 
     expect(screen.getByText("No webhooks configured")).toBeInTheDocument();
     expect(
@@ -81,9 +81,9 @@ describe("WebhooksList", () => {
     ).toBeInTheDocument();
   });
 
-  it("says the read failed rather than claiming there are none", () => {
+  it("says the read failed rather than claiming there are none", async () => {
     mockScopedSWR({ webhooks: { error: new Error("500") } }, { strict: true });
-    render();
+    await render();
 
     expect(screen.getByText("Failed to load webhooks.")).toBeInTheDocument();
     expect(
@@ -91,9 +91,9 @@ describe("WebhooksList", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("holds the rows with a skeleton, not the empty state, while loading", () => {
+  it("holds the rows with a skeleton, not the empty state, while loading", async () => {
     mockScopedSWR({ webhooks: { isLoading: true } }, { strict: true });
-    render();
+    await render();
 
     expect(
       screen.getByRole("status", { name: "Loading webhooks" }),
@@ -103,10 +103,10 @@ describe("WebhooksList", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("orders its menu Edit, Disable, then Delete", () => {
+  it("orders its menu Edit, Disable, then Delete", async () => {
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
-    renderList(<WebhooksList orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await renderList(<WebhooksList orgId="org1" workspaceId="ws1" />);
+    await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual(["Edit", "Disable", "Delete"]);
     expect(screen.getByRole("menuitem", { name: /Edit/ })).toHaveAttribute(
@@ -115,13 +115,13 @@ describe("WebhooksList", () => {
     );
   });
 
-  it("offers Enable on a disabled webhook", () => {
+  it("offers Enable on a disabled webhook", async () => {
     mockScopedSWR(
       { webhooks: [{ ...webhook, enabled: false }] },
       { strict: true },
     );
-    renderList(<WebhooksList orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await renderList(<WebhooksList orgId="org1" workspaceId="ws1" />);
+    await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual(["Edit", "Enable", "Delete"]);
   });
@@ -129,7 +129,10 @@ describe("WebhooksList", () => {
   it("PUTs the flipped enabled flag and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
-    renderList(<WebhooksList orgId="org1" workspaceId="ws1" />, "Disable");
+    await renderList(
+      <WebhooksList orgId="org1" workspaceId="ws1" />,
+      "Disable",
+    );
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -144,7 +147,10 @@ describe("WebhooksList", () => {
   it("toasts the backend's reason when the toggle is refused", async () => {
     stubRejectedSave("Nope", 409);
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
-    renderList(<WebhooksList orgId="org1" workspaceId="ws1" />, "Disable");
+    await renderList(
+      <WebhooksList orgId="org1" workspaceId="ws1" />,
+      "Disable",
+    );
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith("Nope"));
     expect(mutate).not.toHaveBeenCalled();
@@ -153,7 +159,7 @@ describe("WebhooksList", () => {
   it("deletes after confirmation and revalidates", async () => {
     const fetchMock = stubAcceptedSave();
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
-    renderList(<WebhooksList orgId="org1" workspaceId="ws1" />, "Delete");
+    await renderList(<WebhooksList orgId="org1" workspaceId="ws1" />, "Delete");
 
     expect(fetchMock).not.toHaveBeenCalled();
     await confirmDialog("Delete");

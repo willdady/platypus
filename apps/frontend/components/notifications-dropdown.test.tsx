@@ -80,9 +80,9 @@ describe("NotificationsDropdown polling", () => {
     expect(lastConfigFor("/users/me/invitations")?.refreshInterval).toBe(0);
   });
 
-  it("starts polling the workspace feeds and invitations once opened", () => {
+  it("starts polling the workspace feeds and invitations once opened", async () => {
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await openDropdownMenu();
 
     expect(lastConfigFor("/notifications")?.refreshInterval).toBe(30000);
     expect(lastConfigFor("/unread-count")?.refreshInterval).toBe(30000);
@@ -91,17 +91,17 @@ describe("NotificationsDropdown polling", () => {
     );
   });
 
-  it("leaves the notification list unread until the bell opens", () => {
+  it("leaves the notification list unread until the bell opens", async () => {
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
 
     expect(swrCalls.some((c) => c.key === NOTIFICATIONS_URL)).toBe(false);
-    openDropdownMenu();
+    await openDropdownMenu();
     expect(swrCalls.some((c) => c.key === NOTIFICATIONS_URL)).toBe(true);
   });
 
-  it("reads notifications through the workspace-scoped key", () => {
+  it("reads notifications through the workspace-scoped key", async () => {
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await openDropdownMenu();
 
     expect(
       swrCalls.some(
@@ -123,13 +123,13 @@ describe("NotificationsDropdown feed", () => {
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
   };
 
-  it("counts unread notifications and pending invitations on the bell", () => {
+  it("counts unread notifications and pending invitations on the bell", async () => {
     renderWithFeed();
 
     expect(
       screen.getByRole("button", { name: "Notifications (2)" }),
     ).toBeInTheDocument();
-    openDropdownMenu();
+    await openDropdownMenu();
     expect(screen.getByText("Nightly digest")).toBeInTheDocument();
     expect(screen.getByText("Acme")).toBeInTheDocument();
   });
@@ -138,7 +138,7 @@ describe("NotificationsDropdown feed", () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
     renderWithFeed();
-    openDropdownMenu();
+    await openDropdownMenu();
     mutate.mockReset();
 
     fireEvent.click(screen.getByText("Nightly digest"));
@@ -157,7 +157,7 @@ describe("NotificationsDropdown feed", () => {
       .mockResolvedValue(jsonResponse(403, { error: "Not yours" }));
     vi.stubGlobal("fetch", fetchMock);
     renderWithFeed();
-    openDropdownMenu();
+    await openDropdownMenu();
     mutate.mockReset();
 
     fireEvent.click(
@@ -176,7 +176,7 @@ describe("NotificationsDropdown feed", () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
     renderWithFeed();
-    openDropdownMenu();
+    await openDropdownMenu();
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Mark all as read" }));
 
@@ -190,22 +190,22 @@ describe("NotificationsDropdown feed", () => {
 });
 
 describe("NotificationsDropdown keyboard", () => {
-  const renderFeed = () => {
+  const renderFeed = async () => {
     feeds["/notifications"] = { results: [unread] };
     feeds["/unread-count"] = { count: 1 };
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await openDropdownMenu();
   };
   const row = () => screen.getByRole("menuitem", { name: /Nightly digest/ });
 
-  it("makes each notification a menu item the arrow keys reach", () => {
-    renderFeed();
+  it("makes each notification a menu item the arrow keys reach", async () => {
+    await renderFeed();
 
     expect(row()).toBeInTheDocument();
   });
 
-  it("says a notification is unread in words, not just a dot", () => {
-    renderFeed();
+  it("says a notification is unread in words, not just a dot", async () => {
+    await renderFeed();
 
     expect(within(row()).getByText("Unread")).toHaveClass("sr-only");
   });
@@ -213,7 +213,7 @@ describe("NotificationsDropdown keyboard", () => {
   it("expands and marks read on Enter, keeping the menu open", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
-    renderFeed();
+    await renderFeed();
 
     fireEvent.keyDown(row(), { key: "Enter" });
 
@@ -230,7 +230,7 @@ describe("NotificationsDropdown keyboard", () => {
   it("dismisses the focused notification on Delete", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
-    renderFeed();
+    await renderFeed();
 
     expect(row()).toHaveAttribute("aria-keyshortcuts", "Delete");
     fireEvent.keyDown(row(), { key: "Delete" });
@@ -245,15 +245,15 @@ describe("NotificationsDropdown keyboard", () => {
 });
 
 describe("NotificationsDropdown body", () => {
-  const renderBody = (body: string) => {
+  const renderBody = async (body: string) => {
     feeds["/notifications"] = { results: [{ ...unread, body }] };
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await openDropdownMenu();
   };
 
   // The body's renderer loads on demand, so each read waits for it.
   it("renders an unordered list with every item", async () => {
-    renderBody("Acceptance criteria:\n- item one\n- item two\n\nSize: S");
+    await renderBody("Acceptance criteria:\n- item one\n- item two\n\nSize: S");
 
     const items = await screen.findAllByRole("listitem");
     expect(items.map((li) => li.textContent)).toEqual(["item one", "item two"]);
@@ -262,7 +262,7 @@ describe("NotificationsDropdown body", () => {
   });
 
   it("renders an ordered list with every item", async () => {
-    renderBody("1. first\n2. second");
+    await renderBody("1. first\n2. second");
 
     const items = await screen.findAllByRole("listitem");
     expect(items.map((li) => li.textContent)).toEqual(["first", "second"]);
@@ -270,7 +270,7 @@ describe("NotificationsDropdown body", () => {
   });
 
   it("shows a disallowed block's text without its element", async () => {
-    renderBody("## Title\n\nDetails");
+    await renderBody("## Title\n\nDetails");
 
     expect(await screen.findByText("Title")).toBeInTheDocument();
     expect(
@@ -281,7 +281,7 @@ describe("NotificationsDropdown body", () => {
   it("confirms a link before opening it, without toggling the entry", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    renderBody("See [the run](https://example.com/run)");
+    await renderBody("See [the run](https://example.com/run)");
 
     fireEvent.click(await screen.findByRole("button", { name: "the run" }));
 
@@ -300,7 +300,7 @@ describe("NotificationsDropdown body", () => {
   });
 
   it("cancels the confirmation and leaves the dropdown open", async () => {
-    renderBody("See [the run](https://example.com/run)");
+    await renderBody("See [the run](https://example.com/run)");
     const link = await screen.findByRole("button", { name: "the run" });
 
     await act(async () => {
@@ -318,10 +318,10 @@ describe("NotificationsDropdown body", () => {
 });
 
 describe("NotificationsDropdown source link", () => {
-  const renderWithSource = (source: unknown) => {
+  const renderWithSource = async (source: unknown) => {
     feeds["/notifications"] = { results: [{ ...unread, source }] };
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await openDropdownMenu();
   };
 
   it.each([
@@ -330,8 +330,8 @@ describe("NotificationsDropdown source link", () => {
       { kind: "triggerRun", triggerRunId: "run-1" },
       "/org1/workspace/ws1/trigger-runs/run-1",
     ],
-  ])("links a notification from %o to its page", (source, href) => {
-    renderWithSource(source);
+  ])("links a notification from %o to its page", async (source, href) => {
+    await renderWithSource(source);
 
     expect(screen.getByRole("menuitem", { name: "Open" })).toHaveAttribute(
       "href",
@@ -339,8 +339,8 @@ describe("NotificationsDropdown source link", () => {
     );
   });
 
-  it("shows no link for a notification without a source", () => {
-    renderWithSource(null);
+  it("shows no link for a notification without a source", async () => {
+    await renderWithSource(null);
 
     expect(
       screen.queryByRole("menuitem", { name: "Open" }),
@@ -350,7 +350,7 @@ describe("NotificationsDropdown source link", () => {
   it("marks it read and closes the bell when the link is followed", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
-    renderWithSource({ kind: "chat", chatId: "chat-1" });
+    await renderWithSource({ kind: "chat", chatId: "chat-1" });
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Open" }));
 

@@ -37,9 +37,9 @@ beforeEach(() => {
 });
 
 describe("A2aEndpointsList", () => {
-  it("lists each endpoint with its agent, and lets the Owner add one", () => {
+  it("lists each endpoint with its agent, and lets the Owner add one", async () => {
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByRole("link", { name: /Acme helpdesk/ })).toHaveAttribute(
       "href",
@@ -52,7 +52,7 @@ describe("A2aEndpointsList", () => {
     ).toBeInTheDocument();
   });
 
-  it("flags an endpoint with no live tokens, beside Disabled", () => {
+  it("flags an endpoint with no live tokens, beside Disabled", async () => {
     mockScopedSWR(
       {
         "/a2a-endpoints": [
@@ -62,7 +62,7 @@ describe("A2aEndpointsList", () => {
       },
       { strict: true },
     );
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     const flagged = screen.getByRole("link", { name: /Acme helpdesk/ });
     expect(flagged).toHaveTextContent("Disabled");
@@ -72,10 +72,10 @@ describe("A2aEndpointsList", () => {
     );
   });
 
-  it("offers no Add endpoint to an Org Admin in another Owner's workspace", () => {
+  it("offers no Add endpoint to an Org Admin in another Owner's workspace", async () => {
     asOwner(false);
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText("Acme helpdesk")).toBeInTheDocument();
     expect(
@@ -83,18 +83,18 @@ describe("A2aEndpointsList", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows a skeleton while the endpoints load", () => {
+  it("shows a skeleton while the endpoints load", async () => {
     mockScopedSWR({ "/a2a-endpoints": { isLoading: true } }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expect(
       screen.getByRole("status", { name: "Loading A2A endpoints" }),
     ).toBeInTheDocument();
   });
 
-  it("says when there are no endpoints, and offers to add one", () => {
+  it("says when there are no endpoints, and offers to add one", async () => {
     mockScopedSWR({ "/a2a-endpoints": [] }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText("No A2A endpoints configured")).toBeInTheDocument();
     expect(
@@ -102,10 +102,10 @@ describe("A2aEndpointsList", () => {
     ).toBeInTheDocument();
   });
 
-  it("tells an Org Admin in another Owner's workspace only the workspace owner can add one", () => {
+  it("tells an Org Admin in another Owner's workspace only the workspace owner can add one", async () => {
     asOwner(false);
     mockScopedSWR({ "/a2a-endpoints": [] }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expect(
       screen.getByText(/Only the workspace owner can add one/),
@@ -115,14 +115,14 @@ describe("A2aEndpointsList", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows a failed read as an error with a retry, not as no endpoints", () => {
+  it("shows a failed read as an error with a retry, not as no endpoints", async () => {
     mockScopedSWR(
       {
         "/a2a-endpoints": { error: { status: 500, message: "Server error" } },
       },
       { strict: true },
     );
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expect(
       screen.getByText("Failed to load A2A endpoints. Server error"),
@@ -135,19 +135,19 @@ describe("A2aEndpointsList", () => {
     expect(mutate).toHaveBeenCalled();
   });
 
-  it("gives the Owner Edit, Enable, then Delete", () => {
+  it("gives the Owner Edit, Enable, then Delete", async () => {
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual(["Edit", "Enable", "Delete"]);
   });
 
-  it("gives anyone else only Edit, which opens the form read-only", () => {
+  it("gives anyone else only Edit, which opens the form read-only", async () => {
     asOwner(false);
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
-    openDropdownMenu();
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+    await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual(["Edit"]);
   });
@@ -155,7 +155,10 @@ describe("A2aEndpointsList", () => {
   it("enables a disabled endpoint from the menu", async () => {
     const fetchMock = stubAcceptedSave();
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />, "Enable");
+    await renderList(
+      <A2aEndpointsList orgId="org1" workspaceId="ws1" />,
+      "Enable",
+    );
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -170,7 +173,10 @@ describe("A2aEndpointsList", () => {
   it("deletes after confirmation and revalidates", async () => {
     const fetchMock = stubAcceptedSave();
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
-    renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />, "Delete");
+    await renderList(
+      <A2aEndpointsList orgId="org1" workspaceId="ws1" />,
+      "Delete",
+    );
 
     expect(fetchMock).not.toHaveBeenCalled();
     await confirmDialog("Delete");

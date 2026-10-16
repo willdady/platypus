@@ -1,12 +1,13 @@
 import { vi, type Mock } from "vitest";
-import { render, fireEvent, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { openDropdownMenu, resetSharedSpies } from "./test-utils";
+import { openDropdownMenu, resetSharedSpies, setupUser } from "./test-utils";
 
 // Lists stub the same `fetch` shapes forms do, so the write helpers come from
 // the same place; re-exported here so a list test has one import to reach for.
 export {
   jsonResponse,
+  setupUser,
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
@@ -32,16 +33,14 @@ export {
  * hoisted, so what it names has to be an import, not something a factory
  * call built.
  *
- * Usage — the `vi.mock` calls stay in the test file, as literal calls:
+ * Usage — the `vi.mock` calls stay in the test file, as literal calls.
+ * `next/navigation` and `sonner` are already mocked with the same spies by
+ * `vitest.setup.ts`:
  *
  * ```ts
- * import {
- *   authMock, navigationMock, toastMock, swrMock, mockScopedSWR,
- * } from "@/test/list-test-harness";
+ * import { authMock, swrMock, mockScopedSWR } from "@/test/list-test-harness";
  *
  * vi.mock("@/components/auth-provider", () => authMock);
- * vi.mock("next/navigation", () => navigationMock);
- * vi.mock("sonner", () => toastMock);
  * vi.mock("swr", () => swrMock);
  * ```
  */
@@ -147,15 +146,15 @@ export function resetListHarness() {
 
 /**
  * Renders a list, optionally opening the row's dropdown menu and picking
- * `menuItem` — the three lines every row-action test starts with. The
- * pointer and ResizeObserver polyfills the menu and cmdk need come from
- * `vitest.setup.ts`.
+ * `menuItem` — the three lines every row-action test starts with. The render
+ * itself happens before the first `await`, so a caller with no `menuItem` may
+ * leave the promise unawaited; one with a `menuItem` must await it.
  */
-export function renderList(ui: ReactElement, menuItem?: string) {
+export async function renderList(ui: ReactElement, menuItem?: string) {
   const result = render(ui);
   if (menuItem !== undefined) {
-    openDropdownMenu();
-    fireEvent.click(screen.getByText(menuItem));
+    await openDropdownMenu();
+    await setupUser().click(screen.getByText(menuItem));
   }
   return result;
 }
@@ -173,5 +172,5 @@ export function menuItemLabels() {
  * count) before the dialog appears.
  */
 export async function confirmDialog(name: string | RegExp) {
-  fireEvent.click(await screen.findByRole("button", { name }));
+  await setupUser().click(await screen.findByRole("button", { name }));
 }

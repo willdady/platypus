@@ -69,7 +69,7 @@ describe("UsersList delete", () => {
   it("deletes through the request module, revalidates, and confirms on success", async () => {
     const fetchMock = stubAcceptedSave();
 
-    renderUsers([target]);
+    await renderUsers([target]);
     await confirmDelete();
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -86,7 +86,7 @@ describe("UsersList delete", () => {
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
     stubRejectedSave("User owns resources", 409);
 
-    renderUsers([target]);
+    await renderUsers([target]);
     await confirmDelete();
 
     expect(await screen.findByText("User owns resources")).toBeInTheDocument();
@@ -99,25 +99,25 @@ describe("UsersList delete", () => {
 });
 
 describe("UsersList list states", () => {
-  it("shows the empty state when no users came back", () => {
-    renderUsers([]);
+  it("shows the empty state when no users came back", async () => {
+    await renderUsers([]);
 
     expect(screen.getByText("No users found.")).toBeInTheDocument();
   });
 
-  it("surfaces a failed read rather than rendering an empty list", () => {
+  it("surfaces a failed read rather than rendering an empty list", async () => {
     mockScopedSWR(
       { "list-users": { error: new Error("500") } },
       { strict: true },
     );
-    renderList(<UsersList />);
+    await renderList(<UsersList />);
 
     expect(screen.getByText(/Failed to load users/)).toBeInTheDocument();
   });
 
-  it("shows the loading state while the read is in flight", () => {
+  it("shows the loading state while the read is in flight", async () => {
     mockScopedSWR({ "list-users": { isLoading: true } }, { strict: true });
-    renderList(<UsersList />);
+    await renderList(<UsersList />);
 
     expect(
       screen.getByRole("status", { name: "Loading users" }),
