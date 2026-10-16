@@ -62,7 +62,11 @@ const { harness } = vi.hoisted(() => ({
     },
     /** What the Chat configured the chat hook with. */
     chatOptions: undefined as
-      undefined | { transport: { prepareSendMessagesRequest: PrepareRequest } },
+      | undefined
+      | {
+          transport: { prepareSendMessagesRequest: PrepareRequest };
+          experimental_throttle?: number;
+        },
   },
 }));
 
@@ -752,6 +756,25 @@ describe("applying a fetched snapshot", () => {
     renderChat();
 
     expect(harness.setMessages).not.toHaveBeenCalled();
+  });
+});
+
+// A streamed reply arrives a chunk at a time; the Chat must not redo its
+// per-render work for each one.
+describe("streaming renders", () => {
+  it("batches streamed chunks into at most one update per 50ms", () => {
+    renderChat();
+
+    expect(harness.chatOptions!.experimental_throttle).toBe(50);
+  });
+
+  it("keeps the same transport across re-renders", () => {
+    const view = renderChat();
+    const first = harness.chatOptions!.transport;
+
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(harness.chatOptions!.transport).toBe(first);
   });
 });
 

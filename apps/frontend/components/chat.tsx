@@ -158,6 +158,48 @@ export const Chat = ({
     [skillsData?.results],
   );
 
+  // The per-turn body rides each call (`useChatTurn` builds it) and wins the
+  // SDK's shallow merge over this one, so the transport carries only what
+  // never changes for the Chat (issue #971). Built once per Workspace, not on
+  // every render — which, while a reply streams, is every chunk.
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport<PlatypusUIMessage>({
+        api: joinUrl(
+          backendUrl || "",
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
+        ),
+        body: { orgId, workspaceId },
+        credentials: "include",
+        // The AI SDK calls this before each fetch. The server owns the
+        // Transcript (ADR-0026), so a turn carries only what is new: the
+        // message and the id it follows, or the reply to regenerate. Never
+        // the Transcript.
+        prepareSendMessagesRequest: ({
+          id,
+          messages,
+          body,
+          trigger,
+          messageId,
+        }) => {
+          // An edit names its parent (`useChatTurn`); a composer send follows
+          // the last message on screen.
+          const { parentId = messages.at(-2)?.id ?? null, ...rest } =
+            body ?? {};
+          return {
+            body: {
+              ...rest,
+              id,
+              ...(trigger === "regenerate-message"
+                ? { trigger, messageId }
+                : { message: messages.at(-1), parentId }),
+            },
+          };
+        },
+      }),
+    [backendUrl, orgId, workspaceId],
+  );
+
   const {
     messages,
     setMessages,
@@ -168,40 +210,10 @@ export const Chat = ({
     stop,
   } = useChat<PlatypusUIMessage>({
     id: chatId,
-    // The per-turn body rides each call (`useChatTurn` builds it) and wins the
-    // SDK's shallow merge over this one, so the transport carries only what
-    // never changes for the Chat (issue #971).
-    transport: new DefaultChatTransport({
-      api: joinUrl(
-        backendUrl || "",
-        `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-      ),
-      body: { orgId, workspaceId },
-      credentials: "include",
-      // The AI SDK calls this before each fetch. The server owns the
-      // Transcript (ADR-0026), so a turn carries only what is new: the message
-      // and the id it follows, or the reply to regenerate. Never the Transcript.
-      prepareSendMessagesRequest: ({
-        id,
-        messages,
-        body,
-        trigger,
-        messageId,
-      }) => {
-        // An edit names its parent (`useChatTurn`); a composer send follows
-        // the last message on screen.
-        const { parentId = messages.at(-2)?.id ?? null, ...rest } = body ?? {};
-        return {
-          body: {
-            ...rest,
-            id,
-            ...(trigger === "regenerate-message"
-              ? { trigger, messageId }
-              : { message: messages.at(-1), parentId }),
-          },
-        };
-      },
-    }),
+    transport,
+    // Streamed chunks reach the screen at most once per 50ms, rather than one
+    // render of the whole Chat per chunk.
+    experimental_throttle: 50,
   });
 
   // Whether this turn's stream had started arriving before it broke — what tells
@@ -749,42 +761,58 @@ export const Chat = ({
                 </p>
               )}
               {messages.map((message, messageIndex) => (
-                <ChatMessage
+                // A long transcript keeps every message in the DOM, rendered
+                // diagrams and highlighted code included; the browser skips
+                // laying out and painting the ones off screen. `auto` in the
+                // intrinsic size remembers each one's real height once it has
+                // rendered, so scrolling back over it does not jump. The last
+                // message is always on screen and is the one still growing.
+                // The padding cancelled by the margin keeps focus rings at the
+                // edge outside the paint clip this sets.
+                <div
                   key={message.id}
-                  message={message}
-                  isLastMessage={messageIndex === messages.length - 1}
-                  status={status}
-                  canSendMessages={canSendMessages}
-                  editor={
-                    editing?.messageId === message.id ? (
-                      <MessageEditor
-                        // Remounted per message, so the surface reseeds from
-                        // the message it was opened on rather than carrying
-                        // the last one's text and attachments over.
-                        key={editing.messageId}
-                        initialText={editing.text}
-                        initialAttachments={editing.attachments}
-                        modelSelection={modelSelection}
-                        passthroughFileTypes={
-                          resolvedModel?.passthroughFileTypes ?? []
-                        }
-                        onSubmit={handleMessageEditSubmit}
-                        onCancel={handleMessageEditCancel}
-                      />
-                    ) : undefined
-                  }
-                  agents={agents}
-                  onEditStart={handleMessageEditStart}
-                  onMessageDelete={handleMessageDelete}
-                  onRegenerate={
-                    isRegenerable(messageIndex) ? turn.regenerate : undefined
-                  }
-                  alternatives={positions.get(message.id)}
-                  onSwitchAlternative={handleSwitchAlternative}
-                  onCopyMessage={handleCopyMessage}
-                  copiedMessageId={copiedMessageId}
-                  staleToolCallIds={staleToolCallIds}
-                />
+                  className={cn(
+                    "-m-1 flex flex-col gap-4 p-1",
+                    messageIndex < messages.length - 1 &&
+                      "[contain-intrinsic-size:auto_160px] [content-visibility:auto]",
+                  )}
+                >
+                  <ChatMessage
+                    message={message}
+                    isLastMessage={messageIndex === messages.length - 1}
+                    status={status}
+                    canSendMessages={canSendMessages}
+                    editor={
+                      editing?.messageId === message.id ? (
+                        <MessageEditor
+                          // Remounted per message, so the surface reseeds from
+                          // the message it was opened on rather than carrying
+                          // the last one's text and attachments over.
+                          key={editing.messageId}
+                          initialText={editing.text}
+                          initialAttachments={editing.attachments}
+                          modelSelection={modelSelection}
+                          passthroughFileTypes={
+                            resolvedModel?.passthroughFileTypes ?? []
+                          }
+                          onSubmit={handleMessageEditSubmit}
+                          onCancel={handleMessageEditCancel}
+                        />
+                      ) : undefined
+                    }
+                    agents={agents}
+                    onEditStart={handleMessageEditStart}
+                    onMessageDelete={handleMessageDelete}
+                    onRegenerate={
+                      isRegenerable(messageIndex) ? turn.regenerate : undefined
+                    }
+                    alternatives={positions.get(message.id)}
+                    onSwitchAlternative={handleSwitchAlternative}
+                    onCopyMessage={handleCopyMessage}
+                    copiedMessageId={copiedMessageId}
+                    staleToolCallIds={staleToolCallIds}
+                  />
+                </div>
               ))}
             </div>
           </div>
