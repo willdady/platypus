@@ -95,7 +95,7 @@ import {
   installResizeObserverStub,
   openDropdownMenu,
   selectOption,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 
 // Radix Tooltip content measures itself on focus, which jsdom has no
 // ResizeObserver for. The row's ⋮ menu needs the pointer polyfills.

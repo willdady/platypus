@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
-import { authMock } from "@/lib/test-utils";
+import { authMock } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("next/navigation", () => ({

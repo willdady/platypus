@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { toastError, toastMock, toastSuccess } from "@/lib/test-utils";
+import { toastError, toastMock, toastSuccess } from "@/test/test-utils";
 
 const copyToClipboard = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/clipboard", () => ({ copyToClipboard }));

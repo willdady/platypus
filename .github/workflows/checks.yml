@@ -56,8 +56,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The frontend runs under coverage, so its thresholds (vitest.config.ts)
+      # gate the merge; every other package runs its plain `test`.
       - name: Test
-        run: pnpm test
+        run: pnpm exec turbo run test --filter='!@platypus/frontend'
+
+      - name: Test frontend with coverage
+        run: pnpm exec turbo run test:coverage --filter=@platypus/frontend
 
   # Source-level type gate (`tsc --noEmit`). ESLint does not surface type errors,
   # so without this a strict-tsconfig violation can land on main unnoticed

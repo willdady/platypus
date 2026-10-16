@@ -13,7 +13,7 @@ import {
   setLoading,
   stubAcceptedSave,
   savedBody,
-} from "@/lib/form-test-harness";
+} from "@/test/form-test-harness";
 
 vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);

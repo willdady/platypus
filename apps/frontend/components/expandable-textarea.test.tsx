@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { installRadixPointerPolyfills } from "@/lib/test-utils";
+import { installRadixPointerPolyfills } from "@/test/test-utils";
 import { ExpandableTextarea } from "./expandable-textarea";
 
 beforeAll(installRadixPointerPolyfills);

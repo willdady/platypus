@@ -21,7 +21,7 @@ import {
   installResizeObserverStub,
   installRadixPointerPolyfills,
   jsonResponse,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 import type { Actor } from "@/lib/authorization";
 
 // --- Module mocks ------------------------------------------------------------

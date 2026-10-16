@@ -6,7 +6,7 @@ import {
   stubRejectedSave,
   toastError,
   toastMock,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",

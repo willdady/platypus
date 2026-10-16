@@ -9,7 +9,7 @@ import {
   resetListHarness,
   swrMock,
   toastMock,
-} from "@/lib/list-test-harness";
+} from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("next/navigation", () => ({

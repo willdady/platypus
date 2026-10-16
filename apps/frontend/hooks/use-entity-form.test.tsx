@@ -13,7 +13,7 @@ import {
   setLoading,
   stubAcceptedSave,
   stubRejectedSave,
-} from "@/lib/form-test-harness";
+} from "@/test/form-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("sonner", () => toastMock);

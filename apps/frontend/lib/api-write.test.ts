@@ -8,7 +8,7 @@ import {
   chatListEntity,
   organizationEntity,
 } from "./api-write";
-import { jsonResponse } from "./test-utils";
+import { jsonResponse } from "@/test/test-utils";
 
 const BACKEND_URL = "http://localhost:4000";
 

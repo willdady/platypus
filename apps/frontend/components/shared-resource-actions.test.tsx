@@ -18,7 +18,7 @@ vi.mock("swr", () => ({
 }));
 
 import { AttachSharedAction } from "./shared-resource-actions";
-import { jsonResponse } from "@/lib/test-utils";
+import { jsonResponse } from "@/test/test-utils";
 
 afterEach(() => {
   orgRows = [];

@@ -5,8 +5,8 @@ import type { Skill } from "@platypus/schemas";
 import { Composer } from "./composer";
 import { SlashCommandPicker } from "./slash-command-picker";
 import { useSlashCommands } from "@/hooks/use-slash-commands";
-import { composerProvider } from "@/lib/chat-test-fixtures";
-import { installMatchMediaStub } from "@/lib/test-utils";
+import { composerProvider } from "@/test/chat-test-fixtures";
+import { installMatchMediaStub } from "@/test/test-utils";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 

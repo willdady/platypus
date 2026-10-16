@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { installMatchMediaStub } from "@/lib/test-utils";
+import { installMatchMediaStub } from "@/test/test-utils";
 
 const nav = vi.hoisted(() => ({ pathname: "/org2" }));
 

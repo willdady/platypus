@@ -10,8 +10,8 @@ import {
   resetListHarness,
   renderList,
   mutate,
-} from "@/lib/list-test-harness";
-import { stubPendingSave } from "@/lib/test-utils";
+} from "@/test/list-test-harness";
+import { stubPendingSave } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("next/navigation", () => navigationMock);

@@ -7,11 +7,11 @@ import {
   stubRejectedSave,
   toastError,
   toastMock,
-} from "@/lib/test-utils";
+} from "@/test/test-utils";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
 import type { ModelSelection } from "@/hooks/use-model-selection";
 import { CHAT_MAX_STEPS_ERROR, CHAT_SELECTION_ERROR } from "@/lib/chat-turn";
-import { reportPdf } from "@/lib/chat-test-fixtures";
+import { reportPdf } from "@/test/chat-test-fixtures";
 import { useChatTurn } from "./use-chat-turn";
 
 vi.mock("sonner", () => toastMock);

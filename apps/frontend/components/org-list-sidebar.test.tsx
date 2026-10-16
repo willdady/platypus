@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { installMatchMediaStub } from "@/lib/test-utils";
+import { installMatchMediaStub } from "@/test/test-utils";
 
 const read = vi.hoisted(() => ({
   data: undefined as { results: { id: string; name: string }[] } | undefined,

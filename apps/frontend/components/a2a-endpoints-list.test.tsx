@@ -11,8 +11,8 @@ import {
   menuItemLabels,
   confirmDialog,
   stubAcceptedSave,
-} from "@/lib/list-test-harness";
-import { openDropdownMenu } from "@/lib/test-utils";
+} from "@/test/list-test-harness";
+import { openDropdownMenu } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
