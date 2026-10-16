@@ -34,6 +34,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FileCompatibilityWarning } from "./file-compatibility-warning";
+import { SelectionSubstitutedNotice } from "./selection-substituted-notice";
+import type { SelectionSubstitution } from "@/lib/restore-selection";
 import { ModelSelectorDialog } from "./model-selector-dialog";
 
 /**
@@ -52,6 +54,8 @@ export interface ModelSelection {
   onModelChange: (value: string) => void;
   /** The resolved model's Output ceiling, for the picker's tooltip. */
   maxOutputTokens?: number;
+  /** Why the restored selection is a stand-in, when it is one. */
+  substitution?: SelectionSubstitution;
 }
 
 /**
@@ -135,6 +139,7 @@ export const Composer = ({
       <PromptInputAttachments className="w-full">
         {(attachment) => <PromptInputAttachment data={attachment} />}
       </PromptInputAttachments>
+      <SelectionSubstitutedNotice substitution={modelSelection.substitution} />
       <FileCompatibilityWarning passthroughFileTypes={passthroughFileTypes} />
       <PromptInputBody>
         <PromptInputTextarea ref={textareaRef} {...textareaProps} />

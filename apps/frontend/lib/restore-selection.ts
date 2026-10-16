@@ -15,10 +15,22 @@ export type RestoreLadderInput = {
   agents: Agent[];
 };
 
+/**
+ * Why the ladder opened a Chat against something other than what it asked
+ * for: which reference was gone, and whose it was — the Chat's own row, or
+ * the selection this browser last used in the Workspace.
+ */
+export type SelectionSubstitution = {
+  missing: "agent" | "provider" | "model";
+  source: "chat" | "lastUsed";
+};
+
 export type RestoredSelection = {
   agentId: string;
   modelId: string;
   providerId: string;
+  /** Present only when the selection asked for could not be honoured. */
+  substitution?: SelectionSubstitution;
 };
 
 /**
@@ -28,6 +40,10 @@ export type RestoredSelection = {
  * Pure — takes the already-read localStorage value rather than reading it
  * itself — so every fallback (a deleted Agent, a removed Provider, an aliased
  * model, empty storage) is testable without a DOM or storage stub.
+ *
+ * When a reference it was asked to restore is gone, the result carries a
+ * `substitution` saying which, so the Chat can tell the user it is not
+ * talking to the model they last used rather than switching silently.
  *
  * Returns `null` only when there is no Provider to fall back to, meaning
  * nothing can be resolved yet — the caller should leave its state as-is
@@ -39,6 +55,12 @@ export const resolveRestoredSelection = (
   const { chatData, storedSelection, providers, agents } = input;
 
   if (providers.length === 0) return null;
+
+  // The first reference found missing; later rungs keep it, since it is the
+  // one the user would recognise.
+  let substitution: SelectionSubstitution | undefined;
+  const substituted = (selection: RestoredSelection): RestoredSelection =>
+    substitution ? { ...selection, substitution } : selection;
 
   // PRIORITY 1: restore from chatData (existing chat).
   if (chatData) {
@@ -53,7 +75,7 @@ export const resolveRestoredSelection = (
       if (agent) {
         return { agentId: chatData.agentId, modelId: "", providerId: "" };
       }
-      console.warn(`Agent '${chatData.agentId}' no longer exists`);
+      substitution = { missing: "agent", source: "chat" };
     }
 
     if (chatData.providerId && chatData.modelId) {
@@ -65,25 +87,25 @@ export const resolveRestoredSelection = (
         // fall through to a different model (ADR-0017).
         const option = findModelOption(provider, chatData.modelId);
         if (option) {
-          return {
+          return substituted({
             agentId: "",
             modelId: option.value,
             providerId: chatData.providerId,
-          };
+          });
         }
-        console.warn(
-          `Model '${chatData.modelId}' no longer available for provider '${chatData.providerId}', falling back to first model`,
-        );
-        return {
+        substitution ??= { missing: "model", source: "chat" };
+        return substituted({
           agentId: "",
           providerId: chatData.providerId,
           modelId: getModelOptions(provider)[0]?.value ?? "",
-        };
+        });
       }
-      console.warn(
-        `Provider '${chatData.providerId}' no longer exists, falling back to first available provider`,
-      );
+      substitution ??= { missing: "provider", source: "chat" };
     }
+
+    // An Agent Chat that reaches the fallback lost its Agent, even when the
+    // list was empty and so never judged above.
+    if (chatData.agentId) substitution ??= { missing: "agent", source: "chat" };
   }
 
   // PRIORITY 2: restore from localStorage (new chats only).
@@ -93,9 +115,7 @@ export const resolveRestoredSelection = (
       if (agent) {
         return { agentId: storedSelection.id, modelId: "", providerId: "" };
       }
-      console.warn(
-        `Agent '${storedSelection.id}' from localStorage no longer exists`,
-      );
+      substitution = { missing: "agent", source: "lastUsed" };
     } else {
       const provider = providers.find(
         (p) => p.id === storedSelection.providerId,
@@ -109,15 +129,18 @@ export const resolveRestoredSelection = (
           modelId: option.value,
         };
       }
-      console.warn("Provider/model from localStorage no longer valid");
+      substitution = {
+        missing: provider ? "model" : "provider",
+        source: "lastUsed",
+      };
     }
   }
 
   // PRIORITY 3: fall back to the first provider's first model.
   const fallbackProvider = providers[0];
-  return {
+  return substituted({
     agentId: "",
     providerId: fallbackProvider.id,
     modelId: getModelOptions(fallbackProvider)[0]?.value ?? "",
-  };
+  });
 };

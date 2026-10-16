@@ -283,6 +283,36 @@ describe("useModelSelection — workspace and stale references", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
+  it("says why it substituted when the chat's Provider is gone", () => {
+    const { result } = renderTracked({
+      ...base,
+      chatData: { providerId: "gone", modelId: "gpt-4" } as Chat,
+    });
+
+    expect(result.current.selection).toEqual({
+      agentId: "",
+      modelId: "gpt-4",
+      providerId: "p1",
+    });
+    expect(result.current.substitution).toEqual({
+      missing: "provider",
+      source: "chat",
+    });
+  });
+
+  it("drops the substitution once the user picks for themselves", () => {
+    store({ type: "agent", id: "gone" });
+    const { result } = renderTracked(base);
+    expect(result.current.substitution).toEqual({
+      missing: "agent",
+      source: "lastUsed",
+    });
+
+    act(() => result.current.handleModelChange(encodeAgentSelection("a1")));
+
+    expect(result.current.substitution).toBeUndefined();
+  });
+
   it("does not refresh the stored selection's expiry on a bare revalidation", () => {
     const { rerender } = renderTracked(base);
     const written = localStorage.getItem(STORAGE_KEY);

@@ -7,7 +7,7 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
-import { Composer } from "./composer";
+import { Composer, type ModelSelection } from "./composer";
 import {
   PromptInputSpeechButton,
   type PromptInputMessage,
@@ -349,6 +349,57 @@ describe("Composer model picker — unsettled selection", () => {
 
     expect(screen.getByText("Select model")).toBeInTheDocument();
     expect(screen.queryByLabelText("Loading selection")).toBeNull();
+  });
+});
+
+describe("Composer model picker — substituted selection", () => {
+  const renderWith = (substitution?: ModelSelection["substitution"]) => {
+    render(
+      <Composer
+        onSubmit={vi.fn()}
+        passthroughFileTypes={[]}
+        modelSelection={{
+          agents: [],
+          providers: [composerProvider],
+          agentId: "",
+          modelId: "gpt-4o",
+          providerId: composerProvider.id,
+          isResolved: true,
+          substitution,
+          onModelChange: vi.fn(),
+        }}
+        textarea={{
+          ref: { current: null },
+          value: "",
+          onChange: vi.fn(),
+          placeholder: "Ask anything",
+        }}
+        onTranscriptionChange={vi.fn()}
+        submit={<button type="submit">Send</button>}
+      />,
+    );
+  };
+
+  it("says the chat's own Agent is gone and a different model is in use", () => {
+    renderWith({ missing: "agent", source: "chat" });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "This chat's agent is no longer available, so it's using a different model.",
+    );
+  });
+
+  it("says the last-used model is gone for a new chat", () => {
+    renderWith({ missing: "model", source: "lastUsed" });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "The model you last used is no longer available, so this chat is using a different one.",
+    );
+  });
+
+  it("says nothing when the selection is the one asked for", () => {
+    renderWith(undefined);
+
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
 
