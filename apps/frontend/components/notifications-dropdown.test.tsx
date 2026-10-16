@@ -91,7 +91,6 @@ describe("NotificationsDropdown polling", () => {
   it("does not poll any feed while the dropdown is closed", () => {
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
 
-    expect(lastConfigFor("/notifications")?.refreshInterval).toBe(0);
     expect(lastConfigFor("/unread-count")?.refreshInterval).toBe(0);
     expect(lastConfigFor("/users/me/invitations")?.refreshInterval).toBe(0);
   });
@@ -107,8 +106,17 @@ describe("NotificationsDropdown polling", () => {
     );
   });
 
+  it("leaves the notification list unread until the bell opens", () => {
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+
+    expect(swrCalls.some((c) => c.key === NOTIFICATIONS_URL)).toBe(false);
+    openDropdownMenu();
+    expect(swrCalls.some((c) => c.key === NOTIFICATIONS_URL)).toBe(true);
+  });
+
   it("reads notifications through the workspace-scoped key", () => {
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+    openDropdownMenu();
 
     expect(
       swrCalls.some(
@@ -258,27 +266,28 @@ describe("NotificationsDropdown body", () => {
     openDropdownMenu();
   };
 
-  it("renders an unordered list with every item", () => {
+  // The body's renderer loads on demand, so each read waits for it.
+  it("renders an unordered list with every item", async () => {
     renderBody("Acceptance criteria:\n- item one\n- item two\n\nSize: S");
 
-    const items = screen.getAllByRole("listitem");
+    const items = await screen.findAllByRole("listitem");
     expect(items.map((li) => li.textContent)).toEqual(["item one", "item two"]);
     expect(items[0].closest("ul")).not.toBeNull();
     expect(screen.getByText("Size: S")).toBeInTheDocument();
   });
 
-  it("renders an ordered list with every item", () => {
+  it("renders an ordered list with every item", async () => {
     renderBody("1. first\n2. second");
 
-    const items = screen.getAllByRole("listitem");
+    const items = await screen.findAllByRole("listitem");
     expect(items.map((li) => li.textContent)).toEqual(["first", "second"]);
     expect(items[0].closest("ol")).not.toBeNull();
   });
 
-  it("shows a disallowed block's text without its element", () => {
+  it("shows a disallowed block's text without its element", async () => {
     renderBody("## Title\n\nDetails");
 
-    expect(screen.getByText("Title")).toBeInTheDocument();
+    expect(await screen.findByText("Title")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Title" })).toBeNull();
   });
 
@@ -287,7 +296,7 @@ describe("NotificationsDropdown body", () => {
     vi.stubGlobal("open", open);
     renderBody("See [the run](https://example.com/run)");
 
-    fireEvent.click(screen.getByRole("button", { name: "the run" }));
+    fireEvent.click(await screen.findByRole("button", { name: "the run" }));
 
     const dialog = await screen.findByRole("dialog", {
       name: "Open external link?",
@@ -305,9 +314,10 @@ describe("NotificationsDropdown body", () => {
 
   it("cancels the confirmation and leaves the dropdown open", async () => {
     renderBody("See [the run](https://example.com/run)");
+    const link = await screen.findByRole("button", { name: "the run" });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "the run" }));
+      fireEvent.click(link);
     });
     const dialog = screen.getByRole("dialog", { name: "Open external link?" });
     fireEvent.keyDown(dialog, { key: "Escape" });
