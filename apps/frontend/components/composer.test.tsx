@@ -377,7 +377,7 @@ describe("Composer model picker — substituted selection", () => {
     renderWith({ missing: "agent", source: "chat" });
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "This chat's agent is no longer available, so it's using a different model.",
+      "This chat's Agent is no longer available, so it's using a different model.",
     );
   });
 
