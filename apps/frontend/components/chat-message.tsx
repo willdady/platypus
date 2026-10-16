@@ -141,7 +141,7 @@ const isSubAgentToolPart = (part: MessagePart): part is MessageToolPart =>
 // renderer as an ordinary tool error.
 const isFsDownloadPart = (
   part: MessagePart,
-): part is PartOfType<"tool-fsDownload"> =>
+): part is Exclude<PartOfType<"tool-fsDownload">, { state: "output-error" }> =>
   part.type === "tool-fsDownload" && part.state !== "output-error";
 
 const isWebToolPart = (part: MessagePart): part is MessageToolPart =>
