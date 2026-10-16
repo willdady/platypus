@@ -1,13 +1,23 @@
-"use client";
-
-import { use } from "react";
+import type { Metadata } from "next";
+import type { Organization } from "@platypus/schemas";
 import { OrgHome } from "@/components/org-home";
+import { readForLabel } from "@/lib/server-read";
 
-export default function OrgPage({
+type Params = Promise<{ orgId: string }>;
+
+export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ orgId: string }>;
-}) {
-  const { orgId } = use(params);
+  params: Params;
+}): Promise<Metadata> {
+  const { orgId } = await params;
+  const organization = await readForLabel<Organization>(
+    `/organizations/${orgId}`,
+  );
+  return { title: organization?.name || "Organization" };
+}
+
+export default async function OrgPage({ params }: { params: Params }) {
+  const { orgId } = await params;
   return <OrgHome orgId={orgId} />;
 }

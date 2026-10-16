@@ -3,12 +3,24 @@ import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
 import { workspaceRoutes } from "@/lib/routes";
+import { readForLabel } from "@/lib/server-read";
+import type { Metadata } from "next";
 
-const AgentEditPage = async ({
+type Params = Promise<{ orgId: string; workspaceId: string; agentId: string }>;
+
+export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ orgId: string; workspaceId: string; agentId: string }>;
-}) => {
+  params: Params;
+}): Promise<Metadata> {
+  const { orgId, workspaceId, agentId } = await params;
+  const agent = await readForLabel<{ name: string }>(
+    `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
+  );
+  return { title: agent?.name || "Edit Agent" };
+}
+
+const AgentEditPage = async ({ params }: { params: Params }) => {
   const { orgId, workspaceId, agentId } = await params;
 
   // Fetch tool sets from the server. A failed read is reported to the form
