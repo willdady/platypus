@@ -16,7 +16,7 @@ import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
-import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import {
@@ -872,7 +872,7 @@ const McpForm = ({
         onDelete={openDeleteDialog}
       />
 
-      <EntityDeleteDialog
+      <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete MCP server"

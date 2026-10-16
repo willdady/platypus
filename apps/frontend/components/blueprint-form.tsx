@@ -14,7 +14,7 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { SelectItem } from "@/components/ui/select";
-import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
@@ -523,7 +523,7 @@ const BlueprintForm = ({
         onDelete={openDeleteDialog}
       />
 
-      <EntityDeleteDialog
+      <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Blueprint"
