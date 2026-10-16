@@ -153,6 +153,7 @@ export function PromptInputAttachment({
                 <img
                   alt={filename || "attachment"}
                   className="size-5 object-cover"
+                  decoding="async"
                   height={20}
                   src={data.url}
                   width={20}
@@ -191,6 +192,7 @@ export function PromptInputAttachment({
               <img
                 alt={filename || "attachment preview"}
                 className="max-h-full max-w-full object-contain"
+                decoding="async"
                 height={384}
                 src={data.url}
                 width={448}

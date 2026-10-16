@@ -123,6 +123,10 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                     src={agent.avatarUrl}
                     alt={agent.name}
                     className="size-full object-cover"
+                    width={48}
+                    height={48}
+                    loading="lazy"
+                    decoding="async"
                   />
                 </ItemMedia>
               ) : (

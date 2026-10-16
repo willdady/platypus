@@ -62,6 +62,10 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                           src={member.user.image}
                           alt={member.user.name}
                           className="h-full w-full object-cover"
+                          width={32}
+                          height={32}
+                          loading="lazy"
+                          decoding="async"
                         />
                       ) : (
                         <User className="h-4 w-4 text-muted-foreground" />

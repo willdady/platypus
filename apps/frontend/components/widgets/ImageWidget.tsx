@@ -70,6 +70,8 @@ export function ImageWidget({
           src={data.url}
           alt={widget.title}
           className="w-full h-full object-contain"
+          loading="lazy"
+          decoding="async"
         />
       ) : (
         <p className="text-sm text-muted-foreground italic">No image yet</p>
