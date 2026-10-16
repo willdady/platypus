@@ -60,9 +60,6 @@ import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   type Trigger,
   type Agent,
-  type CronTriggerConfig,
-  type EventTriggerConfig,
-  type InboundTriggerConfig,
   type Organization,
   type TriggerType,
   type KanbanBoard,
@@ -564,17 +561,10 @@ const TriggerForm = ({
       agentId: trigger.agentId,
       instruction: trigger.instruction,
       cronExpression:
-        trigger.type === "cron"
-          ? (trigger.config as CronTriggerConfig).cronExpression
-          : "0 9 * * *",
+        trigger.type === "cron" ? trigger.config.cronExpression : "0 9 * * *",
       timezone:
-        trigger.type === "cron"
-          ? (trigger.config as CronTriggerConfig).timezone
-          : defaultTimezone,
-      isOneOff:
-        trigger.type === "cron"
-          ? (trigger.config as CronTriggerConfig).isOneOff
-          : false,
+        trigger.type === "cron" ? trigger.config.timezone : defaultTimezone,
+      isOneOff: trigger.type === "cron" ? trigger.config.isOneOff : false,
       enabled: trigger.enabled,
       maxRunsToKeep: trigger.maxRunsToKeep,
       search: trigger.search ?? false,
@@ -583,7 +573,7 @@ const TriggerForm = ({
     onSeed: (trigger) => {
       setTriggerType(trigger.type);
       if (trigger.type === "cron") {
-        const cronConfig = trigger.config as CronTriggerConfig;
+        const cronConfig = trigger.config;
         const parsed = parseCronExpression(cronConfig.cronExpression);
         if (parsed) {
           setSimpleSchedule(parsed);
@@ -592,13 +582,13 @@ const TriggerForm = ({
           setScheduleMode("advanced");
         }
       } else if (trigger.type === "event") {
-        const eventConfig = trigger.config as EventTriggerConfig;
+        const eventConfig = trigger.config;
         setSelectedEvents(eventConfig.events);
         setFilterBoardId(eventConfig.filters?.boardId || "");
         setFilterColumnId(eventConfig.filters?.columnId || "");
         setFilterChangedFields(eventConfig.filters?.changedFields || []);
       } else if (trigger.type === "inbound") {
-        const inboundConfig = trigger.config as InboundTriggerConfig;
+        const inboundConfig = trigger.config;
         setInboundInputs(
           inboundConfig.inputs.map((input) => ({
             name: input.name,

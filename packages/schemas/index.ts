@@ -2457,11 +2457,11 @@ export const triggerRunStatusSchema = z.enum([
 
 export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
 
-export const triggerSchema = z.object({
+/** Every Trigger field but `type` and `config`, which vary together. */
+export const triggerBaseSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   agentId: z.string(),
-  type: triggerTypeSchema,
   name: z.string().min(TRIGGER_NAME_MIN_LENGTH).max(TRIGGER_NAME_MAX_LENGTH),
   description: z
     .string()
@@ -2481,13 +2481,6 @@ export const triggerSchema = z.object({
   // headless run should not have a system prompt that drifts with the
   // Workspace User's unrelated interactive-chat activity.
   includeMemories: z.boolean().default(false),
-  // The stored shape, for reading. Writes are validated against the schema
-  // their `type` selects (see `triggerCreateSchema`), never by this union.
-  config: z.union([
-    cronTriggerConfigSchema,
-    eventTriggerConfigSchema,
-    inboundTriggerConfigSchema,
-  ]),
   lastRunAt: z.date().nullable().optional(),
   nextRunAt: z.date().nullable().optional(),
   // One-off Triggers only: when it fired. A fired One-off is spent.
@@ -2508,9 +2501,29 @@ export const triggerSchema = z.object({
   updatedAt: z.date(),
 });
 
+/**
+ * The stored shape, for reading: discriminated on `type`, so narrowing a
+ * Trigger's `type` narrows its `config` to that type's schema — the same
+ * pairing `triggerCreateSchema` validates writes against.
+ */
+export const triggerSchema = z.discriminatedUnion("type", [
+  triggerBaseSchema.extend({
+    type: z.literal("cron"),
+    config: cronTriggerConfigSchema,
+  }),
+  triggerBaseSchema.extend({
+    type: z.literal("event"),
+    config: eventTriggerConfigSchema,
+  }),
+  triggerBaseSchema.extend({
+    type: z.literal("inbound"),
+    config: inboundTriggerConfigSchema,
+  }),
+]);
+
 export type Trigger = z.infer<typeof triggerSchema>;
 
-const triggerCreateBaseSchema = triggerSchema.pick({
+const triggerCreateBaseSchema = triggerBaseSchema.pick({
   workspaceId: true,
   agentId: true,
   name: true,
@@ -2543,17 +2556,18 @@ export const triggerCreateSchema = z.discriminatedUnion("type", [
 ]);
 
 export const triggerUpdateSchema = partialWithoutDefaults(
-  triggerSchema.pick({
-    name: true,
-    description: true,
-    instruction: true,
-    agentId: true,
-    type: true,
-    enabled: true,
-    maxRunsToKeep: true,
-    search: true,
-    includeMemories: true,
-  }),
+  triggerBaseSchema
+    .pick({
+      name: true,
+      description: true,
+      instruction: true,
+      agentId: true,
+      enabled: true,
+      maxRunsToKeep: true,
+      search: true,
+      includeMemories: true,
+    })
+    .extend({ type: triggerTypeSchema }),
 ).extend({
   // An update may omit `type`, so only the stored Trigger settles which
   // schema its config must meet: the backend validates it against that.

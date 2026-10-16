@@ -54,9 +54,6 @@ import {
 import {
   type Trigger,
   type Agent,
-  type CronTriggerConfig,
-  type EventTriggerConfig,
-  type InboundTriggerConfig,
   type TriggerType,
   triggerTypeSchema,
 } from "@platypus/schemas";
@@ -119,8 +116,12 @@ export const TriggerCardsSkeleton = ({ cards }: { cards?: number }) => (
 );
 
 /** An Inbound Trigger's line: what it takes, and how its token stands. */
-const InboundSummary = ({ trigger }: { trigger: Trigger }) => {
-  const config = trigger.config as InboundTriggerConfig;
+const InboundSummary = ({
+  trigger,
+}: {
+  trigger: Extract<Trigger, { type: "inbound" }>;
+}) => {
+  const config = trigger.config;
   const inputs = config.inputs;
   const status = trigger.tokenStatus ?? "none";
   const parts = [
@@ -308,13 +309,12 @@ export const TriggerList = ({
                       <TriggerTypeIcon type={trigger.type} />
                       {TRIGGER_TYPE_LABELS[trigger.type] ?? trigger.type}
                     </Badge>
-                    {trigger.type === "cron" &&
-                      (trigger.config as CronTriggerConfig).isOneOff && (
-                        <Badge variant="outline" className="text-xs">
-                          <CalendarClock />
-                          One-off
-                        </Badge>
-                      )}
+                    {trigger.type === "cron" && trigger.config.isOneOff && (
+                      <Badge variant="outline" className="text-xs">
+                        <CalendarClock />
+                        One-off
+                      </Badge>
+                    )}
                     {trigger.firedAt ? (
                       <Badge variant="secondary" className="text-xs">
                         <CircleCheck />
@@ -343,15 +343,12 @@ export const TriggerList = ({
                       <>
                         <span
                           className="flex items-center gap-1"
-                          title={
-                            (trigger.config as CronTriggerConfig).cronExpression
-                          }
+                          title={trigger.config.cronExpression}
                         >
                           <Timer className="h-3 w-3" />
                           {describeSchedule(
-                            (trigger.config as CronTriggerConfig)
-                              .cronExpression,
-                            (trigger.config as CronTriggerConfig).timezone,
+                            trigger.config.cronExpression,
+                            trigger.config.timezone,
                           )}
                         </span>
                         {trigger.enabled && trigger.nextRunAt && (
@@ -365,17 +362,15 @@ export const TriggerList = ({
                     ) : (
                       <span className="flex items-center gap-1 flex-wrap">
                         <Zap className="h-3 w-3" />
-                        {(trigger.config as EventTriggerConfig).events.map(
-                          (event) => (
-                            <Badge
-                              key={event}
-                              variant="secondary"
-                              className="text-xs"
-                            >
-                              {event}
-                            </Badge>
-                          ),
-                        )}
+                        {trigger.config.events.map((event) => (
+                          <Badge
+                            key={event}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {event}
+                          </Badge>
+                        ))}
                       </span>
                     )}
                     {trigger.lastRunStatus && trigger.lastRunStartedAt && (

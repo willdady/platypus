@@ -56,7 +56,7 @@ import {
   TOOL_NAME_PATTERN,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
-  triggerSchema,
+  triggerBaseSchema,
   eventTriggerEventSchema,
   webhookEventDataSchemas,
   webhookEventSchema,
@@ -1599,8 +1599,8 @@ const LIMIT_CLAIMS: LimitClaim[] = [
   {
     doc: "building-with-platypus/triggers.mdx",
     anchor: "**Instruction** — the message sent to the Agent",
-    source: "packages/schemas/index.ts (triggerSchema.instruction)",
-    expected: { max: stringField(triggerSchema, "instruction").max },
+    source: "packages/schemas/index.ts (triggerBaseSchema.instruction)",
+    expected: { max: stringField(triggerBaseSchema, "instruction").max },
   },
   {
     doc: "administering/workspaces.mdx",
