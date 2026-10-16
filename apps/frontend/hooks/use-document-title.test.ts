@@ -35,4 +35,36 @@ describe("useDocumentTitle", () => {
 
     expect(document.title).toBe("Trip planning | Platypus");
   });
+
+  it("puts the route's title back when the entity loses its name", () => {
+    const { rerender } = renderHook(
+      ({ name }: { name?: string }) => useDocumentTitle(name, "Research"),
+      { initialProps: { name: "Trip planning" as string | undefined } },
+    );
+
+    rerender({ name: undefined });
+
+    expect(document.title).toBe("Chat | Research | Platypus");
+  });
+
+  it("puts the route's title back on unmount", () => {
+    const { unmount } = renderHook(() =>
+      useDocumentTitle("Trip planning", "Research"),
+    );
+
+    unmount();
+
+    expect(document.title).toBe("Chat | Research | Platypus");
+  });
+
+  it("leaves a title the next route set on unmount", () => {
+    const { unmount } = renderHook(() =>
+      useDocumentTitle("Trip planning", "Research"),
+    );
+    document.title = "Agents | Research | Platypus";
+
+    unmount();
+
+    expect(document.title).toBe("Agents | Research | Platypus");
+  });
 });
