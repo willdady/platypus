@@ -19,19 +19,9 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { UsersList } from "./users-list";
+import type { User } from "./auth-provider";
 
 // --- Fixtures ----------------------------------------------------------------
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: "user" | "admin";
-  emailVerified: boolean;
-  banned?: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
 
 const target: User = {
   id: "u2",
@@ -39,8 +29,9 @@ const target: User = {
   name: "Sam",
   role: "user",
   emailVerified: true,
-  createdAt: "2024-01-01T00:00:00.000Z",
-  updatedAt: "2024-01-01T00:00:00.000Z",
+  banned: false,
+  createdAt: new Date("2024-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2024-01-01T00:00:00.000Z"),
 };
 
 /**

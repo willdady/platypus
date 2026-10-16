@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Shield, User as UserIcon, KeyRound, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth, useBackendUrl, type User } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
@@ -30,17 +30,6 @@ import {
   UserCellSkeleton,
 } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: "user" | "admin";
-  emailVerified: boolean;
-  banned?: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface ListUsersResponse {
   users: User[];
