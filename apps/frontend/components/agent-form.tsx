@@ -484,6 +484,9 @@ const AgentForm = ({
                     src={avatarPreviewUrl}
                     alt="Avatar"
                     className="w-full h-full object-cover"
+                    width={80}
+                    height={80}
+                    decoding="async"
                   />
                 ) : (
                   <ImageIcon className="w-8 h-8 text-muted-foreground" />

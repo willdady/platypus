@@ -251,6 +251,10 @@ export const ChatMessage = memo(function ChatMessage({
         src={messageAgent.avatarUrl}
         alt={partIndex === firstAvatarPart ? messageAgent.name : ""}
         className="size-6 rounded-full object-cover"
+        width={24}
+        height={24}
+        loading="lazy"
+        decoding="async"
       />
     ) : (
       <div className="flex size-6 items-center justify-center rounded-full bg-muted">
@@ -464,12 +468,16 @@ export const ChatMessage = memo(function ChatMessage({
           >
             <MessageContent className="max-w-full">
               {/* Generated/uploaded image served from a backend or data: URL;
-              not routable through the Next image optimizer. */}
+              not routable through the Next image optimizer. Its size is
+              unknown until it loads. Lazy further up the transcript; the
+              newest message's is the one being looked at. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={filePart.url}
                 alt={filePart.filename || "Generated image"}
                 className="max-w-full rounded-lg border"
+                loading={isLastMessage ? "eager" : "lazy"}
+                decoding="async"
               />
             </MessageContent>
           </Message>
