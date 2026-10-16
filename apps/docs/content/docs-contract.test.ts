@@ -2126,13 +2126,6 @@ const BACKEND_CONSTANTS = [
     files: ["building-with-platypus/a2a-endpoints.mdx"],
     cost: "A Workspace Owner checking whether a token is still in use reads its last-used time as fresher than it is.",
   },
-  {
-    source: "apps/frontend/hooks/use-model-selection.ts",
-    name: "STORAGE_TTL_MS",
-    phrase: (ms: number) => `for up to ${ms / 3_600_000} hours`,
-    files: ["building-with-platypus/chat.mdx"],
-    cost: "A User expects a new Chat to open on their last pick after it has already been forgotten.",
-  },
 ] as const;
 
 describe("backend constants the concept pages quote", () => {

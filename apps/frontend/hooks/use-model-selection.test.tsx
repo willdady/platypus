@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import type { Agent, Chat, Provider } from "@platypus/schemas";
 import {
@@ -6,7 +6,10 @@ import {
   type ModelSelection,
   type UseModelSelectionInput,
 } from "./use-model-selection";
-import { encodeAgentSelection } from "@/lib/selection-reference";
+import {
+  encodeAgentSelection,
+  encodeProviderSelection,
+} from "@/lib/selection-reference";
 
 const WORKSPACE_ID = "w1";
 const STORAGE_KEY = `platypus:workspace:${WORKSPACE_ID}:lastSelection`;
@@ -32,10 +35,7 @@ const agent = (over: Partial<Agent> = {}): Agent =>
   }) as unknown as Agent;
 
 const store = (value: unknown) =>
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({ value, expiresAt: Date.now() + 60_000 }),
-  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ value }));
 
 /**
  * Renders the hook while keeping every render's result, so a test can assert
@@ -264,21 +264,6 @@ describe("useModelSelection — workspace and stale references", () => {
     });
   });
 
-  it("ignores and clears a stored selection past its expiry", () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        value: { type: "agent", id: "a1" },
-        expiresAt: Date.now() - 1,
-      }),
-    );
-
-    const { result } = renderTracked({ ...base, providers: [] });
-
-    expect(result.current.isResolved).toBe(false);
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
-  });
-
   it("says why it substituted when the chat's Provider is gone", () => {
     const { result } = renderTracked({
       ...base,
@@ -308,14 +293,96 @@ describe("useModelSelection — workspace and stale references", () => {
 
     expect(result.current.substitution).toBeUndefined();
   });
+});
 
-  it("does not refresh the stored selection's expiry on a bare revalidation", () => {
-    const { rerender } = renderTracked(base);
-    const written = localStorage.getItem(STORAGE_KEY);
+/**
+ * The stored selection is the Workspace's last pick (issue #1503): only a pick
+ * in the picker writes it. Anything else that resolves a selection — opening a
+ * Chat, restoring a new one, falling back, following a link — leaves it be.
+ */
+describe("useModelSelection — only a pick is remembered", () => {
+  const storedAgent = () => ({ value: { type: "agent", id: "a1" } });
 
-    // SWR handing back an equal-but-new array is not a selection change.
-    rerender({ ...base, providers: [provider()], agents: [agent()] });
+  it("leaves a stored Agent untouched when a Provider-backed Chat is opened", () => {
+    store({ type: "agent", id: "a1" });
+    renderTracked({
+      ...base,
+      chatData: { providerId: "p1", modelId: "gpt-5" } as Chat,
+    });
 
-    expect(localStorage.getItem(STORAGE_KEY)).toBe(written);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject(
+      storedAgent(),
+    );
+  });
+
+  it("leaves the stored selection untouched when a new Chat falls back to the first Provider", () => {
+    // The stored Agent is missing from the list (deleted, or a stale cache).
+    store({ type: "agent", id: "gone" });
+    const { result } = renderTracked(base);
+    expect(result.current.selection.providerId).toBe("p1");
+
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject({
+      value: { type: "agent", id: "gone" },
+    });
+  });
+
+  it("leaves the stored selection untouched when a new Chat opens from `?agentId=`", () => {
+    store({ type: "agent", id: "a1" });
+    const { result } = renderTracked({
+      ...base,
+      agents: [agent(), agent({ id: "a2" })],
+      initialAgentId: "a2",
+    });
+    expect(result.current.selection.agentId).toBe("a2");
+
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject(
+      storedAgent(),
+    );
+  });
+
+  it("opens the next new Chat on a Provider's model picked in this one", () => {
+    store({ type: "agent", id: "a1" });
+    const { result, unmount } = renderTracked(base);
+
+    act(() =>
+      result.current.handleModelChange(encodeProviderSelection("p1", "gpt-5")),
+    );
+    unmount();
+
+    const next = renderTracked(base);
+    expect(next.result.current.selection).toEqual({
+      agentId: "",
+      modelId: "gpt-5",
+      providerId: "p1",
+    });
+  });
+
+  it("restores a selection stored with an expiry that has passed", () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        value: { type: "agent", id: "a1" },
+        expiresAt: Date.now() - 1,
+      }),
+    );
+
+    const { result } = renderTracked(base);
+
+    expect(result.current.selection.agentId).toBe("a1");
+  });
+
+  it("restores a pick however long ago it was made", () => {
+    vi.useFakeTimers({ now: new Date("2026-01-01T00:00:00Z") });
+    try {
+      const { result, unmount } = renderTracked(base);
+      act(() => result.current.handleModelChange(encodeAgentSelection("a1")));
+      unmount();
+
+      vi.setSystemTime(new Date("2027-01-01T00:00:00Z"));
+
+      expect(renderTracked(base).result.current.selection.agentId).toBe("a1");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
