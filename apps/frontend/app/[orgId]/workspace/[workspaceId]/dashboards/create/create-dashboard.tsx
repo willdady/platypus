@@ -1,0 +1,100 @@
+"use client";
+
+import { use, useState } from "react";
+import { useRouter } from "next/navigation";
+import { mutate } from "swr";
+import { ResourcePage } from "@/components/resource-page";
+import { Button } from "@/components/ui/button";
+import { FormTextField } from "@/components/form-text-field";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useBackendUrl } from "@/components/auth-provider";
+import { joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
+import type { Dashboard } from "@platypus/schemas";
+import { workspaceRoutes } from "@/lib/routes";
+
+const CreateDashboardPage = ({
+  params,
+}: {
+  params: Promise<{ orgId: string; workspaceId: string }>;
+}) => {
+  const { orgId, workspaceId } = use(params);
+  const routes = workspaceRoutes(orgId, workspaceId);
+  const router = useRouter();
+  const backendUrl = useBackendUrl();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!backendUrl || !name.trim()) return;
+    setLoading(true);
+    setError(null);
+    const outcome = await writeEntity<Dashboard>(
+      backendUrl,
+      "dashboards",
+      { orgId, workspaceId },
+      {
+        data: {
+          name: name.trim(),
+          description: description.trim() || null,
+        },
+      },
+    );
+    if (outcome.outcome === "conflict") {
+      setError(outcome.message);
+    } else if (outcome.outcome === "success") {
+      const dashboard = outcome.data;
+      const dashUrl = joinUrl(
+        backendUrl,
+        `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboard.id}`,
+      );
+      await mutate(dashUrl, dashboard, false);
+      router.push(routes.dashboards.detail(dashboard.id));
+    } else {
+      setError(outcome.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <ResourcePage
+      backFallbackHref={routes.root}
+      title="New Dashboard"
+      variant="narrow"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <FormTextField
+          label="Name"
+          name="name"
+          value={name}
+          onChange={setName}
+          placeholder="My Dashboard"
+          required
+        />
+        <div className="space-y-2">
+          <Label htmlFor="description">Description</Label>
+          <Textarea
+            id="description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional description"
+          />
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <Button type="submit" disabled={loading || !name.trim()}>
+          {loading ? "Saving..." : "Save"}
+        </Button>
+      </form>
+    </ResourcePage>
+  );
+};
+
+export default CreateDashboardPage;

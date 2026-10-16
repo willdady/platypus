@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { WorkspaceWizard } from "@/components/workspace-wizard";
 import { ResourcePage } from "@/components/resource-page";
 import { ProtectedRoute } from "@/components/protected-route";
 import { orgRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Create Workspace" };
 
 const WorkspaceCreatePage = async ({
   params,

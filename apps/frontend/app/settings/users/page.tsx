@@ -1,7 +1,8 @@
-"use client";
-
+import type { Metadata } from "next";
 import { ProtectedRoute } from "@/components/protected-route";
 import { UsersList } from "@/components/users-list";
+
+export const metadata: Metadata = { title: "User Management" };
 
 export default function UsersPage() {
   return (

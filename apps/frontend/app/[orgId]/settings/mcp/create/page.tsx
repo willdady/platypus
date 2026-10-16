@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { McpForm } from "@/components/mcp-form";
 import { ResourcePage } from "@/components/resource-page";
 import { orgRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Add Organization MCP" };
 
 const CreateOrgMcpPage = async ({
   params,

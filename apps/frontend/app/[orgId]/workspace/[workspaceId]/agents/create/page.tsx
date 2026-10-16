@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { AgentForm } from "@/components/agent-form";
 import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
 import { workspaceRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Create Agent" };
 
 const AgentCreatePage = async ({
   params,

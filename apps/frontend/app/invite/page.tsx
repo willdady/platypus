@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { InviteShell } from "./invite-shell";
+
+export const metadata: Metadata = { title: "Invitation" };
 
 /**
  * The bare `/invite` address. An invitation page scrubs its token from the

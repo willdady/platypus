@@ -4,6 +4,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
+import { scopedTitle } from "@/lib/page-title";
 import { CommandMenu } from "@/components/command-menu";
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Kbd } from "@/components/ui/kbd";
@@ -47,9 +48,7 @@ export async function generateMetadata({
   const { orgId, workspaceId } = await params;
   const { workspace } = await fetchWorkspace(orgId, workspaceId);
 
-  return {
-    title: workspace ? `${workspace.name} | Platypus` : "Platypus",
-  };
+  return { title: scopedTitle(workspace?.name) };
 }
 
 export default async function WorkspaceLayout({

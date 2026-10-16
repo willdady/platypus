@@ -2,6 +2,7 @@ import { serverBackendUrl } from "@/lib/env";
 import { cache } from "react";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
+import { scopedTitle } from "@/lib/page-title";
 import type { Organization } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
 import { OrgSettingsMenu } from "@/components/org-settings-menu";
@@ -42,9 +43,7 @@ export async function generateMetadata({
   const { orgId } = await params;
   const organization = await fetchOrganization(orgId);
 
-  return {
-    title: organization ? `${organization.name} | Platypus` : "Platypus",
-  };
+  return { title: scopedTitle(organization?.name) };
 }
 
 export default async function OrgSettingsLayout({

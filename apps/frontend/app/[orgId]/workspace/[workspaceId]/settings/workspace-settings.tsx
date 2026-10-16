@@ -1,0 +1,58 @@
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { Copy } from "lucide-react";
+import { copyWithToast } from "@/lib/clipboard";
+import { WorkspaceForm } from "@/components/workspace-form";
+
+const WorkspaceSettingsPage = ({
+  orgId,
+  workspaceId,
+}: {
+  orgId: string;
+  workspaceId: string;
+}) => {
+  return (
+    <div>
+      <h1 className="text-2xl font-bold mb-4">Workspace Settings</h1>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
+        <div>
+          <p className="text-sm mb-2">Organization ID</p>
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-muted-foreground">{orgId}</p>
+            <Button
+              className="cursor-pointer text-muted-foreground"
+              variant="ghost"
+              size="icon"
+              aria-label="Copy Organization ID"
+              onClick={() => copyWithToast(orgId)}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div>
+          <p className="text-sm mb-2">Workspace ID</p>
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-muted-foreground">{workspaceId}</p>
+            <Button
+              className="cursor-pointer text-muted-foreground"
+              variant="ghost"
+              size="icon"
+              aria-label="Copy Workspace ID"
+              onClick={() => copyWithToast(workspaceId)}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="w-full">
+        <WorkspaceForm orgId={orgId} workspaceId={workspaceId} />
+      </div>
+    </div>
+  );
+};
+
+export default WorkspaceSettingsPage;

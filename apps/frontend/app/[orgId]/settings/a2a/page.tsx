@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { OrgA2aAccess } from "@/components/org-gate-access";
 import { OrgA2aEndpointsList } from "@/components/org-a2a-endpoints-list";
+
+export const metadata: Metadata = { title: "A2A endpoints" };
 
 const OrgA2aPage = async ({
   params,

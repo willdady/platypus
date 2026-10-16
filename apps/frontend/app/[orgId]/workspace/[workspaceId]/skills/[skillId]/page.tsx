@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { SkillForm } from "@/components/skill-form";
 import { ResourcePage } from "@/components/resource-page";
 import { workspaceRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Edit Skill" };
 
 const SkillEditPage = async ({
   params,

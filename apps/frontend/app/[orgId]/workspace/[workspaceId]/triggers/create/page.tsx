@@ -1,16 +1,16 @@
-"use client";
-
-import { use } from "react";
+import type { Metadata } from "next";
 import { TriggerForm } from "@/components/trigger-form";
 import { ResourcePage } from "@/components/resource-page";
 import { workspaceRoutes } from "@/lib/routes";
 
-const CreateTriggerPage = ({
+export const metadata: Metadata = { title: "New Trigger" };
+
+const CreateTriggerPage = async ({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
 }) => {
-  const { orgId, workspaceId } = use(params);
+  const { orgId, workspaceId } = await params;
 
   return (
     <ResourcePage

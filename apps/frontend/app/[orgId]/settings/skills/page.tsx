@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { SkillsList } from "@/components/skills-list";
+
+export const metadata: Metadata = { title: "Organization Skills" };
 
 const OrgSkillsPage = async ({
   params,

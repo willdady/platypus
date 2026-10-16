@@ -1,16 +1,16 @@
-"use client";
-
-import { use } from "react";
+import type { Metadata } from "next";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
 import { ResourcePage } from "@/components/resource-page";
 import { workspaceRoutes } from "@/lib/routes";
 
-const CreateBoardPage = ({
+export const metadata: Metadata = { title: "New Board" };
+
+const CreateBoardPage = async ({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
 }) => {
-  const { orgId, workspaceId } = use(params);
+  const { orgId, workspaceId } = await params;
 
   return (
     <ResourcePage

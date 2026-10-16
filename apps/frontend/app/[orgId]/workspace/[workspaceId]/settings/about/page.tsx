@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
+
+export const metadata: Metadata = { title: "About" };
 
 const AboutPage = () => {
   const version = process.env.APP_VERSION ?? "unknown";

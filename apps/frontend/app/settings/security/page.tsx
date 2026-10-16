@@ -1,6 +1,7 @@
-"use client";
-
+import type { Metadata } from "next";
 import { ChangePasswordForm } from "@/components/change-password-form";
+
+export const metadata: Metadata = { title: "Security Settings" };
 
 const SecuritySettingsPage = () => {
   return (

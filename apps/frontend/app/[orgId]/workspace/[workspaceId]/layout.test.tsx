@@ -11,7 +11,7 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "session=1" }),
 }));
 
-import WorkspaceLayout from "./layout";
+import WorkspaceLayout, { generateMetadata } from "./layout";
 
 const renderLayout = () =>
   WorkspaceLayout({
@@ -66,5 +66,29 @@ describe("WorkspaceLayout", () => {
     stubWorkspaceRead(403);
 
     await expect(renderLayout()).resolves.toBeTruthy();
+  });
+});
+
+describe("WorkspaceLayout metadata", () => {
+  const metadataFor = () =>
+    generateMetadata({
+      params: Promise.resolve({ orgId: "org1", workspaceId: "ws1" }),
+    });
+
+  // A page titled "Chats" inside it reads "Chats | Research | Platypus"; the
+  // Workspace home, which names no title of its own, reads "Research | Platypus".
+  it("names the Workspace in the title of every page inside it", async () => {
+    stubWorkspaceRead(200);
+
+    await expect(metadataFor()).resolves.toMatchObject({
+      title: { default: "Research", template: "%s | Research | Platypus" },
+    });
+  });
+
+  it("leaves the title to the app when the Workspace cannot be read", async () => {
+    stubWorkspaceRead(500);
+
+    const metadata = await metadataFor();
+    expect(metadata.title).toBeUndefined();
   });
 });

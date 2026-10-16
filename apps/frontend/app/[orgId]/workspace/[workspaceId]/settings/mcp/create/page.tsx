@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { McpForm } from "@/components/mcp-form";
 import { ResourcePage } from "@/components/resource-page";
 import { workspaceRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Create MCP" };
 
 const McpCreatePage = async ({
   params,

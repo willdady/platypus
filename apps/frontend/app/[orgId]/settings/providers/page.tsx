@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { ProvidersList } from "@/components/providers-list";
+
+export const metadata: Metadata = { title: "Organization Providers" };
 
 const OrgProvidersPage = async ({
   params,

@@ -4,6 +4,7 @@ import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { getEnv } from "@/lib/env";
+import { APP_NAME } from "@/lib/page-title";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "next-themes";
@@ -23,13 +24,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Platypus",
+  title: { default: APP_NAME, template: `%s | ${APP_NAME}` },
   description:
     "A rich web interface for interacting with AI chatbots and agents",
+  // Every page but sign-in sits behind auth: nothing here is worth indexing.
+  robots: { index: false, follow: false },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Platypus",
+    title: APP_NAME,
   },
   icons: {
     apple: withBasePath("/icon-192x192.png"),

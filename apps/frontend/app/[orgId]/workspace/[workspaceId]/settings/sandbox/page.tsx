@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { SandboxSettings } from "@/components/sandbox-settings";
+
+export const metadata: Metadata = { title: "Sandbox" };
 
 const SandboxPage = async ({
   params,
