@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { linkSafety } from "@/components/link-safety";
@@ -15,9 +14,11 @@ import type { FileUIPart, UIMessage } from "ai";
 import { PaperclipIcon, XIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
 import { memo } from "react";
-import { code } from "@streamdown/code";
-import { mermaid } from "@streamdown/mermaid";
 import { Streamdown } from "streamdown";
+import { lazyCode, lazyMermaid } from "./lazy-streamdown-plugins";
+
+// Module-level, so the memoised response keeps one plugins object.
+const plugins = { code: lazyCode, mermaid: lazyMermaid };
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -100,16 +101,15 @@ export const MessageAction = ({
     </Button>
   );
 
+  // `Tooltip` brings its own provider; a second one around it is redundant.
   if (tooltip) {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent>
-            <p>{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent>
+          <p>{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
     );
   }
 
@@ -125,7 +125,7 @@ export const MessageResponse = memo(
       <Streamdown
         linkSafety={linkSafety}
         controls={controls}
-        plugins={{ code, mermaid }}
+        plugins={plugins}
         {...props}
         className={cn(
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
@@ -171,7 +171,9 @@ export function MessageAttachment({
           <img
             alt={filename || "attachment"}
             className="size-full object-cover"
+            decoding="async"
             height={100}
+            loading="lazy"
             src={data.url}
             width={100}
           />
