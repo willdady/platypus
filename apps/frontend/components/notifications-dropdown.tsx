@@ -22,10 +22,17 @@ import {
   type NotificationSource,
 } from "@platypus/schemas";
 import Link from "next/link";
-import { Markdown } from "@/components/markdown";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { userRoutes, workspaceRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+
+// Streamdown is heavy, and the Header carries this dropdown onto nearly every
+// page. Its bodies only render once the bell opens, so load it then.
+const Markdown = dynamic(
+  () => import("@/components/markdown").then((m) => m.Markdown),
+  { ssr: false },
+);
 
 interface NotificationsDropdownProps {
   orgId?: string;
@@ -41,12 +48,13 @@ export function NotificationsDropdown({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const scope = orgId && workspaceId ? { orgId, workspaceId } : null;
 
-  // Polling is gated on the dropdown being open: the badge still loads its
-  // initial count, but a closed bell doesn't keep re-reading in the background.
+  // The list itself is only read while the bell is open; the badge needs
+  // just the count. Polling is gated the same way, so a closed bell doesn't
+  // keep re-reading in the background.
   const { data: notificationsData, mutate: mutateNotifications } =
     useScopedSWR<{
       results: NotificationListItem[];
-    }>("notifications", scope, { refreshInterval: isOpen ? 30000 : 0 });
+    }>("notifications", isOpen ? scope : null, { refreshInterval: 30000 });
 
   const { data: unreadCountData, mutate: mutateUnreadCount } = useScopedSWR<{
     count: number;
@@ -139,10 +147,9 @@ export function NotificationsDropdown({
       onOpenChange={(open) => {
         setIsOpen(open);
         setExpandedId(null);
-        if (open) {
-          mutateNotifications();
-          mutateUnreadCount();
-        }
+        // Opening gives the list a key, which reads it; the count is
+        // refreshed alongside.
+        if (open) mutateUnreadCount();
       }}
     >
       <DropdownMenuTrigger asChild>
