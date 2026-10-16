@@ -287,16 +287,17 @@ export const Chat = ({
   useStreamingFavicon(runMayBeLive(runBelief));
 
   // Custom hooks for state management (must be called before any conditional returns)
-  const { selection, isResolved, handleModelChange } = useModelSelection({
-    chatData: chatData ?? undefined,
-    providers,
-    agents: agentsIfLoaded,
-    // SWR reports a key's first mount as loading even when the cache already
-    // holds a value: a row, or the `null` the index route seeds for a new Chat.
-    isChatLoading: isChatLoading && chatData === undefined,
-    workspaceId,
-    initialAgentId,
-  });
+  const { selection, isResolved, substitution, handleModelChange } =
+    useModelSelection({
+      chatData: chatData ?? undefined,
+      providers,
+      agents: agentsIfLoaded,
+      // SWR reports a key's first mount as loading even when the cache already
+      // holds a value: a row, or the `null` the index route seeds for a new Chat.
+      isChatLoading: isChatLoading && chatData === undefined,
+      workspaceId,
+      initialAgentId,
+    });
   const { settings, setters } = useChatSettings(
     chatData ?? undefined,
     selection.agentId,
@@ -353,6 +354,7 @@ export const Chat = ({
     modelId,
     providerId,
     isResolved,
+    substitution,
     onModelChange: handleModelChange,
     maxOutputTokens: resolvedModel?.maxOutputTokens,
   };

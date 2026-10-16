@@ -3,6 +3,8 @@ import { Provider, Agent, Chat } from "@platypus/schemas";
 import { decodeSelectionReference } from "@/lib/selection-reference";
 import {
   resolveRestoredSelection,
+  type RestoredSelection,
+  type SelectionSubstitution,
   type StoredSelection,
 } from "@/lib/restore-selection";
 
@@ -128,7 +130,7 @@ export const useModelSelection = ({
     setChosen(null);
   }
 
-  const restored = useMemo<ModelSelection | null>(() => {
+  const restored = useMemo<RestoredSelection | null>(() => {
     // Nothing resolves until the inputs the ladder reads have arrived: the row
     // (Priority 1) outranks storage, so committing to a stored selection while
     // the row is still in flight would only trade one flicker for another.
@@ -176,10 +178,17 @@ export const useModelSelection = ({
 
   // Memoised so consumers that key off the selection object (the picker's
   // props bundle, `resolveModel`) see one identity per actual selection.
-  const selection = useMemo(
-    () => chosen ?? restored ?? EMPTY_SELECTION,
-    [chosen, restored],
-  );
+  const selection = useMemo<ModelSelection>(() => {
+    if (chosen) return chosen;
+    if (!restored) return EMPTY_SELECTION;
+    const { agentId, modelId, providerId } = restored;
+    return { agentId, modelId, providerId };
+  }, [chosen, restored]);
+  // Why the restored selection is not the one asked for. A pick of the
+  // user's own supersedes it: they are no longer on the substitute.
+  const substitution: SelectionSubstitution | undefined = chosen
+    ? undefined
+    : restored?.substitution;
   const isResolved = chosen !== null || restored !== null;
 
   const handleModelChange = useCallback((value: string) => {
@@ -216,5 +225,5 @@ export const useModelSelection = ({
     }
   }, [agentId, providerId, modelId, STORAGE_KEY]);
 
-  return { selection, isResolved, handleModelChange };
+  return { selection, isResolved, substitution, handleModelChange };
 };

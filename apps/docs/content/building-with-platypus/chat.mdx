@@ -25,6 +25,12 @@ alias](/concepts/providers#model-aliases) — a stable name like `fast` — rath
 than its vendor model id. Pick it and your Chat follows whatever model the alias
 points at, including after an Org Admin repoints it.
 
+A Chat reopens on the Agent or model it last used, and a new Chat opens on the
+one you last picked in the Workspace. If that Agent, Provider or model has since
+been deleted, the Chat switches to another model and an amber notice above the
+message box says which one went missing. The picker shows what it switched to.
+Pick anything there and the notice goes away.
+
 With an Agent selected, an info button — tooltip **Agent info** — opens
 **Agent Information**, which shows what that Agent is bringing to the
 conversation: its Provider and model, Instructions, tools, Skills and
