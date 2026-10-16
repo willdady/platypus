@@ -30,16 +30,19 @@ beforeEach(() => resetListHarness());
 
 describe("KanbanCardHistory", () => {
   it("says so when the card has no recorded changes", () => {
-    mockScopedSWR({ "/history": [] });
+    mockScopedSWR({ "/history": [] }, { strict: true });
     openHistory();
 
     expect(screen.getByText("No changes recorded yet.")).toBeInTheDocument();
   });
 
   it("shows a failed read as an error with a retry, not as loading or empty", () => {
-    mockScopedSWR({
-      "/history": { error: { status: 500, message: "Server error" } },
-    });
+    mockScopedSWR(
+      {
+        "/history": { error: { status: 500, message: "Server error" } },
+      },
+      { strict: true },
+    );
     openHistory();
 
     expect(

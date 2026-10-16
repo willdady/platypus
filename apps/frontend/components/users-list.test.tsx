@@ -50,7 +50,7 @@ const target: User = {
  * `{ results }` every other list returns, so it registers a raw payload.
  */
 function renderUsers(users: User[]) {
-  mockScopedSWR({ "list-users": { data: { users } } });
+  mockScopedSWR({ "list-users": { data: { users } } }, { strict: true });
   return renderList(<UsersList />);
 }
 
@@ -115,14 +115,17 @@ describe("UsersList list states", () => {
   });
 
   it("surfaces a failed read rather than rendering an empty list", () => {
-    mockScopedSWR({ "list-users": { error: new Error("500") } });
+    mockScopedSWR(
+      { "list-users": { error: new Error("500") } },
+      { strict: true },
+    );
     renderList(<UsersList />);
 
     expect(screen.getByText(/Failed to load users/)).toBeInTheDocument();
   });
 
   it("shows the loading state while the read is in flight", () => {
-    mockScopedSWR({ "list-users": { isLoading: true } });
+    mockScopedSWR({ "list-users": { isLoading: true } }, { strict: true });
     renderList(<UsersList />);
 
     expect(

@@ -22,13 +22,16 @@ const seed = (
   a2aGate: string,
   workspace: { a2aAllowed: boolean } | "loading",
 ) =>
-  mockScopedSWR({
-    "/workspaces/ws1":
-      workspace === "loading"
-        ? { isLoading: true }
-        : { data: { id: "ws1", ...workspace } },
-    "/organizations/org1": { data: { id: "org1", a2aGate } },
-  });
+  mockScopedSWR(
+    {
+      "/workspaces/ws1":
+        workspace === "loading"
+          ? { isLoading: true }
+          : { data: { id: "ws1", ...workspace } },
+      "/organizations/org1": { data: { id: "org1", a2aGate } },
+    },
+    { strict: true },
+  );
 
 const renderNotices = () =>
   render(<A2aEndpointNotices orgId="org1" workspaceId="ws1" />);

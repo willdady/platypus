@@ -50,11 +50,14 @@ function mockReads({
   backends?: Parameters<typeof mockScopedSWR>[0][string];
   networks?: Parameters<typeof mockScopedSWR>[0][string];
 }) {
-  mockScopedSWR({
-    "/sandbox-backends/networks": networks,
-    "/sandbox-backends": backends,
-    "/ws1/sandbox": sandbox,
-  });
+  mockScopedSWR(
+    {
+      "/sandbox-backends/networks": networks,
+      "/sandbox-backends": backends,
+      "/ws1/sandbox": sandbox,
+    },
+    { strict: true },
+  );
 }
 
 const renderSettings = () =>

@@ -37,7 +37,7 @@ beforeEach(resetListHarness);
 
 describe("AttachSharedResourceDialog", () => {
   it("shows a placeholder, not a false empty, while the list loads", () => {
-    mockScopedSWR({ "/skills": { isLoading: true } });
+    mockScopedSWR({ "/skills": { isLoading: true } }, { strict: true });
     renderDialog();
 
     expect(screen.getByLabelText("Loading shared skills")).toBeInTheDocument();
@@ -47,7 +47,10 @@ describe("AttachSharedResourceDialog", () => {
   });
 
   it("says none are available once loaded with nothing unattached", () => {
-    mockScopedSWR({ "/skills": [{ id: "s1", name: "Research" }] });
+    mockScopedSWR(
+      { "/skills": [{ id: "s1", name: "Research" }] },
+      { strict: true },
+    );
     renderDialog(["s1"]);
 
     expect(
@@ -56,7 +59,10 @@ describe("AttachSharedResourceDialog", () => {
   });
 
   it("lists the unattached resources once loaded", () => {
-    mockScopedSWR({ "/skills": [{ id: "s1", name: "Research" }] });
+    mockScopedSWR(
+      { "/skills": [{ id: "s1", name: "Research" }] },
+      { strict: true },
+    );
     renderDialog();
 
     expect(screen.getByText("Research")).toBeInTheDocument();

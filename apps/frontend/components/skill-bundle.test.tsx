@@ -49,7 +49,7 @@ const renderCard = (value: Skill, workspaceId: string | undefined = "ws1") =>
 
 beforeEach(() => {
   resetListHarness();
-  mockScopedSWR({ "/sandbox": { data: null } });
+  mockScopedSWR({ "/sandbox": { data: null } }, { strict: true });
 });
 
 describe("SkillBundleCard", () => {
@@ -64,7 +64,10 @@ describe("SkillBundleCard", () => {
   });
 
   it("warns when the Sandbox can't take this Skill's binary files", () => {
-    mockScopedSWR({ "/sandbox": { data: { transfer: { upload: false } } } });
+    mockScopedSWR(
+      { "/sandbox": { data: { transfer: { upload: false } } } },
+      { strict: true },
+    );
     renderCard(skill({ needsSandbox: true, files: [file("logo.png", false)] }));
     expect(screen.getByText(WARNING)).toBeInTheDocument();
   });
@@ -73,7 +76,7 @@ describe("SkillBundleCard", () => {
     ["the Sandbox takes binary files", { upload: true }, false],
     ["the Skill has only text files", { upload: false }, true],
   ])("doesn't warn when %s", (_label, transfer, textOnly) => {
-    mockScopedSWR({ "/sandbox": { data: { transfer } } });
+    mockScopedSWR({ "/sandbox": { data: { transfer } } }, { strict: true });
     renderCard(skill({ files: [file("logo.png", textOnly)] }));
     expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
   });
