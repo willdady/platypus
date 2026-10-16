@@ -65,9 +65,9 @@ const DashboardSettingsPage = ({
   };
 
   const {
-    isDeleteDialogOpen: deleteOpen,
-    setIsDeleteDialogOpen: setDeleteOpen,
-    isDeleting: deleting,
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
     deleteError,
     openDeleteDialog,
     handleDelete,
@@ -131,7 +131,7 @@ const DashboardSettingsPage = ({
           <div className="flex gap-2">
             <Button
               type="submit"
-              disabled={saving || deleting || !formData.name.trim()}
+              disabled={saving || isDeleting || !formData.name.trim()}
             >
               Save
             </Button>
@@ -139,7 +139,7 @@ const DashboardSettingsPage = ({
               type="button"
               variant="outline"
               onClick={openDeleteDialog}
-              disabled={saving || deleting}
+              disabled={saving || isDeleting}
             >
               <Trash2 /> Delete
             </Button>
@@ -148,8 +148,8 @@ const DashboardSettingsPage = ({
       </DetailFormState>
 
       <EntityDeleteDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
         title="Delete Dashboard"
         description={
           <>
@@ -160,7 +160,7 @@ const DashboardSettingsPage = ({
         }
         confirmPhrase="delete dashboard"
         onConfirm={handleDelete}
-        loading={deleting}
+        loading={isDeleting}
         error={deleteError}
       />
     </ResourcePage>
