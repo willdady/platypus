@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { OAuthCallbackHandler } from "./oauth-callback-handler";
+
+export const metadata: Metadata = { title: "Connecting MCP" };
 
 const OAuthCallbackPage = async ({
   searchParams,

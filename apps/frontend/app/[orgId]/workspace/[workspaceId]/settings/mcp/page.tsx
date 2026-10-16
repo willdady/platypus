@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { McpList } from "@/components/mcp-list";
+
+export const metadata: Metadata = { title: "MCP Servers" };
 
 const McpPage = async ({
   params,

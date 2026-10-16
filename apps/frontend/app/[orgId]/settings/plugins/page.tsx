@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { PluginsList } from "@/components/plugins-list";
+
+export const metadata: Metadata = { title: "Installed Plugins" };
 
 const OrgPluginsPage = async ({
   params,

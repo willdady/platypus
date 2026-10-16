@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { A2aEndpointForm } from "@/components/a2a-endpoint-form";
 import { ResourcePage } from "@/components/resource-page";
 import { workspaceRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Create A2A endpoint" };
 
 const A2aEndpointCreatePage = async ({
   params,

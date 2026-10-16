@@ -1,42 +1,13 @@
-"use client";
+import type { Metadata } from "next";
+import OrgSettingsPage from "./organization-settings";
 
-import { Button } from "@/components/ui/button";
-import { Copy } from "lucide-react";
-import { useParams } from "next/navigation";
-import { copyWithToast } from "@/lib/clipboard";
-import { OrganizationForm } from "@/components/organization-form";
+export const metadata: Metadata = { title: "Organization Settings" };
 
-const OrgSettingsPage = () => {
-  const { orgId } = useParams<{
-    orgId: string;
-  }>();
-
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Organization Settings</h1>
-      <div className="grid grid-cols-2 gap-6 mb-4">
-        <div>
-          <p className="text-sm mb-2">Organization ID</p>
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-muted-foreground">{orgId}</p>
-            <Button
-              className="text-muted-foreground"
-              variant="ghost"
-              size="icon"
-              aria-label="Copy Organization ID"
-              onClick={() => copyWithToast(orgId)}
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-md">
-        <OrganizationForm orgId={orgId} />
-      </div>
-    </div>
-  );
-};
-
-export default OrgSettingsPage;
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ orgId: string }>;
+}) {
+  const { orgId } = await params;
+  return <OrgSettingsPage orgId={orgId} />;
+}

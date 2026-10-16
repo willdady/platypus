@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { WebhooksList } from "@/components/webhooks-list";
+
+export const metadata: Metadata = { title: "Webhooks" };
 
 const WebhooksPage = async ({
   params,

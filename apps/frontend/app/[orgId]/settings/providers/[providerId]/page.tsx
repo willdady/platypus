@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { ProviderForm } from "@/components/provider-form";
 import { ResourcePage } from "@/components/resource-page";
 import { orgRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Edit Organization Provider" };
 
 const EditOrgProviderPage = async ({
   params,

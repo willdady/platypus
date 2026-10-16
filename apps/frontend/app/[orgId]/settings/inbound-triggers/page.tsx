@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { OrgInboundTriggerAccess } from "@/components/org-gate-access";
 import { OrgInboundTriggersList } from "@/components/org-inbound-triggers-list";
+
+export const metadata: Metadata = { title: "Inbound Triggers" };
 
 const OrgInboundTriggersPage = async ({
   params,

@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { BlueprintsList } from "@/components/blueprints-list";
+
+export const metadata: Metadata = { title: "Blueprints" };
 
 const OrgBlueprintsPage = async ({
   params,

@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { appRoutes } from "@/lib/routes";
 import { OrganizationForm } from "@/components/organization-form";
 import { ResourcePage } from "@/components/resource-page";
 import { ProtectedRoute } from "@/components/protected-route";
+
+export const metadata: Metadata = { title: "Create Organization" };
 
 const OrganizationCreatePage = () => {
   return (

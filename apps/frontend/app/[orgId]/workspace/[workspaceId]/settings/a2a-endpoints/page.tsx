@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { TriangleAlert } from "lucide-react";
 import { A2aEndpointsList } from "@/components/a2a-endpoints-list";
 import { A2aEndpointNotices } from "@/components/a2a-endpoint-notices";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+export const metadata: Metadata = { title: "A2A endpoints" };
 
 const A2aEndpointsPage = async ({
   params,

@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { WebhookForm } from "@/components/webhook-form";
 import { ResourcePage } from "@/components/resource-page";
 import { workspaceRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Edit Webhook" };
 
 const WebhookEditPage = async ({
   params,

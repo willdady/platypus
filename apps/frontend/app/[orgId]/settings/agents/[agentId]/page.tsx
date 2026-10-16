@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { AgentForm } from "@/components/agent-form";
 import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
 import { orgRoutes } from "@/lib/routes";
+
+export const metadata: Metadata = { title: "Edit Shared Agent" };
 
 const OrgAgentEditPage = async ({
   params,
