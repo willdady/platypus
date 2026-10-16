@@ -11,6 +11,8 @@ import {
   swrMock,
   push,
   resetFormHarness,
+  setData,
+  toastError,
   jsonResponse,
   stubRejectedSave,
   savedBody,
@@ -160,5 +162,30 @@ describe("WebhookForm validation error surfacing", () => {
         screen.queryByText("Header value is too long"),
       ).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("WebhookForm delete", () => {
+  beforeEach(() => resetFormHarness());
+
+  it("keeps a refused delete in the dialog, with the backend's message", async () => {
+    setData({
+      id: "wh1",
+      name: "Ops",
+      url: "https://hooks.test/ops",
+      events: ["chat.created"],
+      enabled: true,
+    });
+    stubRejectedSave("Webhook is busy", 409);
+
+    render(<WebhookForm orgId="org1" workspaceId="ws1" webhookId="wh1" />);
+    fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(await within(dialog).findByText("Webhook is busy")).toBeVisible();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 });

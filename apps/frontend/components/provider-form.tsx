@@ -700,6 +700,7 @@ const ProviderForm = ({
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete({
@@ -707,10 +708,7 @@ const ProviderForm = ({
     scope,
     id: providerId,
     onSuccess: () => router.push(listHref),
-    onError: (message, outcome, { close }) => {
-      toastGuidanceOrError(message, outcome);
-      close();
-    },
+    guidanceOnForbidden: true,
   });
 
   // The Web-search backends this deployment has installed (ADR-0014). Org-scoped
@@ -1369,6 +1367,7 @@ const ProviderForm = ({
         description="Are you sure you want to delete this provider? This action cannot be undone."
         onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
 
       <ConfirmDialog

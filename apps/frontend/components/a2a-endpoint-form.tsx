@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import {
   A2A_ENDPOINT_DESCRIPTION_MAX_LENGTH,
   A2A_ENDPOINT_NAME_MAX_LENGTH,
@@ -132,6 +131,7 @@ const A2aEndpointForm = ({
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete({
@@ -140,10 +140,6 @@ const A2aEndpointForm = ({
     id: endpointId,
     successMessage: "A2A endpoint deleted",
     onSuccess: () => router.push(routes.a2aEndpoints),
-    onError: (message, _outcome, { close }) => {
-      toast.error(message);
-      close();
-    },
   });
 
   // Picking an Agent fills the name and description, unless the Owner has
@@ -304,6 +300,7 @@ const A2aEndpointForm = ({
         description="Its URL and every one of its tokens stop working straight away."
         onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
     </div>
   );

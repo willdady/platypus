@@ -692,6 +692,7 @@ const TriggerForm = ({
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete({
@@ -699,10 +700,6 @@ const TriggerForm = ({
     scope: { orgId, workspaceId },
     id: triggerId,
     onSuccess: () => router.push(workspaceRoutes(orgId, workspaceId).root),
-    onError: (message, _outcome, { close }) => {
-      toast.error(message);
-      close();
-    },
   });
 
   const effectiveCronExpression =
@@ -1709,6 +1706,7 @@ const TriggerForm = ({
         description="Are you sure you want to delete this trigger? This will also delete all run history for this trigger. This action cannot be undone."
         onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
 
       <ConfirmDialog

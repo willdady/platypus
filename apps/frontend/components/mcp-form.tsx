@@ -246,6 +246,7 @@ const McpForm = ({
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
     isDeleting,
+    deleteError,
     openDeleteDialog,
     handleDelete,
   } = useEntityDelete({
@@ -253,10 +254,7 @@ const McpForm = ({
     scope,
     id: mcpId,
     onSuccess: () => router.push(listPath),
-    onError: (message, outcome, { close }) => {
-      toastGuidanceOrError(message, outcome);
-      close();
-    },
+    guidanceOnForbidden: true,
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -879,6 +877,7 @@ const McpForm = ({
         description="Are you sure you want to delete this MCP server? This action cannot be undone."
         onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
     </div>
   );

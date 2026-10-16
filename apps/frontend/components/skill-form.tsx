@@ -34,7 +34,6 @@ import {
   type Skill,
   type Agent,
 } from "@platypus/schemas";
-import { toast } from "sonner";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
@@ -175,17 +174,7 @@ const SkillForm = ({
     scope,
     id: skillId,
     onSuccess: () => router.push(returnPath),
-    onError: (message, outcome, { close, setError, stopLoading }) => {
-      if (outcome.outcome === "forbidden") {
-        // Guidance, not a failure — the backend's message already says
-        // where the Shared resource is actually managed (#570).
-        toast.info(message);
-        close();
-      } else {
-        setError(message);
-        stopLoading();
-      }
-    },
+    guidanceOnForbidden: true,
   });
 
   // Delete checks the saved agent set, so toggles not yet saved would make it
