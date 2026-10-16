@@ -79,6 +79,7 @@ import {
 } from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 import {
   NeedsSandboxBadge,
   SkillImportButton,
@@ -427,9 +428,10 @@ export const SkillsList = ({
               <li key={skill.id}>
                 <Item
                   variant="outline"
-                  className={`h-full cursor-pointer ${
-                    workspaceId && agentCount === 0 ? "border-warning" : ""
-                  }`}
+                  className={cn(
+                    "h-full cursor-pointer",
+                    workspaceId && agentCount === 0 && "border-warning",
+                  )}
                   asChild
                 >
                   <Link href={`${editBasePath}/${skill.id}`}>

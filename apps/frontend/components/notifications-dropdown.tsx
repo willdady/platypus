@@ -25,6 +25,7 @@ import Link from "next/link";
 import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 import { userRoutes, workspaceRoutes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 
 interface NotificationsDropdownProps {
   orgId?: string;
@@ -242,7 +243,10 @@ export function NotificationsDropdown({
                               e.stopPropagation();
                             }
                           }}
-                          className={`text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary [&_ul]:m-0 [&_ol]:m-0 [&_li]:py-0 ${isExpanded ? "" : "line-clamp-2"}`}
+                          className={cn(
+                            "text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary [&_ul]:m-0 [&_ol]:m-0 [&_li]:py-0",
+                            !isExpanded && "line-clamp-2",
+                          )}
                         >
                           <Markdown
                             allowedElements={[

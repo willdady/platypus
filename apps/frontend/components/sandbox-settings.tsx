@@ -10,6 +10,7 @@ import { type Sandbox } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canConfigureSandbox } from "@/lib/authorization";
 import { scopedUrl, writeAt, type FormDraft } from "@/lib/api-write";
+import { optionalFetcher } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -268,25 +269,10 @@ const SandboxSettings = ({
   // can't drift apart.
   const sandboxUrl = scopedUrl(backendUrl, "sandbox", scope);
 
-  const sandboxFetcher = async (url: string): Promise<Sandbox | null> => {
-    const res = await fetch(url, { credentials: "include" });
-    if (res.status === 404) return null;
-    if (!res.ok) {
-      const error: Error & { info?: unknown; status?: number } = new Error(
-        "Failed to load sandbox",
-      );
-      const info = await res.json().catch(() => ({}));
-      error.info = info;
-      error.status = res.status;
-      throw error;
-    }
-    return res.json();
-  };
-
   const { data, error, isLoading, mutate } = useScopedSWR<Sandbox | null>(
     "sandbox",
     draft ? null : scope,
-    { fetcher: sandboxFetcher },
+    { fetcher: optionalFetcher },
   );
 
   const { data: backendsData, isLoading: backendsLoading } = useScopedSWR<{
