@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { notFound } = vi.hoisted(() => ({
   notFound: vi.fn(() => {
@@ -34,7 +34,6 @@ const stubWorkspaceRead = (status: number) =>
 beforeEach(() => {
   notFound.mockClear();
 });
-afterEach(() => vi.unstubAllGlobals());
 
 describe("WorkspaceLayout", () => {
   it("renders the Workspace it read", async () => {

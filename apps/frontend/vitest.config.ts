@@ -12,6 +12,16 @@ export default defineConfig({
     execArgv: ["--no-experimental-webstorage"],
     include: ["**/*.test.ts", "**/*.test.tsx"],
     setupFiles: ["./vitest.setup.ts"],
+    // Before each test: clear every spy's calls, restore every `vi.spyOn`,
+    // and undo every `vi.stubGlobal` / `vi.stubEnv`, so no test file repeats
+    // that cleanup by hand. In Vitest 4 neither clearing nor restoring
+    // touches a `vi.fn()`'s implementation, so module-mock factories keep
+    // working; anything stubbed in a `beforeAll` is undone before the first
+    // test, so stub in `beforeEach` instead.
+    clearMocks: true,
+    restoreMocks: true,
+    unstubGlobals: true,
+    unstubEnvs: true,
     // What `lib/env.ts` validates; a real deployment must set it too.
     env: { BACKEND_URL: "http://localhost:4001" },
     coverage: {

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { Agent, Chat, Provider } from "@platypus/schemas";
 import { resolveRestoredSelection } from "./restore-selection";
 
@@ -18,10 +18,6 @@ const agent = (over: Partial<Agent> = {}): Agent =>
     modelId: "gpt-4",
     ...over,
   }) as unknown as Agent;
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
   it("restores the chat's Agent when it still exists", () => {

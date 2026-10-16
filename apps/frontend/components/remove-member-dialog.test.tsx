@@ -4,18 +4,14 @@ import type { OrgMemberListItem } from "@platypus/schemas";
 import {
   authMock,
   mockScopedSWR,
-  navigationMock,
   renderList,
   resetListHarness,
   stubAcceptedSave,
   swrMock,
-  toastMock,
 } from "@/test/list-test-harness";
 import { selectOption } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("next/navigation", () => navigationMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { RemoveMemberDialog } from "./remove-member-dialog";

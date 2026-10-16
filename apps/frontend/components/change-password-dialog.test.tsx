@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { ChangePasswordDialog } from "./change-password-dialog";
@@ -36,14 +36,6 @@ const renderDialog = () => {
 
 const submit = () =>
   fireEvent.click(screen.getByRole("button", { name: "Update password" }));
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("ChangePasswordDialog", () => {
   it("masks the new password until revealed", () => {

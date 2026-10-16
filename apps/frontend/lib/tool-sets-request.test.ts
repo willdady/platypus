@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fetchToolSets } from "./tool-sets-request";
 
 const cookie = "better-auth.session_token=abc";
@@ -24,11 +24,6 @@ function httpResponse(body: unknown, status = 200) {
 describe("fetchToolSets", () => {
   beforeEach(() => {
     vi.stubEnv("INTERNAL_BACKEND_URL", "http://backend:4000");
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
   });
 
   it("returns the tool sets when the request succeeds", async () => {

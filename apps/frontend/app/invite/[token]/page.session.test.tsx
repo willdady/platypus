@@ -45,7 +45,6 @@ function Probe() {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
   backendUrl = `http://localhost:${4100 + ++sequence}`;
   currentUser = null;
   registrationConflict = false;

@@ -90,17 +90,10 @@ import {
   RUN_STEP_LIMIT_NOTICE,
 } from "@/components/turn-notice";
 import { RUN_SUPPRESSED_NOTICE } from "@/components/trigger-run-row";
-import {
-  installRadixPointerPolyfills,
-  installResizeObserverStub,
-  openDropdownMenu,
-  selectOption,
-} from "@/test/test-utils";
+import { openDropdownMenu, selectOption } from "@/test/test-utils";
 
 // Radix Tooltip content measures itself on focus, which jsdom has no
 // ResizeObserver for. The row's ⋮ menu needs the pointer polyfills.
-installResizeObserverStub();
-installRadixPointerPolyfills();
 
 const stats = (overrides?: Partial<TriggerRunStats>): TriggerRunStats => ({
   steps: 1,
@@ -147,7 +140,6 @@ const renderRuns = async (rows: TriggerRunWithTrigger[]) => {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
   searchParams.current = new URLSearchParams();
   state.pages = [];
   state.size = 1;
@@ -584,7 +576,6 @@ describe("Trigger runs copy-run-id control", () => {
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     // jsdom has no execCommand; drop the one a test installed.
     Reflect.deleteProperty(document, "execCommand");
   });

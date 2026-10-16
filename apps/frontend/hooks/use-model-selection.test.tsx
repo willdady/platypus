@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import type { Agent, Chat, Provider } from "@platypus/schemas";
 import {
@@ -71,10 +71,6 @@ const base: UseModelSelectionInput = {
 
 beforeEach(() => {
   localStorage.clear();
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
 });
 
 describe("useModelSelection — nothing paints before the ladder resolves", () => {

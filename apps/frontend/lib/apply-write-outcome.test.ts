@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { toast } from "sonner";
 import {
   applyWriteOutcome,
@@ -13,10 +13,6 @@ vi.mock("sonner", () => ({
 }));
 
 describe("applyWriteOutcome", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("revalidates every key and calls onSuccess with the data on success", async () => {
     const mutate = vi.fn();
     const onSuccess = vi.fn();
@@ -204,10 +200,6 @@ describe("applyWriteOutcome", () => {
 });
 
 describe("applyDeleteOutcome", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("revalidates and calls onSuccess on success", async () => {
     const mutate = vi.fn();
     const onSuccess = vi.fn();
@@ -254,10 +246,6 @@ describe("applyDeleteOutcome", () => {
 });
 
 describe("toastGuidanceOrError", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("shows an info toast for a forbidden outcome", () => {
     toastGuidanceOrError("Managed at the organization level", {
       outcome: "forbidden",

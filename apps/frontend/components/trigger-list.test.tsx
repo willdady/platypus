@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import type { Trigger } from "@platypus/schemas";
 import {
   authMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -20,7 +19,6 @@ import { openDropdownMenu, selectOption } from "@/test/test-utils";
 // --- Module mocks ------------------------------------------------------------
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 // The list renders the stored `nextRunAt` through this formatter; stubbing it
 // keeps the assertion independent of the viewer's locale and time zone.
@@ -61,11 +59,6 @@ function renderTriggers(triggers: Trigger[], menuItem?: string) {
 }
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
 
 // --- Tests -------------------------------------------------------------------
 

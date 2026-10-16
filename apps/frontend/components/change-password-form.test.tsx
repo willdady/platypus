@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { ChangePasswordForm } from "./change-password-form";
@@ -34,10 +34,6 @@ const fill = (current: string, next: string, confirm: string) => {
   fireEvent.change(f.confirm, { target: { value: confirm } });
   fireEvent.click(screen.getByRole("button", { name: "Change password" }));
 };
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
 
 // Toggle independence is RevealableInput's own; here, only that each field is
 // masked and its toggle is wired to it.

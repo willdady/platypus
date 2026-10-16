@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { KanbanCard } from "@platypus/schemas";
 import {
   applyCardMove,
@@ -190,10 +190,6 @@ describe("applyCardMove", () => {
 });
 
 describe("writes", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   const baseUrl = "http://test/boards/board-1";
   const sync = () => ({ setColumns: vi.fn(), refetch: vi.fn() });
   const move = {

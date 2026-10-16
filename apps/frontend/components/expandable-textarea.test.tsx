@@ -1,10 +1,7 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { installRadixPointerPolyfills } from "@/test/test-utils";
 import { ExpandableTextarea } from "./expandable-textarea";
-
-beforeAll(installRadixPointerPolyfills);
 
 function Harness({ onChange }: { onChange?: (value: string) => void }) {
   const [value, setValue] = useState("Hello");

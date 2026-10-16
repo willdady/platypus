@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { fetcher, joinUrl, optionalFetcher } from "./utils";
 
 describe("joinUrl", () => {
@@ -14,10 +14,6 @@ describe("joinUrl", () => {
 });
 
 describe("fetcher", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   const respondWith = (status: number, body: unknown = {}) => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(body), {
@@ -59,10 +55,6 @@ describe("fetcher", () => {
 // longer perform. A brand-new Chat is read before its row exists, so a throwing
 // 404 there disables the poll that is meant to recover the run.
 describe("optionalFetcher", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   const respondWith = (status: number, body: unknown = {}) => {
     vi.stubGlobal(
       "fetch",

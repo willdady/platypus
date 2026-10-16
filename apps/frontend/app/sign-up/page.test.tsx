@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import SignUpPage from "./page";
@@ -75,10 +75,6 @@ describe("SignUpPage when an invitation is required", () => {
 });
 
 describe("SignUpPage form", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   const submit = (container: HTMLElement) => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Ada Lovelace" },

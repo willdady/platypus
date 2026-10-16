@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   writeEntity,
   writeAt,
@@ -18,10 +18,6 @@ const respond = (status: number, body: unknown = {}) => {
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 };
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("writeEntity — transport", () => {
   it("POSTs to the org-scoped collection path when creating with no workspace scope", async () => {

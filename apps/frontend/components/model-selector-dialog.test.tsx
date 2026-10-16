@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import type { Agent, Provider } from "@platypus/schemas";
 import { ModelSelectorDialog } from "./model-selector-dialog";
-import { installResizeObserverStub } from "@/test/test-utils";
 
 const countingProvider = () => {
   let reads = 0;
@@ -30,12 +29,6 @@ const dialog = (providers: Provider[], agents: Agent[] = []) => (
     onModelChange={vi.fn()}
   />
 );
-
-beforeEach(() => {
-  // cmdk scrolls the active item into view and observes its list.
-  Element.prototype.scrollIntoView = () => {};
-  installResizeObserverStub();
-});
 
 describe("ModelSelectorDialog model options", () => {
   // Issue #869: the picker re-normalised every provider's model list on each

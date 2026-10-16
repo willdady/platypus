@@ -24,19 +24,16 @@ import {
   installSpeechRecognition,
   uninstallSpeechRecognition,
 } from "@/test/chat-test-fixtures";
-import { installMatchMediaStub } from "@/test/test-utils";
 
 /** The session the editor most recently constructed. */
 let recognition: ReturnType<typeof installSpeechRecognition>;
 
 beforeEach(() => {
-  installMatchMediaStub();
   recognition = installSpeechRecognition();
 });
 
 afterEach(() => {
   uninstallSpeechRecognition();
-  vi.unstubAllGlobals();
 });
 
 const provider = {

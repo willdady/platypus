@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   authMock,
-  toastMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -12,7 +11,6 @@ import {
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { formatDateTime } from "@/lib/format-date";
@@ -53,10 +51,6 @@ const revoke = async (name: string, label: string) => {
 };
 
 beforeEach(resetListHarness);
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("OrgA2aEndpointsList", () => {
   it("lists each endpoint with its Agent, Workspace and Owner, and its tokens beneath", () => {

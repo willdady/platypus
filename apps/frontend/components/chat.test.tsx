@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ChatStatus, FileUIPart, PrepareSendMessagesRequest } from "ai";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
@@ -781,8 +781,6 @@ describe("streaming renders", () => {
 // The server owns the Transcript (ADR-0026): a turn sends what is new, never
 // the history, and a delete is stored the moment it is clicked.
 describe("the server-owned Transcript", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
   const prepare = (options: Partial<Parameters<PrepareRequest>[0]>) => {
     renderChat();
     return harness.chatOptions!.transport.prepareSendMessagesRequest({
@@ -1383,8 +1381,6 @@ describe("starting a turn", () => {
 // Moving between Alternatives (#712): a local swap straight away, then the
 // server's path. Nothing fetched in between may drag the view back.
 describe("switching between Alternatives", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
   const SWITCH_URL = `${CHAT_KEY}/active-leaf`;
 
   /** u1 → a1 → u2 → a2 → u3 → a3, with u2 edited twice: u2b → a2b, and u2c. */

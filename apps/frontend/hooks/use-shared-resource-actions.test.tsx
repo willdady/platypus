@@ -5,13 +5,11 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   toastError,
-  toastMock,
 } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
 }));
-vi.mock("sonner", () => toastMock);
 
 import {
   usePromoteShared,
@@ -28,7 +26,6 @@ const skill = { id: "s1", name: "Deploy" };
 const scope = { orgId: "org1", workspaceId: "ws1" };
 
 afterEach(() => {
-  vi.unstubAllGlobals();
   toastError.mockClear();
 });
 

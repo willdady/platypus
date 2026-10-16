@@ -37,8 +37,6 @@ describe("useStreamingFavicon", () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   it("does nothing while inactive", async () => {

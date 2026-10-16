@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   act,
   fireEvent,
@@ -6,9 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { toastMock, stubSaveSequence } from "@/test/list-test-harness";
-
-vi.mock("sonner", () => toastMock);
+import { stubSaveSequence } from "@/test/list-test-harness";
 
 import { toast } from "sonner";
 import { useSandboxUploads } from "./use-sandbox-uploads";
@@ -28,8 +26,6 @@ const harness = () => {
 };
 
 const file = (name: string, body = "a,b") => new File([body], name);
-
-beforeEach(() => vi.clearAllMocks());
 
 describe("useSandboxUploads", () => {
   it("puts each file at the Sandbox root under its own name", async () => {

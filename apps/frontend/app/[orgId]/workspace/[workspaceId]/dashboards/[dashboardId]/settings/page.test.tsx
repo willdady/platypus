@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   act,
   fireEvent,
@@ -9,9 +9,7 @@ import {
 } from "@testing-library/react";
 import { Suspense } from "react";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   configuredMutate,
   resetFormHarness,
@@ -24,9 +22,7 @@ import {
   toastError,
 } from "@/test/form-test-harness";
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 vi.mock("@/components/back-button", () => ({ BackButton: () => null }));
 
@@ -54,7 +50,6 @@ const renderPage = async () => {
 
 describe("DashboardSettingsPage", () => {
   beforeEach(() => resetFormHarness());
-  afterEach(() => vi.unstubAllGlobals());
 
   it("lets the Name field be cleared, disabling Save", async () => {
     setDataFor("/dashboards/d1", { id: "d1", name: "Ops", description: null });

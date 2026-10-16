@@ -1,9 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   push,
   resetFormHarness,
@@ -12,11 +10,9 @@ import {
   stubAcceptedSave,
   savedBody,
 } from "@/test/form-test-harness";
-import { installResizeObserverStub, selectOption } from "@/test/test-utils";
+import { selectOption } from "@/test/test-utils";
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { BlueprintForm } from "./blueprint-form";
@@ -55,7 +51,6 @@ describe("BlueprintForm shared resource groups", () => {
 describe("BlueprintForm Tier 2 provider slots", () => {
   beforeEach(() => {
     resetFormHarness();
-    installResizeObserverStub();
     setDataFor("/organizations/org1/providers", {
       results: [{ id: "p1", name: "OpenAI" }],
     });
@@ -63,8 +58,6 @@ describe("BlueprintForm Tier 2 provider slots", () => {
       results: [{ id: "a1", name: "Helper" }],
     });
   });
-
-  afterEach(() => vi.unstubAllGlobals());
 
   const taskModelSelect = () =>
     screen.getByRole("combobox", { name: "Task model provider" });

@@ -1,12 +1,4 @@
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  beforeEach,
-  afterEach,
-} from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   act,
   fireEvent,
@@ -16,12 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import {
-  installMatchMediaStub,
-  installResizeObserverStub,
-  installRadixPointerPolyfills,
-  jsonResponse,
-} from "@/test/test-utils";
+import { jsonResponse } from "@/test/test-utils";
 import type { Actor } from "@/lib/authorization";
 
 // --- Module mocks ------------------------------------------------------------
@@ -51,8 +38,6 @@ vi.mock("@/components/auth-provider", () => ({
 }));
 
 vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: vi.fn() }) }));
-
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 const LOADING = { data: undefined, isLoading: true };
 
@@ -112,8 +97,6 @@ function search(value: string) {
 
 // --- Tests -------------------------------------------------------------------
 
-beforeAll(installMatchMediaStub);
-
 beforeEach(() => {
   vi.useFakeTimers();
   reads.clear();
@@ -140,7 +123,6 @@ describe("AppSidebar New chat", () => {
     beforeEach(() => {
       // Radix opens the tooltip on real timers and measures it.
       vi.useRealTimers();
-      installResizeObserverStub();
     });
 
     it.each<[string, Actor, boolean, string]>([
@@ -307,7 +289,6 @@ describe("AppSidebar workspace switcher", () => {
   };
 
   it("lists Workspaces by name without reordering the cached results", () => {
-    installRadixPointerPolyfills();
     const workspaces = {
       results: [
         { id: "ws2", name: "Beta", organizationId: "org1" },
@@ -331,7 +312,6 @@ describe("AppSidebar workspace switcher", () => {
     ["an Org Admin", "org-admin", true],
     ["a member who owns the Workspace", "workspace-owner", false],
   ] as const)("offers Add workspace to %s (%s): %s", (_who, actor, shown) => {
-    installRadixPointerPolyfills();
     auth.actor = actor;
     seedHeader();
     renderSidebar();
@@ -345,10 +325,7 @@ describe("AppSidebar workspace switcher", () => {
   describe("Organization settings item", () => {
     beforeEach(() => {
       vi.useRealTimers();
-      installRadixPointerPolyfills();
     });
-
-    afterEach(() => vi.unstubAllGlobals());
 
     it.each<Actor>(["operator", "org-admin"])(
       "links the %s to the Organization's settings",
@@ -385,10 +362,7 @@ describe("AppSidebar chat actions", () => {
   beforeEach(() => {
     // The writes resolve on real promises; nothing here needs the debounce.
     vi.useRealTimers();
-    installRadixPointerPolyfills();
   });
-
-  afterEach(() => vi.unstubAllGlobals());
 
   /** Opens a chat row's menu. */
   const openChatMenu = (title: string) => {

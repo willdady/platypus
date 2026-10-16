@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import {
   authMock,
   authState,
   swrMock,
-  toastMock,
   mockScopedSWR,
   mutate,
   resetListHarness,
@@ -18,7 +17,6 @@ import { savedBody } from "@/test/form-test-harness";
 // --- Module mocks ------------------------------------------------------------
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { SandboxSettings } from "./sandbox-settings";
@@ -69,7 +67,6 @@ const save = () =>
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
 beforeEach(resetListHarness);
-afterEach(() => vi.unstubAllGlobals());
 
 // --- Tests -------------------------------------------------------------------
 

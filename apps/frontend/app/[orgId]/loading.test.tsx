@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { installMatchMediaStub } from "@/test/test-utils";
 
 const nav = vi.hoisted(() => ({ pathname: "/org2" }));
 
@@ -43,7 +42,6 @@ vi.mock("@/hooks/use-scoped-swr", () => ({
 import OrganizationLoading from "./loading";
 import { resourcePageLayout } from "@/components/resource-page";
 
-beforeAll(installMatchMediaStub);
 afterEach(() => {
   nav.pathname = "/org2";
 });

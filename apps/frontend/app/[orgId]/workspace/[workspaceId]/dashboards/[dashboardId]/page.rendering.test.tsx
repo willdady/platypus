@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen, fireEvent } from "@testing-library/react";
 import { Suspense } from "react";
 import type { Dashboard, Widget } from "@platypus/schemas";
-import { installResizeObserverStub } from "@/test/test-utils";
 
 const ORG_ID = "org-1";
 const WS_ID = "ws-1";
@@ -167,12 +166,6 @@ describe("Dashboard render stability", () => {
     widgetsError = undefined;
     swrCalls.length = 0;
     widgetRender.mockClear();
-    installResizeObserverStub();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   it("polls the dashboard in view but not the switcher list", async () => {
@@ -249,12 +242,6 @@ describe("Dashboard loading and failure states", () => {
     widgetsData = { results: [] };
     dashboardError = undefined;
     widgetsError = undefined;
-    installResizeObserverStub();
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   it("replaces the placeholder with a notice when the dashboard read fails", async () => {

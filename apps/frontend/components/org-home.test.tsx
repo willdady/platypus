@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { installMatchMediaStub } from "@/test/test-utils";
 import type { Actor, OrgRole } from "@/lib/authorization";
 
 const auth = vi.hoisted(() => ({
@@ -28,8 +27,6 @@ vi.mock("@/hooks/use-scoped-swr", () => ({
 }));
 
 import { OrgHome } from "./org-home";
-
-beforeAll(installMatchMediaStub);
 
 const viewers: [string, Actor, OrgRole | null, boolean][] = [
   ["an Org Member", "org-member", "member", false],

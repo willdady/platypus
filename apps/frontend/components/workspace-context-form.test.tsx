@@ -1,10 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Context } from "@platypus/schemas";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   configuredMutate,
   push,
   toastError,
@@ -31,9 +29,7 @@ const state = vi.hoisted(() => ({
   noOrgs: false,
 }));
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 
 const workspaces = [
   { id: "ws1", name: "Alpha", organizationId: "o1" },
@@ -134,11 +130,6 @@ describe("WorkspaceContextForm writes", () => {
     state.contextData = undefined;
     state.orgsError = undefined;
     state.workspacesError = undefined;
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   it("creates through writeAt, revalidates the list, and lands on it", async () => {
@@ -245,11 +236,6 @@ describe("WorkspaceContextForm workspace read", () => {
     state.workspacesError = undefined;
     state.workspacesPending = false;
     state.noOrgs = false;
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
   it("holds the Workspace picker disabled, and says why, while workspaces load", () => {

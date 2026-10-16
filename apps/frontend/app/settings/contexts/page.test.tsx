@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   stubAcceptedSave,
   stubRejectedSave,
   toastError,
-  toastMock,
   toastSuccess,
 } from "@/test/test-utils";
 
@@ -14,8 +13,6 @@ vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
   useAuth: () => ({ user: { id: "u1" } }),
 }));
-
-vi.mock("sonner", () => toastMock);
 
 vi.mock("@/components/contexts-list", () => ({
   ContextsList: () => null,
@@ -53,11 +50,6 @@ describe("ContextsPage global context field", () => {
     swrState.response = WARM;
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-    vi.unstubAllGlobals();
-  });
-
   it("shows the saved global context immediately when SWR data is already warm on mount", () => {
     render(<ContextsPage />);
 
@@ -91,8 +83,6 @@ describe("ContextsPage global context field", () => {
 });
 
 describe("ContextsPage revalidation", () => {
-  afterEach(() => vi.clearAllMocks());
-
   it("keeps what the user is typing when the contexts revalidate", () => {
     swrState.response = WARM;
     const { rerender } = render(<ContextsPage />);
@@ -113,11 +103,6 @@ describe("ContextsPage revalidation", () => {
 
 describe("ContextsPage saving the global context", () => {
   const NONE = { ...WARM, data: { results: [] } };
-
-  afterEach(() => {
-    vi.clearAllMocks();
-    vi.unstubAllGlobals();
-  });
 
   const save = (content: string) => {
     fireEvent.change(screen.getByRole("textbox"), {

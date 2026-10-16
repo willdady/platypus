@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import {
   authMock,
-  toastMock,
   swrMock,
   configuredMutate,
   toastSuccess,
@@ -16,7 +15,6 @@ import {
 } from "@/test/form-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 vi.mock("swr", () => swrMock);
 
 import { useEntityDelete, useEntityForm } from "./use-entity-form";
@@ -201,10 +199,6 @@ describe("useEntityForm record read", () => {
 
 describe("useEntityForm submit lifecycle", () => {
   beforeEach(() => resetFormHarness());
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
 
   it("writes, revalidates, toasts and hands the saved record on", async () => {
     const fetchMock = stubAcceptedSave({ id: "s1" });
@@ -259,10 +253,6 @@ describe("useEntityForm submit lifecycle", () => {
 
 describe("useEntityDelete lifecycle", () => {
   beforeEach(() => resetFormHarness());
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
 
   it("deletes, revalidates and hands off on success", async () => {
     const fetchMock = stubAcceptedSave({});

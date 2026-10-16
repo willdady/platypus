@@ -54,10 +54,6 @@ const renderPage = () => {
 };
 
 describe("SignInPage sign-up link", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("offers Sign up while sign-up is open", async () => {
     stubSignUpAvailability(true);
 
@@ -84,7 +80,6 @@ describe("SignInPage sign-up link", () => {
 
 describe("SignInPage form", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     stubSignUpAvailability(true);
   });
 
@@ -154,7 +149,6 @@ describe("SignInPage form", () => {
 // The form is for signing in; a reader who already is goes into the app.
 describe("SignInPage with a session", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     stubSignUpAvailability(true);
     auth.user = null;
   });

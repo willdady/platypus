@@ -1,10 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Provider, ToolSet } from "@platypus/schemas";
 import {
-  navigationMock,
   authMock,
-  toastMock,
   swrMock,
   push,
   toastError,
@@ -18,9 +16,7 @@ import {
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("next/navigation", () => navigationMock);
 vi.mock("@/components/auth-provider", () => authMock);
-vi.mock("sonner", () => toastMock);
 // useSWR is called for providers, skills, agents, and (when editing) the
 // agent. The harness keys its responses off the request URL suffix, so
 // each call gets the right payload; a key with no matcher (skills, the
@@ -57,10 +53,6 @@ describe("AgentForm validation error surfacing", () => {
   beforeEach(() => {
     resetFormHarness();
     registerSwrData();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   it("renders an inline error and marks the Model control invalid when the server rejects modelId", async () => {
@@ -147,10 +139,6 @@ describe("AgentForm avatar write partial-success handling", () => {
     setDataFor("/agents/a1", undefined);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("surfaces a toast but still navigates when the avatar upload fails after a successful agent save", async () => {
     const file = new File(["avatar-bytes"], "avatar.png", {
       type: "image/png",
@@ -226,10 +214,6 @@ describe("AgentForm tool set load failure", () => {
     resetFormHarness();
     registerSwrData();
     setDataFor("/agents/a1", undefined);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   it("names authentication as the cause, and keeps the form usable, when the tool sets request was rejected as unauthorized", () => {

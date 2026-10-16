@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 import {
@@ -7,11 +7,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { installRadixPointerPolyfills } from "@/test/test-utils";
-
-beforeAll(() => {
-  installRadixPointerPolyfills();
-});
 
 function Menu({
   onSelect,

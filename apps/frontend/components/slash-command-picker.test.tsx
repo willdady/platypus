@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useRef, useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Skill } from "@platypus/schemas";
@@ -6,11 +6,6 @@ import { Composer } from "./composer";
 import { SlashCommandPicker } from "./slash-command-picker";
 import { useSlashCommands } from "@/hooks/use-slash-commands";
 import { composerProvider } from "@/test/chat-test-fixtures";
-import { installMatchMediaStub } from "@/test/test-utils";
-
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
-
-beforeEach(installMatchMediaStub);
 
 const skill = (
   name: string,
