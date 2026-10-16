@@ -193,24 +193,24 @@ export const useModelSelection = ({
       if (!decoded) return;
       // Exactly one of "an Agent" or "a Provider's model" is ever selected, so
       // each choice clears the other side rather than layering over it.
-      if (decoded.type === "agent") {
-        setChosen({ agentId: decoded.agentId, modelId: "", providerId: "" });
-        writeStoredSelection(STORAGE_KEY, {
-          type: "agent",
-          id: decoded.agentId,
-        });
-      } else {
-        setChosen({
-          agentId: "",
-          providerId: decoded.providerId,
-          modelId: decoded.modelReference,
-        });
-        writeStoredSelection(STORAGE_KEY, {
-          type: "provider",
-          providerId: decoded.providerId,
-          modelId: decoded.modelReference,
-        });
-      }
+      const stored: StoredSelection =
+        decoded.type === "agent"
+          ? { type: "agent", id: decoded.agentId }
+          : {
+              type: "provider",
+              providerId: decoded.providerId,
+              modelId: decoded.modelReference,
+            };
+      setChosen(
+        stored.type === "agent"
+          ? { agentId: stored.id, modelId: "", providerId: "" }
+          : {
+              agentId: "",
+              providerId: stored.providerId,
+              modelId: stored.modelId,
+            },
+      );
+      writeStoredSelection(STORAGE_KEY, stored);
     },
     [STORAGE_KEY],
   );
