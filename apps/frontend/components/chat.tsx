@@ -27,7 +27,7 @@ import {
   UNTITLED_CHAT_TITLE,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
-import { joinUrl, optionalFetcher } from "@/lib/utils";
+import { cn, joinUrl, optionalFetcher } from "@/lib/utils";
 import {
   chatPollIntervalMs,
   classifyChatError,
@@ -715,7 +715,10 @@ export const Chat = ({
 
   return (
     <div
-      className={`relative size-full flex flex-col overflow-hidden h-full ${messages.length === 0 ? "justify-center" : ""}`}
+      className={cn(
+        "relative size-full flex flex-col overflow-hidden h-full",
+        messages.length === 0 && "justify-center",
+      )}
     >
       <h1 className="sr-only">
         {chatData?.title && chatData.title !== UNTITLED_CHAT_TITLE
@@ -725,7 +728,10 @@ export const Chat = ({
       {/* The transcript is a live log; marked busy while a reply streams so
           screen readers wait for it rather than reading every token. */}
       <Conversation
-        className={`overflow-y-hidden ${messages.length === 0 ? "flex-none" : ""}`}
+        className={cn(
+          "overflow-y-hidden",
+          messages.length === 0 && "flex-none",
+        )}
         data-conversation
         aria-busy={isTurnInFlight(effectiveStatus)}
       >

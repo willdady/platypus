@@ -4,6 +4,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { RefreshCw } from "lucide-react";
 import { useTimeout } from "@/hooks/use-timeout";
+import { cn } from "@/lib/utils";
 
 /** How far the finger must travel before releasing triggers a refresh. */
 const REFRESH_THRESHOLD = 80;
@@ -165,7 +166,7 @@ export function PullToRefresh({
   return (
     <div
       ref={containerRef}
-      className={`relative [overscroll-behavior-y:contain] ${className ?? ""}`}
+      className={cn("relative [overscroll-behavior-y:contain]", className)}
     >
       <AnimatePresence>
         {showIndicator && (

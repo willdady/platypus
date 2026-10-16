@@ -5,6 +5,8 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "esModuleInterop": true,

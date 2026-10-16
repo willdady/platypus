@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { cn, fetcher, joinUrl } from "@/lib/utils";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -260,7 +260,10 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       <Button
         type="submit"
         disabled={isSubmitting || !canSubmit}
-        className={`w-full md:w-auto mt-2 ${!isSubmitting ? "cursor-pointer" : ""}`}
+        className={cn(
+          "w-full md:w-auto mt-2",
+          !isSubmitting && "cursor-pointer",
+        )}
       >
         {isSubmitting ? "Sending..." : "Send invitation"}
       </Button>

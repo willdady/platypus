@@ -50,6 +50,7 @@ import { cachedTokenBreakdown } from "@/lib/cached-tokens";
 import { formatTokens } from "@/lib/context-window";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { workspaceRoutes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 
 /**
  * What the runs list says about a firing the run-rate breaker dropped before it
@@ -147,7 +148,7 @@ export const StatusIcon = ({ status }: { status: TriggerRunStatus }) => {
       title={label}
       className="flex translate-y-px"
     >
-      <Icon className={`h-3 w-3 ${className}`} />
+      <Icon className={cn("h-3 w-3", className)} />
     </span>
   );
 };
