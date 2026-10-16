@@ -243,7 +243,10 @@ export const ResourceList = ({
                 <ItemTitle>{resource.name}</ItemTitle>
                 {resource.scope === "organization" && <OrganizationBadge />}
               </div>
-              <p className="text-sm text-muted-foreground truncate">
+              <p
+                className="text-sm text-muted-foreground truncate"
+                title={resource[config.secondLine]}
+              >
                 {resource[config.secondLine]}
               </p>
               {canManageAttachments && (

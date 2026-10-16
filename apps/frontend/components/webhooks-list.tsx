@@ -94,7 +94,10 @@ const WebhooksList = ({
                     <ItemTitle>{webhook.name}</ItemTitle>
                     {!webhook.enabled && <DisabledBadge />}
                   </div>
-                  <p className="text-sm text-muted-foreground truncate">
+                  <p
+                    className="text-sm text-muted-foreground truncate"
+                    title={webhook.url}
+                  >
                     {webhook.url}
                   </p>
                 </ItemContent>
