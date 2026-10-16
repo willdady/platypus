@@ -6,6 +6,7 @@ import {
   type NormalizedWebToolResult,
 } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
+import { setErrorReporter } from "@/lib/error-reporting";
 
 import {
   ChatMessage,
@@ -95,6 +96,66 @@ describe("ChatMessage agent attribution", () => {
 });
 
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
+
+describe("ChatMessage part that fails to render", () => {
+  // A tool input no JSON can carry: rendering it throws, the way a malformed
+  // part from a misbehaving tool would.
+  const brokenToolPart = {
+    type: "dynamic-tool",
+    toolName: "broken",
+    toolCallId: "call-1",
+    state: "output-available",
+    input: { count: BigInt(1) },
+    output: "done",
+  } as unknown as MessagePart;
+
+  const messageWithBrokenPart: PlatypusUIMessage = {
+    id: "m1",
+    role: "assistant",
+    parts: [
+      { type: "text", text: "Before" },
+      brokenToolPart,
+      { type: "text", text: "After" },
+    ],
+  };
+
+  const openBrokenTool = () =>
+    fireEvent.click(screen.getByRole("button", { name: /broken/ }));
+
+  it("replaces only that part with a compact notice", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    renderMessage(messageWithBrokenPart);
+    openBrokenTool();
+
+    expect(screen.getByText("Couldn't render this part")).toBeInTheDocument();
+    expect(screen.getByText("Before")).toBeInTheDocument();
+    expect(screen.getByText("After")).toBeInTheDocument();
+  });
+
+  it("keeps the message's own actions", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    renderMessage(messageWithBrokenPart);
+    openBrokenTool();
+
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
+  it("hands the failure to the error reporter", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const reporter = vi.fn();
+    setErrorReporter(reporter);
+    try {
+      renderMessage(messageWithBrokenPart);
+      openBrokenTool();
+    } finally {
+      setErrorReporter(null);
+    }
+
+    expect(reporter).toHaveBeenCalledWith(expect.any(TypeError), {
+      source: "message-part",
+    });
+  });
+});
 
 describe("ChatMessage image parts", () => {
   const userMessageWithFilePart = (part: MessagePart): PlatypusUIMessage => ({

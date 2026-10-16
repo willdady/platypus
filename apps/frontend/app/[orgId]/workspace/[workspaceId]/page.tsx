@@ -33,6 +33,7 @@ import Link from "next/link";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { ListError } from "@/components/list-state";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
+import { WorkspaceNotFound } from "@/components/workspace-not-found";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
@@ -282,7 +283,7 @@ const Workspace = () => {
   }
 
   if (!workspaceData) {
-    return <div>Workspace not found</div>;
+    return <WorkspaceNotFound />;
   }
 
   const workspace = workspaceData;
