@@ -1042,6 +1042,6 @@ describe("KanbanBoard load states", () => {
     expect(
       screen.getByRole("heading", { name: "Test Board" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Failed to load board.")).toBeNull();
+    expect(screen.queryByText("Failed to load board.")).not.toBeInTheDocument();
   });
 });

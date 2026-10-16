@@ -69,7 +69,7 @@ describe("OrgSettingsMenu organization heading", () => {
     expect(
       container.querySelector('[data-slot="sidebar-separator"]'),
     ).toBeNull();
-    expect(container.textContent).not.toMatch(/error/i);
+    expect(container).not.toHaveTextContent(/error/i);
     // The settings pages stay fully navigable
     expect(screen.getByRole("link", { name: "Members" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Plugins" })).toBeInTheDocument();

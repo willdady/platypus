@@ -14,7 +14,7 @@ describe("DetailFormState", () => {
   it("holds the form back while the record is loading", () => {
     render(<DetailFormState {...baseProps} isLoading />);
 
-    expect(screen.queryByText("the form")).toBeNull();
+    expect(screen.queryByText("the form")).not.toBeInTheDocument();
   });
 
   it("renders the form once the record is loaded", () => {
@@ -37,7 +37,7 @@ describe("DetailFormState", () => {
     expect(
       screen.getByRole("link", { name: "Back to providers" }),
     ).toHaveAttribute("href", "/org1/settings/providers");
-    expect(screen.queryByText("the form")).toBeNull();
+    expect(screen.queryByText("the form")).not.toBeInTheDocument();
   });
 
   it("explains a forbidden record", () => {
@@ -89,6 +89,6 @@ describe("DetailFormState loading placeholder", () => {
 
     expect(screen.getByLabelText("Loading form")).toBeInTheDocument();
     expect(screen.getByText("the skeleton")).toBeInTheDocument();
-    expect(screen.queryByText("the form")).toBeNull();
+    expect(screen.queryByText("the form")).not.toBeInTheDocument();
   });
 });

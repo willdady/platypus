@@ -84,7 +84,7 @@ describe("Agent pages tool set loading", () => {
   });
 
   for (const page of pages) {
-    describe(page.name, () => {
+    describe(`${page.name}`, () => {
       it("renders instead of throwing when the tool sets request is rejected as unauthorized", async () => {
         stubFetch({ error: "Unauthorized" }, 401);
 

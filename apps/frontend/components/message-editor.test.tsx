@@ -180,7 +180,9 @@ describe("MessageEditor", () => {
 
     expect(screen.getByRole("button", { name: "m1" })).toBeInTheDocument();
     for (const gone of ["Settings", "Search", "Agent Information"]) {
-      expect(screen.queryByRole("button", { name: gone })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: gone }),
+      ).not.toBeInTheDocument();
     }
   });
 
@@ -206,7 +208,7 @@ describe("MessageEditor", () => {
       },
     });
 
-    expect(screen.queryByText("dropped.png")).toBeNull();
+    expect(screen.queryByText("dropped.png")).not.toBeInTheDocument();
   });
 
   // …but a file dropped ON the edit surface is the edit's, and it must not fall

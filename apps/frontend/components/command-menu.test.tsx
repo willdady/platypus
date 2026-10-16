@@ -65,7 +65,9 @@ describe("CommandMenu", () => {
     mockScopedSWR({ "/agents": [{ id: "a1", name: "Researcher" }] });
     openMenu();
 
-    expect(screen.queryByRole("group", { name: "Pinned agents" })).toBeNull();
+    expect(
+      screen.queryByRole("group", { name: "Pinned agents" }),
+    ).not.toBeInTheDocument();
   });
 
   it.each(["agents", "boards", "triggers"])(

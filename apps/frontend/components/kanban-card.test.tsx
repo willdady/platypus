@@ -78,7 +78,7 @@ describe("KanbanCard status", () => {
   it("names no priority when there is none", () => {
     renderCard(makeCard({ priority: "none" }));
 
-    expect(screen.queryByText(/Priority:/)).toBeNull();
+    expect(screen.queryByText(/Priority:/)).not.toBeInTheDocument();
   });
 
   it("picks a label's text colour for contrast with its background", () => {

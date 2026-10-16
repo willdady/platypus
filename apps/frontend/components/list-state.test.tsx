@@ -81,6 +81,8 @@ describe("ListError retry", () => {
   it("offers no retry when the list gives it none", () => {
     render(<ListError error={{ status: 500 }} subject="members" />);
 
-    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
   });
 });

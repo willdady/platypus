@@ -89,9 +89,7 @@ describe("UsersList delete", () => {
     renderUsers([target]);
     await confirmDelete();
 
-    await waitFor(() =>
-      expect(screen.getByText("User owns resources")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("User owns resources")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     expect(toastSuccess).not.toHaveBeenCalled();
     expect(

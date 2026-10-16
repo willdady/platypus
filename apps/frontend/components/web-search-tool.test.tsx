@@ -65,7 +65,7 @@ describe("WebToolCard duration", () => {
     render(<WebToolCard toolPart={searchCall(backendSearch)} />);
 
     expect(screen.getByText("Web search")).toBeInTheDocument();
-    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s)$/)).toBeNull();
+    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s)$/)).not.toBeInTheDocument();
   });
 });
 
@@ -102,7 +102,9 @@ describe("WebToolCard kinds", () => {
 
     openCard();
     expect(screen.getByText("5 results")).toBeInTheDocument();
-    expect(screen.queryByText(/listed above as sources/)).toBeNull();
+    expect(
+      screen.queryByText(/listed above as sources/),
+    ).not.toBeInTheDocument();
   });
 
   it("omits the count line entirely when a native search cannot report one", () => {
@@ -113,7 +115,7 @@ describe("WebToolCard kinds", () => {
     );
 
     openCard();
-    expect(screen.queryByText(/result/)).toBeNull();
+    expect(screen.queryByText(/result/)).not.toBeInTheDocument();
   });
 
   it("titles an opened page distinctly from a search", () => {

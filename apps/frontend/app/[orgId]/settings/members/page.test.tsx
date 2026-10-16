@@ -38,7 +38,7 @@ describe("OrgMembersPage", () => {
     expect(
       screen.getByText("Failed to load members. Server error"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("No members yet")).toBeNull();
+    expect(screen.queryByText("No members yet")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();

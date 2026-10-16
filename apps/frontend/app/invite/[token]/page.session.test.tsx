@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
+  // Manual, deliberately: see the afterEach below.
+  // eslint-disable-next-line testing-library/no-manual-cleanup
   cleanup,
   fireEvent,
   render,

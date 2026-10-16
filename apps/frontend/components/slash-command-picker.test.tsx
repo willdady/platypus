@@ -177,7 +177,7 @@ describe("SlashCommandPicker", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     // The caret sits after the token, so the user keeps typing their prompt.
     expect(textarea.selectionStart).toBe("/blog-post ".length);
-    expect(document.activeElement).toBe(textarea);
+    expect(textarea).toHaveFocus();
   });
 
   it("accepts on Tab", () => {

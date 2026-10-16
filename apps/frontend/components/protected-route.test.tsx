@@ -57,7 +57,7 @@ describe("ProtectedRoute", () => {
 
     expect(push).not.toHaveBeenCalled();
     expect(screen.getByText("Couldn't load")).toBeInTheDocument();
-    expect(screen.queryByText("Secret page")).toBeNull();
+    expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(auth.retryAccessReads).toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe("ProtectedRoute", () => {
       "href",
       href,
     );
-    expect(screen.queryByText("Secret page")).toBeNull();
+    expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -162,8 +162,8 @@ describe("ProtectedRoute when an access read fails", () => {
       renderGate(props);
 
       expect(screen.getByText("Couldn't load")).toBeInTheDocument();
-      expect(screen.queryByText(denial)).toBeNull();
-      expect(screen.queryByText("Secret page")).toBeNull();
+      expect(screen.queryByText(denial)).not.toBeInTheDocument();
+      expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       expect(auth.retryAccessReads).toHaveBeenCalled();

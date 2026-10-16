@@ -82,9 +82,7 @@ describe("TriggerList delete", () => {
     renderTriggers([cronTrigger], "Delete");
     await confirmDialog("Delete");
 
-    await waitFor(() =>
-      expect(screen.getByText("Trigger is in use")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Trigger is in use")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     // The dialog stays open on a refused delete, letting the user retry.
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
@@ -187,7 +185,7 @@ describe("TriggerList list states", () => {
       } as unknown as Trigger,
     ]);
 
-    expect(screen.queryByRole("listitem")).toBeNull();
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
     const showFired = screen.getByRole("switch", { name: "Show fired" });
     await act(async () => {
       showFired.click();
@@ -248,15 +246,15 @@ describe("TriggerList inbound triggers", () => {
     renderTriggers([inboundTrigger()]);
 
     expect(screen.getByText("Inbound")).toBeInTheDocument();
-    expect(screen.queryByText("Event")).toBeNull();
+    expect(screen.queryByText("Event")).not.toBeInTheDocument();
     expect(screen.getByText("issueKey")).toBeInTheDocument();
-    expect(screen.queryByText(/Called from outside/)).toBeNull();
+    expect(screen.queryByText(/Called from outside/)).not.toBeInTheDocument();
   });
 
   it("draws no summary line for an input-less Trigger with a healthy token", () => {
     renderTriggers([inboundTrigger({ config: { inputs: [] } })]);
 
-    expect(screen.queryByText(/Inputs:|Token/)).toBeNull();
+    expect(screen.queryByText(/Inputs:|Token/)).not.toBeInTheDocument();
   });
 
   it("flags a trigger whose token was revoked or has expired", () => {
@@ -307,7 +305,7 @@ describe("TriggerList type filter", () => {
 
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.getByText("Card watcher")).toBeInTheDocument();
-    expect(screen.queryByText("Nightly job")).toBeNull();
+    expect(screen.queryByText("Nightly job")).not.toBeInTheDocument();
   });
 
   it("disables Show fired for the types that never fire", async () => {
@@ -336,7 +334,7 @@ describe("TriggerList type filter", () => {
     expect(
       screen.getByText("No Inbound triggers to show."),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("listitem")).toBeNull();
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
     expect(
       screen.getByRole("combobox", { name: "Filter by type" }),
     ).toBeInTheDocument();
@@ -405,7 +403,7 @@ describe("TriggerList last run", () => {
       { ...cronTrigger, lastRunStatus: null, lastRunStartedAt: null },
     ]);
 
-    expect(screen.queryByText("Last run:")).toBeNull();
+    expect(screen.queryByText("Last run:")).not.toBeInTheDocument();
   });
 
   it("keeps Fired in a fired One-off's title row and its status on the last run line", async () => {

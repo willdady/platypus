@@ -1,6 +1,11 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import vitest from "@vitest/eslint-plugin";
+import testingLibrary from "eslint-plugin-testing-library";
+import jestDom from "eslint-plugin-jest-dom";
+
+const TEST_FILES = ["**/*.test.ts", "**/*.test.tsx"];
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -65,6 +70,45 @@ const eslintConfig = defineConfig([
         },
       ],
     },
+  },
+  // Test files: Vitest, Testing Library and jest-dom rules.
+  {
+    files: TEST_FILES,
+    plugins: { vitest },
+    rules: {
+      ...vitest.configs.recommended.rules,
+      // A helper named `expect…` (e.g. `expectThemedSpinner`) asserts too.
+      "vitest/expect-expect": [
+        "error",
+        { assertFunctionNames: ["expect", "expect*"] },
+      ],
+      "vitest/no-focused-tests": "error",
+    },
+  },
+  {
+    files: TEST_FILES,
+    ...testingLibrary.configs["flat/react"],
+  },
+  {
+    files: TEST_FILES,
+    rules: {
+      "testing-library/prefer-screen-queries": "error",
+      // Ratchets: warnings, not errors, because the existing tests have too
+      // many to fix in one change (132, 30 and 23 when these rules landed),
+      // and many need an accessible name or role the component lacks. Fix
+      // them as you touch a file, and make each an error once it reaches 0.
+      "testing-library/no-node-access": "warn",
+      "testing-library/no-container": "warn",
+      "testing-library/no-unnecessary-act": "warn",
+      // Flags any variable a `render…` helper's result is assigned to, which
+      // misfires on our own helpers that return something else (a spy, a
+      // list of forms).
+      "testing-library/render-result-naming-convention": "off",
+    },
+  },
+  {
+    files: TEST_FILES,
+    ...jestDom.configs["flat/recommended"],
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([

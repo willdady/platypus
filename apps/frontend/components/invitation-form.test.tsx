@@ -53,13 +53,11 @@ describe("InvitationForm conflict handling", () => {
     renderForm();
     submit();
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          "A pending invitation already exists for this user and organization",
-        ),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText(
+        "A pending invitation already exists for this user and organization",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("never discards a rejection silently — a plain 400 message still surfaces", async () => {

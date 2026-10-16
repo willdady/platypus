@@ -250,7 +250,9 @@ describe("Dashboard loading and failure states", () => {
     await renderDashboardPage();
 
     expect(screen.getByText("Not found")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Loading dashboard")).toBeNull();
+    expect(
+      screen.queryByLabelText("Loading dashboard"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the placeholder while the dashboard is loading", async () => {
@@ -264,7 +266,7 @@ describe("Dashboard loading and failure states", () => {
     widgetsData = undefined;
     await renderDashboard();
 
-    expect(screen.queryByText(/No widgets yet/)).toBeNull();
+    expect(screen.queryByText(/No widgets yet/)).not.toBeInTheDocument();
     expect(
       document.querySelectorAll('[data-slot="skeleton"]').length,
     ).toBeGreaterThan(0);
@@ -276,7 +278,7 @@ describe("Dashboard loading and failure states", () => {
     await renderDashboard();
 
     expect(screen.getByText(/Failed to load widgets/)).toBeInTheDocument();
-    expect(screen.queryByText(/No widgets yet/)).toBeNull();
+    expect(screen.queryByText(/No widgets yet/)).not.toBeInTheDocument();
   });
 
   it("shows the empty state once the widgets have loaded empty", async () => {

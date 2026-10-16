@@ -48,8 +48,10 @@ describe("KanbanCardHistory", () => {
     expect(
       screen.getByText("Failed to load history. Server error"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Loading…")).toBeNull();
-    expect(screen.queryByText("No changes recorded yet.")).toBeNull();
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No changes recorded yet."),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();

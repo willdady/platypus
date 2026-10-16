@@ -138,6 +138,8 @@ describe("ContextMeter", () => {
     expect(screen.getByText(/42K/)).toBeInTheDocument();
     expect(screen.getByText(/128K/)).toBeInTheDocument();
     expect(screen.getByText(/33%/)).toBeInTheDocument();
+    // A progressbar's value is its aria-valuenow, which toHaveValue does not read.
+    // eslint-disable-next-line jest-dom/prefer-to-have-value
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuenow",
       "33",
@@ -149,6 +151,8 @@ describe("ContextMeter", () => {
     // deliberately conservative window must not make the meter look broken.
     render(<ContextMeter occupancy={150_000} contextWindow={128_000} />);
 
+    // A progressbar's value is its aria-valuenow, which toHaveValue does not read.
+    // eslint-disable-next-line jest-dom/prefer-to-have-value
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuenow",
       "100",

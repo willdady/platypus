@@ -100,9 +100,9 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
     armDelete([card]);
     await confirmDialog("Delete");
 
-    await waitFor(() =>
-      expect(screen.getByText(`This ${entity} is in use`)).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText(`This ${entity} is in use`),
+    ).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
     // The dialog stays open on a refused delete, letting the user retry.
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();

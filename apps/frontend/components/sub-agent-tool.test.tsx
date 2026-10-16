@@ -95,7 +95,7 @@ describe("SubAgentTool duration", () => {
     render(<SubAgentTool toolPart={delegateCall()} />);
 
     expect(screen.getByText("Research Bot")).toBeInTheDocument();
-    expect(screen.queryByText(/\d+(\.\d+)?(ms|s)/)).toBeNull();
+    expect(screen.queryByText(/\d+(\.\d+)?(ms|s)/)).not.toBeInTheDocument();
   });
 });
 
@@ -129,7 +129,9 @@ describe("SubAgentTool cut-short marker", () => {
     renderExpanded(delegateCall());
 
     expect(screen.getByText("It shipped in March.")).toBeInTheDocument();
-    expect(screen.queryByText(SUB_AGENT_CUT_SHORT_NOTICE)).toBeNull();
+    expect(
+      screen.queryByText(SUB_AGENT_CUT_SHORT_NOTICE),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -176,13 +178,17 @@ describe("SubAgentTool step-limit marker", () => {
   it("names the step limit, not the output limit", () => {
     renderExpanded(stepLimitedDelegateCall());
 
-    expect(screen.queryByText(SUB_AGENT_CUT_SHORT_NOTICE)).toBeNull();
+    expect(
+      screen.queryByText(SUB_AGENT_CUT_SHORT_NOTICE),
+    ).not.toBeInTheDocument();
   });
 
   it("says nothing about a delegation that finished on its own", () => {
     renderExpanded(delegateCall());
 
-    expect(screen.queryByText(SUB_AGENT_STEP_LIMIT_NOTICE)).toBeNull();
+    expect(
+      screen.queryByText(SUB_AGENT_STEP_LIMIT_NOTICE),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -196,7 +202,7 @@ describe("SubAgentTool disclosure", () => {
     const trigger = screen.getByRole("button", { name: /Research Bot/ });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.queryByText("Task")).toBeNull();
+    expect(screen.queryByText("Task")).not.toBeInTheDocument();
     expect(container.firstElementChild?.className).not.toMatch(/\bborder\b/);
 
     fireEvent.click(trigger);

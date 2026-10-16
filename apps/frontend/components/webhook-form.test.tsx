@@ -75,11 +75,9 @@ describe("WebhookForm validation error surfacing", () => {
     const saveButton = screen.getByRole("button", { name: "Save" });
     fireEvent.click(saveButton);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("At least one event is required"),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("At least one event is required"),
+    ).toBeInTheDocument();
     // A shown error disables Save until the offending field is corrected.
     expect(saveButton).toBeDisabled();
 
@@ -94,7 +92,7 @@ describe("WebhookForm validation error surfacing", () => {
         screen.queryByText("At least one event is required"),
       ).not.toBeInTheDocument(),
     );
-    expect(saveButton).not.toBeDisabled();
+    expect(saveButton).toBeEnabled();
 
     // The round trip completes: re-submitting now succeeds.
     fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
@@ -119,9 +117,7 @@ describe("WebhookForm validation error surfacing", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(screen.getByText("Invalid enabled")).toBeInTheDocument(),
-    );
+    expect(await screen.findByText("Invalid enabled")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("switch", { name: "Enabled" }));
 
@@ -147,9 +143,9 @@ describe("WebhookForm validation error surfacing", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(screen.getByText("Header value is too long")).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByText("Header value is too long"),
+    ).toBeInTheDocument();
 
     // Editing the unrelated second row must not strand or clear the first
     // row's error.

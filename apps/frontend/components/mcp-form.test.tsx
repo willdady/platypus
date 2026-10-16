@@ -160,7 +160,9 @@ describe("McpForm detail read failures", () => {
 
     expect(screen.getByText("Couldn't load")).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Update" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Update" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -312,7 +314,7 @@ describe("McpForm test connection", () => {
       target: { value: "http://other.test" },
     });
 
-    expect(screen.queryByText("Connection failed")).toBeNull();
+    expect(screen.queryByText("Connection failed")).not.toBeInTheDocument();
   });
 });
 

@@ -283,7 +283,8 @@ describe.each(RESOURCES)(
       renderRows([item]);
       fireEvent.click(screen.getByText(item.name));
       expect(screen.queryByText(dialogTitle)).not.toBeInTheDocument();
-      expect(screen.getByText(item.name).closest("a")).toBeNull();
+      const name = screen.getByText(item.name);
+      expect(name.closest("a")).toBeNull();
 
       openDropdownMenu();
       expect(menuItemLabels()).toEqual(["Edit in org settings", "Detach"]);
@@ -439,13 +440,11 @@ describe.each(RESOURCES)(
       fireEvent.click(screen.getByText("Detach"));
       fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
 
-      await waitFor(() =>
-        expect(
-          screen.getByText(
-            "This resource is in use by an agent in this workspace",
-          ),
-        ).toBeInTheDocument(),
-      );
+      expect(
+        await screen.findByText(
+          "This resource is in use by an agent in this workspace",
+        ),
+      ).toBeInTheDocument();
 
       // A refused detach must not revalidate the list.
       expect(mutate).not.toHaveBeenCalled();

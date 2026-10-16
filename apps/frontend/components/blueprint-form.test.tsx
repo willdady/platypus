@@ -30,7 +30,7 @@ describe("BlueprintForm shared resource groups", () => {
 
     expect(
       screen.queryByText("No shared agents in this organization yet."),
-    ).toBeNull();
+    ).not.toBeInTheDocument();
     // A group whose list landed empty still says so.
     expect(
       screen.getByText("No shared skills in this organization yet."),
@@ -43,7 +43,7 @@ describe("BlueprintForm shared resource groups", () => {
     render(<BlueprintForm orgId="org1" />);
 
     expect(screen.getByLabelText("Loading blueprint")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
   });
 });
 

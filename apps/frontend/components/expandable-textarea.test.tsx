@@ -42,7 +42,9 @@ describe("ExpandableTextarea expanded editor", () => {
     );
 
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     expect(screen.getByRole("button", { name: "Expand" })).toHaveFocus();
   });
 
@@ -56,7 +58,9 @@ describe("ExpandableTextarea expanded editor", () => {
     fireEvent.change(editor, { target: { value: "Hello world" } });
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     expect(onChange).toHaveBeenCalledWith("Hello world");
     expect(screen.getByLabelText("Instructions")).toHaveValue("Hello world");
   });
