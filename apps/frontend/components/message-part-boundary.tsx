@@ -29,11 +29,20 @@ const RenderPart = ({ render }: { render: () => ReactNode }) => <>{render()}</>;
 export class MessagePartBoundary extends Component<Props, State> {
   override state: State = { failed: false };
 
+  /**
+   * The last failure reported. A part that stays malformed while it streams
+   * throws the same error on every chunk; it is reported once, not per chunk.
+   */
+  private lastReported: string | null = null;
+
   static getDerivedStateFromError(): State {
     return { failed: true };
   }
 
   override componentDidCatch(error: unknown) {
+    const signature = error instanceof Error ? error.message : String(error);
+    if (signature === this.lastReported) return;
+    this.lastReported = signature;
     reportClientError(error, { source: "message-part" });
   }
 
