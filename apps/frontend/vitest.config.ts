@@ -2,15 +2,41 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
+// Dates render in the reader's zone, so pin one: a test that formats a time
+// reads the same on a laptop in Sydney as on a CI runner. Set here, before
+// Vitest spawns its workers, so every worker starts with it.
+process.env.TZ = "UTC";
+
 export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
-    environment: "jsdom",
     // Node 25+ ships its own `localStorage` global, which is undefined without
     // --localstorage-file and stops Vitest installing jsdom's in its place.
     execArgv: ["--no-experimental-webstorage"],
-    include: ["**/*.test.ts", "**/*.test.tsx"],
+    // Two environments, picked by file name: `*.node.test.ts` runs in plain
+    // Node (pure logic, source scans), every other test in jsdom. Each
+    // project inherits the rest of this config.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "jsdom",
+          environment: "jsdom",
+          include: ["**/*.test.ts", "**/*.test.tsx"],
+          exclude: ["**/*.node.test.ts", "**/node_modules/**"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["**/*.node.test.ts"],
+          exclude: ["**/node_modules/**"],
+        },
+      },
+    ],
     setupFiles: ["./vitest.setup.ts"],
     // Before each test: clear every spy's calls, restore every `vi.spyOn`,
     // and undo every `vi.stubGlobal` / `vi.stubEnv`, so no test file repeats
