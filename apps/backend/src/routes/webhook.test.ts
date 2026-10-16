@@ -191,7 +191,7 @@ describe("Webhook Routes", () => {
       expect(res.status).toBe(400);
       const data = (await res.json()) as { error: string };
       expect(data.error).toBe(
-        "This URL is not permitted by this deployment's network policy.",
+        "This URL can't be reached from this deployment, or isn't permitted by its network policy.",
       );
       expect(mockDb.insert).not.toHaveBeenCalled();
     });

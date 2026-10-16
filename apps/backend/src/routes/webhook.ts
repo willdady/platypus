@@ -46,7 +46,7 @@ async function assertDeliverable(url: string): Promise<void> {
       "Rejected a webhook URL by network policy",
     );
     throw new ValidationError(
-      "This URL is not permitted by this deployment's network policy.",
+      "This URL can't be reached from this deployment, or isn't permitted by its network policy.",
     );
   }
 }
