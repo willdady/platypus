@@ -252,7 +252,9 @@ export function KanbanBoard({
   //
   // `history.replaceState` rather than `router.replace`: Next keeps
   // `useSearchParams` in step with it, and it opens the dialog without a
-  // round-trip. A relative `?…` URL keeps the path, base path included.
+  // round-trip. A relative `?…` URL keeps the path, base path included. Pass
+  // `null`, not `history.state`: Next copies its own state across, and skips
+  // the sync entirely for state already carrying its `__NA` marker.
   const updateCardIdParam = useCallback((cardId: string | null) => {
     const params = new URLSearchParams(window.location.search);
     if (cardId) {
@@ -262,7 +264,7 @@ export function KanbanBoard({
     }
     const qs = params.toString();
     window.history.replaceState(
-      window.history.state,
+      null,
       "",
       qs ? `?${qs}` : window.location.pathname,
     );
