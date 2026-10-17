@@ -3,7 +3,7 @@ import { ChangePasswordForm } from "@/components/change-password-form";
 
 export const metadata: Metadata = { title: "Security Settings" };
 
-const SecuritySettingsPage = () => {
+function SecuritySettingsPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Security Settings</h1>
@@ -13,6 +13,6 @@ const SecuritySettingsPage = () => {
       </div>
     </div>
   );
-};
+}
 
 export default SecuritySettingsPage;

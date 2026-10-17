@@ -28,7 +28,7 @@ import { useBackendUrl } from "@/components/auth-provider";
 // Apply a Blueprint to an existing Workspace (ADR-0008). The macro is additive
 // and idempotent, so re-applying only attaches what is missing — we report the
 // outcome rather than treating an all-skipped run as an error.
-export const ApplyBlueprintDialog = ({
+export function ApplyBlueprintDialog({
   orgId,
   blueprintId,
   blueprintName,
@@ -40,7 +40,7 @@ export const ApplyBlueprintDialog = ({
   blueprintName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
   const [workspaceId, setWorkspaceId] = useState<string>("");
   const [applying, setApplying] = useState(false);
@@ -173,4 +173,4 @@ export const ApplyBlueprintDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

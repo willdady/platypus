@@ -3,11 +3,11 @@ import { PluginsList } from "@/components/plugins-list";
 
 export const metadata: Metadata = { title: "Installed Plugins" };
 
-const OrgPluginsPage = async ({
+async function OrgPluginsPage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
-}) => {
+}) {
   const { orgId } = await params;
 
   return (
@@ -22,6 +22,6 @@ const OrgPluginsPage = async ({
       <PluginsList orgId={orgId} />
     </div>
   );
-};
+}
 
 export default OrgPluginsPage;

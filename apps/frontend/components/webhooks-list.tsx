@@ -20,21 +20,21 @@ import {
   LoadingRegion,
 } from "./list-skeletons";
 
-interface Webhook {
+type Webhook = {
   id: string;
   workspaceId: string;
   name: string;
   url: string;
   enabled: boolean;
-}
+};
 
-const WebhooksList = ({
+function WebhooksList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId: string;
-}) => {
+}) {
   const routes = workspaceRoutes(orgId, workspaceId);
 
   const scope = { orgId, workspaceId };
@@ -137,6 +137,6 @@ const WebhooksList = ({
       />
     </>
   );
-};
+}
 
 export { WebhooksList };

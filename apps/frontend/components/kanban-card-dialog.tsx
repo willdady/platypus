@@ -155,7 +155,7 @@ function AssigneePicker({
               </>
             ) : (
               <>
-                <Users className="size-3.5" />
+                <Users />
                 Assign...
               </>
             )}
@@ -223,7 +223,7 @@ function CardTitleActions({
             aria-label="Copy link to card"
             onClick={onCopyLink}
           >
-            <Link2 className="h-3.5 w-3.5" />
+            <Link2 />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Copy link to card</TooltipContent>
@@ -236,7 +236,7 @@ function CardTitleActions({
             aria-label="Copy card as Markdown"
             onClick={onCopyMarkdown}
           >
-            <Copy className="h-3.5 w-3.5" />
+            <Copy />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Copy card as Markdown</TooltipContent>
@@ -249,7 +249,7 @@ function CardTitleActions({
             aria-label="Edit card"
             onClick={onEdit}
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Pencil />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Edit card</TooltipContent>
@@ -279,7 +279,7 @@ function CardTitleSection({
 }) {
   if (isEditing) {
     return (
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <FieldLabel htmlFor="kanban-card-title">Title</FieldLabel>
         <Input
           id="kanban-card-title"
@@ -399,7 +399,7 @@ function CardDetailsPane({
           onEdit={onEdit}
         />
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 space-y-4">
+      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-4">
         <CardBodySection
           body={body}
           isEditing={isEditing}
@@ -414,8 +414,9 @@ function CardDetailsPane({
 
 // Who wrote a comment and when, so each comment's Edit and Delete are told
 // apart by a screen reader rather than all reading "Edit" and "Delete".
-const commentLabel = (comment: Serialized<KanbanCardComment>) =>
-  `${comment.createdByName ?? "Unknown"}, ${formatRelativeTime(comment.createdAt)}`;
+function commentLabel(comment: Serialized<KanbanCardComment>) {
+  return `${comment.createdByName ?? "Unknown"}, ${formatRelativeTime(comment.createdAt)}`;
+}
 
 // The comment list and composer. Shared by both layouts.
 function CommentsSection({
@@ -455,9 +456,9 @@ function CommentsSection({
     <div className={className}>
       <p className="text-sm font-medium mb-3">Comments</p>
       {comments.length > 0 && (
-        <div className="space-y-3 mb-4">
+        <div className="flex flex-col gap-3 mb-4">
           {comments.map((comment) => (
-            <div key={comment.id} className="space-y-1">
+            <div key={comment.id} className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium">
                   {comment.createdByName ?? "Unknown"}
@@ -467,7 +468,7 @@ function CommentsSection({
                 </span>
               </div>
               {editingCommentId === comment.id ? (
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Textarea
                     value={editingCommentBody}
                     onChange={(e) => onEditingCommentBodyChange(e.target.value)}
@@ -539,7 +540,7 @@ function CommentsSection({
           ))}
         </div>
       )}
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <Textarea
           value={newCommentBody}
           onChange={(e) => onNewCommentBodyChange(e.target.value)}
@@ -548,6 +549,7 @@ function CommentsSection({
           rows={3}
         />
         <Button
+          className="self-start"
           size="sm"
           onClick={onAddComment}
           disabled={!newCommentBody.trim() || !!commentAction}
@@ -1020,7 +1022,7 @@ export function KanbanCardDialog({
                 onBlur={handleDetailsBlur}
               >
                 <CardMetadataSection
-                  className="border-t pt-4 space-y-4 min-w-0"
+                  className="border-t pt-4 flex flex-col gap-4 min-w-0"
                   createdAt={card.createdAt}
                   createdByName={card.createdByName}
                   updatedAt={card.updatedAt}
@@ -1106,7 +1108,7 @@ export function KanbanCardDialog({
                 onCancelEditComment={cancelEditingComment}
                 commentAction={commentAction}
               />
-              <div className="mt-6">
+              <div className="mt-2">
                 <KanbanCardHistory
                   orgId={orgId}
                   workspaceId={workspaceId}
@@ -1118,7 +1120,7 @@ export function KanbanCardDialog({
 
             {/* Sidebar - Column, Labels, Assignees, Due Date, Priority, and Metadata */}
             <CardMetadataSection
-              className="w-52 shrink-0 space-y-4 overflow-y-auto"
+              className="w-52 shrink-0 flex flex-col gap-4 overflow-y-auto"
               createdAt={card.createdAt}
               createdByName={card.createdByName}
               updatedAt={card.updatedAt}
@@ -1144,7 +1146,7 @@ export function KanbanCardDialog({
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="secondary">
-                <Trash2 className="h-4 w-4" />
+                <Trash2 />
                 Delete
               </Button>
             </PopoverTrigger>

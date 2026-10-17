@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useTimeout } from "@/hooks/use-timeout";
 
-interface TagInputProps {
+type TagInputProps = {
   /** The text input's id, for a label's `htmlFor`. */
   id?: string;
   value: string[];
@@ -16,7 +16,7 @@ interface TagInputProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
-}
+};
 
 const KEBAB_CASE_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -72,7 +72,7 @@ export function TagInput({
   const reduceMotion = useReducedMotion();
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex flex-wrap gap-2">
         {value.map((tag) => (
           <motion.div
@@ -94,7 +94,7 @@ export function TagInput({
                 disabled={disabled}
                 className="rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none"
               >
-                <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                <X className="size-3 text-muted-foreground hover:text-foreground" />
                 <span className="sr-only">Remove {tag}</span>
               </button>
             </Badge>

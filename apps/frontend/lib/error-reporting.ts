@@ -20,23 +20,20 @@ let reporter: ErrorReporter | null = null;
  * endpoint). Nothing is sent until one is set; `null` turns reporting off
  * again. Set it from `instrumentation-client.ts`, which runs before the app.
  */
-export const setErrorReporter = (next: ErrorReporter | null): void => {
+export function setErrorReporter(next: ErrorReporter | null): void {
   reporter = next;
-};
+}
 
 /**
  * Hands an error to the reporter, if one is set. Called by every error
  * boundary and by the window listeners. A reporter that throws is ignored:
  * reporting must never turn one failure into two.
  */
-export const reportClientError = (
-  error: unknown,
-  report: ErrorReport,
-): void => {
+export function reportClientError(error: unknown, report: ErrorReport): void {
   if (!reporter) return;
   try {
     reporter(error, report);
   } catch {
     // Deliberately swallowed; see above.
   }
-};
+}

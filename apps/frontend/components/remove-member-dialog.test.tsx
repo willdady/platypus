@@ -17,12 +17,12 @@ vi.mock("swr", () => swrMock);
 import { RemoveMemberDialog } from "./remove-member-dialog";
 import type { Serialized } from "@/lib/api-write";
 
-const memberOf = (
+function memberOf(
   id: string,
   name: string,
   extra: Partial<Serialized<OrgMemberListItem>> = {},
-): Serialized<OrgMemberListItem> =>
-  ({
+): Serialized<OrgMemberListItem> {
+  return {
     id: `m-${id}`,
     organizationId: "org1",
     userId: id,
@@ -33,22 +33,25 @@ const memberOf = (
     isSuperAdmin: false,
     isBanned: false,
     ...extra,
-  }) as Serialized<OrgMemberListItem>;
+  } as Serialized<OrgMemberListItem>;
+}
 
 const olive = memberOf("u-old", "Olive");
 const nina = memberOf("u-new", "Nina");
 const bea = memberOf("u-banned", "Bea", { isBanned: true });
 
-const workspace = (id: string, name: string, ownerId = "u-old") => ({
-  id,
-  name,
-  ownerId,
-  organizationId: "org1",
-});
+function workspace(id: string, name: string, ownerId = "u-old") {
+  return {
+    id,
+    name,
+    ownerId,
+    organizationId: "org1",
+  };
+}
 
 const onSuccess = vi.fn();
-const renderDialog = (members: Serialized<OrgMemberListItem>[]) =>
-  renderList(
+function renderDialog(members: Serialized<OrgMemberListItem>[]) {
+  return renderList(
     <RemoveMemberDialog
       orgId="org1"
       member={olive}
@@ -58,14 +61,18 @@ const renderDialog = (members: Serialized<OrgMemberListItem>[]) =>
       onSuccess={onSuccess}
     />,
   );
+}
 
-const removeButton = () => screen.getByRole("button", { name: "Remove" });
-const actionFor = (name: string) =>
-  screen.getByRole("combobox", { name: `Action for ${name}` });
-const sentBody = (fetchMock: ReturnType<typeof stubAcceptedSave>) => {
+function removeButton() {
+  return screen.getByRole("button", { name: "Remove" });
+}
+function actionFor(name: string) {
+  return screen.getByRole("combobox", { name: `Action for ${name}` });
+}
+function sentBody(fetchMock: ReturnType<typeof stubAcceptedSave>) {
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   return { url, method: init.method, body: JSON.parse(String(init.body)) };
-};
+}
 
 beforeEach(() => {
   resetListHarness();

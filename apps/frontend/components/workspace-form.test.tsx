@@ -22,8 +22,9 @@ import { WorkspaceForm } from "./workspace-form";
 
 const WORKSPACE_KEY = "/organizations/org1/workspaces/ws1";
 
-const renderForm = () =>
-  render(<WorkspaceForm orgId="org1" workspaceId="ws1" />);
+function renderForm() {
+  return render(<WorkspaceForm orgId="org1" workspaceId="ws1" />);
+}
 
 const RESEARCH = {
   id: "ws1",
@@ -33,8 +34,9 @@ const RESEARCH = {
   context: "",
 };
 
-const save = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+function save() {
+  return fireEvent.click(screen.getByRole("button", { name: "Save" }));
+}
 
 describe("WorkspaceForm record read", () => {
   beforeEach(() => resetFormHarness());

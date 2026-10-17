@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Invitation" };
  */
 export default function InvitePage() {
   return (
-    <InviteShell className="space-y-4 text-center">
+    <InviteShell className="flex flex-col gap-4 text-center">
       <h1 className="text-2xl font-bold">Open your invitation link</h1>
       <p className="text-muted-foreground">
         The link you used is no longer in the address bar. Open the invitation

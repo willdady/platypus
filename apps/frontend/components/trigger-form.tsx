@@ -157,38 +157,40 @@ type TriggerFormData = {
 };
 
 /** The cron layout, which a new trigger opens on and most saved ones use. */
-const TriggerFormSkeleton = ({ editing }: { editing: boolean }) => (
-  <div>
-    <FormSkeletonSet>
-      <FormSkeletonGroup>
-        <FieldSkeleton />
-        <FieldSkeleton />
-        <FieldSkeleton />
-        <FieldSkeleton />
-        <TextareaSkeleton counter description={1} />
-        {/* Schedule Mode's button pair */}
-        <div className="flex w-full flex-col gap-3">
-          <Skeleton className="h-3.5 w-28" />
-          <Skeleton className="h-9 w-44" />
-        </div>
-        <FieldSkeleton />
-        <div className="flex gap-4">
-          <FieldSkeleton className="flex-1" />
-          <FieldSkeleton className="flex-1" />
-        </div>
-        <FieldSkeleton />
-        <SwitchRowSkeleton />
-        <FieldSkeleton className="w-1/2" description={1} />
-        <SwitchRowSkeleton />
-        <SwitchRowSkeleton />
-        <CollapsibleSkeleton />
-      </FormSkeletonGroup>
-    </FormSkeletonSet>
-    <FooterSkeleton buttons={editing ? 2 : 1} />
-  </div>
-);
+function TriggerFormSkeleton({ editing }: { editing: boolean }) {
+  return (
+    <div>
+      <FormSkeletonSet>
+        <FormSkeletonGroup>
+          <FieldSkeleton />
+          <FieldSkeleton />
+          <FieldSkeleton />
+          <FieldSkeleton />
+          <TextareaSkeleton counter description={1} />
+          {/* Schedule Mode's button pair */}
+          <div className="flex w-full flex-col gap-3">
+            <Skeleton className="h-3.5 w-28" />
+            <Skeleton className="h-9 w-44" />
+          </div>
+          <FieldSkeleton />
+          <div className="flex gap-4">
+            <FieldSkeleton className="flex-1" />
+            <FieldSkeleton className="flex-1" />
+          </div>
+          <FieldSkeleton />
+          <SwitchRowSkeleton />
+          <FieldSkeleton className="w-1/2" description={1} />
+          <SwitchRowSkeleton />
+          <SwitchRowSkeleton />
+          <CollapsibleSkeleton />
+        </FormSkeletonGroup>
+      </FormSkeletonSet>
+      <FooterSkeleton buttons={editing ? 2 : 1} />
+    </div>
+  );
+}
 
-const TriggerForm = ({
+function TriggerForm({
   orgId,
   workspaceId,
   triggerId,
@@ -196,7 +198,7 @@ const TriggerForm = ({
   orgId: string;
   workspaceId: string;
   triggerId?: string;
-}) => {
+}) {
   const scope = { orgId, workspaceId };
 
   const { results: agents, isLoading: agentsLoading } = useScopedList<Agent>(
@@ -590,6 +592,6 @@ const TriggerForm = ({
       {form}
     </DetailFormState>
   );
-};
+}
 
 export { TriggerForm };

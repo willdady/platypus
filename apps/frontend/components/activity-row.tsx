@@ -84,10 +84,11 @@ const config: Record<
 };
 
 /** The words a row's label uses for an entry, exported so tests need not restate them. */
-export const activityLabel = (entry: ActivityRowEntry): string =>
-  config[entry.type].label(entry);
+export function activityLabel(entry: ActivityRowEntry): string {
+  return config[entry.type].label(entry);
+}
 
-const StatusMark = ({ status }: { status: RunEventStatus }) => {
+function StatusMark({ status }: { status: RunEventStatus }) {
   switch (status) {
     case "running":
       return (
@@ -120,9 +121,9 @@ const StatusMark = ({ status }: { status: RunEventStatus }) => {
         />
       );
   }
-};
+}
 
-export const ActivityRow = ({
+export function ActivityRow({
   entry,
   trailing,
   className,
@@ -131,7 +132,7 @@ export const ActivityRow = ({
   /** Anything to draw after the status mark — a duration, say. */
   trailing?: ReactNode;
   className?: string;
-}) => {
+}) {
   const { icon: Icon, activeColor } = config[entry.type];
   const isRunning = entry.status === "running";
 
@@ -166,4 +167,4 @@ export const ActivityRow = ({
       )}
     </div>
   );
-};
+}

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
-interface DeleteConfirmDialogProps {
+type DeleteConfirmDialogProps = {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;
@@ -19,7 +19,7 @@ interface DeleteConfirmDialogProps {
   readonly onConfirm: () => void;
   readonly loading?: boolean;
   readonly error?: string | null;
-}
+};
 
 /**
  * The destructive confirm dialog shared by every list's delete flow (#877):

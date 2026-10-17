@@ -32,7 +32,7 @@ function SearchInput({
         onChange={(e) => onValueChange(e.target.value)}
         // Hide the browser's own clear button; the X below replaces it.
         className={cn(
-          "pl-8 pr-8 [&::-webkit-search-cancel-button]:appearance-none",
+          "px-8 [&::-webkit-search-cancel-button]:appearance-none",
           inputClassName,
         )}
         {...props}

@@ -15,10 +15,10 @@ import type { Serialized } from "@/lib/api-write";
 const WORKSPACE_ID = "w1";
 const STORAGE_KEY = `platypus:workspace:${WORKSPACE_ID}:lastSelection`;
 
-const provider = (
+function provider(
   over: Partial<Serialized<Provider>> = {},
-): Serialized<Provider> =>
-  ({
+): Serialized<Provider> {
+  return {
     id: "p1",
     name: "Test",
     modelIds: [
@@ -26,26 +26,29 @@ const provider = (
       { id: "gpt-5", passthroughFileTypes: [] },
     ],
     ...over,
-  }) as unknown as Serialized<Provider>;
+  } as unknown as Serialized<Provider>;
+}
 
-const agent = (over: Partial<Serialized<Agent>> = {}): Serialized<Agent> =>
-  ({
+function agent(over: Partial<Serialized<Agent>> = {}): Serialized<Agent> {
+  return {
     id: "a1",
     name: "Agent One",
     providerId: "p1",
     modelId: "gpt-4",
     ...over,
-  }) as unknown as Serialized<Agent>;
+  } as unknown as Serialized<Agent>;
+}
 
-const store = (value: unknown) =>
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ value }));
+function store(value: unknown) {
+  return localStorage.setItem(STORAGE_KEY, JSON.stringify({ value }));
+}
 
 /**
  * Renders the hook while keeping every render's result, so a test can assert
  * on what the picker WOULD have painted — the flicker in issue #799 was
  * invisible to a test that only looked at the settled value.
  */
-const renderTracked = (initialProps: UseModelSelectionInput) => {
+function renderTracked(initialProps: UseModelSelectionInput) {
   const renders: { selection: ModelSelection; isResolved: boolean }[] = [];
   const view = renderHook(
     (props: UseModelSelectionInput) => {
@@ -62,7 +65,7 @@ const renderTracked = (initialProps: UseModelSelectionInput) => {
   const painted = () =>
     renders.filter((r) => r.isResolved).map((r) => r.selection);
   return { ...view, renders, painted };
-};
+}
 
 const base: UseModelSelectionInput = {
   chatData: undefined,

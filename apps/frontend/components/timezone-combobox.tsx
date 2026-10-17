@@ -20,7 +20,7 @@ import { TIMEZONES } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
 
 /** A searchable select over {@link TIMEZONES}; `null` reads as "Not set". */
-export const TimezoneCombobox = ({
+export function TimezoneCombobox({
   id,
   value,
   onChange,
@@ -30,7 +30,7 @@ export const TimezoneCombobox = ({
   value: string | null;
   onChange: (value: string) => void;
   disabled?: boolean;
-}) => {
+}) {
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -46,7 +46,7 @@ export const TimezoneCombobox = ({
           <span className={cn(!value && "text-muted-foreground")}>
             {value ?? "Not set"}
           </span>
-          <ChevronsUpDown className="size-4 opacity-50" />
+          <ChevronsUpDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
@@ -79,4 +79,4 @@ export const TimezoneCombobox = ({
       </PopoverContent>
     </Popover>
   );
-};
+}

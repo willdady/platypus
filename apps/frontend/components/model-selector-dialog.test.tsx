@@ -4,7 +4,7 @@ import type { Agent, Provider } from "@platypus/schemas";
 import { ModelSelectorDialog } from "./model-selector-dialog";
 import type { Serialized } from "@/lib/api-write";
 
-const countingProvider = () => {
+function countingProvider() {
   let reads = 0;
   const provider = {
     id: "p1",
@@ -15,24 +15,26 @@ const countingProvider = () => {
     },
   } as unknown as Serialized<Provider>;
   return { provider, reads: () => reads };
-};
+}
 
-const dialog = (
+function dialog(
   providers: Serialized<Provider>[],
   agents: Serialized<Agent>[] = [],
-) => (
-  <ModelSelectorDialog
-    agents={agents}
-    providers={providers}
-    agentId=""
-    modelId=""
-    providerId=""
-    isResolved
-    isOpen
-    onOpenChange={vi.fn()}
-    onModelChange={vi.fn()}
-  />
-);
+) {
+  return (
+    <ModelSelectorDialog
+      agents={agents}
+      providers={providers}
+      agentId=""
+      modelId=""
+      providerId=""
+      isResolved
+      isOpen
+      onOpenChange={vi.fn()}
+      onModelChange={vi.fn()}
+    />
+  );
+}
 
 describe("ModelSelectorDialog model options", () => {
   // Issue #869: the picker re-normalised every provider's model list on each

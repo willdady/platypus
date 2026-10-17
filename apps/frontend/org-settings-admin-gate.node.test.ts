@@ -16,14 +16,15 @@ const SETTINGS_ROOT = path.join(
   "app/[orgId]/settings",
 );
 
-const layouts = (dir: string) =>
-  readdirSync(dir, { recursive: true, encoding: "utf8" })
+function layouts(dir: string) {
+  return readdirSync(dir, { recursive: true, encoding: "utf8" })
     .filter((entry) => path.basename(entry) === "layout.tsx")
     .map((entry) => path.join(dir, entry));
+}
 
 /** `requireOrgAdmin` bare, or `requireOrgAdmin={true}`. */
-const requiresOrgAdmin = (opening: ts.JsxOpeningLikeElement) =>
-  opening.attributes.properties.some(
+function requiresOrgAdmin(opening: ts.JsxOpeningLikeElement) {
+  return opening.attributes.properties.some(
     (p) =>
       ts.isJsxAttribute(p) &&
       p.name.getText() === "requireOrgAdmin" &&
@@ -31,8 +32,9 @@ const requiresOrgAdmin = (opening: ts.JsxOpeningLikeElement) =>
         (ts.isJsxExpression(p.initializer) &&
           p.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword)),
   );
+}
 
-const isGated = (file: string) => {
+function isGated(file: string) {
   const sf = ts.createSourceFile(
     file,
     readFileSync(file, "utf8"),
@@ -53,7 +55,7 @@ const isGated = (file: string) => {
   };
   visit(sf);
   return found;
-};
+}
 
 describe("org settings layouts", () => {
   it("all require an Org Admin", () => {

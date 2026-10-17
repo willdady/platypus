@@ -69,9 +69,11 @@ const RESOURCE_GROUPS: {
 
 type SharedResource = { id: string; name: string; description?: string };
 
-const itemKey = (type: AttachmentResourceType, id: string) => `${type}:${id}`;
+function itemKey(type: AttachmentResourceType, id: string) {
+  return `${type}:${id}`;
+}
 
-const ResourceGroup = ({
+function ResourceGroup({
   orgId,
   type,
   label,
@@ -89,7 +91,7 @@ const ResourceGroup = ({
   selected: Set<string>;
   onToggle: (type: AttachmentResourceType, id: string, on: boolean) => void;
   disabled: boolean;
-}) => {
+}) {
   const { results, isLoading } = useScopedList<SharedResource>(collection, {
     orgId,
   });
@@ -143,50 +145,54 @@ const ResourceGroup = ({
       </CardContent>
     </Card>
   );
-};
+}
 
 /** A section heading and its one-line lede, as the form's `h2` + `p`. */
-const SectionHeadingSkeleton = () => (
-  <>
-    <div className="mb-1 flex h-7 items-center">
-      <Skeleton className="h-5 w-40" />
-    </div>
-    <div className="mb-4 flex h-5 items-center">
-      <Skeleton className="h-3.5 w-3/4" />
-    </div>
-  </>
-);
+function SectionHeadingSkeleton() {
+  return (
+    <>
+      <div className="mb-1 flex h-7 items-center">
+        <Skeleton className="h-5 w-40" />
+      </div>
+      <div className="mb-4 flex h-5 items-center">
+        <Skeleton className="h-3.5 w-3/4" />
+      </div>
+    </>
+  );
+}
 
-const BlueprintFormSkeleton = ({
+function BlueprintFormSkeleton({
   className,
   editing,
 }: {
   className?: string;
   editing: boolean;
-}) => (
-  <div className={className}>
-    <FormSkeletonSet>
-      <FormSkeletonGroup className="gap-4">
-        <FieldSkeleton counter />
-        <TextareaSkeleton counter />
-      </FormSkeletonGroup>
-    </FormSkeletonSet>
-    <SectionHeadingSkeleton />
-    {RESOURCE_GROUPS.map((group) => (
-      <SwitchCardSkeleton key={group.type} className="mb-4" rows={2} />
-    ))}
-    <SectionHeadingSkeleton />
-    <FormSkeletonSet>
-      <FormSkeletonGroup className="gap-4">
-        <TextareaSkeleton counter description={1} />
-        <FieldSkeleton description={1} />
-        <FieldSkeleton description={1} />
-        <FieldSkeleton description={1} />
-      </FormSkeletonGroup>
-    </FormSkeletonSet>
-    <FooterSkeleton buttons={editing ? 2 : 1} />
-  </div>
-);
+}) {
+  return (
+    <div className={className}>
+      <FormSkeletonSet>
+        <FormSkeletonGroup className="gap-4">
+          <FieldSkeleton counter />
+          <TextareaSkeleton counter />
+        </FormSkeletonGroup>
+      </FormSkeletonSet>
+      <SectionHeadingSkeleton />
+      {RESOURCE_GROUPS.map((group) => (
+        <SwitchCardSkeleton key={group.type} className="mb-4" rows={2} />
+      ))}
+      <SectionHeadingSkeleton />
+      <FormSkeletonSet>
+        <FormSkeletonGroup className="gap-4">
+          <TextareaSkeleton counter description={1} />
+          <FieldSkeleton description={1} />
+          <FieldSkeleton description={1} />
+          <FieldSkeleton description={1} />
+        </FormSkeletonGroup>
+      </FormSkeletonSet>
+      <FooterSkeleton buttons={editing ? 2 : 1} />
+    </div>
+  );
+}
 
 const RETRACTABLE_FIELDS = [
   "name",
@@ -207,7 +213,7 @@ const INITIAL_DATA = {
   memoryEmbeddingProviderId: null as string | null,
 };
 
-const BlueprintForm = ({
+function BlueprintForm({
   classNames,
   orgId,
   blueprintId,
@@ -215,7 +221,7 @@ const BlueprintForm = ({
   classNames?: string;
   orgId: string;
   blueprintId?: string;
-}) => {
+}) {
   const returnPath = orgRoutes(orgId).settings.blueprints;
 
   // Org-scoped providers — the eligible set for Tier 2 pointer-settings, which
@@ -547,6 +553,6 @@ const BlueprintForm = ({
       {form}
     </DetailFormState>
   );
-};
+}
 
 export { BlueprintForm };

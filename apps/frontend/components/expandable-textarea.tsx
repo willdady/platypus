@@ -10,13 +10,11 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from "./ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "@/lib/utils";
 
-interface ExpandableTextareaProps extends React.ComponentProps<
-  typeof Textarea
-> {
+type ExpandableTextareaProps = {
   label?: string;
   error?: string;
   expandable?: boolean;
-}
+} & React.ComponentProps<typeof Textarea>;
 
 function ExpandableTextarea({
   className,
@@ -124,7 +122,7 @@ function ExpandableTextarea({
               event.preventDefault();
               expandButtonRef.current?.focus();
             }}
-            className="flex flex-col gap-0 w-full max-w-5xl sm:max-w-5xl h-full max-h-[80vh] p-4"
+            className="flex flex-col gap-0 size-full max-w-5xl sm:max-w-5xl max-h-[80vh] p-4"
           >
             <div className="flex justify-between items-center mb-2">
               <DialogTitle className="text-sm font-medium text-muted-foreground">

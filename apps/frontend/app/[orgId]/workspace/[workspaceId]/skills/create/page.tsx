@@ -5,11 +5,11 @@ import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Create Skill" };
 
-const SkillCreatePage = async ({
+async function SkillCreatePage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = await params;
 
   return (
@@ -21,6 +21,6 @@ const SkillCreatePage = async ({
       <SkillForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>
   );
-};
+}
 
 export default SkillCreatePage;

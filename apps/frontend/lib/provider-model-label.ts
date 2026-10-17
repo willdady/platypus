@@ -15,10 +15,10 @@ const ROLE_MODEL_ID = {
  * `name (model id)`, or the name alone when the provider has no model for
  * that role.
  */
-export const providerModelLabel = (
+export function providerModelLabel(
   provider: Serialized<Provider>,
   role: ProviderModelRole,
-) => {
+) {
   const modelId = provider[ROLE_MODEL_ID[role]];
   return modelId ? `${provider.name} (${modelId})` : provider.name;
-};
+}

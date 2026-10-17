@@ -24,13 +24,13 @@ import { joinUrl } from "@/lib/utils";
 import { writeAt, type Serialized } from "@/lib/api-write";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
-interface MemberEditDialogProps {
+type MemberEditDialogProps = {
   orgId: string;
   member: Serialized<OrgMemberListItem>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-}
+};
 
 export function MemberEditDialog({
   orgId,

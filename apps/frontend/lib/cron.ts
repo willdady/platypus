@@ -23,13 +23,13 @@ export type SimpleSchedule = {
   dayOfMonth: string;
 };
 
-export const buildCronExpression = (
+export function buildCronExpression(
   frequency: Frequency,
   minute: string,
   hour: string,
   dayOfWeek: string,
   dayOfMonth: string,
-): string => {
+): string {
   switch (frequency) {
     case "every-5-minutes":
       return "*/5 * * * *";
@@ -50,11 +50,9 @@ export const buildCronExpression = (
     default:
       return "0 9 * * *";
   }
-};
+}
 
-export const parseCronExpression = (
-  expression: string,
-): SimpleSchedule | null => {
+export function parseCronExpression(expression: string): SimpleSchedule | null {
   const parts = expression.trim().split(/\s+/);
   if (parts.length !== 5) return null;
 
@@ -189,4 +187,4 @@ export const parseCronExpression = (
   }
 
   return null;
-};
+}

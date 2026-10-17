@@ -14,7 +14,7 @@ import { useSandboxUploads } from "./use-sandbox-uploads";
 const FILE_URL = "http://test/organizations/org1/workspaces/ws1/sandbox/file";
 
 /** Renders the hook's dialog and hands back its `upload`. */
-const harness = () => {
+function harness() {
   let upload!: ReturnType<typeof useSandboxUploads>["upload"];
   const Harness = () => {
     const sandbox = useSandboxUploads(FILE_URL);
@@ -23,9 +23,11 @@ const harness = () => {
   };
   render(<Harness />);
   return (files: File[]) => upload(files);
-};
+}
 
-const file = (name: string, body = "a,b") => new File([body], name);
+function file(name: string, body = "a,b") {
+  return new File([body], name);
+}
 
 describe("useSandboxUploads", () => {
   it("puts each file at the Sandbox root under its own name", async () => {

@@ -11,7 +11,7 @@ import { orgRoutes } from "@/lib/routes";
  * An Organization settings page that doesn't exist — a deleted record, a
  * stale link — shown inside the settings shell, so the menu stays in reach.
  */
-export const OrgSettingsNotFound = () => {
+export function OrgSettingsNotFound() {
   const { orgId } = useParams<{ orgId: string }>();
   return (
     <EmptyCard
@@ -25,4 +25,4 @@ export const OrgSettingsNotFound = () => {
       }
     />
   );
-};
+}

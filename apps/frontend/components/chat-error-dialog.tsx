@@ -15,17 +15,17 @@ import { TriangleAlert, Copy, Check } from "lucide-react";
 import { useTimeout } from "@/hooks/use-timeout";
 import { copyWithToast } from "@/lib/clipboard";
 
-interface ChatErrorDialogProps {
+type ChatErrorDialogProps = {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   error: Error | undefined;
-}
+};
 
-export const ChatErrorDialog = ({
+export function ChatErrorDialog({
   isOpen,
   onOpenChange,
   error,
-}: ChatErrorDialogProps) => {
+}: ChatErrorDialogProps) {
   const [copied, setCopied] = useState(false);
   const scheduleCopiedReset = useTimeout();
   const message = error?.message || "An unknown error occurred.";
@@ -66,4 +66,4 @@ export const ChatErrorDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

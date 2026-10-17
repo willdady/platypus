@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { workspaceRoutes } from "@/lib/routes";
 
-interface NoMcpEmptyStateProps {
+type NoMcpEmptyStateProps = {
   orgId: string;
   /** Absent on the Organization's own settings page, which always passes `action`. */
   workspaceId?: string;
@@ -13,14 +13,14 @@ interface NoMcpEmptyStateProps {
   canManage?: boolean;
   /** Replaces the default CTA, e.g. the settings list's own Add / Attach buttons. */
   action?: ReactNode;
-}
+};
 
-export const NoMcpEmptyState = ({
+export function NoMcpEmptyState({
   orgId,
   workspaceId,
   canManage = true,
   action,
-}: NoMcpEmptyStateProps) => {
+}: NoMcpEmptyStateProps) {
   const cta =
     action ??
     (canManage && workspaceId && (
@@ -48,4 +48,4 @@ export const NoMcpEmptyState = ({
       action={cta}
     />
   );
-};
+}

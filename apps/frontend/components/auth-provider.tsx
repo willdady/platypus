@@ -26,13 +26,13 @@ import {
 } from "@/lib/api-write";
 import { fetcher, isNotFoundOrForbidden } from "@/lib/utils";
 
-interface OrgMembership {
+type OrgMembership = {
   id: string;
   organizationId: string;
   role: "admin" | "member";
-}
+};
 
-interface AuthContextType {
+type AuthContextType = {
   user: User | null;
   session: Session | null;
   isPending: boolean;
@@ -59,15 +59,16 @@ interface AuthContextType {
   accessReadError: unknown;
   /** Re-reads the session, the membership and the Workspace. */
   retryAccessReads: () => void;
-}
+};
 
 /**
  * A read's error when it failed for a reason reading again might clear and
  * left no row behind. A 403 or 404 is the server's answer, not a failure;
  * a failed revalidation still has the row it had.
  */
-const transientReadError = (error: unknown, data: unknown): unknown =>
-  error && !data && !isNotFoundOrForbidden(error) ? error : null;
+function transientReadError(error: unknown, data: unknown): unknown {
+  return error && !data && !isNotFoundOrForbidden(error) ? error : null;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -75,10 +76,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
  * What stays fixed for the life of the page, kept apart from the session and
  * membership state so its readers don't re-render when those change.
  */
-interface BackendContextType {
+type BackendContextType = {
   backendUrl: string;
   authClient: AuthClient;
-}
+};
 
 const BackendContext = createContext<BackendContextType | undefined>(undefined);
 
@@ -91,8 +92,8 @@ const BackendContext = createContext<BackendContextType | undefined>(undefined);
 // tripped the backend's rate limiter (#1216). Here the store is created once,
 // so every attempt reads the same one and it fetches once.
 const authClients = new Map<string, AuthClient>();
-const newAuthClient = (backendUrl: string) =>
-  createAuthClient({
+function newAuthClient(backendUrl: string) {
+  return createAuthClient({
     baseURL: backendUrl,
     basePath: "/auth",
     plugins: [
@@ -105,6 +106,7 @@ const newAuthClient = (backendUrl: string) =>
       adminClient(),
     ],
   });
+}
 
 type AuthClient = ReturnType<typeof newAuthClient>;
 
@@ -114,14 +116,14 @@ export type User = AuthSession["user"];
 /** The current session, without the token nothing here needs to hold. */
 export type Session = Omit<AuthSession["session"], "token">;
 
-const getAuthClient = (backendUrl: string) => {
+function getAuthClient(backendUrl: string) {
   let client = authClients.get(backendUrl);
   if (!client) {
     client = newAuthClient(backendUrl);
     authClients.set(backendUrl, client);
   }
   return client;
-};
+}
 
 export function AuthProvider({
   children,

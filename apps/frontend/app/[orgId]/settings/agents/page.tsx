@@ -3,11 +3,11 @@ import { OrgAgentsList } from "@/components/org-agents-list";
 
 export const metadata: Metadata = { title: "Organization Agents" };
 
-const OrgAgentsPage = async ({
+async function OrgAgentsPage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
-}) => {
+}) {
   const { orgId } = await params;
 
   return (
@@ -21,6 +21,6 @@ const OrgAgentsPage = async ({
       <OrgAgentsList orgId={orgId} />
     </div>
   );
-};
+}
 
 export default OrgAgentsPage;

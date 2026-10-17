@@ -61,13 +61,13 @@ import { workspaceRoutes } from "@/lib/routes";
  * Monday (UTC)". cronstrue throws on a malformed expression, so fall back to
  * showing it raw rather than blanking the row.
  */
-const describeSchedule = (cronExpression: string, timezone: string): string => {
+function describeSchedule(cronExpression: string, timezone: string): string {
   try {
     return `${cronstrue.toString(cronExpression, { verbose: false })} (${timezone})`;
   } catch {
     return cronExpression;
   }
-};
+}
 
 /** The value a Select carries for "no filter" — Radix rejects an empty one. */
 const ALL = "all";
@@ -84,32 +84,34 @@ const TRIGGER_TYPE_ICONS: Record<TriggerType, LucideIcon> = {
   inbound: Webhook,
 };
 
-const TriggerTypeIcon = ({ type }: { type: TriggerType }) => {
+function TriggerTypeIcon({ type }: { type: TriggerType }) {
   const Icon = TRIGGER_TYPE_ICONS[type];
   return Icon ? <Icon /> : null;
-};
+}
 
 /** The trigger cards as they load; the workspace home draws them too. */
-export const TriggerCardsSkeleton = ({ cards }: { cards?: number }) => (
-  <CardGridSkeleton
-    cards={cards}
-    titleBadges={["w-12"]}
-    extra={
-      <>
-        {/* The agent it runs, then its schedule or events. */}
-        <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
-        <SkeletonLine lineClassName="mt-1.5 h-4" className="h-3 w-48" />
-      </>
-    }
-  />
-);
+export function TriggerCardsSkeleton({ cards }: { cards?: number }) {
+  return (
+    <CardGridSkeleton
+      cards={cards}
+      titleBadges={["w-12"]}
+      extra={
+        <>
+          {/* The agent it runs, then its schedule or events. */}
+          <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
+          <SkeletonLine lineClassName="mt-1.5 h-4" className="h-3 w-48" />
+        </>
+      }
+    />
+  );
+}
 
 /** An Inbound Trigger's line: what it takes, and how its token stands. */
-const InboundSummary = ({
+function InboundSummary({
   trigger,
 }: {
   trigger: Extract<Serialized<Trigger>, { type: "inbound" }>;
-}) => {
+}) {
   const config = trigger.config;
   const inputs = config.inputs;
   const status = trigger.tokenStatus ?? "none";
@@ -133,7 +135,7 @@ const InboundSummary = ({
         key="token"
         className="flex items-center gap-1 text-warning-foreground"
       >
-        <TriangleAlert className="h-3 w-3" />
+        <TriangleAlert className="size-3" />
         Token expiring soon
       </span>
     ),
@@ -150,19 +152,19 @@ const InboundSummary = ({
 
   return (
     <span className="flex items-center gap-1 flex-wrap">
-      <Webhook className="h-3 w-3" />
+      <Webhook className="size-3" />
       {parts.flatMap((part, i) => (i > 0 ? [" · ", part] : [part]))}
     </span>
   );
-};
+}
 
-export const TriggerList = ({
+export function TriggerList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId: string;
-}) => {
+}) {
   const routes = workspaceRoutes(orgId, workspaceId);
   const searchParams = useSearchParams();
 
@@ -339,7 +341,7 @@ export const TriggerList = ({
                           className="flex items-center gap-1"
                           title={trigger.config.cronExpression}
                         >
-                          <Timer className="h-3 w-3" />
+                          <Timer className="size-3" />
                           {describeSchedule(
                             trigger.config.cronExpression,
                             trigger.config.timezone,
@@ -355,7 +357,7 @@ export const TriggerList = ({
                       <InboundSummary trigger={trigger} />
                     ) : (
                       <span className="flex items-center gap-1 flex-wrap">
-                        <Zap className="h-3 w-3" />
+                        <Zap className="size-3" />
                         {trigger.config.events.map((event) => (
                           <Badge
                             key={event}
@@ -412,4 +414,4 @@ export const TriggerList = ({
       />
     </>
   );
-};
+}

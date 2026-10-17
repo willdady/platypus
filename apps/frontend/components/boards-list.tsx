@@ -12,16 +12,18 @@ const boardsConfig: EntityCardListConfig = {
   },
 };
 
-export const BoardsList = ({
+export function BoardsList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId: string;
-}) => (
-  <EntityCardList
-    orgId={orgId}
-    workspaceId={workspaceId}
-    config={boardsConfig}
-  />
-);
+}) {
+  return (
+    <EntityCardList
+      orgId={orgId}
+      workspaceId={workspaceId}
+      config={boardsConfig}
+    />
+  );
+}

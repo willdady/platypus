@@ -10,19 +10,21 @@ import {
 
 const T0 = 1_767_258_000_000;
 
-const event = (over: Partial<RunEvent> & { id: string }): RunEvent => ({
-  runId: "run-1",
-  parentEventId: null,
-  seq: 0,
-  type: "tool-call",
-  toolName: "search",
-  startedAt: T0,
-  durationMs: 100,
-  status: "completed",
-  error: null,
-  childrenTruncated: false,
-  ...over,
-});
+function event(over: Partial<RunEvent> & { id: string }): RunEvent {
+  return {
+    runId: "run-1",
+    parentEventId: null,
+    seq: 0,
+    type: "tool-call",
+    toolName: "search",
+    startedAt: T0,
+    durationMs: 100,
+    status: "completed",
+    error: null,
+    childrenTruncated: false,
+    ...over,
+  };
+}
 
 describe("RunTimeline", () => {
   it("renders one row per event, nested by parent, with its duration", () => {

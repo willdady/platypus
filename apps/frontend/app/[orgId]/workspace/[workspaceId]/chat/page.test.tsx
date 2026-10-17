@@ -36,13 +36,13 @@ vi.mock("@/components/chat", () => ({
 
 import ChatPage from "./page";
 
-const chatProps = () => {
+function chatProps() {
   const el = screen.getByTestId("chat");
   return {
     chatId: el.getAttribute("data-chat-id")!,
     agentId: el.getAttribute("data-agent-id"),
   };
-};
+}
 
 describe("ChatPage", () => {
   beforeEach(() => {

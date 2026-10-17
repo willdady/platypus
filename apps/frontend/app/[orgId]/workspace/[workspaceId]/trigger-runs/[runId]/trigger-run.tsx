@@ -42,11 +42,11 @@ export const RUN_DETAIL_ERROR_NOTICE =
  * open and patched when it closes, the page asks from just below its oldest
  * still-running event — see `nextSinceSeq` — so the patches reach it too.
  */
-const TriggerRunDetailPage = ({
+function TriggerRunDetailPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string; runId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId, runId } = use(params);
 
   // The events the page has accumulated so far, across polls. A ref rather
@@ -102,7 +102,7 @@ const TriggerRunDetailPage = ({
             description={RUN_DETAIL_ERROR_NOTICE}
           />
         ) : data ? (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             <div className="border rounded-lg">
               <TriggerRunRow
                 run={data.run}
@@ -148,7 +148,7 @@ const TriggerRunDetailPage = ({
         ) : (
           // Anything short of data or an error is still loading, the frames
           // before the session resolves included — never a blank page.
-          <div className="space-y-6" aria-label="Loading trigger run">
+          <div className="flex flex-col gap-6" aria-label="Loading trigger run">
             <div className="border rounded-lg">
               <TriggerRunRowSkeleton />
             </div>
@@ -163,6 +163,6 @@ const TriggerRunDetailPage = ({
       </div>
     </div>
   );
-};
+}
 
 export default TriggerRunDetailPage;

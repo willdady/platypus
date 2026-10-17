@@ -48,7 +48,7 @@ const INITIAL_DATA = {
  * its card URL and manages its tokens. Only the Workspace Owner edits; an Org
  * Admin sees it read-only.
  */
-const A2aEndpointForm = ({
+function A2aEndpointForm({
   orgId,
   workspaceId,
   endpointId,
@@ -56,7 +56,7 @@ const A2aEndpointForm = ({
   orgId: string;
   workspaceId: string;
   endpointId?: string;
-}) => {
+}) {
   const router = useRouter();
   const { ownsWorkspace } = useAuth();
   const scope = { orgId, workspaceId };
@@ -310,6 +310,6 @@ const A2aEndpointForm = ({
       {form}
     </DetailFormState>
   );
-};
+}
 
 export { A2aEndpointForm };

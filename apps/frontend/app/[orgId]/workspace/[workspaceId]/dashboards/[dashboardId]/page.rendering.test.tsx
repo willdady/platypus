@@ -116,26 +116,30 @@ vi.mock("swr", () => ({
 
 import DashboardPage from "./page";
 
-const baseDashboard = (): Dashboard => ({
-  id: DASHBOARD_ID,
-  workspaceId: WS_ID,
-  name: "Test Dashboard",
-  description: null,
-  desktopLayout: [],
-  mobileLayout: [],
-  createdAt: new Date("2026-01-01T00:00:00Z"),
-  updatedAt: new Date("2026-01-01T00:00:00Z"),
-});
+function baseDashboard(): Dashboard {
+  return {
+    id: DASHBOARD_ID,
+    workspaceId: WS_ID,
+    name: "Test Dashboard",
+    description: null,
+    desktopLayout: [],
+    mobileLayout: [],
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+  };
+}
 
-const textWidget = (id: string, title: string): Widget => ({
-  id,
-  dashboardId: DASHBOARD_ID,
-  type: "text",
-  title,
-  data: { content: "" },
-  createdAt: new Date("2026-01-01T00:00:00Z"),
-  updatedAt: new Date("2026-01-01T00:00:00Z"),
-});
+function textWidget(id: string, title: string): Widget {
+  return {
+    id,
+    dashboardId: DASHBOARD_ID,
+    type: "text",
+    title,
+    data: { content: "" },
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+  };
+}
 
 async function renderDashboardPage() {
   await act(async () => {

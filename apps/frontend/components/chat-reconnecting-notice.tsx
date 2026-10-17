@@ -13,13 +13,15 @@ export const CHAT_RECONNECTING_MESSAGE =
  * politely so a screen reader picks it up without interrupting the reply being
  * read.
  */
-export const ChatReconnectingNotice = () => (
-  <div
-    role="status"
-    aria-live="polite"
-    className="mb-2 flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground"
-  >
-    <RefreshCw className="size-4 shrink-0 animate-spin" aria-hidden="true" />
-    <span>{CHAT_RECONNECTING_MESSAGE}</span>
-  </div>
-);
+export function ChatReconnectingNotice() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mb-2 flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground"
+    >
+      <RefreshCw className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+      <span>{CHAT_RECONNECTING_MESSAGE}</span>
+    </div>
+  );
+}

@@ -16,11 +16,11 @@ import { classifyAttachment } from "@/lib/model-config";
  * Rendered inside `<PromptInput>` so it can read the live attachment list from
  * context. The backend remains the source of truth; these are only heads-ups.
  */
-export const FileCompatibilityWarning = ({
+export function FileCompatibilityWarning({
   passthroughFileTypes,
 }: {
   passthroughFileTypes: string[];
-}) => {
+}) {
   const attachments = usePromptInputAttachments();
 
   const classify = (file: { mediaType?: string; filename?: string }) =>
@@ -70,4 +70,4 @@ export const FileCompatibilityWarning = ({
       )}
     </div>
   );
-};
+}

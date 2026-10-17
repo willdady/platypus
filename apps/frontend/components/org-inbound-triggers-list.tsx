@@ -35,7 +35,7 @@ import { TokenCells } from "@/components/bearer-token";
  * One row of `GET /organizations/:orgId/inbound-triggers` (ADR-0030): where
  * the Trigger is, whose it is, and how its token stands. Never the token.
  */
-interface OrgInboundTrigger {
+type OrgInboundTrigger = {
   id: string;
   name: string;
   enabled: boolean;
@@ -49,7 +49,7 @@ interface OrgInboundTrigger {
   tokenExpiresAt: string | null;
   lastUsedAt: string | null;
   lastRejectedAt: string | null;
-}
+};
 
 const COLUMNS = [
   "Trigger",
@@ -66,7 +66,7 @@ const COLUMNS = [
  * Workspace Owner, who can issue a new one. The Organization's Inbound
  * Triggers setting is the lasting off switch.
  */
-export const OrgInboundTriggersList = ({ orgId }: { orgId: string }) => {
+export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
   const backendUrl = useBackendUrl();
   const scope = { orgId };
   const {
@@ -213,4 +213,4 @@ export const OrgInboundTriggersList = ({ orgId }: { orgId: string }) => {
       />
     </>
   );
-};
+}

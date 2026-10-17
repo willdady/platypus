@@ -2,32 +2,34 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, fireEvent, act } from "@testing-library/react";
 import { PullToRefresh } from "./pull-to-refresh";
 
-const touchAt = (clientY: number, clientX = 0) => ({ clientX, clientY });
+function touchAt(clientY: number, clientX = 0) {
+  return { clientX, clientY };
+}
 
-const renderPullToRefresh = (
+function renderPullToRefresh(
   onRefresh: () => Promise<void>,
   { disabled = false }: { disabled?: boolean } = {},
-) => {
+) {
   const view = render(
     <PullToRefresh onRefresh={onRefresh} disabled={disabled}>
       <div>content</div>
     </PullToRefresh>,
   );
   return { view, container: view.container.firstElementChild as HTMLElement };
-};
+}
 
 /**
  * Walks the gesture the component expects: a small move inside the settle
  * window, a pause past the settle period, then the pull itself. A single large
  * move would be disqualified as a flick.
  */
-const pullDown = (container: HTMLElement, endY: number) => {
+function pullDown(container: HTMLElement, endY: number) {
   fireEvent.touchStart(container, { touches: [touchAt(0)] });
   fireEvent.touchMove(container, { touches: [touchAt(10)] });
   vi.advanceTimersByTime(110);
   fireEvent.touchMove(container, { touches: [touchAt(10)] });
   fireEvent.touchMove(container, { touches: [touchAt(endY)] });
-};
+}
 
 describe("PullToRefresh", () => {
   beforeEach(() => {

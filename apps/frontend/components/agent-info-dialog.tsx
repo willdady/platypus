@@ -19,23 +19,23 @@ import { useParams, useRouter } from "next/navigation";
 import { workspaceRoutes } from "@/lib/routes";
 import type { Serialized } from "@/lib/api-write";
 
-interface AgentInfoDialogProps {
+type AgentInfoDialogProps = {
   agent: Serialized<Agent>;
   agents: Serialized<Agent>[];
   toolSets: ToolSet[];
   skills: Serialized<Skill>[];
   providers: Serialized<Provider>[];
   onClose?: () => void;
-}
+};
 
-export const AgentInfoDialog = ({
+export function AgentInfoDialog({
   agent,
   agents,
   toolSets,
   skills,
   providers,
   onClose,
-}: AgentInfoDialogProps) => {
+}: AgentInfoDialogProps) {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const router = useRouter();
   const params = useParams();
@@ -218,10 +218,10 @@ export const AgentInfoDialog = ({
       </div>
       <DialogFooter className="sm:justify-between">
         <Button variant="outline" onClick={handleEdit}>
-          <Pencil className="size-4" /> Edit agent
+          <Pencil /> Edit agent
         </Button>
         <Button onClick={onClose}>Close</Button>
       </DialogFooter>
     </DialogContent>
   );
-};
+}

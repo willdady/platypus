@@ -34,7 +34,7 @@ export const RUN_TIMELINE_TRUNCATED_NOTICE =
 /** How an event whose end nobody saw is labelled in place of a duration. */
 export const UNKNOWN_DURATION_LABEL = "Unknown duration";
 
-const Bar = ({ row, totalMs }: { row: TimelineRow; totalMs: number }) => {
+function Bar({ row, totalMs }: { row: TimelineRow; totalMs: number }) {
   const { left, width } = barGeometry(row, totalMs);
   const style = { left: `${left * 100}%`, width: `${width * 100}%` };
 
@@ -84,7 +84,7 @@ const Bar = ({ row, totalMs }: { row: TimelineRow; totalMs: number }) => {
       </TooltipContent>
     </Tooltip>
   );
-};
+}
 
 /**
  * A Trigger run's **Run timeline** as a waterfall: one row per Run event, the
@@ -94,7 +94,7 @@ const Bar = ({ row, totalMs }: { row: TimelineRow; totalMs: number }) => {
  * it said (that is the boundary ADR-0023 draws, and the reason there is no
  * input or output to expand).
  */
-export const RunTimeline = ({
+export function RunTimeline({
   events,
   runStatus,
   eventsTruncated,
@@ -105,7 +105,7 @@ export const RunTimeline = ({
   eventsTruncated?: boolean;
   /** The clock a still-running event is drawn to. Defaults to the wall clock. */
   now?: number;
-}) => {
+}) {
   const layout = useMemo(
     () => layoutTimeline(events, runStatus, now),
     [events, runStatus, now],
@@ -178,4 +178,4 @@ export const RunTimeline = ({
       )}
     </div>
   );
-};
+}

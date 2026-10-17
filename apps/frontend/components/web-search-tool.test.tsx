@@ -8,11 +8,11 @@ import {
 
 import { WebToolCard, webSearchSources } from "./web-search-tool";
 
-const searchCall = (
+function searchCall(
   normalized: NormalizedWebToolResult,
   extraMetadata?: Record<string, unknown>,
-): ToolUIPart =>
-  ({
+): ToolUIPart {
+  return {
     type: "tool-web_search",
     toolCallId: "call-1",
     state: "output-available",
@@ -22,7 +22,8 @@ const searchCall = (
       ...extraMetadata,
       [WEB_TOOL_NORMALIZED_KEY]: normalized,
     },
-  }) as unknown as ToolUIPart;
+  } as unknown as ToolUIPart;
+}
 
 const backendSearch: NormalizedWebToolResult = {
   kind: "search",
@@ -31,7 +32,9 @@ const backendSearch: NormalizedWebToolResult = {
 };
 
 /** The card's body is a closed `Collapsible` until clicked open. */
-const openCard = () => fireEvent.click(screen.getByRole("button"));
+function openCard() {
+  return fireEvent.click(screen.getByRole("button"));
+}
 
 // Issue #469. A plugin search is the tool most likely to take several seconds,
 // so the card that heads it is where the elapsed time is worth reading.

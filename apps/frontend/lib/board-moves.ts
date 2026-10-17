@@ -23,22 +23,22 @@ export function parseDropZoneId(id: string): string | null {
 
 type Rect = { top: number; height: number };
 
-export interface CardDrop {
+export type CardDrop = {
   activeId: string;
   /** A card id, a column id, or a column drop zone id. */
   overId: string;
   /** Null when dnd-kit has not measured the dragged card. */
   activeRect: Rect | null;
   overRect: Rect;
-}
+};
 
-export interface CardPlacement {
+export type CardPlacement = {
   /** The column the card sits in within `columns`. */
   fromColumnId: string;
   toColumnId: string;
   /** The card to sit behind; null means the head of the column. */
   afterCardId: string | null;
-}
+};
 
 /**
  * Where a dropped card lands. Null when the dragged card is on no column.
@@ -108,13 +108,13 @@ export function placeCard(
   };
 }
 
-export interface CardMove {
+export type CardMove = {
   cardId: string;
   fromColumnId: string;
   toColumnId: string;
   /** Null means the head of the column. */
   afterCardId: string | null;
-}
+};
 
 /** The columns after `move`, applied locally ahead of the server. */
 export function applyCardMove(
@@ -144,11 +144,11 @@ export function applyCardMove(
 }
 
 /** How a write hands its result back to the board. */
-export interface BoardSync {
+export type BoardSync = {
   /** Sets the local optimistic copy; null drops it for the last poll. */
   setColumns: (columns: ColumnWithCards[] | null) => void;
   refetch: () => Promise<unknown>;
-}
+};
 
 /** Not a failed write but a stale board, so it says who moved the card. */
 const CARD_MOVED_ELSEWHERE = "This card was moved by someone else.";

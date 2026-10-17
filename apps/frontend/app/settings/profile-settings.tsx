@@ -15,15 +15,16 @@ import { Pencil } from "lucide-react";
 
 // `updateUser` is an auth-client call, not a REST write — mapped onto the
 // shared outcome shape so the form hook can drive it.
-const toOutcome = (
+function toOutcome(
   error: { message?: string } | null,
   fallback: string,
-): WriteOutcome<unknown> =>
-  error
+): WriteOutcome<unknown> {
+  return error
     ? { outcome: "error", message: error.message || fallback }
     : { outcome: "success", data: {}, revalidateKeys: [] };
+}
 
-const UserSettingsPage = () => {
+function UserSettingsPage() {
   const { user } = useAuth();
   const authClient = useAuthClient();
   const [isEditing, setIsEditing] = useState(false);
@@ -88,7 +89,7 @@ const UserSettingsPage = () => {
     <div>
       <h1 className="text-2xl font-bold mb-4">Profile Settings</h1>
       <div className="grid grid-cols-1 gap-6 mb-4 max-w-md">
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="name" className="text-sm text-muted-foreground">
             Name
           </Label>
@@ -128,7 +129,7 @@ const UserSettingsPage = () => {
                 aria-label="Edit name"
                 onClick={() => setIsEditing(true)}
               >
-                <Pencil className="w-4 h-4" />
+                <Pencil />
               </Button>
             </div>
           )}
@@ -137,7 +138,7 @@ const UserSettingsPage = () => {
           <p className="text-sm text-muted-foreground mb-1">Email</p>
           <p className="font-medium">{user.email}</p>
         </div>
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="timezone" className="text-sm text-muted-foreground">
             Timezone
           </Label>
@@ -179,6 +180,6 @@ const UserSettingsPage = () => {
       </div>
     </div>
   );
-};
+}
 
 export default UserSettingsPage;

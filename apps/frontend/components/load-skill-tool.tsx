@@ -28,13 +28,13 @@ type ReadSkillFileToolPart = Extract<
  * body worth reading, so it borrows the tool disclosure's row and nothing
  * else: no chevron, nothing to expand. Deliberately not a `Tool`.
  */
-const SkillToolRow = ({
+function SkillToolRow({
   toolPart,
   label,
 }: {
   toolPart: LoadSkillToolPart | ReadSkillFileToolPart;
   label: string;
-}) => {
+}) {
   const { output } = toolPart;
   const errorText =
     toolPart.errorText || (output && "error" in output ? output.error : null);
@@ -53,26 +53,26 @@ const SkillToolRow = ({
       )}
     </div>
   );
-};
+}
 
-export const LoadSkillTool = ({
-  toolPart,
-}: {
-  toolPart: LoadSkillToolPart;
-}) => (
-  <SkillToolRow
-    toolPart={toolPart}
-    label={`Loading skill${toolPart.input?.name ? `: ${toolPart.input.name}` : ""}`}
-  />
-);
+export function LoadSkillTool({ toolPart }: { toolPart: LoadSkillToolPart }) {
+  return (
+    <SkillToolRow
+      toolPart={toolPart}
+      label={`Loading skill${toolPart.input?.name ? `: ${toolPart.input.name}` : ""}`}
+    />
+  );
+}
 
-export const ReadSkillFileTool = ({
+export function ReadSkillFileTool({
   toolPart,
 }: {
   toolPart: ReadSkillFileToolPart;
-}) => (
-  <SkillToolRow
-    toolPart={toolPart}
-    label={`Reading skill file${toolPart.input?.name && toolPart.input.path ? `: ${toolPart.input.name}/${toolPart.input.path}` : ""}`}
-  />
-);
+}) {
+  return (
+    <SkillToolRow
+      toolPart={toolPart}
+      label={`Reading skill file${toolPart.input?.name && toolPart.input.path ? `: ${toolPart.input.name}/${toolPart.input.path}` : ""}`}
+    />
+  );
+}

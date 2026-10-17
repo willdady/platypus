@@ -5,11 +5,11 @@ import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Create MCP" };
 
-const McpCreatePage = async ({
+async function McpCreatePage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const McpCreatePage = async ({
       <McpForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>
   );
-};
+}
 
 export default McpCreatePage;

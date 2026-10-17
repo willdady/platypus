@@ -28,8 +28,8 @@ const member = {
 
 const onSuccess = vi.fn();
 
-const renderDialog = () =>
-  render(
+function renderDialog() {
+  return render(
     <MemberEditDialog
       orgId="org1"
       member={member}
@@ -38,15 +38,16 @@ const renderDialog = () =>
       onSuccess={onSuccess}
     />,
   );
+}
 
-const changeRoleToAdmin = async () => {
+async function changeRoleToAdmin() {
   renderDialog();
   await selectOption(
     screen.getByRole("combobox", { name: "Organization Role" }),
     "Admin",
   );
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
-};
+}
 
 beforeEach(() => {
   resetFormHarness();

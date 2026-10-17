@@ -8,15 +8,17 @@ import { useSlashCommands } from "@/hooks/use-slash-commands";
 import { composerProvider } from "@/test/chat-test-fixtures";
 import type { Serialized } from "@/lib/api-write";
 
-const skill = (
+function skill(
   name: string,
   extra: Partial<Serialized<Skill>> = {},
-): Pick<Serialized<Skill>, "name" | "description" | "argumentHint"> => ({
-  name,
-  description: `Does ${name}`,
-  argumentHint: null,
-  ...extra,
-});
+): Pick<Serialized<Skill>, "name" | "description" | "argumentHint"> {
+  return {
+    name,
+    description: `Does ${name}`,
+    argumentHint: null,
+    ...extra,
+  };
+}
 
 /**
  * The picker is driven through the REAL composer, not a bare textarea: the
@@ -26,13 +28,13 @@ const skill = (
  * command instead of sending the message" is a claim about that interaction,
  * and only the composer can test it.
  */
-const renderPicker = ({
+function renderPicker({
   commands,
   enabled = true,
 }: {
   commands: Pick<Serialized<Skill>, "name" | "description" | "argumentHint">[];
   enabled?: boolean;
-}) => {
+}) {
   const onSubmit = vi.fn();
 
   const Harness = () => {
@@ -82,12 +84,15 @@ const renderPicker = ({
   render(<Harness />);
   const textarea = screen.getByRole("combobox") as HTMLTextAreaElement;
   return { textarea, onSubmit };
-};
+}
 
-const type = (textarea: HTMLTextAreaElement, value: string) =>
-  fireEvent.change(textarea, { target: { value } });
+function type(textarea: HTMLTextAreaElement, value: string) {
+  return fireEvent.change(textarea, { target: { value } });
+}
 
-const options = () => screen.queryAllByRole("option").map((o) => o.textContent);
+function options() {
+  return screen.queryAllByRole("option").map((o) => o.textContent);
+}
 
 describe("SlashCommandPicker", () => {
   const commands = [

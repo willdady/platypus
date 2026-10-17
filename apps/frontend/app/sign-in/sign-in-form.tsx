@@ -56,7 +56,7 @@ export default function SignInPage() {
       id={MAIN_CONTENT_ID}
       className="flex min-h-screen items-center justify-center"
     >
-      <div className="w-full max-w-md space-y-8 p-8">
+      <div className="w-full max-w-md flex flex-col gap-8 p-8">
         <div className="text-center">
           <h1 className="text-2xl font-bold">Sign in to Platypus</h1>
           <p className="text-muted-foreground mt-2">
@@ -64,14 +64,14 @@ export default function SignInPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
@@ -84,7 +84,7 @@ export default function SignInPage() {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="password">Password</Label>
             <RevealableInput
               id="password"

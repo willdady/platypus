@@ -67,32 +67,38 @@ import DashboardPage from "./page";
 
 // --- Fixtures ------------------------------------------------------------
 
-const baseDashboard = (): Dashboard => ({
-  id: DASHBOARD_ID,
-  workspaceId: WS_ID,
-  name: "Test Dashboard",
-  description: null,
-  desktopLayout: [{ i: "w-1", x: 0, y: 0, w: 3, h: 5 }],
-  mobileLayout: [],
-  createdAt: new Date("2026-01-01T00:00:00Z"),
-  updatedAt: new Date("2026-01-01T00:00:00Z"),
-});
+function baseDashboard(): Dashboard {
+  return {
+    id: DASHBOARD_ID,
+    workspaceId: WS_ID,
+    name: "Test Dashboard",
+    description: null,
+    desktopLayout: [{ i: "w-1", x: 0, y: 0, w: 3, h: 5 }],
+    mobileLayout: [],
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+  };
+}
 
-const baseWidget = (): Widget => ({
-  id: "w-1",
-  dashboardId: DASHBOARD_ID,
-  type: "text",
-  title: "My Text Widget",
-  data: { content: "hello" },
-  createdAt: new Date("2026-01-01T00:00:00Z"),
-  updatedAt: new Date("2026-01-01T00:00:00Z"),
-});
+function baseWidget(): Widget {
+  return {
+    id: "w-1",
+    dashboardId: DASHBOARD_ID,
+    type: "text",
+    title: "My Text Widget",
+    data: { content: "hello" },
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+  };
+}
 
-const secondWidget = (): Widget => ({
-  ...baseWidget(),
-  id: "w-2",
-  title: "Second Widget",
-});
+function secondWidget(): Widget {
+  return {
+    ...baseWidget(),
+    id: "w-2",
+    title: "Second Widget",
+  };
+}
 
 /** Routes a stubbed `fetch` by method/URL shape, so each mutation's success
  * or failure can be controlled independently per test. `deleteWidget` may be
@@ -167,33 +173,37 @@ async function renderDashboard() {
   await screen.findByText("Test Dashboard");
 }
 
-const clickEdit = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+function clickEdit() {
+  return fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+}
 
-const clickWidgetPencil = () => {
+function clickWidgetPencil() {
   const button = document.querySelector("button:has(svg.lucide-pencil)");
   if (!button) throw new Error("widget edit toggle not found");
   fireEvent.click(button);
-};
+}
 
-const clickWidgetTrash = () => {
+function clickWidgetTrash() {
   const button = document.querySelector("button:has(svg.lucide-trash-2)");
   if (!button) throw new Error("widget delete button not found");
   fireEvent.click(button);
-};
+}
 
-const clickSave = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+function clickSave() {
+  return fireEvent.click(screen.getByRole("button", { name: "Save" }));
+}
 
-const clickCancel = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+function clickCancel() {
+  return fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+}
 
-const expectViewMode = () =>
-  waitFor(() =>
+function expectViewMode() {
+  return waitFor(() =>
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument(),
   );
+}
 
-const addWidget = async (title: string) => {
+async function addWidget(title: string) {
   fireEvent.click(screen.getByRole("button", { name: /add widget/i }));
   fireEvent.change(screen.getByPlaceholderText("Widget title"), {
     target: { value: title },
@@ -202,18 +212,19 @@ const addWidget = async (title: string) => {
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
-};
+}
 
 /** `[method, url]` of every write the stubbed `fetch` received. */
-const writes = (fetchMock: ReturnType<typeof stubFetch>) =>
-  fetchMock.mock.calls
+function writes(fetchMock: ReturnType<typeof stubFetch>) {
+  return fetchMock.mock.calls
     .map(([url, init]) => [init?.method ?? "GET", url] as const)
     .filter(([method]) => method !== "GET");
+}
 
-const widgetSaveButton = () => {
+function widgetSaveButton() {
   const buttons = screen.getAllByRole("button", { name: "Save" });
   return buttons[buttons.length - 1];
-};
+}
 
 describe("Dashboard editor mutations", () => {
   beforeEach(() => {

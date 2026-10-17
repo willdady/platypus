@@ -14,16 +14,18 @@ vi.mock("swr", () => swrMock);
 import { SkillBundleCard } from "./skill-bundle";
 import type { Serialized } from "@/lib/api-write";
 
-const file = (path: string, isText: boolean) => ({
-  id: path,
-  path,
-  size: 10,
-  sha256: "x",
-  isText,
-});
+function file(path: string, isText: boolean) {
+  return {
+    id: path,
+    path,
+    size: 10,
+    sha256: "x",
+    isText,
+  };
+}
 
-const skill = (overrides: Partial<Serialized<Skill>>): Serialized<Skill> =>
-  ({
+function skill(overrides: Partial<Serialized<Skill>>): Serialized<Skill> {
+  return {
     id: "s1",
     name: "pdf",
     description: "d",
@@ -32,22 +34,24 @@ const skill = (overrides: Partial<Serialized<Skill>>): Serialized<Skill> =>
     needsSandbox: false,
     files: [],
     ...overrides,
-  }) as Serialized<Skill>;
+  } as Serialized<Skill>;
+}
 
 const WARNING =
   "Some files in this Skill can't be copied to this Workspace's Sandbox.";
 
-const renderCard = (
+function renderCard(
   value: Serialized<Skill>,
   workspaceId: string | undefined = "ws1",
-) =>
-  render(
+) {
+  return render(
     <SkillBundleCard
       scope={workspaceId ? { orgId: "org1", workspaceId } : { orgId: "org1" }}
       skill={value}
       onReplaced={() => {}}
     />,
   );
+}
 
 beforeEach(() => {
   resetListHarness();

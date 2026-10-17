@@ -44,33 +44,35 @@ type AttachedWorkspace = { workspaceId: string; workspaceName: string };
 
 // One SWR key per resource, so the badge, the card's warning and the Manage
 // attachments dialog share a single read and revalidate together.
-const useAttachments = (
+function useAttachments(
   orgId: string | null,
   resourceType: ResourceType,
   resourceId: string,
-) =>
-  useScopedList<AttachedWorkspace>(
+) {
+  return useScopedList<AttachedWorkspace>(
     attachmentsEntity(resourceType, resourceId),
     orgId ? { orgId } : null,
   );
+}
 
 /**
  * How many Workspaces a Shared resource is attached to, or `undefined` while
  * the read is pending (or withheld by a `null` orgId, for a viewer who can't
  * see attachments).
  */
-const useAttachmentCount = (
+function useAttachmentCount(
   orgId: string | null,
   resourceType: ResourceType,
   resourceId: string,
-): number | undefined =>
-  useAttachments(orgId, resourceType, resourceId).data?.results.length;
+): number | undefined {
+  return useAttachments(orgId, resourceType, resourceId).data?.results.length;
+}
 
 /**
  * Hands an org-surface card its attachment count, so a list can call
  * {@link useAttachmentCount} per row without extracting a row component.
  */
-export const AttachmentCount = ({
+export function AttachmentCount({
   orgId,
   resourceType,
   resourceId,
@@ -80,15 +82,19 @@ export const AttachmentCount = ({
   resourceType: ResourceType;
   resourceId: string;
   children: (count: number | undefined) => ReactNode;
-}) => children(useAttachmentCount(orgId, resourceType, resourceId));
+}) {
+  return children(useAttachmentCount(orgId, resourceType, resourceId));
+}
 
 /** The line an org-surface card shows when attached to no Workspaces. */
-export const UnattachedWarning = () => (
-  <span className="mt-1 flex items-center gap-1 cursor-default text-xs text-warning-foreground">
-    <TriangleAlert className="h-3 w-3" />
-    <strong>WARNING:</strong> Not attached to any workspaces.
-  </span>
-);
+export function UnattachedWarning() {
+  return (
+    <span className="mt-1 flex items-center gap-1 cursor-default text-xs text-warning-foreground">
+      <TriangleAlert className="size-3" />
+      <strong>WARNING:</strong> Not attached to any workspaces.
+    </span>
+  );
+}
 
 /**
  * Read-only affordance shown on an org-surface card: "Shared with N workspaces"
@@ -96,7 +102,7 @@ export const UnattachedWarning = () => (
  * tool-set/skill hover summaries on the workspace home page. Managing the
  * attachments themselves happens via {@link ManageAttachmentsDialog}.
  */
-export const SharedWithBadge = ({
+export function SharedWithBadge({
   orgId,
   resourceType,
   resourceId,
@@ -104,7 +110,7 @@ export const SharedWithBadge = ({
   orgId: string;
   resourceType: ResourceType;
   resourceId: string;
-}) => {
+}) {
   const { results: attached, isLoading } = useAttachments(
     orgId,
     resourceType,
@@ -140,7 +146,7 @@ export const SharedWithBadge = ({
       )}
     </Tooltip>
   );
-};
+}
 
 /**
  * Org Admin dialog to manage where a Shared resource is attached (ADR-0007).
@@ -148,7 +154,7 @@ export const SharedWithBadge = ({
  * workspaces show as removable chips and the list filters as you type.
  * Controlled by the caller (opened from the card's "Manage attachments" menu).
  */
-export const ManageAttachmentsDialog = ({
+export function ManageAttachmentsDialog({
   orgId,
   resourceType,
   resourceId,
@@ -162,7 +168,7 @@ export const ManageAttachmentsDialog = ({
   resourceName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -315,4 +321,4 @@ export const ManageAttachmentsDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

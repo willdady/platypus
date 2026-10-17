@@ -10,7 +10,7 @@ import {
   type KeyValueRow,
 } from "./key-value-rows-editor";
 
-const Harness = ({ initial }: { initial: KeyValueRow[] }) => {
+function Harness({ initial }: { initial: KeyValueRow[] }) {
   const [rows, setRows] = useState(initial);
   return (
     <KeyValueRowsEditor
@@ -21,7 +21,7 @@ const Harness = ({ initial }: { initial: KeyValueRow[] }) => {
       addLabel="Add variable"
     />
   );
-};
+}
 
 describe("KeyValueRowsEditor", () => {
   it("keeps the following rows' typed values and inputs when a middle row is removed", () => {

@@ -7,11 +7,11 @@ import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Shared Agent" };
 
-const OrgAgentEditPage = async ({
+async function OrgAgentEditPage({
   params,
 }: {
   params: Promise<{ orgId: string; agentId: string }>;
-}) => {
+}) {
   const { orgId, agentId } = await params;
 
   // Org-scoped tool sets: static sets + org MCPs (the only ones a Shared agent
@@ -34,6 +34,6 @@ const OrgAgentEditPage = async ({
       />
     </ResourcePage>
   );
-};
+}
 
 export default OrgAgentEditPage;

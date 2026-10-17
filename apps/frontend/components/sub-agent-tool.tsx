@@ -35,11 +35,14 @@ export const SUB_AGENT_CUT_SHORT_NOTICE =
 export const SUB_AGENT_STEP_LIMIT_NOTICE =
   "Sub-Agent response cut short at the step limit.";
 
-const isSubAgentActivity = (output: unknown): output is SubAgentActivity =>
-  typeof output === "object" &&
-  output !== null &&
-  "entries" in output &&
-  Array.isArray((output as SubAgentActivity).entries);
+function isSubAgentActivity(output: unknown): output is SubAgentActivity {
+  return (
+    typeof output === "object" &&
+    output !== null &&
+    "entries" in output &&
+    Array.isArray((output as SubAgentActivity).entries)
+  );
+}
 
 /**
  * Extracts the sub-agent name from a pre-dispatcher tool name.
@@ -49,14 +52,14 @@ const isSubAgentActivity = (output: unknown): output is SubAgentActivity =>
  * `delegate` tool, which is for ever: stored Chat messages carry the tool name
  * that was current when they were written and are never rewritten.
  */
-const extractSubAgentName = (toolName: string): string => {
+function extractSubAgentName(toolName: string): string {
   const prefix = "delegateTo";
   if (toolName.startsWith(prefix)) {
     const namePart = toolName.slice(prefix.length);
     return namePart.replace(/([A-Z])/g, " $1").trim();
   }
   return toolName;
-};
+}
 
 /**
  * Whose name to put on the row.
@@ -66,13 +69,13 @@ const extractSubAgentName = (toolName: string): string => {
  * The name arrives with the streamed input, so the fallback covers only the
  * sliver of a turn before the model has finished writing the call.
  */
-const subAgentNameOf = (toolPart: ToolUIPart): string => {
+function subAgentNameOf(toolPart: ToolUIPart): string {
   const toolName = toolPart.type.replace("tool-", "");
   if (toolName !== "delegate") return extractSubAgentName(toolName);
   const target = (toolPart.input as { subAgent?: string } | undefined)
     ?.subAgent;
   return target?.trim() || "Sub-Agent";
-};
+}
 
 /**
  * A streamed activity entry in the shape the shared row draws. The yielded
@@ -81,17 +84,19 @@ const subAgentNameOf = (toolPart: ToolUIPart): string => {
  * reasoning stretch and `generating` a text stretch; `failed` — the delegation
  * itself failing — the row still knows how to draw.
  */
-const toRowEntry = (entry: SubAgentActivityEntry): ActivityRowEntry => ({
-  type:
-    entry.type === "thinking"
-      ? "reasoning"
-      : entry.type === "generating"
-        ? "text"
-        : entry.type,
-  toolName: entry.toolName,
-  status: entry.status,
-  error: entry.error,
-});
+function toRowEntry(entry: SubAgentActivityEntry): ActivityRowEntry {
+  return {
+    type:
+      entry.type === "thinking"
+        ? "reasoning"
+        : entry.type === "generating"
+          ? "text"
+          : entry.type,
+    toolName: entry.toolName,
+    status: entry.status,
+    error: entry.error,
+  };
+}
 
 /**
  * Folds consecutive completed entries with the same type and toolName into a
@@ -99,9 +104,7 @@ const toRowEntry = (entry: SubAgentActivityEntry): ActivityRowEntry => ({
  * are never folded — a trailing running entry that matches the preceding
  * completed streak stays on its own line.
  */
-const compactEntries = (
-  entries: SubAgentActivityEntry[],
-): ActivityRowEntry[] => {
+function compactEntries(entries: SubAgentActivityEntry[]): ActivityRowEntry[] {
   const result: ActivityRowEntry[] = [];
 
   for (const raw of entries) {
@@ -121,7 +124,7 @@ const compactEntries = (
   }
 
   return result;
-};
+}
 
 /**
  * The delegate's answer. One component for both call sites — with and without
@@ -129,21 +132,23 @@ const compactEntries = (
  * other. `notice` is the resolved wording for whichever limit stopped the
  * delegation, absent when it finished on its own.
  */
-const ResponseBlock = ({ text, notice }: { text: string; notice?: string }) => (
-  <div className="space-y-2">
-    <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      Response
-    </h4>
-    <Message from="assistant">
-      <MessageContent className="max-w-full">
-        <MessageResponse>{text}</MessageResponse>
-      </MessageContent>
-    </Message>
-    {notice && <TurnNotice className="mt-2">{notice}</TurnNotice>}
-  </div>
-);
+function ResponseBlock({ text, notice }: { text: string; notice?: string }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        Response
+      </h4>
+      <Message from="assistant">
+        <MessageContent className="max-w-full">
+          <MessageResponse>{text}</MessageResponse>
+        </MessageContent>
+      </Message>
+      {notice && <TurnNotice>{notice}</TurnNotice>}
+    </div>
+  );
+}
 
-interface SubAgentToolProps {
+type SubAgentToolProps = {
   toolPart: ToolUIPart;
   /**
    * The metadata of the message this invocation sits on, which is where a
@@ -151,16 +156,13 @@ interface SubAgentToolProps {
    * it needs both carriers, and the composing message already holds them.
    */
   messageMetadata?: unknown;
-}
+};
 
 /**
  * Renders a sub-agent tool invocation. Shows a real-time activity log while the
  * sub-agent runs, then the plain-text result when complete.
  */
-export const SubAgentTool = ({
-  toolPart,
-  messageMetadata,
-}: SubAgentToolProps) => {
+export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
   const input = toolPart.input as { task?: string };
   const output = toolPart.output as SubAgentActivity | string | null;
   const errorText = toolPart.errorText;
@@ -219,7 +221,7 @@ export const SubAgentTool = ({
 
       <ToolContent>
         {/* Task input */}
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
             Task
           </h4>
@@ -230,7 +232,7 @@ export const SubAgentTool = ({
 
         {/* Activity log, error, working indicator, or response */}
         {errorText ? (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
               Error
             </h4>
@@ -240,8 +242,8 @@ export const SubAgentTool = ({
           </div>
         ) : activity && activity.entries.length > 0 ? (
           <>
-            <div className="space-y-1">
-              <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-1">
+            <div className="flex flex-col gap-1">
+              <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
                 Activity
               </h4>
               {compacted.map((entry, i) => (
@@ -260,4 +262,4 @@ export const SubAgentTool = ({
       </ToolContent>
     </Tool>
   );
-};
+}

@@ -98,29 +98,31 @@ import type { Serialized } from "@/lib/api-write";
  * explanation, which as one block under the list was a wall nobody read and
  * left the reader matching sentences to fields by hand.
  */
-const InfoHint = ({
+function InfoHint({
   label,
   children,
 }: {
   label: string;
   children: React.ReactNode;
-}) => (
-  // A short delay, so sweeping the pointer across a row of fields doesn't fire
-  // a tooltip at every icon on the way past.
-  <Tooltip delayDuration={400}>
-    <TooltipTrigger
-      // Focusable, so the help is reachable by keyboard and not hover-only.
-      type="button"
-      aria-label={`About ${label}`}
-      className="text-muted-foreground hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]"
-    >
-      <Info className="size-3.5" />
-    </TooltipTrigger>
-    <TooltipContent className="max-w-xs">{children}</TooltipContent>
-  </Tooltip>
-);
+}) {
+  return (
+    // A short delay, so sweeping the pointer across a row of fields doesn't fire
+    // a tooltip at every icon on the way past.
+    <Tooltip delayDuration={400}>
+      <TooltipTrigger
+        // Focusable, so the help is reachable by keyboard and not hover-only.
+        type="button"
+        aria-label={`About ${label}`}
+        className="text-muted-foreground hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]"
+      >
+        <Info className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{children}</TooltipContent>
+    </Tooltip>
+  );
+}
 
-const ModelField = ({
+function ModelField({
   htmlFor,
   label,
   hint,
@@ -132,18 +134,20 @@ const ModelField = ({
   hint: React.ReactNode;
   error?: string;
   children: React.ReactNode;
-}) => (
-  <div className="flex flex-col gap-1" data-invalid={!!error}>
-    <div className="flex items-center gap-1.5">
-      <FieldLabel htmlFor={htmlFor} className="text-xs text-muted-foreground">
-        {label}
-      </FieldLabel>
-      <InfoHint label={label}>{hint}</InfoHint>
+}) {
+  return (
+    <div className="flex flex-col gap-1" data-invalid={!!error}>
+      <div className="flex items-center gap-1.5">
+        <FieldLabel htmlFor={htmlFor} className="text-xs text-muted-foreground">
+          {label}
+        </FieldLabel>
+        <InfoHint label={label}>{hint}</InfoHint>
+      </div>
+      {children}
+      {error && <FieldError>{error}</FieldError>}
     </div>
-    {children}
-    {error && <FieldError>{error}</FieldError>}
-  </div>
-);
+  );
+}
 
 /** Errors reported against one model row, split by the field each belongs to. */
 type ModelRowErrors = { row?: string; fields: Record<string, string> };
@@ -154,7 +158,7 @@ type ModelRowErrors = { row?: string; fields: Record<string, string> };
  * per row turned a ten-model provider into a wall. A row that has either value
  * set opens expanded, so nothing configured is hidden from the reader.
  */
-const ModelRow = ({
+function ModelRow({
   model,
   index,
   disabled,
@@ -170,7 +174,7 @@ const ModelRow = ({
   errors: ModelRowErrors;
   onChange: (patch: Partial<ModelConfigView>) => void;
   onRemove: () => void;
-}) => {
+}) {
   const [showAdvanced, setShowAdvanced] = useState(
     model.passthroughFileTypes.length > 0 ||
       model.maxExtractedTextChars !== undefined ||
@@ -473,7 +477,7 @@ const ModelRow = ({
       </Button>
     </div>
   );
-};
+}
 
 type ProviderFormData = Omit<
   Provider,
@@ -484,59 +488,63 @@ type ProviderFormData = Omit<
 };
 
 /** A ModelRow's box: three small labelled inputs, Advanced, and Remove. */
-const ModelRowSkeleton = () => (
-  <div className="flex items-start gap-2 rounded-md border p-3">
-    <div className="flex flex-1 flex-col gap-3">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="flex flex-col gap-1">
-          <div className="flex h-5 items-center">
-            <Skeleton className="h-3 w-20" />
+function ModelRowSkeleton() {
+  return (
+    <div className="flex items-start gap-2 rounded-md border p-3">
+      <div className="flex flex-1 flex-col gap-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex flex-col gap-1">
+            <div className="flex h-5 items-center">
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <Skeleton className="h-9 w-full" />
           </div>
-          <Skeleton className="h-9 w-full" />
+        ))}
+        <div className="flex h-9 items-center">
+          <Skeleton className="h-3 w-20" />
         </div>
-      ))}
-      <div className="flex h-9 items-center">
-        <Skeleton className="h-3 w-20" />
       </div>
+      <Skeleton className="size-9 shrink-0" />
     </div>
-    <Skeleton className="size-9 shrink-0" />
-  </div>
-);
+  );
+}
 
-const ProviderFormSkeleton = ({
+function ProviderFormSkeleton({
   className,
   editing,
 }: {
   className?: string;
   editing: boolean;
-}) => (
-  <div className={className}>
-    <FormSkeletonSet>
-      <FormSkeletonGroup>
-        <FieldSkeleton />
-        <FieldSkeleton />
-        <FieldSkeleton />
-        <FieldSkeleton description={1} />
-        {/* Models: its label, one row, Add model and the description. */}
-        <div className="flex w-full flex-col gap-3">
-          <div className="flex h-5 items-center">
-            <Skeleton className="h-3.5 w-16" />
+}) {
+  return (
+    <div className={className}>
+      <FormSkeletonSet>
+        <FormSkeletonGroup>
+          <FieldSkeleton />
+          <FieldSkeleton />
+          <FieldSkeleton />
+          <FieldSkeleton description={1} />
+          {/* Models: its label, one row, Add model and the description. */}
+          <div className="flex w-full flex-col gap-3">
+            <div className="flex h-5 items-center">
+              <Skeleton className="h-3.5 w-16" />
+            </div>
+            <ModelRowSkeleton />
+            <Skeleton className="mt-2 h-8 w-28" />
+            <Skeleton className="h-3.5 w-2/3" />
           </div>
-          <ModelRowSkeleton />
-          <Skeleton className="mt-2 h-8 w-28" />
-          <Skeleton className="h-3.5 w-2/3" />
-        </div>
-        <FieldSkeleton description={1} />
-        <FieldSkeleton description={1} />
-        <FieldSkeleton description={1} />
-      </FormSkeletonGroup>
-      <CollapsibleSkeleton />
-    </FormSkeletonSet>
-    <FooterSkeleton buttons={editing ? 2 : 1} />
-  </div>
-);
+          <FieldSkeleton description={1} />
+          <FieldSkeleton description={1} />
+          <FieldSkeleton description={1} />
+        </FormSkeletonGroup>
+        <CollapsibleSkeleton />
+      </FormSkeletonSet>
+      <FooterSkeleton buttons={editing ? 2 : 1} />
+    </div>
+  );
+}
 
-const ProviderForm = ({
+function ProviderForm({
   classNames,
   orgId,
   workspaceId,
@@ -549,7 +557,7 @@ const ProviderForm = ({
   providerId?: string;
   /** Collect the Provider rather than save it (see `FormDraft`). */
   draft?: FormDraft;
-}) => {
+}) {
   // Add scope to Provider type for this component
   type ProviderWithScope = Serialized<Provider> & {
     scope: "organization" | "workspace";
@@ -1398,6 +1406,6 @@ const ProviderForm = ({
       {form}
     </DetailFormState>
   );
-};
+}
 
 export { ProviderForm };

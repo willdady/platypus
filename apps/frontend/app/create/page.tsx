@@ -7,7 +7,7 @@ import { ProtectedRoute } from "@/components/protected-route";
 
 export const metadata: Metadata = { title: "Create Organization" };
 
-const OrganizationCreatePage = () => {
+function OrganizationCreatePage() {
   return (
     <ProtectedRoute requireSuperAdmin={true}>
       <main id={MAIN_CONTENT_ID}>
@@ -21,6 +21,6 @@ const OrganizationCreatePage = () => {
       </main>
     </ProtectedRoute>
   );
-};
+}
 
 export default OrganizationCreatePage;

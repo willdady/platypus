@@ -9,13 +9,16 @@ export type SelectionReference =
   | { type: "agent"; agentId: string }
   | { type: "provider"; providerId: string; modelReference: string };
 
-export const encodeAgentSelection = (agentId: string): string =>
-  `agent:${agentId}`;
+export function encodeAgentSelection(agentId: string): string {
+  return `agent:${agentId}`;
+}
 
-export const encodeProviderSelection = (
+export function encodeProviderSelection(
   providerId: string,
   modelReference: string,
-): string => `provider:${providerId}:${modelReference}`;
+): string {
+  return `provider:${providerId}:${modelReference}`;
+}
 
 /**
  * Parses a value built by `encodeAgentSelection` / `encodeProviderSelection`.
@@ -25,9 +28,9 @@ export const encodeProviderSelection = (
  * model segment can contain its own colon. Anything not matching either shape
  * (an empty string, a bare model id with no prefix) decodes to `null`.
  */
-export const decodeSelectionReference = (
+export function decodeSelectionReference(
   value: string,
-): SelectionReference | null => {
+): SelectionReference | null {
   if (value.startsWith("agent:")) {
     return { type: "agent", agentId: value.slice("agent:".length) };
   }
@@ -40,4 +43,4 @@ export const decodeSelectionReference = (
     };
   }
   return null;
-};
+}

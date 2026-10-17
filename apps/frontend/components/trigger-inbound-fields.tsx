@@ -52,7 +52,7 @@ type InboundInputDraft = {
  * What stops the declared inputs from saving, if anything. The backend checks
  * the same rules; this only moves the message next to the rows.
  */
-const inboundInputsProblem = (inputs: InboundInputDraft[]): string | null => {
+function inboundInputsProblem(inputs: InboundInputDraft[]): string | null {
   const names = inputs.map((input) => input.name.trim());
   if (names.some((name) => name === "")) return "Every input needs a name.";
   const bad = names.find((name) => !inboundTriggerInputNameRegex.test(name));
@@ -64,7 +64,7 @@ const inboundInputsProblem = (inputs: InboundInputDraft[]): string | null => {
     return `"${duplicate}" is declared more than once.`;
   }
   return null;
-};
+}
 
 /** A token being shown in the one-time dialog, and where to go after. */
 type ShownToken = {
@@ -78,7 +78,7 @@ type ShownToken = {
  * An Inbound Trigger's declared inputs, record key and token lifetime, and,
  * once saved, its token: status, regenerate, and the one-time token dialog.
  */
-const TriggerInboundFields = ({
+function TriggerInboundFields({
   active,
   trigger,
   scope,
@@ -87,7 +87,7 @@ const TriggerInboundFields = ({
   clearErrors,
   onChange,
   mutateRecord,
-}: TriggerFieldsProps) => {
+}: TriggerFieldsProps) {
   const saved = trigger?.type === "inbound" ? trigger.config : undefined;
   const backendUrl = useBackendUrl();
   const router = useRouter();
@@ -287,7 +287,7 @@ const TriggerInboundFields = ({
                       }
                       disabled={disabled}
                     >
-                      <X className="h-4 w-4" />
+                      <X />
                     </Button>
                   </div>
                 </div>
@@ -307,7 +307,7 @@ const TriggerInboundFields = ({
                     inboundInputs.length >= INBOUND_TRIGGER_MAX_INPUTS
                   }
                 >
-                  <Plus className="h-4 w-4" /> Add input
+                  <Plus /> Add input
                 </Button>
               </div>
             </div>
@@ -368,8 +368,7 @@ const TriggerInboundFields = ({
                     onClick={() => setIsRegenerateDialogOpen(true)}
                     disabled={disabled}
                   >
-                    <RefreshCw className="h-4 w-4" />{" "}
-                    {hasToken ? "Regenerate" : "Issue token"}
+                    <RefreshCw /> {hasToken ? "Regenerate" : "Issue token"}
                   </Button>
                 </div>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-muted-foreground">
@@ -445,6 +444,6 @@ const TriggerInboundFields = ({
       )}
     </>
   );
-};
+}
 
 export { TriggerInboundFields };

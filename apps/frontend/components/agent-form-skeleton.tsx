@@ -15,7 +15,7 @@ import {
  * Its own module so the agent pages' route-level `loading.tsx`, shown while
  * the server fetches the tool sets, needn't pull in the whole form.
  */
-export const AgentFormSkeleton = ({
+export function AgentFormSkeleton({
   className,
   editing = false,
   tools = true,
@@ -25,26 +25,28 @@ export const AgentFormSkeleton = ({
   editing?: boolean;
   /** Whether the Tools card shows (there are tool sets to pick from). */
   tools?: boolean;
-}) => (
-  <div className={className}>
-    <FormSkeletonSet>
-      <AvatarSkeleton />
-      <FormSkeletonGroup>
-        <FieldSkeleton />
-        <TextareaSkeleton counter />
-        <FieldSkeleton description={1} />
-        <TextareaSkeleton
-          heightClassName={editing ? "h-52" : "h-16"}
-          description={2}
-        />
-        <FieldSkeleton />
-        <FieldSkeleton className="w-1/2" description={1} />
-      </FormSkeletonGroup>
-      {tools && <SwitchCardSkeleton rows={4} />}
-      <SwitchCardSkeleton className="mb-6" rows={2} />
-      <SwitchCardSkeleton className="mb-6" rows={2} description />
-      <CollapsibleSkeleton />
-    </FormSkeletonSet>
-    <FooterSkeleton buttons={editing ? 2 : 1} />
-  </div>
-);
+}) {
+  return (
+    <div className={className}>
+      <FormSkeletonSet>
+        <AvatarSkeleton />
+        <FormSkeletonGroup>
+          <FieldSkeleton />
+          <TextareaSkeleton counter />
+          <FieldSkeleton description={1} />
+          <TextareaSkeleton
+            heightClassName={editing ? "h-52" : "h-16"}
+            description={2}
+          />
+          <FieldSkeleton />
+          <FieldSkeleton className="w-1/2" description={1} />
+        </FormSkeletonGroup>
+        {tools && <SwitchCardSkeleton rows={4} />}
+        <SwitchCardSkeleton className="mb-6" rows={2} />
+        <SwitchCardSkeleton className="mb-6" rows={2} description />
+        <CollapsibleSkeleton />
+      </FormSkeletonSet>
+      <FooterSkeleton buttons={editing ? 2 : 1} />
+    </div>
+  );
+}

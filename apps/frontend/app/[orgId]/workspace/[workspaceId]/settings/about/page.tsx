@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = { title: "About" };
 
-const AboutPage = () => {
+function AboutPage() {
   const version = process.env.APP_VERSION ?? "unknown";
 
   return (
@@ -60,6 +60,6 @@ const AboutPage = () => {
       </div>
     </div>
   );
-};
+}
 
 export default AboutPage;

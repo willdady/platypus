@@ -9,33 +9,35 @@ import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
-export const Conversation = ({ className, ...props }: ConversationProps) => (
-  <StickToBottom
-    className={cn("relative flex-1 overflow-y-auto", className)}
-    initial="smooth"
-    resize="smooth"
-    role="log"
-    {...props}
-  />
-);
+export function Conversation({ className, ...props }: ConversationProps) {
+  return (
+    <StickToBottom
+      className={cn("relative flex-1 overflow-y-auto", className)}
+      initial="smooth"
+      resize="smooth"
+      role="log"
+      {...props}
+    />
+  );
+}
 
 export type ConversationContentProps = ComponentProps<
   typeof StickToBottom.Content
 >;
 
-export const ConversationContent = ({
+export function ConversationContent({
   className,
   ...props
-}: ConversationContentProps) => (
-  <StickToBottom.Content className={cn("p-4", className)} {...props} />
-);
+}: ConversationContentProps) {
+  return <StickToBottom.Content className={cn("p-4", className)} {...props} />;
+}
 
 export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
 
-export const ConversationScrollButton = ({
+export function ConversationScrollButton({
   className,
   ...props
-}: ConversationScrollButtonProps) => {
+}: ConversationScrollButtonProps) {
   const { isAtBottom, scrollToBottom } = useStickToBottomContext();
 
   const handleScrollToBottom = useCallback(() => {
@@ -56,8 +58,8 @@ export const ConversationScrollButton = ({
         variant="outline"
         {...props}
       >
-        <ArrowDownIcon className="size-4" />
+        <ArrowDownIcon />
       </Button>
     )
   );
-};
+}

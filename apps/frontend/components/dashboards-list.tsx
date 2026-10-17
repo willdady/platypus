@@ -12,16 +12,18 @@ const dashboardsConfig: EntityCardListConfig = {
   },
 };
 
-export const DashboardsList = ({
+export function DashboardsList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId: string;
-}) => (
-  <EntityCardList
-    orgId={orgId}
-    workspaceId={workspaceId}
-    config={dashboardsConfig}
-  />
-);
+}) {
+  return (
+    <EntityCardList
+      orgId={orgId}
+      workspaceId={workspaceId}
+      config={dashboardsConfig}
+    />
+  );
+}

@@ -11,79 +11,85 @@ import { Skeleton } from "@/components/ui/skeleton";
 import WorkspaceShellLayout from "./workspace/layout";
 import WorkspaceLoading from "./workspace/loading";
 
-const MenuSkeleton = () => (
-  <div className="flex flex-col gap-2">
-    {Array.from({ length: 8 }, (_, i) => (
-      <Skeleton key={i} className="h-8 w-full" />
-    ))}
-  </div>
-);
+function MenuSkeleton() {
+  return (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: 8 }, (_, i) => (
+        <Skeleton key={i} className="h-8 w-full" />
+      ))}
+    </div>
+  );
+}
 
-const ContentSkeleton = () => (
-  <div
-    role="status"
-    aria-busy="true"
-    aria-label="Loading organization"
-    className="space-y-4"
-  >
-    <Skeleton className="h-8 w-48" />
-    <Skeleton className="h-24 w-full" />
-    <Skeleton className="h-24 w-full" />
-  </div>
-);
-
-// Stands in for the Create Workspace page and the first step of its wizard,
-// placeholder for placeholder, so nothing jumps when the wizard arrives.
-const CreateWorkspaceSkeleton = () => (
-  <div className="h-dvh overflow-y-auto pb-4">
+function ContentSkeleton() {
+  return (
     <div
       role="status"
       aria-busy="true"
-      aria-label="Loading workspace setup"
-      className={resourcePageLayout.wide.outer}
+      aria-label="Loading organization"
+      className="flex flex-col gap-4"
     >
-      <div className={resourcePageLayout.wide.inner}>
-        <Skeleton className="mb-8 h-8 w-20" />
-        <Skeleton className="mb-4 h-8 w-56" />
-        <div className="mb-8 flex flex-wrap gap-x-6 gap-y-2">
-          {Array.from({ length: 3 }, (_, i) => (
-            <div
-              key={i}
-              data-testid="step-placeholder"
-              className="flex items-center gap-2"
-            >
-              <Skeleton className="size-6 rounded-full" />
-              <Skeleton className="h-5 w-16" />
-            </div>
-          ))}
-        </div>
-        <div className="mb-6 flex flex-col gap-7">
-          {/* Name, then Owner with its description */}
-          {[false, true].map((described, i) => (
-            <div key={i} className="flex flex-col gap-3">
-              <Skeleton className="h-5 w-20" />
-              <Skeleton className="h-9 w-full" />
-              {described && <Skeleton className="h-5 w-3/4" />}
-            </div>
-          ))}
-          {/* Context: label and expand button, textarea, counter, description */}
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col">
-              <div className="mb-2 flex items-center justify-between">
-                <Skeleton className="h-5 w-20" />
-                <Skeleton className="size-6" />
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-24 w-full" />
+      <Skeleton className="h-24 w-full" />
+    </div>
+  );
+}
+
+// Stands in for the Create Workspace page and the first step of its wizard,
+// placeholder for placeholder, so nothing jumps when the wizard arrives.
+function CreateWorkspaceSkeleton() {
+  return (
+    <div className="h-dvh overflow-y-auto pb-4">
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label="Loading workspace setup"
+        className={resourcePageLayout.wide.outer}
+      >
+        <div className={resourcePageLayout.wide.inner}>
+          <Skeleton className="mb-8 h-8 w-20" />
+          <Skeleton className="mb-4 h-8 w-56" />
+          <div className="mb-8 flex flex-wrap gap-x-6 gap-y-2">
+            {Array.from({ length: 3 }, (_, i) => (
+              <div
+                key={i}
+                data-testid="step-placeholder"
+                className="flex items-center gap-2"
+              >
+                <Skeleton className="size-6 rounded-full" />
+                <Skeleton className="h-5 w-16" />
               </div>
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="mt-1 h-4 w-12 self-end" />
-            </div>
-            <Skeleton className="h-10 w-full" />
+            ))}
           </div>
+          <div className="mb-6 flex flex-col gap-7">
+            {/* Name, then Owner with its description */}
+            {[false, true].map((described, i) => (
+              <div key={i} className="flex flex-col gap-3">
+                <Skeleton className="h-5 w-20" />
+                <Skeleton className="h-9 w-full" />
+                {described && <Skeleton className="h-5 w-3/4" />}
+              </div>
+            ))}
+            {/* Context: label and expand button, textarea, counter, description */}
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col">
+                <div className="mb-2 flex items-center justify-between">
+                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="size-6" />
+                </div>
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="mt-1 h-4 w-12 self-end" />
+              </div>
+              <Skeleton className="h-10 w-full" />
+            </div>
+          </div>
+          <Skeleton className="h-9 w-16" />
         </div>
-        <Skeleton className="h-9 w-16" />
       </div>
     </div>
-  </div>
-);
+  );
+}
 
 // The Organization settings layout awaits the organization on the server, and
 // a segment's own `loading` can't cover its layout — so the fallback lives

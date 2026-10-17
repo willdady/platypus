@@ -45,7 +45,7 @@ export type TurnRequest =
  * authority — but a refused request arrives as a failed turn after the
  * transcript has been cut, so it is worth never sending one.
  */
-export const turnRequest = ({
+export function turnRequest({
   selection: { agentId, providerId, modelId },
   settings,
   search,
@@ -53,7 +53,7 @@ export const turnRequest = ({
   selection: ModelSelection;
   settings: ChatSettings;
   search: boolean;
-}): TurnRequest => {
+}): TurnRequest {
   if (agentId) return { ok: true, body: { agentId, search } };
   if (!providerId || !modelId) {
     return { ok: false, reason: CHAT_SELECTION_ERROR };
@@ -87,4 +87,4 @@ export const turnRequest = ({
       search,
     },
   };
-};
+}

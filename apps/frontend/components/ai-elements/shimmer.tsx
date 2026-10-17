@@ -24,7 +24,7 @@ export type TextShimmerProps = {
 // component (motion.div) so it accepts the common HTML motion props used below.
 const motionComponentCache = new Map<ElementType, typeof motion.div>();
 
-const getMotionComponent = (component: ElementType) => {
+function getMotionComponent(component: ElementType) {
   let motionComponent = motionComponentCache.get(component);
   if (!motionComponent) {
     motionComponent = motion.create(
@@ -33,15 +33,15 @@ const getMotionComponent = (component: ElementType) => {
     motionComponentCache.set(component, motionComponent);
   }
   return motionComponent;
-};
+}
 
-const ShimmerComponent = ({
+function ShimmerComponent({
   children,
   as: Component = "p",
   className,
   duration = 2,
   spread = 2,
-}: TextShimmerProps) => {
+}: TextShimmerProps) {
   const dynamicSpread = useMemo(
     () => (children?.length ?? 0) * spread,
     [children, spread],
@@ -88,6 +88,6 @@ const ShimmerComponent = ({
       {children}
     </MotionComponent>
   );
-};
+}
 
 export const Shimmer = memo(ShimmerComponent);

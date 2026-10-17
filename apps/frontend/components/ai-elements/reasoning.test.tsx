@@ -8,7 +8,7 @@ import {
   ReasoningTrigger,
 } from "./reasoning";
 
-const renderReasoning = (props: Partial<ComponentProps<typeof Reasoning>>) => {
+function renderReasoning(props: Partial<ComponentProps<typeof Reasoning>>) {
   const ui = (p: Partial<ComponentProps<typeof Reasoning>>) => (
     <Reasoning {...p}>
       <ReasoningTrigger />
@@ -20,15 +20,20 @@ const renderReasoning = (props: Partial<ComponentProps<typeof Reasoning>>) => {
     rerender: (next: Partial<ComponentProps<typeof Reasoning>>) =>
       view.rerender(ui(next)),
   };
-};
+}
 
-const trigger = () => screen.getByRole("button");
-const reasoningText = () => screen.queryByText("Weighing the options");
+function trigger() {
+  return screen.getByRole("button");
+}
+function reasoningText() {
+  return screen.queryByText("Weighing the options");
+}
 
-const advance = (ms: number) =>
-  act(() => {
+function advance(ms: number) {
+  return act(() => {
     vi.advanceTimersByTime(ms);
   });
+}
 
 beforeEach(() => {
   vi.useFakeTimers();

@@ -16,7 +16,7 @@ import { writeAt } from "@/lib/api-write";
  * across retries, so a retried Send uploads only what has not landed and never
  * asks to overwrite a file it just uploaded.
  */
-export const useSandboxUploads = (fileUrl: string) => {
+export function useSandboxUploads(fileUrl: string) {
   const landed = useRef(new WeakMap<File, SandboxUpload>());
   const running = useRef(false);
   const [conflict, setConflict] = useState<{
@@ -91,4 +91,4 @@ export const useSandboxUploads = (fileUrl: string) => {
   );
 
   return { upload, dialog };
-};
+}

@@ -3,11 +3,11 @@ import { SandboxSettings } from "@/components/sandbox-settings";
 
 export const metadata: Metadata = { title: "Sandbox" };
 
-const SandboxPage = async ({
+async function SandboxPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = await params;
 
   return (
@@ -16,6 +16,6 @@ const SandboxPage = async ({
       <SandboxSettings orgId={orgId} workspaceId={workspaceId} />
     </div>
   );
-};
+}
 
 export default SandboxPage;

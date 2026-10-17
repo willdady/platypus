@@ -33,8 +33,9 @@ export type TimelineLayout = {
   totalMs: number;
 };
 
-const byStart = (a: RunEvent, b: RunEvent) =>
-  a.startedAt - b.startedAt || a.seq - b.seq;
+function byStart(a: RunEvent, b: RunEvent) {
+  return a.startedAt - b.startedAt || a.seq - b.seq;
+}
 
 /**
  * Lays the events out as a waterfall.
@@ -46,11 +47,11 @@ const byStart = (a: RunEvent, b: RunEvent) =>
  * subtracted once, here — starts are absolute instants, so a delegate's events
  * need no rebasing against their own run.
  */
-export const layoutTimeline = (
+export function layoutTimeline(
   events: RunEvent[],
   runStatus: TriggerRunStatus,
   now: number = Date.now(),
-): TimelineLayout => {
+): TimelineLayout {
   if (events.length === 0) return { rows: [], originMs: 0, totalMs: 1 };
 
   const ids = new Set(events.map((e) => e.id));
@@ -100,37 +101,37 @@ export const layoutTimeline = (
   );
 
   return { rows, originMs, totalMs };
-};
+}
 
 /** The narrowest a bar is drawn, as a fraction of the track — or it vanishes. */
 export const MIN_BAR_FRACTION = 0.005;
 
 /** A bar's left edge and width as fractions of the track, floored so a
  *  sub-millisecond span is still visible. */
-export const barGeometry = (
+export function barGeometry(
   row: TimelineRow,
   totalMs: number,
-): { left: number; width: number } => {
+): { left: number; width: number } {
   const left = Math.min(1, row.offsetMs / totalMs);
   if (row.end.kind === "unknown") return { left, width: MIN_BAR_FRACTION };
   const width = Math.max(MIN_BAR_FRACTION, row.end.durationMs / totalMs);
   return { left, width: Math.min(width, 1 - left) };
-};
+}
 
 /**
  * Folds a poll's events into what the page already holds. Events arrive once
  * open and again once patched, so an incoming event replaces the one it
  * updates rather than duplicating it.
  */
-export const mergeRunEvents = (
+export function mergeRunEvents(
   existing: RunEvent[],
   incoming: RunEvent[],
-): RunEvent[] => {
+): RunEvent[] {
   if (incoming.length === 0) return existing;
   const byId = new Map(existing.map((e) => [e.id, e]));
   for (const event of incoming) byId.set(event.id, event);
   return [...byId.values()].sort((a, b) => a.seq - b.seq);
-};
+}
 
 /**
  * Where the next incremental poll should read from. An event is written open
@@ -141,7 +142,7 @@ export const mergeRunEvents = (
  * everything: with nothing held, or with the very first event still open,
  * there is no sequence number to read from.
  */
-export const nextSinceSeq = (events: RunEvent[]): number | undefined => {
+export function nextSinceSeq(events: RunEvent[]): number | undefined {
   if (events.length === 0) return undefined;
   const running = events.filter((e) => e.status === "running");
   if (running.length > 0) {
@@ -149,4 +150,4 @@ export const nextSinceSeq = (events: RunEvent[]): number | undefined => {
     return oldest === 0 ? undefined : oldest - 1;
   }
   return Math.max(...events.map((e) => e.seq));
-};
+}

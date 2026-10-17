@@ -64,14 +64,14 @@ const DEFAULT_SIMPLE_SCHEDULE: SimpleSchedule = {
 };
 
 /** A Cron Trigger's schedule, timezone and One-off switch. */
-const TriggerCronFields = ({
+function TriggerCronFields({
   active,
   trigger,
   disabled,
   errors,
   clearErrors,
   onChange,
-}: TriggerFieldsProps) => {
+}: TriggerFieldsProps) {
   const saved = trigger?.type === "cron" ? trigger.config : undefined;
   const { user } = useAuth();
 
@@ -424,6 +424,6 @@ const TriggerCronFields = ({
       </Field>
     </>
   );
-};
+}
 
 export { TriggerCronFields };

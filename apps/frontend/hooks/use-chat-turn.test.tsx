@@ -32,7 +32,7 @@ const settings: ChatSettings = {
 };
 const direct: ModelSelection = { agentId: "", providerId: "p1", modelId: "m1" };
 
-const harness = ({
+function harness({
   selection = direct,
   maxSteps = settings.maxSteps,
   runHeldElsewhere = false,
@@ -40,7 +40,7 @@ const harness = ({
   selection?: ModelSelection;
   maxSteps?: number;
   runHeldElsewhere?: boolean;
-} = {}) => {
+} = {}) {
   const calls: string[] = [];
   const spy = (name: string) =>
     vi.fn<(...args: unknown[]) => void>(() => void calls.push(name));
@@ -65,7 +65,7 @@ const harness = ({
     }),
   );
   return { turn: result.current, ...chat, refreshChat, calls };
-};
+}
 
 const body = {
   providerId: "p1",

@@ -19,7 +19,9 @@ type Props = {
 
 type State = { failed: boolean };
 
-const RenderPart = ({ render }: { render: () => ReactNode }) => <>{render()}</>;
+function RenderPart({ render }: { render: () => ReactNode }) {
+  return <>{render()}</>;
+}
 
 /**
  * Wraps one Chat message part, so a part that fails to render — a malformed

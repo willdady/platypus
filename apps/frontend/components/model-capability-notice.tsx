@@ -9,11 +9,11 @@ import { FieldDescription } from "@/components/ui/field";
  * not a block — but at the general capability level rather than per-file,
  * since there is nothing attached yet to classify (issue #328).
  */
-export const ModelCapabilityNotice = ({
+export function ModelCapabilityNotice({
   passthroughFileTypes,
 }: {
   passthroughFileTypes: string[];
-}) => {
+}) {
   if (passthroughFileTypes.length > 0) return null;
 
   return (
@@ -29,4 +29,4 @@ export const ModelCapabilityNotice = ({
       </span>
     </FieldDescription>
   );
-};
+}

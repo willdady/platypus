@@ -12,14 +12,15 @@ vi.mock("next/navigation", () => ({
 import { Dialog } from "./ui/dialog";
 import { AgentInfoDialog } from "./agent-info-dialog";
 
-const agent = (overrides: Partial<Serialized<Agent>> = {}) =>
-  ({
+function agent(overrides: Partial<Serialized<Agent>> = {}) {
+  return {
     id: "agent-1",
     name: "Helper",
     providerId: "provider-1",
     modelId: "gpt-4o",
     ...overrides,
-  }) as Serialized<Agent>;
+  } as Serialized<Agent>;
+}
 
 const providers = [
   { id: "provider-1", name: "OpenAI" },
@@ -34,10 +35,10 @@ const agents = [
   { id: "agent-2", name: "Researcher" },
 ] as Serialized<Agent>[];
 
-const renderDialog = (
+function renderDialog(
   props: Partial<Parameters<typeof AgentInfoDialog>[0]> = {},
-) =>
-  render(
+) {
+  return render(
     <Dialog open>
       <AgentInfoDialog
         agent={agent()}
@@ -49,6 +50,7 @@ const renderDialog = (
       />
     </Dialog>,
   );
+}
 
 beforeEach(() => push.mockReset());
 

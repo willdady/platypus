@@ -57,25 +57,27 @@ const SECTION_KEYS = {
 } as const;
 
 /** A section heading: the h2 over its one-line description. */
-const SectionHeaderSkeleton = ({
+function SectionHeaderSkeleton({
   titleWidth,
   descriptionWidth,
 }: {
   titleWidth: string;
   descriptionWidth: string;
-}) => (
-  <div className="flex flex-col">
-    <SkeletonLine lineClassName="h-7" className={cn("h-6", titleWidth)} />
-    <SkeletonLine className={cn("h-4 max-w-full", descriptionWidth)} />
-  </div>
-);
+}) {
+  return (
+    <div className="flex flex-col">
+      <SkeletonLine lineClassName="h-7" className={cn("h-6", titleWidth)} />
+      <SkeletonLine className={cn("h-4 max-w-full", descriptionWidth)} />
+    </div>
+  );
+}
 
 /**
  * A collapsible section as it will load: its header and chevron, and — only
  * if the section was last left open — its body. A collapsed section is just
  * the header, so the placeholder doesn't draw a list the page then hides.
  */
-const CollapsibleSectionSkeleton = ({
+function CollapsibleSectionSkeleton({
   storageKey,
   titleWidth,
   descriptionWidth,
@@ -85,7 +87,7 @@ const CollapsibleSectionSkeleton = ({
   titleWidth: string;
   descriptionWidth: string;
   children: React.ReactNode;
-}) => {
+}) {
   const open = useSectionOpen(storageKey);
   return (
     <div>
@@ -96,10 +98,10 @@ const CollapsibleSectionSkeleton = ({
         />
         <Skeleton className="mt-1 size-5 shrink-0" />
       </div>
-      {open && <div className="space-y-4 pt-4">{children}</div>}
+      {open && <div className="flex flex-col gap-4 pt-4">{children}</div>}
     </div>
   );
-};
+}
 
 /**
  * The workspace home while its reads are in flight, drawn on the loaded
@@ -107,94 +109,96 @@ const CollapsibleSectionSkeleton = ({
  * collapsible one collapsed or expanded as it was last left — so the page
  * lands without shifting.
  */
-const WorkspaceSkeleton = () => (
-  <div
-    className="flex flex-col gap-8 px-4 md:px-8 py-8 pb-32 max-w-6xl mx-auto"
-    aria-label="Loading workspace"
-  >
-    {/* Header: org name, then icon + workspace name, settings link */}
-    <div className="flex flex-col">
-      <SkeletonLine lineClassName="h-5 mb-1" className="w-24" />
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Skeleton className="size-8 rounded" />
-          <Skeleton className="h-9 w-48" />
-        </div>
-        <div className="flex size-9 shrink-0 items-center justify-center">
-          <Skeleton className="size-5" />
+function WorkspaceSkeleton() {
+  return (
+    <div
+      className="flex flex-col gap-8 px-4 md:px-8 py-8 pb-32 max-w-6xl mx-auto"
+      aria-label="Loading workspace"
+    >
+      {/* Header: org name, then icon + workspace name, settings link */}
+      <div className="flex flex-col">
+        <SkeletonLine lineClassName="h-5 mb-1" className="w-24" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-8 rounded" />
+            <Skeleton className="h-9 w-48" />
+          </div>
+          <div className="flex size-9 shrink-0 items-center justify-center">
+            <Skeleton className="size-5" />
+          </div>
         </div>
       </div>
-    </div>
 
-    {/* Stats Cards - mobile */}
-    <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 lg:hidden">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <Skeleton key={i} className="h-[46px] w-24 shrink-0 rounded-xl" />
-      ))}
-    </div>
-    {/* Stats Cards - desktop */}
-    <div className="hidden lg:grid gap-4 grid-cols-6">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <Skeleton key={i} className="h-[106px] w-full rounded-xl" />
-      ))}
-    </div>
-
-    {/* Agents Section (not collapsible) */}
-    <div className="space-y-4">
-      <SectionHeaderSkeleton titleWidth="w-28" descriptionWidth="w-80" />
-      <div>
-        <AgentCardsSkeleton cards={2} />
-        <ButtonRowSkeleton className="mt-4" widths={["w-32"]} />
+      {/* Stats Cards - mobile */}
+      <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 lg:hidden">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-[46px] w-24 shrink-0 rounded-xl" />
+        ))}
       </div>
+      {/* Stats Cards - desktop */}
+      <div className="hidden lg:grid gap-4 grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-[106px] w-full rounded-xl" />
+        ))}
+      </div>
+
+      {/* Agents Section (not collapsible) */}
+      <div className="flex flex-col gap-4">
+        <SectionHeaderSkeleton titleWidth="w-28" descriptionWidth="w-80" />
+        <div>
+          <AgentCardsSkeleton cards={2} />
+          <ButtonRowSkeleton className="mt-4" widths={["w-32"]} />
+        </div>
+      </div>
+
+      <Separator />
+
+      <CollapsibleSectionSkeleton
+        storageKey={SECTION_KEYS.skills}
+        titleWidth="w-24"
+        descriptionWidth="w-96"
+      >
+        <CardGridSkeleton cards={2} descriptionLines={2} />
+        <ButtonRowSkeleton widths={["w-32"]} />
+      </CollapsibleSectionSkeleton>
+
+      <Separator />
+
+      <CollapsibleSectionSkeleton
+        storageKey={SECTION_KEYS.dashboards}
+        titleWidth="w-36"
+        descriptionWidth="w-96"
+      >
+        <CardGridSkeleton cards={2} descriptionLines={2} />
+        <ButtonRowSkeleton widths={["w-44"]} />
+      </CollapsibleSectionSkeleton>
+
+      <Separator />
+
+      <CollapsibleSectionSkeleton
+        storageKey={SECTION_KEYS.boards}
+        titleWidth="w-24"
+        descriptionWidth="w-80"
+      >
+        <CardGridSkeleton cards={2} descriptionLines={2} />
+        <ButtonRowSkeleton widths={["w-36"]} />
+      </CollapsibleSectionSkeleton>
+
+      <Separator />
+
+      <CollapsibleSectionSkeleton
+        storageKey={SECTION_KEYS.triggers}
+        titleWidth="w-28"
+        descriptionWidth="w-80"
+      >
+        <TriggerCardsSkeleton cards={2} />
+        <ButtonRowSkeleton className="flex-wrap" widths={["w-36", "w-32"]} />
+      </CollapsibleSectionSkeleton>
     </div>
+  );
+}
 
-    <Separator />
-
-    <CollapsibleSectionSkeleton
-      storageKey={SECTION_KEYS.skills}
-      titleWidth="w-24"
-      descriptionWidth="w-96"
-    >
-      <CardGridSkeleton cards={2} descriptionLines={2} />
-      <ButtonRowSkeleton widths={["w-32"]} />
-    </CollapsibleSectionSkeleton>
-
-    <Separator />
-
-    <CollapsibleSectionSkeleton
-      storageKey={SECTION_KEYS.dashboards}
-      titleWidth="w-36"
-      descriptionWidth="w-96"
-    >
-      <CardGridSkeleton cards={2} descriptionLines={2} />
-      <ButtonRowSkeleton widths={["w-44"]} />
-    </CollapsibleSectionSkeleton>
-
-    <Separator />
-
-    <CollapsibleSectionSkeleton
-      storageKey={SECTION_KEYS.boards}
-      titleWidth="w-24"
-      descriptionWidth="w-80"
-    >
-      <CardGridSkeleton cards={2} descriptionLines={2} />
-      <ButtonRowSkeleton widths={["w-36"]} />
-    </CollapsibleSectionSkeleton>
-
-    <Separator />
-
-    <CollapsibleSectionSkeleton
-      storageKey={SECTION_KEYS.triggers}
-      titleWidth="w-28"
-      descriptionWidth="w-80"
-    >
-      <TriggerCardsSkeleton cards={2} />
-      <ButtonRowSkeleton className="flex-wrap" widths={["w-36", "w-32"]} />
-    </CollapsibleSectionSkeleton>
-  </div>
-);
-
-const Workspace = () => {
+function Workspace() {
   const params = useParams();
   const orgId = params.orgId as string;
   const workspaceId = params.workspaceId as string;
@@ -333,7 +337,7 @@ const Workspace = () => {
                 key={label}
                 className="flex flex-row items-center gap-2 px-3 py-2 min-w-fit"
               >
-                <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Icon className="size-4 text-muted-foreground shrink-0" />
                 <span className="text-lg font-bold">{value}</span>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {label}
@@ -343,9 +347,9 @@ const Workspace = () => {
           </div>
           <div className="hidden lg:grid gap-4 grid-cols-6">
             <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
+              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Chats</CardTitle>
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                <MessageSquare className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="px-4">
                 <div className="text-2xl font-bold">{chatCount}</div>
@@ -355,9 +359,9 @@ const Workspace = () => {
               </CardContent>
             </Card>
             <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
+              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Agents</CardTitle>
-                <Bot className="h-4 w-4 text-muted-foreground" />
+                <Bot className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="px-4">
                 <div className="text-2xl font-bold">{agentCount}</div>
@@ -367,9 +371,9 @@ const Workspace = () => {
               </CardContent>
             </Card>
             <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
+              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Skills</CardTitle>
-                <Sparkles className="h-4 w-4 text-muted-foreground" />
+                <Sparkles className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="px-4">
                 <div className="text-2xl font-bold">{skillCount}</div>
@@ -379,11 +383,11 @@ const Workspace = () => {
               </CardContent>
             </Card>
             <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
+              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
                 <CardTitle className="text-sm font-medium">
                   Dashboards
                 </CardTitle>
-                <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+                <LayoutDashboard className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="px-4">
                 <div className="text-2xl font-bold">{dashboardCount}</div>
@@ -393,9 +397,9 @@ const Workspace = () => {
               </CardContent>
             </Card>
             <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
+              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Boards</CardTitle>
-                <KanbanSquare className="h-4 w-4 text-muted-foreground" />
+                <KanbanSquare className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="px-4">
                 <div className="text-2xl font-bold">{boardCount}</div>
@@ -405,9 +409,9 @@ const Workspace = () => {
               </CardContent>
             </Card>
             <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
+              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Triggers</CardTitle>
-                <Zap className="h-4 w-4 text-muted-foreground" />
+                <Zap className="size-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="px-4">
                 <div className="text-2xl font-bold">{triggerCount}</div>
@@ -419,7 +423,7 @@ const Workspace = () => {
           </div>
 
           {/* Agents List Section */}
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
                 <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
@@ -462,7 +466,7 @@ const Workspace = () => {
             storageKey={SECTION_KEYS.dashboards}
           >
             <DashboardsList orgId={orgId} workspaceId={workspaceId} />
-            <Button variant="outline" asChild>
+            <Button variant="outline" className="self-start" asChild>
               <Link href={routes.dashboards.create}>
                 <Plus /> Create dashboard
               </Link>
@@ -482,7 +486,7 @@ const Workspace = () => {
             storageKey={SECTION_KEYS.boards}
           >
             <BoardsList orgId={orgId} workspaceId={workspaceId} />
-            <Button variant="outline" asChild>
+            <Button variant="outline" className="self-start" asChild>
               <Link href={routes.boards.create}>
                 <Plus /> Create board
               </Link>
@@ -519,6 +523,6 @@ const Workspace = () => {
       )}
     </div>
   );
-};
+}
 
 export default Workspace;

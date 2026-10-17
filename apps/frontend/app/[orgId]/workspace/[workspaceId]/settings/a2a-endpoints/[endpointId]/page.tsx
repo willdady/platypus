@@ -5,11 +5,11 @@ import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit A2A endpoint" };
 
-const A2aEndpointEditPage = async ({
+async function A2aEndpointEditPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string; endpointId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId, endpointId } = await params;
 
   return (
@@ -26,6 +26,6 @@ const A2aEndpointEditPage = async ({
       />
     </ResourcePage>
   );
-};
+}
 
 export default A2aEndpointEditPage;

@@ -23,8 +23,9 @@ function luminance([r, g, b]: [number, number, number]): number {
   return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
 }
 
-const contrast = (a: number, b: number) =>
-  (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+function contrast(a: number, b: number) {
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
 
 /**
  * Dark or light text, whichever contrasts more with `background` — for a

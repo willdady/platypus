@@ -45,7 +45,7 @@ export type DetailFormStateProps = {
  *
  * Create pages pass no `data` and no `error`, so they fall straight through.
  */
-export const DetailFormState = ({
+export function DetailFormState({
   isLoading,
   error,
   data,
@@ -55,7 +55,7 @@ export const DetailFormState = ({
   skeleton,
   loadingLabel,
   children,
-}: DetailFormStateProps) => {
+}: DetailFormStateProps) {
   if (isLoading) {
     return (
       <div
@@ -80,4 +80,4 @@ export const DetailFormState = ({
   }
 
   return <>{children}</>;
-};
+}

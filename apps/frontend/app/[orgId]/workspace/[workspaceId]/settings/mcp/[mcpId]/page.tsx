@@ -5,11 +5,11 @@ import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit MCP" };
 
-const McpEditPage = async ({
+async function McpEditPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string; mcpId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId, mcpId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const McpEditPage = async ({
       <McpForm orgId={orgId} workspaceId={workspaceId} mcpId={mcpId} />
     </ResourcePage>
   );
-};
+}
 
 export default McpEditPage;

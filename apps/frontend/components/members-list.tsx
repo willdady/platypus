@@ -25,11 +25,11 @@ import { MemberEditDialog } from "@/components/member-edit-dialog";
 import { RemoveMemberDialog } from "@/components/remove-member-dialog";
 import type { Serialized } from "@/lib/api-write";
 
-interface MembersListProps {
+type MembersListProps = {
   orgId: string;
   members: Serialized<OrgMemberListItem>[];
   onUpdate: () => void;
-}
+};
 
 export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
   const [editingMember, setEditingMember] =
@@ -52,7 +52,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
             <TableRow key={member.id}>
               <TableCell>
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                  <div className="size-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
                     {member.user.image ? (
                       // Avatar URL comes from an arbitrary OAuth/external
                       // host; not routable through the Next image optimizer.
@@ -60,14 +60,14 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                       <img
                         src={member.user.image}
                         alt={member.user.name}
-                        className="h-full w-full object-cover"
+                        className="size-full object-cover"
                         width={32}
                         height={32}
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
-                      <User className="h-4 w-4 text-muted-foreground" />
+                      <User className="size-4 text-muted-foreground" />
                     )}
                   </div>
                   <div className="flex flex-col">
@@ -89,7 +89,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                   }
                   className="capitalize"
                 >
-                  {member.isSuperAdmin && <Shield className="h-3 w-3" />}
+                  {member.isSuperAdmin && <Shield />}
                   {member.isSuperAdmin ? "Super Admin" : member.role}
                 </Badge>
               </TableCell>
@@ -101,7 +101,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                       size="icon"
                       aria-label={`Actions for ${member.user.name}`}
                     >
-                      <MoreHorizontal className="h-4 w-4" />
+                      <MoreHorizontal />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -111,14 +111,14 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                         <DropdownMenuItem
                           onClick={() => setEditingMember(member)}
                         >
-                          <Edit className="h-4 w-4" /> Edit org role
+                          <Edit className="size-4" /> Edit org role
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => setRemovingMember(member)}
                           className="text-destructive focus:text-destructive"
                         >
-                          <Trash2 className="h-4 w-4" /> Remove from Org
+                          <Trash2 className="size-4" /> Remove from Org
                         </DropdownMenuItem>
                       </>
                     )}
@@ -127,8 +127,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                         disabled
                         className="text-muted-foreground"
                       >
-                        <Shield className="h-3 w-3" /> Super Admin - No actions
-                        available
+                        <Shield /> Super Admin - No actions available
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>

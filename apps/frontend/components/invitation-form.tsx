@@ -22,10 +22,10 @@ import type { Blueprint } from "@platypus/schemas";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { orgRoutes } from "@/lib/routes";
 
-interface InvitationFormProps {
+type InvitationFormProps = {
   orgId: string;
   onSuccess?: () => void;
-}
+};
 
 const RETRACTABLE_FIELDS = ["email", "workspaceName", "blueprintIds"] as const;
 
@@ -113,7 +113,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
         e.preventDefault();
         void submit();
       }}
-      className="space-y-4 border p-4 rounded-lg bg-muted/30"
+      className="flex flex-col gap-4 border p-4 rounded-lg bg-muted/30"
     >
       <h2 className="font-semibold">Invite User to Organization</h2>
       <FieldSet>
@@ -217,7 +217,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                             onClick={() => moveBlueprint(index, -1)}
                             aria-label="Move earlier"
                           >
-                            <ArrowUp className="size-4" />
+                            <ArrowUp />
                           </Button>
                           <Button
                             type="button"
@@ -229,7 +229,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                             onClick={() => moveBlueprint(index, 1)}
                             aria-label="Move later"
                           >
-                            <ArrowDown className="size-4" />
+                            <ArrowDown />
                           </Button>
                           <Button
                             type="button"
@@ -239,7 +239,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                             onClick={() => toggleBlueprint(id, false)}
                             aria-label="Remove"
                           >
-                            <X className="size-4" />
+                            <X />
                           </Button>
                         </li>
                       ))}
@@ -258,7 +258,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       <Button
         type="submit"
         disabled={isSubmitting || !canSubmit}
-        className="w-full md:w-auto mt-2"
+        className="w-full md:w-auto mt-2 self-start"
       >
         {isSubmitting ? "Sending..." : "Send invitation"}
       </Button>

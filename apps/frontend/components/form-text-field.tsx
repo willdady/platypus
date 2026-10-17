@@ -33,7 +33,7 @@ export type FormTextFieldProps = {
 // Field/FieldLabel/Input/FieldError block doesn't have to be hand-wired at
 // every call site. `trailing` renders alongside the error (e.g. a character
 // counter) instead of after it, matching skill-form's layout.
-export const FormTextField = ({
+export function FormTextField({
   label,
   name,
   value,
@@ -52,7 +52,7 @@ export const FormTextField = ({
   max,
   step,
   maxLength,
-}: FormTextFieldProps) => {
+}: FormTextFieldProps) {
   const ids = formFieldIds(name, { description, error });
   return (
     <Field className={className} data-invalid={!!error}>
@@ -89,4 +89,4 @@ export const FormTextField = ({
       )}
     </Field>
   );
-};
+}

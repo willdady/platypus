@@ -4,13 +4,14 @@ import type { Chat } from "@platypus/schemas";
 import { useChatSettings } from "./use-chat-settings";
 import type { Serialized } from "@/lib/api-write";
 
-const chat = (over: Partial<Serialized<Chat>> = {}): Serialized<Chat> =>
-  ({
+function chat(over: Partial<Serialized<Chat>> = {}): Serialized<Chat> {
+  return {
     id: "chat-1",
     instructions: "Be brief.",
     temperature: 0.5,
     ...over,
-  }) as unknown as Serialized<Chat>;
+  } as unknown as Serialized<Chat>;
+}
 
 describe("useChatSettings", () => {
   it("seeds the form from the chat row", () => {

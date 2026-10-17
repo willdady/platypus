@@ -41,7 +41,7 @@ const CHANGED_FIELD_OPTIONS = [
 ] as const;
 
 /** An Event Trigger's events and its board, column and changed-field filters. */
-const TriggerEventFields = ({
+function TriggerEventFields({
   active,
   trigger,
   scope,
@@ -49,7 +49,7 @@ const TriggerEventFields = ({
   errors,
   clearErrors,
   onChange,
-}: TriggerFieldsProps) => {
+}: TriggerFieldsProps) {
   const saved = trigger?.type === "event" ? trigger.config : undefined;
 
   const [selectedEvents, setSelectedEvents] = useState<string[]>(
@@ -238,6 +238,6 @@ const TriggerEventFields = ({
       )}
     </>
   );
-};
+}
 
 export { TriggerEventFields };

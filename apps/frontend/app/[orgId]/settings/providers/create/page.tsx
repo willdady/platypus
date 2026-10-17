@@ -5,11 +5,11 @@ import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Add Organization Provider" };
 
-const CreateOrgProviderPage = async ({
+async function CreateOrgProviderPage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
-}) => {
+}) {
   const { orgId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const CreateOrgProviderPage = async ({
       <ProviderForm orgId={orgId} />
     </ResourcePage>
   );
-};
+}
 
 export default CreateOrgProviderPage;

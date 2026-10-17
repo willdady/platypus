@@ -37,7 +37,7 @@ import {
 } from "@/components/list-skeletons";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
-const OrgInvitationsPage = () => {
+function OrgInvitationsPage() {
   const { orgId } = useParams<{ orgId: string }>();
   const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
     organizationEntity(orgId),
@@ -101,7 +101,7 @@ const OrgInvitationsPage = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-2xl font-bold mb-4">Invitations</h1>
         <p className="text-muted-foreground mb-6">
@@ -199,7 +199,7 @@ const OrgInvitationsPage = () => {
                         title="Copy invitation link"
                         onClick={() => handleCopyLink(invite.token!)}
                       >
-                        <Copy className="h-4 w-4" />
+                        <Copy />
                       </Button>
                     )}
                     <Button
@@ -209,7 +209,7 @@ const OrgInvitationsPage = () => {
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                       onClick={() => invitationDelete.request(invite.id)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -233,6 +233,6 @@ const OrgInvitationsPage = () => {
       />
     </div>
   );
-};
+}
 
 export default OrgInvitationsPage;

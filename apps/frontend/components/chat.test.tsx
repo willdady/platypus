@@ -107,15 +107,17 @@ vi.mock("@ai-sdk/react", () => ({
   },
 }));
 
-const useChatState = () => ({
-  messages: harness.turn.messages,
-  setMessages: harness.setMessages,
-  sendMessage: harness.sendMessage,
-  status: harness.turn.status,
-  error: harness.turn.error,
-  regenerate: harness.regenerate,
-  stop: harness.stop,
-});
+function useChatState() {
+  return {
+    messages: harness.turn.messages,
+    setMessages: harness.setMessages,
+    sendMessage: harness.sendMessage,
+    status: harness.turn.status,
+    error: harness.turn.error,
+    regenerate: harness.regenerate,
+    stop: harness.stop,
+  };
+}
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
@@ -380,30 +382,32 @@ const provider = {
   modelIds: [{ id: "m1", passthroughFileTypes: [], contextWindow: 1000 }],
 };
 
-const message = (id: string, text: string): PlatypusUIMessage =>
-  ({
+function message(id: string, text: string): PlatypusUIMessage {
+  return {
     id,
     role: id.startsWith("u") ? "user" : "assistant",
     parts: [{ type: "text", text }],
-  }) as PlatypusUIMessage;
+  } as PlatypusUIMessage;
+}
 
 /** The config the Chat detail read was last built with. */
-const chatReadConfig = () => {
+function chatReadConfig() {
   const call = harness.swrCalls.filter((c) => c.key === CHAT_KEY).at(-1);
   if (!call) throw new Error("the Chat detail read was never made");
   return call;
-};
+}
 
 /** What the interval predicate answers for a given fetched row. */
-const pollFor = (row: { status: string } | null) => {
+function pollFor(row: { status: string } | null) {
   const refreshInterval = chatReadConfig().config?.refreshInterval as (
     data: unknown,
   ) => number;
   return refreshInterval(row);
-};
+}
 
-const renderChat = () =>
-  render(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+function renderChat() {
+  return render(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+}
 
 /** Two Providers differing only in whether they can search. */
 const searchProvider = {
@@ -418,12 +422,14 @@ const plainProvider = {
   searchSource: "none",
   modelIds: [{ id: "mp", passthroughFileTypes: [] }],
 };
-const agentOn = (id: string, providerId: string, modelId: string) => ({
-  id,
-  name: id,
-  providerId,
-  modelId,
-});
+function agentOn(id: string, providerId: string, modelId: string) {
+  return {
+    id,
+    name: id,
+    providerId,
+    modelId,
+  };
+}
 
 const searchAgents = [
   agentOn("as", "ps", "ms"),
@@ -436,7 +442,7 @@ const searchAgents = [
  * resolved model — and with it the search toggle — can be switched between
  * renders by changing that prop.
  */
-const renderWithAgent = (agentId: string) => {
+function renderWithAgent(agentId: string) {
   harness.data.set("/providers", {
     results: [searchProvider, plainProvider],
   });
@@ -449,7 +455,7 @@ const renderWithAgent = (agentId: string) => {
       initialAgentId={agentId}
     />,
   );
-};
+}
 
 describe("composer tool row", () => {
   it("names the chat settings button in a Chat with no Agent", () => {
@@ -534,9 +540,12 @@ describe("Upload to Sandbox", () => {
 });
 
 /** The search toggle's Globe control, present only when the model can search. */
-const searchToggle = () => screen.queryByRole("button", { name: "Search" });
-const searchIsOn = () =>
-  searchToggle()?.getAttribute("data-variant") === "default";
+function searchToggle() {
+  return screen.queryByRole("button", { name: "Search" });
+}
+function searchIsOn() {
+  return searchToggle()?.getAttribute("data-variant") === "default";
+}
 
 /**
  * Renders, then walks the local turn through a status sequence the way the chat
@@ -544,7 +553,7 @@ const searchIsOn = () =>
  * what tells a dropped connection from a request the server refused, so a test
  * that jumped straight to `error` would be describing a different failure.
  */
-const renderThrough = (...statuses: ChatStatus[]) => {
+function renderThrough(...statuses: ChatStatus[]) {
   const view = renderChat();
   for (const status of statuses) {
     harness.turn.status = status;
@@ -552,7 +561,7 @@ const renderThrough = (...statuses: ChatStatus[]) => {
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
   }
   return view;
-};
+}
 
 /** A turn that was streaming when the browser tore the connection down. */
 const DROPPED: ChatStatus[] = ["submitted", "streaming", "error"];

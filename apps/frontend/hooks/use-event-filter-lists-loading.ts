@@ -9,10 +9,10 @@ import type { Scope, Serialized } from "@/lib/api-write";
  * clears the column, so a later board change never swaps the whole form back
  * for the skeleton.
  */
-export const useEventFilterListsLoading = (
+export function useEventFilterListsLoading(
   trigger: Serialized<Trigger> | undefined,
   scope: Scope,
-) => {
+) {
   const { isLoading: boardsLoading } = useScopedSWR<{
     results: KanbanBoard[];
   }>("boards", scope);
@@ -22,4 +22,4 @@ export const useEventFilterListsLoading = (
     filters?.boardId && filters.columnId ? scope : null,
   );
   return boardsLoading || columnsLoading;
-};
+}

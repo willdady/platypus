@@ -10,8 +10,9 @@ import { ProtectedRoute } from "@/components/protected-route";
 
 // Unlike the workspace shell, a failure here must not break the page: the
 // organization is only a label and the title, so it degrades to null.
-const readOrganization = (orgId: string) =>
-  readForLabel<Organization>(backendPath`/organizations/${orgId}`);
+function readOrganization(orgId: string) {
+  return readForLabel<Organization>(backendPath`/organizations/${orgId}`);
+}
 
 export async function generateMetadata({
   params,

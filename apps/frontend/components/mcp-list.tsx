@@ -20,12 +20,14 @@ const mcpConfig: ResourceListConfig = {
   emptyState: NoMcpEmptyState,
 };
 
-export const McpList = ({
+export function McpList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId?: string;
-}) => (
-  <ResourceList orgId={orgId} workspaceId={workspaceId} config={mcpConfig} />
-);
+}) {
+  return (
+    <ResourceList orgId={orgId} workspaceId={workspaceId} config={mcpConfig} />
+  );
+}

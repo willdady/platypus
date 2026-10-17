@@ -38,10 +38,10 @@ export function OrgHome({ orgId }: { orgId: string }) {
   const isReady = (!!workspacesData || !!workspacesError) && !isAuthLoading;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <h1 className="sr-only">Workspaces</h1>
       {!isReady ? (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <WorkspaceList orgId={orgId} />
           {/* The button row, reserved so it doesn't pop in below the list.
             Until the membership resolves, whether either button shows is
@@ -56,21 +56,21 @@ export function OrgHome({ orgId }: { orgId: string }) {
           </div>
         </div>
       ) : workspaces.length > 0 || workspacesError ? (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <WorkspaceList orgId={orgId} />
           <div className="flex items-center gap-2">
             {/* ADR-0008: Workspace creation is org-admin-only. */}
             {canCreate && (
               <Button asChild>
                 <Link href={routes.createWorkspace}>
-                  <Plus className="size-4" /> Add workspace
+                  <Plus /> Add workspace
                 </Link>
               </Button>
             )}
             {canOpenSettings && (
               <Button variant="outline" asChild>
                 <Link href={routes.settings.root}>
-                  <Settings className="size-4" /> Organization settings
+                  <Settings /> Organization settings
                 </Link>
               </Button>
             )}

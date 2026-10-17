@@ -48,11 +48,11 @@ export const CONTEXT_WINDOW_CUSTOM = "custom";
  * reject, because a row showing a number the server refused has to keep showing
  * it or the reader cannot see what to fix.
  */
-export const optionForContextWindow = (window: number | undefined): string => {
+export function optionForContextWindow(window: number | undefined): string {
   if (window === undefined) return CONTEXT_WINDOW_UNSET;
   const preset = CONTEXT_WINDOW_PRESETS.find((p) => p.tokens === window);
   return preset ? String(preset.tokens) : CONTEXT_WINDOW_CUSTOM;
-};
+}
 
 /**
  * Option → window. What a chosen option means, given what the row currently
@@ -62,18 +62,20 @@ export const optionForContextWindow = (window: number | undefined): string => {
  * reader opening a text box to edit 128,000 into 131,072, not discarding what
  * they had.
  */
-export const contextWindowForOption = (
+export function contextWindowForOption(
   selection: string,
   current: number | undefined,
-): number | undefined => {
+): number | undefined {
   if (selection === CONTEXT_WINDOW_UNSET) return undefined;
   if (selection === CONTEXT_WINDOW_CUSTOM) return current;
   const parsed = Number.parseInt(selection, 10);
   return Number.isFinite(parsed) ? parsed : undefined;
-};
+}
 
 /** A tenth of a unit, with a trailing `.0` dropped: 1.05 → `1.1`, 42.0 → `42`. */
-const toTenth = (value: number): number => Number(value.toFixed(1));
+function toTenth(value: number): number {
+  return Number(value.toFixed(1));
+}
 
 /**
  * A token figure as it is READ — abbreviated from a thousand up, because past
@@ -85,7 +87,7 @@ const toTenth = (value: number): number => Number(value.toFixed(1));
  * a Trigger run's stats — and a figure that reads `1M` in one and `1,000,000`
  * in the other looks like two different measurements.
  */
-export const formatTokens = (tokens: number): string => {
+export function formatTokens(tokens: number): string {
   if (tokens < 1_000) return tokens.toLocaleString();
   // Rounded at the unit first, then promoted if that rounding carried, so
   // 999,999 reads `1M` rather than the `1000K` a straight threshold gives.
@@ -93,7 +95,7 @@ export const formatTokens = (tokens: number): string => {
   return thousands >= 1_000
     ? `${toTenth(thousands / 1_000)}M`
     : `${thousands}K`;
-};
+}
 
 /**
  * What a typed Custom value means. An empty or unreadable field is "no window
@@ -101,8 +103,8 @@ export const formatTokens = (tokens: number): string => {
  * included, so a `128` meant as 128k is rejected by the schema with a message
  * rather than silently becoming no declaration at all.
  */
-export const parseContextWindowInput = (value: string): number | undefined => {
+export function parseContextWindowInput(value: string): number | undefined {
   if (value.trim() === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-};
+}

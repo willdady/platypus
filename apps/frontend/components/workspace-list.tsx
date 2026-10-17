@@ -16,13 +16,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ListError } from "@/components/list-state";
 import { workspaceRoutes } from "@/lib/routes";
 
-const WorkspaceList = ({
+function WorkspaceList({
   className,
   orgId,
 }: {
   className?: string;
   orgId: string;
-}) => {
+}) {
   const { data, error, isLoading, results } = useScopedList<Workspace>(
     "workspaces",
     { orgId },
@@ -76,6 +76,6 @@ const WorkspaceList = ({
         ))}
     </ItemGroup>
   );
-};
+}
 
 export { WorkspaceList };

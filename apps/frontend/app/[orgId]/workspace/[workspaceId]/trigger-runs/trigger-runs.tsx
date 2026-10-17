@@ -41,11 +41,11 @@ const ALL = "all";
 
 type RunPage = Serialized<TriggerRunWithTriggerList>;
 
-const TriggerRunsPage = ({
+function TriggerRunsPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = use(params);
 
   const { user } = useAuth();
@@ -279,6 +279,6 @@ const TriggerRunsPage = ({
       </div>
     </div>
   );
-};
+}
 
 export default TriggerRunsPage;

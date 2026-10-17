@@ -16,7 +16,7 @@ import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import type { Dashboard } from "@platypus/schemas";
 import { workspaceRoutes } from "@/lib/routes";
 
-const DashboardSettingsPage = ({
+function DashboardSettingsPage({
   params,
 }: {
   params: Promise<{
@@ -24,7 +24,7 @@ const DashboardSettingsPage = ({
     workspaceId: string;
     dashboardId: string;
   }>;
-}) => {
+}) {
   const { orgId, workspaceId, dashboardId } = use(params);
   const routes = workspaceRoutes(orgId, workspaceId);
   const router = useRouter();
@@ -88,12 +88,12 @@ const DashboardSettingsPage = ({
         {...loadState}
         subject="dashboard"
         skeleton={
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
               <Skeleton className="h-3.5 w-16" />
               <Skeleton className="h-9 w-full" />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Skeleton className="h-3.5 w-24" />
               <Skeleton className="h-16 w-full" />
             </div>
@@ -103,8 +103,8 @@ const DashboardSettingsPage = ({
         backHref={routes.root}
         backLabel="Back to workspace"
       >
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="space-y-2">
+        <form onSubmit={handleSave} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="name">Name</Label>
             <Input
               id="name"
@@ -114,7 +114,7 @@ const DashboardSettingsPage = ({
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
@@ -165,6 +165,6 @@ const DashboardSettingsPage = ({
       />
     </ResourcePage>
   );
-};
+}
 
 export default DashboardSettingsPage;

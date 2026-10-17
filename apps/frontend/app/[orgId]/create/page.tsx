@@ -7,11 +7,11 @@ import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Create Workspace" };
 
-const WorkspaceCreatePage = async ({
+async function WorkspaceCreatePage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
-}) => {
+}) {
   const { orgId } = await params;
 
   return (
@@ -28,6 +28,6 @@ const WorkspaceCreatePage = async ({
       </main>
     </ProtectedRoute>
   );
-};
+}
 
 export default WorkspaceCreatePage;

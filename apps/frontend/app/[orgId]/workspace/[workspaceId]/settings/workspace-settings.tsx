@@ -5,13 +5,13 @@ import { Copy } from "lucide-react";
 import { copyWithToast } from "@/lib/clipboard";
 import { WorkspaceForm } from "@/components/workspace-form";
 
-const WorkspaceSettingsPage = ({
+function WorkspaceSettingsPage({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId: string;
-}) => {
+}) {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Workspace Settings</h1>
@@ -27,7 +27,7 @@ const WorkspaceSettingsPage = ({
               aria-label="Copy Organization ID"
               onClick={() => copyWithToast(orgId)}
             >
-              <Copy className="h-4 w-4" />
+              <Copy />
             </Button>
           </div>
         </div>
@@ -42,7 +42,7 @@ const WorkspaceSettingsPage = ({
               aria-label="Copy Workspace ID"
               onClick={() => copyWithToast(workspaceId)}
             >
-              <Copy className="h-4 w-4" />
+              <Copy />
             </Button>
           </div>
         </div>
@@ -53,6 +53,6 @@ const WorkspaceSettingsPage = ({
       </div>
     </div>
   );
-};
+}
 
 export default WorkspaceSettingsPage;

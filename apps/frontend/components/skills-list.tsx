@@ -93,7 +93,7 @@ const ALL = "all";
 /** The agent-filter value for Skills attached to no agent. */
 const UNATTACHED = "unattached";
 
-const UserInvocableBadge = ({ skill }: { skill: SkillWithScope }) => {
+function UserInvocableBadge({ skill }: { skill: SkillWithScope }) {
   if (!skill.disableModelInvocation) return null;
 
   return (
@@ -105,48 +105,50 @@ const UserInvocableBadge = ({ skill }: { skill: SkillWithScope }) => {
       User-invocable only
     </Badge>
   );
-};
+}
 
 // The agent-association indicator shown on workspace skill cards: a Bot icon
 // with an "N agent(s)" count whose tooltip lists the agents, or a warning when
 // the Skill is attached to no agents. Rendered for both workspace-scoped and
 // attached org-scoped (Shared) Skills (#296). The trigger uses preventDefault
 // so tapping the count does not follow the card's link.
-const SkillAgentsIndicator = ({ agents }: { agents: Serialized<Agent>[] }) => (
-  <div className="mt-1 text-xs text-muted-foreground">
-    {agents.length > 0 ? (
-      <Tooltip>
-        <TooltipTrigger
-          className="flex items-center gap-1 cursor-default"
-          onClick={(e) => e.preventDefault()}
-        >
-          <Bot className="h-3 w-3" />
-          {agents.length} agent{agents.length !== 1 && "s"}
-        </TooltipTrigger>
-        <TooltipContent>
-          <ul className="text-left">
-            {agents.map((agent) => (
-              <li key={agent.id}>{agent.name}</li>
-            ))}
-          </ul>
-        </TooltipContent>
-      </Tooltip>
-    ) : (
-      <span className="flex items-center gap-1 cursor-default text-warning-foreground">
-        <TriangleAlert className="h-3 w-3" />
-        <strong>WARNING:</strong> Skill not associated with any agents.
-      </span>
-    )}
-  </div>
-);
+function SkillAgentsIndicator({ agents }: { agents: Serialized<Agent>[] }) {
+  return (
+    <div className="mt-1 text-xs text-muted-foreground">
+      {agents.length > 0 ? (
+        <Tooltip>
+          <TooltipTrigger
+            className="flex items-center gap-1 cursor-default"
+            onClick={(e) => e.preventDefault()}
+          >
+            <Bot className="size-3" />
+            {agents.length} agent{agents.length !== 1 && "s"}
+          </TooltipTrigger>
+          <TooltipContent>
+            <ul className="text-left">
+              {agents.map((agent) => (
+                <li key={agent.id}>{agent.name}</li>
+              ))}
+            </ul>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <span className="flex items-center gap-1 cursor-default text-warning-foreground">
+          <TriangleAlert className="size-3" />
+          <strong>WARNING:</strong> Skill not associated with any agents.
+        </span>
+      )}
+    </div>
+  );
+}
 
-export const SkillsList = ({
+export function SkillsList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId?: string;
-}) => {
+}) {
   const { actor } = useAuth();
   const [skillToManage, setSkillToManage] = useState<SkillWithScope | null>(
     null,
@@ -537,4 +539,4 @@ export const SkillsList = ({
       />
     </>
   );
-};
+}

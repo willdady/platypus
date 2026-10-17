@@ -51,10 +51,10 @@ export function ListState({
  * The shape SWR puts on `error`, whether the failure carries an `info` or not.
  * `info` is the response body, whose failure reason is under `error`.
  */
-interface ReadError {
+type ReadError = {
   readonly message?: string;
   readonly info?: { readonly error?: unknown };
-}
+};
 
 /**
  * The fetch-failure state shared by every list: "Failed to load <subject>." plus

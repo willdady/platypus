@@ -25,7 +25,7 @@ export async function generateMetadata({
   return { title: trigger?.name || "Edit Trigger" };
 }
 
-const EditTriggerPage = async ({ params }: { params: Params }) => {
+async function EditTriggerPage({ params }: { params: Params }) {
   const { orgId, workspaceId, triggerId } = await params;
   const routes = workspaceRoutes(orgId, workspaceId);
 
@@ -49,6 +49,6 @@ const EditTriggerPage = async ({ params }: { params: Params }) => {
       />
     </ResourcePage>
   );
-};
+}
 
 export default EditTriggerPage;

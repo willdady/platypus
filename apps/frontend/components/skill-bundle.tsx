@@ -25,7 +25,7 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { optionalFetcher } from "@/lib/utils";
 
 /** Marks a Skill whose scripts or binary files only a Sandbox can use. */
-export const NeedsSandboxBadge = ({ skill }: { skill: Serialized<Skill> }) => {
+export function NeedsSandboxBadge({ skill }: { skill: Serialized<Skill> }) {
   if (!skill.needsSandbox) return null;
 
   return (
@@ -37,17 +37,17 @@ export const NeedsSandboxBadge = ({ skill }: { skill: Serialized<Skill> }) => {
       Needs Sandbox
     </Badge>
   );
-};
+}
 
 /**
  * Picks a `.zip` and sends it as the raw request body to `url`. The backend
  * validates the whole bundle before writing anything and names the rule a
  * rejected zip broke, so its message is shown as-is.
  */
-const useZipUpload = <TResult,>(
+function useZipUpload<TResult>(
   method: "POST" | "PUT",
   onSuccess: (result: Serialized<TResult>) => void,
-) => {
+) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -74,16 +74,16 @@ const useZipUpload = <TResult,>(
   );
 
   return { input, pick: () => inputRef.current?.click(), uploading };
-};
+}
 
 /** Creates a new Skill from a zip, then hands it to `onImported`. */
-export const SkillImportButton = ({
+export function SkillImportButton({
   scope,
   onImported,
 }: {
   scope: Scope;
   onImported: (skill: Serialized<Skill>) => void;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
   const upload = useZipUpload<Serialized<Skill>>("POST", (skill) => {
     toast.success(`Imported skill ${skill.name}`);
@@ -102,24 +102,26 @@ export const SkillImportButton = ({
       </Button>
     </>
   );
-};
+}
 
-const formatSize = (bytes: number) =>
-  bytes < 1024
+function formatSize(bytes: number) {
+  return bytes < 1024
     ? `${bytes} B`
     : bytes < 1024 * 1024
       ? `${(bytes / 1024).toFixed(1)} KB`
       : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
-const formatValue = (value: unknown) =>
-  typeof value === "string" ? value : JSON.stringify(value);
+function formatValue(value: unknown) {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
 
 /**
  * A Skill's bundle beyond the form's fields: Export, Replace bundle, the
  * bundled files (view-only, each downloadable), and the frontmatter kept from
  * the imported `SKILL.md`, read-only.
  */
-export const SkillBundleCard = ({
+export function SkillBundleCard({
   scope,
   skill,
   onReplaced,
@@ -127,7 +129,7 @@ export const SkillBundleCard = ({
   scope: Scope;
   skill: Serialized<Skill>;
   onReplaced: (skill: Serialized<Skill>) => void;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
   const skillUrl = scopedUrl(backendUrl, `skills/${skill.id}`, scope);
   const upload = useZipUpload<Serialized<Skill>>("PUT", (replaced) => {
@@ -153,7 +155,7 @@ export const SkillBundleCard = ({
           Bundle <NeedsSandboxBadge skill={skill} />
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         <FieldDescription>
           Files bundled with this skill. Replacing the bundle overwrites the
           fields above, the frontmatter and every file with the zip&apos;s
@@ -194,7 +196,7 @@ export const SkillBundleCard = ({
         )}
 
         {frontmatter.length > 0 && (
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <p className="text-sm font-medium">Frontmatter</p>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-md border px-3 py-2 text-sm">
               {frontmatter.map(([key, value]) => (
@@ -225,4 +227,4 @@ export const SkillBundleCard = ({
       </CardContent>
     </Card>
   );
-};
+}

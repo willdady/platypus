@@ -14,7 +14,7 @@ vi.mock("swr", () => swrMock);
 
 import { KanbanCardHistory } from "./kanban-card-history";
 
-const openHistory = async () => {
+async function openHistory() {
   await renderList(
     <KanbanCardHistory
       orgId="org1"
@@ -24,7 +24,7 @@ const openHistory = async () => {
     />,
   );
   fireEvent.click(screen.getByRole("button", { name: "History" }));
-};
+}
 
 beforeEach(() => resetListHarness());
 

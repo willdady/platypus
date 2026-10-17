@@ -59,10 +59,10 @@ function RetryReadItem({
   );
 }
 
-interface CommandMenuProps {
+type CommandMenuProps = {
   orgId: string;
   workspaceId: string;
-}
+};
 
 export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
   const [open, setOpen] = useState(false);

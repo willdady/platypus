@@ -43,12 +43,12 @@ export function UserMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-xs" aria-label="Account menu">
-          <User className="size-4" />
+          <User />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>
-          <div className="flex flex-col space-y-1">
+          <div className="flex flex-col gap-1">
             <p className="text-sm font-medium leading-none">{user.name}</p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}

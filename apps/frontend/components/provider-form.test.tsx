@@ -49,8 +49,9 @@ function savedModelIds(fetchMock: ReturnType<typeof vi.fn>) {
   return savedBody(fetchMock).modelIds;
 }
 
-const save = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Update" }));
+function save() {
+  return fireEvent.click(screen.getByRole("button", { name: "Update" }));
+}
 
 beforeEach(() => {
   resetFormHarness();

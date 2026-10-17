@@ -14,16 +14,24 @@ import {
 } from "@/test/test-utils";
 import type { Serialized } from "./api-write";
 
-const card = (id: string) => ({ id }) as Serialized<KanbanCard>;
+function card(id: string) {
+  return { id } as Serialized<KanbanCard>;
+}
 
-const column = (id: string, cardIds: string[]) =>
-  ({ id, cards: cardIds.map(card) }) as ColumnWithCards;
+function column(id: string, cardIds: string[]) {
+  return { id, cards: cardIds.map(card) } as ColumnWithCards;
+}
 
-const ids = (columns: ColumnWithCards[]) =>
-  Object.fromEntries(columns.map((c) => [c.id, c.cards.map((x) => x.id)]));
+function ids(columns: ColumnWithCards[]) {
+  return Object.fromEntries(
+    columns.map((c) => [c.id, c.cards.map((x) => x.id)]),
+  );
+}
 
 /** A rect whose centre-Y is `centreY`. */
-const rect = (centreY: number) => ({ top: centreY - 5, height: 10 });
+function rect(centreY: number) {
+  return { top: centreY - 5, height: 10 };
+}
 
 describe("placeCard", () => {
   const columns = [column("col-1", ["a", "b", "c"]), column("col-2", ["d"])];

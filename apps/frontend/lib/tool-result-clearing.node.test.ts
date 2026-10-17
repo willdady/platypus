@@ -8,12 +8,12 @@ import { clearedToolCallIds } from "./tool-result-clearing";
  * allowlist and an MCP tool alike (ADR-0021, issue #626). Pass
  * `clearable: false` for a tool no message ever reports.
  */
-const toolResultMessage = (
+function toolResultMessage(
   toolName: string,
   toolCallId: string,
   { clearable = true }: { clearable?: boolean } = {},
-): PlatypusUIMessage =>
-  ({
+): PlatypusUIMessage {
+  return {
     id: `m-${toolCallId}`,
     role: "assistant",
     parts: [
@@ -26,7 +26,8 @@ const toolResultMessage = (
       },
     ],
     metadata: clearable ? { readOnlyToolNames: [toolName] } : undefined,
-  }) as unknown as PlatypusUIMessage;
+  } as unknown as PlatypusUIMessage;
+}
 
 describe("clearedToolCallIds", () => {
   it("returns nothing when the Context window is unknown", () => {

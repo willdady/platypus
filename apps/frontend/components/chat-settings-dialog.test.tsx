@@ -6,7 +6,7 @@ import { ChatSettingsDialog } from "./chat-settings-dialog";
 import { CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
 
-const renderDialog = (initial: Partial<ChatSettings> = {}) => {
+function renderDialog(initial: Partial<ChatSettings> = {}) {
   const onChange = vi.fn();
   // A stateful parent: the dialog is a controlled component, so its derived
   // validation state only moves when the value round-trips through state.
@@ -39,7 +39,7 @@ const renderDialog = (initial: Partial<ChatSettings> = {}) => {
   // "Advanced settings" disclosure.
   fireEvent.click(screen.getByText("Advanced settings"));
   return onChange;
-};
+}
 
 describe("ChatSettingsDialog", () => {
   // Issue #1058: Skills and Sub-Agents come from an Agent, so an agentless

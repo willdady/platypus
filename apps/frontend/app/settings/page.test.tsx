@@ -31,9 +31,12 @@ beforeEach(() => {
   authState.user = { id: "u1", name: "Ada", email: "ada@example.com" };
 });
 
-const timezoneField = () => screen.getByRole("combobox", { name: "Timezone" });
-const save = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Save timezone" }));
+function timezoneField() {
+  return screen.getByRole("combobox", { name: "Timezone" });
+}
+function save() {
+  return fireEvent.click(screen.getByRole("button", { name: "Save timezone" }));
+}
 
 describe("Profile Settings timezone", () => {
   it("shows the saved timezone", () => {

@@ -44,7 +44,7 @@ import type { Serialized } from "@/lib/api-write";
  * only to reach `ModelSelectorDialog`, so they are bundled rather than threaded
  * individually through every surface (issue #724).
  */
-export interface ModelSelection {
+export type ModelSelection = {
   agents: Serialized<Agent>[];
   providers: Serialized<Provider>[];
   agentId: string;
@@ -57,7 +57,7 @@ export interface ModelSelection {
   maxOutputTokens?: number;
   /** Why the restored selection is a stand-in, when it is one. */
   substitution?: SelectionSubstitution;
-}
+};
 
 /**
  * The textarea's own controls, which are the one truly per-surface part.
@@ -67,7 +67,7 @@ export interface ModelSelection {
  * issue #649) supplies its ARIA as one bag, and that bag has to stay the
  * picker's business rather than becoming a list here that can drift from it.
  */
-export interface ComposerTextareaProps extends AriaAttributes {
+export type ComposerTextareaProps = {
   ref: RefObject<HTMLTextAreaElement | null>;
   value: string;
   onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
@@ -78,9 +78,9 @@ export interface ComposerTextareaProps extends AriaAttributes {
   className?: string;
   autoFocus?: boolean;
   role?: string;
-}
+} & AriaAttributes;
 
-interface ComposerProps {
+type ComposerProps = {
   /** A rejected promise keeps the attachments, so the user can retry. */
   onSubmit: (message: PromptInputMessage) => void | Promise<void>;
   /**
@@ -102,7 +102,7 @@ interface ComposerProps {
   footerContent?: ReactNode;
   /** The submit control, and anything beside it (the editor's Cancel). */
   submit: ReactNode;
-}
+};
 
 /**
  * The stack every message-composing surface shares (issue #724): the
@@ -111,7 +111,7 @@ interface ComposerProps {
  * caller supplies. What differs between surfaces is passed in: the textarea's
  * own props, extra tools, the context meter and the submit control.
  */
-export const Composer = ({
+export function Composer({
   onSubmit,
   canUploadToSandbox,
   passthroughFileTypes,
@@ -124,7 +124,7 @@ export const Composer = ({
   tools,
   footerContent,
   submit,
-}: ComposerProps) => {
+}: ComposerProps) {
   // The picker's own open state: sharing it across surfaces would open both
   // dialogs at once.
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
@@ -203,16 +203,16 @@ export const Composer = ({
       </PromptInputFooter>
     </PromptInput>
   );
-};
+}
 
 /**
  * The model picker, locked while the composer holds a Sandbox upload: the
  * upload was offered because this Agent has the `sandbox` Tool set, and
  * another selection may not.
  */
-const ComposerModelSelector = (
+function ComposerModelSelector(
   props: Omit<ComponentProps<typeof ModelSelectorDialog>, "lockedReason">,
-) => {
+) {
   const { sandboxFiles } = usePromptInputAttachments();
   return (
     <ModelSelectorDialog
@@ -224,4 +224,4 @@ const ComposerModelSelector = (
       }
     />
   );
-};
+}

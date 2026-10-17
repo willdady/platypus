@@ -15,10 +15,11 @@ import { ProtectedRoute } from "@/components/protected-route";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import type { Workspace } from "@platypus/schemas";
 
-const readWorkspace = (orgId: string, workspaceId: string) =>
-  serverRead<Workspace>(
+function readWorkspace(orgId: string, workspaceId: string) {
+  return serverRead<Workspace>(
     backendPath`/organizations/${orgId}/workspaces/${workspaceId}`,
   );
+}
 
 export async function generateMetadata({
   params,

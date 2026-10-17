@@ -5,7 +5,7 @@ import { openDropdownMenu } from "@/test/test-utils";
 import { menuItemLabels } from "@/test/list-test-harness";
 import { RowActionsMenu } from "./row-actions-menu";
 
-const noop = () => {};
+function noop() {}
 
 const pin = { label: "Pin", icon: <Pin />, onSelect: noop };
 

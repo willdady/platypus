@@ -13,7 +13,7 @@ import ts from "typescript";
 
 const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
-const tsxFiles = (dir: string): string[] => {
+function tsxFiles(dir: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules" || entry === ".next") continue;
@@ -23,11 +23,11 @@ const tsxFiles = (dir: string): string[] => {
       found.push(full);
   }
   return found;
-};
+}
 
 type Offence = { where: string; missing: string[] };
 
-const offences = (): Offence[] => {
+function offences(): Offence[] {
   const result: Offence[] = [];
   const files = [
     ...tsxFiles(path.join(APP_ROOT, "app")),
@@ -68,7 +68,7 @@ const offences = (): Offence[] => {
     visit(source);
   }
   return result;
-};
+}
 
 describe("raw <button> elements", () => {
   it("set a type and a focus-visible style", () => {

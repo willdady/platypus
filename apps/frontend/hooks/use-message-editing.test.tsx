@@ -29,11 +29,11 @@ const transcript: UIMessage[] = [
   { id: "u2", role: "user", parts: [{ type: "text", text: "And this?" }] },
 ];
 
-const harness = (messages: UIMessage[] = transcript, started = true) => {
+function harness(messages: UIMessage[] = transcript, started = true) {
   const resend = vi.fn().mockReturnValue(started);
   const view = renderHook(() => useMessageEditing(messages, resend));
   return { ...view, resend };
-};
+}
 
 describe("useMessageEditing opening an edit", () => {
   it("edits nothing until a message is named", () => {

@@ -26,29 +26,35 @@ function Menu({
  * Radix marks everything outside the open menu `aria-hidden`, so the trigger
  * disappears from the accessibility tree while it is open. Query the slot.
  */
-const trigger = () => {
+function trigger() {
   const el = document.querySelector<HTMLElement>(
     '[data-slot="dropdown-menu-trigger"]',
   );
   if (!el) throw new Error("No dropdown menu trigger rendered");
   return el;
-};
-const isOpen = () => trigger().getAttribute("data-state") === "open";
+}
+function isOpen() {
+  return trigger().getAttribute("data-state") === "open";
+}
 
 // The pointer type is the whole point of these tests, so spell out each gesture
 // rather than leaning on fireEvent defaults (jsdom leaves `pointerType` empty).
-const press = (el: Element, pointerType: string) =>
-  fireEvent.pointerDown(el, { button: 0, pointerId: 1, pointerType });
-const release = (el: Element, pointerType: string) =>
-  fireEvent.pointerUp(el, { button: 0, pointerId: 1, pointerType });
-const click = (el: Element) => fireEvent.click(el, { button: 0 });
+function press(el: Element, pointerType: string) {
+  return fireEvent.pointerDown(el, { button: 0, pointerId: 1, pointerType });
+}
+function release(el: Element, pointerType: string) {
+  return fireEvent.pointerUp(el, { button: 0, pointerId: 1, pointerType });
+}
+function click(el: Element) {
+  return fireEvent.click(el, { button: 0 });
+}
 
 /** A completed touch tap: down, up, then the click the browser synthesises. */
-const tap = (el: Element) => {
+function tap(el: Element) {
   press(el, "touch");
   release(el, "touch");
   click(el);
-};
+}
 
 describe("DropdownMenuTrigger pointer handling", () => {
   it("does not open on a touch pointerdown", () => {

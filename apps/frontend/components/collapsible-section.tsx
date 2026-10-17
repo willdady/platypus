@@ -9,13 +9,13 @@ import {
 } from "@/components/ui/collapsible";
 import { useSectionOpen } from "@/hooks/use-section-open";
 
-interface CollapsibleSectionProps {
+type CollapsibleSectionProps = {
   title: React.ReactNode;
   description?: string;
   storageKey: string;
   children: React.ReactNode;
   className?: string;
-}
+};
 
 export function CollapsibleSection({
   title,
@@ -54,10 +54,10 @@ export function CollapsibleSection({
             <p className="text-sm text-muted-foreground">{description}</p>
           )}
         </div>
-        <ChevronDown className="mt-1 h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
+        <ChevronDown className="mt-1 size-5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
       </CollapsibleTrigger>
       <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
-        <div className="space-y-4 pt-4">{children}</div>
+        <div className="flex flex-col gap-4 pt-4">{children}</div>
       </CollapsibleContent>
     </Collapsible>
   );

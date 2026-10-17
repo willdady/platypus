@@ -28,16 +28,21 @@ export type WebSearchSource = { url: string; title: string };
  * Provider's native search) and the per-vendor read of a native result are
  * both decided once, on the backend, never re-derived here from the payload.
  */
-export const normalizedWebTool = (part: {
+export function normalizedWebTool(part: {
   toolMetadata?: Record<string, unknown>;
-}): NormalizedWebToolResult | null =>
-  (part.toolMetadata?.[WEB_TOOL_NORMALIZED_KEY] as
-    NormalizedWebToolResult | undefined) ?? null;
+}): NormalizedWebToolResult | null {
+  return (
+    (part.toolMetadata?.[WEB_TOOL_NORMALIZED_KEY] as
+      NormalizedWebToolResult | undefined) ?? null
+  );
+}
 
 /** Whether a message part is one the Web tool block should render. */
-export const isNormalizedWebToolPart = (part: {
+export function isNormalizedWebToolPart(part: {
   toolMetadata?: Record<string, unknown>;
-}): boolean => normalizedWebTool(part) !== null;
+}): boolean {
+  return normalizedWebTool(part) !== null;
+}
 
 /**
  * The citations a Web-search backend's `web_search` result contributes to the
@@ -56,11 +61,11 @@ export const isNormalizedWebToolPart = (part: {
  * Deduplicated by URL, first occurrence winning, so two searches in one turn
  * that both surface a page cite it once.
  */
-export const webSearchSources = (
+export function webSearchSources(
   parts:
     | ReadonlyArray<{ type: string; toolMetadata?: Record<string, unknown> }>
     | undefined,
-): WebSearchSource[] => {
+): WebSearchSource[] {
   const sources: WebSearchSource[] = [];
   const seen = new Set<string>();
   for (const part of parts ?? []) {
@@ -76,9 +81,9 @@ export const webSearchSources = (
     }
   }
   return sources;
-};
+}
 
-const titleFor = (kind: NormalizedWebToolResult["kind"]): string => {
+function titleFor(kind: NormalizedWebToolResult["kind"]): string {
   switch (kind) {
     case "search":
       return "Web search";
@@ -87,9 +92,9 @@ const titleFor = (kind: NormalizedWebToolResult["kind"]): string => {
     case "find":
       return "Searched page for text";
   }
-};
+}
 
-const labelFor = (result: NormalizedWebToolResult): string | undefined => {
+function labelFor(result: NormalizedWebToolResult): string | undefined {
   switch (result.kind) {
     case "search":
       return result.query;
@@ -97,15 +102,15 @@ const labelFor = (result: NormalizedWebToolResult): string | undefined => {
     case "find":
       return result.url;
   }
-};
+}
 
-const SearchBody = ({
+function SearchBody({
   result,
   toolPart,
 }: {
   result: Extract<NormalizedWebToolResult, { kind: "search" }>;
   toolPart: ToolUIPart;
-}) => {
+}) {
   // A count only once there is an output to count — showing one for a search
   // still in flight would otherwise read "0 results", and "Searching…" only
   // for the two states where one genuinely is running. A denied call is
@@ -143,13 +148,13 @@ const SearchBody = ({
       )}
     </>
   );
-};
+}
 
-const PageBody = ({
+function PageBody({
   result,
 }: {
   result: Extract<NormalizedWebToolResult, { kind: "page" }>;
-}) => {
+}) {
   if (result.contentLength === undefined && !result.contentType) {
     return <p className="text-muted-foreground text-xs">Opening…</p>;
   }
@@ -166,20 +171,21 @@ const PageBody = ({
         .join(" · ")}
     </p>
   );
-};
+}
 
-const FindBody = ({
+function FindBody({
   result,
 }: {
   result: Extract<NormalizedWebToolResult, { kind: "find" }>;
-}) =>
-  result.pattern ? (
+}) {
+  return result.pattern ? (
     <p className="text-muted-foreground text-xs">
       Searched for &ldquo;{result.pattern}&rdquo;
     </p>
   ) : (
     <p className="text-muted-foreground text-xs">Searching page…</p>
   );
+}
 
 /**
  * The Web tool block: one row for a native provider search, a Web-search
@@ -191,7 +197,7 @@ const FindBody = ({
  * and a page read has content that belongs in this row's body, not
  * dumped whole into the Transcript body.
  */
-export const WebToolCard = ({
+export function WebToolCard({
   toolPart,
   messageMetadata,
   cleared,
@@ -207,7 +213,7 @@ export const WebToolCard = ({
   /** Tool-result clearing (ADR-0018 Notes, issue #524) left this result out
    *  of the next model call. */
   cleared?: boolean;
-}) => {
+}) {
   const result = normalizedWebTool(toolPart);
   if (!result) return null;
 
@@ -232,7 +238,7 @@ export const WebToolCard = ({
         cleared={cleared}
       />
       <ToolContent>
-        <div className="space-y-2 text-sm">
+        <div className="flex flex-col gap-2 text-sm">
           {errorText ? (
             <p className="text-destructive text-xs">{errorText}</p>
           ) : result.kind === "search" ? (
@@ -246,4 +252,4 @@ export const WebToolCard = ({
       </ToolContent>
     </Tool>
   );
-};
+}

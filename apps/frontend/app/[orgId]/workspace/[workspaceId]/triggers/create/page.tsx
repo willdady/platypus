@@ -5,11 +5,11 @@ import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "New Trigger" };
 
-const CreateTriggerPage = async ({
+async function CreateTriggerPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = await params;
 
   return (
@@ -21,6 +21,6 @@ const CreateTriggerPage = async ({
       <TriggerForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>
   );
-};
+}
 
 export default CreateTriggerPage;

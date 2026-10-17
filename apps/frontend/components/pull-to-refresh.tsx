@@ -17,14 +17,14 @@ const MAX_PULL_DISTANCE = 120;
 const SETTLE_DISTANCE = 15;
 const SETTLE_PERIOD_MS = 100;
 
-interface PullToRefreshProps {
+type PullToRefreshProps = {
   /** Must not reject: callers pass SWR revalidation, which reports failure
    * through the hook. */
   onRefresh: () => Promise<void>;
   disabled?: boolean;
   className?: string;
   children: React.ReactNode;
-}
+};
 
 /**
  * A touch gesture that refreshes by pulling down from the top of a scroll

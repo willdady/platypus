@@ -9,7 +9,7 @@ import type { ToolSetsFailureReason } from "@/lib/tool-sets-request";
  * renders nothing: substituting an empty list for a failed read hides the
  * misconfiguration that caused it (issue #818).
  */
-export const ToolSetsUnavailableNotice = ({
+export function ToolSetsUnavailableNotice({
   reason,
   scope,
   hasExistingSelections,
@@ -19,7 +19,7 @@ export const ToolSetsUnavailableNotice = ({
   scope: "organization" | "workspace";
   /** Only an existing Agent has selections worth reassuring the reader about. */
   hasExistingSelections: boolean;
-}) => {
+}) {
   const owner = scope === "organization" ? "Organization" : "Workspace";
 
   return (
@@ -47,4 +47,4 @@ export const ToolSetsUnavailableNotice = ({
       </AlertDescription>
     </Alert>
   );
-};
+}

@@ -3,11 +3,11 @@ import { BlueprintsList } from "@/components/blueprints-list";
 
 export const metadata: Metadata = { title: "Blueprints" };
 
-const OrgBlueprintsPage = async ({
+async function OrgBlueprintsPage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
-}) => {
+}) {
   const { orgId } = await params;
 
   return (
@@ -21,6 +21,6 @@ const OrgBlueprintsPage = async ({
       <BlueprintsList orgId={orgId} />
     </div>
   );
-};
+}
 
 export default OrgBlueprintsPage;

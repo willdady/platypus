@@ -13,15 +13,15 @@ import { toast } from "sonner";
 import { useDetachDialog } from "@/hooks/use-detach-dialog";
 
 /** The minimum a row needs to appear in one of the Shared-resource dialogs. */
-export interface NamedResource {
+export type NamedResource = {
   readonly id: string;
   readonly name: string;
-}
+};
 
 /** The Shared resources a Workspace can attach, detach, or promote (ADR-0007). */
 export type SharedResourceType = "mcp" | "provider" | "skill" | "agent";
 
-export interface SharedDetach<T> {
+export type SharedDetach<T> = {
   /** The org-scoped row the detach dialog is open for, or null when closed. */
   readonly selected: T | null;
   readonly error: string | null;
@@ -30,7 +30,7 @@ export interface SharedDetach<T> {
   readonly close: () => void;
   /** Detach the open row; revalidates and closes on success. */
   readonly detach: () => Promise<void>;
-}
+};
 
 /**
  * The detach half of the Shared-resource actions (#880): `useDetachDialog`'s
@@ -85,13 +85,13 @@ export function useSharedDetach<T extends NamedResource>({
 }
 
 /** One workspace-private reference that a refused Promote asks the user to fix. */
-export interface PromoteBlocker {
+export type PromoteBlocker = {
   readonly type: "provider" | "skill" | "subAgent" | "mcp";
   readonly id: string;
   readonly name: string;
-}
+};
 
-export interface PromoteFlow<T> {
+export type PromoteFlow<T> = {
   readonly selected: T | null;
   readonly error: string | null;
   readonly blockers: PromoteBlocker[];
@@ -99,7 +99,7 @@ export interface PromoteFlow<T> {
   readonly open: (item: T) => void;
   readonly close: () => void;
   readonly confirm: () => Promise<void>;
-}
+};
 
 function parseBlockers(body: unknown): PromoteBlocker[] {
   if (body && typeof body === "object" && "blockers" in body) {
@@ -182,13 +182,13 @@ export function usePromoteShared<T extends NamedResource>({
   return { selected, error, blockers, promoting, open, close, confirm };
 }
 
-export interface DeleteGuard<T> {
+export type DeleteGuard<T> = {
   /** The row whose delete was blocked, with its live attachment count. */
   readonly blocked: { item: T; count: number } | null;
   readonly clear: () => void;
   /** Check attachments, then either block or hand the row to the delete flow. */
   readonly request: (item: T) => Promise<void>;
-}
+};
 
 /**
  * A Shared resource can't be deleted while attached (ADR-0007). Check the live

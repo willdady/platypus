@@ -30,7 +30,7 @@ import BoardSettingsPage from "./page";
 
 const BOARD = "http://test/organizations/org1/workspaces/ws1/boards/b1";
 
-const renderPage = async () => {
+async function renderPage() {
   // `params` is unwrapped with `use`, so the first render suspends.
   await act(async () => {
     render(
@@ -45,7 +45,7 @@ const renderPage = async () => {
       </Suspense>,
     );
   });
-};
+}
 
 describe("BoardSettingsPage", () => {
   beforeEach(() => resetFormHarness());

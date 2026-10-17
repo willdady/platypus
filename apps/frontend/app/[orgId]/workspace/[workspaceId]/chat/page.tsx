@@ -9,7 +9,7 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { scopedUrl } from "@/lib/api-write";
 import { workspaceRoutes } from "@/lib/routes";
 
-const ChatPage = () => {
+function ChatPage() {
   const router = useRouter();
   const { orgId, workspaceId } = useParams<{
     orgId: string;
@@ -58,6 +58,6 @@ const ChatPage = () => {
       initialAgentId={searchParams.get("agentId") || undefined}
     />
   );
-};
+}
 
 export default ChatPage;

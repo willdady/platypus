@@ -34,9 +34,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 /** A row of `list-users`, read as plain JSON rather than through the auth client. */
 export type ListedUser = Serialized<User>;
 
-interface ListUsersResponse {
+type ListUsersResponse = {
   users: ListedUser[];
-}
+};
 
 export function UsersList() {
   const backendUrl = useBackendUrl();
@@ -117,8 +117,8 @@ export function UsersList() {
             <TableRow key={user.id}>
               <TableCell>
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                    <UserIcon className="h-4 w-4 text-muted-foreground" />
+                  <div className="size-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                    <UserIcon className="size-4 text-muted-foreground" />
                   </div>
                   <div className="flex flex-col">
                     <span className="font-medium">{user.name}</span>
@@ -133,7 +133,7 @@ export function UsersList() {
                   variant={user.role === "admin" ? "default" : "secondary"}
                   className="capitalize"
                 >
-                  {user.role === "admin" && <Shield className="h-3 w-3" />}
+                  {user.role === "admin" && <Shield className="size-3" />}
                   {user.role === "admin" ? "Super Admin" : "User"}
                 </Badge>
               </TableCell>
@@ -169,7 +169,7 @@ export function UsersList() {
                         size="sm"
                         onClick={() => setChangingPasswordUser(user)}
                       >
-                        <KeyRound className="h-4 w-4" />
+                        <KeyRound />
                         Change password
                       </Button>
                       <Button
@@ -177,7 +177,7 @@ export function UsersList() {
                         size="sm"
                         onClick={() => deleteFlow.request(user)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 />
                         Delete
                       </Button>
                     </>

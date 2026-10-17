@@ -20,7 +20,7 @@ import { useSWRConfig } from "swr";
 import { useMutation } from "@/hooks/use-mutation";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
-const UserInvitationsPage = () => {
+function UserInvitationsPage() {
   const backendUrl = useBackendUrl();
   const {
     data,
@@ -70,9 +70,9 @@ const UserInvitationsPage = () => {
               className="p-4 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card"
             >
               {/* Organization name, then invited-by and expiry. */}
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <SkeletonLine lineClassName="h-6" className="h-4 w-40" />
-                <div className="space-y-1">
+                <div className="flex flex-col gap-1">
                   <SkeletonLine className="w-36" />
                   <SkeletonLine className="w-32" />
                 </div>
@@ -97,9 +97,9 @@ const UserInvitationsPage = () => {
               key={invite.id}
               className="p-4 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card"
             >
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <h3 className="font-semibold">{invite.organizationName}</h3>
-                <div className="text-sm text-muted-foreground space-y-1">
+                <div className="text-sm text-muted-foreground flex flex-col gap-1">
                   {invite.invitedByName && (
                     <p>Invited by: {invite.invitedByName}</p>
                   )}
@@ -113,15 +113,14 @@ const UserInvitationsPage = () => {
                   onClick={() => void accept.run(invite.id)}
                   disabled={accept.pending}
                 >
-                  <Check className="h-4 w-4" />{" "}
-                  {accept.pending ? "Accepting..." : "Accept"}
+                  <Check /> {accept.pending ? "Accepting..." : "Accept"}
                 </Button>
                 <Button
                   variant="outline"
                   className="flex-1 md:flex-none"
                   onClick={() => decline.request(invite.id)}
                 >
-                  <X className="h-4 w-4" /> Decline
+                  <X /> Decline
                 </Button>
               </div>
             </div>
@@ -142,6 +141,6 @@ const UserInvitationsPage = () => {
       />
     </div>
   );
-};
+}
 
 export default UserInvitationsPage;

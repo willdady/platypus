@@ -36,12 +36,16 @@ import type { Serialized } from "./api-write";
 export const CHAT_POLL_INTERVAL_MS = 3_000;
 
 /** A status the server reports for a run that has ended, however it ended. */
-const isRunOver = (status: RunStatus | undefined): boolean =>
-  status === "succeeded" || status === "failed" || status === "cancelled";
+function isRunOver(status: RunStatus | undefined): boolean {
+  return (
+    status === "succeeded" || status === "failed" || status === "cancelled"
+  );
+}
 
 /** Whether this tab's own turn is under way: sent, or its reply streaming. */
-export const isTurnInFlight = (status: TurnStatus): boolean =>
-  status === "submitted" || status === "streaming";
+export function isTurnInFlight(status: TurnStatus): boolean {
+  return status === "submitted" || status === "streaming";
+}
 
 /** Everything the client knows about whether a turn is in flight. */
 export type RunBelief = {
@@ -72,15 +76,15 @@ export type RunBelief = {
  * this turn's rather than the previous one's because the row is refetched when
  * the turn is submitted.
  */
-export const runMayBeLive = ({
+export function runMayBeLive({
   runStatus,
   turnStatus,
   turnEstablished,
-}: RunBelief): boolean => {
+}: RunBelief): boolean {
   if (runStatus === "running") return true;
   if (isTurnInFlight(turnStatus)) return true;
   return turnStatus === "error" && turnEstablished && !isRunOver(runStatus);
-};
+}
 
 /**
  * Whether a run may be underway that this tab is not streaming.
@@ -91,8 +95,9 @@ export const runMayBeLive = ({
  * server with a 409, so this is a courtesy rather than the protection; it exists
  * to stop the user asking for something they can't have.
  */
-export const isRunHeldElsewhere = (belief: RunBelief): boolean =>
-  runMayBeLive(belief) && !isTurnInFlight(belief.turnStatus);
+export function isRunHeldElsewhere(belief: RunBelief): boolean {
+  return runMayBeLive(belief) && !isTurnInFlight(belief.turnStatus);
+}
 
 /**
  * How long until the Chat row should be read again, or `0` for "don't".
@@ -103,8 +108,9 @@ export const isRunHeldElsewhere = (belief: RunBelief): boolean =>
  * on every read. A stream that drops ends the turn, and the read taken then
  * brings the status up to date for this to resume from.
  */
-export const chatPollIntervalMs = (belief: RunBelief): number =>
-  isRunHeldElsewhere(belief) ? CHAT_POLL_INTERVAL_MS : 0;
+export function chatPollIntervalMs(belief: RunBelief): number {
+  return isRunHeldElsewhere(belief) ? CHAT_POLL_INTERVAL_MS : 0;
+}
 
 /** How a Chat error should be surfaced. */
 export type ChatErrorTreatment = "none" | "recovering" | "failure";
@@ -125,15 +131,15 @@ export type ChatErrorTreatment = "none" | "recovering" | "failure";
  * - `none` — say nothing. The stream ended, but the run went on to finish, so
  *   the next snapshot is the whole answer.
  */
-export const classifyChatError = ({
+export function classifyChatError({
   error,
   ...belief
-}: RunBelief & { error: Error | undefined }): ChatErrorTreatment => {
+}: RunBelief & { error: Error | undefined }): ChatErrorTreatment {
   if (!error) return "none";
   if (!belief.turnEstablished) return "failure";
   if (belief.runStatus === "failed") return "failure";
   return runMayBeLive(belief) ? "recovering" : "none";
-};
+}
 
 /**
  * The status the composer should present, which is not always the turn's own.
@@ -148,14 +154,14 @@ export const classifyChatError = ({
  *   same "a dropped connection reported as a failed turn" defect the modal fix
  *   removed, only moved onto the button.
  */
-export const composerTurnStatus = (
+export function composerTurnStatus(
   belief: RunBelief,
   treatment: ChatErrorTreatment,
-): TurnStatus => {
+): TurnStatus {
   if (isRunHeldElsewhere(belief)) return "streaming";
   if (belief.turnStatus === "error" && treatment !== "failure") return "ready";
   return belief.turnStatus;
-};
+}
 
 /**
  * How far a transcript has got: the message count, the part count, and the
@@ -171,9 +177,9 @@ export type TranscriptExtent = {
   textLength: number;
 };
 
-export const transcriptExtent = (
+export function transcriptExtent(
   messages: readonly PlatypusUIMessage[] | undefined,
-): TranscriptExtent => {
+): TranscriptExtent {
   const extent: TranscriptExtent = { messages: 0, parts: 0, textLength: 0 };
   if (!messages) return extent;
   extent.messages = messages.length;
@@ -188,7 +194,7 @@ export const transcriptExtent = (
     }
   }
   return extent;
-};
+}
 
 /**
  * Whether a fetched snapshot may replace the messages on screen.
@@ -213,11 +219,11 @@ export const transcriptExtent = (
  * Which makes it safe to hydrate on any signal — a poll, a focus, a restored
  * page — without checking first whether a stream is live.
  */
-export const snapshotMayLand = (
+export function snapshotMayLand(
   snapshot: readonly PlatypusUIMessage[],
   held: readonly PlatypusUIMessage[],
   runStatus: RunStatus | undefined,
-): boolean => {
+): boolean {
   if (isRunOver(runStatus)) return true;
   const leaf = snapshot.at(-1);
   const heldLeaf = held.at(-1);
@@ -227,14 +233,15 @@ export const snapshotMayLand = (
     return next.parts >= current.parts && next.textLength >= current.textLength;
   }
   return !held.some((message) => message.id === leaf?.id);
-};
+}
 
 /**
  * The messages on a fetched Chat row, or `undefined` where there is no row. An
  * emptied Chat is a real snapshot — its empty list is what other tabs must
  * land when every message is deleted.
  */
-export const snapshotMessages = (
+export function snapshotMessages(
   chat: Serialized<Chat> | null | undefined,
-): PlatypusUIMessage[] | undefined =>
-  chat?.messages as PlatypusUIMessage[] | undefined;
+): PlatypusUIMessage[] | undefined {
+  return chat?.messages as PlatypusUIMessage[] | undefined;
+}

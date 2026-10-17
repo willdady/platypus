@@ -15,22 +15,24 @@ vi.mock("swr", () => swrMock);
 
 import { OrgInboundTriggersList } from "./org-inbound-triggers-list";
 
-const row = (over: Record<string, unknown> = {}) => ({
-  id: "trig-1",
-  name: "Ready for AI",
-  enabled: true,
-  workspaceId: "ws-1",
-  workspaceName: "Support",
-  ownerId: "user-1",
-  ownerName: "Dana Owner",
-  createdAt: "2026-09-01T10:00:00.000Z",
-  tokenStatus: "expiring",
-  tokenCreatedAt: "2026-07-01T10:00:00.000Z",
-  tokenExpiresAt: "2026-10-15T10:00:00.000Z",
-  lastUsedAt: null,
-  lastRejectedAt: "2026-09-28T10:00:00.000Z",
-  ...over,
-});
+function row(over: Record<string, unknown> = {}) {
+  return {
+    id: "trig-1",
+    name: "Ready for AI",
+    enabled: true,
+    workspaceId: "ws-1",
+    workspaceName: "Support",
+    ownerId: "user-1",
+    ownerName: "Dana Owner",
+    createdAt: "2026-09-01T10:00:00.000Z",
+    tokenStatus: "expiring",
+    tokenCreatedAt: "2026-07-01T10:00:00.000Z",
+    tokenExpiresAt: "2026-10-15T10:00:00.000Z",
+    lastUsedAt: null,
+    lastRejectedAt: "2026-09-28T10:00:00.000Z",
+    ...over,
+  };
+}
 
 beforeEach(resetListHarness);
 

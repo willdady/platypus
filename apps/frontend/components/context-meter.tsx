@@ -26,13 +26,13 @@ const FOOTER_BLEED = "0.75rem";
  * inside the box being clipped — a negative margin on the content would shorten
  * the box by 12px and cut the bottom of the band off.
  */
-export const ContextMeterEntrance = ({
+export function ContextMeterEntrance({
   children,
   className,
 }: {
   children: ReactNode;
   className?: string;
-}) => {
+}) {
   const isMobile = useIsMobile();
   const prefersReducedMotion = useReducedMotion();
   const shouldAnimate = isMobile && !prefersReducedMotion;
@@ -48,7 +48,7 @@ export const ContextMeterEntrance = ({
       {children}
     </motion.div>
   );
-};
+}
 
 /**
  * How full the model's context will be on the next call (ADR-0018).
@@ -70,7 +70,7 @@ export const ContextMeterEntrance = ({
  * because a numerator with no denominator cannot say whether a value is roomy
  * or nearly fatal. The internal guard remains for safe standalone reuse.
  */
-export const ContextMeter = ({
+export function ContextMeter({
   occupancy,
   contextWindow,
   className,
@@ -85,7 +85,7 @@ export const ContextMeter = ({
   contextWindow?: number;
   /** Where the meter sits — the composing component's decision, not this one's. */
   className?: string;
-}) => {
+}) {
   if (occupancy == null || contextWindow == null) return null;
 
   // Clamped, because under-declaring a window is the SAFE direction and
@@ -129,4 +129,4 @@ export const ContextMeter = ({
       </span>
     </div>
   );
-};
+}

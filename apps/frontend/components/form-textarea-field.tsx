@@ -27,7 +27,7 @@ export type FormTextareaFieldProps = {
 // Composes the ui/field + ui/textarea atoms so the
 // Field/FieldLabel/Textarea/FieldError block doesn't have to be hand-wired at
 // every call site, matching `FormTextField`.
-export const FormTextareaField = ({
+export function FormTextareaField({
   label,
   name,
   value,
@@ -41,7 +41,7 @@ export const FormTextareaField = ({
   maxLength,
   className,
   textareaClassName,
-}: FormTextareaFieldProps) => {
+}: FormTextareaFieldProps) {
   const ids = formFieldIds(name, { description, error });
   return (
     <Field className={className} data-invalid={!!error}>
@@ -67,4 +67,4 @@ export const FormTextareaField = ({
       {error && <FieldError id={ids.errorId}>{error}</FieldError>}
     </Field>
   );
-};
+}

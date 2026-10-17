@@ -16,12 +16,12 @@ vi.mock("swr", () => swrMock);
 
 import { CommandMenu } from "./command-menu";
 
-const openMenu = async () => {
+async function openMenu() {
   await renderList(<CommandMenu orgId="org1" workspaceId="ws1" />);
   act(() => {
     fireEvent.keyDown(document, { key: "k", metaKey: true });
   });
-};
+}
 
 beforeEach(() => {
   resetListHarness();

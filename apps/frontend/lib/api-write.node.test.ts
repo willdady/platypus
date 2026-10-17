@@ -13,11 +13,11 @@ import { jsonResponse } from "@/test/test-utils";
 const BACKEND_URL = "http://localhost:4000";
 
 /** Stubs `fetch` to answer every request with `status` and `body`. */
-const respond = (status: number, body: unknown = {}) => {
+function respond(status: number, body: unknown = {}) {
   const fetchMock = vi.fn().mockResolvedValue(jsonResponse(status, body));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
-};
+}
 
 describe("Serialized — what JSON.parse makes of a type", () => {
   it("turns every Date into a string, leaving other fields alone", () => {

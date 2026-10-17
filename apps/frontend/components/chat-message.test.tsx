@@ -17,24 +17,27 @@ import {
 } from "./chat-message";
 import type { Serialized } from "@/lib/api-write";
 
-const makeAgent = (overrides: Partial<Serialized<Agent>>): Serialized<Agent> =>
-  ({
+function makeAgent(overrides: Partial<Serialized<Agent>>): Serialized<Agent> {
+  return {
     id: "agent-1",
     name: "Research Agent",
     avatarUrl: "https://example.com/agent-1.png",
     ...overrides,
-  }) as Serialized<Agent>;
+  } as Serialized<Agent>;
+}
 
 const agents = [makeAgent({})];
 
-const assistantMessage = (
+function assistantMessage(
   metadata?: PlatypusUIMessage["metadata"],
-): PlatypusUIMessage => ({
-  id: "m1",
-  role: "assistant",
-  metadata,
-  parts: [{ type: "text", text: "Hello" }],
-});
+): PlatypusUIMessage {
+  return {
+    id: "m1",
+    role: "assistant",
+    metadata,
+    parts: [{ type: "text", text: "Hello" }],
+  };
+}
 
 function renderMessage(
   message: PlatypusUIMessage,
@@ -1026,11 +1029,13 @@ describe("ChatMessage tool duration", () => {
   );
 });
 
-const userMessage = (): PlatypusUIMessage => ({
-  id: "u1",
-  role: "user",
-  parts: [{ type: "text", text: "Ask" }],
-});
+function userMessage(): PlatypusUIMessage {
+  return {
+    id: "u1",
+    role: "user",
+    parts: [{ type: "text", text: "Ask" }],
+  };
+}
 
 /**
  * Sending is workspace ownership, and until issue #710 the client gated only

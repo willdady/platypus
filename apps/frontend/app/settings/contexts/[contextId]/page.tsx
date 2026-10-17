@@ -5,11 +5,11 @@ import { userRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Workspace Context" };
 
-const WorkspaceContextEditPage = async ({
+async function WorkspaceContextEditPage({
   params,
 }: {
   params: Promise<{ contextId: string }>;
-}) => {
+}) {
   const { contextId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const WorkspaceContextEditPage = async ({
       <WorkspaceContextForm contextId={contextId} />
     </ResourcePage>
   );
-};
+}
 
 export default WorkspaceContextEditPage;

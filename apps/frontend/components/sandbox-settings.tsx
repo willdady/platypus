@@ -107,20 +107,22 @@ const DEFAULT_FORM: SandboxFormData = {
 
 // extraHosts travel as `["hostname:target", ...]`. Split on the first colon so
 // IPv6 targets (which contain colons) survive intact.
-const extraHostsToRows = (entries: string[] | undefined): KeyValueRow[] =>
-  (entries ?? []).map((entry) => {
+function extraHostsToRows(entries: string[] | undefined): KeyValueRow[] {
+  return (entries ?? []).map((entry) => {
     const idx = entry.indexOf(":");
     return idx === -1
       ? newRow(entry)
       : newRow(entry.slice(0, idx), entry.slice(idx + 1));
   });
+}
 
-const rowsToExtraHosts = (rows: KeyValueRow[]): string[] =>
-  rows
+function rowsToExtraHosts(rows: KeyValueRow[]): string[] {
+  return rows
     .filter((r) => r.key.trim() !== "")
     .map((r) => `${r.key.trim()}:${r.value.trim()}`);
+}
 
-const findDuplicateKey = (rows: KeyValueRow[]): string | null => {
+function findDuplicateKey(rows: KeyValueRow[]): string | null {
   const seen = new Set<string>();
   for (const { key } of rows) {
     const trimmed = key.trim();
@@ -129,51 +131,54 @@ const findDuplicateKey = (rows: KeyValueRow[]): string | null => {
     seen.add(trimmed);
   }
   return null;
-};
+}
 
 const SAVED_MESSAGE = "Sandbox configured";
 const DELETED_MESSAGE = "Sandbox deleted";
 
 // A teardown the backend could not finish asks to be retried with `force=true`.
-const isForceRetry = (outcome: WriteOutcome<unknown>): boolean =>
-  outcome.outcome === "error" &&
-  outcome.httpStatus === 500 &&
-  outcome.message.includes("force=true");
+function isForceRetry(outcome: WriteOutcome<unknown>): boolean {
+  return (
+    outcome.outcome === "error" &&
+    outcome.httpStatus === 500 &&
+    outcome.message.includes("force=true")
+  );
+}
 
 // One label / control / description field, at the form's sizes.
-const FieldSkeleton = ({
+function FieldSkeleton({
   control,
   description = true,
 }: {
   control: string;
   description?: boolean;
-}) => (
-  <div className="flex flex-col gap-3">
-    <Skeleton className="h-4 w-28" />
-    <Skeleton className={control} />
-    {description && <Skeleton className="h-4 w-3/4" />}
-  </div>
-);
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <Skeleton className="h-4 w-28" />
+      <Skeleton className={control} />
+      {description && <Skeleton className="h-4 w-3/4" />}
+    </div>
+  );
+}
 
 // Mirrors the configured-sandbox form — the shape most workspaces land on —
 // rather than the Empty card: name, backend, the env editors, then Save.
-const SandboxSettingsSkeleton = ({
-  canConfigure,
-}: {
-  canConfigure: boolean;
-}) => (
-  <div aria-label="Loading sandbox">
-    <div className="mb-6 flex flex-col gap-7">
-      <FieldSkeleton control="h-9 w-full" description={false} />
-      <FieldSkeleton control="h-9 w-full" />
-      {canConfigure && <FieldSkeleton control="h-8 w-32" />}
-      <FieldSkeleton control="h-8 w-32" />
+function SandboxSettingsSkeleton({ canConfigure }: { canConfigure: boolean }) {
+  return (
+    <div aria-label="Loading sandbox">
+      <div className="mb-6 flex flex-col gap-7">
+        <FieldSkeleton control="h-9 w-full" description={false} />
+        <FieldSkeleton control="h-9 w-full" />
+        {canConfigure && <FieldSkeleton control="h-8 w-32" />}
+        <FieldSkeleton control="h-8 w-32" />
+      </div>
+      <Skeleton className="h-9 w-16" />
     </div>
-    <Skeleton className="h-9 w-16" />
-  </div>
-);
+  );
+}
 
-const SandboxSettings = ({
+function SandboxSettings({
   orgId,
   workspaceId,
   draft,
@@ -183,7 +188,7 @@ const SandboxSettings = ({
   workspaceId?: string;
   /** Collect the Sandbox rather than save it (see `FormDraft`). */
   draft?: FormDraft;
-}) => {
+}) {
   const { actor } = useAuth();
   const backendUrl = useBackendUrl();
   // Credential- and reach-bearing sandbox config is admin-managed (ADR-0006).
@@ -1024,6 +1029,6 @@ const SandboxSettings = ({
       />
     </div>
   );
-};
+}
 
 export { SandboxSettings };

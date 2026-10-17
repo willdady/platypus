@@ -15,8 +15,9 @@ const codeThemes: [ThemeInput, ThemeInput] = ["github-light", "github-dark"];
 
 let code: CodeHighlighterPlugin | undefined;
 let codeLoad: Promise<CodeHighlighterPlugin> | undefined;
-const loadCode = () =>
-  (codeLoad ??= import("@streamdown/code").then((m) => (code = m.code)));
+function loadCode() {
+  return (codeLoad ??= import("@streamdown/code").then((m) => (code = m.code)));
+}
 
 export const lazyCode: CodeHighlighterPlugin = {
   name: "shiki",
@@ -40,8 +41,9 @@ export const lazyCode: CodeHighlighterPlugin = {
 };
 
 let mermaidLoad: Promise<DiagramPlugin> | undefined;
-const loadMermaid = () =>
-  (mermaidLoad ??= import("@streamdown/mermaid").then((m) => m.mermaid));
+function loadMermaid() {
+  return (mermaidLoad ??= import("@streamdown/mermaid").then((m) => m.mermaid));
+}
 
 export const lazyMermaid: DiagramPlugin = {
   name: "mermaid",

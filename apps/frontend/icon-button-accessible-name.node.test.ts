@@ -14,7 +14,7 @@ import ts from "typescript";
 
 const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
-const tsxFiles = (dir: string): string[] => {
+function tsxFiles(dir: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules" || entry === ".next") continue;
@@ -24,22 +24,23 @@ const tsxFiles = (dir: string): string[] => {
       found.push(full);
   }
   return found;
-};
+}
 
-const attr = (opening: ts.JsxOpeningLikeElement, name: string) =>
-  opening.attributes.properties.find(
+function attr(opening: ts.JsxOpeningLikeElement, name: string) {
+  return opening.attributes.properties.find(
     (p): p is ts.JsxAttribute =>
       ts.isJsxAttribute(p) && p.name.getText() === name,
   );
+}
 
-const isIconButton = (opening: ts.JsxOpeningLikeElement) => {
+function isIconButton(opening: ts.JsxOpeningLikeElement) {
   if (opening.tagName.getText() !== "Button") return false;
   const size = attr(opening, "size")?.initializer;
   return !!size && ts.isStringLiteral(size) && size.text.startsWith("icon");
-};
+}
 
 /** A raw `<button>` whose children are all self-closing components, e.g. `<X />`. */
-const isIconOnlyRawButton = (node: ts.Node) => {
+function isIconOnlyRawButton(node: ts.Node) {
   if (!ts.isJsxElement(node)) return false;
   if (node.openingElement.tagName.getText() !== "button") return false;
   const children = node.children.filter(
@@ -52,9 +53,9 @@ const isIconOnlyRawButton = (node: ts.Node) => {
         ts.isJsxSelfClosingElement(c) && /^[A-Z]/.test(c.tagName.getText()),
     )
   );
-};
+}
 
-const hasSrOnlyChild = (element: ts.JsxElement): boolean => {
+function hasSrOnlyChild(element: ts.JsxElement): boolean {
   let found = false;
   const visit = (node: ts.Node) => {
     if (found) return;
@@ -66,23 +67,24 @@ const hasSrOnlyChild = (element: ts.JsxElement): boolean => {
   };
   element.children.forEach(visit);
   return found;
-};
+}
 
 /** A present, non-empty `aria-label` / `aria-labelledby`. */
-const hasNameAttr = (opening: ts.JsxOpeningLikeElement) =>
-  ["aria-label", "aria-labelledby"].some((name) => {
+function hasNameAttr(opening: ts.JsxOpeningLikeElement) {
+  return ["aria-label", "aria-labelledby"].some((name) => {
     const a = attr(opening, name);
     if (!a?.initializer) return false;
     return (
       !ts.isStringLiteral(a.initializer) || a.initializer.text.trim() !== ""
     );
   });
+}
 
-const hasAccessibleName = (node: ts.JsxElement | ts.JsxSelfClosingElement) => {
+function hasAccessibleName(node: ts.JsxElement | ts.JsxSelfClosingElement) {
   const opening = ts.isJsxElement(node) ? node.openingElement : node;
   if (hasNameAttr(opening)) return true;
   return ts.isJsxElement(node) && hasSrOnlyChild(node);
-};
+}
 
 describe("icon-only buttons", () => {
   it("all have an accessible name", () => {

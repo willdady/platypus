@@ -7,25 +7,28 @@ import {
 } from "./clipboard";
 
 // jsdom does not define `isSecureContext` at all.
-const stubSecureContext = (secure: boolean) =>
-  Object.defineProperty(window, "isSecureContext", {
+function stubSecureContext(secure: boolean) {
+  return Object.defineProperty(window, "isSecureContext", {
     value: secure,
     configurable: true,
   });
+}
 
 // jsdom implements neither the Clipboard API nor execCommand, so both are
 // installed per test and removed after.
-const setClipboard = (writeText: ((text: string) => Promise<void>) | null) =>
-  Object.defineProperty(navigator, "clipboard", {
+function setClipboard(writeText: ((text: string) => Promise<void>) | null) {
+  return Object.defineProperty(navigator, "clipboard", {
     value: writeText ? { writeText } : undefined,
     configurable: true,
   });
+}
 
-const setExecCommand = (impl: (command: string) => boolean) =>
-  Object.defineProperty(document, "execCommand", {
+function setExecCommand(impl: (command: string) => boolean) {
+  return Object.defineProperty(document, "execCommand", {
     value: vi.fn(impl),
     configurable: true,
   });
+}
 
 afterEach(() => {
   setClipboard(null);

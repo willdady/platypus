@@ -51,12 +51,12 @@ export {
  * ```
  */
 
-export interface SwrResponse<T = unknown> {
+export type SwrResponse<T = unknown> = {
   data: T;
   error?: unknown;
   isLoading: boolean;
   mutate: Mock;
-}
+};
 
 export const configuredMutate = vi.fn();
 

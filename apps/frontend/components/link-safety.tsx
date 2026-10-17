@@ -19,12 +19,12 @@ import {
  * clicked under another modal Radix layer (a card Dialog sets
  * `pointer-events: none` on body); a nested Radix Dialog can.
  */
-const LinkSafetyDialog = ({
+function LinkSafetyDialog({
   isOpen,
   onClose,
   onConfirm,
   url,
-}: LinkSafetyModalProps) => {
+}: LinkSafetyModalProps) {
   const handleCopy = () =>
     copyWithToast(url, "Link copied to clipboard", "Failed to copy link");
 
@@ -61,7 +61,7 @@ const LinkSafetyDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}
 
 /** Every Markdown renderer showing agent-writable content uses this. */
 export const linkSafety: LinkSafetyConfig = {

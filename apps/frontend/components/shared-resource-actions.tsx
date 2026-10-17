@@ -29,7 +29,7 @@ import type {
  * skills, MCP, and providers lists each carried separately. The caller passes
  * its own rows; anything scoped to the organization is already attached.
  */
-export const AttachSharedAction = <
+export function AttachSharedAction<
   T extends { readonly id: string; readonly scope?: string },
 >({
   orgId,
@@ -46,7 +46,7 @@ export const AttachSharedAction = <
   label: string;
   resources: readonly T[];
   onAttached: () => void;
-}) => {
+}) {
   const [open, setOpen] = useState(false);
   const attachedIds = resources
     .filter((resource) => resource.scope === "organization")
@@ -55,7 +55,7 @@ export const AttachSharedAction = <
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        <Link2 className="size-4" /> {label}
+        <Link2 /> {label}
       </Button>
       <AttachSharedResourceDialog
         open={open}
@@ -71,14 +71,14 @@ export const AttachSharedAction = <
       />
     </>
   );
-};
+}
 
 /**
  * The dialog a locked org-scoped row opens in a Workspace: it explains where
  * the resource is managed and offers Detach plus a link to the organization
  * settings. Only the copy and the settings link differ per resource.
  */
-export const DetachSharedDialog = <T extends NamedResource>({
+export function DetachSharedDialog<T extends NamedResource>({
   detach,
   title,
   description,
@@ -91,53 +91,55 @@ export const DetachSharedDialog = <T extends NamedResource>({
   canDetach: boolean;
   /** Where the Shared resource is actually edited. */
   orgSettingsHref: (selected: T) => string;
-}) => (
-  <Dialog
-    open={!!detach.selected}
-    onOpenChange={(open) => {
-      if (!open) detach.close();
-    }}
-  >
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>
-          {detach.selected && description(detach.selected)}
-        </DialogDescription>
-      </DialogHeader>
-      {detach.error && (
-        <p role="alert" className="text-sm text-destructive">
-          {detach.error}
-        </p>
-      )}
-      <DialogFooter>
-        <Button variant="outline" onClick={detach.close}>
-          Close
-        </Button>
-        {canDetach && detach.selected && (
-          <Button
-            variant="destructive"
-            disabled={detach.detaching}
-            onClick={detach.detach}
-          >
-            <Unlink className="size-4" />
-            Detach
-          </Button>
+}) {
+  return (
+    <Dialog
+      open={!!detach.selected}
+      onOpenChange={(open) => {
+        if (!open) detach.close();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            {detach.selected && description(detach.selected)}
+          </DialogDescription>
+        </DialogHeader>
+        {detach.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {detach.error}
+          </p>
         )}
-        {canDetach && detach.selected && (
-          <Button asChild>
-            {/* The Org settings copy, even from a workspace: that is where the
+        <DialogFooter>
+          <Button variant="outline" onClick={detach.close}>
+            Close
+          </Button>
+          {canDetach && detach.selected && (
+            <Button
+              variant="destructive"
+              disabled={detach.detaching}
+              onClick={detach.detach}
+            >
+              <Unlink />
+              Detach
+            </Button>
+          )}
+          {canDetach && detach.selected && (
+            <Button asChild>
+              {/* The Org settings copy, even from a workspace: that is where the
                 Shared resource is edited. */}
-            <Link href={orgSettingsHref(detach.selected)}>
-              <ExternalLink className="size-4" />
-              Org settings
-            </Link>
-          </Button>
-        )}
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
-);
+              <Link href={orgSettingsHref(detach.selected)}>
+                <ExternalLink />
+                Org settings
+              </Link>
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const BLOCKER_LABEL: Record<PromoteBlocker["type"], string> = {
   provider: "Provider",
@@ -151,68 +153,70 @@ const BLOCKER_LABEL: Record<PromoteBlocker["type"], string> = {
  * workspace-private references to fix first (ADR-0007's no-cascade rule);
  * those replace the plain error message when present.
  */
-export const PromoteSharedDialog = <T extends NamedResource>({
+export function PromoteSharedDialog<T extends NamedResource>({
   promote,
   noun,
 }: {
   promote: PromoteFlow<T>;
   /** The resource named mid-sentence: "agent" / "skill". */
   noun: string;
-}) => (
-  <Dialog
-    open={!!promote.selected}
-    onOpenChange={(open) => {
-      if (!open) promote.close();
-    }}
-  >
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Promote to organization</DialogTitle>
-        <DialogDescription>
-          Promote <strong>{promote.selected?.name}</strong> to an
-          organization-shared {noun}? It will be managed by org admins and
-          remain attached to this workspace.
-        </DialogDescription>
-      </DialogHeader>
-      {promote.blockers.length > 0 && (
-        <div className="rounded-md border border-warning bg-warning/10 p-3 text-sm">
-          <p className="mb-2 font-medium">
-            Promote the following workspace-private references first:
+}) {
+  return (
+    <Dialog
+      open={!!promote.selected}
+      onOpenChange={(open) => {
+        if (!open) promote.close();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Promote to organization</DialogTitle>
+          <DialogDescription>
+            Promote <strong>{promote.selected?.name}</strong> to an
+            organization-shared {noun}? It will be managed by org admins and
+            remain attached to this workspace.
+          </DialogDescription>
+        </DialogHeader>
+        {promote.blockers.length > 0 && (
+          <div className="rounded-md border border-warning bg-warning/10 p-3 text-sm">
+            <p className="mb-2 font-medium">
+              Promote the following workspace-private references first:
+            </p>
+            <ul className="flex flex-col gap-1">
+              {promote.blockers.map((b) => (
+                <li key={`${b.type}-${b.id}`} className="flex gap-2">
+                  <span className="text-muted-foreground">
+                    {BLOCKER_LABEL[b.type]}:
+                  </span>
+                  <span className="font-medium">{b.name}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {promote.error && promote.blockers.length === 0 && (
+          <p role="alert" className="text-sm text-destructive">
+            {promote.error}
           </p>
-          <ul className="space-y-1">
-            {promote.blockers.map((b) => (
-              <li key={`${b.type}-${b.id}`} className="flex gap-2">
-                <span className="text-muted-foreground">
-                  {BLOCKER_LABEL[b.type]}:
-                </span>
-                <span className="font-medium">{b.name}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {promote.error && promote.blockers.length === 0 && (
-        <p role="alert" className="text-sm text-destructive">
-          {promote.error}
-        </p>
-      )}
-      <DialogFooter>
-        <Button variant="outline" onClick={promote.close}>
-          Cancel
-        </Button>
-        <Button onClick={promote.confirm} disabled={promote.promoting}>
-          Promote
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
-);
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={promote.close}>
+            Cancel
+          </Button>
+          <Button onClick={promote.confirm} disabled={promote.promoting}>
+            Promote
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 /**
  * What the Organization surface shows instead of a delete it knows will fail:
  * the attachment count, and a way through to the attachments dialog.
  */
-export const DeleteBlockedDialog = <T extends NamedResource>({
+export function DeleteBlockedDialog<T extends NamedResource>({
   guard,
   noun,
   onManage,
@@ -222,24 +226,26 @@ export const DeleteBlockedDialog = <T extends NamedResource>({
   noun: string;
   /** Opens the Manage attachments dialog for the blocked row. */
   onManage: (item: T) => void;
-}) => (
-  <ConfirmDialog
-    open={!!guard.blocked}
-    onOpenChange={(open) => !open && guard.clear()}
-    title={`Can't delete shared ${noun}`}
-    description={
-      guard.blocked
-        ? `“${guard.blocked.item.name}” is shared with ${guard.blocked.count} workspace${
-            guard.blocked.count !== 1 ? "s" : ""
-          }. Detach it from every workspace before deleting.`
-        : ""
-    }
-    confirmLabel="Manage attachments"
-    cancelLabel="Close"
-    onConfirm={() => {
-      const item = guard.blocked?.item;
-      guard.clear();
-      if (item) onManage(item);
-    }}
-  />
-);
+}) {
+  return (
+    <ConfirmDialog
+      open={!!guard.blocked}
+      onOpenChange={(open) => !open && guard.clear()}
+      title={`Can't delete shared ${noun}`}
+      description={
+        guard.blocked
+          ? `“${guard.blocked.item.name}” is shared with ${guard.blocked.count} workspace${
+              guard.blocked.count !== 1 ? "s" : ""
+            }. Detach it from every workspace before deleting.`
+          : ""
+      }
+      confirmLabel="Manage attachments"
+      cancelLabel="Close"
+      onConfirm={() => {
+        const item = guard.blocked?.item;
+        guard.clear();
+        if (item) onManage(item);
+      }}
+    />
+  );
+}

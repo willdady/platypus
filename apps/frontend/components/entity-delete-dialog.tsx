@@ -22,7 +22,7 @@ export type EntityDeleteDialogProps = {
  * confirm copy and the destructive variant in one place, so a delete never
  * drifts between forms.
  */
-export const EntityDeleteDialog = ({
+export function EntityDeleteDialog({
   open,
   onOpenChange,
   title,
@@ -31,18 +31,20 @@ export const EntityDeleteDialog = ({
   loading,
   error,
   confirmPhrase,
-}: EntityDeleteDialogProps) => (
-  <ConfirmDialog
-    open={open}
-    onOpenChange={onOpenChange}
-    title={title}
-    description={description}
-    confirmLabel="Delete"
-    confirmVariant="destructive"
-    loadingLabel="Deleting..."
-    onConfirm={onConfirm}
-    loading={loading}
-    error={error}
-    confirmPhrase={confirmPhrase}
-  />
-);
+}: EntityDeleteDialogProps) {
+  return (
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      confirmLabel="Delete"
+      confirmVariant="destructive"
+      loadingLabel="Deleting..."
+      onConfirm={onConfirm}
+      loading={loading}
+      error={error}
+      confirmPhrase={confirmPhrase}
+    />
+  );
+}

@@ -95,31 +95,35 @@ import { openDropdownMenu, selectOption } from "@/test/test-utils";
 // Radix Tooltip content measures itself on focus, which jsdom has no
 // ResizeObserver for. The row's ⋮ menu needs the pointer polyfills.
 
-const stats = (overrides?: Partial<TriggerRunStats>): TriggerRunStats => ({
-  steps: 1,
-  toolCalls: [],
-  inputTokens: 100,
-  outputTokens: 4096,
-  ...overrides,
-});
+function stats(overrides?: Partial<TriggerRunStats>): TriggerRunStats {
+  return {
+    steps: 1,
+    toolCalls: [],
+    inputTokens: 100,
+    outputTokens: 4096,
+    ...overrides,
+  };
+}
 
-const run = (
+function run(
   overrides: Partial<TriggerRunWithTrigger> = {},
-): TriggerRunWithTrigger => ({
-  id: "run-1",
-  triggerId: "trigger-1",
-  triggerName: "Nightly digest",
-  status: "success",
-  startedAt: new Date("2026-01-01T09:00:00Z"),
-  completedAt: new Date("2026-01-01T09:00:10Z"),
-  stats: stats(),
-  unloadedToolSets: [],
-  failedToolCalls: 0,
-  createdAt: new Date("2026-01-01T09:00:00Z"),
-  ...overrides,
-});
+): TriggerRunWithTrigger {
+  return {
+    id: "run-1",
+    triggerId: "trigger-1",
+    triggerName: "Nightly digest",
+    status: "success",
+    startedAt: new Date("2026-01-01T09:00:00Z"),
+    completedAt: new Date("2026-01-01T09:00:10Z"),
+    stats: stats(),
+    unloadedToolSets: [],
+    failedToolCalls: 0,
+    createdAt: new Date("2026-01-01T09:00:00Z"),
+    ...overrides,
+  };
+}
 
-const renderPage = async () => {
+async function renderPage() {
   // `params` is a promise the page unwraps with `use`, so the first render
   // suspends; flush it before asserting.
   await act(async () => {
@@ -132,12 +136,12 @@ const renderPage = async () => {
     );
   });
   await screen.findByRole("heading", { name: "Trigger runs" });
-};
+}
 
-const renderRuns = async (rows: TriggerRunWithTrigger[]) => {
+async function renderRuns(rows: TriggerRunWithTrigger[]) {
   state.pages = [{ results: rows }];
   await renderPage();
-};
+}
 
 beforeEach(() => {
   searchParams.current = new URLSearchParams();

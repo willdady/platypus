@@ -26,20 +26,22 @@ export const RUN_STEP_LIMIT_NOTICE = "Run cut short at the step limit.";
  * an exported constant its tests assert against — the ceiling notices name
  * their subject ("Response", "Sub-Agent response", "Run") per surface.
  */
-export const TurnNotice = ({
+export function TurnNotice({
   children,
   className,
 }: {
   children: string;
   className?: string;
-}) => (
-  <div
-    className={cn(
-      "flex items-center gap-1.5 text-muted-foreground text-xs",
-      className,
-    )}
-  >
-    <TriangleAlertIcon className="size-3.5 shrink-0" />
-    <span>{children}</span>
-  </div>
-);
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 text-muted-foreground text-xs",
+        className,
+      )}
+    >
+      <TriangleAlertIcon className="size-3.5 shrink-0" />
+      <span>{children}</span>
+    </div>
+  );
+}

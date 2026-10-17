@@ -150,7 +150,7 @@ const WidgetTile = memo(function WidgetTile({
         )}
       >
         <div className="flex items-center gap-1.5 min-w-0">
-          <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Icon className="size-3.5 text-muted-foreground shrink-0" />
           <span className="text-xs font-medium truncate">{widget.title}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -158,11 +158,11 @@ const WidgetTile = memo(function WidgetTile({
             <button
               type="button"
               aria-label="Expand widget"
-              className="hidden md:flex items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="hidden md:flex items-center justify-center size-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => onExpand(widget.id)}
             >
-              <Maximize2 className="h-3 w-3" />
+              <Maximize2 />
             </button>
           )}
           <Tooltip delayDuration={500}>
@@ -171,11 +171,11 @@ const WidgetTile = memo(function WidgetTile({
                 type="button"
                 aria-label="Widget details"
                 className={cn(
-                  "hidden items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "hidden items-center justify-center size-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   !editMode && "md:flex",
                 )}
               >
-                <InfoIcon className="h-3 w-3" />
+                <InfoIcon />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-left">
@@ -193,7 +193,7 @@ const WidgetTile = memo(function WidgetTile({
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onEditToggle(widget.id)}
               >
-                <Pencil className="h-3 w-3" />
+                <Pencil />
               </Button>
               <Button
                 variant="ghost"
@@ -203,7 +203,7 @@ const WidgetTile = memo(function WidgetTile({
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onDelete(widget.id)}
               >
-                <Trash2 className="h-3 w-3" />
+                <Trash2 />
               </Button>
             </>
           )}
@@ -225,25 +225,27 @@ const WidgetTile = memo(function WidgetTile({
 // The widget grid's loading placeholder: shown until the widgets have loaded
 // and the grid container has been measured, so neither "No widgets yet" nor
 // an empty frame flashes first.
-const GridSkeleton = () => (
-  <div className="p-4">
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <Skeleton className="h-32 rounded-lg" />
-      <Skeleton className="h-32 rounded-lg" />
-      <Skeleton className="h-32 rounded-lg" />
-      <Skeleton className="md:col-span-2 h-48 rounded-lg" />
-      <Skeleton className="h-48 rounded-lg" />
+function GridSkeleton() {
+  return (
+    <div className="p-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Skeleton className="h-32 rounded-lg" />
+        <Skeleton className="h-32 rounded-lg" />
+        <Skeleton className="h-32 rounded-lg" />
+        <Skeleton className="md:col-span-2 h-48 rounded-lg" />
+        <Skeleton className="h-48 rounded-lg" />
+      </div>
     </div>
-  </div>
-);
+  );
+}
 
 // ─── Main page ──────────────────────────────────────────────────────────────
 
-const DashboardPage = ({
+function DashboardPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string; dashboardId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId, dashboardId } = use(params);
   const routes = useMemo(
     () => workspaceRoutes(orgId, workspaceId),
@@ -638,7 +640,7 @@ const DashboardPage = ({
                 className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="truncate">{dashboard.name}</span>
-                <ChevronDown className="h-4 w-4 shrink-0" />
+                <ChevronDown className="size-4 shrink-0" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
@@ -650,7 +652,7 @@ const DashboardPage = ({
                       href={routes.dashboards.detail(d.id)}
                       className="flex items-center gap-2"
                     >
-                      <LayoutDashboard className="h-4 w-4" />
+                      <LayoutDashboard className="size-4" />
                       <span className="truncate">{d.name}</span>
                     </Link>
                   </DropdownMenuItem>
@@ -661,7 +663,7 @@ const DashboardPage = ({
                   href={routes.dashboards.create}
                   className="flex items-center gap-2"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="size-4" />
                   <span>Create new dashboard</span>
                 </Link>
               </DropdownMenuItem>
@@ -692,7 +694,7 @@ const DashboardPage = ({
                 size="sm"
                 onClick={() => setAddWidgetOpen(true)}
               >
-                <Plus className="h-4 w-4" /> Add widget
+                <Plus /> Add widget
               </Button>
               <Button variant="outline" size="sm" onClick={cancelEdit}>
                 Cancel
@@ -705,7 +707,7 @@ const DashboardPage = ({
             <>
               {!isMobileViewport && (
                 <Button variant="outline" size="sm" onClick={enterEditMode}>
-                  <Pencil className="h-4 w-4" /> Edit
+                  <Pencil /> Edit
                 </Button>
               )}
               <Link
@@ -713,7 +715,7 @@ const DashboardPage = ({
                 aria-label="Dashboard settings"
                 className="p-2 hover:bg-muted rounded-md transition-colors shrink-0"
               >
-                <Settings className="h-5 w-5 text-muted-foreground" />
+                <Settings className="size-5 text-muted-foreground" />
               </Link>
             </>
           )}
@@ -810,8 +812,8 @@ const DashboardPage = ({
           <DialogHeader>
             <DialogTitle>Add Widget</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="new-widget-type">Type</Label>
               <Select
                 value={newWidgetType}
@@ -826,7 +828,7 @@ const DashboardPage = ({
                     return (
                       <SelectItem key={value} value={value}>
                         <span className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Icon className="size-4 shrink-0 text-muted-foreground" />
                           {label}
                         </span>
                       </SelectItem>
@@ -835,7 +837,7 @@ const DashboardPage = ({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="new-widget-title">Title</Label>
               <Input
                 id="new-widget-title"
@@ -888,7 +890,7 @@ const DashboardPage = ({
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ duration: 0.2 }}
-                      className="relative w-full max-w-5xl h-full max-h-[80vh] bg-background rounded-lg border shadow-2xl flex flex-col p-4"
+                      className="relative size-full max-w-5xl max-h-[80vh] bg-background rounded-lg border shadow-2xl flex flex-col p-4"
                     >
                       <div className="flex justify-between items-center mb-4 shrink-0">
                         <span className="text-sm font-medium">
@@ -923,6 +925,6 @@ const DashboardPage = ({
         )}
     </div>
   );
-};
+}
 
 export default DashboardPage;

@@ -54,7 +54,7 @@ function ChartContainer({
   );
 }
 
-const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
+function ChartStyle({ id, config }: { id: string; config: ChartConfig }) {
   const colorConfig = Object.entries(config).filter(([, cfg]) => cfg.color);
   if (!colorConfig.length) return null;
   return (
@@ -69,7 +69,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
       }}
     />
   );
-};
+}
 
 type TooltipPayloadItem = {
   dataKey?: string | number;
@@ -122,7 +122,7 @@ function ChartTooltipContent({
           return (
             <div key={key} className="flex items-center gap-2">
               <div
-                className="h-2 w-2 shrink-0 rounded-full"
+                className="size-2 shrink-0 rounded-full"
                 style={{ backgroundColor: item.color ?? cfg?.color }}
               />
               <span className="text-muted-foreground">{cfg?.label ?? key}</span>
@@ -161,7 +161,7 @@ function ChartLegendContent({
         return (
           <div key={item.value} className="flex items-center gap-1.5">
             <div
-              className="h-2 w-2 shrink-0 rounded-full"
+              className="size-2 shrink-0 rounded-full"
               style={{ backgroundColor: item.color ?? cfg?.color }}
             />
             <span className="text-muted-foreground text-xs">

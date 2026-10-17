@@ -28,14 +28,14 @@ const invitation = {
 
 beforeEach(resetListHarness);
 
-const confirmDecline = async () => {
+async function confirmDecline() {
   mockScopedSWR({ "/invitations": [invitation] }, { strict: true });
   await renderList(<UserInvitationsPage />);
   fireEvent.click(screen.getByRole("button", { name: /Decline/ }));
   const dialog = screen.getByRole("dialog");
   fireEvent.click(within(dialog).getByRole("button", { name: "Decline" }));
   return dialog;
-};
+}
 
 describe("UserInvitationsPage", () => {
   it("lists each pending invitation with who sent it", async () => {

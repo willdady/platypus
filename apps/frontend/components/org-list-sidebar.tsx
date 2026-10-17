@@ -20,9 +20,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization } from "@platypus/schemas";
 import { appRoutes, orgRoutes } from "@/lib/routes";
 
-interface OrgListSidebarProps {
+type OrgListSidebarProps = {
   currentOrgId: string;
-}
+};
 
 export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   const backendUrl = useBackendUrl();

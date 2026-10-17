@@ -6,7 +6,9 @@ import type { ControlsConfig } from "streamdown";
 // HTTP it is hidden. The table can still be downloaded or selected by hand.
 const insecureControls: ControlsConfig = { table: { copy: false } };
 
-const noSubscribe = () => () => {};
+function noSubscribe() {
+  return () => {};
+}
 
 /** The `controls` to give a Streamdown that keeps its copy buttons. */
 export function useStreamdownControls(): ControlsConfig | undefined {
