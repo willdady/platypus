@@ -280,15 +280,12 @@ describe("invitationLink", () => {
 describe("sign-in next", () => {
   it("returns to the requested page", () => {
     const path = "/org1/workspace/ws1/chat/c1?tab=runs#latest";
-    const next = new URL(signInReturningTo(path), "http://x").searchParams.get(
-      "next",
-    );
+    const { search } = new URL(signInReturningTo(path), "http://x");
 
-    expect(signInDestination(next)).toBe(path);
+    expect(signInDestination(search)).toBe(path);
   });
 
   it.each([
-    null,
     "",
     "https://evil.example/org1",
     "//evil.example/org1",
@@ -296,6 +293,6 @@ describe("sign-in next", () => {
     "javascript:alert(1)",
     "http://[",
   ])("goes home for %j", (next) => {
-    expect(signInDestination(next)).toBe("/");
+    expect(signInDestination(`?next=${encodeURIComponent(next)}`)).toBe("/");
   });
 });

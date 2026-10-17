@@ -44,10 +44,12 @@ export function signInReturningTo(path: string): string {
 }
 
 /**
- * Where sign-in goes on to: `next` when it resolves to a path on this origin,
- * home otherwise. Honouring any `next` would make sign-in an open redirect.
+ * Where sign-in goes on to, given its query string: `next` when it resolves to
+ * a path on this origin, home otherwise. Honouring any `next` would make
+ * sign-in an open redirect.
  */
-export function signInDestination(next: string | null): string {
+export function signInDestination(search: string): string {
+  const next = new URLSearchParams(search).get("next");
   if (!next) return appRoutes.home;
   // Resolved against a stand-in origin: `//host`, `/\\host` and absolute
   // URLs all resolve somewhere else, and so fail the comparison.

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ProtectedRoute } from "./protected-route";
 
@@ -42,17 +42,20 @@ beforeEach(() => {
   auth.retryAccessReads.mockReset();
 });
 
+afterEach(() => {
+  window.history.replaceState(null, "", "/");
+});
+
 describe("ProtectedRoute", () => {
   it("sends a signed-out reader to sign in, to return here, and renders nothing", () => {
-    window.history.replaceState(null, "", "/org1/settings?tab=a");
+    window.history.replaceState(null, "", "/org1/settings?tab=a#b");
     auth.user = null;
     const { container } = renderGate({ requireOrgAccess: true });
 
     expect(replace).toHaveBeenCalledWith(
-      "/sign-in?next=%2Forg1%2Fsettings%3Ftab%3Da",
+      "/sign-in?next=%2Forg1%2Fsettings%3Ftab%3Da%23b",
     );
     expect(container).toBeEmptyDOMElement();
-    window.history.replaceState(null, "", "/");
   });
 
   // A session read that never landed says nothing about the session (#1204).

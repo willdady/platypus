@@ -21,7 +21,7 @@ vi.mock("@/components/auth-provider", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn() }),
 }));
 
 import { UserMenu } from "./user-menu";

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import SignInPage from "./page";
@@ -82,6 +82,9 @@ describe("SignInPage form", () => {
   beforeEach(() => {
     stubSignUpAvailability(true);
   });
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
 
   const submit = (container: HTMLElement) => {
     fireEvent.change(screen.getByLabelText("Email"), {
@@ -126,7 +129,6 @@ describe("SignInPage form", () => {
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith("/org1?tab=a"),
     );
-    window.history.replaceState(null, "", "/");
   });
 
   it("goes home rather than off-site", async () => {
@@ -141,7 +143,6 @@ describe("SignInPage form", () => {
     submit(container);
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
-    window.history.replaceState(null, "", "/");
   });
 
   it.each([

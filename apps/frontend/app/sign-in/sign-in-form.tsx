@@ -12,10 +12,6 @@ import { RevealableInput } from "@/components/ui/revealable-input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 
-/** Where the gate that sent the reader here asked to return them to. */
-const destination = () =>
-  signInDestination(new URLSearchParams(window.location.search).get("next"));
-
 export default function SignInPage() {
   const { authClient, user } = useAuth();
   const router = useRouter();
@@ -26,7 +22,7 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (user) router.replace(destination());
+    if (user) router.replace(signInDestination(window.location.search));
   }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,7 +41,7 @@ export default function SignInPage() {
         return;
       }
 
-      router.replace(destination());
+      router.replace(signInDestination(window.location.search));
     } catch {
       setError("An unexpected error occurred");
     } finally {

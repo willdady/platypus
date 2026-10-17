@@ -119,14 +119,18 @@ export function ProtectedRoute({
   // only redirects again.
   useEffect(() => {
     if (!isAuthLoading && !user && !accessReadError) {
-      router.replace(signInReturningTo(pathname + window.location.search));
+      router.replace(
+        signInReturningTo(
+          pathname + window.location.search + window.location.hash,
+        ),
+      );
     }
   }, [user, isAuthLoading, accessReadError, router, pathname]);
 
   // Held back until the roles are first known, so a gated page doesn't mount
-  // and fire reads the backend will refuse. A later read, such as the next
-  // Workspace's under a layout that stays mounted, keeps the page up rather
-  // than swapping the whole layout for a skeleton.
+  // and fire reads the backend will refuse. Once admitted, a later read keeps
+  // the page up: the `[orgId]` layout stays mounted across a Workspace switch,
+  // and swapping it for a skeleton would blank the whole Organization.
   if (isAuthLoading) {
     return hasSettled ? (
       <>{children}</>
