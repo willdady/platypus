@@ -533,7 +533,7 @@ export function AgentsList({
       ) : (
         <>
           {pinnedAgents.length > 0 && (
-            <div className="mb-6 flex flex-col gap-2">
+            <div className="mb-2 flex flex-col gap-2">
               <h3 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                 <Pin className="size-4" /> Pinned
               </h3>
@@ -551,7 +551,7 @@ export function AgentsList({
         </>
       )}
 
-      {agents.length > 0 && <div className="mt-4 flex gap-2">{actions}</div>}
+      {agents.length > 0 && <div className="flex gap-2">{actions}</div>}
 
       <DetachSharedDialog
         detach={orgAgentDetach}
