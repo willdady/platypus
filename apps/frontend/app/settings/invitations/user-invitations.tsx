@@ -1,7 +1,7 @@
 "use client";
 
 import { joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt } from "@/lib/api-write";
 import { type InvitationListItem } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import { Mail, Check, X } from "lucide-react";
@@ -16,8 +16,9 @@ import {
   LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
-import { useState } from "react";
+import { useSWRConfig } from "swr";
 import { useMutation } from "@/hooks/use-mutation";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 const UserInvitationsPage = () => {
   const backendUrl = useBackendUrl();
@@ -25,10 +26,7 @@ const UserInvitationsPage = () => {
     results: InvitationListItem[];
   }>("users/me/invitations", {});
 
-  const [invitationToDecline, setInvitationToDecline] = useState<string | null>(
-    null,
-  );
-  const [isDeclining, setIsDeclining] = useState(false);
+  const { mutate: globalMutate } = useSWRConfig();
 
   const accept = useMutation(async (invitationId: string) => {
     const result = await writeAt(
@@ -38,31 +36,21 @@ const UserInvitationsPage = () => {
     if (result.outcome === "success") {
       toast.success("Invitation accepted");
       mutate();
+      // The sidebar's Organization list now has one more.
+      globalMutate(scopedUrl(backendUrl, "organizations", {}));
     } else {
       toast.error(result.message);
     }
   });
 
-  const handleDecline = async () => {
-    if (!invitationToDecline) return;
-
-    setIsDeclining(true);
-    const result = await writeAt(
-      joinUrl(
-        backendUrl,
-        `/users/me/invitations/${invitationToDecline}/decline`,
-      ),
-      { method: "POST" },
-    );
-    if (result.outcome === "success") {
-      toast.success("Invitation declined");
-      mutate();
-      setInvitationToDecline(null);
-    } else {
-      toast.error(result.message);
-    }
-    setIsDeclining(false);
-  };
+  const decline = useDeleteFlow<string>({
+    delete: (invitationId, url) =>
+      writeAt(joinUrl(url, `/users/me/invitations/${invitationId}/decline`), {
+        method: "POST",
+      }),
+    mutate,
+    onSuccess: () => toast.success("Invitation declined"),
+  });
 
   return (
     <div>
@@ -128,7 +116,7 @@ const UserInvitationsPage = () => {
                 <Button
                   variant="outline"
                   className="flex-1 md:flex-none cursor-pointer"
-                  onClick={() => setInvitationToDecline(invite.id)}
+                  onClick={() => decline.request(invite.id)}
                 >
                   <X className="h-4 w-4" /> Decline
                 </Button>
@@ -139,14 +127,15 @@ const UserInvitationsPage = () => {
       )}
 
       <ConfirmDialog
-        open={!!invitationToDecline}
-        onOpenChange={(open) => !open && setInvitationToDecline(null)}
+        open={decline.open}
+        onOpenChange={(open) => !open && decline.close()}
         title="Decline Invitation"
         description="Are you sure you want to decline this invitation?"
         confirmLabel="Decline"
         loadingLabel="Declining..."
-        onConfirm={handleDecline}
-        loading={isDeclining}
+        onConfirm={decline.confirm}
+        loading={decline.deleting}
+        error={decline.error}
       />
     </div>
   );

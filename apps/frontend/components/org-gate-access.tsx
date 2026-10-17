@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { toast } from "sonner";
+import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import type { OrgGate, OrgGateAccess as Access } from "@platypus/schemas";
 import {
@@ -23,6 +23,7 @@ import { LoadingRegion } from "@/components/list-skeletons";
 import { ListError } from "@/components/list-state";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useEntityForm } from "@/hooks/use-entity-form";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 
 const GATE_OPTIONS: { value: OrgGate; label: string }[] = [
@@ -78,7 +79,37 @@ export const OrgGateAccess = ({
   // The Admin's unsaved edits; null shows what is saved. Cleared on save, so
   // the next read is shown as it stands.
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+
+  const savedAllowed = new Set(
+    data?.workspaces.filter((ws) => ws.allowed).map((ws) => ws.id),
+  );
+  const { gate, allowed } = draft ?? {
+    gate: data?.gate ?? "off",
+    allowed: savedAllowed,
+  };
+
+  const { isSubmitting: isSaving, submit } = useEntityForm<object, Access>({
+    initialData: {},
+    entity: copy.entity,
+    scope,
+    // The staged draft lives outside the hook's form state, so the write
+    // reads it directly rather than through `formData`.
+    write: () =>
+      writeAt<Access>(scopedUrl(backendUrl, copy.entity, scope), {
+        method: "PUT",
+        data: {
+          gate,
+          ...(gate === "selected" ? { allowedWorkspaceIds: [...allowed] } : {}),
+        },
+      }),
+    // No field here renders a server error, so a rejection is toasted.
+    onInvalid: (_fieldErrors, message) => toast.error(message),
+    successMessage: copy.savedMessage,
+    onSuccess: async (saved) => {
+      await mutate(saved, { revalidate: false });
+      setDraft(null);
+    },
+  });
 
   if (isLoading) {
     return (
@@ -93,10 +124,6 @@ export const OrgGateAccess = ({
   }
   if (!data) return null;
 
-  const savedAllowed = new Set(
-    data.workspaces.filter((ws) => ws.allowed).map((ws) => ws.id),
-  );
-  const { gate, allowed } = draft ?? { gate: data.gate, allowed: savedAllowed };
   // The switches only count under Selected; elsewhere they are left as saved.
   const dirty =
     gate !== data.gate ||
@@ -112,29 +139,6 @@ export const OrgGateAccess = ({
     if (on) next.add(workspaceId);
     else next.delete(workspaceId);
     setDraft({ gate, allowed: next });
-  };
-
-  const handleSave = async () => {
-    if (!backendUrl) return;
-    setIsSaving(true);
-    const outcome = await writeAt<Access>(
-      scopedUrl(backendUrl, copy.entity, scope),
-      {
-        method: "PUT",
-        data: {
-          gate,
-          ...(gate === "selected" ? { allowedWorkspaceIds: [...allowed] } : {}),
-        },
-      },
-    );
-    if (outcome.outcome === "success") {
-      toast.success(copy.savedMessage);
-      await mutate(outcome.data, { revalidate: false });
-      setDraft(null);
-    } else {
-      toast.error(outcome.message);
-    }
-    setIsSaving(false);
   };
 
   return (
@@ -213,9 +217,9 @@ export const OrgGateAccess = ({
           type="button"
           className="cursor-pointer"
           disabled={!dirty || isSaving}
-          onClick={() => void handleSave()}
+          onClick={() => void submit()}
         >
-          Save
+          {isSaving ? "Saving..." : "Save"}
         </Button>
       </div>
     </div>

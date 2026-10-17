@@ -19,6 +19,8 @@ import {
   canOpenOrgSettings,
 } from "@/lib/authorization";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useEntityForm } from "@/hooks/use-entity-form";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
 import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import {
@@ -112,15 +114,6 @@ export function AppSidebar() {
   const router = useRouter();
 
   const [renameChatId, setRenameChatId] = useState<string | null>(null);
-  const [renameTitle, setRenameTitle] = useState("");
-  const [renameTags, setRenameTags] = useState<string[]>([]);
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [renameValidationErrors, setRenameValidationErrors] = useState<
-    Record<string, string>
-  >({});
-  const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const pins = useOptimisticRows<ChatListItem>();
 
   const { mutate } = useSWRConfig();
@@ -247,75 +240,43 @@ export function AppSidebar() {
     },
   ].filter((group) => group.chats.length > 0);
 
-  const handleRenameChat = async () => {
-    if (!renameChatId) return;
+  const {
+    formData: renameData,
+    setFormData: setRenameData,
+    validationErrors: renameValidationErrors,
+    setValidationErrors: setRenameValidationErrors,
+    isSubmitting: isRenaming,
+    setField: setRenameField,
+    submit: submitRename,
+  } = useEntityForm<{ title: string; tags: string[] }>({
+    initialData: { title: "", tags: [] },
+    entity: "chat",
+    scope,
+    id: renameChatId ?? undefined,
+    buildPayload: (data) => ({
+      workspaceId,
+      ...data,
+      isPinned: chats.find((chat) => chat.id === renameChatId)?.isPinned,
+    }),
+    // A chat has no field a conflict could key to.
+    conflictField: null,
+    onSuccess: async () => {
+      setRenameChatId(null);
+      // The list is read under query params the write's own keys don't cover.
+      await revalidateChatList();
+    },
+  });
 
-    const currentChat = chats.find((chat) => chat.id === renameChatId);
-    if (!currentChat) return;
-
-    setIsRenaming(true);
-    setRenameValidationErrors({});
-    try {
-      const outcome = await writeEntity(backendUrl, "chat", scope, {
-        id: renameChatId,
-        data: {
-          workspaceId,
-          title: renameTitle,
-          isPinned: currentChat.isPinned,
-          tags: renameTags,
-        },
-      });
-
-      if (outcome.outcome === "success") {
-        // Close the dialog
-        setRenameChatId(null);
-        setRenameTitle("");
-        setRenameTags([]);
-
-        // Revalidate the chat list
-        await revalidateChatList();
-      } else if (
-        outcome.outcome === "invalid" &&
-        Object.keys(outcome.fieldErrors).length > 0
-      ) {
-        setRenameValidationErrors(outcome.fieldErrors);
-      } else {
-        toast.error(outcome.message);
-      }
-    } finally {
-      setIsRenaming(false);
-    }
-  };
-
-  const handleDeleteChat = async () => {
-    if (!deleteChatId) return;
-
-    setIsDeleting(true);
-    setDeleteError(null);
-    try {
-      const outcome = await writeEntity(backendUrl, "chat", scope, {
-        id: deleteChatId,
-      });
-
-      if (outcome.outcome !== "success") {
-        setDeleteError(outcome.message);
-        return;
-      }
-
-      // Close the dialog
-      setDeleteChatId(null);
-
-      // Navigate to the main chat page if we were on the deleted chat
-      if (pathname.startsWith(routes.chat.detail(deleteChatId))) {
+  const chatDelete = useDeleteFlow<string>({
+    delete: (chatId) => writeEntity(backendUrl, "chat", scope, { id: chatId }),
+    mutate: revalidateChatList,
+    onSuccess: (chatId) => {
+      // Leave the deleted chat if it is the one open.
+      if (pathname.startsWith(routes.chat.detail(chatId))) {
         router.push(routes.chat.root);
       }
-
-      // Revalidate the chat list
-      await revalidateChatList();
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+    },
+  });
 
   const handleTogglePin = (chat: ChatListItem) => {
     const data = { isPinned: !chat.isPinned };
@@ -549,8 +510,10 @@ export function AppSidebar() {
                                         className="cursor-pointer"
                                         onSelect={() => {
                                           setRenameChatId(chat.id);
-                                          setRenameTitle(chat.title);
-                                          setRenameTags(chat.tags ?? []);
+                                          setRenameData({
+                                            title: chat.title,
+                                            tags: chat.tags ?? [],
+                                          });
                                           setRenameValidationErrors({});
                                         }}
                                       >
@@ -559,7 +522,7 @@ export function AppSidebar() {
                                       <DropdownMenuItem
                                         className="cursor-pointer"
                                         onSelect={() =>
-                                          setDeleteChatId(chat.id)
+                                          chatDelete.request(chat.id)
                                         }
                                       >
                                         <Trash2 className="h-4 w-4" /> Delete
@@ -601,13 +564,7 @@ export function AppSidebar() {
       {/* Rename Chat Dialog */}
       <Dialog
         open={!!renameChatId}
-        onOpenChange={(open) => {
-          if (!open) {
-            setRenameChatId(null);
-            setRenameTitle("");
-            setRenameTags([]);
-          }
-        }}
+        onOpenChange={(open) => !open && setRenameChatId(null)}
       >
         <DialogContent
           onPointerDownOutside={(e) => {
@@ -633,8 +590,8 @@ export function AppSidebar() {
               <FieldLabel htmlFor="title">Title</FieldLabel>
               <Input
                 id="title"
-                value={renameTitle}
-                onChange={(e) => setRenameTitle(e.target.value)}
+                value={renameData.title}
+                onChange={(e) => setRenameField("title", e.target.value)}
                 placeholder="Chat title"
                 disabled={isRenaming}
                 aria-invalid={!!renameValidationErrors.title}
@@ -648,8 +605,8 @@ export function AppSidebar() {
               <FieldLabel htmlFor="tags">Tags</FieldLabel>
               <TagInput
                 id="tags"
-                value={renameTags}
-                onChange={setRenameTags}
+                value={renameData.tags}
+                onChange={(tags) => setRenameField("tags", tags)}
                 disabled={isRenaming}
               />
               {renameValidationErrors.tags && (
@@ -660,40 +617,31 @@ export function AppSidebar() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                setRenameChatId(null);
-                setRenameTitle("");
-                setRenameTags([]);
-              }}
+              onClick={() => setRenameChatId(null)}
               disabled={isRenaming}
               className="cursor-pointer"
             >
               Cancel
             </Button>
             <Button
-              onClick={handleRenameChat}
-              disabled={isRenaming || !renameTitle.trim()}
+              onClick={() => void submitRename()}
+              disabled={isRenaming || !renameData.title.trim()}
               className="cursor-pointer"
             >
-              Save
+              {isRenaming ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <DeleteConfirmDialog
-        open={!!deleteChatId}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeleteChatId(null);
-            setDeleteError(null);
-          }
-        }}
+        open={chatDelete.open}
+        onOpenChange={(open) => !open && chatDelete.close()}
         title="Delete Chat"
         description="Are you sure you want to delete this chat? This action cannot be undone."
-        onConfirm={handleDeleteChat}
-        loading={isDeleting}
-        error={deleteError}
+        onConfirm={chatDelete.confirm}
+        loading={chatDelete.deleting}
+        error={chatDelete.error}
       />
     </>
   );

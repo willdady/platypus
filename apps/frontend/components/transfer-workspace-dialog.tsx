@@ -1,9 +1,8 @@
 "use client";
 
+import { toast } from "sonner";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSWRConfig } from "swr";
-import { toast } from "sonner";
 import { ArrowRightLeft } from "lucide-react";
 import {
   type OrgMemberListItem,
@@ -22,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useEntityForm } from "@/hooks/use-entity-form";
 import { scopedUrl, workspaceEntity, writeAt } from "@/lib/api-write";
 import {
   historyOutcome,
@@ -50,7 +50,6 @@ export const TransferWorkspaceAction = ({
 }: TransferWorkspaceActionProps) => {
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const { mutate } = useSWRConfig();
   const { data: workspace } = useScopedSWR<Workspace>(
     workspaceEntity(workspaceId),
     { orgId },
@@ -61,9 +60,34 @@ export const TransferWorkspaceAction = ({
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"choose" | "confirm">("choose");
-  const [newOwnerId, setNewOwnerId] = useState("");
-  const [keepHistory, setKeepHistory] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    formData: { newOwnerId, keepHistory },
+    setFormData,
+    setField,
+    isSubmitting,
+    submit,
+  } = useEntityForm({
+    initialData: { newOwnerId: "", keepHistory: true },
+    entity: workspaceEntity(workspaceId),
+    scope: { orgId },
+    write: (data) => {
+      const url = scopedUrl(backendUrl, workspaceEntity(workspaceId), {
+        orgId,
+      });
+      return writeAt(`${url}/transfer`, {
+        method: "POST",
+        data,
+        revalidateKeys: [url, scopedUrl(backendUrl, "workspaces", { orgId })],
+      });
+    },
+    // No field here renders a server error, so a rejection is toasted.
+    onInvalid: (_fieldErrors, message) => toast.error(message),
+    successMessage: "Workspace transferred",
+    onSuccess: () => {
+      setOpen(false);
+      router.refresh();
+    },
+  });
 
   if (!workspace || !membersData) return null;
   const members = membersData.results;
@@ -78,33 +102,8 @@ export const TransferWorkspaceAction = ({
 
   const openDialog = () => {
     setStep("choose");
-    setNewOwnerId("");
-    setKeepHistory(true);
+    setFormData({ newOwnerId: "", keepHistory: true });
     setOpen(true);
-  };
-
-  const handleTransfer = async () => {
-    setIsSubmitting(true);
-    try {
-      const url = scopedUrl(backendUrl, workspaceEntity(workspaceId), {
-        orgId,
-      });
-      const outcome = await writeAt(`${url}/transfer`, {
-        method: "POST",
-        data: { newOwnerId, keepHistory },
-        revalidateKeys: [url, scopedUrl(backendUrl, "workspaces", { orgId })],
-      });
-      if (outcome.outcome === "success") {
-        outcome.revalidateKeys.forEach((key) => mutate(key));
-        toast.success("Workspace transferred");
-        setOpen(false);
-        router.refresh();
-      } else {
-        toast.error(outcome.message);
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   return (
@@ -141,10 +140,10 @@ export const TransferWorkspaceAction = ({
                 keepHistory={keepHistory}
                 onChange={(change) => {
                   if (change.newOwnerId !== undefined) {
-                    setNewOwnerId(change.newOwnerId);
+                    setField("newOwnerId", change.newOwnerId);
                   }
                   if (change.keepHistory !== undefined) {
-                    setKeepHistory(change.keepHistory);
+                    setField("keepHistory", change.keepHistory);
                   }
                 }}
               />
@@ -212,7 +211,7 @@ export const TransferWorkspaceAction = ({
                 >
                   Back
                 </Button>
-                <Button onClick={handleTransfer} disabled={isSubmitting}>
+                <Button onClick={() => submit()} disabled={isSubmitting}>
                   {isSubmitting ? "Transferring..." : "Transfer"}
                 </Button>
               </>

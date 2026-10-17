@@ -10,7 +10,12 @@ import {
   type A2aEndpoint,
   type A2aToken,
 } from "@platypus/schemas";
-import { Field, FieldDescription, FieldTitle } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldTitle,
+} from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +36,7 @@ import { a2aCardUrl } from "@/lib/a2a-endpoint";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import { ListState } from "@/components/list-state";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { useEntityForm } from "@/hooks/use-entity-form";
 
 /** The anchor a new endpoint's page opens at, so its first token is next. */
 export const ACCESS_SECTION_ID = "access";
@@ -56,16 +62,10 @@ export const A2aTokens = ({
   const { ownsWorkspace } = useAuth();
   const readOnly = !ownsWorkspace;
 
-  const [tokenName, setTokenName] = useState("");
-  const [expiryDays, setExpiryDays] = useState<number>(
-    DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
-  );
-  const [isIssuing, setIsIssuing] = useState(false);
   const [issued, setIssued] = useState<string | null>(null);
   const [tokenToRegenerate, setTokenToRegenerate] = useState<A2aToken | null>(
     null,
   );
-  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // The browser's own jump to #access fires before the endpoint loads, so
   // land on the card URL and token controls once they render.
@@ -85,21 +85,27 @@ export const A2aTokens = ({
   })}/${endpoint.id}/tokens`;
   const cardUrl = backendUrl ? a2aCardUrl(backendUrl, endpoint.id) : null;
 
-  const issueToken = async () => {
-    setIsIssuing(true);
-    const outcome = await writeAt<IssuedToken>(tokensUrl, {
-      method: "POST",
-      data: { name: tokenName.trim(), expiryDays },
-    });
-    if (outcome.outcome === "success") {
-      setIssued(outcome.data.token);
-      setTokenName("");
+  const {
+    formData: tokenForm,
+    validationErrors,
+    isSubmitting: isIssuing,
+    setField,
+    submit: issueToken,
+  } = useEntityForm<{ name: string; expiryDays: number }, IssuedToken>({
+    initialData: { name: "", expiryDays: DEFAULT_BEARER_TOKEN_EXPIRY_DAYS },
+    entity: "tokens",
+    scope: {},
+    write: (data) =>
+      writeAt<IssuedToken>(tokensUrl, {
+        method: "POST",
+        data: { ...data, name: data.name.trim() },
+      }),
+    onSuccess: async (token) => {
+      setIssued(token.token);
+      setField("name", "");
       await mutate();
-    } else {
-      toast.error(outcome.message);
-    }
-    setIsIssuing(false);
-  };
+    },
+  });
 
   const tokenDelete = useDeleteFlow<A2aToken>({
     delete: (token) =>
@@ -108,21 +114,26 @@ export const A2aTokens = ({
     onSuccess: () => toast.success("Token deleted"),
   });
 
+  // The token is the target, not a field: `write` reads it off the open dialog.
+  const { isSubmitting: isRegenerating, submit: submitRegenerate } =
+    useEntityForm<object, IssuedToken>({
+      initialData: {},
+      entity: "tokens",
+      scope: {},
+      write: () =>
+        writeAt<IssuedToken>(
+          `${tokensUrl}/${tokenToRegenerate?.id}/regenerate`,
+          { method: "POST" },
+        ),
+      onSuccess: async (token) => {
+        setIssued(token.token);
+        await mutate();
+      },
+    });
+
   const regenerateToken = async () => {
-    if (!tokenToRegenerate) return;
-    setIsRegenerating(true);
-    const outcome = await writeAt<IssuedToken>(
-      `${tokensUrl}/${tokenToRegenerate.id}/regenerate`,
-      { method: "POST" },
-    );
-    if (outcome.outcome === "success") {
-      setIssued(outcome.data.token);
-      await mutate();
-    } else {
-      toast.error(outcome.message);
-    }
+    await submitRegenerate();
     setTokenToRegenerate(null);
-    setIsRegenerating(false);
   };
 
   return (
@@ -206,14 +217,15 @@ export const A2aTokens = ({
               ref={tokenNameRef}
               aria-label="Token name"
               placeholder="Who the token is for"
-              value={tokenName}
+              value={tokenForm.name}
               maxLength={A2A_TOKEN_NAME_MAX_LENGTH}
-              onChange={(e) => setTokenName(e.target.value)}
+              onChange={(e) => setField("name", e.target.value)}
               disabled={isIssuing}
+              aria-invalid={!!validationErrors.name}
             />
             <Select
-              value={String(expiryDays)}
-              onValueChange={(value) => setExpiryDays(Number(value))}
+              value={String(tokenForm.expiryDays)}
+              onValueChange={(value) => setField("expiryDays", Number(value))}
               disabled={isIssuing}
             >
               <SelectTrigger
@@ -234,12 +246,17 @@ export const A2aTokens = ({
               type="button"
               variant="outline"
               className="shrink-0 cursor-pointer"
-              disabled={isIssuing || !tokenName.trim()}
+              disabled={isIssuing || !tokenForm.name.trim()}
               onClick={() => void issueToken()}
             >
               <Plus className="h-4 w-4" /> Add token
             </Button>
           </div>
+        )}
+        {(validationErrors.name || validationErrors.expiryDays) && (
+          <FieldError>
+            {validationErrors.name ?? validationErrors.expiryDays}
+          </FieldError>
         )}
       </Field>
 

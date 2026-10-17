@@ -3,10 +3,10 @@
 import { appRoutes, withBasePath, workspaceRoutes } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { optionalFetcher, joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
@@ -39,6 +39,7 @@ export default function InviteTokenPage() {
     isPending: isAuthPending,
   } = useAuth();
   const backendUrl = useBackendUrl();
+  const { mutate } = useSWRConfig();
 
   // The token lives only in this page's own state after the first render —
   // the URL itself is scrubbed below so a bearer credential doesn't linger
@@ -74,24 +75,26 @@ export default function InviteTokenPage() {
     e.preventDefault();
     setFormError(null);
     setIsSubmitting(true);
-    const outcome = await writeAt<InvitationAcceptResult>(
-      joinUrl(backendUrl, `/invitation-links/${redeemToken}/register`),
-      { method: "POST", data: { name, password } },
-    );
-    if (outcome.outcome !== "success") {
-      setIsSubmitting(false);
-      setFormError(outcome.message);
-      if (outcome.outcome === "conflict") {
-        setIsSigningIn(true);
-        setPassword("");
+    try {
+      const outcome = await writeAt<InvitationAcceptResult>(
+        joinUrl(backendUrl, `/invitation-links/${redeemToken}/register`),
+        { method: "POST", data: { name, password } },
+      );
+      if (outcome.outcome !== "success") {
+        setFormError(outcome.message);
+        if (outcome.outcome === "conflict") {
+          setIsSigningIn(true);
+          setPassword("");
+        }
+        return;
       }
-      return;
+      // This endpoint sets cookies outside Better Auth's client. Refresh its
+      // session store before navigating into a protected page.
+      await refreshSession();
+      enterWorkspace(outcome.data);
+    } finally {
+      setIsSubmitting(false);
     }
-    // This endpoint sets cookies outside Better Auth's client. Refresh its
-    // session store before navigating into a protected page.
-    await refreshSession();
-    setIsSubmitting(false);
-    enterWorkspace(outcome.data);
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -131,6 +134,8 @@ export default function InviteTokenPage() {
       setFormError(outcome.message);
       return;
     }
+    // The sidebar's Organization list now has one more.
+    mutate(scopedUrl(backendUrl, "organizations", {}));
     enterWorkspace(outcome.data);
   };
 

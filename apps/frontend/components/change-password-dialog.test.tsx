@@ -2,10 +2,16 @@ import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import { ChangePasswordDialog } from "./change-password-dialog";
-import { jsonResponse } from "@/test/test-utils";
+
+const { setUserPassword } = vi.hoisted(() => ({ setUserPassword: vi.fn() }));
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://localhost:3000",
+  useAuth: () => ({
+    user: null,
+    isPending: false,
+    authClient: { admin: { setUserPassword } },
+  }),
 }));
 
 vi.mock("sonner", () => ({
@@ -48,23 +54,24 @@ describe("ChangePasswordDialog", () => {
     expect(input).toHaveAttribute("type", "password");
   });
 
-  it("rejects a password shorter than 8 characters without sending it", () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    const { input } = renderDialog();
+  it("shows the server's length refusal on the field", async () => {
+    setUserPassword.mockResolvedValue({
+      error: { status: 400, message: "Password too short" },
+    });
+    const { input, onSuccess } = renderDialog();
 
     fireEvent.change(input, { target: { value: "1234567" } });
     submit();
 
-    expect(
-      screen.getByText("Password must be at least 8 characters"),
-    ).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Password too short",
+    );
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
   it("sets the user's password and reports success", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    setUserPassword.mockResolvedValue({ error: null });
     const { input, onSuccess } = renderDialog();
 
     fireEvent.change(input, { target: { value: "12345678" } });
@@ -74,9 +81,7 @@ describe("ChangePasswordDialog", () => {
     expect(toast.success).toHaveBeenCalledWith(
       "Password updated successfully for Alice",
     );
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("http://localhost:3000/auth/admin/set-user-password");
-    expect(JSON.parse(init.body)).toEqual({
+    expect(setUserPassword).toHaveBeenCalledWith({
       userId: "user-123",
       newPassword: "12345678",
     });
@@ -84,10 +89,9 @@ describe("ChangePasswordDialog", () => {
   });
 
   it("surfaces the backend's reason and stays open on a refusal", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(jsonResponse(403, { message: "Not allowed" })),
-    );
+    setUserPassword.mockResolvedValue({
+      error: { status: 403, message: "Not allowed" },
+    });
     const { input, onSuccess } = renderDialog();
 
     fireEvent.change(input, { target: { value: "12345678" } });

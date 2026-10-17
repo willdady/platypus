@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -17,12 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
-import { useState } from "react";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
-import { toast } from "sonner";
+import { useEntityForm } from "@/hooks/use-entity-form";
 
 interface MemberEditDialogProps {
   orgId: string;
@@ -40,26 +40,21 @@ export function MemberEditDialog({
   onSuccess,
 }: MemberEditDialogProps) {
   const backendUrl = useBackendUrl();
-  const [role, setRole] = useState<string>(member.role);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    try {
-      const outcome = await writeAt(
+  const { formData, setField, isSubmitting, submit } = useEntityForm({
+    initialData: { role: member.role as string },
+    entity: "members",
+    scope: { orgId },
+    write: (data) =>
+      writeAt(
         joinUrl(backendUrl, `/organizations/${orgId}/members/${member.id}`),
-        { method: "PATCH", data: { role } },
-      );
-      if (outcome.outcome === "success") {
-        toast.success("Member role updated");
-        onSuccess();
-      } else {
-        toast.error(outcome.message);
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+        { method: "PATCH", data },
+      ),
+    // No field here renders a server error, so a rejection is toasted.
+    onInvalid: (_fieldErrors, message) => toast.error(message),
+    successMessage: "Member role updated",
+    onSuccess,
+  });
+  const role = formData.role;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -77,7 +72,7 @@ export function MemberEditDialog({
               <FieldLabel htmlFor="role">Organization Role</FieldLabel>
               <Select
                 value={role}
-                onValueChange={setRole}
+                onValueChange={(value) => setField("role", value)}
                 disabled={isSubmitting}
               >
                 <SelectTrigger id="role">
@@ -101,7 +96,7 @@ export function MemberEditDialog({
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
+            onClick={() => submit()}
             disabled={isSubmitting || role === member.role}
             className={isSubmitting ? "opacity-50" : ""}
           >

@@ -75,8 +75,8 @@ export interface UseEntityFormOptions<
   successMessage?: Message;
   /**
    * Toast shown when a write throws outright — a failure the outcome seam
-   * never saw (a rejected `onSuccess`, a multipart upload). Without it the
-   * rejection is logged rather than surfaced.
+   * never saw (a rejected `onSuccess`, a multipart upload). Defaults to
+   * "Couldn't save".
    */
   failureMessage?: string;
   /** Called after a successful write, before `submit` resolves. */
@@ -286,8 +286,8 @@ export function useEntityForm<
         });
         return saved;
       } catch (error) {
-        if (failureMessage) toast.error(failureMessage);
-        else console.error(error);
+        console.error(error);
+        toast.error(failureMessage ?? "Couldn't save");
         return undefined;
       } finally {
         setIsSubmitting(false);
@@ -409,29 +409,34 @@ export function useEntityDelete<TResult = unknown>({
     if (!id) return;
     setIsDeleting(true);
     setDeleteError(null);
+    try {
+      const result = write
+        ? await write()
+        : await writeEntity<TResult>(backendUrl, entity, scope, { id });
 
-    const result = write
-      ? await write()
-      : await writeEntity<TResult>(backendUrl, entity, scope, { id });
-
-    await applyDeleteOutcome(result, {
-      mutate,
-      onSuccess: async (data) => {
-        const message = resolveMessage(successMessage);
-        if (message) toast.success(message);
-        await onSuccess?.(data);
-      },
-      onError: (message, outcome) => {
-        setIsDeleting(false);
-        if (onError?.(message, outcome)) return;
-        if (guidanceOnForbidden && outcome.outcome === "forbidden") {
-          setIsDeleteDialogOpen(false);
-          toastGuidanceOrError(message, outcome);
-        } else {
-          setDeleteError(message);
-        }
-      },
-    });
+      await applyDeleteOutcome(result, {
+        mutate,
+        onSuccess: async (data) => {
+          const message = resolveMessage(successMessage);
+          if (message) toast.success(message);
+          await onSuccess?.(data);
+        },
+        onError: (message, outcome) => {
+          setIsDeleting(false);
+          if (onError?.(message, outcome)) return;
+          if (guidanceOnForbidden && outcome.outcome === "forbidden") {
+            setIsDeleteDialogOpen(false);
+            toastGuidanceOrError(message, outcome);
+          } else {
+            setDeleteError(message);
+          }
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      setIsDeleting(false);
+      setDeleteError("Couldn't delete");
+    }
   }, [
     backendUrl,
     entity,

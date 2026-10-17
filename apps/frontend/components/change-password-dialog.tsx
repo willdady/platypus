@@ -10,11 +10,18 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RevealableInput } from "@/components/ui/revealable-input";
-import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
-import { useState } from "react";
-import { useBackendUrl, type User } from "@/components/auth-provider";
-import { joinUrl } from "@/lib/utils";
-import { toast } from "sonner";
+import {
+  Field,
+  FieldError,
+  FieldLabel,
+  FieldGroup,
+  FieldSet,
+} from "@/components/ui/field";
+import { useAuth, type User } from "@/components/auth-provider";
+import { useEntityForm } from "@/hooks/use-entity-form";
+
+const RETRACTABLE_FIELDS = ["newPassword"] as const;
+const INITIAL_DATA = { newPassword: "" };
 
 interface ChangePasswordDialogProps {
   user: Pick<User, "id" | "email" | "name">;
@@ -29,63 +36,48 @@ export function ChangePasswordDialog({
   onOpenChange,
   onSuccess,
 }: ChangePasswordDialogProps) {
-  const backendUrl = useBackendUrl();
-  const [newPassword, setNewPassword] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const { authClient } = useAuth();
 
-  const handleSubmit = async () => {
-    // Client-side validation
-    setValidationError(null);
-
-    if (!newPassword) {
-      setValidationError("Password is required");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setValidationError("Password must be at least 8 characters");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, "/auth/admin/set-user-password"),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Origin: window.location.origin,
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            newPassword,
-          }),
-          credentials: "include",
-        },
-      );
-
-      if (response.ok) {
-        toast.success(`Password updated successfully for ${user.name}`);
-        setNewPassword("");
-        onSuccess();
-      } else {
-        const data = await response.json();
-        toast.error(data.error || data.message || "Failed to update password");
-      }
-    } catch (error) {
-      toast.error("Error updating password");
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    handleChange,
+    submit,
+  } = useEntityForm<typeof INITIAL_DATA>({
+    initialData: INITIAL_DATA,
+    entity: "admin/set-user-password",
+    scope: {},
+    retractableFields: RETRACTABLE_FIELDS,
+    // An admin auth-client call, not a REST write — mapped onto the shared
+    // outcome shape. The server owns the length rule; its 400 lands on the
+    // field.
+    write: async ({ newPassword }) => {
+      const { error } = await authClient.admin.setUserPassword({
+        userId: user.id,
+        newPassword,
+      });
+      if (!error) return { outcome: "success", data: {}, revalidateKeys: [] };
+      const message = error.message || "Failed to update password";
+      return error.status === 400
+        ? { outcome: "invalid", message, fieldErrors: { newPassword: message } }
+        : { outcome: "error", message };
+    },
+    successMessage: () => `Password updated successfully for ${user.name}`,
+    onSuccess: () => {
+      setFormData(INITIAL_DATA);
+      onSuccess();
+    },
+  });
+  const newPassword = formData.newPassword;
+  const validationError = validationErrors.newPassword;
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
-      setNewPassword("");
-      setValidationError(null);
+      setFormData(INITIAL_DATA);
+      setValidationErrors({});
     }
     onOpenChange(open);
   };
@@ -102,25 +94,19 @@ export function ChangePasswordDialog({
 
         <FieldSet>
           <FieldGroup>
-            <Field>
+            <Field data-invalid={!!validationError}>
               <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
               <RevealableInput
                 id="newPassword"
                 value={newPassword}
-                onChange={(e) => {
-                  setNewPassword(e.target.value);
-                  setValidationError(null);
-                }}
+                onChange={handleChange}
                 disabled={isSubmitting}
-                placeholder="Enter new password (min 8 characters)"
+                aria-invalid={!!validationError}
+                placeholder="Enter new password"
                 autoComplete="new-password"
                 revealLabel="new password"
               />
-              {validationError && (
-                <p role="alert" className="text-sm text-destructive mt-1">
-                  {validationError}
-                </p>
-              )}
+              {validationError && <FieldError>{validationError}</FieldError>}
             </Field>
           </FieldGroup>
         </FieldSet>
@@ -134,7 +120,7 @@ export function ChangePasswordDialog({
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
+            onClick={() => submit()}
             disabled={isSubmitting || !newPassword}
             className={isSubmitting ? "opacity-50" : ""}
           >

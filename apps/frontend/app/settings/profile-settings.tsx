@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityForm } from "@/hooks/use-entity-form";
 import { useAuth } from "@/components/auth-provider";
+import type { WriteOutcome } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,16 +13,52 @@ import { getBrowserTimezone } from "@/lib/timezones";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 
+// `updateUser` is an auth-client call, not a REST write — mapped onto the
+// shared outcome shape so the form hook can drive it.
+const toOutcome = (
+  error: { message?: string } | null,
+  fallback: string,
+): WriteOutcome<unknown> =>
+  error
+    ? { outcome: "error", message: error.message || fallback }
+    : { outcome: "success", data: {}, revalidateKeys: [] };
+
 const UserSettingsPage = () => {
   const { user, authClient } = useAuth();
-  const [name, setName] = useState(user?.name || "");
   const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   const savedTimezone = user?.timezone ?? null;
-  const [timezone, setTimezone] = useState<string | null>(savedTimezone);
-  const [isSavingTimezone, setIsSavingTimezone] = useState(false);
   const detectedTimezone = getBrowserTimezone();
+
+  const nameForm = useEntityForm<{ name: string }>({
+    initialData: { name: user?.name || "" },
+    entity: "users/me",
+    scope: {},
+    write: async ({ name }) =>
+      toOutcome(
+        (await authClient.updateUser({ name: name.trim() })).error,
+        "Failed to update name",
+      ),
+    successMessage: "Name updated successfully",
+    onSuccess: () => setIsEditing(false),
+  });
+  const name = nameForm.formData.name;
+  const setName = (value: string) => nameForm.setField("name", value);
+
+  const timezoneForm = useEntityForm<{ timezone: string | null }>({
+    initialData: { timezone: savedTimezone },
+    entity: "users/me",
+    scope: {},
+    write: async ({ timezone }) =>
+      toOutcome(
+        (await authClient.updateUser({ timezone })).error,
+        "Failed to update timezone",
+      ),
+    successMessage: "Timezone updated successfully",
+  });
+  const timezone = timezoneForm.formData.timezone;
+  const setTimezone = (value: string | null) =>
+    timezoneForm.setField("timezone", value);
 
   useResetOnChange(user?.name, () => {
     if (user?.name) {
@@ -32,47 +70,15 @@ const UserSettingsPage = () => {
 
   if (!user) return null;
 
-  const handleSaveTimezone = async () => {
-    setIsSavingTimezone(true);
-    try {
-      const { error } = await authClient.updateUser({ timezone });
-      if (error) {
-        toast.error(error.message || "Failed to update timezone");
-      } else {
-        toast.success("Timezone updated successfully");
-      }
-    } catch (err) {
-      toast.error("An unexpected error occurred");
-      console.error(err);
-    } finally {
-      setIsSavingTimezone(false);
-    }
-  };
+  const isLoading = nameForm.isSubmitting;
+  const isSavingTimezone = timezoneForm.isSubmitting;
 
   const handleUpdateName = async () => {
     if (!name.trim()) {
       toast.error("Name cannot be empty");
       return;
     }
-
-    setIsLoading(true);
-    try {
-      const { error } = await authClient.updateUser({
-        name: name.trim(),
-      });
-
-      if (error) {
-        toast.error(error.message || "Failed to update name");
-      } else {
-        toast.success("Name updated successfully");
-        setIsEditing(false);
-      }
-    } catch (err) {
-      toast.error("An unexpected error occurred");
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+    await nameForm.submit();
   };
 
   return (
@@ -165,7 +171,7 @@ const UserSettingsPage = () => {
             </Button>
             <Button
               aria-label="Save timezone"
-              onClick={handleSaveTimezone}
+              onClick={() => timezoneForm.submit()}
               disabled={isSavingTimezone || timezone === savedTimezone}
               className="cursor-pointer"
             >
