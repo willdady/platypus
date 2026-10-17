@@ -75,7 +75,7 @@ export default async function WorkspaceLayout({
   const routes = workspaceRoutes(orgId, workspaceId);
 
   return (
-    <ProtectedRoute requireOrgAccess requireWorkspaceAccess>
+    <ProtectedRoute requireWorkspaceAccess>
       <SidebarInset id={MAIN_CONTENT_ID} className="min-w-0">
         <Header
           bordered={false}

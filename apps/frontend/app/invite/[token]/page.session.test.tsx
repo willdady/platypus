@@ -13,11 +13,13 @@ import { ProtectedRoute } from "@/components/protected-route";
 import InviteTokenPage from "./page";
 
 const push = vi.fn();
+const replace = vi.fn();
 let sequence = 0;
 let backendUrl: string;
 vi.mock("next/navigation", () => ({
   useParams: () => ({ token: `session-test-${sequence}` }),
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
+  usePathname: () => "/",
 }));
 
 const WORKSPACE_PATH = "/org-9/workspace/ws-9";
@@ -138,7 +140,7 @@ it("refreshes the real client session before entering a protected page after reg
     </AuthProvider>,
   );
   expect(await screen.findByText("Protected home")).toBeInTheDocument();
-  expect(push).not.toHaveBeenCalledWith("/sign-in");
+  expect(replace).not.toHaveBeenCalled();
 });
 
 it("lets an existing account sign in and accept without losing or restoring the token URL", async () => {

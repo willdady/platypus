@@ -1,4 +1,3 @@
-import { ProtectedRoute } from "@/components/protected-route";
 import { WorkspaceSettingsMenu } from "@/components/workspace-settings-menu";
 import { SettingsColumns } from "@/components/settings-shell";
 
@@ -12,18 +11,14 @@ export default async function WorkspaceSettingsLayout({
   const { orgId, workspaceId } = await params;
 
   return (
-    <ProtectedRoute requireWorkspaceAccess={true}>
-      <div className="flex justify-center">
-        <SettingsColumns
-          menu={
-            <WorkspaceSettingsMenu orgId={orgId} workspaceId={workspaceId} />
-          }
-          columnWidth="narrow"
-          contentClassName="p-2 pb-8"
-        >
-          {children}
-        </SettingsColumns>
-      </div>
-    </ProtectedRoute>
+    <div className="flex justify-center">
+      <SettingsColumns
+        menu={<WorkspaceSettingsMenu orgId={orgId} workspaceId={workspaceId} />}
+        columnWidth="narrow"
+        contentClassName="p-2 pb-8"
+      >
+        {children}
+      </SettingsColumns>
+    </div>
   );
 }

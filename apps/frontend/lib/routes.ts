@@ -38,6 +38,33 @@ export const appRoutes = {
   inviteToken: (token: string) => `/invite/${encodeURIComponent(token)}`,
 } as const;
 
+/** Sign-in, returning to `path` once signed in. */
+export function signInReturningTo(path: string): string {
+  return `${appRoutes.signIn}?next=${encodeURIComponent(path)}`;
+}
+
+/**
+ * Where sign-in goes on to, given its query string: `next` when it resolves to
+ * a path on this origin, home otherwise. Honouring any `next` would make
+ * sign-in an open redirect.
+ */
+export function signInDestination(search: string): string {
+  const next = new URLSearchParams(search).get("next");
+  if (!next) return appRoutes.home;
+  // Resolved against a stand-in origin: `//host`, `/\\host` and absolute
+  // URLs all resolve somewhere else, and so fail the comparison.
+  const origin = "http://platypus.invalid";
+  let url: URL;
+  try {
+    url = new URL(next, origin);
+  } catch {
+    return appRoutes.home;
+  }
+  return url.origin === origin
+    ? `${url.pathname}${url.search}${url.hash}`
+    : appRoutes.home;
+}
+
 /** The absolute invitation link to hand to an invitee. */
 export function invitationLink(origin: string, token: string): string {
   return `${origin}${withBasePath(appRoutes.inviteToken(token))}`;

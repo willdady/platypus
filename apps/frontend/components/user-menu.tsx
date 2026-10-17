@@ -23,7 +23,7 @@ export function UserMenu() {
 
   const handleSignOut = async () => {
     await authClient.signOut();
-    router.push(appRoutes.signIn);
+    router.replace(appRoutes.signIn);
   };
 
   if (!user) {

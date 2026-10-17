@@ -6,18 +6,19 @@ import {
   canAccessWorkspace,
   isOperator,
 } from "@/lib/authorization";
-import { useParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { EmptyCard } from "@/components/empty-card";
 import { Button } from "@/components/ui/button";
 import { OctagonX, Home, Building } from "lucide-react";
 import Link from "next/link";
-import { appRoutes, orgRoutes } from "@/lib/routes";
+import { orgRoutes, signInReturningTo } from "@/lib/routes";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  /** Require the caller to be an Org Admin, not merely a member. */
+  /** Require the caller to be an Org Admin; implies `requireOrgAccess`. */
   requireOrgAdmin?: boolean;
   requireOrgAccess?: boolean;
   requireWorkspaceAccess?: boolean;
@@ -109,17 +110,37 @@ export function ProtectedRoute({
     retryAccessReads,
   } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const [hasSettled, setHasSettled] = useState(false);
+  if (!isAuthLoading && !hasSettled) setHasSettled(true);
 
   // With no user, a failed read means the session was never read, not that
-  // there is none.
+  // there is none. Replaced, not pushed, so Back doesn't return to a page that
+  // only redirects again.
   useEffect(() => {
     if (!isAuthLoading && !user && !accessReadError) {
-      router.push(appRoutes.signIn);
+      router.replace(
+        signInReturningTo(
+          pathname + window.location.search + window.location.hash,
+        ),
+      );
     }
-  }, [user, isAuthLoading, accessReadError, router]);
+  }, [user, isAuthLoading, accessReadError, router, pathname]);
 
+  // Held back until the roles are first known, so a gated page doesn't mount
+  // and fire reads the backend will refuse. Once admitted, a later read keeps
+  // the page up: the `[orgId]` layout stays mounted across a Workspace switch,
+  // and swapping it for a skeleton would blank the whole Organization.
   if (isAuthLoading) {
-    return <>{children}</>;
+    return hasSettled ? (
+      <>{children}</>
+    ) : (
+      <Skeleton
+        role="status"
+        aria-label="Loading"
+        className="m-4 h-[calc(100dvh-2rem)] flex-1"
+      />
+    );
   }
 
   if (!user) {
@@ -137,7 +158,7 @@ export function ProtectedRoute({
     );
   }
 
-  if (requireOrgAccess) {
+  if (requireOrgAccess || requireOrgAdmin) {
     const requiredOrgRole = requireOrgAdmin ? "admin" : "member";
     const orgAccess = canAccessOrganization(
       actor,

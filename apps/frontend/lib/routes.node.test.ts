@@ -3,6 +3,8 @@ import {
   appRoutes,
   invitationLink,
   orgRoutes,
+  signInDestination,
+  signInReturningTo,
   userRoutes,
   withBasePath,
   workspaceRoutes,
@@ -272,5 +274,25 @@ describe("invitationLink", () => {
     expect(invitationLink("https://chat.example.com", "tok_1")).toBe(
       "https://chat.example.com/platypus-app/invite/tok_1",
     );
+  });
+});
+
+describe("sign-in next", () => {
+  it("returns to the requested page", () => {
+    const path = "/org1/workspace/ws1/chat/c1?tab=runs#latest";
+    const { search } = new URL(signInReturningTo(path), "http://x");
+
+    expect(signInDestination(search)).toBe(path);
+  });
+
+  it.each([
+    "",
+    "https://evil.example/org1",
+    "//evil.example/org1",
+    "/\\evil.example/org1",
+    "javascript:alert(1)",
+    "http://[",
+  ])("goes home for %j", (next) => {
+    expect(signInDestination(`?next=${encodeURIComponent(next)}`)).toBe("/");
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
-import { appRoutes } from "@/lib/routes";
+import { appRoutes, signInDestination } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
@@ -22,7 +22,7 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (user) router.push(appRoutes.home);
+    if (user) router.replace(signInDestination(window.location.search));
   }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,7 +41,7 @@ export default function SignInPage() {
         return;
       }
 
-      router.push(appRoutes.home);
+      router.replace(signInDestination(window.location.search));
     } catch {
       setError("An unexpected error occurred");
     } finally {

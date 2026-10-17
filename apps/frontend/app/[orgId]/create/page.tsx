@@ -15,7 +15,7 @@ const WorkspaceCreatePage = async ({
   const { orgId } = await params;
 
   return (
-    <ProtectedRoute requireOrgAccess requireOrgAdmin>
+    <ProtectedRoute requireOrgAdmin>
       {/* No shell wraps this page, and the body doesn't scroll. */}
       <main id={MAIN_CONTENT_ID} className="h-dvh overflow-y-auto pb-4">
         <ResourcePage
