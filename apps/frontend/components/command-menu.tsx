@@ -247,7 +247,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Wrench />
-            <span>MCP</span>
+            <span>MCP Servers</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {
