@@ -21,6 +21,7 @@ import {
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
+import { hardNavigate } from "@/components/unsaved-changes-guard";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import {
@@ -215,7 +216,7 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
       // `organization-form.tsx`. The Workspace this view is scoped to is
       // gone, and a client-side transition would keep the app shell (and its
       // cached payload for the deleted Workspace) alive around it.
-      window.location.href = withBasePath(orgRoutes(orgId).root);
+      hardNavigate(withBasePath(orgRoutes(orgId).root));
     },
   });
 

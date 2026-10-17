@@ -62,11 +62,13 @@ const UserSettingsPage = () => {
 
   useResetOnChange(user?.name, () => {
     if (user?.name) {
-      setName(user.name);
+      nameForm.seedFormData({ name: user.name });
     }
   });
 
-  useResetOnChange(savedTimezone, () => setTimezone(savedTimezone));
+  useResetOnChange(savedTimezone, () =>
+    timezoneForm.seedFormData({ timezone: savedTimezone }),
+  );
 
   if (!user) return null;
 

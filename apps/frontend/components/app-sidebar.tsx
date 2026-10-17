@@ -250,6 +250,7 @@ export function AppSidebar() {
     submit: submitRename,
   } = useEntityForm<{ title: string; tags: string[] }>({
     initialData: { title: "", tags: [] },
+    guardUnsavedChanges: false,
     entity: "chat",
     scope,
     id: renameChatId ?? undefined,

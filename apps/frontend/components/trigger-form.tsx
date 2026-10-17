@@ -33,6 +33,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useCallback, useState, useMemo } from "react";
+import { deepEqual } from "@/lib/deep-equal";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { ChevronsUpDown, ShieldOff } from "lucide-react";
@@ -209,12 +210,20 @@ const TriggerForm = ({
   const [typeFields, setTypeFields] = useState<
     Partial<Record<TriggerType, TriggerTypeFields>>
   >({});
-  const reportTypeFields = useCallback(
-    (fields: TriggerTypeFields) =>
-      setTypeFields((prev) => ({ ...prev, [fields.type]: fields })),
-    [],
-  );
+  // The first config each type reports is its clean value, for `isDirty`.
+  const [typeBaselines, setTypeBaselines] = useState<
+    Partial<Record<TriggerType, unknown>>
+  >({});
+  const reportTypeFields = useCallback((fields: TriggerTypeFields) => {
+    setTypeFields((prev) => ({ ...prev, [fields.type]: fields }));
+    setTypeBaselines((prev) =>
+      fields.type in prev ? prev : { ...prev, [fields.type]: fields.config },
+    );
+  }, []);
   const selectedFields = typeFields[triggerType];
+  const configChanged =
+    !!selectedFields &&
+    !deepEqual(selectedFields.config, typeBaselines[triggerType]);
 
   // Whether the Organization gate lets this Workspace take calls, so an Owner
   // is told before they wire up a caller that would only ever get 404.
@@ -270,6 +279,7 @@ const TriggerForm = ({
       search: trigger.search ?? false,
       includeMemories: trigger.includeMemories ?? false,
     }),
+    sideState: { triggerType, configChanged },
     onSeed: (trigger) => setTriggerType(trigger.type),
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data): unknown => ({

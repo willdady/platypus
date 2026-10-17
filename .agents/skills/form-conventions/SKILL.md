@@ -1,6 +1,6 @@
 ---
 name: form-conventions
-description: Post-save conventions for Platypus frontend forms — where a save lands the user, what the submit button is called, and how a failed delete is shown. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, or a delete confirm dialog.
+description: Post-save conventions for Platypus frontend forms — where a save lands the user, what the submit button is called, how a failed delete is shown, and the unsaved-changes guard. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, or a delete confirm dialog.
 ---
 
 # Frontend Form Conventions
@@ -50,6 +50,31 @@ refused as `forbidden`, and the message only says where the resource is
 managed: guidance, not an error the user can act on in this dialog. With the
 option set, a `forbidden` refusal closes the dialog and shows the message as
 an info toast. Every other refusal still stays inline.
+
+## Leaving with unsaved changes
+
+Every form built on `useEntityForm` is guarded for free: while its values
+differ from the ones it was seeded or last saved with (`isDirty`), a
+same-tab link click opens "Discard unsaved changes?" and refresh or tab
+close shows the browser's prompt. Typing then reverting is clean. A
+successful save is clean before `onSuccess` runs, so the post-save redirect
+goes straight through; a failed save stays dirty.
+
+- A value the form sets itself — a default once options load, a reset after
+  save — goes through `seedFormData`, not `setFormData`, or the untouched
+  form reads as dirty.
+- An edit the form keeps outside `formData` (a selection, raw JSON text, an
+  avatar file) goes in `sideState`, or changing it alone never prompts.
+- A deliberate full document load after a write uses `hardNavigate`, not
+  `window.location.href`, so the browser's prompt doesn't fire over it.
+- A surface with its own state and no `useEntityForm` (the Card dialog) calls
+  `useUnsavedChangesGuard(isDirty)` and routes its own close through the
+  `confirmDiscard` it returns.
+- A small dialog or inline action built on `useEntityForm` (member edit,
+  chat rename, issue token) passes `guardUnsavedChanges: false`: it is not a
+  form the user would lose work in.
+- Programmatic navigation (`router.push` after save or delete) and browser
+  Back are never held. The App Router cannot block Back.
 
 ## What the button says
 

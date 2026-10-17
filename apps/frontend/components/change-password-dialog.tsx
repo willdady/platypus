@@ -48,6 +48,7 @@ export function ChangePasswordDialog({
     submit,
   } = useEntityForm<typeof INITIAL_DATA>({
     initialData: INITIAL_DATA,
+    guardUnsavedChanges: false,
     entity: "admin/set-user-password",
     scope: {},
     retractableFields: RETRACTABLE_FIELDS,

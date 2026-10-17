@@ -12,6 +12,7 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
+import { hardNavigate } from "@/components/unsaved-changes-guard";
 import {
   FieldSkeleton,
   FooterSkeleton,
@@ -95,7 +96,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
       // payload and SWR entries for the deleted Org included, which the
       // surrounding layout would go on rendering. Reloading rebuilds
       // everything from a server that now agrees the Org is gone.
-      window.location.href = withBasePath(appRoutes.home);
+      hardNavigate(withBasePath(appRoutes.home));
     },
   });
 
