@@ -30,6 +30,8 @@ interface ConfirmDialogProps {
   // When set, the confirm button stays disabled until the user types this
   // phrase (case-insensitively) into an input rendered in the dialog.
   confirmPhrase?: string;
+  // Keeps the confirm button disabled, e.g. while the action is not allowed.
+  confirmDisabled?: boolean;
 }
 
 export const ConfirmDialog = ({
@@ -46,6 +48,7 @@ export const ConfirmDialog = ({
   loading = false,
   error = null,
   confirmPhrase,
+  confirmDisabled = false,
 }: ConfirmDialogProps) => {
   const [typedPhrase, setTypedPhrase] = useState("");
 
@@ -116,7 +119,7 @@ export const ConfirmDialog = ({
           <Button
             variant={confirmVariant}
             onClick={onConfirm}
-            disabled={loading || !phraseMatches}
+            disabled={loading || !phraseMatches || confirmDisabled}
           >
             {loading && loadingLabel ? loadingLabel : confirmLabel}
           </Button>

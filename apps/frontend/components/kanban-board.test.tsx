@@ -385,6 +385,24 @@ describe("KanbanBoard transport", () => {
     },
   );
 
+  it("won't delete a column that still has cards", async () => {
+    boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
+    const fetchMock = stubAcceptedSave({ message: "Column deleted" });
+
+    renderBoard();
+    await openColumnMenuItem("To Do", "Delete");
+
+    expect(
+      await screen.findByText(/Cannot delete this column/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringMatching(/\/columns\/col-1$/),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
   describe("column move", () => {
     beforeEach(() => {
       boardState = makeBoardState([

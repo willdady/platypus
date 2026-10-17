@@ -1,6 +1,5 @@
 "use client";
 
-import { readableTextColor } from "@/lib/color";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useMutation } from "@/hooks/use-mutation";
@@ -39,7 +38,7 @@ import type {
   KanbanCardPriority,
   KanbanLabel,
 } from "@platypus/schemas";
-import { cn, joinUrl } from "@/lib/utils";
+import { joinUrl } from "@/lib/utils";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import {
   applyCardMove,
@@ -54,18 +53,13 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { KanbanColumnComponent } from "@/components/kanban-column";
 import { KanbanCardComponent } from "@/components/kanban-card";
 import { KanbanCardDialog } from "@/components/kanban-card-dialog";
-import { Plus, Settings, ChevronDown, KanbanSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+  AddCardDialog,
+  AddColumnDialog,
+  EditColumnDialog,
+} from "@/components/kanban-board-dialogs";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { Plus, Settings, ChevronDown, KanbanSquare } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,6 +72,13 @@ import { workspaceRoutes } from "@/lib/routes";
 import { replaceSearchParam } from "@/lib/search-params";
 
 const EMPTY_LABELS: KanbanLabel[] = [];
+
+type BoardDialog =
+  | { kind: "addColumn" }
+  | { kind: "addCard"; columnId: string }
+  | { kind: "editColumn"; columnId: string; name: string }
+  | { kind: "deleteColumn"; columnId: string; hasCards: boolean }
+  | null;
 
 const noop = () => {};
 
@@ -193,25 +194,8 @@ export function KanbanBoard({
   // target as `expectedColumnId` and refuse every cross-column move.
   const dragOriginColumnRef = useRef<string | null>(null);
 
-  // Add column dialog state
-  const [addColumnDialogOpen, setAddColumnDialogOpen] = useState(false);
-  const [newColumnName, setNewColumnName] = useState("");
-
-  // Add card dialog state
-  const [addCardDialogOpen, setAddCardDialogOpen] = useState(false);
-  const [addCardColumnId, setAddCardColumnId] = useState<string | null>(null);
-  const [newCardTitle, setNewCardTitle] = useState("");
-  const [newCardLabelIds, setNewCardLabelIds] = useState<string[]>([]);
-
-  // Edit column dialog state
-  const [editColumnDialogOpen, setEditColumnDialogOpen] = useState(false);
-  const [editColumnId, setEditColumnId] = useState<string | null>(null);
-  const [editColumnName, setEditColumnName] = useState("");
-
-  // Delete column dialog state
-  const [deleteColumnDialogOpen, setDeleteColumnDialogOpen] = useState(false);
-  const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
-  const [deleteColumnHasCards, setDeleteColumnHasCards] = useState(false);
+  // The one board dialog that is open, with what it acts on.
+  const [dialog, setDialog] = useState<BoardDialog>(null);
 
   const columns: ColumnWithCards[] = useMemo(
     () => localColumns ?? data?.columns ?? [],
@@ -517,141 +501,62 @@ export function KanbanBoard({
     [baseUrl, sync, setLocalColumns],
   );
 
-  const handleAddColumn = useCallback(() => {
-    setNewColumnName("");
-    setAddColumnDialogOpen(true);
-  }, []);
+  const closeDialog = useCallback(() => setDialog(null), []);
 
-  const confirmAddColumn = useCallback(async () => {
-    if (!newColumnName.trim()) return;
+  /** Sends a dialog's write under the board; closes the dialog once it lands. */
+  const submitDialogWrite = async (
+    path: string,
+    body: Parameters<typeof writeEntity>[3],
+  ) => {
     const outcome = await writeEntity(
       backendUrl,
-      `${boardPath}/columns`,
+      `${boardPath}/${path}`,
       scope,
-      { data: { name: newColumnName.trim() } },
+      body,
     );
     if (outcome.outcome === "success") {
-      setAddColumnDialogOpen(false);
-      setNewColumnName("");
+      setDialog(null);
       await mutate();
     } else {
       toast.error(outcome.message);
     }
-  }, [newColumnName, backendUrl, boardPath, scope, mutate]);
+  };
 
-  const handleAddCard = useCallback((columnId: string) => {
-    setAddCardColumnId(columnId);
-    setNewCardTitle("");
-    setNewCardLabelIds([]);
-    setAddCardDialogOpen(true);
-  }, []);
+  const submitAddColumn = (data: { name: string }) =>
+    submitDialogWrite("columns", { data });
 
-  const confirmAddCard = useCallback(async () => {
-    if (!newCardTitle.trim() || !addCardColumnId) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      `${boardPath}/columns/${addCardColumnId}/cards`,
-      scope,
-      {
-        data: {
-          title: newCardTitle.trim(),
-          ...(newCardLabelIds.length > 0 && { labelIds: newCardLabelIds }),
-        },
-      },
-    );
-    if (outcome.outcome === "success") {
-      setAddCardDialogOpen(false);
-      setNewCardTitle("");
-      setNewCardLabelIds([]);
-      setAddCardColumnId(null);
-      await mutate();
-    } else {
-      toast.error(outcome.message);
-    }
-  }, [
-    newCardTitle,
-    newCardLabelIds,
-    addCardColumnId,
-    backendUrl,
-    boardPath,
-    scope,
-    mutate,
-  ]);
+  const submitAddCard = (
+    columnId: string,
+    { title, labelIds }: { title: string; labelIds: string[] },
+  ) =>
+    submitDialogWrite(`columns/${columnId}/cards`, {
+      data: { title, ...(labelIds.length > 0 && { labelIds }) },
+    });
 
-  const handleEditColumn = useCallback((columnId: string) => {
-    const column = columnsRef.current.find((c) => c.id === columnId);
-    if (!column) return;
-    setEditColumnId(columnId);
-    setEditColumnName(column.name);
-    setEditColumnDialogOpen(true);
-  }, []);
+  const submitEditColumn = (columnId: string, data: { name: string }) =>
+    submitDialogWrite("columns", { id: columnId, data });
 
-  const confirmEditColumn = useCallback(async () => {
-    if (!editColumnName.trim() || !editColumnId) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      `${boardPath}/columns`,
-      scope,
-      { id: editColumnId, data: { name: editColumnName.trim() } },
-    );
-    if (outcome.outcome === "success") {
-      setEditColumnDialogOpen(false);
-      setEditColumnId(null);
-      setEditColumnName("");
-      await mutate();
-    } else {
-      toast.error(outcome.message);
-    }
-  }, [editColumnName, editColumnId, backendUrl, boardPath, scope, mutate]);
+  // The delete runs once per confirm: a double click would send it twice.
+  const deleteColumn = useMutation((columnId: string) =>
+    submitDialogWrite("columns", { id: columnId }),
+  );
 
-  const handleDeleteColumn = useCallback(
-    (columnId: string, hasCards: boolean) => {
-      setDeleteColumnId(columnId);
-      setDeleteColumnHasCards(hasCards);
-      setDeleteColumnDialogOpen(true);
-    },
+  const openAddCard = useCallback(
+    (columnId: string) => setDialog({ kind: "addCard", columnId }),
     [],
   );
 
-  const confirmDeleteColumn = useCallback(async () => {
-    if (!deleteColumnId || deleteColumnHasCards) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      `${boardPath}/columns`,
-      scope,
-      { id: deleteColumnId },
-    );
-    if (outcome.outcome === "success") {
-      setDeleteColumnDialogOpen(false);
-      setDeleteColumnId(null);
-      setDeleteColumnHasCards(false);
-      await mutate();
-    } else {
-      toast.error(outcome.message);
-    }
-  }, [
-    deleteColumnId,
-    deleteColumnHasCards,
-    backendUrl,
-    boardPath,
-    scope,
-    mutate,
-  ]);
+  const openEditColumn = useCallback((columnId: string) => {
+    const column = columnsRef.current.find((c) => c.id === columnId);
+    if (!column) return;
+    setDialog({ kind: "editColumn", columnId, name: column.name });
+  }, []);
 
-  // Each dialog's write runs once per submit: a double click or Enter held
-  // down would otherwise create duplicate columns or cards.
-  const addColumn = useMutation(confirmAddColumn);
-  const addCard = useMutation(confirmAddCard);
-  const editColumn = useMutation(confirmEditColumn);
-  const deleteColumn = useMutation(confirmDeleteColumn);
-
-  /** Submits a dialog's form through its guarded write; Enter lands here too. */
-  const submitWith =
-    (mutation: { run: () => Promise<unknown> }) =>
-    (e: React.FormEvent<HTMLFormElement>) => {
-      e.preventDefault();
-      void mutation.run();
-    };
+  const openDeleteColumn = useCallback(
+    (columnId: string, hasCards: boolean) =>
+      setDialog({ kind: "deleteColumn", columnId, hasCards }),
+    [],
+  );
 
   const handleMoveColumn = useCallback(
     async (columnId: string, direction: "left" | "right") => {
@@ -922,16 +827,16 @@ export function KanbanBoard({
                   isFirst={index === 0}
                   isLast={index === columns.length - 1}
                   onCardClick={handleCardClick}
-                  onAddCard={handleAddCard}
-                  onEditColumn={handleEditColumn}
-                  onDeleteColumn={handleDeleteColumn}
+                  onAddCard={openAddCard}
+                  onEditColumn={openEditColumn}
+                  onDeleteColumn={openDeleteColumn}
                   onMoveColumn={handleMoveColumn}
                 />
               ))}
             </SortableContext>
             <button
               type="button"
-              onClick={handleAddColumn}
+              onClick={() => setDialog({ kind: "addColumn" })}
               className="flex flex-col items-center justify-center w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Plus className="h-8 w-8" />
@@ -972,190 +877,39 @@ export function KanbanBoard({
         </DragOverlay>
       </DndContext>
 
-      {/* Add Column Dialog */}
-      <Dialog open={addColumnDialogOpen} onOpenChange={setAddColumnDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Column</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={submitWith(addColumn)}>
-            <div className="py-4">
-              <Label htmlFor="columnName">Column Name</Label>
-              <Input
-                id="columnName"
-                value={newColumnName}
-                onChange={(e) => setNewColumnName(e.target.value)}
-                placeholder="Enter column name"
-                className="mt-2"
-                autoFocus
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setAddColumnDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={addColumn.pending}>
-                {addColumn.pending ? "Adding..." : "Add column"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Card Dialog */}
-      <Dialog open={addCardDialogOpen} onOpenChange={setAddCardDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Card</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={submitWith(addCard)}>
-            <div className="py-4 space-y-4">
-              <div>
-                <Label htmlFor="cardTitle">Card Title</Label>
-                <Input
-                  id="cardTitle"
-                  value={newCardTitle}
-                  onChange={(e) => setNewCardTitle(e.target.value)}
-                  placeholder="Enter card title"
-                  className="mt-2"
-                  autoFocus
-                />
-              </div>
-              {labels.length > 0 && (
-                <div role="group" aria-labelledby="new-card-labels-label">
-                  <p
-                    id="new-card-labels-label"
-                    className="flex items-center gap-2 text-sm leading-none font-medium"
-                  >
-                    Labels
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {labels.map((label) => {
-                      const isActive = newCardLabelIds.includes(label.id);
-                      return (
-                        <Badge
-                          key={label.id}
-                          className={cn(
-                            "cursor-pointer transition-opacity border-0",
-                            !isActive && "opacity-40",
-                          )}
-                          style={{
-                            backgroundColor: label.color,
-                            color: readableTextColor(label.color),
-                          }}
-                          onClick={() =>
-                            setNewCardLabelIds((prev) =>
-                              prev.includes(label.id)
-                                ? prev.filter((id) => id !== label.id)
-                                : [...prev, label.id],
-                            )
-                          }
-                        >
-                          {label.name}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setAddCardDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={addCard.pending}>
-                {addCard.pending ? "Adding..." : "Add card"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Column Dialog */}
-      <Dialog
-        open={editColumnDialogOpen}
-        onOpenChange={setEditColumnDialogOpen}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Column</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={submitWith(editColumn)}>
-            <div className="py-4">
-              <Label htmlFor="editColumnName">Column Name</Label>
-              <Input
-                id="editColumnName"
-                value={editColumnName}
-                onChange={(e) => setEditColumnName(e.target.value)}
-                placeholder="Enter column name"
-                className="mt-2"
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditColumnDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={editColumn.pending}>
-                {editColumn.pending ? "Saving..." : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Column Confirmation Dialog */}
-      <Dialog
-        open={deleteColumnDialogOpen}
-        onOpenChange={setDeleteColumnDialogOpen}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Column</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            {deleteColumnHasCards ? (
-              <p className="text-muted-foreground">
-                Cannot delete this column because it contains cards. Move or
-                delete all cards first.
-              </p>
-            ) : (
-              <p className="text-muted-foreground">
-                Are you sure you want to delete this column? This action cannot
-                be undone.
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteColumnDialogOpen(false)}
-            >
-              {deleteColumnHasCards ? "Close" : "Cancel"}
-            </Button>
-            {!deleteColumnHasCards && (
-              <Button
-                variant="destructive"
-                onClick={() => void deleteColumn.run()}
-                disabled={deleteColumn.pending}
-              >
-                {deleteColumn.pending ? "Deleting..." : "Delete"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {dialog?.kind === "addColumn" && (
+        <AddColumnDialog onSubmit={submitAddColumn} onClose={closeDialog} />
+      )}
+      {dialog?.kind === "addCard" && (
+        <AddCardDialog
+          labels={labels}
+          onSubmit={(values) => submitAddCard(dialog.columnId, values)}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === "editColumn" && (
+        <EditColumnDialog
+          initialName={dialog.name}
+          onSubmit={(values) => submitEditColumn(dialog.columnId, values)}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog?.kind === "deleteColumn" && (
+        <DeleteConfirmDialog
+          open
+          onOpenChange={(open) => !open && closeDialog()}
+          title="Delete Column"
+          description={
+            dialog.hasCards
+              ? "Cannot delete this column because it contains cards. Move or delete all cards first."
+              : "Are you sure you want to delete this column? This action cannot be undone."
+          }
+          cancelLabel={dialog.hasCards ? "Close" : "Cancel"}
+          confirmDisabled={dialog.hasCards}
+          onConfirm={() => void deleteColumn.run(dialog.columnId)}
+          loading={deleteColumn.pending}
+        />
+      )}
 
       {/* Card Details Dialog */}
       <KanbanCardDialog
