@@ -6,10 +6,9 @@ import { ChangePasswordForm } from "./change-password-form";
 const mockChangePassword = vi.fn();
 
 vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => ({
-    authClient: {
-      changePassword: mockChangePassword,
-    },
+  useAuth: () => ({}),
+  useAuthClient: () => ({
+    changePassword: mockChangePassword,
   }),
   useBackendUrl: () => "http://test",
 }));

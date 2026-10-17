@@ -12,12 +12,12 @@ const { authState } = vi.hoisted(() => ({
       role?: string;
     } | null,
     isPending: false,
-    authClient: { signOut: () => Promise.resolve() },
   },
 }));
 
 vi.mock("@/components/auth-provider", () => ({
   useAuth: () => authState,
+  useAuthClient: () => ({ signOut: () => Promise.resolve() }),
 }));
 
 vi.mock("next/navigation", () => ({

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityForm } from "@/hooks/use-entity-form";
-import { useAuth } from "@/components/auth-provider";
+import { useAuth, useAuthClient } from "@/components/auth-provider";
 import type { WriteOutcome } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,8 @@ const toOutcome = (
     : { outcome: "success", data: {}, revalidateKeys: [] };
 
 const UserSettingsPage = () => {
-  const { user, authClient } = useAuth();
+  const { user } = useAuth();
+  const authClient = useAuthClient();
   const [isEditing, setIsEditing] = useState(false);
 
   const savedTimezone = user?.timezone ?? null;

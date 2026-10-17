@@ -4,7 +4,7 @@ import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { appRoutes } from "@/lib/routes";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/auth-provider";
+import { useAuthClient } from "@/components/auth-provider";
 import { useSignUpOpen } from "@/hooks/use-sign-up-open";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 
 export default function SignUpPage() {
-  const { authClient } = useAuth();
+  const authClient = useAuthClient();
   const router = useRouter();
   const signUpOpen = useSignUpOpen();
   const [name, setName] = useState("");

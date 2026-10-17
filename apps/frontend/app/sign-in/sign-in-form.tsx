@@ -4,7 +4,7 @@ import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { appRoutes, signInDestination } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/auth-provider";
+import { useAuth, useAuthClient } from "@/components/auth-provider";
 import { useSignUpOpen } from "@/hooks/use-sign-up-open";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,7 +14,8 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 
 export default function SignInPage() {
-  const { authClient, user } = useAuth();
+  const { user } = useAuth();
+  const authClient = useAuthClient();
   const router = useRouter();
   const signUpOpen = useSignUpOpen();
   const [email, setEmail] = useState("");

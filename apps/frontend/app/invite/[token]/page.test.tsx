@@ -29,8 +29,8 @@ vi.mock("@/components/auth-provider", () => ({
     user: mockUser,
     isPending: false,
     refreshSession: mockRefreshSession,
-    authClient: { signOut: mockSignOut },
   }),
+  useAuthClient: () => ({ signOut: mockSignOut }),
 }));
 
 const RESOLUTION_BODY = {

@@ -17,6 +17,7 @@ vi.mock("@/components/auth-provider", () => ({
     user: { id: "u1" },
     isAuthLoading: state.isAuthLoading,
   }),
+  useAuthClient: () => ({}),
 }));
 
 vi.mock("@/hooks/use-scoped-swr", () => ({
