@@ -1,6 +1,4 @@
-export function genId() {
-  return Math.random().toString(36).slice(2, 9);
-}
+export const genId = () => Math.random().toString(36).slice(2, 9);
 
 /**
  * Seeds an editor's local rows from persisted data. Each row is given a stable

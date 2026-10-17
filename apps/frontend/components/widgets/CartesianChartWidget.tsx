@@ -147,7 +147,7 @@ export function CartesianChartWidget({
   return (
     <ChartContainer
       config={chartConfig}
-      className="size-full aspect-auto pl-4 pr-2 pt-2 pb-1"
+      className="h-full w-full aspect-auto pl-4 pr-2 pt-2 pb-1"
     >
       {isBar ? (
         <BarChart

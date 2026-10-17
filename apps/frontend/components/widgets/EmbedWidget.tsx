@@ -61,7 +61,7 @@ export function EmbedWidget({
   if (editing) {
     return (
       <div className="flex h-full flex-col gap-2 p-3">
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label className="text-xs" htmlFor={`embed-title-${widget.id}`}>
             Name
           </Label>
@@ -72,7 +72,7 @@ export function EmbedWidget({
             className="h-7 text-sm"
           />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label className="text-xs" htmlFor={`embed-url-${widget.id}`}>
             Embed URL
           </Label>
@@ -94,7 +94,7 @@ export function EmbedWidget({
           Some sites don&apos;t allow embedding and will appear blank.
         </p>
         <Button size="sm" className="mt-auto" onClick={handleSave}>
-          <Check /> Save
+          <Check className="h-3 w-3" /> Save
         </Button>
       </div>
     );
@@ -115,7 +115,7 @@ export function EmbedWidget({
           // storage.
           sandbox="allow-scripts allow-forms allow-popups"
           referrerPolicy="no-referrer"
-          className="size-full border-0"
+          className="h-full w-full border-0"
         />
       ) : (
         <p className="text-sm text-muted-foreground italic">

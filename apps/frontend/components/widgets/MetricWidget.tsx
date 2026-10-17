@@ -64,7 +64,7 @@ export function MetricWidget({
   if (editing) {
     return (
       <div className="flex flex-col gap-2 p-3 h-full overflow-auto">
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-name`} className="text-xs">
             Name
           </Label>
@@ -76,7 +76,7 @@ export function MetricWidget({
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="flex flex-col gap-1">
+          <div className="space-y-1">
             <Label htmlFor={`${id}-value`} className="text-xs">
               Value
             </Label>
@@ -88,7 +88,7 @@ export function MetricWidget({
               className="h-7 text-sm"
             />
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="space-y-1">
             <Label htmlFor={`${id}-unit`} className="text-xs">
               Unit
             </Label>
@@ -101,7 +101,7 @@ export function MetricWidget({
             />
           </div>
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-label`} className="text-xs">
             Label
           </Label>
@@ -112,7 +112,7 @@ export function MetricWidget({
             className="h-7 text-sm"
           />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-change`} className="text-xs">
             Change indicator
           </Label>
@@ -139,7 +139,7 @@ export function MetricWidget({
             )
           }
         >
-          <Check /> Save
+          <Check className="h-3 w-3" /> Save
         </Button>
       </div>
     );

@@ -8,6 +8,21 @@ import betterTailwindcss from "eslint-plugin-better-tailwindcss";
 
 const TEST_FILES = ["**/*.test.ts", "**/*.test.tsx"];
 
+const RAW_WRITE_FETCH = {
+  selector:
+    "CallExpression[callee.name='fetch']:has(Property[key.name='method'][value.value!='GET'])",
+  message:
+    "Writes go through writeEntity()/writeAt() in lib/api-write.ts, not a raw fetch() — see ADR-0010 and #563.",
+};
+
+// Call sites allowed a raw write `fetch()` (see the rule below).
+const RAW_FETCH_EXEMPT = [
+  "lib/api-write.ts",
+  "components/change-password-dialog.tsx",
+  "components/agent-form.tsx",
+  "hooks/use-shared-resource-actions.ts",
+];
+
 // Top-level functions are declarations (`function X() {}`), not a const holding
 // an arrow or function expression. `func-style: "declaration"` can't do this:
 // it also flags every `const handleX = () => …` inside a component, which stay
@@ -95,33 +110,18 @@ const eslintConfig = defineConfig([
   // 422 "blockers" checklist the module's outcome type doesn't carry.
   {
     files: ["**/*.ts", "**/*.tsx"],
-    ignores: [
-      "lib/api-write.ts",
-      "components/change-password-dialog.tsx",
-      "components/agent-form.tsx",
-      "hooks/use-shared-resource-actions.ts",
-    ],
+    ignores: RAW_FETCH_EXEMPT,
     rules: {
       "no-restricted-syntax": [
         "error",
         TOP_LEVEL_FUNCTION_DECLARATIONS,
-        {
-          selector:
-            "CallExpression[callee.name='fetch']:has(Property[key.name='method'][value.value!='GET'])",
-          message:
-            "Writes go through writeEntity()/writeAt() in lib/api-write.ts, not a raw fetch() — see ADR-0010 and #563.",
-        },
+        RAW_WRITE_FETCH,
       ],
     },
   },
   // The files exempt from the raw-fetch rule above still get the top-level one.
   {
-    files: [
-      "lib/api-write.ts",
-      "components/change-password-dialog.tsx",
-      "components/agent-form.tsx",
-      "hooks/use-shared-resource-actions.ts",
-    ],
+    files: RAW_FETCH_EXEMPT,
     rules: {
       "no-restricted-syntax": ["error", TOP_LEVEL_FUNCTION_DECLARATIONS],
     },
@@ -146,6 +146,17 @@ const eslintConfig = defineConfig([
           ],
         },
       ],
+    },
+  },
+  // Widgets are being removed (#1430), so they keep their old style rather
+  // than being rewritten to these conventions. Delete this block with them.
+  {
+    files: ["components/widgets/**"],
+    rules: {
+      "no-restricted-syntax": ["error", RAW_WRITE_FETCH],
+      "@typescript-eslint/consistent-type-definitions": "off",
+      "better-tailwindcss/enforce-shorthand-classes": "off",
+      "better-tailwindcss/no-restricted-classes": "off",
     },
   },
   // The frontend never compiles backend source: the Chat UI message contract

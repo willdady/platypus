@@ -7,6 +7,5 @@ export const CHART_COLORS = [
 ];
 
 /** Cycles the palette so a series or segment keeps one colour as it is added. */
-export function colorForIndex(index: number) {
-  return CHART_COLORS[index % CHART_COLORS.length];
-}
+export const colorForIndex = (index: number) =>
+  CHART_COLORS[index % CHART_COLORS.length];

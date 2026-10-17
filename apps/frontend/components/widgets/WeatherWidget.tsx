@@ -111,7 +111,7 @@ export function WeatherWidget({
   if (editing) {
     return (
       <div className="flex flex-col gap-2 p-3 h-full overflow-auto">
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-name`} className="text-xs">
             Name
           </Label>
@@ -122,7 +122,7 @@ export function WeatherWidget({
             className="h-7 text-sm"
           />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-location`} className="text-xs">
             Location
           </Label>
@@ -134,7 +134,7 @@ export function WeatherWidget({
             className="h-7 text-sm"
           />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-date`} className="text-xs">
             Date
           </Label>
@@ -146,7 +146,7 @@ export function WeatherWidget({
             className="h-7 text-sm"
           />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-condition`} className="text-xs">
             Condition
           </Label>
@@ -166,7 +166,7 @@ export function WeatherWidget({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-description`} className="text-xs">
             Description
           </Label>
@@ -179,7 +179,7 @@ export function WeatherWidget({
           />
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <div className="flex flex-col gap-1">
+          <div className="space-y-1">
             <Label htmlFor={`${id}-temperature`} className="text-xs">
               Temp (°C)
             </Label>
@@ -191,7 +191,7 @@ export function WeatherWidget({
               className="h-7 text-sm"
             />
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="space-y-1">
             <Label htmlFor={`${id}-high`} className="text-xs">
               High (°C)
             </Label>
@@ -203,7 +203,7 @@ export function WeatherWidget({
               className="h-7 text-sm"
             />
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="space-y-1">
             <Label htmlFor={`${id}-low`} className="text-xs">
               Low (°C)
             </Label>
@@ -216,7 +216,7 @@ export function WeatherWidget({
             />
           </div>
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-unit`} className="text-xs">
             Temperature unit
           </Label>
@@ -249,7 +249,7 @@ export function WeatherWidget({
             )
           }
         >
-          <Check /> Save
+          <Check className="h-3 w-3" /> Save
         </Button>
       </div>
     );

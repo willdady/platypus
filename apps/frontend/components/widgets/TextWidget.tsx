@@ -31,7 +31,7 @@ export function TextWidget({
   if (editing) {
     return (
       <div className="flex flex-col gap-2 p-3 h-full">
-        <div className="flex flex-col gap-1">
+        <div className="space-y-1">
           <Label htmlFor={`${id}-name`} className="text-xs">
             Name
           </Label>
@@ -49,7 +49,7 @@ export function TextWidget({
           className="flex-1 min-h-0 resize-none text-sm font-mono"
         />
         <Button size="sm" onClick={() => onSave({ content }, title)}>
-          <Check /> Save
+          <Check className="h-3 w-3" /> Save
         </Button>
       </div>
     );
