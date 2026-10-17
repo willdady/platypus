@@ -88,7 +88,7 @@ function type(dialog: HTMLElement, label: string, value: string) {
 
 /** The `modelIds` the form put on the wire for the last save. */
 function savedModelIds(fetchMock: ReturnType<typeof vi.fn>) {
-  return savedBody(fetchMock).modelIds;
+  return savedBody(fetchMock).modelIds as Record<string, unknown>[];
 }
 
 function save() {

@@ -286,22 +286,22 @@ const eslintConfig = defineConfig([
     files: TEST_FILES,
     ...jestDom.configs["flat/recommended"],
   },
-  // Ratchets on the type-checked preset, for tests and their helpers only:
-  // app code holds every one of these as an error. Each count is the
+  // Ratchets on the type-checked preset, for test files only: app code and
+  // the `test/` helpers hold every one of these as an error. Each count is the
   // violations when the preset landed (#1546). Fix them as you touch a file,
   // and make each rule an error once it reaches 0.
   {
-    files: [...TEST_FILES, "test/**"],
+    files: TEST_FILES,
     rules: {
       "@typescript-eslint/require-await": "warn", // 60
-      "@typescript-eslint/no-unsafe-member-access": "warn", // 58
+      "@typescript-eslint/no-unsafe-member-access": "warn", // 38
       "@typescript-eslint/no-unnecessary-type-assertion": "warn", // 33
-      "@typescript-eslint/no-unsafe-assignment": "warn", // 22
-      "@typescript-eslint/no-unsafe-return": "warn", // 13
+      "@typescript-eslint/no-unsafe-assignment": "warn", // 21
       "@typescript-eslint/unbound-method": "warn", // 13
+      "@typescript-eslint/no-unsafe-return": "warn", // 10
       "@typescript-eslint/no-base-to-string": "warn", // 8
-      "@typescript-eslint/no-unsafe-argument": "warn", // 7
       "@typescript-eslint/no-unsafe-call": "warn", // 7
+      "@typescript-eslint/no-unsafe-argument": "warn", // 6
       "@typescript-eslint/prefer-promise-reject-errors": "warn", // 1
     },
   },
