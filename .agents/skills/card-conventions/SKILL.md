@@ -39,6 +39,28 @@ Delete
 Skip the items that do not apply and keep the rest in this order. Delete
 takes the destructive style.
 
+Build every list card's (and run row's) ⋮ menu with `RowActionsMenu`
+(`components/row-actions-menu.tsx`), never a hand-built `DropdownMenu`; it
+enforces the order and the separator.
+
+```tsx
+<RowActionsMenu
+  name={item.name}                 // "Actions for <name>"
+  shared={isShared}                // Edit in org settings + Detach
+  edit={{ href }}
+  actions={[                       // RowAction: href (a link) or onSelect
+    { label: "Pin", icon: <Pin />, onSelect, disabled },
+    { label: "View runs", icon: <List />, href },
+  ]}
+  clone={{ onSelect }}
+  toggle={{ enabled, onSelect, disabled }}
+  remove={{ onSelect }}            // Delete, or Detach when `shared`
+/>
+```
+
+Leave out a prop the User lacks the permission for; the component drops the ⋮
+when nothing is left, so a list needs no "has menu" check of its own.
+
 ## Shared items
 
 A Shared resource attached to a Workspace (`scope: "organization"`) is locked
@@ -48,6 +70,8 @@ there. Its card gets a ⋮ menu with:
   only for a User who can manage Shared resources (`canManageSharedResource`);
 - the item-specific items that still apply (Pin);
 - separator, then **Detach**, in Delete's place.
+
+Pass `shared` to `RowActionsMenu` for both labels.
 
 Detach is always a named menu item that opens the shared Detach dialog
 (`DetachSharedDialog`). A Shared card's own click opens its main view if it has

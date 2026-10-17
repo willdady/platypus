@@ -9,7 +9,6 @@ import {
   Clock,
   Copy,
   Database,
-  EllipsisVertical,
   Footprints,
   Gauge,
   List,
@@ -29,13 +28,7 @@ import {
   type UnloadedToolSetReason,
 } from "@platypus/schemas";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -338,38 +331,26 @@ export const TriggerRunRow = ({
         )}
       </div>
       <div className="flex items-center shrink-0">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              className="text-muted-foreground"
-              variant="ghost"
-              size="icon"
-              aria-label={`Actions for ${run.triggerName} run`}
-              // Inside the row's link: opening the menu must not open the run.
-              onClick={(e) => e.preventDefault()}
-            >
-              <EllipsisVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          {/* Portalled, but React still bubbles its clicks to the row link. */}
-          <DropdownMenuContent onClick={(e) => e.preventDefault()}>
-            <DropdownMenuItem asChild>
-              <Link href={routes.triggers.detail(run.triggerId)}>
-                <Pencil /> Edit trigger
-              </Link>
-            </DropdownMenuItem>
-            {!linkToDetail && (
-              <DropdownMenuItem asChild>
-                <Link href={routes.triggerRuns.forTrigger(run.triggerId)}>
-                  <List /> View trigger&apos;s runs
-                </Link>
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onSelect={handleCopyRunId}>
-              <Copy /> Copy run id
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowActionsMenu
+          name={`${run.triggerName} run`}
+          actions={[
+            {
+              label: "Edit trigger",
+              icon: <Pencil />,
+              href: routes.triggers.detail(run.triggerId),
+            },
+            ...(linkToDetail
+              ? []
+              : [
+                  {
+                    label: "View trigger's runs",
+                    icon: <List />,
+                    href: routes.triggerRuns.forTrigger(run.triggerId),
+                  },
+                ]),
+            { label: "Copy run id", icon: <Copy />, onSelect: handleCopyRunId },
+          ]}
+        />
       </div>
     </div>
   );

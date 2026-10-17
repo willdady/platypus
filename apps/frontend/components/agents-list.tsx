@@ -33,13 +33,7 @@ import {
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RowActionsMenu, type RowAction } from "@/components/row-actions-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -49,14 +43,9 @@ import {
   ArrowUpFromLine,
   Bot,
   BotMessageSquare,
-  Copy,
-  EllipsisVertical,
-  Pencil,
   Pin,
   PinOff,
   Plus,
-  Trash2,
-  Unlink,
   Wrench,
   Sparkles,
 } from "lucide-react";
@@ -308,82 +297,62 @@ export const AgentsList = ({
     );
   }
 
-  // The ⋮ order is the `card-conventions` skill's: Edit → item-specific →
-  // Clone → separator → Delete; a Shared Agent's Detach takes Delete's place.
-  const renderMenuItems = (agent: AgentWithScope) => {
+  const renderMenu = (agent: AgentWithScope) => {
     const isOrgScoped = agent.scope === "organization";
-    const pinItem = canPin && (
-      <DropdownMenuItem
-        onSelect={() => togglePin(agent)}
-        disabled={pins.isPending(agent.id)}
-      >
-        {agent.isPinned ? (
-          <>
-            <PinOff /> Unpin
-          </>
-        ) : (
-          <>
-            <Pin /> Pin
-          </>
-        )}
-      </DropdownMenuItem>
-    );
+    const pinAction: RowAction[] = canPin
+      ? [
+          {
+            label: agent.isPinned ? "Unpin" : "Pin",
+            icon: agent.isPinned ? <PinOff /> : <Pin />,
+            onSelect: () => togglePin(agent),
+            disabled: pins.isPending(agent.id),
+          },
+        ]
+      : [];
 
     if (isOrgScoped) {
       // A Shared Agent is locked in the Workspace; only an Org Admin can
       // open it in the org settings editor or detach it here (ADR-0007).
       return (
-        <>
-          {canManageShared && (
-            <DropdownMenuItem asChild>
-              <Link href={orgRoutes(orgId).settings.agentDetail(agent.id)}>
-                <Pencil /> Edit in org settings
-              </Link>
-            </DropdownMenuItem>
-          )}
-          {pinItem}
-          {canManageShared && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => orgAgentDetach.open(agent)}>
-                <Unlink /> Detach
-              </DropdownMenuItem>
-            </>
-          )}
-        </>
+        <RowActionsMenu
+          name={agent.name}
+          shared
+          edit={
+            canManageShared
+              ? { href: orgRoutes(orgId).settings.agentDetail(agent.id) }
+              : undefined
+          }
+          actions={pinAction}
+          remove={
+            canManageShared
+              ? { onSelect: () => orgAgentDetach.open(agent) }
+              : undefined
+          }
+        />
       );
     }
 
     return (
-      <>
-        <DropdownMenuItem asChild>
-          <Link href={routes.agents.detail(agent.id)}>
-            <Pencil /> Edit
-          </Link>
-        </DropdownMenuItem>
-        {pinItem}
-        {canManageShared && (
-          <DropdownMenuItem onSelect={() => promote.open(agent)}>
-            <ArrowUpFromLine /> Promote to organization
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem onSelect={() => handleCloneClick(agent)}>
-          <Copy /> Clone
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="text-destructive focus:text-destructive"
-          onSelect={() => handleDeleteClick(agent)}
-        >
-          <Trash2 /> Delete
-        </DropdownMenuItem>
-      </>
+      <RowActionsMenu
+        name={agent.name}
+        edit={{ href: routes.agents.detail(agent.id) }}
+        actions={[
+          ...pinAction,
+          ...(canManageShared
+            ? [
+                {
+                  label: "Promote to organization",
+                  icon: <ArrowUpFromLine />,
+                  onSelect: () => promote.open(agent),
+                },
+              ]
+            : []),
+        ]}
+        clone={{ onSelect: () => handleCloneClick(agent) }}
+        remove={{ onSelect: () => handleDeleteClick(agent) }}
+      />
     );
   };
-
-  // A Shared Agent with no admin actions has an empty menu; hide the trigger.
-  const hasMenu = (agent: AgentWithScope) =>
-    agent.scope !== "organization" || canManageShared || canPin;
 
   const renderCard = (agent: AgentWithScope) => {
     const isOrgScoped = agent.scope === "organization";
@@ -502,23 +471,7 @@ export const AgentsList = ({
                 <BotMessageSquare /> New chat
               </Link>
             </Button>
-            {hasMenu(agent) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    className="text-muted-foreground"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Actions for ${agent.name}`}
-                  >
-                    <EllipsisVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {renderMenuItems(agent)}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            {renderMenu(agent)}
           </ItemActions>
           <ItemFooter className="xl:hidden mt-0 pl-16">
             <Button size="sm" asChild>
@@ -526,23 +479,7 @@ export const AgentsList = ({
                 <BotMessageSquare /> New chat
               </Link>
             </Button>
-            {hasMenu(agent) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    className="text-muted-foreground"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Actions for ${agent.name}`}
-                  >
-                    <EllipsisVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {renderMenuItems(agent)}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            {renderMenu(agent)}
           </ItemFooter>
         </Item>
       </li>

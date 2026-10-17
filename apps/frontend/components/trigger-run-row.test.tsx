@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import type { TriggerRunWithTrigger } from "@platypus/schemas";
 import {
@@ -135,16 +135,22 @@ describe("TriggerRunRow", () => {
     });
 
     it("does not open the run when the menu is opened or used", async () => {
-      render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
+      const onRowClick = vi.fn();
+      render(
+        // The row link's own click handler stands in for its navigation.
+        // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+        <div onClick={onRowClick}>
+          <TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />
+        </div>,
+      );
       const trigger = screen.getByRole("button", {
         name: "Actions for Nightly digest run",
       });
 
       await openDropdownMenu();
-      const copy = screen.getByRole("menuitem", { name: "Copy run id" });
-      const choosing = createEvent.click(copy);
-      fireEvent(copy, choosing);
-      expect(choosing.defaultPrevented).toBe(true);
+      onRowClick.mockClear();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
+      expect(onRowClick).not.toHaveBeenCalled();
 
       const opening = createEvent.click(trigger);
       fireEvent(trigger, opening);

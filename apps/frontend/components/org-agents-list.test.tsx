@@ -13,6 +13,7 @@ import {
   mutate,
   authState,
 } from "@/test/list-test-harness";
+import { openDropdownMenu } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -38,6 +39,20 @@ function renderAgents(agents: Agent[], menuItem?: string) {
 beforeEach(resetListHarness);
 
 // --- Tests -------------------------------------------------------------------
+
+describe("OrgAgentsList menu", () => {
+  it("separates Delete from the other items", async () => {
+    stubAcceptedSave({ results: [] });
+    await renderAgents([sharedAgent]);
+    await openDropdownMenu();
+
+    const separator = screen.getByRole("separator");
+    expect(separator.previousElementSibling).toHaveTextContent(
+      "Manage attachments",
+    );
+    expect(separator.nextElementSibling).toHaveTextContent("Delete");
+  });
+});
 
 describe("OrgAgentsList delete", () => {
   it("blocks delete and reports the attachment count when the agent is still attached", async () => {

@@ -288,12 +288,9 @@ export const ResourceList = ({
                         <ItemActions>
                           <RowActionsMenu
                             name={resource.name}
-                            edit={{
-                              href: `${orgSettingsRoot}/${resource.id}`,
-                              label: "Edit in org settings",
-                            }}
+                            shared
+                            edit={{ href: `${orgSettingsRoot}/${resource.id}` }}
                             remove={{
-                              kind: "detach",
                               onSelect: () => detach.open(resource),
                             }}
                           />
@@ -327,7 +324,6 @@ export const ResourceList = ({
                             remove={
                               canManage
                                 ? {
-                                    kind: "delete",
                                     onSelect: () =>
                                       workspaceId
                                         ? deleteFlow.request(resource)

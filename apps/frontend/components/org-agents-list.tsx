@@ -9,7 +9,6 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
-import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
@@ -19,13 +18,8 @@ import {
   LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Bot, EllipsisVertical, Pencil, Share2, Trash2 } from "lucide-react";
+import { RowActionsMenu } from "@/components/row-actions-menu";
+import { Bot, Share2 } from "lucide-react";
 import { type Agent } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useAuth } from "@/components/auth-provider";
@@ -37,7 +31,6 @@ import {
   UnattachedWarning,
 } from "@/components/manage-sharing";
 import { DeleteBlockedDialog } from "@/components/shared-resource-actions";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
@@ -167,40 +160,20 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                   </ItemContent>
                   {canManage && (
                     <ItemActions>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            className="text-muted-foreground"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Actions for ${agent.name}`}
-                          >
-                            <EllipsisVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem asChild>
-                            <Link
-                              href={orgRoutes(orgId).settings.agentDetail(
-                                agent.id,
-                              )}
-                            >
-                              <Pencil /> Edit
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => setAgentToManage(agent)}
-                          >
-                            <Share2 /> Manage attachments
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onSelect={() => deleteGuard.request(agent)}
-                          >
-                            <Trash2 /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <RowActionsMenu
+                        name={agent.name}
+                        edit={{
+                          href: orgRoutes(orgId).settings.agentDetail(agent.id),
+                        }}
+                        actions={[
+                          {
+                            label: "Manage attachments",
+                            icon: <Share2 />,
+                            onSelect: () => setAgentToManage(agent),
+                          },
+                        ]}
+                        remove={{ onSelect: () => deleteGuard.request(agent) }}
+                      />
                     </ItemActions>
                   )}
                 </Item>
