@@ -35,6 +35,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -692,51 +693,14 @@ export function AppSidebar() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Chat Confirmation Dialog */}
-      <Dialog
+      <DeleteConfirmDialog
         open={!!deleteChatId}
         onOpenChange={(open) => !open && setDeleteChatId(null)}
-      >
-        <DialogContent
-          onPointerDownOutside={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          onEscapeKeyDown={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>Delete Chat</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this chat? This action cannot be
-              undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteChatId(null)}
-              disabled={isDeleting}
-              className="cursor-pointer"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteChat}
-              disabled={isDeleting}
-              className="cursor-pointer"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="Delete Chat"
+        description="Are you sure you want to delete this chat? This action cannot be undone."
+        onConfirm={handleDeleteChat}
+        loading={isDeleting}
+      />
     </>
   );
 }

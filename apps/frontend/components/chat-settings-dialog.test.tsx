@@ -4,37 +4,31 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { Dialog } from "./ui/dialog";
 import { ChatSettingsDialog } from "./chat-settings-dialog";
 import { CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
+import type { ChatSettings } from "@/hooks/use-chat-settings";
 
-const renderDialog = (
-  props: Partial<Parameters<typeof ChatSettingsDialog>[0]> = {},
-) => {
-  const onMaxStepsChange = vi.fn();
+const renderDialog = (initial: Partial<ChatSettings> = {}) => {
+  const onChange = vi.fn();
   // A stateful parent: the dialog is a controlled component, so its derived
   // validation state only moves when the value round-trips through state.
   const Harness = () => {
-    const [maxSteps, setMaxSteps] = useState(props.maxSteps);
+    const [settings, setSettings] = useState<ChatSettings>({
+      instructions: "",
+      temperature: undefined,
+      seed: undefined,
+      topP: undefined,
+      topK: undefined,
+      presencePenalty: undefined,
+      frequencyPenalty: undefined,
+      maxSteps: undefined,
+      ...initial,
+    });
     return (
       <Dialog open>
         <ChatSettingsDialog
-          instructions=""
-          onInstructionsChange={vi.fn()}
-          temperature={undefined}
-          onTemperatureChange={vi.fn()}
-          seed={undefined}
-          onSeedChange={vi.fn()}
-          topP={undefined}
-          onTopPChange={vi.fn()}
-          topK={undefined}
-          onTopKChange={vi.fn()}
-          presencePenalty={undefined}
-          onPresencePenaltyChange={vi.fn()}
-          frequencyPenalty={undefined}
-          onFrequencyPenaltyChange={vi.fn()}
-          {...props}
-          maxSteps={maxSteps}
-          onMaxStepsChange={(v) => {
-            onMaxStepsChange(v);
-            setMaxSteps(v);
+          settings={settings}
+          onChange={(patch) => {
+            onChange(patch);
+            setSettings((prev) => ({ ...prev, ...patch }));
           }}
         />
       </Dialog>
@@ -44,7 +38,7 @@ const renderDialog = (
   // The step ceiling sits beside the sampling settings under the collapsed
   // "Advanced settings" disclosure.
   fireEvent.click(screen.getByText("Advanced settings"));
-  return onMaxStepsChange;
+  return onChange;
 };
 
 describe("ChatSettingsDialog", () => {
@@ -79,24 +73,24 @@ describe("ChatSettingsDialog", () => {
     expect(input).toHaveValue(25);
   });
 
-  it("forwards typed values to onMaxStepsChange", () => {
-    const onMaxStepsChange = renderDialog();
+  it("forwards typed values to onChange", () => {
+    const onChange = renderDialog();
 
     fireEvent.change(screen.getByLabelText("Max steps"), {
       target: { value: "30" },
     });
 
-    expect(onMaxStepsChange).toHaveBeenCalledWith(30);
+    expect(onChange).toHaveBeenCalledWith({ maxSteps: 30 });
   });
 
   it("clears the setting when emptied", () => {
-    const onMaxStepsChange = renderDialog({ maxSteps: 25 });
+    const onChange = renderDialog({ maxSteps: 25 });
 
     fireEvent.change(screen.getByLabelText("Max steps"), {
       target: { value: "" },
     });
 
-    expect(onMaxStepsChange).toHaveBeenCalledWith(undefined);
+    expect(onChange).toHaveBeenCalledWith({ maxSteps: undefined });
   });
 
   it.each(["0", "-2", "51"])(
