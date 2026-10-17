@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Info } from "lucide-react";
 import {
   CONTEXT_WINDOW_MAX,
@@ -187,7 +187,11 @@ export function ModelEntryDialog({
     setFieldErrors((prev) => retractFieldError(prev, field));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // React bubbles synthetic events through the portal, so without this the
+    // submit would reach any form the provider form is rendered in.
+    e.stopPropagation();
     // Same keys as the entry it came from, so Save with nothing changed leaves
     // the provider form clean.
     const entry = {
@@ -202,9 +206,18 @@ export function ModelEntryDialog({
     onSubmit(entry);
   };
 
+  const modelIdRef = useRef<HTMLInputElement>(null);
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent
+        // Model ID rather than the first tabbable, the info button before it,
+        // whose tooltip would open on focus and spend the first Esc.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          modelIdRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{model ? "Edit model" : "Add model"}</DialogTitle>
           <DialogDescription>
@@ -212,206 +225,213 @@ export function ModelEntryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <FieldSet>
-          <FieldGroup className="gap-3">
-            <ModelField
-              htmlFor="model-id"
-              label="Model ID"
-              hint="The model id sent to the vendor, exactly as the vendor names it."
-              error={fieldErrors.id}
-            >
-              <Input
-                // Focused on open, so the dialog doesn't land on the info
-                // button before it, open its tooltip and spend the first Esc.
-                autoFocus
-                id="model-id"
-                placeholder="e.g. gpt-4o"
-                value={draft.id}
-                onChange={(e) => update("id", e.target.value)}
-                aria-invalid={!!fieldErrors.id}
-              />
-            </ModelField>
+        {/* noValidate: the schema owns every message, so the number inputs'
+            min/max/step must not stop the submit with a browser bubble. */}
+        <form
+          noValidate
+          onSubmit={handleSubmit}
+          className="flex flex-col gap-4"
+        >
+          <FieldSet>
+            <FieldGroup className="gap-3">
+              <ModelField
+                htmlFor="model-id"
+                label="Model ID"
+                hint="The model id sent to the vendor, exactly as the vendor names it."
+                error={fieldErrors.id}
+              >
+                <Input
+                  ref={modelIdRef}
+                  id="model-id"
+                  placeholder="e.g. gpt-4o"
+                  value={draft.id}
+                  onChange={(e) => update("id", e.target.value)}
+                  aria-invalid={!!fieldErrors.id}
+                />
+              </ModelField>
 
-            <ModelField
-              htmlFor="model-alias"
-              label="Alias"
-              hint="Optional stable name Agents and Chats can select instead of the model ID. Pointing the alias at a newer model upgrades all of them at once."
-              error={fieldErrors.alias}
-            >
-              <Input
-                id="model-alias"
-                placeholder="e.g. flagship"
-                value={draft.alias ?? ""}
-                aria-invalid={!!fieldErrors.alias}
-                onChange={(e) =>
-                  // An empty field means "no alias". Anything else goes to the
-                  // schema as typed, so a whitespace-only name is rejected
-                  // rather than silently dropped.
-                  update(
-                    "alias",
-                    e.target.value === "" ? undefined : e.target.value,
-                  )
-                }
-              />
-            </ModelField>
-
-            <ModelField
-              htmlFor="model-context-window"
-              label="Context window"
-              hint={
-                <>
-                  The model&apos;s <strong>total</strong> token capacity, not a
-                  cap on the reply. Listed sizes are decimal, so{" "}
-                  <code>128k</code> is 128,000. Optional; without it a Chat on
-                  this model shows no context meter.
-                </>
-              }
-              error={fieldErrors.contextWindow}
-            >
-              <div className="flex items-center gap-2">
-                <Select
-                  value={contextWindowOption}
-                  onValueChange={(value) => {
-                    setCustomContextWindow(value === CONTEXT_WINDOW_CUSTOM);
+              <ModelField
+                htmlFor="model-alias"
+                label="Alias"
+                hint="Optional stable name Agents and Chats can select instead of the model ID. Pointing the alias at a newer model upgrades all of them at once."
+                error={fieldErrors.alias}
+              >
+                <Input
+                  id="model-alias"
+                  placeholder="e.g. flagship"
+                  value={draft.alias ?? ""}
+                  aria-invalid={!!fieldErrors.alias}
+                  onChange={(e) =>
+                    // An empty field means "no alias". Anything else goes to the
+                    // schema as typed, so a whitespace-only name is rejected
+                    // rather than silently dropped.
                     update(
-                      "contextWindow",
-                      contextWindowForOption(value, draft.contextWindow),
-                    );
-                  }}
-                >
-                  <SelectTrigger
-                    id="model-context-window"
-                    aria-invalid={!!fieldErrors.contextWindow}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={CONTEXT_WINDOW_UNSET}>
-                      Not set
-                    </SelectItem>
-                    {CONTEXT_WINDOW_PRESETS.map((preset) => (
-                      <SelectItem
-                        key={preset.tokens}
-                        value={String(preset.tokens)}
-                      >
-                        {preset.label}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value={CONTEXT_WINDOW_CUSTOM}>
-                      Custom
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                {contextWindowOption === CONTEXT_WINDOW_CUSTOM && (
-                  <Input
-                    aria-label="Context window in tokens"
-                    type="number"
-                    min={CONTEXT_WINDOW_MIN}
-                    max={CONTEXT_WINDOW_MAX}
-                    placeholder="e.g. 131072"
-                    className="flex-1"
-                    value={draft.contextWindow ?? ""}
-                    aria-invalid={!!fieldErrors.contextWindow}
-                    onChange={(e) =>
+                      "alias",
+                      e.target.value === "" ? undefined : e.target.value,
+                    )
+                  }
+                />
+              </ModelField>
+
+              <ModelField
+                htmlFor="model-context-window"
+                label="Context window"
+                hint={
+                  <>
+                    The model&apos;s <strong>total</strong> token capacity, not
+                    a cap on the reply. Listed sizes are decimal, so{" "}
+                    <code>128k</code> is 128,000. Optional; without it a Chat on
+                    this model shows no context meter.
+                  </>
+                }
+                error={fieldErrors.contextWindow}
+              >
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={contextWindowOption}
+                    onValueChange={(value) => {
+                      setCustomContextWindow(value === CONTEXT_WINDOW_CUSTOM);
                       update(
                         "contextWindow",
-                        parseContextWindowInput(e.target.value),
+                        contextWindowForOption(value, draft.contextWindow),
+                      );
+                    }}
+                  >
+                    <SelectTrigger
+                      id="model-context-window"
+                      aria-invalid={!!fieldErrors.contextWindow}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={CONTEXT_WINDOW_UNSET}>
+                        Not set
+                      </SelectItem>
+                      {CONTEXT_WINDOW_PRESETS.map((preset) => (
+                        <SelectItem
+                          key={preset.tokens}
+                          value={String(preset.tokens)}
+                        >
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={CONTEXT_WINDOW_CUSTOM}>
+                        Custom
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {contextWindowOption === CONTEXT_WINDOW_CUSTOM && (
+                    <Input
+                      aria-label="Context window in tokens"
+                      type="number"
+                      min={CONTEXT_WINDOW_MIN}
+                      max={CONTEXT_WINDOW_MAX}
+                      placeholder="e.g. 131072"
+                      className="flex-1"
+                      value={draft.contextWindow ?? ""}
+                      aria-invalid={!!fieldErrors.contextWindow}
+                      onChange={(e) =>
+                        update(
+                          "contextWindow",
+                          parseContextWindowInput(e.target.value),
+                        )
+                      }
+                    />
+                  )}
+                </div>
+              </ModelField>
+
+              <ModelField
+                htmlFor="model-passthrough"
+                label="Native file types"
+                hint={
+                  <>
+                    Media types this model ingests <strong>natively</strong>,
+                    comma-separated (wildcards like <code>image/*</code>{" "}
+                    allowed). Other types are converted to text where possible,
+                    so this is a capability setting,{" "}
+                    <strong>not a security filter</strong>. Leave empty to use
+                    the provider-type default.
+                  </>
+                }
+                error={fieldErrors.passthroughFileTypes}
+              >
+                <Input
+                  id="model-passthrough"
+                  placeholder={fileTypesPlaceholder}
+                  value={fileTypesText}
+                  aria-invalid={!!fieldErrors.passthroughFileTypes}
+                  onChange={(e) => {
+                    setFileTypesText(e.target.value);
+                    setFieldErrors((prev) =>
+                      retractFieldError(prev, "passthroughFileTypes"),
+                    );
+                  }}
+                />
+              </ModelField>
+
+              <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+                <ModelField
+                  htmlFor="model-extracted-chars"
+                  label="Max extracted text characters"
+                  hint="How much extracted document text a single file may add to a turn. Protects a small context window. Leave empty for the default."
+                  error={fieldErrors.maxExtractedTextChars}
+                >
+                  <Input
+                    id="model-extracted-chars"
+                    type="number"
+                    min={1}
+                    placeholder={String(DEFAULT_MAX_EXTRACTED_TEXT_CHARS)}
+                    value={draft.maxExtractedTextChars ?? ""}
+                    aria-invalid={!!fieldErrors.maxExtractedTextChars}
+                    onChange={(e) =>
+                      update(
+                        "maxExtractedTextChars",
+                        parsePositiveNumber(e.target.value),
                       )
                     }
                   />
-                )}
+                </ModelField>
+
+                <ModelField
+                  htmlFor="model-max-output-tokens"
+                  label="Max output tokens"
+                  hint={
+                    <>
+                      The most this model may produce in a{" "}
+                      <strong>single reply</strong> — a cap on the answer, not
+                      the window. Leave empty to use the vendor’s own default,
+                      which may be well below what the model can actually write.
+                    </>
+                  }
+                  error={fieldErrors.maxOutputTokens}
+                >
+                  <Input
+                    id="model-max-output-tokens"
+                    type="number"
+                    min={1}
+                    placeholder="Provider default"
+                    value={draft.maxOutputTokens ?? ""}
+                    aria-invalid={!!fieldErrors.maxOutputTokens}
+                    onChange={(e) =>
+                      update(
+                        "maxOutputTokens",
+                        parsePositiveNumber(e.target.value),
+                      )
+                    }
+                  />
+                </ModelField>
               </div>
-            </ModelField>
+            </FieldGroup>
+          </FieldSet>
 
-            <ModelField
-              htmlFor="model-passthrough"
-              label="Native file types"
-              hint={
-                <>
-                  Media types this model ingests <strong>natively</strong>,
-                  comma-separated (wildcards like <code>image/*</code> allowed).
-                  Other types are converted to text where possible, so this is a
-                  capability setting, <strong>not a security filter</strong>.
-                  Leave empty to use the provider-type default.
-                </>
-              }
-              error={fieldErrors.passthroughFileTypes}
-            >
-              <Input
-                id="model-passthrough"
-                placeholder={fileTypesPlaceholder}
-                value={fileTypesText}
-                aria-invalid={!!fieldErrors.passthroughFileTypes}
-                onChange={(e) => {
-                  setFileTypesText(e.target.value);
-                  setFieldErrors((prev) =>
-                    retractFieldError(prev, "passthroughFileTypes"),
-                  );
-                }}
-              />
-            </ModelField>
-
-            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
-              <ModelField
-                htmlFor="model-extracted-chars"
-                label="Max extracted text characters"
-                hint="How much extracted document text a single file may add to a turn. Protects a small context window. Leave empty for the default."
-                error={fieldErrors.maxExtractedTextChars}
-              >
-                <Input
-                  id="model-extracted-chars"
-                  type="number"
-                  min={1}
-                  placeholder={String(DEFAULT_MAX_EXTRACTED_TEXT_CHARS)}
-                  value={draft.maxExtractedTextChars ?? ""}
-                  aria-invalid={!!fieldErrors.maxExtractedTextChars}
-                  onChange={(e) =>
-                    update(
-                      "maxExtractedTextChars",
-                      parsePositiveNumber(e.target.value),
-                    )
-                  }
-                />
-              </ModelField>
-
-              <ModelField
-                htmlFor="model-max-output-tokens"
-                label="Max output tokens"
-                hint={
-                  <>
-                    The most this model may produce in a{" "}
-                    <strong>single reply</strong> — a cap on the answer, not the
-                    window. Leave empty to use the vendor’s own default, which
-                    may be well below what the model can actually write.
-                  </>
-                }
-                error={fieldErrors.maxOutputTokens}
-              >
-                <Input
-                  id="model-max-output-tokens"
-                  type="number"
-                  min={1}
-                  placeholder="Provider default"
-                  value={draft.maxOutputTokens ?? ""}
-                  aria-invalid={!!fieldErrors.maxOutputTokens}
-                  onChange={(e) =>
-                    update(
-                      "maxOutputTokens",
-                      parsePositiveNumber(e.target.value),
-                    )
-                  }
-                />
-              </ModelField>
-            </div>
-          </FieldGroup>
-        </FieldSet>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit}>{model ? "Save" : "Add"}</Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit">{model ? "Save" : "Add"}</Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

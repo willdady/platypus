@@ -309,6 +309,43 @@ describe("ProviderForm model dialog", () => {
     ]);
   });
 
+  // The dialog is portalled out of the DOM tree but not the React tree, so its
+  // submit would otherwise bubble to a form the provider form sits in.
+  it("saves the model on Enter without submitting an enclosing form", () => {
+    const outerSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    setData({
+      id: "p1",
+      name: "OpenAI",
+      providerType: "OpenAI",
+      apiKey: "sk-test",
+      apiMode: "responses",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    } as unknown as Provider);
+    render(
+      <form onSubmit={outerSubmit}>
+        <ProviderForm orgId="org1" providerId="p1" />
+      </form>,
+    );
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Model ID", "gpt-5");
+    fireEvent.submit(within(dialog).getByLabelText("Model ID"));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(modelCard("gpt-5")).toBeInTheDocument();
+    expect(outerSubmit).not.toHaveBeenCalled();
+  });
+
+  it("focuses Model ID when the dialog opens", () => {
+    renderEditForm([]);
+
+    const dialog = openAddDialog();
+
+    expect(within(dialog).getByLabelText("Model ID")).toHaveFocus();
+  });
+
   it("leaves the form clean after Save with nothing changed", () => {
     renderEditForm([
       { id: "gpt-4o", alias: "flagship", passthroughFileTypes: ["image/*"] },
