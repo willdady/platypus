@@ -469,6 +469,7 @@ export function AppSidebar() {
           <div className="px-2 py-2">
             <SearchInput
               placeholder="Search chats..."
+              aria-label="Search chats"
               value={searchInput}
               onValueChange={setSearchInput}
               inputClassName="h-8"

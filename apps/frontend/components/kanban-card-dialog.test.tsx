@@ -102,7 +102,7 @@ describe("KanbanCardDialog add comment", () => {
 
     renderDialog();
 
-    fireEvent.change(screen.getByPlaceholderText("Add a comment..."), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
       target: { value: "A new comment" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
@@ -119,7 +119,7 @@ describe("KanbanCardDialog comment double submit", () => {
     const { fetchMock, resolve } = stubPendingSave({ id: "cm2" });
     renderDialog();
 
-    fireEvent.change(screen.getByPlaceholderText("Add a comment..."), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
       target: { value: "A new comment" },
     });
     const submit = screen.getByRole("button", { name: "Comment" });
@@ -163,7 +163,7 @@ describe("KanbanCardDialog comment double submit", () => {
     const { resolve } = stubPendingSave({ id: "cm2" });
     renderDialog();
 
-    fireEvent.change(screen.getByPlaceholderText("Add a comment..."), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
       target: { value: "A new comment" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
@@ -215,6 +215,24 @@ describe("KanbanCardDialog edit comment", () => {
       expect(toastErrorSpy).toHaveBeenCalledWith("Comment not found"),
     );
     expect(mutateCommentsSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("KanbanCardDialog editing", () => {
+  it("labels the title and description fields visibly", () => {
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+
+    const title = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Title",
+    });
+    expect(title).toHaveValue("Ship the release");
+    expect(title.labels?.[0]).toHaveTextContent("Title");
+    const description = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: "Description",
+    });
+    expect(description).toHaveValue("Details");
+    expect(description.labels?.[0]).toHaveTextContent("Description");
   });
 });
 
@@ -283,12 +301,14 @@ describe("KanbanCardDialog mobile composition", () => {
 
     // The comments section is not mounted until its tab is selected.
     expect(
-      screen.queryByPlaceholderText("Add a comment..."),
+      screen.queryByRole("textbox", { name: "Add a comment" }),
     ).not.toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Comments" }), {
       button: 0,
     });
     expect(screen.getByText("First comment")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Add a comment...")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Add a comment" }),
+    ).toBeInTheDocument();
   });
 });

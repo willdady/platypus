@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
@@ -665,19 +666,23 @@ export const AgentsList = ({
               Enter a name for the cloned agent.
             </DialogDescription>
           </DialogHeader>
-          <Input
-            value={cloneName}
-            onChange={(e) => {
-              setCloneName(e.target.value);
-              setCloneError(null);
-            }}
-            placeholder="Agent name"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleCloneConfirm();
-              }
-            }}
-          />
+          <Field>
+            <FieldLabel htmlFor="clone-agent-name">Name</FieldLabel>
+            <Input
+              id="clone-agent-name"
+              value={cloneName}
+              onChange={(e) => {
+                setCloneName(e.target.value);
+                setCloneError(null);
+              }}
+              placeholder="Agent name"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleCloneConfirm();
+                }
+              }}
+            />
+          </Field>
           {cloneError && (
             <p role="alert" className="text-destructive text-sm">
               {cloneError}

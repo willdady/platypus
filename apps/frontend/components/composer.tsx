@@ -142,7 +142,12 @@ export const Composer = ({
       <SelectionSubstitutedNotice substitution={modelSelection.substitution} />
       <FileCompatibilityWarning passthroughFileTypes={passthroughFileTypes} />
       <PromptInputBody>
-        <PromptInputTextarea ref={textareaRef} {...textareaProps} />
+        <PromptInputTextarea
+          ref={textareaRef}
+          {...textareaProps}
+          // After the spread: the name holds whatever a surface passes.
+          aria-label="Message"
+        />
       </PromptInputBody>
       <PromptInputFooter className="flex-wrap">
         <PromptInputTools>

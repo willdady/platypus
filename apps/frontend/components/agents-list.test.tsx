@@ -134,9 +134,12 @@ describe("AgentsList clone", () => {
   it("names the copy after the original", async () => {
     await renderAgents([workspaceAgent], "Clone");
 
-    expect(
-      screen.getByDisplayValue("Workspace Agent (copy)"),
-    ).toBeInTheDocument();
+    const name = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Name",
+    });
+    expect(name).toHaveValue("Workspace Agent (copy)");
+    // Named by a visible label, as in other form dialogs.
+    expect(name.labels?.[0]).toHaveTextContent("Name");
   });
 
   it("navigates to the new agent on success", async () => {

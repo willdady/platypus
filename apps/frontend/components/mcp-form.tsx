@@ -648,6 +648,7 @@ const McpForm = ({
               <div key={index} className="flex items-center gap-2">
                 <Input
                   placeholder="Header Name"
+                  aria-label={`Header ${index + 1} name`}
                   value={row.key}
                   onChange={(e) => {
                     const newRows = [...formData.headerRows];
@@ -662,6 +663,7 @@ const McpForm = ({
                 />
                 <Input
                   placeholder="Header Value"
+                  aria-label={`Header ${index + 1} value`}
                   value={row.value}
                   onChange={(e) => {
                     const newRows = [...formData.headerRows];

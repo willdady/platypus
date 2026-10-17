@@ -136,12 +136,13 @@ describe("WebhookForm validation error surfacing", () => {
     renderForm();
 
     fireEvent.click(screen.getByRole("button", { name: "Add header" }));
-    fireEvent.change(screen.getByPlaceholderText("Header name"), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 1 name" }), {
       target: { value: "X-Foo" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Add header" }));
-    const values = screen.getAllByPlaceholderText("Header value");
-    fireEvent.change(values[0], { target: { value: "bar" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 1 value" }), {
+      target: { value: "bar" },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -151,12 +152,15 @@ describe("WebhookForm validation error surfacing", () => {
 
     // Editing the unrelated second row must not strand or clear the first
     // row's error.
-    const names = screen.getAllByPlaceholderText("Header name");
-    fireEvent.change(names[1], { target: { value: "X-Bar" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 2 name" }), {
+      target: { value: "X-Bar" },
+    });
     expect(screen.getByText("Header value is too long")).toBeInTheDocument();
 
     // Editing the offending row retracts its own error.
-    fireEvent.change(names[0], { target: { value: "X-Foo-Fixed" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 1 name" }), {
+      target: { value: "X-Foo-Fixed" },
+    });
     await waitFor(() =>
       expect(
         screen.queryByText("Header value is too long"),

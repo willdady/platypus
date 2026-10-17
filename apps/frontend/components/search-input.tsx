@@ -9,6 +9,8 @@ type SearchInputProps = Omit<
 > & {
   value: string;
   onValueChange: (value: string) => void;
+  /** Required: the placeholder alone is not an accessible name. */
+  "aria-label": string;
   /** Applied to the wrapper; use `inputClassName` for the input itself. */
   className?: string;
   inputClassName?: string;

@@ -481,6 +481,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                     <div className="flex items-center gap-2">
                       <Input
                         placeholder="Header name"
+                        aria-label={`Header ${index + 1} name`}
                         value={header.key}
                         onChange={(e) =>
                           updateHeader(index, "key", e.target.value)
@@ -491,6 +492,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                       />
                       <Input
                         placeholder="Header value"
+                        aria-label={`Header ${index + 1} value`}
                         value={header.value}
                         onChange={(e) =>
                           updateHeader(index, "value", e.target.value)

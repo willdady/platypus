@@ -87,7 +87,7 @@ function renderSidebar() {
 }
 
 function search(value: string) {
-  fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search chats" }), {
     target: { value },
   });
   act(() => {
