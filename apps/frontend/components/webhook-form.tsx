@@ -10,6 +10,13 @@ import {
   FieldError,
   FieldTitle,
 } from "@/components/ui/field";
+import {
+  HEADER_ROW_LABELS,
+  KeyValueRowsEditor,
+  recordToRows,
+  rowsToRecord,
+  type KeyValueRow,
+} from "@/components/key-value-rows-editor";
 import { Input } from "@/components/ui/input";
 import {
   eventTriggerEventSchema,
@@ -29,7 +36,7 @@ import {
   FormSkeletonSet,
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { joinUrl } from "@/lib/utils";
@@ -38,7 +45,7 @@ import { writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
 import { useBackendUrl } from "@/components/auth-provider";
-import { Eye, EyeOff, Copy, RefreshCw, Plus, X } from "lucide-react";
+import { Eye, EyeOff, Copy, RefreshCw } from "lucide-react";
 import { workspaceRoutes } from "@/lib/routes";
 
 interface Webhook {
@@ -110,7 +117,7 @@ const INITIAL_DATA = {
   url: "",
   enabled: true,
   events: [...ALL_EVENTS] as string[],
-  headers: [] as { key: string; value: string }[],
+  headers: [] as KeyValueRow[],
 };
 
 /** A switch beside a single-line label, as the Enabled and event rows are. */
@@ -185,29 +192,16 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
       url: webhook.url,
       enabled: webhook.enabled,
       events: webhook.events ?? [...ALL_EVENTS],
-      headers: webhook.headers
-        ? Object.entries(webhook.headers).map(([key, value]) => ({
-            key,
-            value,
-          }))
-        : [],
+      headers: recordToRows(webhook.headers),
     }),
     retractableFields: RETRACTABLE_FIELDS,
-    buildPayload: (data) => {
-      const headersObj: Record<string, string> = {};
-      for (const h of data.headers) {
-        if (h.key.trim()) {
-          headersObj[h.key.trim()] = h.value;
-        }
-      }
-      return {
-        name: data.name,
-        url: data.url,
-        enabled: data.enabled,
-        events: data.events,
-        headers: Object.keys(headersObj).length > 0 ? headersObj : null,
-      };
-    },
+    buildPayload: (data) => ({
+      name: data.name,
+      url: data.url,
+      enabled: data.enabled,
+      events: data.events,
+      headers: rowsToRecord(data.headers, null),
+    }),
     successMessage: () => (isEditMode ? "Webhook updated" : "Webhook created"),
     onSuccess: () =>
       router.push(workspaceRoutes(orgId, workspaceId).settings.webhooks),
@@ -274,47 +268,17 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
   const headerRowErrorKey = (key: string) => `headers.${key}`;
 
-  const addHeader = () => {
-    clearErrors("headers");
-    setFormData((prev) => ({
-      ...prev,
-      headers: [...prev.headers, { key: "", value: "" }],
-    }));
-  };
-
   // Retract the whole-field "headers" error (any edit is an attempt to fix
-  // it) and the row-level error keyed to this entry, without touching errors
-  // stranded on other rows.
-  const clearHeaderRowError = useCallback(
-    (index: number) => {
-      const rowKey = headerRowErrorKey(headers[index].key);
-      setValidationErrors((prev) =>
-        retractExactKeys(prev, ["headers", rowKey]),
-      );
-    },
-    [headers, setValidationErrors],
-  );
-
-  const removeHeader = (index: number) => {
-    clearHeaderRowError(index);
-    setFormData((prev) => ({
-      ...prev,
-      headers: prev.headers.filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateHeader = (
-    index: number,
-    field: "key" | "value",
-    value: string,
-  ) => {
-    clearHeaderRowError(index);
-    setFormData((prev) => ({
-      ...prev,
-      headers: prev.headers.map((h, i) =>
-        i === index ? { ...h, [field]: value } : h,
-      ),
-    }));
+  // it) and the row-level error keyed to the edited entry, without touching
+  // errors stranded on other rows.
+  const changeHeaders = (rows: KeyValueRow[], changed?: KeyValueRow) => {
+    if (changed) {
+      const keys = ["headers", headerRowErrorKey(changed.key)];
+      setValidationErrors((prev) => retractExactKeys(prev, keys));
+    } else {
+      clearErrors("headers");
+    }
+    setFormData((prev) => ({ ...prev, headers: rows }));
   };
 
   // parseValidationErrors mirrors any headers.<key> issue onto the bare
@@ -472,61 +436,16 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             <FieldDescription className="mb-3">
               Additional headers to include with each webhook request.
             </FieldDescription>
-            <div className="space-y-2">
-              {headers.map((header, index) => {
-                const rowError =
-                  validationErrors[headerRowErrorKey(header.key)];
-                return (
-                  <div key={index} className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Input
-                        placeholder="Header name"
-                        aria-label={`Header ${index + 1} name`}
-                        value={header.key}
-                        onChange={(e) =>
-                          updateHeader(index, "key", e.target.value)
-                        }
-                        disabled={isSubmitting}
-                        aria-invalid={!!rowError}
-                        className="flex-1"
-                      />
-                      <Input
-                        placeholder="Header value"
-                        aria-label={`Header ${index + 1} value`}
-                        value={header.value}
-                        onChange={(e) =>
-                          updateHeader(index, "value", e.target.value)
-                        }
-                        disabled={isSubmitting}
-                        aria-invalid={!!rowError}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        aria-label="Remove header"
-                        className="shrink-0 cursor-pointer"
-                        onClick={() => removeHeader(index)}
-                        disabled={isSubmitting}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {rowError && <FieldError>{rowError}</FieldError>}
-                  </div>
-                );
-              })}
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={addHeader}
-                disabled={isSubmitting}
-              >
-                <Plus className="h-4 w-4" /> Add header
-              </Button>
-            </div>
+            <KeyValueRowsEditor
+              rows={headers}
+              onChange={changeHeaders}
+              disabled={isSubmitting}
+              keyPlaceholder="Header name"
+              valuePlaceholder="Header value"
+              labels={HEADER_ROW_LABELS}
+              addLabel="Add header"
+              rowError={(row) => validationErrors[headerRowErrorKey(row.key)]}
+            />
             {validationErrors.headers && !hasHeaderRowError && (
               <FieldError>{validationErrors.headers}</FieldError>
             )}

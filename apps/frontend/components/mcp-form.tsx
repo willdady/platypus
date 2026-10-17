@@ -9,7 +9,13 @@ import {
   FieldError,
   FieldTitle,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import {
+  HEADER_ROW_LABELS,
+  KeyValueRowsEditor,
+  recordToRows,
+  rowsToRecord,
+  type KeyValueRow,
+} from "@/components/key-value-rows-editor";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
 import { RevealableInput } from "@/components/ui/revealable-input";
@@ -36,22 +42,18 @@ import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/components/auth-provider";
 import {
-  Trash2,
   Plug,
   Check,
   X,
   ExternalLink,
   ShieldCheck,
   ShieldOff,
-  Plus,
 } from "lucide-react";
 import {
   OAUTH_MCP_SUCCESS_EVENT,
   OAUTH_MCP_ERROR_EVENT,
 } from "@/lib/constants";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
-
-type HeaderRow = { key: string; value: string };
 
 type McpRecord = MCP & {
   oauthAuthorized?: boolean;
@@ -62,7 +64,7 @@ type McpFormData = Omit<
   MCP,
   "id" | "createdAt" | "updatedAt" | "workspaceId" | "oauthAuthorized" | "slug"
 > & {
-  headerRows: HeaderRow[];
+  headerRows: KeyValueRow[];
 };
 
 const RETRACTABLE_FIELDS = [
@@ -153,18 +155,6 @@ const McpForm = ({
 
   const router = useRouter();
 
-  /** Convert headerRows to a Record, filtering out empty keys */
-  const buildHeadersObject = (): Record<string, string> | undefined => {
-    const headers: Record<string, string> = {};
-    for (const row of formData.headerRows) {
-      const key = row.key.trim();
-      if (key) {
-        headers[key] = row.value;
-      }
-    }
-    return Object.keys(headers).length > 0 ? headers : undefined;
-  };
-
   const {
     record: mcp,
     mutateRecord: mutateMcp,
@@ -206,10 +196,7 @@ const McpForm = ({
       oauthClientId: mcp.oauthClientId || "",
       oauthClientSecret: "",
       oauthRequestedScope: mcp.oauthRequestedScope || "",
-      headerRows: Object.entries(mcp.headers ?? {}).map(([key, value]) => ({
-        key,
-        value,
-      })),
+      headerRows: recordToRows(mcp.headers),
     }),
     onSeed: (mcp) => {
       seededClientId.current = mcp.oauthClientId || "";
@@ -221,7 +208,7 @@ const McpForm = ({
       ...(workspaceId ? { workspaceId } : { organizationId: orgId }),
       name: data.name,
       url: data.url,
-      headers: buildHeadersObject(),
+      headers: rowsToRecord(data.headerRows, undefined),
       authType: data.authType,
       bearerToken: data.authType === "Bearer" ? data.bearerToken : undefined,
       oauthClientId:
@@ -319,7 +306,7 @@ const McpForm = ({
     try {
       const payload: Record<string, unknown> = {
         url: formData.url,
-        headers: buildHeadersObject(),
+        headers: rowsToRecord(formData.headerRows, undefined),
         authType: formData.authType,
         bearerToken:
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
@@ -644,79 +631,19 @@ const McpForm = ({
                 Optional HTTP headers sent with every request to the MCP server.
               </FieldDescription>
             </div>
-            {formData.headerRows.map((row, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Input
-                  placeholder="Header Name"
-                  aria-label={`Header ${index + 1} name`}
-                  value={row.key}
-                  onChange={(e) => {
-                    const newRows = [...formData.headerRows];
-                    newRows[index] = { ...newRows[index], key: e.target.value };
-                    setFormData((prev) => ({
-                      ...prev,
-                      headerRows: newRows,
-                    }));
-                    setTestResult(null);
-                  }}
-                  disabled={isSubmitting}
-                />
-                <Input
-                  placeholder="Header Value"
-                  aria-label={`Header ${index + 1} value`}
-                  value={row.value}
-                  onChange={(e) => {
-                    const newRows = [...formData.headerRows];
-                    newRows[index] = {
-                      ...newRows[index],
-                      value: e.target.value,
-                    };
-                    setFormData((prev) => ({
-                      ...prev,
-                      headerRows: newRows,
-                    }));
-                    setTestResult(null);
-                  }}
-                  disabled={isSubmitting}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Remove header"
-                  className="shrink-0 cursor-pointer"
-                  onClick={() => {
-                    const newRows = formData.headerRows.filter(
-                      (_, i) => i !== index,
-                    );
-                    setFormData((prev) => ({
-                      ...prev,
-                      headerRows: newRows,
-                    }));
-                    setTestResult(null);
-                  }}
-                  disabled={isSubmitting}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              onClick={() =>
-                setFormData((prev) => ({
-                  ...prev,
-                  headerRows: [...prev.headerRows, { key: "", value: "" }],
-                }))
-              }
+            <KeyValueRowsEditor
+              rows={formData.headerRows}
+              onChange={(rows, changed) => {
+                setFormData((prev) => ({ ...prev, headerRows: rows }));
+                // An empty new row changes nothing that was tested.
+                if (changed) setTestResult(null);
+              }}
               disabled={isSubmitting}
-            >
-              <Plus className="h-4 w-4" />
-              Add header
-            </Button>
+              keyPlaceholder="Header Name"
+              valuePlaceholder="Header Value"
+              labels={HEADER_ROW_LABELS}
+              addLabel="Add header"
+            />
           </div>
 
           {/* OAuth Authorization Section */}

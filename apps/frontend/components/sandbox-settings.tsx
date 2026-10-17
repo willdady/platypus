@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { toast } from "sonner";
-import { Box, KeyRound, Plus, Trash2, X } from "lucide-react";
+import { Box, KeyRound, Plus, Trash2 } from "lucide-react";
 import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -13,6 +13,13 @@ import { scopedUrl, writeAt, type FormDraft } from "@/lib/api-write";
 import { optionalFetcher } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  KeyValueRowsEditor,
+  newRow,
+  recordToRows,
+  rowsToRecord,
+  type KeyValueRow,
+} from "@/components/key-value-rows-editor";
 import { Switch } from "@/components/ui/switch";
 import {
   Field,
@@ -49,20 +56,15 @@ const DOCKER_BACKEND = "docker";
 const SSH_BACKEND = "ssh";
 const DEFAULT_SSH_PORT = "22";
 
-// Rows are kept as an ordered array (not a Record) so a user can edit keys, add
-// empties, and tolerate duplicate-during-edit without the UI reshuffling on
-// every keystroke. Converted on save.
-type Row = { key: string; value: string };
-
 type SandboxFormData = {
   name: string;
   backend: string;
   // Two-tier env (ADR-0006): admin-managed vs owner-managed.
-  adminEnv: Row[];
-  userEnv: Row[];
+  adminEnv: KeyValueRow[];
+  userEnv: KeyValueRow[];
   // Docker host reachability (ADR-0005), admin-only.
   networks: string[];
-  extraHosts: Row[]; // key = hostname, value = ip / host-gateway
+  extraHosts: KeyValueRow[]; // key = hostname, value = ip / host-gateway
   // SSH connection (ADR-0012), admin-only. Port is kept as a string for the
   // input and parsed on save. privateKey/passphrase are credentials: GET never
   // returns them (only `hasCredentials`), so blank means "keep the stored key".
@@ -93,35 +95,22 @@ const DEFAULT_FORM: SandboxFormData = {
   sshPassphrase: "",
 };
 
-const recordToRows = (rec: Record<string, string> | undefined): Row[] =>
-  Object.entries(rec ?? {}).map(([key, value]) => ({ key, value }));
-
-const rowsToRecord = (rows: Row[]): Record<string, string> => {
-  const out: Record<string, string> = {};
-  for (const { key, value } of rows) {
-    const trimmedKey = key.trim();
-    if (trimmedKey === "") continue;
-    out[trimmedKey] = value;
-  }
-  return out;
-};
-
 // extraHosts travel as `["hostname:target", ...]`. Split on the first colon so
 // IPv6 targets (which contain colons) survive intact.
-const extraHostsToRows = (entries: string[] | undefined): Row[] =>
+const extraHostsToRows = (entries: string[] | undefined): KeyValueRow[] =>
   (entries ?? []).map((entry) => {
     const idx = entry.indexOf(":");
     return idx === -1
-      ? { key: entry, value: "" }
-      : { key: entry.slice(0, idx), value: entry.slice(idx + 1) };
+      ? newRow(entry)
+      : newRow(entry.slice(0, idx), entry.slice(idx + 1));
   });
 
-const rowsToExtraHosts = (rows: Row[]): string[] =>
+const rowsToExtraHosts = (rows: KeyValueRow[]): string[] =>
   rows
     .filter((r) => r.key.trim() !== "")
     .map((r) => `${r.key.trim()}:${r.value.trim()}`);
 
-const findDuplicateKey = (rows: Row[]): string | null => {
+const findDuplicateKey = (rows: KeyValueRow[]): string | null => {
   const seen = new Set<string>();
   for (const { key } of rows) {
     const trimmed = key.trim();
@@ -134,85 +123,6 @@ const findDuplicateKey = (rows: Row[]): string | null => {
 
 const isForceRetryError = (errorMessage: unknown): boolean =>
   typeof errorMessage === "string" && errorMessage.includes("force=true");
-
-// Reusable key/value editor used for both env tiers and extraHosts.
-const RowsEditor = ({
-  rows,
-  onChange,
-  disabled,
-  readOnly,
-  keyPlaceholder,
-  valuePlaceholder,
-  maskValue,
-  addLabel,
-}: {
-  rows: Row[];
-  onChange: (rows: Row[]) => void;
-  disabled: boolean;
-  readOnly?: boolean;
-  keyPlaceholder: string;
-  valuePlaceholder: string;
-  maskValue?: boolean;
-  addLabel: string;
-}) => (
-  <div className="flex flex-col gap-2">
-    {rows.map((row, idx) => (
-      <div key={idx} className="flex gap-2 items-start">
-        <Input
-          placeholder={keyPlaceholder}
-          value={row.key}
-          aria-label={`${keyPlaceholder} ${idx + 1}`}
-          disabled={disabled || readOnly}
-          onChange={(e) => {
-            const next = [...rows];
-            next[idx] = { ...next[idx], key: e.target.value };
-            onChange(next);
-          }}
-          className="font-mono"
-        />
-        <Input
-          placeholder={valuePlaceholder}
-          value={row.value}
-          aria-label={`${valuePlaceholder} ${idx + 1}`}
-          disabled={disabled || readOnly}
-          type={maskValue ? "password" : "text"}
-          autoComplete="off"
-          onChange={(e) => {
-            const next = [...rows];
-            next[idx] = { ...next[idx], value: e.target.value };
-            onChange(next);
-          }}
-          className="font-mono"
-        />
-        {!readOnly && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={`Remove row ${idx + 1}`}
-            disabled={disabled}
-            onClick={() => onChange(rows.filter((_, i) => i !== idx))}
-          >
-            <X />
-          </Button>
-        )}
-      </div>
-    ))}
-    {!readOnly && (
-      <div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          onClick={() => onChange([...rows, { key: "", value: "" }])}
-        >
-          <Plus /> {addLabel}
-        </Button>
-      </div>
-    )}
-  </div>
-);
 
 // One label / control / description field, at the form's sizes.
 const FieldSkeleton = ({
@@ -428,13 +338,13 @@ const SandboxSettings = ({
           backend: formData.backend,
           config,
           ...credentialsPayload,
-          adminEnv: rowsToRecord(formData.adminEnv),
-          userEnv: rowsToRecord(formData.userEnv),
+          adminEnv: rowsToRecord(formData.adminEnv, {}),
+          userEnv: rowsToRecord(formData.userEnv, {}),
         }
       : {
           name: formData.name,
           backend: formData.backend,
-          userEnv: rowsToRecord(formData.userEnv),
+          userEnv: rowsToRecord(formData.userEnv, {}),
         };
 
     const outcome = draft
@@ -756,7 +666,7 @@ const SandboxSettings = ({
                   <span className="font-mono">host-gateway</span>). Lets agent
                   code reach host services. Off by default.
                 </FieldDescription>
-                <RowsEditor
+                <KeyValueRowsEditor
                   rows={formData.extraHosts}
                   onChange={(rows) => {
                     clearError("config");
@@ -766,6 +676,7 @@ const SandboxSettings = ({
                   keyPlaceholder="hostname"
                   valuePlaceholder="host-gateway"
                   addLabel="Add host"
+                  mono
                 />
                 {validationErrors.config && (
                   <FieldError>{validationErrors.config}</FieldError>
@@ -987,7 +898,7 @@ const SandboxSettings = ({
                 precedence over workspace-owner variables. Kept server-side,
                 never sent to the model.
               </FieldDescription>
-              <RowsEditor
+              <KeyValueRowsEditor
                 rows={formData.adminEnv}
                 onChange={(rows) => {
                   clearError("adminEnv");
@@ -997,6 +908,7 @@ const SandboxSettings = ({
                 keyPlaceholder="KEY"
                 valuePlaceholder="value"
                 maskValue
+                mono
                 addLabel="Add variable"
               />
               {validationErrors.adminEnv && (
@@ -1025,7 +937,7 @@ const SandboxSettings = ({
                 <p className="text-xs text-muted-foreground mb-1">
                   Managed by admin (read-only):
                 </p>
-                <RowsEditor
+                <KeyValueRowsEditor
                   rows={formData.adminEnv}
                   onChange={() => {}}
                   disabled
@@ -1033,10 +945,11 @@ const SandboxSettings = ({
                   keyPlaceholder="KEY"
                   valuePlaceholder="(hidden)"
                   addLabel=""
+                  mono
                 />
               </div>
             )}
-            <RowsEditor
+            <KeyValueRowsEditor
               rows={formData.userEnv}
               onChange={(rows) => {
                 clearError("userEnv");
@@ -1046,6 +959,7 @@ const SandboxSettings = ({
               keyPlaceholder="KEY"
               valuePlaceholder="value"
               maskValue
+              mono
               addLabel="Add variable"
             />
             {validationErrors.userEnv && (
