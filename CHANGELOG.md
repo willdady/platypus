@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.23.0](https://github.com/willdady/platypus/compare/v3.22.0...v3.23.0) (2026-10-17)
+
+
+### Features
+
+* **frontend:** group adjacent tool calls into a Tool call group ([#1578](https://github.com/willdady/platypus/issues/1578)) ([8593bf1](https://github.com/willdady/platypus/commit/8593bf1793a63f6ad94b57949b245783bd36b965))
+* **frontend:** keep Skills and Trigger list filters in the URL ([#1534](https://github.com/willdady/platypus/issues/1534)) ([636cc9f](https://github.com/willdady/platypus/commit/636cc9fd9c0e35a6d50834ff992445b1d75a32d6))
+* **frontend:** optimistic enabled toggles and pins with per-item pending state ([#1541](https://github.com/willdady/platypus/issues/1541)) ([b4593a7](https://github.com/willdady/platypus/commit/b4593a7b0690a0fb6d86144e55af8603ff183d5f))
+* **frontend:** return to the requested page after sign-in ([#1533](https://github.com/willdady/platypus/issues/1533)) ([c5b8d2b](https://github.com/willdady/platypus/commit/c5b8d2b037d2b748a3094d258d36db580f15e837))
+* **frontend:** show provider models as cards edited in an Add/Edit model dialog ([#1570](https://github.com/willdady/platypus/issues/1570)) ([5b08e0b](https://github.com/willdady/platypus/commit/5b08e0ba3ceb6514d40d12b072a84fff8cccb9f1))
+* **frontend:** warn before discarding unsaved changes ([#1543](https://github.com/willdady/platypus/issues/1543)) ([969556d](https://github.com/willdady/platypus/commit/969556d583519e2594606a736468e6467c14c8f2))
+* **frontend:** warn when an Organization resource is attached to no workspaces ([#1536](https://github.com/willdady/platypus/issues/1536)) ([aa92b77](https://github.com/willdady/platypus/commit/aa92b776692fffbb61d4893ec4d012c1ce5b4536))
+
+
+### Bug Fixes
+
+* **backend:** record tool argument streaming as a tool-input Run event ([#1575](https://github.com/willdady/platypus/issues/1575)) ([291215a](https://github.com/willdady/platypus/commit/291215aa13fe37867195207035161944bd703e4a))
+* **frontend:** label the MCP settings nav link "MCP Servers" ([#1556](https://github.com/willdady/platypus/issues/1556)) ([74683a9](https://github.com/willdady/platypus/commit/74683a99c3012c17588859bf39fb08b43a12ed0d))
+* **frontend:** replace full-screen loading skeleton with a delayed spinner ([#1545](https://github.com/willdady/platypus/issues/1545)) ([47cbd19](https://github.com/willdady/platypus/commit/47cbd19689c1747fcaaf488826b091b01b6b4cb7))
+
 ## [3.22.0](https://github.com/willdady/platypus/compare/v3.21.0...v3.22.0) (2026-10-17)
 
 
