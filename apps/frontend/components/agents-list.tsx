@@ -8,7 +8,6 @@ import {
   ItemDescription,
   ItemContent,
   ItemMedia,
-  ItemFooter,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { OrganizationBadge } from "@/components/resource-list";
@@ -89,14 +88,10 @@ type AgentWithScope = Serialized<Agent> & {
   scope?: "organization" | "workspace";
 };
 
-// The card's New chat + menu sit beside the content from `xl`, and in a footer
-// row under it below that — the same split the loaded card makes.
-const agentCardActions = (
-  <>
-    <Skeleton className="h-8 w-24" />
-    <IconButtonSkeleton />
-  </>
-);
+// The card's New chat + menu sit beside the content from `xl`, and wrap to a
+// full-width row under it (indented past the avatar) below that.
+const agentCardActionsClassName =
+  "basis-full justify-between pl-16 xl:basis-auto xl:pl-0";
 
 /** The agent cards as they load; the workspace home draws them too. */
 export function AgentCardsSkeleton({ cards }: { cards?: number }) {
@@ -119,12 +114,10 @@ export function AgentCardsSkeleton({ cards }: { cards?: number }) {
         </div>
       }
       actions={
-        <ItemActions className="hidden xl:flex">{agentCardActions}</ItemActions>
-      }
-      footer={
-        <ItemFooter className="xl:hidden mt-0 pl-16">
-          {agentCardActions}
-        </ItemFooter>
+        <ItemActions className={agentCardActionsClassName}>
+          <Skeleton className="h-8 w-24" />
+          <IconButtonSkeleton />
+        </ItemActions>
       }
     />
   );
@@ -477,7 +470,7 @@ export function AgentsList({
               )}
             </div>
           </ItemContent>
-          <ItemActions className="hidden xl:flex">
+          <ItemActions className={agentCardActionsClassName}>
             <Button size="sm" asChild>
               <Link href={routes.chat.forAgent(agent.id)}>
                 <BotMessageSquare /> New chat
@@ -485,14 +478,6 @@ export function AgentsList({
             </Button>
             {renderMenu(agent)}
           </ItemActions>
-          <ItemFooter className="xl:hidden mt-0 pl-16">
-            <Button size="sm" asChild>
-              <Link href={routes.chat.forAgent(agent.id)}>
-                <BotMessageSquare /> New chat
-              </Link>
-            </Button>
-            {renderMenu(agent)}
-          </ItemFooter>
         </Item>
       </li>
     );

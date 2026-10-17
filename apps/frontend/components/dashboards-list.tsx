@@ -1,8 +1,11 @@
 "use client";
 
-import { EntityCardList, type EntityCardListConfig } from "./entity-card-list";
+import {
+  WorkspaceEntityCardList,
+  type WorkspaceEntityCardListConfig,
+} from "./entity-card-list";
 
-const dashboardsConfig: EntityCardListConfig = {
+const dashboardsConfig: WorkspaceEntityCardListConfig = {
   entity: "dashboards",
   labels: {
     deleteTitle: "Delete Dashboard",
@@ -20,7 +23,7 @@ export function DashboardsList({
   workspaceId: string;
 }) {
   return (
-    <EntityCardList
+    <WorkspaceEntityCardList
       orgId={orgId}
       workspaceId={workspaceId}
       config={dashboardsConfig}

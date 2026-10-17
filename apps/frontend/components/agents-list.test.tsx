@@ -355,6 +355,35 @@ describe("AgentsList list states", () => {
   });
 });
 
+describe("AgentsList card actions", () => {
+  it("renders each card's New chat and menu once", async () => {
+    await renderAgents([workspaceAgent, orgAgent]);
+
+    for (const item of screen.getAllByRole("listitem")) {
+      expect(
+        within(item).getAllByRole("link", { name: /New chat/ }),
+      ).toHaveLength(1);
+      expect(item.querySelectorAll('[aria-haspopup="menu"]')).toHaveLength(1);
+    }
+  });
+
+  it("draws each skeleton card's actions once", async () => {
+    mockScopedSWR({
+      "/agents": { isLoading: true },
+      "/providers": [provider],
+    });
+    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
+
+    const cards = screen.getAllByRole("listitem");
+    expect(cards.length).toBeGreaterThan(0);
+    for (const card of cards) {
+      expect(card.querySelectorAll('[data-slot="item-actions"]')).toHaveLength(
+        1,
+      );
+    }
+  });
+});
+
 describe("AgentsList menu", () => {
   afterEach(() => {
     authState.ownsWorkspace = undefined;

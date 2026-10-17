@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   Item,
   ItemTitle,
@@ -16,15 +17,125 @@ import { useScopedList } from "@/hooks/use-scoped-list";
 import { writeEntity } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 
-/** The card fields Boards and Dashboards both expose. */
+/** The card fields every entity card shows. */
 type EntityCard = {
   readonly id: string;
   readonly name: string;
   readonly description?: string | null;
 };
 
-export type EntityCardListConfig = {
+/** What `wrap` may add to a card it surrounds. */
+type CardExtras = {
+  /** Classes on the `Item`: `border-warning`. */
+  className?: string;
+  /** Rendered after `meta`. */
+  meta?: ReactNode;
+};
+
+/**
+ * The `grid-cols-1 lg:grid-cols-2` card list of outline `Item` cards, with
+ * its loading, failed and empty states. The caller fetches, sorts, and owns
+ * the dialogs and controls around it; the slots fill in what differs.
+ */
+export function EntityCardList<T extends EntityCard>({
+  items,
+  isLoading,
+  error,
+  subject,
+  skeleton,
+  empty,
+  descriptionClassName = "line-clamp-2",
+  href,
+  media,
+  meta,
+  menu,
+  wrap,
+}: {
+  items: readonly T[];
+  isLoading: boolean;
+  error: unknown;
+  /** The plural noun loading or failing to load: "boards", "shared agents". */
+  subject: string;
+  /** Drawn in the loading region. */
+  skeleton: ReactNode;
+  /** Drawn when there are no items: a `ListState` or an `EmptyCard`. */
+  empty: ReactNode;
+  /** Classes on the description, after `text-xs`. */
+  descriptionClassName?: string;
+  /** The card links here; without it the card is not a link. */
+  href?: (item: T) => string;
+  /** Leads the card: an avatar. */
+  media?: (item: T) => ReactNode;
+  /** Rendered under the description: a count, a badge. */
+  meta?: (item: T) => ReactNode;
+  /** The card's `RowActionsMenu`; without it the card has no actions. */
+  menu?: (item: T) => ReactNode;
+  /** Surrounds each card, drawing it with `card`: a per-card read. */
+  wrap?: (item: T, card: (extras?: CardExtras) => ReactNode) => ReactNode;
+}) {
+  if (isLoading) {
+    return (
+      <LoadingRegion label={`Loading ${subject}`}>{skeleton}</LoadingRegion>
+    );
+  }
+
+  if (error) {
+    return <ListError error={error} subject={subject} />;
+  }
+
+  if (!items.length) {
+    return empty;
+  }
+
+  const renderCard = (item: T, extras: CardExtras = {}) => {
+    const content = (
+      <>
+        {media?.(item)}
+        <ItemContent>
+          <ItemTitle>{item.name}</ItemTitle>
+          {item.description && (
+            <ItemDescription className={cn("text-xs", descriptionClassName)}>
+              {item.description}
+            </ItemDescription>
+          )}
+          {meta?.(item)}
+          {extras.meta}
+        </ItemContent>
+        {menu && <ItemActions>{menu(item)}</ItemActions>}
+      </>
+    );
+    const link = href?.(item);
+    return link ? (
+      <Item
+        variant="outline"
+        className={cn("h-full cursor-pointer", extras.className)}
+        asChild
+      >
+        <Link href={link}>{content}</Link>
+      </Item>
+    ) : (
+      <Item variant="outline" className={cn("h-full", extras.className)}>
+        {content}
+      </Item>
+    );
+  };
+
+  return (
+    <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
+      {items.map((item) => (
+        <li key={item.id}>
+          {wrap
+            ? wrap(item, (extras) => renderCard(item, extras))
+            : renderCard(item)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export type WorkspaceEntityCardListConfig = {
   /** Collection entity as the API spells it, and the key to its routes. */
   readonly entity: "boards" | "dashboards";
   readonly labels: {
@@ -45,14 +156,14 @@ export type EntityCardListConfig = {
  * same edit/delete menu; the entity noun, delete copy, and confirmation
  * phrase are the parameters.
  */
-export function EntityCardList({
+export function WorkspaceEntityCardList({
   orgId,
   workspaceId,
   config,
 }: {
   orgId: string;
   workspaceId: string;
-  config: EntityCardListConfig;
+  config: WorkspaceEntityCardListConfig;
 }) {
   const {
     results: rows,
@@ -78,49 +189,24 @@ export function EntityCardList({
       ),
   });
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label={`Loading ${config.entity}`}>
-        <CardGridSkeleton />
-      </LoadingRegion>
-    );
-  }
-
-  if (error) {
-    return <ListError error={error} subject={config.entity} />;
-  }
-
-  if (!cards.length) {
-    return <ListState variant="empty">No {config.entity} yet.</ListState>;
-  }
-
   return (
     <>
-      <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
-        {cards.map((card) => (
-          <li key={card.id}>
-            <Item variant="outline" className="h-full cursor-pointer" asChild>
-              <Link href={routes.detail(card.id)}>
-                <ItemContent>
-                  <ItemTitle>{card.name}</ItemTitle>
-                  {card.description && (
-                    <ItemDescription className="text-xs line-clamp-2">
-                      {card.description}
-                    </ItemDescription>
-                  )}
-                </ItemContent>
-                <ItemActions>
-                  <RowActionsMenu
-                    name={card.name}
-                    edit={{ href: routes.settings(card.id) }}
-                    remove={{ onSelect: () => deleteFlow.request(card) }}
-                  />
-                </ItemActions>
-              </Link>
-            </Item>
-          </li>
-        ))}
-      </ul>
+      <EntityCardList
+        items={cards}
+        isLoading={isLoading}
+        error={error}
+        subject={config.entity}
+        skeleton={<CardGridSkeleton />}
+        empty={<ListState variant="empty">No {config.entity} yet.</ListState>}
+        href={(card) => routes.detail(card.id)}
+        menu={(card) => (
+          <RowActionsMenu
+            name={card.name}
+            edit={{ href: routes.settings(card.id) }}
+            remove={{ onSelect: () => deleteFlow.request(card) }}
+          />
+        )}
+      />
 
       <DeleteConfirmDialog
         open={deleteFlow.open}

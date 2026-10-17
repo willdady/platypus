@@ -1,21 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item";
+import { ItemMedia } from "@/components/ui/item";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
+import { EntityCardList } from "@/components/entity-card-list";
 import {
   CardGridSkeleton,
   IconButtonSkeleton,
-  LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { RowActionsMenu } from "@/components/row-actions-menu";
@@ -31,7 +23,6 @@ import {
   UnattachedWarning,
 } from "@/components/manage-sharing";
 import { DeleteBlockedDialog } from "@/components/shared-resource-actions";
-import { cn } from "@/lib/utils";
 import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { orgRoutes } from "@/lib/routes";
@@ -73,119 +64,108 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
     onAllowed: deleteFlow.request,
   });
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading shared agents">
-        <CardGridSkeleton
-          media
-          descriptionLines={2}
-          extra={
-            canManage && (
-              // The "Shared with N workspaces" badge.
-              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-32" />
-            )
-          }
-          // The row menu is an Org Admin's alone, as on the loaded card.
-          actions={canManage ? <IconButtonSkeleton /> : null}
-        />
-      </LoadingRegion>
-    );
-  }
-
-  if (error) {
-    return <ListError error={error} subject="shared agents" />;
-  }
-
-  if (agents.length === 0) {
-    return (
-      <EmptyCard
-        icon={<Bot />}
-        title="No shared agents yet"
-        description="Promote a workspace agent to the organization to share it across workspaces."
-      />
-    );
-  }
-
   return (
     <>
-      <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
-        {agents.map((agent) => (
-          <li key={agent.id}>
-            <AttachmentCount
-              orgId={canManage ? orgId : null}
-              resourceType="agent"
-              resourceId={agent.id}
+      <EntityCardList
+        items={agents}
+        isLoading={isLoading}
+        error={error}
+        subject="shared agents"
+        skeleton={
+          <CardGridSkeleton
+            media
+            descriptionLines={2}
+            extra={
+              canManage && (
+                // The "Shared with N workspaces" badge.
+                <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-32" />
+              )
+            }
+            // The row menu is an Org Admin's alone, as on the loaded card.
+            actions={canManage ? <IconButtonSkeleton /> : null}
+          />
+        }
+        empty={
+          <EmptyCard
+            icon={<Bot />}
+            title="No shared agents yet"
+            description="Promote a workspace agent to the organization to share it across workspaces."
+          />
+        }
+        descriptionClassName="line-clamp-3"
+        media={(agent) =>
+          agent.avatarUrl ? (
+            <ItemMedia variant="image" className="size-12 rounded-full">
+              {/* Agent avatar URL is user-supplied (arbitrary host); not
+              routable through the Next image optimizer. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={agent.avatarUrl}
+                alt={agent.name}
+                className="size-full object-cover"
+                width={48}
+                height={48}
+                loading="lazy"
+                decoding="async"
+              />
+            </ItemMedia>
+          ) : (
+            <ItemMedia
+              variant="icon"
+              className="size-12 rounded-full [&_svg]:!size-7"
             >
-              {(count) => (
-                <Item
-                  variant="outline"
-                  className={cn("h-full", count === 0 && "border-warning")}
-                >
-                  {agent.avatarUrl ? (
-                    <ItemMedia variant="image" className="size-12 rounded-full">
-                      {/* Agent avatar URL is user-supplied (arbitrary host); not
-                      routable through the Next image optimizer. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={agent.avatarUrl}
-                        alt={agent.name}
-                        className="size-full object-cover"
-                        width={48}
-                        height={48}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </ItemMedia>
-                  ) : (
-                    <ItemMedia
-                      variant="icon"
-                      className="size-12 rounded-full [&_svg]:!size-7"
-                    >
-                      <Bot className="size-7 text-muted-foreground" />
-                    </ItemMedia>
-                  )}
-                  <ItemContent>
-                    <ItemTitle>{agent.name}</ItemTitle>
-                    <ItemDescription className="text-xs line-clamp-3">
-                      {agent.description}
-                    </ItemDescription>
-                    {canManage && (
-                      <div className="mt-1">
-                        <SharedWithBadge
-                          orgId={orgId}
-                          resourceType="agent"
-                          resourceId={agent.id}
-                        />
-                      </div>
-                    )}
-                    {count === 0 && <UnattachedWarning />}
-                  </ItemContent>
-                  {canManage && (
-                    <ItemActions>
-                      <RowActionsMenu
-                        name={agent.name}
-                        edit={{
-                          href: orgRoutes(orgId).settings.agentDetail(agent.id),
-                        }}
-                        actions={[
-                          {
-                            label: "Manage attachments",
-                            icon: <Share2 />,
-                            onSelect: () => setAgentToManage(agent),
-                          },
-                        ]}
-                        remove={{
-                          onSelect: () => void deleteGuard.request(agent),
-                        }}
-                      />
-                    </ItemActions>
-                  )}
-                </Item>
-              )}
-            </AttachmentCount>
-          </li>
-        ))}
-      </ul>
+              <Bot className="size-7 text-muted-foreground" />
+            </ItemMedia>
+          )
+        }
+        meta={(agent) =>
+          canManage && (
+            <div className="mt-1">
+              <SharedWithBadge
+                orgId={orgId}
+                resourceType="agent"
+                resourceId={agent.id}
+              />
+            </div>
+          )
+        }
+        menu={
+          canManage
+            ? (agent) => (
+                <RowActionsMenu
+                  name={agent.name}
+                  edit={{
+                    href: orgRoutes(orgId).settings.agentDetail(agent.id),
+                  }}
+                  actions={[
+                    {
+                      label: "Manage attachments",
+                      icon: <Share2 />,
+                      onSelect: () => setAgentToManage(agent),
+                    },
+                  ]}
+                  remove={{
+                    onSelect: () => void deleteGuard.request(agent),
+                  }}
+                />
+              )
+            : undefined
+        }
+        wrap={(agent, card) => (
+          <AttachmentCount
+            orgId={canManage ? orgId : null}
+            resourceType="agent"
+            resourceId={agent.id}
+          >
+            {(count) =>
+              card({
+                className: count === 0 ? "border-warning" : undefined,
+                meta: count === 0 && <UnattachedWarning />,
+              })
+            }
+          </AttachmentCount>
+        )}
+      />
 
       {agentToManage && (
         <ManageAttachmentsDialog
