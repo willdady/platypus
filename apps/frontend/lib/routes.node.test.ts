@@ -5,6 +5,7 @@ import {
   orgRoutes,
   signInDestination,
   signInReturningTo,
+  stripBasePath,
   userRoutes,
   withBasePath,
   workspaceRoutes,
@@ -258,6 +259,25 @@ describe("withBasePath", () => {
   it("maps the root to the base path itself, with no trailing slash", () => {
     vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/platypus-app");
     expect(withBasePath("/")).toBe("/platypus-app");
+  });
+});
+
+describe("stripBasePath", () => {
+  it("returns the pathname unchanged when no base path is set", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "");
+    expect(stripBasePath("/org1/settings")).toBe("/org1/settings");
+  });
+
+  it("strips the base path, mapping the base path itself to the root", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/platypus-app");
+    expect(stripBasePath("/platypus-app/org1")).toBe("/org1");
+    expect(stripBasePath("/platypus-app")).toBe("/");
+  });
+
+  it("returns null for a path outside the base path", () => {
+    vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/platypus-app");
+    expect(stripBasePath("/other")).toBeNull();
+    expect(stripBasePath("/platypus-application")).toBeNull();
   });
 });
 

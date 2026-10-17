@@ -195,6 +195,7 @@ const AgentForm = ({
     loadState,
     formData,
     setFormData,
+    seedFormData,
     validationErrors,
     setValidationErrors,
     isSubmitting,
@@ -243,6 +244,7 @@ const AgentForm = ({
       skillIds: agent.skillIds || [],
       subAgentIds: agent.subAgentIds || [],
     }),
+    sideState: { avatarFile, avatarDeleted },
     onSeed: (agent) => {
       if (agent.avatarUrl) {
         setAvatarPreviewUrl(agent.avatarUrl);
@@ -371,7 +373,7 @@ const AgentForm = ({
         !formData.providerId &&
         !agentId
       ) {
-        setFormData((prevData) => ({
+        seedFormData((prevData) => ({
           ...prevData,
           modelId: getModelOptions(providers[0])[0]?.value,
           providerId: providers[0].id,

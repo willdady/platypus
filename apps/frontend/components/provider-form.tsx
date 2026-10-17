@@ -646,6 +646,8 @@ const ProviderForm = ({
       embeddingModelId: provider.embeddingModelId || "",
       embeddingDimensions: provider.embeddingDimensions?.toString() || "",
     }),
+    // The raw text, so JSON still being typed (and not yet valid) counts.
+    sideState: { headersString, extraBodyString },
     onSeed: (provider) => {
       setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
       setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));

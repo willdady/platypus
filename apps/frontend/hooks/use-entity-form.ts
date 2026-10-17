@@ -18,6 +18,8 @@ import {
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
+import { deepEqual } from "@/lib/deep-equal";
 
 /** The success copy a write shows, or a thunk for a message that varies. */
 type Message = string | (() => string);
@@ -57,6 +59,17 @@ export interface UseEntityFormOptions<
    * once-per-id rule as `fromRecord` (so only when `fromRecord` is given).
    */
   onSeed?: (record: TRecord) => void;
+  /**
+   * The edits a form keeps outside `formData` (a selection, raw JSON text),
+   * compared like `formData` for `isDirty`. Its clean value is the first
+   * render's, then whatever it holds once `onSeed` has run or a save lands.
+   */
+  sideState?: unknown;
+  /**
+   * False opts out of `UnsavedChangesProvider`, for a small dialog or inline
+   * action rather than an entity form; `isDirty` is still reported.
+   */
+  guardUnsavedChanges?: boolean;
   /**
    * Field ids whose server error an edit can retract — and therefore the only
    * ones that may gate Save. See `canSubmitForm`.
@@ -120,6 +133,17 @@ export interface UseEntityFormResult<
   loadState: EntityLoadState<TRecord>;
   formData: TForm;
   setFormData: React.Dispatch<React.SetStateAction<TForm>>;
+  /**
+   * Sets the values and makes them the clean baseline — for a change the form
+   * makes itself (a default once options load, a reset after save), not one
+   * the user typed.
+   */
+  seedFormData: (update: React.SetStateAction<TForm>) => void;
+  /**
+   * Whether `formData` differs from the values last seeded or saved. While
+   * true, `UnsavedChangesProvider` guards link clicks and unload.
+   */
+  isDirty: boolean;
   validationErrors: FormErrors;
   setValidationErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
   isSubmitting: boolean;
@@ -168,6 +192,8 @@ export function useEntityForm<
   id,
   fromRecord,
   onSeed,
+  sideState,
+  guardUnsavedChanges = true,
   retractableFields = NO_RETRACTABLE_FIELDS,
   transformField,
   buildPayload,
@@ -188,6 +214,24 @@ export function useEntityForm<
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
   const [formData, setFormData] = useState<TForm>(initialData);
+  const [baseline, setBaseline] = useState<TForm>(initialData);
+  const [sideBaseline, setSideBaseline] = useState(sideState);
+  // Set by a seed; the render after it, which holds what `onSeed` set, takes
+  // `sideState` as the new clean value.
+  const [sideSeedPending, setSideSeedPending] = useState(false);
+  if (sideSeedPending) {
+    setSideSeedPending(false);
+    setSideBaseline(sideState);
+  }
+
+  const seedFormData = useCallback((update: React.SetStateAction<TForm>) => {
+    setFormData(update);
+    setBaseline(update);
+  }, []);
+
+  const isDirty =
+    !deepEqual(formData, baseline) || !deepEqual(sideState, sideBaseline);
+  useUnsavedChangesGuard(guardUnsavedChanges && isDirty);
 
   const reads = !!id && !!fromRecord;
   const {
@@ -203,8 +247,9 @@ export function useEntityForm<
   // when it lands rather than into a blank form beforehand (#474).
   useResetOnChange(record ? id : undefined, () => {
     if (!record || !fromRecord) return;
-    setFormData(fromRecord(record));
+    seedFormData(fromRecord(record));
     onSeed?.(record);
+    setSideSeedPending(true);
   });
   const [validationErrors, setValidationErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -277,6 +322,9 @@ export function useEntityForm<
           onError,
           onSuccess: async (savedData) => {
             saved = savedData;
+            // Clean before any hand-off, so a post-save redirect isn't held.
+            setBaseline(formData);
+            setSideBaseline(sideState);
             if (!options?.silent) {
               const message = resolveMessage(successMessage);
               if (message) toast.success(message);
@@ -299,6 +347,7 @@ export function useEntityForm<
       scope,
       id,
       formData,
+      sideState,
       buildPayload,
       conflictField,
       successMessage,
@@ -324,6 +373,8 @@ export function useEntityForm<
     loadState: { isLoading, error, data: record },
     formData,
     setFormData,
+    seedFormData,
+    isDirty,
     validationErrors,
     setValidationErrors,
     isSubmitting,

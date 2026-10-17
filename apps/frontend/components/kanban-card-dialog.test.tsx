@@ -31,6 +31,7 @@ vi.mock("swr", () => ({
 }));
 
 import { KanbanCardDialog } from "./kanban-card-dialog";
+import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 import { jsonResponse, stubPendingSave } from "@/test/test-utils";
 
 // --- Helpers -----------------------------------------------------------------
@@ -66,21 +67,23 @@ function setViewportWidth(width: number) {
   }) as unknown as typeof window.matchMedia;
 }
 
-function renderDialog() {
+function renderDialog(onOpenChange: (open: boolean) => void = () => {}) {
   return render(
-    <KanbanCardDialog
-      card={card}
-      labels={[]}
-      columns={[]}
-      columnId={null}
-      open={true}
-      onOpenChange={() => {}}
-      onSave={() => {}}
-      onDelete={() => {}}
-      orgId="org1"
-      workspaceId="ws1"
-      boardId="b1"
-    />,
+    <UnsavedChangesProvider>
+      <KanbanCardDialog
+        card={card}
+        labels={[]}
+        columns={[]}
+        columnId={null}
+        open={true}
+        onOpenChange={onOpenChange}
+        onSave={() => {}}
+        onDelete={() => {}}
+        orgId="org1"
+        workspaceId="ws1"
+        boardId="b1"
+      />
+    </UnsavedChangesProvider>,
   );
 }
 
@@ -310,5 +313,79 @@ describe("KanbanCardDialog mobile composition", () => {
     expect(
       screen.getByRole("textbox", { name: "Add a comment" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("KanbanCardDialog close with unsaved changes", () => {
+  const close = () =>
+    fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
+
+  it("closes at once with nothing changed", () => {
+    const onOpenChange = vi.fn();
+    renderDialog(onOpenChange);
+
+    close();
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("prompts for a changed field, staying open on Keep editing", () => {
+    const onOpenChange = vi.fn();
+    renderDialog(onOpenChange);
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "Renamed" },
+    });
+
+    close();
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+    // Leaving the editor shows the title as text, still the edited value.
+    expect(screen.getByText("Renamed")).toBeInTheDocument();
+  });
+
+  it("does not prompt once a changed field is reverted", () => {
+    const onOpenChange = vi.fn();
+    renderDialog(onOpenChange);
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+    const title = screen.getByRole("textbox", { name: "Title" });
+    fireEvent.change(title, { target: { value: "Renamed" } });
+    fireEvent.change(title, { target: { value: "Ship the release" } });
+
+    close();
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("prompts for an unsent comment draft and closes on Discard", () => {
+    const onOpenChange = vi.fn();
+    renderDialog(onOpenChange);
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
+      target: { value: "Draft" },
+    });
+
+    close();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("prompts for a comment mid-edit", () => {
+    comments = [existingComment];
+    const onOpenChange = vi.fn();
+    renderDialog(onOpenChange);
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Edit comment by Bob/ }),
+    );
+
+    close();
+
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/auth-provider";
 import { MotionProvider } from "@/components/motion-provider";
+import { UnsavedChangesProvider } from "@/components/unsaved-changes-guard";
 import { ClipboardFallback } from "@/lib/clipboard";
 
 const geistSans = Geist({
@@ -107,9 +108,11 @@ export default function RootLayout({
               disableTransitionOnChange
             >
               <MotionProvider>
-                {children}
-                <Toaster position="top-right" />
-                <ClipboardFallback />
+                <UnsavedChangesProvider>
+                  {children}
+                  <Toaster position="top-right" />
+                  <ClipboardFallback />
+                </UnsavedChangesProvider>
               </MotionProvider>
             </ThemeProvider>
           </RuntimeAuthProvider>

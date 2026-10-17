@@ -27,6 +27,17 @@ export function withBasePath(path: string): string {
   return path === "/" ? basePath : `${basePath}${path}`;
 }
 
+/**
+ * The inverse of `withBasePath`: the app path under `BASE_PATH` that a
+ * same-origin pathname points at, or null when it lies outside the app.
+ */
+export function stripBasePath(pathname: string): string | null {
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  if (!basePath) return pathname;
+  if (!`${pathname}/`.startsWith(`${basePath}/`)) return null;
+  return pathname.slice(basePath.length) || "/";
+}
+
 /** App-level pages outside any Organization. */
 export const appRoutes = {
   home: "/",

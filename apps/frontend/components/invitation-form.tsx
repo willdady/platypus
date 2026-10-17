@@ -44,6 +44,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
   const {
     formData,
     setFormData,
+    seedFormData,
     validationErrors,
     isSubmitting,
     canSubmit,
@@ -69,7 +70,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
     invalidMessage: FIX_FORM_ERRORS_MESSAGE,
     successMessage: "Invitation created",
     onSuccess: () => {
-      setFormData(INITIAL_DATA);
+      seedFormData(INITIAL_DATA);
       onSuccess?.();
     },
   });

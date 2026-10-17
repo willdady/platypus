@@ -68,6 +68,7 @@ export const TransferWorkspaceAction = ({
     submit,
   } = useEntityForm({
     initialData: { newOwnerId: "", keepHistory: true },
+    guardUnsavedChanges: false,
     entity: workspaceEntity(workspaceId),
     scope: { orgId },
     write: (data) => {

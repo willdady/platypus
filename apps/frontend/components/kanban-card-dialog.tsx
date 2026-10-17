@@ -4,6 +4,8 @@ import { readableTextColor } from "@/lib/color";
 import { useState, type FocusEventHandler, type ReactNode } from "react";
 import { useMutation } from "@/hooks/use-mutation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
+import { deepEqual } from "@/lib/deep-equal";
 import { Markdown } from "@/components/markdown";
 import { formatDate, formatDateTime } from "@/lib/format-date";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -826,6 +828,36 @@ export function KanbanCardDialog({
     },
   );
 
+  // Dirty while the fields differ from the card, a new comment is drafted, or
+  // a comment is being edited. A save closes the dialog itself, not through
+  // `onOpenChange`, so only a dismissal is held.
+  const isDirty =
+    !!card &&
+    (!deepEqual(
+      {
+        title,
+        body,
+        // Sorted: toggling a label off and back on moves it to the end.
+        labelIds: [...selectedLabelIds].sort(),
+        assignees: selectedAssignees,
+        dueDate: selectedDueDate,
+        priority: selectedPriority,
+        columnId: selectedColumnId,
+      },
+      {
+        title: card.title,
+        body: card.body ?? "",
+        labelIds: [...(card.labelIds ?? [])].sort(),
+        assignees: card.assignees ?? [],
+        dueDate: (card.dueDate as string) ?? null,
+        priority: card.priority ?? "none",
+        columnId: initialColumnId,
+      },
+    ) ||
+      newCommentBody.trim() !== "" ||
+      editingCommentId !== null);
+  const confirmDiscard = useUnsavedChangesGuard(isDirty);
+
   // One guard per kind of write, so a double click sends nothing twice. The
   // card's Save and Delete share one: neither makes sense while the other runs.
   // Each also records which action is in flight, so only that button reads as
@@ -953,7 +985,12 @@ export function KanbanCardDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) =>
+        next ? onOpenChange(next) : confirmDiscard(() => onOpenChange(false))
+      }
+    >
       <DialogContent
         className="sm:max-w-5xl max-h-[90vh] flex flex-col"
         onOpenAutoFocus={(e) => e.preventDefault()}

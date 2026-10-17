@@ -37,7 +37,7 @@ const ContextsPage = () => {
   const {
     formData,
     setField,
-    setFormData,
+    seedFormData,
     validationErrors,
     isSubmitting,
     submit,
@@ -57,7 +57,7 @@ const ContextsPage = () => {
   // not the list: a revalidation hands back a new array, and re-seeding on that
   // would overwrite what the user is typing.
   useResetOnChange(isLoaded ? (globalCtx?.id ?? null) : undefined, () =>
-    setFormData({ content: globalCtx?.content || "" }),
+    seedFormData({ content: globalCtx?.content || "" }),
   );
 
   return (

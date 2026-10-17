@@ -258,6 +258,8 @@ const BlueprintForm = ({
       memoryExtractionProviderId: blueprint.memoryExtractionProviderId ?? null,
       memoryEmbeddingProviderId: blueprint.memoryEmbeddingProviderId ?? null,
     }),
+    // Sorted keys: deepEqual compares plain values, not Sets.
+    sideState: [...selected].sort(),
     onSeed: (blueprint) =>
       setSelected(
         new Set(

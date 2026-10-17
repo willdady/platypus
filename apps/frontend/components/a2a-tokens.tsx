@@ -93,6 +93,7 @@ export const A2aTokens = ({
     submit: issueToken,
   } = useEntityForm<{ name: string; expiryDays: number }, IssuedToken>({
     initialData: { name: "", expiryDays: DEFAULT_BEARER_TOKEN_EXPIRY_DAYS },
+    guardUnsavedChanges: false,
     entity: "tokens",
     scope: {},
     write: (data) =>

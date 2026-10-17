@@ -29,7 +29,7 @@ export function ChangePasswordForm() {
 
   const {
     formData,
-    setFormData,
+    seedFormData,
     validationErrors,
     setValidationErrors,
     isSubmitting,
@@ -57,7 +57,7 @@ export function ChangePasswordForm() {
     },
     successMessage: "Password changed successfully",
     onSuccess: () => {
-      setFormData(INITIAL_DATA);
+      seedFormData(INITIAL_DATA);
     },
   });
 

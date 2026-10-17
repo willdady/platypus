@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { useState } from "react";
 import { act, renderHook } from "@testing-library/react";
 import {
   authMock,
@@ -155,6 +156,51 @@ describe("useEntityForm record read", () => {
     expect(onSeed).toHaveBeenCalledTimes(1);
   });
 
+  it("is clean once seeded, dirty after an edit, and clean again once reverted", () => {
+    setData(row);
+    const { result } = renderRead({});
+    expect(result.current.isDirty).toBe(false);
+
+    act(() => result.current.setField("name", "Edited"));
+    expect(result.current.isDirty).toBe(true);
+
+    act(() => result.current.setField("name", "Deploy"));
+    expect(result.current.isDirty).toBe(false);
+  });
+
+  it("tracks sideState against what onSeed set", () => {
+    setData(row);
+    const { result } = renderHook(() => {
+      const [tags, setTags] = useState<string[]>([]);
+      const form = useEntityForm<Data, unknown, Row>({
+        ...baseOptions,
+        id: "s1",
+        fromRecord,
+        sideState: tags,
+        onSeed: () => setTags(["seeded"]),
+      });
+      return { form, setTags };
+    });
+    expect(result.current.form.isDirty).toBe(false);
+
+    act(() => result.current.setTags(["seeded", "added"]));
+    expect(result.current.form.isDirty).toBe(true);
+
+    act(() => result.current.setTags(["seeded"]));
+    expect(result.current.form.isDirty).toBe(false);
+  });
+
+  it("is clean after seedFormData, a change the form makes itself", () => {
+    const { result } = renderHook(() =>
+      useEntityForm<Data, unknown>(baseOptions),
+    );
+    act(() =>
+      result.current.seedFormData((prev) => ({ ...prev, name: "Default" })),
+    );
+    expect(result.current.formData.name).toBe("Default");
+    expect(result.current.isDirty).toBe(false);
+  });
+
   it("re-seeds for a different record id", () => {
     setData(row);
     const { result, rerender } = renderRead({});
@@ -271,6 +317,38 @@ describe("useEntityForm submit lifecycle", () => {
 
     expect(toastError).toHaveBeenCalledWith("Couldn't save");
     expect(result.current.isSubmitting).toBe(false);
+  });
+});
+
+describe("useEntityForm dirty across a save", () => {
+  beforeEach(() => resetFormHarness());
+
+  it("is clean after a successful save", async () => {
+    stubAcceptedSave({ id: "s1" });
+    const { result } = renderHook(() =>
+      useEntityForm<Data, { id: string }>(baseOptions),
+    );
+
+    act(() => result.current.setField("name", "Deploy"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.isDirty).toBe(false);
+  });
+
+  it("stays dirty after a failed save", async () => {
+    stubRejectedSave([{ path: ["name"], message: "Name is taken" }], 400);
+    const { result } = renderHook(() =>
+      useEntityForm<Data, unknown>(baseOptions),
+    );
+
+    act(() => result.current.setField("name", "Deploy"));
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.isDirty).toBe(true);
   });
 });
 

@@ -42,6 +42,7 @@ export function MemberEditDialog({
   const backendUrl = useBackendUrl();
   const { formData, setField, isSubmitting, submit } = useEntityForm({
     initialData: { role: member.role as string },
+    guardUnsavedChanges: false,
     entity: "members",
     scope: { orgId },
     write: (data) =>

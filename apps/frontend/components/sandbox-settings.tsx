@@ -227,6 +227,7 @@ const SandboxSettings = ({
   const {
     formData,
     setFormData,
+    seedFormData,
     validationErrors,
     setValidationErrors,
     isSubmitting,
@@ -299,7 +300,7 @@ const SandboxSettings = ({
       rootDir?: string;
       hostKey?: string;
     };
-    setFormData({
+    seedFormData({
       ...DEFAULT_FORM,
       name: record.name,
       backend: record.backend,
@@ -329,7 +330,7 @@ const SandboxSettings = ({
   // available one until the user picks another.
   useResetOnChange(backends, () => {
     if (!data && backends.length > 0) {
-      setFormData((prev) =>
+      seedFormData((prev) =>
         prev.backend ? prev : { ...prev, backend: backends[0].backend },
       );
     }
@@ -427,7 +428,7 @@ const SandboxSettings = ({
   async function clearDeleted() {
     await mutate(null, { revalidate: false });
     setIsConfiguring(false);
-    setFormData(DEFAULT_FORM);
+    seedFormData(DEFAULT_FORM);
     mutate();
   }
 

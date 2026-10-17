@@ -123,6 +123,7 @@ const SkillForm = ({
     loadState,
     formData,
     setFormData,
+    seedFormData,
     validationErrors,
     isSubmitting,
     canSubmit,
@@ -139,6 +140,7 @@ const SkillForm = ({
     scope,
     id: skillId,
     fromRecord: toForm,
+    sideState: selectedAgentIds,
     // agentIds are present in workspace mode only.
     onSeed: (skill) => {
       if (skill.agentIds) setSelectedAgentIds(skill.agentIds);
@@ -320,7 +322,7 @@ const SkillForm = ({
           onReplaced={(replaced) => {
             // A Replace rewrites the fields too, so the form re-seeds from it
             // rather than keeping what was typed before.
-            setFormData(toForm(replaced));
+            seedFormData(toForm(replaced));
             void mutateRecord();
           }}
         />

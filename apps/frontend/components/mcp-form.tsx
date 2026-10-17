@@ -161,6 +161,7 @@ const McpForm = ({
     loadState,
     formData,
     setFormData,
+    seedFormData,
     validationErrors,
     clearErrors,
     isSubmitting,
@@ -287,7 +288,7 @@ const McpForm = ({
     if (saved) {
       const stored = saved.oauthClientId ?? "";
       seededClientId.current = stored;
-      setFormData((prev) => ({ ...prev, oauthClientId: stored }));
+      seedFormData((prev) => ({ ...prev, oauthClientId: stored }));
     }
     return saved?.id ?? null;
   };
