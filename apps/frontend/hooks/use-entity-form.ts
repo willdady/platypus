@@ -264,7 +264,7 @@ export function useEntityForm<
 
   const setField = useCallback((fieldId: string, value: unknown) => {
     setValidationErrors((prev) => retractFieldError(prev, fieldId));
-    setFormData((prev) => ({ ...prev, [fieldId]: value }) as TForm);
+    setFormData((prev) => ({ ...prev, [fieldId]: value }));
   }, []);
 
   const handleChange = useCallback(

@@ -22,7 +22,7 @@ function makeCard(
     createdAt: new Date("2026-01-01").toISOString(),
     updatedAt: new Date("2026-01-01").toISOString(),
     ...overrides,
-  } as Serialized<KanbanCard>;
+  };
 }
 
 function renderCard(card: Serialized<KanbanCard>, labels: KanbanLabel[] = []) {
@@ -60,14 +60,14 @@ describe("KanbanCard keyboard", () => {
 describe("KanbanCard status", () => {
   it("says a past due date is overdue in words", () => {
     vi.useFakeTimers({ now: new Date("2026-03-10T12:00:00Z") });
-    renderCard(makeCard({ dueDate: "2026-03-01T00:00:00Z" as never }));
+    renderCard(makeCard({ dueDate: "2026-03-01T00:00:00Z" }));
 
     expect(screen.getByText(/Overdue/)).toBeInTheDocument();
   });
 
   it("says a due date within a day is due soon in words", () => {
     vi.useFakeTimers({ now: new Date("2026-03-10T12:00:00Z") });
-    renderCard(makeCard({ dueDate: "2026-03-11T00:00:00Z" as never }));
+    renderCard(makeCard({ dueDate: "2026-03-11T00:00:00Z" }));
 
     expect(screen.getByText(/Due soon/)).toBeInTheDocument();
   });

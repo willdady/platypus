@@ -230,7 +230,7 @@ describe("KanbanBoard transport", () => {
       matches: true,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
-    }) as unknown as typeof window.matchMedia;
+    });
     // Radix DropdownMenu positioning calls this during focus management.
     Element.prototype.scrollIntoView = vi.fn();
     Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
@@ -830,7 +830,7 @@ describe("KanbanBoard open card", () => {
       matches: true,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
-    }) as unknown as typeof window.matchMedia;
+    });
     boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
   });
 
@@ -914,7 +914,7 @@ describe("KanbanBoard double submit", () => {
       matches: true,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
-    }) as unknown as typeof window.matchMedia;
+    });
     Element.prototype.scrollIntoView = vi.fn();
     Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
     Element.prototype.releasePointerCapture = vi.fn();
@@ -1029,7 +1029,7 @@ describe("KanbanBoard load states", () => {
       matches: true,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
-    }) as unknown as typeof window.matchMedia;
+    });
     boardState = makeBoardState([makeColumn()]);
   });
 

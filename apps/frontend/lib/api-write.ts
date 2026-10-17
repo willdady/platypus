@@ -172,7 +172,7 @@ export function chatListEntity(params?: {
 
 export function errorMessage(body: unknown): string | undefined {
   if (body && typeof body === "object" && "error" in body) {
-    const { error } = body as { error: unknown };
+    const { error } = body;
     if (typeof error === "string") return error;
   }
   return undefined;
@@ -180,7 +180,7 @@ export function errorMessage(body: unknown): string | undefined {
 
 function errorFiles(body: unknown): string[] | undefined {
   if (body && typeof body === "object" && "files" in body) {
-    const { files } = body as { files: unknown };
+    const { files } = body;
     if (Array.isArray(files) && files.every((f) => typeof f === "string")) {
       return files;
     }

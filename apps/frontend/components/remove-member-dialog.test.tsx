@@ -33,7 +33,7 @@ function memberOf(
     isSuperAdmin: false,
     isBanned: false,
     ...extra,
-  } as Serialized<OrgMemberListItem>;
+  };
 }
 
 const olive = memberOf("u-old", "Olive");

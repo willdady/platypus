@@ -357,7 +357,9 @@ function McpForm({
 
   // Listen for OAuth completion messages from the popup window
   useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
+    const onMessage = (
+      event: MessageEvent<{ type?: string; message?: string } | null>,
+    ) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type === OAUTH_MCP_SUCCESS_EVENT) {
         void mutateMcp();

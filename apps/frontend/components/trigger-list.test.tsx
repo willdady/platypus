@@ -51,7 +51,7 @@ const nextRunAt = new Date("2026-02-01T09:00:00.000Z");
 const scheduledTrigger: Trigger = {
   ...cronTrigger,
   nextRunAt,
-} as unknown as Trigger;
+};
 
 function renderTriggers(triggers: Trigger[], menuItem?: string) {
   mockScopedSWR({ "/triggers": triggers });
@@ -145,14 +145,14 @@ describe("TriggerList cron schedule", () => {
   });
 
   it("describes the schedule without a next run when the trigger is disabled", async () => {
-    await renderTriggers([{ ...scheduledTrigger, enabled: false } as Trigger]);
+    await renderTriggers([{ ...scheduledTrigger, enabled: false }]);
 
     expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
     expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();
   });
 
   it("describes the schedule without a next run when none is scheduled", async () => {
-    await renderTriggers([{ ...scheduledTrigger, nextRunAt: null } as Trigger]);
+    await renderTriggers([{ ...scheduledTrigger, nextRunAt: null }]);
 
     expect(screen.getByText("At 12:00 AM (UTC)")).toBeInTheDocument();
     expect(screen.queryByText(/Next:/)).not.toBeInTheDocument();

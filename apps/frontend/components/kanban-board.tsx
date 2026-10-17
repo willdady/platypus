@@ -309,7 +309,8 @@ export function KanbanBoard({
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       const { active } = event;
-      const type = active.data.current?.type;
+      // Every draggable (a column, a card) names its kind in its data.
+      const type = active.data.current?.type as "column" | "card";
       const cols = columnsRef.current;
       setActiveId(active.id as string);
       setActiveType(type);

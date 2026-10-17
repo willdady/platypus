@@ -465,7 +465,7 @@ function ProviderForm({
     if (id === "headers") {
       setHeadersString(value);
       try {
-        const parsed = JSON.parse(value);
+        const parsed = JSON.parse(value) as ProviderFormData["headers"];
         setFormData((prevData) => ({
           ...prevData,
           headers: parsed,
@@ -477,7 +477,7 @@ function ProviderForm({
     } else if (id === "extraBody") {
       setExtraBodyString(value);
       try {
-        const parsed = JSON.parse(value);
+        const parsed = JSON.parse(value) as ProviderFormData["extraBody"];
         setFormData((prevData) => ({
           ...prevData,
           extraBody: parsed,

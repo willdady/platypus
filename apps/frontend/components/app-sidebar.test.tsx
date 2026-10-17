@@ -16,7 +16,7 @@ import type { Actor } from "@/lib/authorization";
 const { params, reads, auth } = vi.hoisted(() => ({
   params: { orgId: "org1", workspaceId: "ws1" },
   auth: {
-    actor: "org-admin" as Actor,
+    actor: "org-admin",
     ownsWorkspace: true,
     workspaceDelegation: null as { providerSelfManagement: boolean } | null,
   },

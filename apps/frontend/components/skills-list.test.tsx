@@ -277,8 +277,11 @@ describe("SkillsList promote", () => {
 });
 
 describe("SkillsList filters", () => {
-  const skillNamed = (id: string, name: string): SkillWithScope =>
-    ({ ...workspaceSkill, id, name }) as SkillWithScope;
+  const skillNamed = (id: string, name: string): SkillWithScope => ({
+    ...workspaceSkill,
+    id,
+    name,
+  });
 
   const search = (text: string) =>
     fireEvent.change(screen.getByRole("searchbox", { name: "Search skills" }), {

@@ -121,7 +121,8 @@ export async function selectOption(from: string | HTMLElement, option: string) {
       ? screen.getAllByRole("combobox").find((el) => el.textContent === from)
       : from;
   if (!combobox) {
-    throw new Error(`No select reading "${String(from)}" found`);
+    // Only a string `from` can miss: an element is its own combobox.
+    throw new Error(`No select reading "${from as string}" found`);
   }
   const user = setupUser();
   combobox.focus();
@@ -139,7 +140,7 @@ export function jsonResponse(status: number, body: unknown): Response {
     ok: status >= 200 && status < 300,
     status,
     statusText: "",
-    json: async () => body,
+    json: () => Promise.resolve(body),
   } as unknown as Response;
 }
 

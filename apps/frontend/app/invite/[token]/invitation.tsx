@@ -53,7 +53,8 @@ export default function InviteTokenPage() {
 
   // Raw `useSWR`, not `useScopedSWR`: the link resolves before sign-in.
   const { data, error, isLoading } = useSWR<
-    Serialized<InvitationLinkResolution>
+    Serialized<InvitationLinkResolution> | null,
+    unknown
   >(
     backendUrl && redeemToken
       ? joinUrl(backendUrl, `/invitation-links/${redeemToken}`)

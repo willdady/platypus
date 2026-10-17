@@ -143,14 +143,14 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
     setStep(1);
   };
 
-  const stashProvider = async (
+  const stashProvider = (
     payload: Record<string, unknown>,
   ): Promise<WriteOutcome<undefined>> => {
     const parsed = providerStepSchema.safeParse(payload);
-    if (!parsed.success) return invalid(parsed.error.issues);
+    if (!parsed.success) return Promise.resolve(invalid(parsed.error.issues));
     setProvider(payload);
     setStep(2);
-    return accepted;
+    return Promise.resolve(accepted);
   };
 
   const create = async (

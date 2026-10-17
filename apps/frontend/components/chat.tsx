@@ -157,8 +157,8 @@ export function Chat({
         }) => {
           // An edit names its parent (`useChatTurn`); a composer send follows
           // the last message on screen.
-          const { parentId = messages.at(-2)?.id ?? null, ...rest } =
-            body ?? {};
+          const { parentId = messages.at(-2)?.id ?? null, ...rest } = (body ??
+            {}) as { parentId?: string | null };
           return {
             body: {
               ...rest,
@@ -544,7 +544,8 @@ export function Chat({
       if (isTurnInFlight(statusRef.current)) return;
 
       if (outcome.outcome === "success") {
-        const { messages, tree } = outcome.data;
+        const { tree } = outcome.data;
+        const messages = outcome.data.messages as PlatypusUIMessage[];
         setMessages(messages);
         void mutateChat(
           (current) => current && { ...current, messages, tree },

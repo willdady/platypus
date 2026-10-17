@@ -24,7 +24,7 @@ vi.mock("sonner", async (importOriginal) => ({
 // (vitest.config.ts) leaves them in place. A test that needs something else —
 // a matching media query, a spy on `scrollIntoView` — assigns its own.
 if (typeof window !== "undefined") {
-  window.matchMedia = ((query: string) => ({
+  window.matchMedia = (query: string) => ({
     matches: false,
     media: query,
     onchange: null,
@@ -33,13 +33,13 @@ if (typeof window !== "undefined") {
     addListener: () => {},
     removeListener: () => {},
     dispatchEvent: () => false,
-  })) as unknown as typeof window.matchMedia;
+  });
 
   window.ResizeObserver = class {
     observe() {}
     unobserve() {}
     disconnect() {}
-  } as unknown as typeof ResizeObserver;
+  };
 
   Element.prototype.scrollIntoView = () => {};
   Element.prototype.hasPointerCapture = () => false;

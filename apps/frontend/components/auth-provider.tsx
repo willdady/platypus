@@ -162,7 +162,7 @@ export function AuthProvider({
     error: orgMembershipError,
     isLoading: isOrgMembershipLoading,
     mutate: mutateOrgMembership,
-  } = useSWR<Serialized<OrgMembership>>(
+  } = useSWR<Serialized<OrgMembership>, unknown>(
     userId && orgId ? scopedUrl(backendUrl, membershipEntity, { orgId }) : null,
     fetcher,
   );
@@ -172,7 +172,7 @@ export function AuthProvider({
     error: workspaceError,
     isLoading: isWorkspaceLoading,
     mutate: mutateWorkspace,
-  } = useSWR<Serialized<Workspace>>(
+  } = useSWR<Serialized<Workspace>, unknown>(
     userId && orgId && workspaceId
       ? scopedUrl(backendUrl, workspaceEntity(workspaceId), { orgId })
       : null,

@@ -45,7 +45,7 @@ const boards = [{ id: "board-1", name: "Board One" }];
 
 /** The `config` the form put on the wire for the last save. */
 function savedConfig(fetchMock: ReturnType<typeof vi.fn>) {
-  return savedBody(fetchMock).config;
+  return savedBody(fetchMock).config as Record<string, unknown>;
 }
 
 beforeEach(() => {

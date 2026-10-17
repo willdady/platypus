@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { MCP } from "@platypus/schemas";
 import {
   authMock,
   swrMock,
@@ -40,7 +39,7 @@ describe("McpForm secret reveal", () => {
       url: "http://mcp.test",
       authType: "Bearer",
       bearerToken: "secret-token",
-    } as unknown as MCP);
+    });
     render(<McpForm orgId="org1" mcpId="m1" />);
 
     const input = screen.getByLabelText("Bearer Token");
@@ -60,7 +59,7 @@ describe("McpForm secret reveal", () => {
       url: "http://mcp.test",
       authType: "OAuth",
       oauthClientId: "client-id",
-    } as unknown as MCP);
+    });
     render(<McpForm orgId="org1" mcpId="m1" />);
 
     const input = screen.getByLabelText("Client Secret");
@@ -85,7 +84,7 @@ describe("McpForm locked delete", () => {
       name: "Docs",
       url: "http://mcp.test",
       authType: "None",
-    } as unknown as MCP);
+    });
     stubRejectedSave(
       "This MCP server is managed at the organization level",
       403,
@@ -114,7 +113,7 @@ describe("McpForm locked delete", () => {
       name: "Docs",
       url: "http://mcp.test",
       authType: "None",
-    } as unknown as MCP);
+    });
     stubRejectedSave("Still used by an Agent", 409);
 
     render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
@@ -207,7 +206,7 @@ describe("McpForm save payload", () => {
       authType: "Bearer",
       bearerToken: "secret-token",
       headers: { "X-Api": "1" },
-    } as unknown as MCP);
+    });
     const fetchMock = stubAcceptedSave({ id: "m1" });
     render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
 
@@ -247,7 +246,7 @@ describe("McpForm save payload", () => {
       authType: "OAuth",
       oauthClientId: "client-id",
       oauthRequestedScope: "  calendar email  ",
-    } as unknown as MCP);
+    });
     const fetchMock = stubAcceptedSave({ id: "m1" });
     render(<McpForm orgId="org1" mcpId="m1" />);
 
@@ -278,7 +277,7 @@ describe("McpForm save payload", () => {
       url: "http://mcp.test",
       authType: "OAuth",
       oauthClientId: "client-id",
-    } as unknown as MCP);
+    });
     const fetchMock = stubAcceptedSave({ id: "m1" });
     render(<McpForm orgId="org1" mcpId="m1" />);
 
@@ -304,7 +303,7 @@ describe("McpForm test connection", () => {
       url: "http://mcp.test",
       authType: "Bearer",
       bearerToken: "secret-token",
-    } as unknown as MCP);
+    });
     render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
   };
 
@@ -366,7 +365,7 @@ describe("McpForm OAuth", () => {
       authType: "OAuth",
       oauthClientId: "client-id",
       oauthAuthorized,
-    } as unknown as MCP);
+    });
     return render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
   };
 

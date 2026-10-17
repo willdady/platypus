@@ -160,9 +160,9 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
 
     const perOrg = await Promise.all(
       organizations.map(async (org) => {
-        const data = (await fetcher(
+        const data = await fetcher<{ results: Serialized<Workspace>[] }>(
           scopedUrl(backendUrl, "workspaces", { orgId: org.id }),
-        )) as { results: Serialized<Workspace>[] };
+        );
         return data.results.map((workspace) => ({
           ...workspace,
           organizationName: org.name,
@@ -177,7 +177,10 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     data: workspacesData,
     error: workspacesError,
     mutate: mutateWorkspaces,
-  } = useSWR<WorkspaceWithOrg[]>(orgs?.results ?? null, fetchOrgWorkspaces);
+  } = useSWR<WorkspaceWithOrg[], unknown>(
+    orgs?.results ?? null,
+    fetchOrgWorkspaces,
+  );
   const workspaces = workspacesData ?? [];
 
   // The picker depends on two reads — the organizations and their workspaces —

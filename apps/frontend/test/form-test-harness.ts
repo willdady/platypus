@@ -149,5 +149,5 @@ export function savedBody(fetchMock: { mock: { calls: unknown[][] } }) {
     string,
     RequestInit,
   ];
-  return JSON.parse(String(init.body));
+  return JSON.parse(init.body as string) as Record<string, unknown>;
 }
