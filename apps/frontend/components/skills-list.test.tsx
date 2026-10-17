@@ -330,6 +330,68 @@ describe("SkillsList filters", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
+  describe("in the URL", () => {
+    const skills = [skillNamed("a", "alpha"), skillNamed("b", "bravo")];
+    const agents = [{ id: "ag1", name: "Writer", skillIds: ["a"] }];
+    const renderWithAgents = () => {
+      mockScopedSWR({ "/skills": skills, "/agents": agents });
+      return renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+    };
+
+    it("writes the search and agent to the query string, leaving defaults out", async () => {
+      const replaceState = vi.spyOn(window.history, "replaceState");
+      const pushState = vi.spyOn(window.history, "pushState");
+      await renderWithAgents();
+
+      search("al");
+      search("alp");
+      expect(window.location.search).toBe("?skillQuery=alp");
+
+      await selectOption("Any agent", "Writer");
+      expect(window.location.search).toBe("?skillQuery=alp&skillAgent=ag1");
+
+      search("  ");
+      await selectOption("Writer", "Any agent");
+      expect(window.location.search).toBe("");
+      // Every write replaces the entry: a keystroke is not a step back.
+      expect(replaceState).toHaveBeenCalled();
+      expect(pushState).not.toHaveBeenCalled();
+    });
+
+    it("reads the search and agent back from the query string", async () => {
+      window.history.replaceState(null, "", "?skillQuery=br&skillAgent=ag1");
+      await renderWithAgents();
+
+      expect(
+        screen.getByRole("searchbox", { name: "Search skills" }),
+      ).toHaveValue("br");
+      expect(
+        screen.getByRole("combobox", { name: "Filter by agent" }),
+      ).toHaveTextContent("Writer");
+      expect(
+        screen.getByText("No skills match your filters."),
+      ).toBeInTheDocument();
+    });
+
+    it("falls back to any agent for an agent id not in the list", async () => {
+      window.history.replaceState(null, "", "?skillAgent=nope");
+      await renderWithAgents();
+
+      expect(
+        screen.getByRole("combobox", { name: "Filter by agent" }),
+      ).toHaveTextContent("Any agent");
+      expect(screen.getByText("alpha")).toBeInTheDocument();
+      expect(screen.getByText("bravo")).toBeInTheDocument();
+    });
+
+    it("ignores the params on the Organization surface, which has no filters", async () => {
+      window.history.replaceState(null, "", "?skillQuery=zzz");
+      await renderOrgSkills([orgSkill]);
+
+      expect(screen.getByText(orgSkill.name)).toBeInTheDocument();
+    });
+  });
+
   describe("by agent", () => {
     const skills = [
       skillNamed("a", "alpha"),

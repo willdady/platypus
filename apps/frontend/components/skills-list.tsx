@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { replaceSearchParam } from "@/lib/search-params";
 import { defaultFilter } from "cmdk";
 import {
   Item,
@@ -156,8 +158,24 @@ export const SkillsList = ({
   const [skillToManage, setSkillToManage] = useState<SkillWithScope | null>(
     null,
   );
-  const [nameFilter, setNameFilter] = useState("");
-  const [agentFilter, setAgentFilter] = useState<string>(ALL);
+  const searchParams = useSearchParams();
+
+  // Both filters live in the URL, so they survive a refresh and Back. Only the
+  // Workspace home shows the controls; elsewhere the params are ignored.
+  const agentFilter = (workspaceId && searchParams.get("skillAgent")) || ALL;
+  // The input reads local state, seeded from the URL: the URL write below
+  // lands a render later, and an input bound straight to it drops keystrokes.
+  const [nameFilter, setNameFilterState] = useState(
+    () => (workspaceId && searchParams.get("skillQuery")) || "",
+  );
+
+  // A default value leaves its param out.
+  const setNameFilter = (value: string) => {
+    setNameFilterState(value);
+    replaceSearchParam("skillQuery", value.trim() || null);
+  };
+  const setAgentFilter = (value: string) =>
+    replaceSearchParam("skillAgent", value === ALL ? null : value);
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at

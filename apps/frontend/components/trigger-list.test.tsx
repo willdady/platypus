@@ -344,6 +344,81 @@ describe("TriggerList type filter", () => {
   });
 });
 
+describe("TriggerList filters in the URL", () => {
+  const eventTrigger = {
+    ...cronTrigger,
+    id: "t5",
+    name: "Card watcher",
+    type: "event",
+    config: { events: ["card.created"] },
+  } as unknown as Trigger;
+  const firedTrigger = {
+    ...cronTrigger,
+    id: "t6",
+    name: "Launch reminder",
+    enabled: false,
+    config: { ...cronTrigger.config, isOneOff: true },
+    firedAt: "2026-02-01T08:00:00.000Z",
+  } as unknown as Trigger;
+
+  it("writes the type and Show fired to the query string, leaving defaults out", async () => {
+    const pushState = vi.spyOn(window.history, "pushState");
+    await renderTriggers([cronTrigger, eventTrigger]);
+
+    await act(async () => {
+      await selectOption("All types", "Cron");
+    });
+    await act(async () => {
+      screen.getByRole("switch", { name: "Show fired" }).click();
+    });
+    expect(window.location.search).toBe(
+      "?triggerType=cron&triggerShowFired=true",
+    );
+
+    await act(async () => {
+      await selectOption("Cron", "All types");
+    });
+    await act(async () => {
+      screen.getByRole("switch", { name: "Show fired" }).click();
+    });
+    expect(window.location.search).toBe("");
+    expect(pushState).not.toHaveBeenCalled();
+  });
+
+  it("reads the type and Show fired back from the query string", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "?triggerType=cron&triggerShowFired=true",
+    );
+    await renderTriggers([cronTrigger, eventTrigger, firedTrigger]);
+
+    expect(
+      screen.getByRole("combobox", { name: "Filter by type" }),
+    ).toHaveTextContent("Cron");
+    expect(screen.getByRole("switch", { name: "Show fired" })).toBeChecked();
+    expect(screen.getByText("Launch reminder")).toBeInTheDocument();
+    expect(screen.queryByText("Card watcher")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the defaults for values it does not know", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "?triggerType=bogus&triggerShowFired=yes",
+    );
+    await renderTriggers([cronTrigger, eventTrigger, firedTrigger]);
+
+    expect(
+      screen.getByRole("combobox", { name: "Filter by type" }),
+    ).toHaveTextContent("All types");
+    expect(
+      screen.getByRole("switch", { name: "Show fired" }),
+    ).not.toBeChecked();
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+});
+
 describe("TriggerList last run", () => {
   const startedAt = "2026-02-01T08:00:00.000Z";
   const ran = (trigger: Record<string, unknown>, status = "success"): Trigger =>
