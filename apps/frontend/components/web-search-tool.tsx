@@ -83,7 +83,8 @@ export function webSearchSources(
   return sources;
 }
 
-function titleFor(kind: NormalizedWebToolResult["kind"]): string {
+/** The name a Web tool block row leads with. */
+export function webToolTitle(kind: NormalizedWebToolResult["kind"]): string {
   switch (kind) {
     case "search":
       return "Web search";
@@ -226,7 +227,7 @@ export function WebToolCard({
   return (
     <Tool>
       <ToolHeader
-        title={titleFor(result.kind)}
+        title={webToolTitle(result.kind)}
         label={labelFor(result)}
         type={toolPart.type}
         state={errorText ? "output-error" : toolPart.state}
