@@ -267,14 +267,15 @@ describe("AgentsList pinning", () => {
     );
   });
 
-  it("sends one pin while the first is in flight, however often it is picked", async () => {
+  it("pins at once and sends one pin while the first is in flight, however often it is picked", async () => {
     const { fetchMock, resolve } = stubPendingSave();
 
     await renderAgents([workspaceAgent], "Pin");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(namesIn("Pinned agents")).toEqual([workspaceAgent.name]);
 
     await openDropdownMenu();
-    const pending = screen.getByRole("menuitem", { name: /Pinning/ });
+    const pending = screen.getByRole("menuitem", { name: /Unpin/ });
     expect(pending).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(pending);
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -291,6 +292,10 @@ describe("AgentsList pinning", () => {
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith("Agent not found"),
     );
+    // The optimistic pin reverts.
+    expect(
+      screen.queryByRole("list", { name: "Pinned agents" }),
+    ).not.toBeInTheDocument();
   });
 
   // The backend refuses a pin from anyone but the Workspace Owner, an Org

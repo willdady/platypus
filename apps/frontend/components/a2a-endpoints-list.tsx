@@ -75,7 +75,7 @@ const A2aEndpointsList = ({
     );
   }
 
-  const endpoints = data?.results ?? [];
+  const endpoints = toggle.apply(data?.results ?? []);
 
   const addButton = ownsWorkspace && (
     <Button asChild>
@@ -132,7 +132,7 @@ const A2aEndpointsList = ({
                         ? {
                             enabled: endpoint.enabled,
                             onSelect: () => void toggle.toggle(endpoint),
-                            disabled: toggle.togglingId === endpoint.id,
+                            disabled: toggle.isToggling(endpoint.id),
                           }
                         : undefined
                     }

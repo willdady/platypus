@@ -172,6 +172,92 @@ describe("NotificationsDropdown feed", () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 
+  it("hides a dismissed notification at once and restores it if refused", async () => {
+    let refuse!: () => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            refuse = () => resolve(jsonResponse(403, { error: "Not yours" }));
+          }),
+      ),
+    );
+    renderWithFeed();
+    await openDropdownMenu();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss notification" }),
+    );
+
+    expect(screen.queryByText("Nightly digest")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Notifications (1)",
+        // Radix hides the trigger from the a11y tree while the menu is open.
+        hidden: true,
+      }),
+    ).toBeInTheDocument();
+
+    await act(async () => refuse());
+
+    expect(screen.getByText("Nightly digest")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Notifications (2)", hidden: true }),
+    ).toBeInTheDocument();
+  });
+
+  it("counts a notification read at once and unread again if refused", async () => {
+    let refuse!: () => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            refuse = () => resolve(jsonResponse(403, { error: "Not yours" }));
+          }),
+      ),
+    );
+    renderWithFeed();
+    await openDropdownMenu();
+
+    fireEvent.click(screen.getByText("Nightly digest"));
+
+    expect(
+      screen.getByRole("button", { name: "Notifications (1)", hidden: true }),
+    ).toBeInTheDocument();
+
+    await act(async () => refuse());
+
+    expect(toastError).toHaveBeenCalledWith("Not yours");
+    expect(
+      screen.getByRole("button", { name: "Notifications (2)", hidden: true }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a dismissed row hidden when an earlier mark-read lands", async () => {
+    const answers: Array<() => void> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answers.push(() => resolve(jsonResponse(200, {})));
+          }),
+      ),
+    );
+    renderWithFeed();
+    await openDropdownMenu();
+
+    fireEvent.click(screen.getByText("Nightly digest"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss notification" }),
+    );
+    await act(async () => answers[0]());
+
+    expect(screen.queryByText("Nightly digest")).not.toBeInTheDocument();
+  });
+
   it("marks everything read in one write", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);

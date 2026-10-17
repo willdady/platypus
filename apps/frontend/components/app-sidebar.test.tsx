@@ -402,6 +402,32 @@ describe("AppSidebar chat actions", () => {
     expect(JSON.parse(init.body)).toEqual({ isPinned: true });
   });
 
+  it("shows a pin at once and reverts it if refused", async () => {
+    let refuse!: () => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            refuse = () => resolve(jsonResponse(403, { error: "Not yours" }));
+          }),
+      ),
+    );
+    seedHeader();
+    setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });
+    renderSidebar();
+
+    fireEvent.click(
+      within(openChatMenu("First chat")).getByRole("menuitem", {
+        name: "Pin",
+      }),
+    );
+
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    await act(async () => refuse());
+    expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
+  });
+
   // The backend refuses every one of these to anyone but the Workspace Owner
   // — an Org Admin included — so offering them would only produce an error.
   it("offers a non-owner no Pin, Edit or Delete", () => {

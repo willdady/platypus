@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { toast } from "sonner";
 import { useBackendUrl } from "@/components/auth-provider";
 import { writeEntity, type Scope } from "@/lib/api-write";
+import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 
 /**
  * Flips a row's `enabled` from its card menu — the same field the edit form's
- * Enabled switch writes. A refusal is toasted and the list left as it was.
+ * Enabled switch writes. The row flips at once; a refusal is toasted and the
+ * row flips back. Render the list through `apply` so the flip shows.
  */
 export function useEnabledToggle<
   T extends { readonly id: string; readonly enabled: boolean },
@@ -20,25 +20,22 @@ export function useEnabledToggle<
   readonly mutate: () => void | Promise<unknown>;
 }) {
   const backendUrl = useBackendUrl();
-  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const rows = useOptimisticRows<T>();
 
   const toggle = async (item: T) => {
     if (!backendUrl) return;
-    setTogglingId(item.id);
-    try {
-      const outcome = await writeEntity(backendUrl, entity, scope, {
-        id: item.id,
-        data: { enabled: !item.enabled },
-      });
-      if (outcome.outcome === "success") {
-        await mutate();
-      } else {
-        toast.error(outcome.message);
-      }
-    } finally {
-      setTogglingId(null);
-    }
+    const enabled = !item.enabled;
+    await rows.run(
+      item.id,
+      { enabled } as Partial<T>,
+      () =>
+        writeEntity(backendUrl, entity, scope, {
+          id: item.id,
+          data: { enabled },
+        }),
+      mutate,
+    );
   };
 
-  return { toggle, togglingId };
+  return { toggle, isToggling: rows.isPending, apply: rows.apply };
 }

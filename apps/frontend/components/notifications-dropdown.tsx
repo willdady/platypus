@@ -16,6 +16,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { writeEntity } from "@/lib/api-write";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import {
   type InvitationListItem,
   type NotificationListItem,
@@ -66,30 +67,43 @@ export function NotificationsDropdown({
     results: InvitationListItem[];
   }>("users/me/invitations", {}, { refreshInterval: isOpen ? 60000 * 2 : 0 });
 
-  const notifications = useMemo(
-    () => notificationsData?.results ?? [],
-    [notificationsData],
-  );
+  // Marking read and dismissing show at once and revert if refused.
+  const optimistic = useOptimisticRows<NotificationListItem>();
+  const notifications = optimistic.apply(notificationsData?.results ?? []);
   const invitations = useMemo(
     () => invitationsData?.results ?? [],
     [invitationsData],
   );
-  const unreadNotificationCount = unreadCountData?.count ?? 0;
+  // An unread notification being marked read or dismissed already reads as
+  // gone from the badge.
+  const unreadNotificationCount = Math.max(
+    0,
+    (unreadCountData?.count ?? 0) -
+      (notificationsData?.results ?? []).filter(
+        (n) => !n.isRead && optimistic.isPending(n.id),
+      ).length,
+  );
   const totalCount = unreadNotificationCount + invitations.length;
 
-  const handleMarkAsRead = async (notificationId: string) => {
+  // The list first: while a row's override stands the badge already counts
+  // it as read, so a new count landing before the list would count it twice.
+  const revalidate = async () => {
+    await mutateNotifications();
+    await mutateUnreadCount();
+  };
+
+  const handleMarkAsRead = (notificationId: string) => {
     if (!backendUrl || !orgId || !workspaceId) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      `notifications/${notificationId}/read`,
-      { orgId, workspaceId },
+    void optimistic.run(
+      notificationId,
+      { isRead: true },
+      () =>
+        writeEntity(backendUrl, `notifications/${notificationId}/read`, {
+          orgId,
+          workspaceId,
+        }),
+      revalidate,
     );
-    if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
-      return;
-    }
-    mutateNotifications();
-    mutateUnreadCount();
   };
 
   const handleMarkAllAsRead = async () => {
@@ -106,21 +120,21 @@ export function NotificationsDropdown({
     mutateUnreadCount();
   };
 
-  const handleDismiss = async (notificationId: string) => {
+  const handleDismiss = (notificationId: string) => {
     if (!backendUrl || !orgId || !workspaceId) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      "notifications",
-      { orgId, workspaceId },
-      { id: notificationId },
-    );
-    if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
-      return;
-    }
     if (expandedId === notificationId) setExpandedId(null);
-    mutateNotifications();
-    mutateUnreadCount();
+    void optimistic.run(
+      notificationId,
+      null,
+      () =>
+        writeEntity(
+          backendUrl,
+          "notifications",
+          { orgId, workspaceId },
+          { id: notificationId },
+        ),
+      revalidate,
+    );
   };
 
   const handleNotificationClick = (notif: NotificationListItem) => {
