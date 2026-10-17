@@ -115,7 +115,7 @@ export function OrgSettingsMenu({
                 isActive={pathname.startsWith(mcpHref)}
               >
                 <Link href={mcpHref}>
-                  <Wrench /> MCP
+                  <Wrench /> MCP Servers
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

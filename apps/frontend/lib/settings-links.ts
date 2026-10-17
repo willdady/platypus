@@ -25,7 +25,7 @@ export function workspaceSettingsLinks(orgId: string, workspaceId: string) {
   return [
     { href: routes.root, icon: Settings, label: "Workspace", exact: true },
     { href: routes.providers, icon: Unplug, label: "Providers" },
-    { href: routes.mcp, icon: Wrench, label: "MCP" },
+    { href: routes.mcp, icon: Wrench, label: "MCP Servers" },
     { href: routes.sandbox, icon: Box, label: "Sandbox" },
     { href: routes.webhooks, icon: Radio, label: "Webhooks" },
     { href: routes.a2aEndpoints, icon: Network, label: "A2A endpoints" },
