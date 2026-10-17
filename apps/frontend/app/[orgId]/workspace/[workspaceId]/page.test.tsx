@@ -95,6 +95,33 @@ describe("Workspace home", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a failed count as an error, not as 0", async () => {
+    mockScopedSWR({
+      "/skills": { error: { status: 500, message: "Server error" } },
+      "/providers": [{ id: "p1", name: "OpenAI" }],
+      ...workspaceRead,
+    });
+    await renderList(<Workspace />);
+
+    expect(screen.getAllByLabelText("Couldn't load skills")).not.toHaveLength(
+      0,
+    );
+  });
+
+  it("renders the page while a count is still loading", async () => {
+    mockScopedSWR({
+      "/boards": { isLoading: true },
+      "/providers": [{ id: "p1", name: "OpenAI" }],
+      ...workspaceRead,
+    });
+    await renderList(<Workspace />);
+
+    expect(
+      screen.getByRole("heading", { name: "Research" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Loading Boards")).not.toHaveLength(0);
+  });
+
   it("says the workspace is gone, with the way back, when the read returns none", async () => {
     mockScopedSWR({ "/workspaces/ws1": { data: undefined } });
     await renderList(<Workspace />);
