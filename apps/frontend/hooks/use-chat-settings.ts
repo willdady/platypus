@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Chat } from "@platypus/schemas";
+import type { Chat } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
 export interface ChatSettings {

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Provider, Agent, Chat } from "@platypus/schemas";
+import type { Provider, Agent, Chat } from "@platypus/schemas";
 import { decodeSelectionReference } from "@/lib/selection-reference";
 import {
   resolveRestoredSelection,

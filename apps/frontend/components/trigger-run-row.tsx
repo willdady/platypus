@@ -186,7 +186,7 @@ export const TriggerRunRow = ({
   const stats = run.stats as TriggerRunStats | null | undefined;
 
   const routes = workspaceRoutes(orgId, workspaceId);
-  const handleCopyRunId = () => copyWithToast(run.id);
+  const handleCopyRunId = () => void copyWithToast(run.id);
   // A suppressed firing never ran, so it has no timeline to open.
   const isLink = linkToDetail && run.status !== "suppressed";
 

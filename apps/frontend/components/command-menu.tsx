@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/command";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { splitPinned } from "@/lib/pinned-agents";
-import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
+import type { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
 import { appRoutes, userRoutes, workspaceRoutes } from "@/lib/routes";

@@ -42,18 +42,26 @@ describe("useStreamingFavicon", () => {
   it("does nothing while inactive", async () => {
     renderHook(() => useStreamingFavicon(false));
     await flush();
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(icon().href).toBe(ORIGINAL);
   });
 
   it("toggles the dot frame while active", async () => {
     renderHook(() => useStreamingFavicon(true));
     await flush();
-    act(() => vi.advanceTimersByTime(1100));
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
     expect(icon().href).toBe(DOT);
-    act(() => vi.advanceTimersByTime(1100));
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
     expect(icon().href).toBe(ORIGINAL);
-    act(() => vi.advanceTimersByTime(1100));
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
     expect(icon().href).toBe(DOT);
   });
 
@@ -65,19 +73,25 @@ describe("useStreamingFavicon", () => {
       },
     );
     await flush();
-    act(() => vi.advanceTimersByTime(1100));
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
     expect(icon().href).toBe(DOT);
 
     rerender({ active: false });
     expect(icon().href).toBe(ORIGINAL);
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(icon().href).toBe(ORIGINAL);
   });
 
   it("restores the original icon on unmount", async () => {
     const { unmount } = renderHook(() => useStreamingFavicon(true));
     await flush();
-    act(() => vi.advanceTimersByTime(1100));
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
     expect(icon().href).toBe(DOT);
 
     unmount();
@@ -88,7 +102,9 @@ describe("useStreamingFavicon", () => {
     const { unmount } = renderHook(() => useStreamingFavicon(true));
     unmount();
     await flush();
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(icon().href).toBe(ORIGINAL);
   });
 
@@ -96,7 +112,9 @@ describe("useStreamingFavicon", () => {
     vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
     renderHook(() => useStreamingFavicon(true));
     await flush();
-    act(() => vi.advanceTimersByTime(5000));
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
     expect(icon().href).toBe(ORIGINAL);
   });
 });

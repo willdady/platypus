@@ -10,7 +10,7 @@ export const FIX_FORM_ERRORS_MESSAGE = "Please fix the errors in the form";
 
 export interface ApplyWriteOutcomeOptions<TResult> {
   /** Revalidates one SWR key — usually `useSWRConfig()`'s `mutate`. */
-  readonly mutate: (key: string) => void;
+  readonly mutate: (key: string) => unknown;
   readonly setValidationErrors: (errors: Record<string, string>) => void;
   /**
    * Field a `conflict` outcome's message is keyed to (default `"name"`).
@@ -102,7 +102,7 @@ export async function applyWriteOutcome<TResult>(
 
 export interface ApplyDeleteOutcomeOptions<TResult> {
   /** Revalidates one SWR key — usually `useSWRConfig()`'s `mutate`. */
-  readonly mutate: (key: string) => void;
+  readonly mutate: (key: string) => unknown;
   readonly onSuccess?: (data: TResult) => void | Promise<void>;
   /** See `ApplyWriteOutcomeOptions.onError` — covers every delete failure. */
   readonly onError?: (message: string, outcome: WriteOutcome<TResult>) => void;

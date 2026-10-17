@@ -202,7 +202,7 @@ export function UsersList() {
           onOpenChange={(open) => !open && setChangingPasswordUser(null)}
           onSuccess={() => {
             setChangingPasswordUser(null);
-            mutate();
+            void mutate();
           }}
         />
       )}

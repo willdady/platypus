@@ -118,7 +118,7 @@ export const OAuthCallbackHandler = ({
       setIsProcessing(false);
     };
 
-    exchangeCode();
+    void exchangeCode();
   }, [code, state, backendUrl, providerMessage]);
 
   if (isProcessing) {

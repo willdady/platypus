@@ -44,7 +44,11 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   useEffect(() => {
     if (!backendUrl) return;
     for (const org of results) {
-      preload(scopedUrl(backendUrl, "workspaces", { orgId: org.id }), fetcher);
+      // A failed prefetch resurfaces as the list's own error once it mounts.
+      preload(
+        scopedUrl(backendUrl, "workspaces", { orgId: org.id }),
+        fetcher,
+      ).catch(() => {});
     }
   }, [backendUrl, results]);
 

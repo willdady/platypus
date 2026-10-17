@@ -116,8 +116,8 @@ export function NotificationsDropdown({
       toast.error(outcome.message);
       return;
     }
-    mutateNotifications();
-    mutateUnreadCount();
+    void mutateNotifications();
+    void mutateUnreadCount();
   };
 
   const handleDismiss = (notificationId: string) => {
@@ -163,7 +163,7 @@ export function NotificationsDropdown({
         setExpandedId(null);
         // Opening gives the list a key, which reads it; the count is
         // refreshed alongside.
-        if (open) mutateUnreadCount();
+        if (open) void mutateUnreadCount();
       }}
     >
       <DropdownMenuTrigger asChild>

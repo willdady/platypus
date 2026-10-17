@@ -1,4 +1,4 @@
-import { Agent, ToolSet, Provider, Skill } from "@platypus/schemas";
+import type { Agent, ToolSet, Provider, Skill } from "@platypus/schemas";
 import {
   DialogContent,
   DialogDescription,

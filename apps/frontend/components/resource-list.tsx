@@ -327,7 +327,7 @@ export const ResourceList = ({
                                     onSelect: () =>
                                       workspaceId
                                         ? deleteFlow.request(resource)
-                                        : deleteGuard.request(resource),
+                                        : void deleteGuard.request(resource),
                                   }
                                 : undefined
                             }

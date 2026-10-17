@@ -194,8 +194,8 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
       (orgs.results.length > 0 && workspacesData === undefined) ||
       (allContexts === undefined && !allContextsError));
   const retryWorkspaces = () => {
-    mutateOrgs();
-    mutateWorkspaces();
+    void mutateOrgs();
+    void mutateWorkspaces();
   };
 
   // Filter out workspaces that already have contexts (unless we're editing that context)
