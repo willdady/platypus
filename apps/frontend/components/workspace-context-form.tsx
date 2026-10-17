@@ -23,9 +23,10 @@ import { Button } from "@/components/ui/button";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { fetcher } from "@/lib/utils";
+import { useBackendUrl } from "@/components/auth-provider";
 import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import {
   FieldSkeleton,
@@ -38,7 +39,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization, Workspace, Context } from "@platypus/schemas";
 import { CONTEXT_MAX_LENGTH } from "@platypus/schemas";
 import { userRoutes } from "@/lib/routes";
-import type { Serialized } from "@/lib/api-write";
+import { scopedUrl, type Serialized } from "@/lib/api-write";
 
 type WorkspaceWithOrg = {
   organizationName?: string;
@@ -85,9 +86,6 @@ function WorkspaceContextFormSkeleton({ editing }: { editing: boolean }) {
 export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
   const router = useRouter();
   const backendUrl = useBackendUrl();
-  const { user } = useAuth();
-
-  const contextsUrl = joinUrl(backendUrl, "/users/me/contexts");
 
   const {
     record: contextData,
@@ -143,15 +141,12 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     data: orgs,
     error: orgsError,
     mutate: mutateOrgs,
-  } = useSWR<Serialized<{ results: Organization[] }>>(
-    user ? joinUrl(backendUrl, "/organizations") : null,
-    fetcher,
-  );
+  } = useScopedSWR<{ results: Organization[] }>("organizations", {});
 
   // Fetch all contexts to filter out workspaces that already have contexts
-  const { data: allContexts, error: allContextsError } = useSWR<
-    Serialized<{ results: Context[] }>
-  >(user ? contextsUrl : null, fetcher);
+  const { data: allContexts, error: allContextsError } = useScopedSWR<{
+    results: Context[];
+  }>("users/me/contexts", {});
 
   // Every workspace across every organization the user belongs to. The API has
   // no user-scoped workspace route, so the per-organization fan-out lives in
@@ -166,7 +161,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     const perOrg = await Promise.all(
       organizations.map(async (org) => {
         const data = (await fetcher(
-          joinUrl(backendUrl, `/organizations/${org.id}/workspaces`),
+          scopedUrl(backendUrl, "workspaces", { orgId: org.id }),
         )) as { results: Serialized<Workspace>[] };
         return data.results.map((workspace) => ({
           ...workspace,
@@ -177,6 +172,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     return perOrg.flat();
   };
 
+  // Raw `useSWR`: keyed on the org list, which `useScopedSWR` already gated.
   const {
     data: workspacesData,
     error: workspacesError,

@@ -141,10 +141,7 @@ export function Chat({
   const transport = useMemo(
     () =>
       new DefaultChatTransport<PlatypusUIMessage>({
-        api: joinUrl(
-          backendUrl || "",
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-        ),
+        api: scopedUrl(backendUrl || "", "chat", scope),
         body: { orgId, workspaceId },
         credentials: "include",
         // The AI SDK calls this before each fetch. The server owns the
@@ -173,7 +170,7 @@ export function Chat({
           };
         },
       }),
-    [backendUrl, orgId, workspaceId],
+    [backendUrl, orgId, workspaceId, scope],
   );
 
   const {

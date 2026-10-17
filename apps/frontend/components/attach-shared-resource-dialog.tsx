@@ -1,8 +1,7 @@
 "use client";
 
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { joinUrl } from "../lib/utils";
-import { writeAt } from "../lib/api-write";
+import { scopedUrl, writeAt } from "../lib/api-write";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Button } from "./ui/button";
 import {
@@ -75,10 +74,7 @@ function AttachSharedResourceDialog({
     setError(null);
     try {
       const outcome = await writeAt(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/attachments`,
-        ),
+        scopedUrl(backendUrl, "attachments", { orgId, workspaceId }),
         { method: "POST", data: { resourceType, resourceId } },
       );
       if (outcome.outcome !== "success") {

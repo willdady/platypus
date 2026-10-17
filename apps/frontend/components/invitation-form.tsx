@@ -12,12 +12,9 @@ import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
-import useSWR from "swr";
-import { cn, fetcher, joinUrl } from "@/lib/utils";
-import type { Serialized } from "@/lib/api-write";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import type { Blueprint } from "@platypus/schemas";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { orgRoutes } from "@/lib/routes";
@@ -39,9 +36,6 @@ const INITIAL_DATA = {
 };
 
 export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
-  const backendUrl = useBackendUrl();
-  const { user } = useAuth();
-
   const {
     formData,
     setFormData,
@@ -76,11 +70,9 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
     },
   });
 
-  const { data: blueprintsData } = useSWR<Serialized<{ results: Blueprint[] }>>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/blueprints`)
-      : null,
-    fetcher,
+  const { data: blueprintsData } = useScopedSWR<{ results: Blueprint[] }>(
+    "blueprints",
+    { orgId },
   );
   const blueprints = blueprintsData?.results || [];
   const blueprintsById = new Map(blueprints.map((b) => [b.id, b]));

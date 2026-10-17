@@ -122,6 +122,9 @@ export function mockScopedSWR(
   }
 }
 
+// Empty: what `useScopedSWR` consults while the session is still resolving.
+const swrCache = new Map<string, { data?: unknown }>();
+
 export const swrMock = {
   __esModule: true,
   default: (key: string | null): SwrResponse => {
@@ -138,7 +141,7 @@ export const swrMock = {
     }
     return fallbackResponse;
   },
-  useSWRConfig: () => ({ mutate }),
+  useSWRConfig: () => ({ mutate, cache: swrCache }),
 };
 
 /** Resets spies and read registrations between tests. */

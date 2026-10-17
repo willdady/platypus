@@ -155,7 +155,8 @@ export function AuthProvider({
 
   // Membership and Workspace rows are reads, not hand-rolled effects: routing
   // them through SWR gives them a shared, per-key cache the pages read from
-  // too, instead of a raw `fetch` invisible to every other consumer.
+  // too, instead of a raw `fetch` invisible to every other consumer. Raw
+  // `useSWR`, not `useScopedSWR`: these reads are the gate it waits on.
   const {
     data: orgMembership,
     error: orgMembershipError,

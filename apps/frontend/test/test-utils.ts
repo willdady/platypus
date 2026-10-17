@@ -26,7 +26,8 @@ export const toastInfo = vi.fn();
 /**
  * The signed-in reader. Mutable so a test can drop the actor down from
  * `org-admin`, sign the reader out, or hand the workspace a delegation — the
- * lists gate Promote, Delete and the create CTAs on all three. Handed back by
+ * lists gate Promote, Delete and the create CTAs on all three. `isPending`
+ * holds the session unresolved, as `useScopedSWR` sees it before sign-in settles. Handed back by
  * reference on every `useAuth()` so the identity stays stable across renders.
  */
 export const authState: {
@@ -34,6 +35,7 @@ export const authState: {
   actor: string;
   workspaceDelegation: unknown;
   ownsWorkspace?: boolean;
+  isPending?: boolean;
 } = { user: { id: "u1" }, actor: "org-admin", workspaceDelegation: null };
 
 export const authMock = {
@@ -81,6 +83,7 @@ export function resetSharedSpies() {
   authState.user = { id: "u1" };
   authState.actor = "org-admin";
   authState.workspaceDelegation = null;
+  authState.isPending = false;
   if (typeof window !== "undefined") window.history.replaceState(null, "", "/");
 }
 

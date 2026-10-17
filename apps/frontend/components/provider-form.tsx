@@ -55,8 +55,8 @@ import {
   type AliasRepoint,
   type Provider,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { cn } from "@/lib/utils";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import type { FormDraft } from "@/lib/api-write";
 import {
@@ -66,7 +66,6 @@ import {
 } from "@/lib/model-config";
 import { CONTEXT_WINDOW_PRESETS } from "@/lib/context-window";
 import { toast } from "sonner";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import type { Serialized } from "@/lib/api-write";
 
@@ -252,8 +251,6 @@ function ProviderForm({
     scope: "organization" | "workspace";
   };
 
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
   const router = useRouter();
 
   const formScope = workspaceId ? "workspace" : "organization";
@@ -420,12 +417,9 @@ function ProviderForm({
     data: webBackendsData,
     error: webBackendsError,
     isLoading: webBackendsLoading,
-  } = useSWR<{
+  } = useScopedSWR<{
     results: Array<{ backend: string; name: string; plugin: string | null }>;
-  }>(
-    user ? joinUrl(backendUrl, `/organizations/${orgId}/web-backends`) : null,
-    fetcher,
-  );
+  }>("web-backends", { orgId });
   // Sorted by display name: the route returns registration order, which follows
   // `PLATYPUS_PLUGINS` and so reshuffles the dropdown when an Operator edits that
   // list. Display order is the frontend's to choose.

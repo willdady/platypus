@@ -9,8 +9,7 @@ import { FormTextField } from "@/components/form-text-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useBackendUrl } from "@/components/auth-provider";
-import { joinUrl } from "@/lib/utils";
-import { writeEntity } from "@/lib/api-write";
+import { scopedUrl, writeEntity } from "@/lib/api-write";
 import type { Dashboard } from "@platypus/schemas";
 import { workspaceRoutes } from "@/lib/routes";
 
@@ -48,10 +47,10 @@ function CreateDashboardPage({
       setError(outcome.message);
     } else if (outcome.outcome === "success") {
       const dashboard = outcome.data;
-      const dashUrl = joinUrl(
-        backendUrl,
-        `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboard.id}`,
-      );
+      const dashUrl = scopedUrl(backendUrl, `dashboards/${dashboard.id}`, {
+        orgId,
+        workspaceId,
+      });
       await mutate(dashUrl, dashboard, false);
       router.push(routes.dashboards.detail(dashboard.id));
     } else {

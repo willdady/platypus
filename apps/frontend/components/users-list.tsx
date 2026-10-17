@@ -12,11 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Shield, User as UserIcon, KeyRound, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useAuth, useBackendUrl, type User } from "@/components/auth-provider";
+import { useAuth, type User } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
-import useSWR from "swr";
-import { fetcher } from "@/lib/utils";
 import { writeAt, type Serialized } from "@/lib/api-write";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { toast } from "sonner";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
@@ -39,14 +38,13 @@ type ListUsersResponse = {
 };
 
 export function UsersList() {
-  const backendUrl = useBackendUrl();
   const { user: currentUser } = useAuth();
   const [changingPasswordUser, setChangingPasswordUser] =
     useState<ListedUser | null>(null);
 
-  const { data, error, isLoading, mutate } = useSWR<ListUsersResponse>(
-    joinUrl(backendUrl, "/auth/admin/list-users"),
-    fetcher,
+  const { data, error, isLoading, mutate } = useScopedSWR<ListUsersResponse>(
+    "auth/admin/list-users",
+    {},
   );
 
   const deleteFlow = useDeleteFlow<ListedUser>({

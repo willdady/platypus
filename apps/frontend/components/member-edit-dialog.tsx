@@ -20,8 +20,7 @@ import {
 import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
-import { joinUrl } from "@/lib/utils";
-import { writeAt, type Serialized } from "@/lib/api-write";
+import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
 type MemberEditDialogProps = {
@@ -46,10 +45,10 @@ export function MemberEditDialog({
     entity: "members",
     scope: { orgId },
     write: (data) =>
-      writeAt(
-        joinUrl(backendUrl, `/organizations/${orgId}/members/${member.id}`),
-        { method: "PATCH", data },
-      ),
+      writeAt(scopedUrl(backendUrl, `members/${member.id}`, { orgId }), {
+        method: "PATCH",
+        data,
+      }),
     // No field here renders a server error, so a rejection is toasted.
     onInvalid: (_fieldErrors, message) => toast.error(message),
     successMessage: "Member role updated",

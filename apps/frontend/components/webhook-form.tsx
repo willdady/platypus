@@ -42,7 +42,7 @@ import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { joinUrl } from "@/lib/utils";
 import { retractExactKeys } from "@/lib/form-errors";
-import { writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
 import { useBackendUrl } from "@/components/auth-provider";
@@ -228,10 +228,10 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     });
   };
 
-  const webhooksBaseUrl = joinUrl(
-    backendUrl,
-    `/organizations/${orgId}/workspaces/${workspaceId}/webhooks`,
-  );
+  const webhooksBaseUrl = scopedUrl(backendUrl, "webhooks", {
+    orgId,
+    workspaceId,
+  });
 
   const handleRegenerateSecret = async () => {
     setIsRegenerating(true);
