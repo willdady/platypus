@@ -36,6 +36,7 @@ import { FetchErrorNotice } from "@/components/fetch-error-notice";
 import { WorkspaceNotFound } from "@/components/workspace-not-found";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import {
   chatListEntity,
   organizationEntity,
@@ -212,9 +213,8 @@ const Workspace = () => {
 
   const scope = { orgId, workspaceId };
 
-  const { data: agentsData, isLoading: isLoadingAgents } = useScopedSWR<{
-    results: [];
-  }>("agents", scope);
+  const { results: agents, isLoading: isLoadingAgents } =
+    useScopedList<unknown>("agents", scope);
 
   const { data: chatsData, isLoading: isLoadingChats } = useScopedSWR<{
     results: [];
@@ -223,29 +223,23 @@ const Workspace = () => {
 
   const {
     data: providersData,
+    results: providers,
     error: providersError,
     isLoading: isLoadingProviders,
     mutate: mutateProviders,
-  } = useScopedSWR<{
-    results: [];
-  }>("providers", scope);
+  } = useScopedList<unknown>("providers", scope);
 
-  const { data: skillsData, isLoading: isLoadingSkills } = useScopedSWR<{
-    results: [];
-  }>("skills", scope);
+  const { results: skills, isLoading: isLoadingSkills } =
+    useScopedList<unknown>("skills", scope);
 
-  const { data: triggersData, isLoading: isLoadingTriggers } = useScopedSWR<{
-    results: [];
-  }>("triggers", scope);
+  const { results: triggers, isLoading: isLoadingTriggers } =
+    useScopedList<unknown>("triggers", scope);
 
-  const { data: boardsData, isLoading: isLoadingBoards } = useScopedSWR<{
-    results: [];
-  }>("boards", scope);
+  const { results: boards, isLoading: isLoadingBoards } =
+    useScopedList<unknown>("boards", scope);
 
-  const { data: dashboardsData, isLoading: isLoadingDashboards } =
-    useScopedSWR<{
-      results: [];
-    }>("dashboards", scope);
+  const { results: dashboards, isLoading: isLoadingDashboards } =
+    useScopedList<unknown>("dashboards", scope);
 
   const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
     organizationEntity(orgId),
@@ -287,13 +281,13 @@ const Workspace = () => {
   }
 
   const workspace = workspaceData;
-  const agentCount = agentsData?.results?.length || 0;
+  const agentCount = agents.length;
   const chatCount = chatsData?.totalCount ?? 0;
-  const providerCount = providersData?.results?.length || 0;
-  const skillCount = skillsData?.results?.length || 0;
-  const triggerCount = triggersData?.results?.length || 0;
-  const boardCount = boardsData?.results?.length || 0;
-  const dashboardCount = dashboardsData?.results?.length || 0;
+  const providerCount = providers.length;
+  const skillCount = skills.length;
+  const triggerCount = triggers.length;
+  const boardCount = boards.length;
+  const dashboardCount = dashboards.length;
 
   return (
     <div className="flex flex-col gap-8 px-4 md:px-8 py-8 pb-32 max-w-6xl mx-auto">

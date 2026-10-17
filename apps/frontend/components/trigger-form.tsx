@@ -32,7 +32,8 @@ import {
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { useCallback, useState, useMemo } from "react";
+import { useScopedList } from "@/hooks/use-scoped-list";
+import { useCallback, useState } from "react";
 import { deepEqual } from "@/lib/deep-equal";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
@@ -196,10 +197,10 @@ const TriggerForm = ({
 }) => {
   const scope = { orgId, workspaceId };
 
-  const { data: agentsData, isLoading: agentsLoading } = useScopedSWR<{
-    results: Agent[];
-  }>("agents", scope);
-  const agents = useMemo(() => agentsData?.results || [], [agentsData]);
+  const { results: agents, isLoading: agentsLoading } = useScopedList<Agent>(
+    "agents",
+    scope,
+  );
   // A new Trigger runs on the first agent until the user picks another.
   // Derived rather than written into the form, so a revalidated agent list
   // can never overwrite the user's pick.

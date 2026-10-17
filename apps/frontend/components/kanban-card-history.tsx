@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { ListError } from "@/components/list-state";
 import {
   Collapsible,
@@ -126,11 +126,15 @@ export function KanbanCardHistory({
   const [open, setOpen] = useState(false);
 
   // A closed section names no scope, so nothing is read until it opens.
-  const { data, error, mutate } = useScopedSWR<{ results: HistoryEntry[] }>(
+  const {
+    data,
+    results: entries,
+    error,
+    mutate,
+  } = useScopedList<HistoryEntry>(
     `boards/${boardId}/cards/${cardId}/history`,
     open ? { orgId, workspaceId } : null,
   );
-  const entries = data?.results ?? [];
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>

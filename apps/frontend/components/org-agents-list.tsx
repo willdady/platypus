@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Bot, EllipsisVertical, Pencil, Share2, Trash2 } from "lucide-react";
 import { type Agent } from "@platypus/schemas";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useAuth } from "@/components/auth-provider";
 import { canManageOrgSharedResource } from "@/lib/authorization";
 import {
@@ -58,14 +58,14 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   // each call site.
   const scope: Scope = { orgId };
 
-  const { data, error, isLoading, mutate } = useScopedSWR<{ results: Agent[] }>(
-    "agents",
-    scope,
-  );
+  const {
+    results: rows,
+    error,
+    isLoading,
+    mutate,
+  } = useScopedList<Agent>("agents", scope);
 
-  const agents = [...(data?.results || [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const agents = [...rows].sort((a, b) => a.name.localeCompare(b.name));
 
   const deleteFlow = useDeleteFlow<Agent>({
     mutate,

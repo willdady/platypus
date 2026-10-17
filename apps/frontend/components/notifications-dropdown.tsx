@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useState } from "react";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Bell, Mail, Bot, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { writeEntity } from "@/lib/api-write";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import {
   type InvitationListItem,
@@ -52,10 +53,12 @@ export function NotificationsDropdown({
   // The list itself is only read while the bell is open; the badge needs
   // just the count. Polling is gated the same way, so a closed bell doesn't
   // keep re-reading in the background.
-  const { data: notificationsData, mutate: mutateNotifications } =
-    useScopedSWR<{
-      results: NotificationListItem[];
-    }>("notifications", isOpen ? scope : null, { refreshInterval: 30000 });
+  const { results: notificationRows, mutate: mutateNotifications } =
+    useScopedList<NotificationListItem>(
+      "notifications",
+      isOpen ? scope : null,
+      { refreshInterval: 30000 },
+    );
 
   const { data: unreadCountData, mutate: mutateUnreadCount } = useScopedSWR<{
     count: number;
@@ -63,25 +66,22 @@ export function NotificationsDropdown({
     refreshInterval: isOpen ? 30000 : 0,
   });
 
-  const { data: invitationsData } = useScopedSWR<{
-    results: InvitationListItem[];
-  }>("users/me/invitations", {}, { refreshInterval: isOpen ? 60000 * 2 : 0 });
+  const { results: invitations } = useScopedList<InvitationListItem>(
+    "users/me/invitations",
+    {},
+    { refreshInterval: isOpen ? 60000 * 2 : 0 },
+  );
 
   // Marking read and dismissing show at once and revert if refused.
   const optimistic = useOptimisticRows<NotificationListItem>();
-  const notifications = optimistic.apply(notificationsData?.results ?? []);
-  const invitations = useMemo(
-    () => invitationsData?.results ?? [],
-    [invitationsData],
-  );
+  const notifications = optimistic.apply(notificationRows);
   // An unread notification being marked read or dismissed already reads as
   // gone from the badge.
   const unreadNotificationCount = Math.max(
     0,
     (unreadCountData?.count ?? 0) -
-      (notificationsData?.results ?? []).filter(
-        (n) => !n.isRead && optimistic.isPending(n.id),
-      ).length,
+      notificationRows.filter((n) => !n.isRead && optimistic.isPending(n.id))
+        .length,
   );
   const totalCount = unreadNotificationCount + invitations.length;
 

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { scopedUrl, workspaceEntity, writeAt } from "@/lib/api-write";
 import {
@@ -54,9 +55,8 @@ export const TransferWorkspaceAction = ({
     workspaceEntity(workspaceId),
     { orgId },
   );
-  const { data: membersData } = useScopedSWR<{
-    results: OrgMemberListItem[];
-  }>("members", { orgId });
+  const { data: membersData, results: members } =
+    useScopedList<OrgMemberListItem>("members", { orgId });
 
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"choose" | "confirm">("choose");
@@ -91,7 +91,6 @@ export const TransferWorkspaceAction = ({
   });
 
   if (!workspace || !membersData) return null;
-  const members = membersData.results;
   const recipients = transferRecipients(members, workspace.ownerId);
   const nameOf = (userId: string) =>
     members.find((m) => m.userId === userId)?.user.name ?? "The current owner";

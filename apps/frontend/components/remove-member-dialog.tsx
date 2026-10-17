@@ -25,7 +25,7 @@ import {
   type Workspace,
 } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import {
   NoRecipientHint,
@@ -90,13 +90,9 @@ export function RemoveMemberDialog({
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
 
   // An Org Admin's list holds every Workspace in the Organization.
-  const { data: workspacesData } = useScopedSWR<{ results: Workspace[] }>(
-    "workspaces",
-    { orgId },
-  );
-  const owned = (workspacesData?.results ?? []).filter(
-    (w) => w.ownerId === member.userId,
-  );
+  const { data: workspacesData, results: workspaces } =
+    useScopedList<Workspace>("workspaces", { orgId });
+  const owned = workspaces.filter((w) => w.ownerId === member.userId);
   const recipients = transferRecipients(members, member.userId);
   const draftOf = (id: string) => drafts[id] ?? EMPTY_DRAFT;
   const decisions = owned.map((w) => decisionOf(w.id, draftOf(w.id)));

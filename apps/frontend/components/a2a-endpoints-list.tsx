@@ -11,7 +11,7 @@ import { useAuth } from "./auth-provider";
 import { ListError } from "./list-state";
 import { EmptyCard } from "@/components/empty-card";
 
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DisabledBadge } from "@/components/disabled-badge";
 import { RowActionsMenu } from "@/components/row-actions-menu";
@@ -41,9 +41,8 @@ const A2aEndpointsList = ({
   const { ownsWorkspace } = useAuth();
 
   const scope = { orgId, workspaceId };
-  const { data, error, isLoading, mutate } = useScopedSWR<{
-    results: A2aEndpointListItem[];
-  }>("a2a-endpoints", scope);
+  const { data, results, error, isLoading, mutate } =
+    useScopedList<A2aEndpointListItem>("a2a-endpoints", scope);
 
   const deleteFlow = useDeleteFlow<A2aEndpointListItem>({
     mutate,
@@ -74,7 +73,7 @@ const A2aEndpointsList = ({
     );
   }
 
-  const endpoints = toggle.apply(data?.results ?? []);
+  const endpoints = toggle.apply(results);
 
   const addButton = ownsWorkspace && (
     <Button asChild>

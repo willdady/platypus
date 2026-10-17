@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import type { Blueprint } from "@platypus/schemas";
 import { writeEntity } from "@/lib/api-write";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import Link from "next/link";
 import { ApplyBlueprintDialog } from "@/components/apply-blueprint-dialog";
@@ -49,13 +49,12 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
     null,
   );
 
-  const { data, error, isLoading, mutate } = useScopedSWR<{
-    results: Blueprint[];
-  }>("blueprints", { orgId });
-
-  const blueprints = [...(data?.results || [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
+  const { results, error, isLoading, mutate } = useScopedList<Blueprint>(
+    "blueprints",
+    { orgId },
   );
+
+  const blueprints = [...results].sort((a, b) => a.name.localeCompare(b.name));
 
   const deleteFlow = useDeleteFlow<Blueprint>({
     mutate,

@@ -3,7 +3,7 @@
 import { type ComponentType, type ReactNode, useState } from "react";
 import { Building, Plus, Share2 } from "lucide-react";
 import Link from "next/link";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useAuth } from "@/components/auth-provider";
 import {
   canConfigureWorkspaceResource,
@@ -118,9 +118,13 @@ export const ResourceList = ({
   // each call site.
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
-  const { data, error, isLoading, mutate } = useScopedSWR<{
-    results: ScopedResource[];
-  }>(config.entity, scope);
+  const {
+    data,
+    error,
+    isLoading,
+    mutate,
+    results: resources,
+  } = useScopedList<ScopedResource>(config.entity, scope);
 
   const detach = useSharedDetach<ScopedResource>({
     resourceType: config.resourceType,
@@ -192,8 +196,6 @@ export const ResourceList = ({
   if (error) {
     return <ListError error={error} subject={config.labels.plural} />;
   }
-
-  const resources: ScopedResource[] = data?.results ?? [];
 
   // The resource's own settings surface, with any trailing segment: a row's
   // detail page, or its create page.

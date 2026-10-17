@@ -2,7 +2,7 @@
 
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { cn } from "../lib/utils";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { Pencil, Plus, Folder } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
@@ -18,9 +18,11 @@ interface ContextWithNames extends Context {
 }
 
 const ContextsList = ({ className }: { className?: string }) => {
-  const { data, error, isLoading } = useScopedSWR<{
-    results: ContextWithNames[];
-  }>("users/me/contexts", {});
+  const {
+    results: contexts,
+    error,
+    isLoading,
+  } = useScopedList<ContextWithNames>("users/me/contexts", {});
 
   if (isLoading) {
     // Mirrors the loaded rows (organization label over workspace title) and
@@ -51,7 +53,6 @@ const ContextsList = ({ className }: { className?: string }) => {
 
   if (error) return <ListError error={error} subject="workspace contexts" />;
 
-  const contexts = data?.results ?? [];
   const workspaceContexts = contexts.filter((c) => c.workspaceId);
 
   if (!workspaceContexts.length) {

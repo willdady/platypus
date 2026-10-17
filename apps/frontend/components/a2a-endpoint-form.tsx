@@ -28,7 +28,7 @@ import { A2aEndpointNotices } from "@/components/a2a-endpoint-notices";
 import { A2aTokens, ACCESS_SECTION_ID } from "@/components/a2a-tokens";
 import { useAuth } from "@/components/auth-provider";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { workspaceRoutes } from "@/lib/routes";
 
 type Endpoint = A2aEndpoint & { tokens: A2aToken[] };
@@ -63,11 +63,7 @@ const A2aEndpointForm = ({
   const isEditMode = !!endpointId;
   const readOnly = !ownsWorkspace;
 
-  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
-    "agents",
-    scope,
-  );
-  const agents = agentsData?.results ?? [];
+  const { results: agents } = useScopedList<Agent>("agents", scope);
 
   const {
     record: endpoint,

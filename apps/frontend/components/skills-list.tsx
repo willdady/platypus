@@ -57,7 +57,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -187,24 +187,19 @@ export const SkillsList = ({
     : orgRoutes(orgId).settings.skills;
 
   const {
-    data: skillsData,
+    results: skillRows,
     error,
     isLoading,
     mutate,
-  } = useScopedSWR<{
-    results: SkillWithScope[];
-  }>("skills", scope);
+  } = useScopedList<SkillWithScope>("skills", scope);
 
   // Agent associations are a workspace concern; only fetched on that surface.
-  const { data: agentsData } = useScopedSWR<{
-    results: Agent[];
-  }>("agents", workspaceId ? scope : null);
-
-  const agents = agentsData?.results || [];
-
-  const skills = [...(skillsData?.results || [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
+  const { results: agents } = useScopedList<Agent>(
+    "agents",
+    workspaceId ? scope : null,
   );
+
+  const skills = [...skillRows].sort((a, b) => a.name.localeCompare(b.name));
 
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007 / #154), asked of the auth module instead of re-derived here.

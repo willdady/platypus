@@ -27,7 +27,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { cn, joinUrl } from "@/lib/utils";
 import { attachmentsEntity, writeAt } from "@/lib/api-write";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -49,7 +49,7 @@ const useAttachments = (
   resourceType: ResourceType,
   resourceId: string,
 ) =>
-  useScopedSWR<{ results: AttachedWorkspace[] }>(
+  useScopedList<AttachedWorkspace>(
     attachmentsEntity(resourceType, resourceId),
     orgId ? { orgId } : null,
   );
@@ -105,8 +105,11 @@ export const SharedWithBadge = ({
   resourceType: ResourceType;
   resourceId: string;
 }) => {
-  const { data, isLoading } = useAttachments(orgId, resourceType, resourceId);
-  const attached = data?.results ?? [];
+  const { results: attached, isLoading } = useAttachments(
+    orgId,
+    resourceType,
+    resourceId,
+  );
   const count = attached.length;
 
   // Sized to the loaded badge (icon + "N workspaces" at text-xs), so a count
@@ -165,18 +168,18 @@ export const ManageAttachmentsDialog = ({
   const [error, setError] = useState<string | null>(null);
 
   const {
-    data: attData,
+    results: attached,
     isLoading: attLoading,
     mutate: mutateAtt,
   } = useAttachments(orgId, resourceType, resourceId);
-  const attached = attData?.results ?? [];
   const attachedIds = new Set(attached.map((a) => a.workspaceId));
 
   // The full workspace list is only needed while the dialog is open.
-  const { data: wsData, isLoading: wsLoading } = useScopedSWR<{
-    results: { id: string; name: string }[];
+  const { results: allWorkspaces, isLoading: wsLoading } = useScopedList<{
+    id: string;
+    name: string;
   }>("workspaces", open ? { orgId } : null);
-  const workspaces = [...(wsData?.results ?? [])].sort((a, b) =>
+  const workspaces = [...allWorkspaces].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
 

@@ -15,6 +15,7 @@ import { Trash2, Mail, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { formatDate } from "@/lib/format-date";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -42,17 +43,17 @@ const OrgInvitationsPage = () => {
     organizationEntity(orgId),
     {},
   );
-  const { data, mutate, isLoading } = useScopedSWR<{
-    results: InvitationListItem[];
-  }>("invitations", { orgId });
+  const {
+    data,
+    results: invitations,
+    mutate,
+    isLoading,
+  } = useScopedList<InvitationListItem>("invitations", { orgId });
   // Map blueprint id → name so the table can show what each invite provisions.
-  const { data: blueprintsData } = useScopedSWR<{ results: Blueprint[] }>(
-    "blueprints",
-    { orgId },
-  );
-  const blueprintNameById = new Map(
-    (blueprintsData?.results ?? []).map((b) => [b.id, b.name]),
-  );
+  const { results: blueprints } = useScopedList<Blueprint>("blueprints", {
+    orgId,
+  });
+  const blueprintNameById = new Map(blueprints.map((b) => [b.id, b.name]));
 
   const invitationDelete = useDeleteFlow<string>({
     delete: (id, backendUrl) =>
@@ -149,7 +150,7 @@ const OrgInvitationsPage = () => {
               ]}
             />
           </LoadingRegion>
-        ) : data?.results.length === 0 ? (
+        ) : data && invitations.length === 0 ? (
           <EmptyCard
             icon={<Mail />}
             title="No invitations sent yet"
@@ -168,7 +169,7 @@ const OrgInvitationsPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.results.map((invite) => (
+              {invitations.map((invite) => (
                 <TableRow key={invite.id}>
                   <TableCell>{invite.email}</TableCell>
                   <TableCell className="text-muted-foreground">

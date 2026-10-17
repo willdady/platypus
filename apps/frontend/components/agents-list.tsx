@@ -66,7 +66,7 @@ import {
   type ToolSet,
   type Skill,
 } from "@platypus/schemas";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -153,25 +153,18 @@ export const AgentsList = ({
   const routes = workspaceRoutes(orgId, workspaceId);
 
   const {
-    data: agentsData,
+    results: allAgents,
     error: agentsError,
     isLoading: isLoadingAgents,
     mutate,
-  } = useScopedSWR<{
-    results: AgentWithScope[];
-  }>("agents", scope);
+  } = useScopedList<AgentWithScope>("agents", scope);
 
-  const { data: providersData, isLoading: isLoadingProviders } = useScopedSWR<{
-    results: Provider[];
-  }>("providers", scope);
+  const { results: providers, isLoading: isLoadingProviders } =
+    useScopedList<Provider>("providers", scope);
 
-  const { data: toolSetsData } = useScopedSWR<{
-    results: ToolSet[];
-  }>("tools", scope);
+  const { results: toolSets } = useScopedList<ToolSet>("tools", scope);
 
-  const { data: skillsData } = useScopedSWR<{
-    results: Skill[];
-  }>("skills", scope);
+  const { results: skills } = useScopedList<Skill>("skills", scope);
 
   const orgAgentDetach = useSharedDetach<AgentWithScope>({
     resourceType: "agent",
@@ -202,14 +195,11 @@ export const AgentsList = ({
   };
 
   const agents = pins
-    .apply(agentsData?.results || [])
+    .apply(allAgents)
     .sort((a, b) => a.name.localeCompare(b.name));
   // A Pinned Agent shows only in the Pinned group, above the rest.
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);
-  const providers = providersData?.results || [];
-  const toolSets = toolSetsData?.results || [];
-  const skills = skillsData?.results || [];
 
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007), asked of the auth module instead of re-derived here.

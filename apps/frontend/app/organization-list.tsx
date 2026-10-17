@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { AlertCircle, Building, Plus } from "lucide-react";
 import { PageSpinner } from "@/components/page-spinner";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Header } from "@/components/header";
 import { EmptyCard } from "@/components/empty-card";
 import { useAuth } from "@/components/auth-provider";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { appRoutes, orgRoutes } from "@/lib/routes";
 
@@ -20,11 +20,11 @@ export default function Home() {
   const { user, isAuthLoading: isAuthLoadingUser } = useAuth();
   const router = useRouter();
 
-  const { data, error, isLoading } = useScopedSWR<{
-    results: Organization[];
-  }>("organizations", {});
-
-  const organizations = useMemo(() => data?.results || [], [data]);
+  const {
+    results: organizations,
+    error,
+    isLoading,
+  } = useScopedList<Organization>("organizations", {});
 
   // Redirect to first organization if available
   useEffect(() => {

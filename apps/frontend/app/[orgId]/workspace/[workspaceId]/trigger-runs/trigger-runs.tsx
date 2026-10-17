@@ -2,7 +2,7 @@
 
 import { use, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl } from "@/lib/api-write";
 import useSWRInfinite from "swr/infinite";
 import { History, TriangleAlert } from "lucide-react";
@@ -61,11 +61,10 @@ const TriggerRunsPage = ({
   const isFiltered = Boolean(triggerFilter || statusFilter);
 
   // Fired One-offs too: their runs are listed here, filterable by name.
-  const { data: triggersData } = useScopedSWR<{ results: Trigger[] }>(
+  const { results: triggers } = useScopedList<Trigger>(
     "triggers?includeFired=true",
     { orgId, workspaceId },
   );
-  const triggers = triggersData?.results ?? [];
 
   const getKey = useCallback(
     (index: number, previous: RunPage | null) => {

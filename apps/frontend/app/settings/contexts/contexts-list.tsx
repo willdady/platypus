@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { type Context } from "@platypus/schemas";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Globe, FolderClosed } from "lucide-react";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { ContextsList } from "@/components/contexts-list";
@@ -15,24 +15,19 @@ interface ContextWithWorkspaceName extends Context {
   workspaceName?: string | null;
 }
 
-const findGlobalContext = (contexts?: {
-  results: ContextWithWorkspaceName[];
-}) => contexts?.results.find((c) => !c.workspaceId);
-
 const ContextsPage = () => {
   const {
-    data: contexts,
+    data,
+    results: contexts,
     error,
     isLoading,
-  } = useScopedSWR<{
-    results: ContextWithWorkspaceName[];
-  }>("users/me/contexts", {});
+  } = useScopedList<ContextWithWorkspaceName>("users/me/contexts", {});
   // Until the read lands there is no telling whether a global context exists,
   // so the editor stays hidden and Save stays off: a save then would POST a
   // duplicate, and anything typed would be overwritten when the data arrives.
-  const isLoaded = contexts !== undefined;
+  const isLoaded = data !== undefined;
 
-  const globalCtx = findGlobalContext(contexts);
+  const globalCtx = contexts.find((c) => !c.workspaceId);
 
   const {
     formData,

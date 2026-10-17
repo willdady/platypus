@@ -1,6 +1,6 @@
 "use client";
 
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { joinUrl } from "../lib/utils";
 import { writeAt } from "../lib/api-write";
 import { useBackendUrl } from "@/components/auth-provider";
@@ -59,16 +59,15 @@ const AttachSharedResourceDialog = ({
   const collection = COLLECTION[resourceType];
   const label = LABEL[resourceType];
 
-  const { data, isLoading } = useScopedSWR<{
-    results: { id: string; name: string }[];
-  }>(collection, open ? { orgId } : null);
+  const { results, isLoading } = useScopedList<{ id: string; name: string }>(
+    collection,
+    open ? { orgId } : null,
+  );
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const available = (data?.results ?? []).filter(
-    (r) => !attachedIds.includes(r.id),
-  );
+  const available = results.filter((r) => !attachedIds.includes(r.id));
 
   const attach = async (resourceId: string) => {
     if (!backendUrl) return;

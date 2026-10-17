@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useMutation } from "@/hooks/use-mutation";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import {
   DndContext,
   closestCorners,
@@ -146,9 +147,10 @@ export function KanbanBoard({
     { refreshInterval: 10000, refreshWhenHidden: false },
   );
 
-  const { data: boardsData } = useScopedSWR<{
-    results: { id: string; name: string }[];
-  }>("boards", scope);
+  const { results: boards } = useScopedList<{ id: string; name: string }>(
+    "boards",
+    scope,
+  );
 
   const [localColumns, _setLocalColumns] = useState<ColumnWithCards[] | null>(
     null,
@@ -762,7 +764,7 @@ export function KanbanBoard({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64">
-              {boardsData?.results
+              {boards
                 .filter((b) => b.id !== boardId)
                 .map((board) => (
                   <DropdownMenuItem key={board.id} asChild>
@@ -785,9 +787,7 @@ export function KanbanBoard({
                   <span>Create new board</span>
                 </Link>
               </DropdownMenuItem>
-              {(!boardsData?.results ||
-                boardsData.results.filter((b) => b.id !== boardId).length ===
-                  0) && (
+              {boards.filter((b) => b.id !== boardId).length === 0 && (
                 <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                   No other boards
                 </div>

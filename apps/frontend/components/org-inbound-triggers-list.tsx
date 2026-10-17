@@ -24,7 +24,7 @@ import {
   TableSkeleton,
 } from "@/components/list-skeletons";
 import { useBackendUrl } from "@/components/auth-provider";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
 import type { BearerTokenStatus } from "@platypus/schemas";
@@ -69,9 +69,13 @@ const COLUMNS = [
 export const OrgInboundTriggersList = ({ orgId }: { orgId: string }) => {
   const backendUrl = useBackendUrl();
   const scope = { orgId };
-  const { data, error, isLoading, mutate } = useScopedSWR<{
-    results: OrgInboundTrigger[];
-  }>("inbound-triggers", scope);
+  const {
+    data,
+    results: triggers,
+    error,
+    isLoading,
+    mutate,
+  } = useScopedList<OrgInboundTrigger>("inbound-triggers", scope);
   const [toRevoke, setToRevoke] = useState<OrgInboundTrigger | null>(null);
   const [isRevoking, setIsRevoking] = useState(false);
 
@@ -136,7 +140,6 @@ export const OrgInboundTriggersList = ({ orgId }: { orgId: string }) => {
     return <ListError error={error} subject="inbound triggers" />;
   }
 
-  const triggers = data?.results ?? [];
   if (!triggers.length) {
     return (
       <EmptyCard

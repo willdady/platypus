@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { toast } from "sonner";
 import { Box, KeyRound, Plus } from "lucide-react";
 import { type Sandbox } from "@platypus/schemas";
@@ -199,16 +200,15 @@ const SandboxSettings = ({
     { fetcher: optionalFetcher },
   );
 
-  const { data: backendsData, isLoading: backendsLoading } = useScopedSWR<{
-    results: SandboxBackend[];
-  }>("sandbox-backends", { orgId });
-  const backends = useMemo(() => backendsData?.results ?? [], [backendsData]);
+  const { results: backends, isLoading: backendsLoading } =
+    useScopedList<SandboxBackend>("sandbox-backends", { orgId });
 
   // Operator network allowlist — admin-only endpoint (ADR-0005).
-  const { data: networksData, isLoading: networksLoading } = useScopedSWR<{
-    results: string[];
-  }>("sandbox-backends/networks", canConfigure ? { orgId } : null);
-  const allowedNetworks = networksData?.results ?? [];
+  const { results: allowedNetworks, isLoading: networksLoading } =
+    useScopedList<string>(
+      "sandbox-backends/networks",
+      canConfigure ? { orgId } : null,
+    );
 
   const [isConfiguring, setIsConfiguring] = useState(false);
   // Whether the admin chose to replace a stored SSH key, revealing the textarea

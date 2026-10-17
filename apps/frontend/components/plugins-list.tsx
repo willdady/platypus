@@ -2,7 +2,7 @@
 
 import { Blocks, Container, Globe, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { Badge } from "@/components/ui/badge";
 import {
   Item,
@@ -35,9 +35,11 @@ const PluginsList = ({
   className?: string;
   orgId: string;
 }) => {
-  const { data, error } = useScopedSWR<{
-    results: InstalledPlugin[];
-  }>("plugins", { orgId });
+  const {
+    data,
+    error,
+    results: plugins,
+  } = useScopedList<InstalledPlugin>("plugins", { orgId });
 
   // No data and no error is still loading — gating on data rather than
   // `isLoading` alone keeps "No plugins installed" from flashing first.
@@ -78,8 +80,6 @@ const PluginsList = ({
       />
     );
   }
-
-  const plugins = data?.results ?? [];
 
   if (!plugins.length) {
     return (

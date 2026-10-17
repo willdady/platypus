@@ -45,6 +45,7 @@ import { TransferWorkspaceAction } from "@/components/transfer-workspace-dialog"
 import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { organizationEntity } from "@/lib/api-write";
 import Link from "next/link";
 import {
@@ -127,10 +128,8 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
   const router = useRouter();
 
   // Fetch providers
-  const { data: providersData, isLoading: providersLoading } = useScopedSWR<{
-    results: Provider[];
-  }>("providers", { orgId, workspaceId });
-  const providers = providersData?.results || [];
+  const { results: providers, isLoading: providersLoading } =
+    useScopedList<Provider>("providers", { orgId, workspaceId });
 
   // The Workspace's Inbound Trigger switch only counts under the
   // Organization's "Selected workspaces" gate (ADR-0030).

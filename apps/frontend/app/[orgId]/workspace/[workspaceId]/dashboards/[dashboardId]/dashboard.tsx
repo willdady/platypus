@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Markdown } from "@/components/markdown";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ResponsiveGridLayout } from "react-grid-layout";
@@ -306,28 +307,26 @@ const DashboardPage = ({
 
   const {
     data: widgetsData,
+    results: allWidgets,
     error: widgetsError,
     mutate: mutateWidgets,
-  } = useScopedSWR<{
-    results: Widget[];
-  }>(widgetsEntity, scope, {
+  } = useScopedList<Widget>(widgetsEntity, scope, {
     refreshInterval: editMode ? 0 : 5000,
   });
 
   // Also fetch all dashboards for the dropdown switcher. Deliberately not
   // polled: it only backs a menu, and polling it re-rendered the whole page
   // every 5s for a list the user is not looking at.
-  const { data: allDashboardsData } = useScopedSWR<{ results: Dashboard[] }>(
+  const { results: allDashboards } = useScopedList<Dashboard>(
     "dashboards",
     scope,
   );
 
   const deletions = session?.deletions;
   const widgets = useMemo(
-    () => (widgetsData?.results ?? []).filter((w) => !deletions?.has(w.id)),
-    [widgetsData, deletions],
+    () => allWidgets.filter((w) => !deletions?.has(w.id)),
+    [allWidgets, deletions],
   );
-  const allDashboards = allDashboardsData?.results ?? [];
 
   // Per-type minimum sizes and mobile heights live in the registry.
   const widgetTypeById = useMemo(

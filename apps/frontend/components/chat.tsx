@@ -42,6 +42,7 @@ import { scopedPath, scopedUrl, writeAt } from "@/lib/api-write";
 import { useSandboxUploads } from "@/hooks/use-sandbox-uploads";
 import { alternativePositions } from "@/lib/chat-alternatives";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import { useChatSettings } from "@/hooks/use-chat-settings";
@@ -100,44 +101,25 @@ export const Chat = ({
   // Fetch providers
   const {
     data: providersData,
+    results: providers,
     error: providersError,
     isLoading,
-  } = useScopedSWR<{
-    results: Provider[];
-  }>("providers", scope);
-
-  // Memoize providers to prevent unnecessary re-renders
-  const providers = useMemo(
-    () => providersData?.results || [],
-    [providersData?.results],
-  );
+  } = useScopedList<Provider>("providers", scope);
 
   // Fetch agents
-  const { data: agentsData, mutate: mutateAgents } = useScopedSWR<{
-    results: Agent[];
-  }>("agents", scope);
+  const {
+    data: agentsData,
+    results: agents,
+    mutate: mutateAgents,
+  } = useScopedList<Agent>("agents", scope);
 
-  // Memoize agents to prevent unnecessary re-renders. The model-selection
-  // ladder is the one reader that needs "the list has not landed yet" apart
-  // from "this workspace has no Agents" (issue #799), so it takes the
-  // undefined-until-loaded value; everything else reads the plain list.
-  const agentsIfLoaded = useMemo(
-    () => agentsData?.results,
-    [agentsData?.results],
-  );
-  const agents = useMemo(() => agentsIfLoaded ?? [], [agentsIfLoaded]);
+  // The model-selection ladder is the one reader that needs "the list has not
+  // landed yet" apart from "this workspace has no Agents" (issue #799), so it
+  // takes the undefined-until-loaded value; everything else reads the plain
+  // list.
+  const agentsIfLoaded = agentsData?.results;
 
-  // Fetch tool sets
-  const { data: toolSetsData } = useScopedSWR<{ results: ToolSet[] }>(
-    "tools",
-    scope,
-  );
-
-  // Memoize tool sets to prevent unnecessary re-renders
-  const toolSets = useMemo(
-    () => toolSetsData?.results || [],
-    [toolSetsData?.results],
-  );
+  const { results: toolSets } = useScopedList<ToolSet>("tools", scope);
 
   // The Workspace's Sandbox, for whether the composer offers Upload to Sandbox.
   const { data: sandbox } = useScopedSWR<Sandbox | null>("sandbox", scope, {
@@ -148,15 +130,7 @@ export const Chat = ({
   );
 
   // Fetch skills
-  const { data: skillsData } = useScopedSWR<{ results: Skill[] }>(
-    "skills",
-    scope,
-  );
-  // Memoize skills to prevent unnecessary re-renders
-  const skills = useMemo(
-    () => skillsData?.results || [],
-    [skillsData?.results],
-  );
+  const { results: skills } = useScopedList<Skill>("skills", scope);
 
   // The per-turn body rides each call (`useChatTurn` builds it) and wins the
   // SDK's shallow merge over this one, so the transport carries only what
