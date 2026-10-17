@@ -51,7 +51,8 @@ export default function InviteTokenPage() {
     window.history.replaceState(null, "", withBasePath(appRoutes.invite));
   }, []);
 
-  // Raw `useSWR`, not `useScopedSWR`: the link resolves before sign-in.
+  // Raw `useSWR`, not `useScopedSWR`: the link resolves before sign-in, so
+  // a failure here is no sign of an ended session.
   const { data, error, isLoading } = useSWR<
     Serialized<InvitationLinkResolution> | null,
     unknown
@@ -60,6 +61,7 @@ export default function InviteTokenPage() {
       ? joinUrl(backendUrl, `/invitation-links/${redeemToken}`)
       : null,
     optionalFetcher,
+    { onError: () => {} },
   );
 
   const [name, setName] = useState("");
