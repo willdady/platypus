@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/",
 }));
 
 vi.mock("@/components/auth-provider", () => ({
