@@ -120,7 +120,7 @@ export const EntityCardList = ({
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
-                        className="cursor-pointer text-muted-foreground"
+                        className="text-muted-foreground"
                         variant="ghost"
                         size="icon"
                         aria-label={`Actions for ${card.name}`}
@@ -130,7 +130,7 @@ export const EntityCardList = ({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <DropdownMenuItem className="cursor-pointer" asChild>
+                      <DropdownMenuItem asChild>
                         <Link
                           href={routes.settings(card.id)}
                           onClick={(e) => e.stopPropagation()}
@@ -140,7 +140,7 @@ export const EntityCardList = ({
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        className="cursor-pointer text-destructive focus:text-destructive"
+                        className="text-destructive focus:text-destructive"
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();

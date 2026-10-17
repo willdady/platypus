@@ -149,59 +149,54 @@ export const OrgInboundTriggersList = ({ orgId }: { orgId: string }) => {
 
   return (
     <>
-      <div className="border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table className="min-w-[720px]">
-            <TableHeader>
-              <TableRow>
-                {COLUMNS.map((header) => (
-                  <TableHead key={header}>{header}</TableHead>
-                ))}
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {triggers.map((trigger) => (
-                <TableRow key={trigger.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{trigger.name}</span>
-                      {!trigger.enabled && (
-                        <Badge variant="secondary" className="text-xs">
-                          Disabled
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {/* The Owner, not the Admin: the run acts as them and a
+      <Table bordered className="min-w-[720px]">
+        <TableHeader>
+          <TableRow>
+            {COLUMNS.map((header) => (
+              <TableHead key={header}>{header}</TableHead>
+            ))}
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {triggers.map((trigger) => (
+            <TableRow key={trigger.id}>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{trigger.name}</span>
+                  {!trigger.enabled && (
+                    <Badge variant="secondary" className="text-xs">
+                      Disabled
+                    </Badge>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>
+                {/* The Owner, not the Admin: the run acts as them and a
                         revoke notifies them. */}
-                    <div className="flex flex-col">
-                      <span>{trigger.workspaceName}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {trigger.ownerName}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{formatDate(trigger.createdAt)}</TableCell>
-                  <TokenCells token={trigger} />
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="cursor-pointer"
-                      disabled={trigger.tokenStatus === "none"}
-                      onClick={() => setToRevoke(trigger)}
-                    >
-                      Revoke token
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                <div className="flex flex-col">
+                  <span>{trigger.workspaceName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {trigger.ownerName}
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell>{formatDate(trigger.createdAt)}</TableCell>
+              <TokenCells token={trigger} />
+              <TableCell className="text-right">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={trigger.tokenStatus === "none"}
+                  onClick={() => setToRevoke(trigger)}
+                >
+                  Revoke token
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
       <ConfirmDialog
         open={toRevoke !== null}

@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldLabel } from "@/components/ui/field";
 import type { Workspace } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -138,12 +139,9 @@ export const ApplyBlueprintDialog = ({
         )}
 
         {error && (
-          <div
-            role="alert"
-            className="py-2 px-4 bg-destructive/10 text-destructive text-sm rounded"
-          >
-            {error}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         <DialogFooter>

@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { useState, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -105,12 +106,9 @@ export const ConfirmDialog = ({
           )}
         </DialogHeader>
         {error && (
-          <div
-            role="alert"
-            className="py-2 px-4 bg-destructive/10 text-destructive text-sm rounded"
-          >
-            {error}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
         <DialogFooter>
           <Button variant="ghost" onClick={handleCancel} disabled={loading}>

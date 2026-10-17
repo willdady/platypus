@@ -154,25 +154,19 @@ export const Composer = ({
           <PromptInputActionMenu>
             <Tooltip delayDuration={1000}>
               <TooltipTrigger asChild>
-                <PromptInputActionMenuTrigger
-                  aria-label="Add attachments"
-                  className="cursor-pointer"
-                />
+                <PromptInputActionMenuTrigger aria-label="Add attachments" />
               </TooltipTrigger>
               <TooltipContent>Add attachments</TooltipContent>
             </Tooltip>
             <PromptInputActionMenuContent>
-              <PromptInputActionAddAttachments className="cursor-pointer" />
-              {canUploadToSandbox && (
-                <PromptInputActionAddSandboxUploads className="cursor-pointer" />
-              )}
+              <PromptInputActionAddAttachments />
+              {canUploadToSandbox && <PromptInputActionAddSandboxUploads />}
             </PromptInputActionMenuContent>
           </PromptInputActionMenu>
           <Tooltip delayDuration={1000}>
             <TooltipTrigger asChild>
               <PromptInputSpeechButton
                 aria-label="Microphone"
-                className="cursor-pointer"
                 textareaRef={textareaRef}
                 onTranscriptionChange={onTranscriptionChange}
               />

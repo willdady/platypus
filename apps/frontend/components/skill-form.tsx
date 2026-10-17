@@ -285,7 +285,6 @@ const SkillForm = ({
                 <Field key={agent.id} orientation="horizontal">
                   <Switch
                     id={`agent-${agent.id}`}
-                    className="cursor-pointer"
                     checked={selectedAgentIds.includes(agent.id)}
                     onCheckedChange={(checked) => {
                       setSelectedAgentIds((prev) =>

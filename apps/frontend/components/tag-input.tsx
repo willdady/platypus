@@ -92,7 +92,7 @@ export function TagInput({
                 type="button"
                 onClick={() => removeTag(tag)}
                 disabled={disabled}
-                className="rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none cursor-pointer"
+                className="rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none"
               >
                 <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                 <span className="sr-only">Remove {tag}</span>
@@ -112,7 +112,7 @@ export function TagInput({
         disabled={disabled || value.length >= MAX_TAGS}
         className="h-9"
       />
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-2xs text-muted-foreground">
         Press Enter or comma to add. Tags must be kebab-case.
       </p>
     </div>

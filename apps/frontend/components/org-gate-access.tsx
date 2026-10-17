@@ -169,37 +169,33 @@ export const OrgGateAccess = ({
               This organization has no workspaces yet.
             </p>
           ) : (
-            <div className="border rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Workspace</TableHead>
-                      <TableHead>Owner</TableHead>
-                      <TableHead>{copy.countHeader}</TableHead>
-                      <TableHead className="text-right">Allowed</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.workspaces.map((ws) => (
-                      <TableRow key={ws.id}>
-                        <TableCell className="font-medium">{ws.name}</TableCell>
-                        <TableCell>{ws.ownerName}</TableCell>
-                        <TableCell>{ws.count}</TableCell>
-                        <TableCell className="text-right">
-                          <Switch
-                            aria-label={`Allow ${ws.name}`}
-                            checked={allowed.has(ws.id)}
-                            disabled={isSaving}
-                            onCheckedChange={(on) => toggle(ws.id, on)}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+            <Table bordered>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Workspace</TableHead>
+                  <TableHead>Owner</TableHead>
+                  <TableHead>{copy.countHeader}</TableHead>
+                  <TableHead className="text-right">Allowed</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.workspaces.map((ws) => (
+                  <TableRow key={ws.id}>
+                    <TableCell className="font-medium">{ws.name}</TableCell>
+                    <TableCell>{ws.ownerName}</TableCell>
+                    <TableCell>{ws.count}</TableCell>
+                    <TableCell className="text-right">
+                      <Switch
+                        aria-label={`Allow ${ws.name}`}
+                        checked={allowed.has(ws.id)}
+                        disabled={isSaving}
+                        onCheckedChange={(on) => toggle(ws.id, on)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </Field>
       )}
@@ -215,7 +211,6 @@ export const OrgGateAccess = ({
       <div>
         <Button
           type="button"
-          className="cursor-pointer"
           disabled={!dirty || isSaving}
           onClick={() => void submit()}
         >

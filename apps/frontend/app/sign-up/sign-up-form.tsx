@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { useSignUpOpen } from "@/hooks/use-sign-up-open";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Label } from "@/components/ui/label";
@@ -80,12 +81,9 @@ export default function SignUpPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div
-                  role="alert"
-                  className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
-                >
-                  {error}
-                </div>
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
               )}
 
               <div className="space-y-2">

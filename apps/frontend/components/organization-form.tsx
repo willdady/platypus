@@ -162,10 +162,8 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
           submitText="Save"
           onSubmit={() => void submit()}
           submitDisabled={isSubmitting || !canSubmit}
-          submitClassName=""
           deleteVisible={!!orgId}
           deleteDisabled={isSubmitting}
-          deleteClassName=""
           onDelete={openDeleteDialog}
         />
 

@@ -127,7 +127,7 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
-                            className="cursor-pointer text-muted-foreground"
+                            className="text-muted-foreground"
                             variant="ghost"
                             size="icon"
                             aria-label={`Actions for ${blueprint.name}`}
@@ -140,22 +140,18 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
                           onClick={(e) => e.preventDefault()}
                         >
                           <DropdownMenuItem
-                            className="cursor-pointer"
                             onSelect={() => setBlueprintToApply(blueprint)}
                           >
                             <Play /> Apply to workspace
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
-                            <Link
-                              className="cursor-pointer"
-                              href={routes.blueprintDetail(blueprint.id)}
-                            >
+                            <Link href={routes.blueprintDetail(blueprint.id)}>
                               <Pencil /> Edit
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            className="cursor-pointer text-destructive focus:text-destructive"
+                            className="text-destructive focus:text-destructive"
                             onSelect={() => {
                               deleteFlow.request(blueprint);
                             }}

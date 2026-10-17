@@ -51,7 +51,7 @@ function RetryReadItem({
   onRetry: () => void;
 }) {
   return (
-    <CommandItem className="cursor-pointer" onSelect={() => onRetry()}>
+    <CommandItem onSelect={() => onRetry()}>
       <RotateCw />
       <span>Couldn&apos;t load {subject}. Retry</span>
     </CommandItem>
@@ -119,7 +119,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
   const renderAgentItem = (agent: Agent) => (
     <CommandItem
       key={agent.id}
-      className="cursor-pointer"
       onSelect={() => {
         runCommand(() =>
           router.push(`${routes.chat.root}?agentId=${agent.id}`),
@@ -138,7 +137,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Actions">
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.root));
             }}
@@ -147,7 +145,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>Home</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(appRoutes.home));
             }}
@@ -156,7 +153,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>Switch org</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             disabled={hasNoProviders}
             onSelect={() => {
               runCommand(() => router.push(routes.chat.root));
@@ -166,7 +162,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>New chat</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.agents.create));
             }}
@@ -175,7 +170,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>New agent</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.skills.create));
             }}
@@ -184,7 +178,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>New skill</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.boards.create));
             }}
@@ -193,7 +186,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>New board</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.dashboards.create));
             }}
@@ -202,7 +194,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>New dashboard</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.triggers.create));
             }}
@@ -211,7 +202,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>New trigger</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.triggerRuns.root));
             }}
@@ -220,7 +210,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>Trigger runs</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.settings.createWebhook));
             }}
@@ -229,7 +218,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>Add webhook</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(userRoutes.profile));
             }}
@@ -238,7 +226,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>Profile settings</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.settings.root));
             }}
@@ -247,7 +234,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>Workspace settings</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.settings.providers));
             }}
@@ -256,7 +242,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>Providers</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.settings.mcp));
             }}
@@ -265,7 +250,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>MCP</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() =>
                 window.open(
@@ -280,7 +264,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>Docs</span>
           </CommandItem>
           <CommandItem
-            className="cursor-pointer"
             onSelect={() => {
               runCommand(() => router.push(routes.settings.about));
             }}
@@ -314,7 +297,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             {boards.map((board) => (
               <CommandItem
                 key={board.id}
-                className="cursor-pointer"
                 onSelect={() => {
                   runCommand(() => router.push(routes.boards.detail(board.id)));
                 }}
@@ -338,7 +320,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             {triggers.map((trigger) => (
               <CommandItem
                 key={trigger.id}
-                className="cursor-pointer"
                 onSelect={() => {
                   runCommand(() =>
                     router.push(routes.triggers.detail(trigger.id)),

@@ -70,19 +70,14 @@ function WorkspaceSettingsDropdown({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Workspace settings"
-          className="size-7 cursor-pointer"
-        >
+        <Button variant="ghost" size="icon-xs" aria-label="Workspace settings">
           <Settings className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {workspaceSettingsLinks(orgId, workspaceId).map(
           ({ href, icon: Icon, label }) => (
-            <DropdownMenuItem key={href} asChild className="cursor-pointer">
+            <DropdownMenuItem key={href} asChild>
               <Link href={href}>
                 <Icon className="size-4" /> {label}
               </Link>

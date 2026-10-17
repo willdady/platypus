@@ -136,11 +136,7 @@ export const OAuthCallbackHandler = ({
         <p role="alert" className="text-destructive">
           {error}
         </p>
-        <Button
-          variant="outline"
-          className="cursor-pointer"
-          onClick={() => router.push(appRoutes.home)}
-        >
+        <Button variant="outline" onClick={() => router.push(appRoutes.home)}>
           Back to Home
         </Button>
       </div>

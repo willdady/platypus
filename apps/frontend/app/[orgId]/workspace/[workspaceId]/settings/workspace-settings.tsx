@@ -21,7 +21,7 @@ const WorkspaceSettingsPage = ({
           <div className="flex items-center justify-between">
             <p className="font-mono text-muted-foreground">{orgId}</p>
             <Button
-              className="cursor-pointer text-muted-foreground"
+              className="text-muted-foreground"
               variant="ghost"
               size="icon"
               aria-label="Copy Organization ID"
@@ -36,7 +36,7 @@ const WorkspaceSettingsPage = ({
           <div className="flex items-center justify-between">
             <p className="font-mono text-muted-foreground">{workspaceId}</p>
             <Button
-              className="cursor-pointer text-muted-foreground"
+              className="text-muted-foreground"
               variant="ghost"
               size="icon"
               aria-label="Copy Workspace ID"

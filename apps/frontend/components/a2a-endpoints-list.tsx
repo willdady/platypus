@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Network, Plus } from "lucide-react";
 import type { A2aEndpointListItem } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { useAuth } from "./auth-provider";
 import { ListError } from "./list-state";
@@ -25,9 +26,7 @@ import {
 } from "./list-skeletons";
 
 const StatusBadge = ({ children }: { children: ReactNode }) => (
-  <span className="px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-    {children}
-  </span>
+  <Badge variant="pill">{children}</Badge>
 );
 
 /** A Workspace's A2A endpoints (ADR-0032). Only the Owner adds or edits one. */

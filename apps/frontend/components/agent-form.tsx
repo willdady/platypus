@@ -470,7 +470,7 @@ const AgentForm = ({
             <button
               type="button"
               onClick={() => avatarInputRef.current?.click()}
-              className="relative group cursor-pointer flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="relative group flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               disabled={isSubmitting || readOnly}
             >
               <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
@@ -705,7 +705,6 @@ const AgentForm = ({
                         <Field key={toolSet.id} orientation="horizontal">
                           <Switch
                             id={toolSet.id}
-                            className="cursor-pointer"
                             checked={formData.toolSetIds.includes(toolSet.id)}
                             onCheckedChange={(checked) => {
                               setFormData((prevData) => {
@@ -765,7 +764,6 @@ const AgentForm = ({
                     <Field key={skill.id} orientation="horizontal">
                       <Switch
                         id={`skill-${skill.id}`}
-                        className="cursor-pointer"
                         checked={formData.skillIds.includes(skill.id)}
                         onCheckedChange={(checked) => {
                           setFormData((prevData) => {
@@ -817,7 +815,6 @@ const AgentForm = ({
                     <Field key={agent.id} orientation="horizontal">
                       <Switch
                         id={`subagent-${agent.id}`}
-                        className="cursor-pointer"
                         checked={formData.subAgentIds.includes(agent.id)}
                         onCheckedChange={(checked) => {
                           setFormData((prevData) => ({
@@ -853,11 +850,7 @@ const AgentForm = ({
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">
               <span className="cursor-default">Advanced settings</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="cursor-pointer size-8"
-              >
+              <Button variant="ghost" size="icon-sm">
                 <ChevronsUpDown />
                 <span className="sr-only">Toggle</span>
               </Button>

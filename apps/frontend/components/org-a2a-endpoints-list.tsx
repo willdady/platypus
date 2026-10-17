@@ -131,89 +131,83 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
 
   return (
     <>
-      <div className="border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table className="min-w-[720px]">
-            <TableHeader>
+      <Table bordered className="min-w-[720px]">
+        <TableHeader>
+          <TableRow>
+            {COLUMNS.map((header) => (
+              <TableHead key={header}>{header}</TableHead>
+            ))}
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {endpoints.map((endpoint) => (
+            <Fragment key={endpoint.id}>
               <TableRow>
-                {COLUMNS.map((header) => (
-                  <TableHead key={header}>{header}</TableHead>
-                ))}
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {endpoints.map((endpoint) => (
-                <Fragment key={endpoint.id}>
-                  <TableRow>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{endpoint.name}</span>
-                          {!endpoint.enabled && (
-                            <Badge variant="secondary" className="text-xs">
-                              Disabled
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          Agent: {endpoint.agentName}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {/* The Owner, not the Admin: the run acts as them and a
+                <TableCell>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{endpoint.name}</span>
+                      {!endpoint.enabled && (
+                        <Badge variant="secondary" className="text-xs">
+                          Disabled
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Agent: {endpoint.agentName}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {/* The Owner, not the Admin: the run acts as them and a
                           revoke notifies them. */}
-                      <div className="flex flex-col">
-                        <span>{endpoint.workspaceName}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {endpoint.ownerName}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{formatDate(endpoint.createdAt)}</TableCell>
-                    <TableCell colSpan={3} />
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="cursor-pointer"
-                        onClick={() => setToRevoke({ endpoint })}
-                      >
-                        Revoke endpoint
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                  {endpoint.tokens.map((token) => (
-                    <TableRow key={token.id}>
-                      <TableCell className="pl-8">
-                        <span className="text-muted-foreground">Token: </span>
-                        {token.name}
-                      </TableCell>
-                      <TableCell />
-                      <TableCell>
-                        <TokenTime value={token.createdAt} />
-                      </TableCell>
-                      <TokenCells token={token} />
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="cursor-pointer"
-                          aria-label={`Revoke token ${token.name}`}
-                          onClick={() => setToRevoke({ endpoint, token })}
-                        >
-                          Revoke token
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </Fragment>
+                  <div className="flex flex-col">
+                    <span>{endpoint.workspaceName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {endpoint.ownerName}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell>{formatDate(endpoint.createdAt)}</TableCell>
+                <TableCell colSpan={3} />
+                <TableCell className="text-right">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setToRevoke({ endpoint })}
+                  >
+                    Revoke endpoint
+                  </Button>
+                </TableCell>
+              </TableRow>
+              {endpoint.tokens.map((token) => (
+                <TableRow key={token.id}>
+                  <TableCell className="pl-8">
+                    <span className="text-muted-foreground">Token: </span>
+                    {token.name}
+                  </TableCell>
+                  <TableCell />
+                  <TableCell>
+                    <TokenTime value={token.createdAt} />
+                  </TableCell>
+                  <TokenCells token={token} />
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Revoke token ${token.name}`}
+                      onClick={() => setToRevoke({ endpoint, token })}
+                    >
+                      Revoke token
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+            </Fragment>
+          ))}
+        </TableBody>
+      </Table>
 
       <ConfirmDialog
         open={toRevoke !== null}

@@ -41,12 +41,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          aria-label="Account menu"
-        >
+        <Button variant="ghost" size="icon-xs" aria-label="Account menu">
           <User className="size-4" />
         </Button>
       </DropdownMenuTrigger>
@@ -65,7 +60,7 @@ export function UserMenu() {
         </DropdownMenuLabel>
         {userSettingsLinks(user.role === "admin").map(
           ({ href, icon: Icon, label }) => (
-            <DropdownMenuItem key={href} asChild className="cursor-pointer">
+            <DropdownMenuItem key={href} asChild>
               <Link href={href}>
                 <Icon className="size-4" /> {label}
               </Link>
@@ -73,7 +68,7 @@ export function UserMenu() {
           ),
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+        <DropdownMenuItem onClick={handleSignOut}>
           <LogOut className="size-4" /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>

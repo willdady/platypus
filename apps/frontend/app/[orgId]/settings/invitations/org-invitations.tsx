@@ -76,28 +76,14 @@ const OrgInvitationsPage = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "pending":
-        return (
-          <Badge
-            variant="outline"
-            className="bg-yellow-50 text-yellow-700 border-yellow-200"
-          >
-            Pending
-          </Badge>
-        );
+        return <Badge variant="warning">Pending</Badge>;
       case "accepted":
-        return (
-          <Badge
-            variant="outline"
-            className="bg-green-50 text-green-700 border-green-200"
-          >
-            Accepted
-          </Badge>
-        );
+        return <Badge variant="success">Accepted</Badge>;
       case "declined":
         return (
           <Badge
             variant="outline"
-            className="bg-red-50 text-red-700 border-red-200"
+            className="border-destructive/30 bg-destructive/10 text-destructive"
           >
             Declined
           </Badge>
@@ -173,71 +159,65 @@ const OrgInvitationsPage = () => {
             description="Invitations you send with the form above appear here until they're accepted."
           />
         ) : (
-          <div className="border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table className="min-w-[600px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Workspace</TableHead>
-                    <TableHead>Blueprints</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Expires</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.results.map((invite) => (
-                    <TableRow key={invite.id}>
-                      <TableCell>{invite.email}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {invite.workspaceName || (
-                          <span className="italic">Member&apos;s name</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {invite.blueprintIds &&
-                        invite.blueprintIds.length > 0 ? (
-                          invite.blueprintIds
-                            .map((id) => blueprintNameById.get(id) ?? id)
-                            .join(", ")
-                        ) : (
-                          <span className="italic">None</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(invite.status)}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(invite.expiresAt)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {invite.status === "pending" && invite.token && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Copy invitation link"
-                            className="cursor-pointer"
-                            title="Copy invitation link"
-                            onClick={() => handleCopyLink(invite.token!)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Delete invitation for ${invite.email}`}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
-                          onClick={() => invitationDelete.request(invite.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
+          <Table bordered className="min-w-[600px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Email</TableHead>
+                <TableHead>Workspace</TableHead>
+                <TableHead>Blueprints</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data?.results.map((invite) => (
+                <TableRow key={invite.id}>
+                  <TableCell>{invite.email}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {invite.workspaceName || (
+                      <span className="italic">Member&apos;s name</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {invite.blueprintIds && invite.blueprintIds.length > 0 ? (
+                      invite.blueprintIds
+                        .map((id) => blueprintNameById.get(id) ?? id)
+                        .join(", ")
+                    ) : (
+                      <span className="italic">None</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{getStatusBadge(invite.status)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(invite.expiresAt)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {invite.status === "pending" && invite.token && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Copy invitation link"
+                        title="Copy invitation link"
+                        onClick={() => handleCopyLink(invite.token!)}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete invitation for ${invite.email}`}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => invitationDelete.request(invite.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </div>
 

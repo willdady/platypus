@@ -14,7 +14,7 @@ export const TriggerRunRowSkeleton = () => (
         <div className="flex h-6 items-center">
           <Skeleton className="h-4 w-36" />
         </div>
-        <Skeleton className="my-1 h-[22px] w-16 rounded-full" />
+        <Skeleton className="my-1 h-badge w-16 rounded-full" />
         <div className="flex h-5 items-center">
           <Skeleton className="h-3.5 w-44" />
         </div>

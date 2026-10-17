@@ -71,11 +71,7 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
             ) : (
               organizations.map((org) => (
                 <SidebarMenuItem key={org.id}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={currentOrgId === org.id}
-                    className="cursor-pointer"
-                  >
+                  <SidebarMenuButton asChild isActive={currentOrgId === org.id}>
                     <Link href={orgRoutes(org.id).root}>
                       <Building className="size-4" />
                       <span>{org.name}</span>

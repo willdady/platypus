@@ -53,7 +53,7 @@ export const RowActionsMenu = ({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          className="cursor-pointer text-muted-foreground"
+          className="text-muted-foreground"
           variant="ghost"
           size="icon"
           aria-label={`Actions for ${name}`}
@@ -66,23 +66,18 @@ export const RowActionsMenu = ({
       <DropdownMenuContent onClick={(e) => e.preventDefault()}>
         {edit && (
           <DropdownMenuItem asChild>
-            <Link className="cursor-pointer" href={edit.href}>
+            <Link href={edit.href}>
               <Pencil /> {edit.label ?? "Edit"}
             </Link>
           </DropdownMenuItem>
         )}
         {actions.map((action) => (
-          <DropdownMenuItem
-            key={action.label}
-            className="cursor-pointer"
-            onSelect={action.onSelect}
-          >
+          <DropdownMenuItem key={action.label} onSelect={action.onSelect}>
             {action.icon} {action.label}
           </DropdownMenuItem>
         ))}
         {toggle && (
           <DropdownMenuItem
-            className="cursor-pointer"
             onSelect={toggle.onSelect}
             disabled={toggle.disabled}
           >
@@ -105,8 +100,8 @@ export const RowActionsMenu = ({
             <DropdownMenuItem
               className={
                 remove.kind === "delete"
-                  ? "cursor-pointer text-destructive focus:text-destructive"
-                  : "cursor-pointer"
+                  ? "text-destructive focus:text-destructive"
+                  : undefined
               }
               onSelect={remove.onSelect}
             >

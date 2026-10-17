@@ -282,7 +282,6 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
                   >
                     <SelectTrigger
                       id="workspace"
-                      className="cursor-pointer"
                       aria-invalid={!!validationErrors.workspaceId}
                     >
                       <SelectValue
@@ -302,7 +301,6 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
                               <SelectItem
                                 key={workspace.id}
                                 value={workspace.id}
-                                className="cursor-pointer"
                               >
                                 {workspace.name}
                               </SelectItem>
@@ -338,10 +336,8 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
           type="submit"
           submitText={contextId ? "Update" : "Save"}
           submitDisabled={isSubmitting}
-          submitClassName=""
           deleteVisible={!!contextId}
           deleteDisabled={isSubmitting}
-          deleteClassName=""
           onDelete={openDeleteDialog}
         />
 

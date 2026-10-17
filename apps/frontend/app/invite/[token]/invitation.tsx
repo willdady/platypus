@@ -8,6 +8,7 @@ import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { optionalFetcher, joinUrl } from "@/lib/utils";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Label } from "@/components/ui/label";
@@ -216,12 +217,9 @@ export default function InviteTokenPage() {
           </p>
         </div>
         {formError && (
-          <div
-            role="alert"
-            className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
-          >
-            {formError}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
         )}
         <Button
           onClick={handleAccept}
@@ -250,12 +248,9 @@ export default function InviteTokenPage() {
         className="space-y-4"
       >
         {formError && (
-          <div
-            role="alert"
-            className="bg-destructive/10 text-destructive rounded-md p-3 text-sm"
-          >
-            {formError}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
         )}
 
         <div className="space-y-2">

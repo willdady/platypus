@@ -34,8 +34,7 @@ export function BackButton({
     return (
       <Button
         variant="ghost"
-        size="icon"
-        className="size-7"
+        size="icon-xs"
         onClick={handleClick}
         aria-label="Back"
       >

@@ -19,7 +19,7 @@ export const ModelCapabilityNotice = ({
   return (
     <FieldDescription
       role="status"
-      className="flex items-start gap-1.5 text-amber-700 dark:text-amber-400"
+      className="flex items-start gap-1.5 text-warning-foreground"
     >
       <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
       <span>

@@ -171,7 +171,6 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                       <Field key={bp.id} orientation="horizontal">
                         <Switch
                           id={`bp-${bp.id}`}
-                          className="cursor-pointer"
                           checked={checked}
                           onCheckedChange={(on) => toggleBlueprint(bp.id, on)}
                           disabled={isSubmitting}
@@ -211,8 +210,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
-                            className="size-7"
+                            size="icon-xs"
                             disabled={isSubmitting || index === 0}
                             onClick={() => moveBlueprint(index, -1)}
                             aria-label="Move earlier"
@@ -222,8 +220,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
-                            className="size-7"
+                            size="icon-xs"
                             disabled={
                               isSubmitting || index === blueprintIds.length - 1
                             }
@@ -235,8 +232,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
-                            className="size-7"
+                            size="icon-xs"
                             disabled={isSubmitting}
                             onClick={() => toggleBlueprint(id, false)}
                             aria-label="Remove"
@@ -260,10 +256,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       <Button
         type="submit"
         disabled={isSubmitting || !canSubmit}
-        className={cn(
-          "w-full md:w-auto mt-2",
-          !isSubmitting && "cursor-pointer",
-        )}
+        className="w-full md:w-auto mt-2"
       >
         {isSubmitting ? "Sending..." : "Send invitation"}
       </Button>

@@ -637,7 +637,7 @@ const DashboardPage = ({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors cursor-pointer min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="truncate">{dashboard.name}</span>
                 <ChevronDown className="h-4 w-4 shrink-0" />
@@ -650,7 +650,7 @@ const DashboardPage = ({
                   <DropdownMenuItem key={d.id} asChild>
                     <Link
                       href={routes.dashboards.detail(d.id)}
-                      className="flex items-center gap-2 cursor-pointer"
+                      className="flex items-center gap-2"
                     >
                       <LayoutDashboard className="h-4 w-4" />
                       <span className="truncate">{d.name}</span>
@@ -661,7 +661,7 @@ const DashboardPage = ({
               <DropdownMenuItem asChild>
                 <Link
                   href={routes.dashboards.create}
-                  className="flex items-center gap-2 cursor-pointer"
+                  className="flex items-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Create new dashboard</span>
@@ -900,7 +900,7 @@ const DashboardPage = ({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-6 cursor-pointer text-muted-foreground"
+                          className="size-6 text-muted-foreground"
                           onClick={() => setExpandedWidgetId(null)}
                         >
                           <Minimize2 className="size-3.5" />

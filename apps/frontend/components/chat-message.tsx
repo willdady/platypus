@@ -368,7 +368,7 @@ export const ChatMessage = memo(function ChatMessage({
         }
         defaultOpen={false}
       >
-        <ReasoningTrigger className="cursor-pointer" />
+        <ReasoningTrigger />
         <ReasoningContent>{reasoningPart.text}</ReasoningContent>
       </Reasoning>
     )),
@@ -574,7 +574,7 @@ export const ChatMessage = memo(function ChatMessage({
               className="flex items-center"
             >
               <MessageAction
-                className="cursor-pointer text-muted-foreground"
+                className="text-muted-foreground"
                 disabled={isTurnInFlight || !alternatives.previousId}
                 onClick={() =>
                   onSwitchAlternative(message.id, alternatives.previousId!)
@@ -589,7 +589,7 @@ export const ChatMessage = memo(function ChatMessage({
                 {alternatives.index + 1}/{alternatives.count}
               </span>
               <MessageAction
-                className="cursor-pointer text-muted-foreground"
+                className="text-muted-foreground"
                 disabled={isTurnInFlight || !alternatives.nextId}
                 onClick={() =>
                   onSwitchAlternative(message.id, alternatives.nextId!)
@@ -615,7 +615,7 @@ export const ChatMessage = memo(function ChatMessage({
           anyone who could reach the Chat (issue #710). */}
           {canSendMessages && message.role === "user" && (
             <MessageAction
-              className="cursor-pointer text-muted-foreground"
+              className="text-muted-foreground"
               onClick={() => onEditStart(message.id)}
               variant="ghost"
               size="icon"
@@ -625,7 +625,7 @@ export const ChatMessage = memo(function ChatMessage({
             </MessageAction>
           )}
           <MessageAction
-            className="cursor-pointer text-muted-foreground"
+            className="text-muted-foreground"
             onClick={() => onCopyMessage(textContent, message.id)}
             variant={copiedMessageId === message.id ? "secondary" : "ghost"}
             size="icon"
@@ -635,7 +635,7 @@ export const ChatMessage = memo(function ChatMessage({
           </MessageAction>
           {canSendMessages && (
             <MessageAction
-              className="cursor-pointer text-muted-foreground"
+              className="text-muted-foreground"
               onClick={() => onMessageDelete(message.id)}
               variant="ghost"
               size="icon"
@@ -646,7 +646,7 @@ export const ChatMessage = memo(function ChatMessage({
           )}
           {canSendMessages && message.role === "assistant" && onRegenerate && (
             <MessageAction
-              className="cursor-pointer text-muted-foreground"
+              className="text-muted-foreground"
               // A second turn cannot start while one is running, and starting
               // it would first cut this tab's reply off the screen.
               disabled={isTurnInFlight}

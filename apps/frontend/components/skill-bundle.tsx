@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Sandbox, Skill, SkillFile } from "@platypus/schemas";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldDescription } from "@/components/ui/field";
@@ -23,13 +24,13 @@ export const NeedsSandboxBadge = ({ skill }: { skill: Skill }) => {
   if (!skill.needsSandbox) return null;
 
   return (
-    <span
-      className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider"
+    <Badge
+      variant="pill"
       title="This skill has scripts or binary files that only an agent with a Sandbox can use"
     >
-      <SquareTerminal className="size-3" />
+      <SquareTerminal />
       Needs Sandbox
-    </span>
+    </Badge>
   );
 };
 
