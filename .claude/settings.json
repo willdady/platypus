@@ -10,6 +10,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r \".tool_input.command\") && if printf \"%s\" \"$cmd\" | grep -Eq -- \"grep.*[[:space:]]--include=\\*\"; then echo \"zsh: an unquoted grep --include glob fails with no matches found. Quote the glob (--include='*.ts') or use the Grep tool.\" >&2; exit 2; fi"
+          }
+        ]
+      }
     ]
   }
 }
