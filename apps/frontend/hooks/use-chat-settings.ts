@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Chat } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
@@ -17,16 +17,16 @@ export const useChatSettings = (
   chatData: Chat | undefined,
   agentId: string,
 ) => {
-  const [instructions, setInstructions] = useState("");
-  const [temperature, setTemperature] = useState<number | undefined>();
-  const [topP, setTopP] = useState<number | undefined>();
-  const [topK, setTopK] = useState<number | undefined>();
-  const [seed, setSeed] = useState<number | undefined>();
-  const [presencePenalty, setPresencePenalty] = useState<number | undefined>();
-  const [frequencyPenalty, setFrequencyPenalty] = useState<
-    number | undefined
-  >();
-  const [maxSteps, setMaxSteps] = useState<number | undefined>();
+  const [settings, setSettings] = useState<ChatSettings>({
+    instructions: "",
+    temperature: undefined,
+    topP: undefined,
+    topK: undefined,
+    seed: undefined,
+    presencePenalty: undefined,
+    frequencyPenalty: undefined,
+    maxSteps: undefined,
+  });
 
   // Initialize chat settings from existing chat data (only when no agent is
   // selected — an agent supplies its own settings). Re-syncs when either the
@@ -37,54 +37,29 @@ export const useChatSettings = (
   // the user had typed into the settings dialog (issue #869).
   const initializeFromChat = () => {
     if (chatData && !agentId) {
-      setInstructions(chatData.instructions || "");
-      setTemperature(chatData.temperature ?? undefined);
-      setTopP(chatData.topP ?? undefined);
-      setTopK(chatData.topK ?? undefined);
-      setSeed(chatData.seed ?? undefined);
-      setPresencePenalty(chatData.presencePenalty ?? undefined);
-      setFrequencyPenalty(chatData.frequencyPenalty ?? undefined);
-      setMaxSteps(chatData.maxSteps ?? undefined);
+      setSettings({
+        instructions: chatData.instructions || "",
+        temperature: chatData.temperature ?? undefined,
+        topP: chatData.topP ?? undefined,
+        topK: chatData.topK ?? undefined,
+        seed: chatData.seed ?? undefined,
+        presencePenalty: chatData.presencePenalty ?? undefined,
+        frequencyPenalty: chatData.frequencyPenalty ?? undefined,
+        maxSteps: chatData.maxSteps ?? undefined,
+      });
     }
   };
   useResetOnChange(chatData?.id, initializeFromChat);
   useResetOnChange(agentId, initializeFromChat);
 
-  // One identity per actual value, so the turn built from it — and the
-  // callbacks `ChatMessage` is memoised on — survive a streamed token (#869).
-  const settings = useMemo<ChatSettings>(
-    () => ({
-      instructions,
-      temperature,
-      topP,
-      topK,
-      seed,
-      presencePenalty,
-      frequencyPenalty,
-      maxSteps,
-    }),
-    [
-      instructions,
-      temperature,
-      topP,
-      topK,
-      seed,
-      presencePenalty,
-      frequencyPenalty,
-      maxSteps,
-    ],
+  // One object held in state, replaced only by a patch or a re-sync, so the
+  // turn built from it — and the callbacks `ChatMessage` is memoised on —
+  // survive a streamed token (#869).
+  const updateSettings = useCallback(
+    (patch: Partial<ChatSettings>) =>
+      setSettings((prev) => ({ ...prev, ...patch })),
+    [],
   );
 
-  const setters = {
-    setInstructions,
-    setTemperature,
-    setTopP,
-    setTopK,
-    setSeed,
-    setPresencePenalty,
-    setFrequencyPenalty,
-    setMaxSteps,
-  };
-
-  return { settings, setters, ...setters };
+  return { settings, updateSettings };
 };

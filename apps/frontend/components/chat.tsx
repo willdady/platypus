@@ -310,7 +310,7 @@ export const Chat = ({
       workspaceId,
       initialAgentId,
     });
-  const { settings, setters } = useChatSettings(
+  const { settings, updateSettings } = useChatSettings(
     chatData ?? undefined,
     selection.agentId,
   );
@@ -899,22 +899,8 @@ export const Chat = ({
                           <TooltipContent>Settings</TooltipContent>
                         </Tooltip>
                         <ChatSettingsDialog
-                          instructions={settings.instructions}
-                          onInstructionsChange={setters.setInstructions}
-                          temperature={settings.temperature}
-                          onTemperatureChange={setters.setTemperature}
-                          seed={settings.seed}
-                          onSeedChange={setters.setSeed}
-                          topP={settings.topP}
-                          onTopPChange={setters.setTopP}
-                          topK={settings.topK}
-                          onTopKChange={setters.setTopK}
-                          presencePenalty={settings.presencePenalty}
-                          onPresencePenaltyChange={setters.setPresencePenalty}
-                          frequencyPenalty={settings.frequencyPenalty}
-                          onFrequencyPenaltyChange={setters.setFrequencyPenalty}
-                          maxSteps={settings.maxSteps}
-                          onMaxStepsChange={setters.setMaxSteps}
+                          settings={settings}
+                          onChange={updateSettings}
                           onClose={() => setIsSettingsDialogOpen(false)}
                         />
                       </Dialog>

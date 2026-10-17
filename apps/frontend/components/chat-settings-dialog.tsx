@@ -31,46 +31,29 @@ import {
   type ChatSamplingField,
 } from "@platypus/schemas";
 import { CHAT_MAX_STEPS_ERROR, CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
+import type { ChatSettings } from "@/hooks/use-chat-settings";
 
 interface ChatSettingsDialogProps {
-  instructions: string;
-  onInstructionsChange: (value: string) => void;
-  temperature: number | undefined;
-  onTemperatureChange: (value: number | undefined) => void;
-  seed: number | undefined;
-  onSeedChange: (value: number | undefined) => void;
-  topP: number | undefined;
-  onTopPChange: (value: number | undefined) => void;
-  topK: number | undefined;
-  onTopKChange: (value: number | undefined) => void;
-  presencePenalty: number | undefined;
-  onPresencePenaltyChange: (value: number | undefined) => void;
-  frequencyPenalty: number | undefined;
-  onFrequencyPenaltyChange: (value: number | undefined) => void;
-  maxSteps: number | undefined;
-  onMaxStepsChange: (value: number | undefined) => void;
+  settings: ChatSettings;
+  onChange: (patch: Partial<ChatSettings>) => void;
   onClose?: () => void;
 }
 
 export const ChatSettingsDialog = ({
-  instructions,
-  onInstructionsChange,
-  temperature,
-  onTemperatureChange,
-  seed,
-  onSeedChange,
-  topP,
-  onTopPChange,
-  topK,
-  onTopKChange,
-  presencePenalty,
-  onPresencePenaltyChange,
-  frequencyPenalty,
-  onFrequencyPenaltyChange,
-  maxSteps,
-  onMaxStepsChange,
+  settings,
+  onChange,
   onClose,
 }: ChatSettingsDialogProps) => {
+  const {
+    instructions,
+    temperature,
+    seed,
+    topP,
+    topK,
+    presencePenalty,
+    frequencyPenalty,
+    maxSteps,
+  } = settings;
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   // Derived from the value, not stored: a flag would reset when the dialog
@@ -94,7 +77,7 @@ export const ChatSettingsDialog = ({
   };
 
   const handleMaxStepsChange = (value: string) => {
-    onMaxStepsChange(value === "" ? undefined : parseInt(value));
+    onChange({ maxSteps: value === "" ? undefined : parseInt(value) });
   };
 
   return (
@@ -115,7 +98,7 @@ export const ChatSettingsDialog = ({
             id="instructions"
             placeholder="You are a helpful assistant..."
             value={instructions}
-            onChange={(e) => onInstructionsChange(e.target.value)}
+            onChange={(e) => onChange({ instructions: e.target.value })}
             rows={3}
             className="max-h-[15em] resize-none"
           />
@@ -152,11 +135,12 @@ export const ChatSettingsDialog = ({
                   step="0.1"
                   value={temperature ?? ""}
                   onChange={(e) =>
-                    onTemperatureChange(
-                      e.target.value === ""
-                        ? undefined
-                        : parseFloat(e.target.value),
-                    )
+                    onChange({
+                      temperature:
+                        e.target.value === ""
+                          ? undefined
+                          : parseFloat(e.target.value),
+                    })
                   }
                 />
                 {errors.temperature && (
@@ -173,11 +157,12 @@ export const ChatSettingsDialog = ({
                   type="number"
                   value={seed ?? ""}
                   onChange={(e) =>
-                    onSeedChange(
-                      e.target.value === ""
-                        ? undefined
-                        : parseInt(e.target.value),
-                    )
+                    onChange({
+                      seed:
+                        e.target.value === ""
+                          ? undefined
+                          : parseInt(e.target.value),
+                    })
                   }
                 />
                 {errors.seed && (
@@ -197,11 +182,12 @@ export const ChatSettingsDialog = ({
                   step="0.1"
                   value={topP ?? ""}
                   onChange={(e) =>
-                    onTopPChange(
-                      e.target.value === ""
-                        ? undefined
-                        : parseFloat(e.target.value),
-                    )
+                    onChange({
+                      topP:
+                        e.target.value === ""
+                          ? undefined
+                          : parseFloat(e.target.value),
+                    })
                   }
                 />
                 {errors.topP && (
@@ -219,11 +205,12 @@ export const ChatSettingsDialog = ({
                   min={TOP_K_MIN}
                   value={topK ?? ""}
                   onChange={(e) =>
-                    onTopKChange(
-                      e.target.value === ""
-                        ? undefined
-                        : parseInt(e.target.value),
-                    )
+                    onChange({
+                      topK:
+                        e.target.value === ""
+                          ? undefined
+                          : parseInt(e.target.value),
+                    })
                   }
                 />
                 {errors.topK && (
@@ -243,11 +230,12 @@ export const ChatSettingsDialog = ({
                   step="0.1"
                   value={presencePenalty ?? ""}
                   onChange={(e) =>
-                    onPresencePenaltyChange(
-                      e.target.value === ""
-                        ? undefined
-                        : parseFloat(e.target.value),
-                    )
+                    onChange({
+                      presencePenalty:
+                        e.target.value === ""
+                          ? undefined
+                          : parseFloat(e.target.value),
+                    })
                   }
                 />
                 {errors.presencePenalty && (
@@ -267,11 +255,12 @@ export const ChatSettingsDialog = ({
                   step="0.1"
                   value={frequencyPenalty ?? ""}
                   onChange={(e) =>
-                    onFrequencyPenaltyChange(
-                      e.target.value === ""
-                        ? undefined
-                        : parseFloat(e.target.value),
-                    )
+                    onChange({
+                      frequencyPenalty:
+                        e.target.value === ""
+                          ? undefined
+                          : parseFloat(e.target.value),
+                    })
                   }
                 />
                 {errors.frequencyPenalty && (

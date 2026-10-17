@@ -35,6 +35,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -118,6 +119,7 @@ export function AppSidebar() {
   >({});
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isTogglingPin, setIsTogglingPin] = useState(false);
 
   const { mutate } = useSWRConfig();
@@ -288,13 +290,14 @@ export function AppSidebar() {
     if (!deleteChatId) return;
 
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       const outcome = await writeEntity(backendUrl, "chat", scope, {
         id: deleteChatId,
       });
 
       if (outcome.outcome !== "success") {
-        toast.error(outcome.message);
+        setDeleteError(outcome.message);
         return;
       }
 
@@ -692,51 +695,20 @@ export function AppSidebar() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Chat Confirmation Dialog */}
-      <Dialog
+      <DeleteConfirmDialog
         open={!!deleteChatId}
-        onOpenChange={(open) => !open && setDeleteChatId(null)}
-      >
-        <DialogContent
-          onPointerDownOutside={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          onEscapeKeyDown={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>Delete Chat</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this chat? This action cannot be
-              undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteChatId(null)}
-              disabled={isDeleting}
-              className="cursor-pointer"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteChat}
-              disabled={isDeleting}
-              className="cursor-pointer"
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteChatId(null);
+            setDeleteError(null);
+          }
+        }}
+        title="Delete Chat"
+        description="Are you sure you want to delete this chat? This action cannot be undone."
+        onConfirm={handleDeleteChat}
+        loading={isDeleting}
+        error={deleteError}
+      />
     </>
   );
 }

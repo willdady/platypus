@@ -28,7 +28,11 @@ describe("useChatSettings", () => {
       { initialProps: { data: chat() } },
     );
 
-    act(() => result.current.setInstructions("Edited while the run streamed"));
+    act(() =>
+      result.current.updateSettings({
+        instructions: "Edited while the run streamed",
+      }),
+    );
 
     rerender({ data: chat({ temperature: 0.7 }) });
 
@@ -44,7 +48,7 @@ describe("useChatSettings", () => {
       { initialProps: { data: chat() } },
     );
 
-    act(() => result.current.setInstructions("Edited"));
+    act(() => result.current.updateSettings({ instructions: "Edited" }));
 
     rerender({ data: chat({ id: "chat-2", instructions: "Another chat." }) });
 
