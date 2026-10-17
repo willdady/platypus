@@ -28,7 +28,7 @@ describe("swrMock", () => {
 
     it("lets a conditional read that is switched off (a null key) through", () => {
       mockScopedSWR({ "/agents": [] }, { strict: true });
-      expect(useSWR(null).data).toEqual({ results: [] });
+      expect(useSWR(null).data).toBeUndefined();
     });
 
     it("is switched off again by resetListHarness", () => {

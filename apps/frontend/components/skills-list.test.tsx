@@ -210,6 +210,33 @@ describe("SkillsList delete", () => {
   });
 });
 
+describe("SkillsList unattached warning", () => {
+  const card = () =>
+    screen.getByText(orgSkill.name).closest('[data-slot="item"]');
+
+  it("warns about a Skill attached to no Workspaces on the Organization surface", async () => {
+    mockScopedSWR({ "/attachments?": [] });
+    await renderOrgSkills([orgSkill]);
+
+    expect(
+      screen.getByText("Not attached to any workspaces."),
+    ).toBeInTheDocument();
+    expect(card()).toHaveClass("border-warning");
+  });
+
+  it("doesn't warn about a Skill attached to a Workspace", async () => {
+    mockScopedSWR({
+      "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
+    });
+    await renderOrgSkills([orgSkill]);
+
+    expect(
+      screen.queryByText("Not attached to any workspaces."),
+    ).not.toBeInTheDocument();
+    expect(card()).not.toHaveClass("border-warning");
+  });
+});
+
 describe("SkillsList promote", () => {
   it("reports an unreachable backend rather than leaving the dialog silent", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));

@@ -14,6 +14,7 @@ import {
 } from "@/lib/authorization";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 import {
   useSharedDeleteGuard,
   useSharedDetach,
@@ -28,7 +29,12 @@ import {
 } from "./list-skeletons";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { DeleteConfirmDialog } from "./delete-confirm-dialog";
-import { ManageAttachmentsDialog, SharedWithBadge } from "./manage-sharing";
+import {
+  AttachmentCount,
+  ManageAttachmentsDialog,
+  SharedWithBadge,
+  UnattachedWarning,
+} from "./manage-sharing";
 import { RowActionsMenu } from "./row-actions-menu";
 import { Button } from "./ui/button";
 import {
@@ -237,7 +243,7 @@ export const ResourceList = ({
           const isOrgScopedInWorkspace =
             workspaceId && resource.scope === "organization";
 
-          const content = (
+          const content = (count: number | undefined) => (
             <ItemContent>
               <div className="flex items-center gap-2">
                 <ItemTitle>{resource.name}</ItemTitle>
@@ -258,67 +264,81 @@ export const ResourceList = ({
                   />
                 </div>
               )}
+              {count === 0 && <UnattachedWarning />}
             </ItemContent>
           );
 
           return (
             <li key={resource.id} className="mb-2">
-              {isOrgScopedInWorkspace ? (
-                // Locked here (ADR-0007): a plain card, with Detach named in
-                // its menu rather than behind the card's own click.
-                <Item variant="outline">
-                  {content}
-                  {canAttach && (
-                    <ItemActions>
-                      <RowActionsMenu
-                        name={resource.name}
-                        edit={{
-                          href: `${orgSettingsRoot}/${resource.id}`,
-                          label: "Edit in org settings",
-                        }}
-                        remove={{
-                          kind: "detach",
-                          onSelect: () => detach.open(resource),
-                        }}
-                      />
-                    </ItemActions>
-                  )}
-                </Item>
-              ) : (
-                <Item variant="outline" asChild>
-                  <Link href={settingsHref(resource.id)}>
-                    {content}
-                    <ItemActions>
-                      <RowActionsMenu
-                        name={resource.name}
-                        edit={{ href: settingsHref(resource.id) }}
-                        actions={
-                          canManageAttachments
-                            ? [
-                                {
-                                  label: "Manage attachments",
-                                  icon: <Share2 />,
-                                  onSelect: () => setResourceToManage(resource),
-                                },
-                              ]
-                            : undefined
-                        }
-                        remove={
-                          canManage
-                            ? {
-                                kind: "delete",
-                                onSelect: () =>
-                                  workspaceId
-                                    ? deleteFlow.request(resource)
-                                    : deleteGuard.request(resource),
-                              }
-                            : undefined
-                        }
-                      />
-                    </ItemActions>
-                  </Link>
-                </Item>
-              )}
+              <AttachmentCount
+                orgId={canManageAttachments ? orgId : null}
+                resourceType={config.resourceType}
+                resourceId={resource.id}
+              >
+                {(count) =>
+                  isOrgScopedInWorkspace ? (
+                    // Locked here (ADR-0007): a plain card, with Detach named in
+                    // its menu rather than behind the card's own click.
+                    <Item variant="outline">
+                      {content(count)}
+                      {canAttach && (
+                        <ItemActions>
+                          <RowActionsMenu
+                            name={resource.name}
+                            edit={{
+                              href: `${orgSettingsRoot}/${resource.id}`,
+                              label: "Edit in org settings",
+                            }}
+                            remove={{
+                              kind: "detach",
+                              onSelect: () => detach.open(resource),
+                            }}
+                          />
+                        </ItemActions>
+                      )}
+                    </Item>
+                  ) : (
+                    <Item
+                      variant="outline"
+                      className={cn(count === 0 && "border-warning")}
+                      asChild
+                    >
+                      <Link href={settingsHref(resource.id)}>
+                        {content(count)}
+                        <ItemActions>
+                          <RowActionsMenu
+                            name={resource.name}
+                            edit={{ href: settingsHref(resource.id) }}
+                            actions={
+                              canManageAttachments
+                                ? [
+                                    {
+                                      label: "Manage attachments",
+                                      icon: <Share2 />,
+                                      onSelect: () =>
+                                        setResourceToManage(resource),
+                                    },
+                                  ]
+                                : undefined
+                            }
+                            remove={
+                              canManage
+                                ? {
+                                    kind: "delete",
+                                    onSelect: () =>
+                                      workspaceId
+                                        ? deleteFlow.request(resource)
+                                        : deleteGuard.request(resource),
+                                  }
+                                : undefined
+                            }
+                          />
+                        </ItemActions>
+                      </Link>
+                    </Item>
+                  )
+                }
+              </AttachmentCount>
             </li>
           );
         })}

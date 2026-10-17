@@ -63,7 +63,9 @@ import {
 } from "@/lib/authorization";
 import {
   ManageAttachmentsDialog,
+  AttachmentCount,
   SharedWithBadge,
+  UnattachedWarning,
 } from "@/components/manage-sharing";
 import {
   AttachSharedAction,
@@ -426,89 +428,99 @@ export const SkillsList = ({
 
             return (
               <li key={skill.id}>
-                <Item
-                  variant="outline"
-                  className={cn(
-                    "h-full cursor-pointer",
-                    workspaceId && agentCount === 0 && "border-warning",
-                  )}
-                  asChild
+                <AttachmentCount
+                  orgId={!workspaceId && canManageOrg ? orgId : null}
+                  resourceType="skill"
+                  resourceId={skill.id}
                 >
-                  <Link href={`${editBasePath}/${skill.id}`}>
-                    <ItemContent>
-                      <div className="flex items-center gap-2">
-                        <ItemTitle>{skill.name}</ItemTitle>
-                        <UserInvocableBadge skill={skill} />
-                        <NeedsSandboxBadge skill={skill} />
-                      </div>
-                      <ItemDescription className="text-xs line-clamp-2">
-                        {skill.description}
-                      </ItemDescription>
-                      {workspaceId && (
-                        <SkillAgentsIndicator agents={skillAgents} />
+                  {(count) => (
+                    <Item
+                      variant="outline"
+                      className={cn(
+                        "h-full cursor-pointer",
+                        (workspaceId ? agentCount === 0 : count === 0) &&
+                          "border-warning",
                       )}
-                      {!workspaceId && canManageOrg && (
-                        <div className="mt-1">
-                          <SharedWithBadge
-                            orgId={orgId}
-                            resourceType="skill"
-                            resourceId={skill.id}
-                          />
-                        </div>
-                      )}
-                    </ItemContent>
-                    <ItemActions>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            className="cursor-pointer text-muted-foreground"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Actions for ${skill.name}`}
-                            onClick={(e) => e.preventDefault()}
-                          >
-                            <EllipsisVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          onClick={(e) => e.preventDefault()}
-                        >
-                          <DropdownMenuItem asChild>
-                            <Link
-                              className="cursor-pointer"
-                              href={`${editBasePath}/${skill.id}`}
-                            >
-                              <Pencil /> Edit
-                            </Link>
-                          </DropdownMenuItem>
-                          {canPromote && (
-                            <DropdownMenuItem
-                              className="cursor-pointer"
-                              onSelect={() => promote.open(skill)}
-                            >
-                              <ArrowUpFromLine /> Promote to organization
-                            </DropdownMenuItem>
+                      asChild
+                    >
+                      <Link href={`${editBasePath}/${skill.id}`}>
+                        <ItemContent>
+                          <div className="flex items-center gap-2">
+                            <ItemTitle>{skill.name}</ItemTitle>
+                            <UserInvocableBadge skill={skill} />
+                            <NeedsSandboxBadge skill={skill} />
+                          </div>
+                          <ItemDescription className="text-xs line-clamp-2">
+                            {skill.description}
+                          </ItemDescription>
+                          {workspaceId && (
+                            <SkillAgentsIndicator agents={skillAgents} />
                           )}
                           {!workspaceId && canManageOrg && (
-                            <DropdownMenuItem
-                              className="cursor-pointer"
-                              onSelect={() => setSkillToManage(skill)}
-                            >
-                              <Share2 /> Manage attachments
-                            </DropdownMenuItem>
+                            <div className="mt-1">
+                              <SharedWithBadge
+                                orgId={orgId}
+                                resourceType="skill"
+                                resourceId={skill.id}
+                              />
+                            </div>
                           )}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="cursor-pointer text-destructive focus:text-destructive"
-                            onSelect={() => handleDeleteClick(skill)}
-                          >
-                            <Trash2 /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </ItemActions>
-                  </Link>
-                </Item>
+                          {count === 0 && <UnattachedWarning />}
+                        </ItemContent>
+                        <ItemActions>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                className="cursor-pointer text-muted-foreground"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Actions for ${skill.name}`}
+                                onClick={(e) => e.preventDefault()}
+                              >
+                                <EllipsisVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              onClick={(e) => e.preventDefault()}
+                            >
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  className="cursor-pointer"
+                                  href={`${editBasePath}/${skill.id}`}
+                                >
+                                  <Pencil /> Edit
+                                </Link>
+                              </DropdownMenuItem>
+                              {canPromote && (
+                                <DropdownMenuItem
+                                  className="cursor-pointer"
+                                  onSelect={() => promote.open(skill)}
+                                >
+                                  <ArrowUpFromLine /> Promote to organization
+                                </DropdownMenuItem>
+                              )}
+                              {!workspaceId && canManageOrg && (
+                                <DropdownMenuItem
+                                  className="cursor-pointer"
+                                  onSelect={() => setSkillToManage(skill)}
+                                >
+                                  <Share2 /> Manage attachments
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="cursor-pointer text-destructive focus:text-destructive"
+                                onSelect={() => handleDeleteClick(skill)}
+                              >
+                                <Trash2 /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </ItemActions>
+                      </Link>
+                    </Item>
+                  )}
+                </AttachmentCount>
               </li>
             );
           })}

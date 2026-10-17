@@ -84,6 +84,33 @@ describe("OrgAgentsList delete", () => {
   });
 });
 
+describe("OrgAgentsList unattached warning", () => {
+  const card = () =>
+    screen.getByText(sharedAgent.name).closest('[data-slot="item"]');
+
+  it("warns about an agent attached to no Workspaces", async () => {
+    mockScopedSWR({ "/attachments?": [] });
+    await renderAgents([sharedAgent]);
+
+    expect(
+      screen.getByText("Not attached to any workspaces."),
+    ).toBeInTheDocument();
+    expect(card()).toHaveClass("border-warning");
+  });
+
+  it("doesn't warn about an agent attached to a Workspace", async () => {
+    mockScopedSWR({
+      "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
+    });
+    await renderAgents([sharedAgent]);
+
+    expect(
+      screen.queryByText("Not attached to any workspaces."),
+    ).not.toBeInTheDocument();
+    expect(card()).not.toHaveClass("border-warning");
+  });
+});
+
 describe("OrgAgentsList list states", () => {
   it("shows the empty state when the organization shares no agents", async () => {
     await renderAgents([]);

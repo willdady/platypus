@@ -81,6 +81,12 @@ function buildResponse(read: ListRead): SwrResponse {
 const responsesByUrlFragment = new Map<string, SwrResponse>();
 let fallbackResponse = buildResponse([]);
 let strict = false;
+// What SWR returns for a `null` key: no data, not loading.
+const withheldResponse: SwrResponse = {
+  data: undefined,
+  isLoading: false,
+  mutate,
+};
 
 /**
  * Registers each read the list under test makes, keyed by a fragment of the
@@ -99,8 +105,8 @@ let strict = false;
  * also lets a mistyped URL render the empty state and pass, so new tests
  * should pass `{ strict: true }`: an unmatched read then throws, naming its
  * key, and every read the list makes has to be registered. A `null` key (a
- * conditional read switched off) is never a miss. `resetListHarness` turns
- * strict mode off again.
+ * conditional read switched off) is never a miss, and returns no data, as SWR
+ * does. `resetListHarness` turns strict mode off again.
  *
  * ```ts
  * mockScopedSWR({ "/agents": [agent], "/providers": [] }, { strict: true });
@@ -119,7 +125,7 @@ export function mockScopedSWR(
 export const swrMock = {
   __esModule: true,
   default: (key: string | null): SwrResponse => {
-    if (!key) return fallbackResponse;
+    if (!key) return withheldResponse;
     for (const [fragment, response] of responsesByUrlFragment) {
       if (key.includes(fragment)) return response;
     }

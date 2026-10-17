@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, FolderClosed, X } from "lucide-react";
+import { Check, FolderClosed, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -24,7 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { cn, joinUrl } from "@/lib/utils";
 import { attachmentsEntity, writeAt } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -42,6 +42,54 @@ const LABEL: Record<ResourceType, string> = {
 
 type AttachedWorkspace = { workspaceId: string; workspaceName: string };
 
+// One SWR key per resource, so the badge, the card's warning and the Manage
+// attachments dialog share a single read and revalidate together.
+const useAttachments = (
+  orgId: string | null,
+  resourceType: ResourceType,
+  resourceId: string,
+) =>
+  useScopedSWR<{ results: AttachedWorkspace[] }>(
+    attachmentsEntity(resourceType, resourceId),
+    orgId ? { orgId } : null,
+  );
+
+/**
+ * How many Workspaces a Shared resource is attached to, or `undefined` while
+ * the read is pending (or withheld by a `null` orgId, for a viewer who can't
+ * see attachments).
+ */
+export const useAttachmentCount = (
+  orgId: string | null,
+  resourceType: ResourceType,
+  resourceId: string,
+): number | undefined =>
+  useAttachments(orgId, resourceType, resourceId).data?.results.length;
+
+/**
+ * Hands an org-surface card its attachment count, so a list can call
+ * {@link useAttachmentCount} per row without extracting a row component.
+ */
+export const AttachmentCount = ({
+  orgId,
+  resourceType,
+  resourceId,
+  children,
+}: {
+  orgId: string | null;
+  resourceType: ResourceType;
+  resourceId: string;
+  children: (count: number | undefined) => ReactNode;
+}) => children(useAttachmentCount(orgId, resourceType, resourceId));
+
+/** The line an org-surface card shows when attached to no Workspaces. */
+export const UnattachedWarning = () => (
+  <span className="mt-1 flex items-center gap-1 cursor-default text-xs text-warning-foreground">
+    <TriangleAlert className="h-3 w-3" />
+    <strong>WARNING:</strong> Not attached to any workspaces.
+  </span>
+);
+
 /**
  * Read-only affordance shown on an org-surface card: "Shared with N workspaces"
  * with a hover tooltip listing the workspaces (ADR-0007). Mirrors the
@@ -57,10 +105,7 @@ export const SharedWithBadge = ({
   resourceType: ResourceType;
   resourceId: string;
 }) => {
-  const { data, isLoading } = useScopedSWR<{ results: AttachedWorkspace[] }>(
-    attachmentsEntity(resourceType, resourceId),
-    { orgId },
-  );
+  const { data, isLoading } = useAttachments(orgId, resourceType, resourceId);
   const attached = data?.results ?? [];
   const count = attached.length;
 
@@ -123,9 +168,7 @@ export const ManageAttachmentsDialog = ({
     data: attData,
     isLoading: attLoading,
     mutate: mutateAtt,
-  } = useScopedSWR<{
-    results: AttachedWorkspace[];
-  }>(attachmentsEntity(resourceType, resourceId), { orgId });
+  } = useAttachments(orgId, resourceType, resourceId);
   const attached = attData?.results ?? [];
   const attachedIds = new Set(attached.map((a) => a.workspaceId));
 

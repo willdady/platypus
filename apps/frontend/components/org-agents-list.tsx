@@ -31,11 +31,14 @@ import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useAuth } from "@/components/auth-provider";
 import { canManageOrgSharedResource } from "@/lib/authorization";
 import {
+  AttachmentCount,
   ManageAttachmentsDialog,
   SharedWithBadge,
+  UnattachedWarning,
 } from "@/components/manage-sharing";
 import { DeleteBlockedDialog } from "@/components/shared-resource-actions";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { orgRoutes } from "@/lib/routes";
@@ -113,84 +116,98 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
       <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
         {agents.map((agent) => (
           <li key={agent.id}>
-            <Item variant="outline" className="h-full">
-              {agent.avatarUrl ? (
-                <ItemMedia variant="image" className="size-12 rounded-full">
-                  {/* Agent avatar URL is user-supplied (arbitrary host); not
-                  routable through the Next image optimizer. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={agent.avatarUrl}
-                    alt={agent.name}
-                    className="size-full object-cover"
-                    width={48}
-                    height={48}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </ItemMedia>
-              ) : (
-                <ItemMedia
-                  variant="icon"
-                  className="size-12 rounded-full [&_svg]:!size-7"
+            <AttachmentCount
+              orgId={canManage ? orgId : null}
+              resourceType="agent"
+              resourceId={agent.id}
+            >
+              {(count) => (
+                <Item
+                  variant="outline"
+                  className={cn("h-full", count === 0 && "border-warning")}
                 >
-                  <Bot className="h-7 w-7 text-muted-foreground" />
-                </ItemMedia>
+                  {agent.avatarUrl ? (
+                    <ItemMedia variant="image" className="size-12 rounded-full">
+                      {/* Agent avatar URL is user-supplied (arbitrary host); not
+                  routable through the Next image optimizer. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={agent.avatarUrl}
+                        alt={agent.name}
+                        className="size-full object-cover"
+                        width={48}
+                        height={48}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </ItemMedia>
+                  ) : (
+                    <ItemMedia
+                      variant="icon"
+                      className="size-12 rounded-full [&_svg]:!size-7"
+                    >
+                      <Bot className="h-7 w-7 text-muted-foreground" />
+                    </ItemMedia>
+                  )}
+                  <ItemContent>
+                    <ItemTitle>{agent.name}</ItemTitle>
+                    <ItemDescription className="text-xs line-clamp-3">
+                      {agent.description}
+                    </ItemDescription>
+                    {canManage && (
+                      <div className="mt-1">
+                        <SharedWithBadge
+                          orgId={orgId}
+                          resourceType="agent"
+                          resourceId={agent.id}
+                        />
+                      </div>
+                    )}
+                    {count === 0 && <UnattachedWarning />}
+                  </ItemContent>
+                  {canManage && (
+                    <ItemActions>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            className="cursor-pointer text-muted-foreground"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Actions for ${agent.name}`}
+                          >
+                            <EllipsisVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem asChild>
+                            <Link
+                              className="cursor-pointer"
+                              href={orgRoutes(orgId).settings.agentDetail(
+                                agent.id,
+                              )}
+                            >
+                              <Pencil /> Edit
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onSelect={() => setAgentToManage(agent)}
+                          >
+                            <Share2 /> Manage attachments
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                            onSelect={() => deleteGuard.request(agent)}
+                          >
+                            <Trash2 /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </ItemActions>
+                  )}
+                </Item>
               )}
-              <ItemContent>
-                <ItemTitle>{agent.name}</ItemTitle>
-                <ItemDescription className="text-xs line-clamp-3">
-                  {agent.description}
-                </ItemDescription>
-                {canManage && (
-                  <div className="mt-1">
-                    <SharedWithBadge
-                      orgId={orgId}
-                      resourceType="agent"
-                      resourceId={agent.id}
-                    />
-                  </div>
-                )}
-              </ItemContent>
-              {canManage && (
-                <ItemActions>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        className="cursor-pointer text-muted-foreground"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Actions for ${agent.name}`}
-                      >
-                        <EllipsisVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem asChild>
-                        <Link
-                          className="cursor-pointer"
-                          href={orgRoutes(orgId).settings.agentDetail(agent.id)}
-                        >
-                          <Pencil /> Edit
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="cursor-pointer"
-                        onSelect={() => setAgentToManage(agent)}
-                      >
-                        <Share2 /> Manage attachments
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="cursor-pointer text-destructive focus:text-destructive"
-                        onSelect={() => deleteGuard.request(agent)}
-                      >
-                        <Trash2 /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </ItemActions>
-              )}
-            </Item>
+            </AttachmentCount>
           </li>
         ))}
       </ul>

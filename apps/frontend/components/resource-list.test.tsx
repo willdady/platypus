@@ -382,6 +382,47 @@ describe.each(RESOURCES)(
         expect(screen.getByText("1 workspace")).toBeInTheDocument();
       });
 
+      it("warns an Org Admin about a row attached to no Workspaces", async () => {
+        authState.actor = "org-admin";
+        mockScopedSWR({ "/attachments?": [] });
+        await renderOrgRows([item]);
+
+        expect(
+          screen.getByText("Not attached to any workspaces."),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText(item.name).closest('[data-slot="item"]'),
+        ).toHaveClass("border-warning");
+      });
+
+      it("doesn't warn about a row attached to a Workspace", async () => {
+        authState.actor = "org-admin";
+        mockScopedSWR({
+          "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
+        });
+        await renderOrgRows([item]);
+
+        expect(
+          screen.queryByText("Not attached to any workspaces."),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.getByText(item.name).closest('[data-slot="item"]'),
+        ).not.toHaveClass("border-warning");
+      });
+
+      it("doesn't warn while the attachment read is loading", async () => {
+        authState.actor = "org-admin";
+        mockScopedSWR({ "/attachments?": { isLoading: true } });
+        await renderOrgRows([item]);
+
+        expect(
+          screen.queryByText("Not attached to any workspaces."),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.getByText(item.name).closest('[data-slot="item"]'),
+        ).not.toHaveClass("border-warning");
+      });
+
       it("shows a non-admin neither the badge nor Manage attachments", async () => {
         authState.actor = "member";
         mockScopedSWR({
@@ -390,6 +431,9 @@ describe.each(RESOURCES)(
         await renderOrgRows([item]);
 
         expect(screen.queryByText("1 workspace")).not.toBeInTheDocument();
+        expect(
+          screen.queryByText("Not attached to any workspaces."),
+        ).not.toBeInTheDocument();
         await openDropdownMenu();
         expect(menuItemLabels()).toEqual(["Edit", "Delete"]);
       });
