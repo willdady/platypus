@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   authMock,
   authState,
@@ -9,7 +9,9 @@ import {
   resetListHarness,
   renderList,
   stubAcceptedSave,
+  stubRejectedSave,
   stubSaveSequence,
+  toastError,
   toastSuccess,
 } from "@/test/list-test-harness";
 import { savedBody } from "@/test/form-test-harness";
@@ -366,6 +368,56 @@ describe("SandboxSettings save", () => {
       SANDBOX_URL,
       `${SANDBOX_URL}?force=true`,
     ]);
+  });
+});
+
+describe("SandboxSettings delete", () => {
+  const openDelete = async () => {
+    fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
+    return screen.findByRole("dialog");
+  };
+
+  it("keeps a refused delete in the dialog with the backend's message", async () => {
+    stubRejectedSave("Sandbox is busy", 409);
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    const dialog = await openDelete();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(await within(dialog).findByText("Sandbox is busy")).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  // Destroying the sandbox can fail the same way a teardown does, and the
+  // backend again asks for `force=true`.
+  it("offers a forced delete when destroying the sandbox fails", async () => {
+    const fetchMock = stubSaveSequence(
+      {
+        status: 500,
+        body: { error: "Destroy failed, retry with force=true" },
+      },
+      { status: 200, body: {} },
+    );
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    const dialog = await openDelete();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete anyway" }),
+    );
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Sandbox deleted"),
+    );
+    expect(
+      fetchMock.mock.calls.map(([url, init]) => [url, init.method]),
+    ).toEqual([
+      [SANDBOX_URL, "DELETE"],
+      [`${SANDBOX_URL}?force=true`, "DELETE"],
+    ]);
+    expect(mutate).toHaveBeenCalledWith(null, { revalidate: false });
   });
 });
 

@@ -284,6 +284,20 @@ describe("useEntityDelete lifecycle", () => {
     );
   });
 
+  // A form that stays mounted after deleting (the Sandbox) can delete again.
+  it("reopens the dialog idle after a successful delete", async () => {
+    stubAcceptedSave({});
+
+    const { result } = renderDelete();
+    await act(async () => {
+      await result.current.handleDelete();
+    });
+    expect(result.current.isDeleting).toBe(true);
+
+    act(() => result.current.openDeleteDialog());
+    expect(result.current.isDeleting).toBe(false);
+  });
+
   it("keeps a failed delete in the dialog with the backend's message", async () => {
     stubRejectedSave("Still referenced", 409);
 
@@ -348,6 +362,37 @@ describe("useEntityDelete lifecycle", () => {
     expect(result.current.deleteError).toBe("Still referenced");
     expect(toastInfo).not.toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("lets onError claim a refusal, falling back to inline when it doesn't", async () => {
+    stubRejectedSave("Still referenced", 409);
+    const onError = vi
+      .fn()
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false);
+
+    const { result } = renderHook(() =>
+      useEntityDelete({
+        entity: "skills",
+        scope: { orgId: "org1" },
+        id: "s1",
+        onError,
+      }),
+    );
+    await act(async () => {
+      await result.current.handleDelete();
+    });
+    expect(onError).toHaveBeenCalledWith(
+      "Still referenced",
+      expect.objectContaining({ outcome: "conflict" }),
+    );
+    expect(result.current.deleteError).toBeNull();
+    expect(result.current.isDeleting).toBe(false);
+
+    await act(async () => {
+      await result.current.handleDelete();
+    });
+    expect(result.current.deleteError).toBe("Still referenced");
   });
 });
 

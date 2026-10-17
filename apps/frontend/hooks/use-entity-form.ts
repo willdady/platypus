@@ -357,6 +357,12 @@ export interface UseEntityDeleteOptions<TResult> {
   guidanceOnForbidden?: boolean;
   /** Replaces `writeEntity`, for a delete that isn't a scoped collection member. */
   write?: () => Promise<WriteOutcome<TResult>>;
+  /**
+   * Sees a refused delete first, for a refusal the form answers itself (e.g.
+   * a retry it offers in its own dialog). Return true when handled; otherwise
+   * the default handling (inline, or `guidanceOnForbidden`) still applies.
+   */
+  onError?: (message: string, outcome: WriteOutcome<TResult>) => boolean;
 }
 
 export interface UseEntityDeleteResult {
@@ -383,6 +389,7 @@ export function useEntityDelete<TResult = unknown>({
   onSuccess,
   guidanceOnForbidden = false,
   write,
+  onError,
 }: UseEntityDeleteOptions<TResult>): UseEntityDeleteResult {
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
@@ -390,7 +397,10 @@ export function useEntityDelete<TResult = unknown>({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // A successful delete leaves `isDeleting` set, as most forms navigate away
+  // on it; a form that stays mounted reopens the dialog idle.
   const openDeleteDialog = useCallback(() => {
+    setIsDeleting(false);
     setDeleteError(null);
     setIsDeleteDialogOpen(true);
   }, []);
@@ -413,6 +423,7 @@ export function useEntityDelete<TResult = unknown>({
       },
       onError: (message, outcome) => {
         setIsDeleting(false);
+        if (onError?.(message, outcome)) return;
         if (guidanceOnForbidden && outcome.outcome === "forbidden") {
           setIsDeleteDialogOpen(false);
           toastGuidanceOrError(message, outcome);
@@ -430,6 +441,7 @@ export function useEntityDelete<TResult = unknown>({
     onSuccess,
     guidanceOnForbidden,
     write,
+    onError,
     mutate,
   ]);
 

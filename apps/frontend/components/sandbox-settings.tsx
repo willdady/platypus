@@ -1,15 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { toast } from "sonner";
-import { Box, KeyRound, Plus, Trash2 } from "lucide-react";
+import { Box, KeyRound, Plus } from "lucide-react";
 import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canConfigureSandbox } from "@/lib/authorization";
-import { scopedUrl, writeAt, type FormDraft } from "@/lib/api-write";
+import {
+  scopedUrl,
+  writeAt,
+  type FormDraft,
+  type WriteOutcome,
+} from "@/lib/api-write";
 import { optionalFetcher } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +47,8 @@ import {
 } from "@/components/ui/select";
 import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { ListError } from "@/components/list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -121,8 +129,14 @@ const findDuplicateKey = (rows: KeyValueRow[]): string | null => {
   return null;
 };
 
-const isForceRetryError = (errorMessage: unknown): boolean =>
-  typeof errorMessage === "string" && errorMessage.includes("force=true");
+const SAVED_MESSAGE = "Sandbox configured";
+const DELETED_MESSAGE = "Sandbox deleted";
+
+// A teardown the backend could not finish asks to be retried with `force=true`.
+const isForceRetry = (outcome: WriteOutcome<unknown>): boolean =>
+  outcome.outcome === "error" &&
+  outcome.httpStatus === 500 &&
+  outcome.message.includes("force=true");
 
 // One label / control / description field, at the form's sizes.
 const FieldSkeleton = ({
@@ -197,17 +211,9 @@ const SandboxSettings = ({
   const allowedNetworks = networksData?.results ?? [];
 
   const [isConfiguring, setIsConfiguring] = useState(false);
-  const [formData, setFormData] = useState<SandboxFormData>(DEFAULT_FORM);
   // Whether the admin chose to replace a stored SSH key, revealing the textarea
   // in place of the "Key stored" state.
   const [isReplacingKey, setIsReplacingKey] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
-
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const [forceDialog, setForceDialog] = useState<{
     open: boolean;
@@ -216,7 +222,73 @@ const SandboxSettings = ({
   }>({ open: false, kind: null, message: "" });
   const [isForcing, setIsForcing] = useState(false);
 
-  const seedFrom = (record: Sandbox) => {
+  // A sandbox is the Workspace's singleton, read from the collection path
+  // itself with no id, so the hook only writes and the read above seeds.
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    clearErrors,
+    submit,
+  } = useEntityForm<SandboxFormData>({
+    initialData: DEFAULT_FORM,
+    entity: "sandbox",
+    scope,
+    write: () => writeSandbox(),
+    // A rejected save toasts, as there is no one field to key a conflict to.
+    conflictField: null,
+    onError: (message, outcome) => {
+      if (isForceRetry(outcome)) {
+        setForceDialog({
+          open: true,
+          kind: "save",
+          message:
+            "Failed to tear down previous sandbox — switch anyway? External resources may leak.",
+        });
+      } else {
+        toast.error(message);
+      }
+    },
+    failureMessage: "Failed to save sandbox",
+    // A draft stays put: the wizard moves on once `write` accepts it.
+    successMessage: draft ? undefined : SAVED_MESSAGE,
+    onSuccess: draft ? undefined : () => reseedFromServer(),
+  });
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    deleteError,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "sandbox",
+    scope,
+    id: data?.id,
+    successMessage: DELETED_MESSAGE,
+    write: () => deleteSandbox(),
+    // A failed destroy is offered as a forced retry in its own dialog; every
+    // other refusal stays inline.
+    onError: (_message, outcome) => {
+      if (!isForceRetry(outcome)) return false;
+      setIsDeleteDialogOpen(false);
+      setForceDialog({
+        open: true,
+        kind: "delete",
+        message: "Failed to destroy sandbox — delete anyway?",
+      });
+      return true;
+    },
+    onSuccess: async () => {
+      setIsDeleteDialogOpen(false);
+      await clearDeleted();
+    },
+  });
+
+  function seedFrom(record: Sandbox) {
     setIsReplacingKey(false);
     const config = (record.config ?? {}) as {
       networks?: string[];
@@ -243,7 +315,7 @@ const SandboxSettings = ({
       sshRootDir: config.rootDir ?? "",
       sshHostKey: config.hostKey ?? "",
     });
-  };
+  }
 
   // Keyed on the id, not the record: SWR hands back a new object on every
   // revalidation, and re-seeding on that would overwrite the edit in progress.
@@ -263,23 +335,12 @@ const SandboxSettings = ({
     }
   });
 
-  const clearError = (field: string) => {
-    if (validationErrors[field]) {
-      setValidationErrors((prev) => {
-        const next = { ...prev };
-        delete next[field];
-        return next;
-      });
-    }
-  };
-
   const isDocker = formData.backend === DOCKER_BACKEND;
   const isSsh = formData.backend === SSH_BACKEND;
 
-  const performSave = async (
+  function writeSandbox(
     options: { force?: boolean } = {},
-  ): Promise<{ ok: boolean; forceRetry?: boolean; errorMessage?: string }> => {
-    setValidationErrors({});
+  ): Promise<WriteOutcome<unknown>> {
     const isCreate = !data;
     const method = isCreate ? "POST" : "PUT";
     const url =
@@ -347,32 +408,30 @@ const SandboxSettings = ({
           userEnv: rowsToRecord(formData.userEnv, {}),
         };
 
-    const outcome = draft
-      ? await draft.write(payload)
-      : await writeAt(url, { method, data: payload });
+    return draft
+      ? draft.write(payload)
+      : writeAt(url, { method, data: payload });
+  }
 
-    if (outcome.outcome === "success") return { ok: true };
+  function deleteSandbox(options: { force?: boolean } = {}) {
+    const url = options.force ? `${sandboxUrl}?force=true` : sandboxUrl;
+    return writeAt(url, { method: "DELETE" });
+  }
 
-    if (
-      outcome.outcome === "error" &&
-      outcome.httpStatus === 500 &&
-      isForceRetryError(outcome.message)
-    ) {
-      return { ok: false, forceRetry: true, errorMessage: outcome.message };
-    }
+  async function reseedFromServer() {
+    const saved = await mutate();
+    if (saved) seedFrom(saved);
+    setIsConfiguring(false);
+  }
 
-    if (
-      outcome.outcome === "invalid" &&
-      Object.keys(outcome.fieldErrors).length > 0
-    ) {
-      setValidationErrors(outcome.fieldErrors);
-    } else {
-      toast.error(outcome.message);
-    }
-    return { ok: false };
-  };
+  async function clearDeleted() {
+    await mutate(null, { revalidate: false });
+    setIsConfiguring(false);
+    setFormData(DEFAULT_FORM);
+    mutate();
+  }
 
-  const handleSave = async () => {
+  const handleSave = () => {
     const dupAdmin = findDuplicateKey(formData.adminEnv);
     const dupUser = findDuplicateKey(formData.userEnv);
     if (dupAdmin) {
@@ -383,113 +442,37 @@ const SandboxSettings = ({
       setValidationErrors({ userEnv: `Duplicate env key: ${dupUser}` });
       return;
     }
-    setIsSubmitting(true);
-    try {
-      const result = await performSave();
-      // A draft stays put: the wizard moves on once `write` accepts it.
-      if (result.ok && !draft) {
-        const saved = await mutate();
-        if (saved) seedFrom(saved);
-        toast.success("Sandbox configured");
-        setIsConfiguring(false);
-      } else if (result.forceRetry) {
-        setForceDialog({
-          open: true,
-          kind: "save",
-          message:
-            "Failed to tear down previous sandbox — switch anyway? External resources may leak.",
-        });
-      }
-    } catch (err) {
-      console.error("Error saving sandbox:", err);
-      toast.error("Failed to save sandbox");
-    } finally {
-      setIsSubmitting(false);
-    }
+    void submit();
   };
 
-  const performDelete = async (
-    options: { force?: boolean } = {},
-  ): Promise<{ ok: boolean; forceRetry?: boolean }> => {
-    const url = options.force ? `${sandboxUrl}?force=true` : sandboxUrl;
-    const outcome = await writeAt(url, { method: "DELETE" });
-
-    if (outcome.outcome === "success") return { ok: true };
-
-    if (
-      outcome.outcome === "error" &&
-      outcome.httpStatus === 500 &&
-      isForceRetryError(outcome.message)
-    ) {
-      return { ok: false, forceRetry: true };
-    }
-    toast.error(outcome.message);
-    return { ok: false };
-  };
-
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    try {
-      const result = await performDelete();
-      if (result.ok) {
-        await mutate(null, { revalidate: false });
-        toast.success("Sandbox deleted");
-        setIsDeleteDialogOpen(false);
-        setIsConfiguring(false);
-        setFormData(DEFAULT_FORM);
-        mutate();
-      } else if (result.forceRetry) {
-        setIsDeleteDialogOpen(false);
-        setForceDialog({
-          open: true,
-          kind: "delete",
-          message: "Failed to destroy sandbox — delete anyway?",
-        });
-      } else {
-        setIsDeleteDialogOpen(false);
-      }
-    } catch (err) {
-      console.error("Error deleting sandbox:", err);
-      toast.error("Failed to delete sandbox");
-      setIsDeleteDialogOpen(false);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+  const closeForceDialog = () =>
+    setForceDialog({ open: false, kind: null, message: "" });
 
   const handleForceConfirm = async () => {
     setIsForcing(true);
     try {
       if (forceDialog.kind === "save") {
-        const result = await performSave({ force: true });
-        if (result.ok) {
-          const saved = await mutate();
-          if (saved) seedFrom(saved);
-          toast.success("Sandbox configured");
-          setIsConfiguring(false);
-          setForceDialog({ open: false, kind: null, message: "" });
+        const outcome = await writeSandbox({ force: true });
+        if (outcome.outcome === "success") {
+          await reseedFromServer();
+          toast.success(SAVED_MESSAGE);
         } else {
           toast.error("Failed to switch sandbox backend");
-          setForceDialog({ open: false, kind: null, message: "" });
         }
       } else if (forceDialog.kind === "delete") {
-        const result = await performDelete({ force: true });
-        if (result.ok) {
-          await mutate(null, { revalidate: false });
-          toast.success("Sandbox deleted");
-          setIsConfiguring(false);
-          setFormData(DEFAULT_FORM);
-          mutate();
+        const outcome = await deleteSandbox({ force: true });
+        if (outcome.outcome === "success") {
+          await clearDeleted();
+          toast.success(DELETED_MESSAGE);
         } else {
           toast.error("Failed to delete sandbox");
         }
-        setForceDialog({ open: false, kind: null, message: "" });
       }
     } catch (err) {
       console.error("Force retry error:", err);
       toast.error("Operation failed");
-      setForceDialog({ open: false, kind: null, message: "" });
     } finally {
+      closeForceDialog();
       setIsForcing(false);
     }
   };
@@ -545,7 +528,7 @@ const SandboxSettings = ({
               placeholder="My sandbox"
               value={formData.name}
               onChange={(e) => {
-                clearError("name");
+                clearErrors("name");
                 setFormData((prev) => ({ ...prev, name: e.target.value }));
               }}
               disabled={isSubmitting}
@@ -562,7 +545,7 @@ const SandboxSettings = ({
             <Select
               value={formData.backend}
               onValueChange={(value) => {
-                clearError("backend");
+                clearErrors("backend");
                 setFormData((prev) => ({ ...prev, backend: value }));
               }}
               disabled={isSubmitting || !canConfigure}
@@ -669,7 +652,7 @@ const SandboxSettings = ({
                 <KeyValueRowsEditor
                   rows={formData.extraHosts}
                   onChange={(rows) => {
-                    clearError("config");
+                    clearErrors("config");
                     setFormData((prev) => ({ ...prev, extraHosts: rows }));
                   }}
                   disabled={isSubmitting}
@@ -695,7 +678,7 @@ const SandboxSettings = ({
                   placeholder="ssh.example.com"
                   value={formData.sshHost}
                   onChange={(e) => {
-                    clearError("config");
+                    clearErrors("config");
                     setFormData((prev) => ({
                       ...prev,
                       sshHost: e.target.value,
@@ -734,7 +717,7 @@ const SandboxSettings = ({
                   placeholder="platypus"
                   value={formData.sshUser}
                   onChange={(e) => {
-                    clearError("config");
+                    clearErrors("config");
                     setFormData((prev) => ({
                       ...prev,
                       sshUser: e.target.value,
@@ -901,7 +884,7 @@ const SandboxSettings = ({
               <KeyValueRowsEditor
                 rows={formData.adminEnv}
                 onChange={(rows) => {
-                  clearError("adminEnv");
+                  clearErrors("adminEnv");
                   setFormData((prev) => ({ ...prev, adminEnv: rows }));
                 }}
                 disabled={isSubmitting}
@@ -952,7 +935,7 @@ const SandboxSettings = ({
             <KeyValueRowsEditor
               rows={formData.userEnv}
               onChange={(rows) => {
-                clearError("userEnv");
+                clearErrors("userEnv");
                 setFormData((prev) => ({ ...prev, userEnv: rows }));
               }}
               disabled={isSubmitting}
@@ -984,26 +967,16 @@ const SandboxSettings = ({
         </div>
       ) : (
         <div className="flex gap-2">
-          <Button
-            className="cursor-pointer"
-            onClick={handleSave}
-            disabled={isSubmitting}
-          >
-            Save
-          </Button>
+          <FormFooterButtons
+            submitText="Save"
+            onSubmit={handleSave}
+            submitDisabled={isSubmitting}
+            deleteVisible={hasSandbox && canConfigure}
+            deleteDisabled={isSubmitting}
+            onDelete={openDeleteDialog}
+          />
 
-          {hasSandbox ? (
-            canConfigure && (
-              <Button
-                className="cursor-pointer"
-                variant="outline"
-                onClick={() => setIsDeleteDialogOpen(true)}
-                disabled={isSubmitting}
-              >
-                <Trash2 /> Delete
-              </Button>
-            )
-          ) : (
+          {!hasSandbox && (
             <Button
               className="cursor-pointer"
               variant="ghost"
@@ -1020,23 +993,20 @@ const SandboxSettings = ({
         </div>
       )}
 
-      <ConfirmDialog
+      <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete sandbox"
         description="Are you sure you want to delete this sandbox? This action cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}
+        error={deleteError}
       />
 
       <ConfirmDialog
         open={forceDialog.open}
         onOpenChange={(open) => {
-          if (!open && !isForcing) {
-            setForceDialog({ open: false, kind: null, message: "" });
-          }
+          if (!open && !isForcing) closeForceDialog();
         }}
         title={
           forceDialog.kind === "delete"
