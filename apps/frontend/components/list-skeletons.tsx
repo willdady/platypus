@@ -178,8 +178,6 @@ export type CardSkeletonProps = {
   extra?: ReactNode;
   /** The trailing actions; defaults to the row menu trigger. */
   actions?: ReactNode;
-  /** A full-width row after the content, like `ItemFooter`. */
-  footer?: ReactNode;
   /** Classes on the `Item`, after `h-full`: `items-stretch`. */
   className?: string;
 };
@@ -196,7 +194,6 @@ export function CardGridSkeleton({
   descriptionLines = 1,
   extra,
   actions = <IconButtonSkeleton />,
-  footer,
   className,
 }: CardSkeletonProps & { cards?: number }) {
   return (
@@ -225,7 +222,6 @@ export function CardGridSkeleton({
               {extra}
             </ItemContent>
             {actions}
-            {footer}
           </Item>
         </li>
       ))}

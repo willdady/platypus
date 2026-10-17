@@ -1,22 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Item,
-  ItemTitle,
-  ItemActions,
-  ItemDescription,
-  ItemContent,
-} from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
-
+import { EntityCardList } from "@/components/entity-card-list";
 import {
   ButtonRowSkeleton,
   CardGridSkeleton,
-  LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { RowActionsMenu } from "@/components/row-actions-menu";
@@ -48,24 +39,6 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
       writeEntity(url, "blueprints", { orgId }, { id: blueprint.id }),
   });
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading blueprints">
-        <CardGridSkeleton
-          extra={
-            // The "N shared resources" count.
-            <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-28" />
-          }
-        />
-        <ButtonRowSkeleton className="mt-4" widths={["w-40"]} />
-      </LoadingRegion>
-    );
-  }
-
-  if (error) {
-    return <ListError error={error} subject="blueprints" />;
-  }
-
   const actions = (
     <div className="flex gap-2">
       <Button variant={blueprints.length ? "outline" : "default"} asChild>
@@ -78,61 +51,60 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
 
   return (
     <>
-      {blueprints.length === 0 ? (
-        <EmptyCard
-          icon={<Layers />}
-          title="No blueprints yet"
-          description="Create one to provision new workspaces with a set of shared resources in a single step."
-          action={actions}
-        />
-      ) : (
-        <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
-          {blueprints.map((blueprint) => {
-            const count = blueprint.items.length;
-            return (
-              <li key={blueprint.id}>
-                <Item
-                  variant="outline"
-                  className="h-full cursor-pointer"
-                  asChild
-                >
-                  <Link href={routes.blueprintDetail(blueprint.id)}>
-                    <ItemContent>
-                      <ItemTitle>{blueprint.name}</ItemTitle>
-                      {blueprint.description && (
-                        <ItemDescription className="text-xs line-clamp-2">
-                          {blueprint.description}
-                        </ItemDescription>
-                      )}
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {count} shared resource{count !== 1 ? "s" : ""}
-                      </div>
-                    </ItemContent>
-                    <ItemActions>
-                      <RowActionsMenu
-                        name={blueprint.name}
-                        edit={{ href: routes.blueprintDetail(blueprint.id) }}
-                        actions={[
-                          {
-                            label: "Apply to workspace",
-                            icon: <Play />,
-                            onSelect: () => setBlueprintToApply(blueprint),
-                          },
-                        ]}
-                        remove={{
-                          onSelect: () => deleteFlow.request(blueprint),
-                        }}
-                      />
-                    </ItemActions>
-                  </Link>
-                </Item>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <EntityCardList
+        items={blueprints}
+        isLoading={isLoading}
+        error={error}
+        subject="blueprints"
+        skeleton={
+          <>
+            <CardGridSkeleton
+              extra={
+                // The "N shared resources" count.
+                <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-28" />
+              }
+            />
+            <ButtonRowSkeleton className="mt-4" widths={["w-40"]} />
+          </>
+        }
+        empty={
+          <EmptyCard
+            icon={<Layers />}
+            title="No blueprints yet"
+            description="Create one to provision new workspaces with a set of shared resources in a single step."
+            action={actions}
+          />
+        }
+        href={(blueprint) => routes.blueprintDetail(blueprint.id)}
+        meta={(blueprint) => {
+          const count = blueprint.items.length;
+          return (
+            <div className="mt-1 text-xs text-muted-foreground">
+              {count} shared resource{count !== 1 ? "s" : ""}
+            </div>
+          );
+        }}
+        menu={(blueprint) => (
+          <RowActionsMenu
+            name={blueprint.name}
+            edit={{ href: routes.blueprintDetail(blueprint.id) }}
+            actions={[
+              {
+                label: "Apply to workspace",
+                icon: <Play />,
+                onSelect: () => setBlueprintToApply(blueprint),
+              },
+            ]}
+            remove={{
+              onSelect: () => deleteFlow.request(blueprint),
+            }}
+          />
+        )}
+      />
 
-      {blueprints.length > 0 && <div className="mt-4">{actions}</div>}
+      {!isLoading && !error && blueprints.length > 0 && (
+        <div className="mt-4">{actions}</div>
+      )}
 
       {blueprintToApply && (
         <ApplyBlueprintDialog
