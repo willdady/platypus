@@ -57,7 +57,7 @@ export function ImageWidget({
           className="mt-auto"
           onClick={() => onSave({ url }, title)}
         >
-          <Check className="size-3" /> Save
+          <Check /> Save
         </Button>
       </div>
     );

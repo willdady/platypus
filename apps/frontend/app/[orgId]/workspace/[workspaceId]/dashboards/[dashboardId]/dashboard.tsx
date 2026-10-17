@@ -162,7 +162,7 @@ const WidgetTile = memo(function WidgetTile({
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => onExpand(widget.id)}
             >
-              <Maximize2 className="size-3" />
+              <Maximize2 />
             </button>
           )}
           <Tooltip delayDuration={500}>
@@ -175,7 +175,7 @@ const WidgetTile = memo(function WidgetTile({
                   !editMode && "md:flex",
                 )}
               >
-                <InfoIcon className="size-3" />
+                <InfoIcon />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="text-left">

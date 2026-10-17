@@ -258,7 +258,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       <Button
         type="submit"
         disabled={isSubmitting || !canSubmit}
-        className="w-full md:w-auto self-start"
+        className="w-full md:w-auto mt-2 self-start"
       >
         {isSubmitting ? "Sending..." : "Send invitation"}
       </Button>

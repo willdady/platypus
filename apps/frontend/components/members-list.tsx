@@ -89,7 +89,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                   }
                   className="capitalize"
                 >
-                  {member.isSuperAdmin && <Shield className="size-3" />}
+                  {member.isSuperAdmin && <Shield />}
                   {member.isSuperAdmin ? "Super Admin" : member.role}
                 </Badge>
               </TableCell>

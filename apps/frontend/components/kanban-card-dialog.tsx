@@ -155,7 +155,7 @@ function AssigneePicker({
               </>
             ) : (
               <>
-                <Users className="size-3.5" />
+                <Users />
                 Assign...
               </>
             )}
@@ -223,7 +223,7 @@ function CardTitleActions({
             aria-label="Copy link to card"
             onClick={onCopyLink}
           >
-            <Link2 className="size-3.5" />
+            <Link2 />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Copy link to card</TooltipContent>
@@ -236,7 +236,7 @@ function CardTitleActions({
             aria-label="Copy card as Markdown"
             onClick={onCopyMarkdown}
           >
-            <Copy className="size-3.5" />
+            <Copy />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Copy card as Markdown</TooltipContent>

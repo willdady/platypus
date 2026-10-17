@@ -94,7 +94,7 @@ export function EmbedWidget({
           Some sites don&apos;t allow embedding and will appear blank.
         </p>
         <Button size="sm" className="mt-auto" onClick={handleSave}>
-          <Check className="size-3" /> Save
+          <Check /> Save
         </Button>
       </div>
     );

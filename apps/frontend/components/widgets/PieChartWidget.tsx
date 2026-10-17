@@ -119,7 +119,7 @@ export function PieChartWidget({
               onClick={handleAddSegment}
               className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Plus className="size-3" /> Add segment
+              <Plus /> Add segment
             </button>
           </div>
           {segments.map((s, i) => (

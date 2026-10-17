@@ -249,7 +249,7 @@ export function WeatherWidget({
             )
           }
         >
-          <Check className="size-3" /> Save
+          <Check /> Save
         </Button>
       </div>
     );

@@ -175,7 +175,7 @@ export function NotificationsDropdown({
             totalCount > 0 ? `Notifications (${totalCount})` : "Notifications"
           }
         >
-          <Bell className="size-5" />
+          <Bell />
           {totalCount > 0 && (
             <span className="absolute -top-0 -right-0.5 flex size-4 items-center justify-center rounded-full bg-destructive text-2xs font-medium text-destructive-foreground dark:bg-destructive/60">
               {totalCount}

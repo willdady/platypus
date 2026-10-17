@@ -49,7 +49,7 @@ export function TextWidget({
           className="flex-1 min-h-0 resize-none text-sm font-mono"
         />
         <Button size="sm" onClick={() => onSave({ content }, title)}>
-          <Check className="size-3" /> Save
+          <Check /> Save
         </Button>
       </div>
     );

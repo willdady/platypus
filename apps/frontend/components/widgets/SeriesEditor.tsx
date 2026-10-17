@@ -98,7 +98,7 @@ export function SeriesEditor({
             onClick={handleAddSeries}
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Plus className="size-3" /> Add series
+            <Plus /> Add series
           </button>
         </div>
         {series.map((s, i) => (

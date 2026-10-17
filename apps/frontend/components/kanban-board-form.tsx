@@ -236,7 +236,7 @@ export function KanbanBoardForm({
             size="sm"
             onClick={handleAddLabel}
             disabled={isSubmitting}
-            className="self-start"
+            className="mt-1 self-start"
           >
             <Plus />
             Add label
