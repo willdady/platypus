@@ -978,7 +978,6 @@ const SandboxSettings = ({
 
           {!hasSandbox && (
             <Button
-              className="cursor-pointer"
               variant="ghost"
               onClick={() => {
                 setIsConfiguring(false);

@@ -262,7 +262,6 @@ const TriggerInboundFields = ({
                     <Field orientation="horizontal" className="w-auto">
                       <Switch
                         id={`input-${index}-required`}
-                        className="cursor-pointer"
                         checked={input.required}
                         onCheckedChange={(checked) =>
                           updateInboundInput(index, {
@@ -279,7 +278,7 @@ const TriggerInboundFields = ({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="cursor-pointer shrink-0"
+                      className="shrink-0"
                       aria-label={`Remove input ${index + 1}`}
                       onClick={() =>
                         updateInboundInputs((prev) =>
@@ -297,7 +296,6 @@ const TriggerInboundFields = ({
                 <Button
                   type="button"
                   variant="outline"
-                  className="cursor-pointer"
                   onClick={() =>
                     updateInboundInputs((prev) => [
                       ...prev,
@@ -367,7 +365,6 @@ const TriggerInboundFields = ({
                   <Button
                     type="button"
                     variant="outline"
-                    className="cursor-pointer"
                     onClick={() => setIsRegenerateDialogOpen(true)}
                     disabled={disabled}
                   >

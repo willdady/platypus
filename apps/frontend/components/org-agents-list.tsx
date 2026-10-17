@@ -170,7 +170,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
-                            className="cursor-pointer text-muted-foreground"
+                            className="text-muted-foreground"
                             variant="ghost"
                             size="icon"
                             aria-label={`Actions for ${agent.name}`}
@@ -181,7 +181,6 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                         <DropdownMenuContent>
                           <DropdownMenuItem asChild>
                             <Link
-                              className="cursor-pointer"
                               href={orgRoutes(orgId).settings.agentDetail(
                                 agent.id,
                               )}
@@ -190,13 +189,12 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            className="cursor-pointer"
                             onSelect={() => setAgentToManage(agent)}
                           >
                             <Share2 /> Manage attachments
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            className="cursor-pointer text-destructive focus:text-destructive"
+                            className="text-destructive focus:text-destructive"
                             onSelect={() => deleteGuard.request(agent)}
                           >
                             <Trash2 /> Delete

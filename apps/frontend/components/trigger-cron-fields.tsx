@@ -156,7 +156,6 @@ const TriggerCronFields = ({
             variant={scheduleMode === "simple" ? "default" : "outline"}
             onClick={() => setScheduleMode("simple")}
             disabled={scheduleLocked}
-            className="cursor-pointer"
           >
             Simple
           </Button>
@@ -168,7 +167,6 @@ const TriggerCronFields = ({
               setCronExpression(effectiveCronExpression);
             }}
             disabled={scheduleLocked}
-            className="cursor-pointer"
           >
             Advanced
           </Button>
@@ -413,7 +411,6 @@ const TriggerCronFields = ({
       <Field orientation="horizontal">
         <Switch
           id="isOneOff"
-          className="cursor-pointer"
           checked={isOneOff}
           onCheckedChange={setIsOneOff}
           disabled={scheduleLocked}

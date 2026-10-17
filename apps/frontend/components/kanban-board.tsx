@@ -755,7 +755,7 @@ export function KanbanBoard({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors cursor-pointer min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="truncate">{data.board.name}</span>
                 <ChevronDown className="h-4 w-4 shrink-0" />
@@ -768,7 +768,7 @@ export function KanbanBoard({
                   <DropdownMenuItem key={board.id} asChild>
                     <Link
                       href={routes.boards.detail(board.id)}
-                      className="flex items-center gap-2 cursor-pointer"
+                      className="flex items-center gap-2"
                     >
                       <KanbanSquare className="h-4 w-4" />
                       <span className="truncate">{board.name}</span>
@@ -779,7 +779,7 @@ export function KanbanBoard({
               <DropdownMenuItem asChild>
                 <Link
                   href={routes.boards.create}
-                  className="flex items-center gap-2 cursor-pointer"
+                  className="flex items-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Create new board</span>
@@ -837,7 +837,7 @@ export function KanbanBoard({
             <button
               type="button"
               onClick={() => setDialog({ kind: "addColumn" })}
-              className="flex flex-col items-center justify-center w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex flex-col items-center justify-center w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Plus className="h-8 w-8" />
               <span className="text-sm">Add column</span>

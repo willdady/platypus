@@ -167,7 +167,6 @@ const TriggerEventFields = ({
             <Field key={event} orientation="horizontal">
               <Switch
                 id={`event-${event}`}
-                className="cursor-pointer"
                 checked={selectedEvents.includes(event)}
                 onCheckedChange={() => handleEventToggle(event)}
                 disabled={disabled}
@@ -252,7 +251,6 @@ const TriggerEventFields = ({
               <Field key={field.value} orientation="horizontal">
                 <Switch
                   id={`changed-field-${field.value}`}
-                  className="cursor-pointer"
                   checked={filterChangedFields.includes(field.value)}
                   onCheckedChange={() => handleChangedFieldToggle(field.value)}
                   disabled={disabled}

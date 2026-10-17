@@ -186,10 +186,9 @@ const WidgetTile = memo(function WidgetTile({
             <>
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-2xs"
                 aria-label="Edit widget"
                 aria-pressed={isEditing}
-                className="h-6 w-6"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onEditToggle(widget.id)}
               >
@@ -197,9 +196,9 @@ const WidgetTile = memo(function WidgetTile({
               </Button>
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-2xs"
                 aria-label="Delete widget"
-                className="h-6 w-6 text-destructive hover:text-destructive"
+                className="text-destructive hover:text-destructive"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onDelete(widget.id)}
               >
