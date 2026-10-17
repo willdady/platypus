@@ -20,6 +20,8 @@ import {
   KanbanSquare,
   LayoutDashboard,
   History,
+  AlertCircle,
+  type LucideIcon,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -198,6 +200,46 @@ function WorkspaceSkeleton() {
   );
 }
 
+/** One stat card: its count, and the read it came from. */
+type Stat = {
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  read: { error?: unknown; isLoading: boolean };
+  count: number | undefined;
+};
+
+/** A list read's row count, once it has landed. */
+function listCount(list: { data?: unknown; results: unknown[] }) {
+  return list.data ? list.results.length : undefined;
+}
+
+/**
+ * A stat's number, or — while its read is in flight or after it failed — a
+ * placeholder, so a count that didn't load never reads as 0.
+ */
+function StatValue({ stat, className }: { stat: Stat; className: string }) {
+  if (stat.count !== undefined) {
+    return <span className={cn("block", className)}>{stat.count}</span>;
+  }
+  if (stat.read.isLoading) {
+    return (
+      <Skeleton className="h-7 w-8" aria-label={`Loading ${stat.label}`} />
+    );
+  }
+  return (
+    <span
+      className={cn("flex items-center", className)}
+      title={`Couldn't load ${stat.label.toLowerCase()}`}
+    >
+      <AlertCircle
+        className="size-5 text-destructive"
+        aria-label={`Couldn't load ${stat.label.toLowerCase()}`}
+      />
+    </span>
+  );
+}
+
 function Workspace() {
   const params = useParams();
   const orgId = params.orgId as string;
@@ -215,14 +257,6 @@ function Workspace() {
 
   const scope = { orgId, workspaceId };
 
-  const { results: agents, isLoading: isLoadingAgents } =
-    useScopedList<unknown>("agents", scope);
-
-  const { data: chatsData, isLoading: isLoadingChats } = useScopedSWR<{
-    results: [];
-    totalCount: number;
-  }>(chatListEntity(), scope);
-
   const {
     data: providersData,
     results: providers,
@@ -231,34 +265,29 @@ function Workspace() {
     mutate: mutateProviders,
   } = useScopedList<unknown>("providers", scope);
 
-  const { results: skills, isLoading: isLoadingSkills } =
-    useScopedList<unknown>("skills", scope);
-
-  const { results: triggers, isLoading: isLoadingTriggers } =
-    useScopedList<unknown>("triggers", scope);
-
-  const { results: boards, isLoading: isLoadingBoards } =
-    useScopedList<unknown>("boards", scope);
-
-  const { results: dashboards, isLoading: isLoadingDashboards } =
-    useScopedList<unknown>("dashboards", scope);
-
   const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
     organizationEntity(orgId),
     {},
   );
 
+  // Each count reads the same key as the section below that lists it, so
+  // the two share one request. Chats has no section here, so it reads a
+  // single row for its `totalCount`.
+  const chats = useScopedSWR<{ results: []; totalCount: number }>(
+    chatListEntity({ limit: 1 }),
+    scope,
+  );
+  const agents = useScopedList<unknown>("agents", scope);
+  const skills = useScopedList<unknown>("skills", scope);
+  const dashboards = useScopedList<unknown>("dashboards", scope);
+  const boards = useScopedList<unknown>("boards", scope);
+  const triggers = useScopedList<unknown>("triggers?includeFired=true", scope);
+
   if (
     !backendUrl ||
     !user ||
     isLoadingWorkspace ||
-    isLoadingAgents ||
-    isLoadingChats ||
     isLoadingProviders ||
-    isLoadingSkills ||
-    isLoadingTriggers ||
-    isLoadingBoards ||
-    isLoadingDashboards ||
     isLoadingOrg
   ) {
     return <WorkspaceSkeleton />;
@@ -283,13 +312,52 @@ function Workspace() {
   }
 
   const workspace = workspaceData;
-  const agentCount = agents.length;
-  const chatCount = chatsData?.totalCount ?? 0;
   const providerCount = providers.length;
-  const skillCount = skills.length;
-  const triggerCount = triggers.length;
-  const boardCount = boards.length;
-  const dashboardCount = dashboards.length;
+
+  const stats: Stat[] = [
+    {
+      label: "Chats",
+      description: "Conversations started",
+      icon: MessageSquare,
+      read: chats,
+      count: chats.data?.totalCount,
+    },
+    {
+      label: "Agents",
+      description: "Active AI assistants",
+      icon: Bot,
+      read: agents,
+      count: listCount(agents),
+    },
+    {
+      label: "Skills",
+      description: "Reusable instruction sets",
+      icon: Sparkles,
+      read: skills,
+      count: listCount(skills),
+    },
+    {
+      label: "Dashboards",
+      description: "Widget-based views",
+      icon: LayoutDashboard,
+      read: dashboards,
+      count: listCount(dashboards),
+    },
+    {
+      label: "Boards",
+      description: "Visual work management",
+      icon: KanbanSquare,
+      read: boards,
+      count: listCount(boards),
+    },
+    {
+      label: "Triggers",
+      description: "Automated agent runs",
+      icon: Zap,
+      read: triggers,
+      count: listCount(triggers),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-8 px-4 md:px-8 py-8 pb-32 max-w-6xl mx-auto">
@@ -321,105 +389,36 @@ function Workspace() {
         <>
           {/* Stats Overview - compact on mobile, full cards on desktop */}
           <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 lg:hidden">
-            {[
-              { label: "Chats", value: chatCount, icon: MessageSquare },
-              { label: "Agents", value: agentCount, icon: Bot },
-              { label: "Skills", value: skillCount, icon: Sparkles },
-              {
-                label: "Dashboards",
-                value: dashboardCount,
-                icon: LayoutDashboard,
-              },
-              { label: "Boards", value: boardCount, icon: KanbanSquare },
-              { label: "Triggers", value: triggerCount, icon: Zap },
-            ].map(({ label, value, icon: Icon }) => (
+            {stats.map((stat) => (
               <Card
-                key={label}
+                key={stat.label}
                 className="flex flex-row items-center gap-2 px-3 py-2 min-w-fit"
               >
-                <Icon className="size-4 text-muted-foreground shrink-0" />
-                <span className="text-lg font-bold">{value}</span>
+                <stat.icon className="size-4 text-muted-foreground shrink-0" />
+                <StatValue stat={stat} className="text-lg font-bold" />
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {label}
+                  {stat.label}
                 </span>
               </Card>
             ))}
           </div>
           <div className="hidden lg:grid gap-4 grid-cols-6">
-            <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
-                <CardTitle className="text-sm font-medium">Chats</CardTitle>
-                <MessageSquare className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-4">
-                <div className="text-2xl font-bold">{chatCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Conversations started
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
-                <CardTitle className="text-sm font-medium">Agents</CardTitle>
-                <Bot className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-4">
-                <div className="text-2xl font-bold">{agentCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Active AI assistants
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
-                <CardTitle className="text-sm font-medium">Skills</CardTitle>
-                <Sparkles className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-4">
-                <div className="text-2xl font-bold">{skillCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Reusable instruction sets
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
-                <CardTitle className="text-sm font-medium">
-                  Dashboards
-                </CardTitle>
-                <LayoutDashboard className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-4">
-                <div className="text-2xl font-bold">{dashboardCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Widget-based views
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
-                <CardTitle className="text-sm font-medium">Boards</CardTitle>
-                <KanbanSquare className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-4">
-                <div className="text-2xl font-bold">{boardCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Visual work management
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="gap-2 py-4">
-              <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
-                <CardTitle className="text-sm font-medium">Triggers</CardTitle>
-                <Zap className="size-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-4">
-                <div className="text-2xl font-bold">{triggerCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Automated agent runs
-                </p>
-              </CardContent>
-            </Card>
+            {stats.map((stat) => (
+              <Card key={stat.label} className="gap-2 py-4">
+                <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
+                  <CardTitle className="text-sm font-medium">
+                    {stat.label}
+                  </CardTitle>
+                  <stat.icon className="size-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent className="px-4">
+                  <StatValue stat={stat} className="text-2xl font-bold" />
+                  <p className="text-xs text-muted-foreground">
+                    {stat.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
           {/* Agents List Section */}
