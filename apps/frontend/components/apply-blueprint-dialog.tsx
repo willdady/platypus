@@ -155,7 +155,7 @@ export const ApplyBlueprintDialog = ({
           ) : (
             <>
               <Button
-                variant="ghost"
+                variant="outline"
                 onClick={() => {
                   reset();
                   onOpenChange(false);

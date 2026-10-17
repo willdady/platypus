@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
  * section never toggled starts closed. Storage can throw (disabled, or a
  * sandboxed frame), which reads as never toggled.
  */
-export function readSectionOpen(storageKey: string): boolean {
+function readSectionOpen(storageKey: string): boolean {
   try {
     const stored = localStorage.getItem(storageKey);
     return stored !== null && stored !== "false";

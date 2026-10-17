@@ -1,6 +1,6 @@
 ---
 name: form-conventions
-description: Post-save conventions for Platypus frontend forms — where a save lands the user, what the submit button is called, how a failed delete is shown, and the unsaved-changes guard. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, or a delete confirm dialog.
+description: Post-save conventions for Platypus frontend forms — where a save lands the user, what the submit button is called, how a failed delete is shown, and the unsaved-changes guard. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, a delete confirm dialog, or a dialog's Cancel button.
 ---
 
 # Frontend Form Conventions

@@ -126,7 +126,7 @@ const eslintConfig = defineConfig([
   // hook with the context it reads, which their module keeps private; `ui/`
   // and `ai-elements/` are vendored (shadcn, AI Elements).
   {
-    files: ["components/**/*.tsx"],
+    files: ["components/**/*.ts", "components/**/*.tsx"],
     ignores: [
       ...TEST_FILES,
       "components/auth-provider.tsx",
