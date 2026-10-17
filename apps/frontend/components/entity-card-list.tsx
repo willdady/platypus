@@ -7,18 +7,10 @@ import {
   ItemDescription,
   ItemContent,
 } from "@/components/ui/item";
-import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import { CardGridSkeleton, LoadingRegion } from "@/components/list-skeletons";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { EllipsisVertical, Pencil, Trash2 } from "lucide-react";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { writeEntity } from "@/lib/api-write";
@@ -117,40 +109,11 @@ export const EntityCardList = ({
                   )}
                 </ItemContent>
                 <ItemActions>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        className="text-muted-foreground"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Actions for ${card.name}`}
-                        onClick={(e) => e.preventDefault()}
-                      >
-                        <EllipsisVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem asChild>
-                        <Link
-                          href={routes.settings(card.id)}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Pencil /> Edit
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          deleteFlow.request(card);
-                        }}
-                      >
-                        <Trash2 /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <RowActionsMenu
+                    name={card.name}
+                    edit={{ href: routes.settings(card.id) }}
+                    remove={{ onSelect: () => deleteFlow.request(card) }}
+                  />
                 </ItemActions>
               </Link>
             </Item>

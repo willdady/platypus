@@ -12,7 +12,9 @@ import {
   stubRejectedSave,
   mutate,
   toastInfo,
+  menuItemLabels,
 } from "@/test/list-test-harness";
+import { openDropdownMenu } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -38,6 +40,15 @@ function renderBlueprints(blueprints: Blueprint[], menuItem?: string) {
 beforeEach(resetListHarness);
 
 // --- Tests -------------------------------------------------------------------
+
+describe("BlueprintsList menu", () => {
+  it("puts Edit before Apply to workspace", async () => {
+    await renderBlueprints([blueprint]);
+    await openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Edit", "Apply to workspace", "Delete"]);
+  });
+});
 
 describe("BlueprintsList delete", () => {
   it("deletes through the request module and revalidates on success", async () => {

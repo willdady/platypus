@@ -138,7 +138,6 @@ const A2aEndpointsList = ({
                     remove={
                       ownsWorkspace
                         ? {
-                            kind: "delete",
                             onSelect: () => deleteFlow.request(endpoint),
                           }
                         : undefined

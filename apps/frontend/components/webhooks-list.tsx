@@ -111,7 +111,6 @@ const WebhooksList = ({
                       disabled: toggle.isToggling(webhook.id),
                     }}
                     remove={{
-                      kind: "delete",
                       onSelect: () => deleteFlow.request(webhook),
                     }}
                   />

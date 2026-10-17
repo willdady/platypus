@@ -10,7 +10,6 @@ import {
   ItemDescription,
   ItemContent,
 } from "@/components/ui/item";
-import { Button } from "@/components/ui/button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import {
@@ -18,13 +17,7 @@ import {
   LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import { Badge } from "@/components/ui/badge";
 import { DisabledBadge } from "@/components/disabled-badge";
 import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
@@ -42,11 +35,6 @@ import {
   Timer,
   Zap,
   Webhook,
-  Play,
-  EllipsisVertical,
-  Pencil,
-  Trash2,
-  Pause,
   TriangleAlert,
   CalendarClock,
   CircleCheck,
@@ -397,50 +385,21 @@ export const TriggerList = ({
                   </div>
                 </ItemContent>
                 <ItemActions className="gap-1">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        className="text-muted-foreground"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Actions for ${trigger.name}`}
-                        onClick={(e) => e.preventDefault()}
-                      >
-                        <EllipsisVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent onClick={(e) => e.preventDefault()}>
-                      <DropdownMenuItem asChild>
-                        <Link href={routes.triggers.detail(trigger.id)}>
-                          <Pencil /> Edit
-                        </Link>
-                      </DropdownMenuItem>
-                      {/* A fired One-off is spent: it cannot be re-armed. */}
-                      {!trigger.firedAt && (
-                        <DropdownMenuItem
-                          onSelect={() => void toggle.toggle(trigger)}
-                          disabled={toggle.isToggling(trigger.id)}
-                        >
-                          {trigger.enabled ? (
-                            <>
-                              <Pause /> Disable
-                            </>
-                          ) : (
-                            <>
-                              <Play /> Enable
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onSelect={() => deleteFlow.request(trigger)}
-                      >
-                        <Trash2 /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <RowActionsMenu
+                    name={trigger.name}
+                    edit={{ href: routes.triggers.detail(trigger.id) }}
+                    toggle={
+                      // A fired One-off is spent: it cannot be re-armed.
+                      trigger.firedAt
+                        ? undefined
+                        : {
+                            enabled: trigger.enabled,
+                            onSelect: () => void toggle.toggle(trigger),
+                            disabled: toggle.isToggling(trigger.id),
+                          }
+                    }
+                    remove={{ onSelect: () => deleteFlow.request(trigger) }}
+                  />
                 </ItemActions>
               </Link>
             </Item>

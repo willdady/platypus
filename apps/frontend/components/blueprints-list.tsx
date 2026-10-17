@@ -19,21 +19,8 @@ import {
   LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  EllipsisVertical,
-  Layers,
-  Pencil,
-  Play,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { RowActionsMenu } from "@/components/row-actions-menu";
+import { Layers, Play, Plus } from "lucide-react";
 import type { Blueprint } from "@platypus/schemas";
 import { writeEntity } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -124,42 +111,20 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
                       </div>
                     </ItemContent>
                     <ItemActions>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            className="text-muted-foreground"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Actions for ${blueprint.name}`}
-                            onClick={(e) => e.preventDefault()}
-                          >
-                            <EllipsisVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          onClick={(e) => e.preventDefault()}
-                        >
-                          <DropdownMenuItem
-                            onSelect={() => setBlueprintToApply(blueprint)}
-                          >
-                            <Play /> Apply to workspace
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={routes.blueprintDetail(blueprint.id)}>
-                              <Pencil /> Edit
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onSelect={() => {
-                              deleteFlow.request(blueprint);
-                            }}
-                          >
-                            <Trash2 /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <RowActionsMenu
+                        name={blueprint.name}
+                        edit={{ href: routes.blueprintDetail(blueprint.id) }}
+                        actions={[
+                          {
+                            label: "Apply to workspace",
+                            icon: <Play />,
+                            onSelect: () => setBlueprintToApply(blueprint),
+                          },
+                        ]}
+                        remove={{
+                          onSelect: () => deleteFlow.request(blueprint),
+                        }}
+                      />
                     </ItemActions>
                   </Link>
                 </Item>

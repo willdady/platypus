@@ -31,13 +31,7 @@ import {
   LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -46,14 +40,10 @@ import {
 import {
   ArrowUpFromLine,
   Bot,
-  EllipsisVertical,
-  Pencil,
   Plus,
   Share2,
   Sparkles,
-  Trash2,
   TriangleAlert,
-  Unlink,
   UserRound,
 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
@@ -404,35 +394,18 @@ export const SkillsList = ({
                     </ItemContent>
                     {canAttach && (
                       <ItemActions>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              className="text-muted-foreground"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Actions for ${skill.name}`}
-                            >
-                              <EllipsisVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            <DropdownMenuItem asChild>
-                              <Link
-                                href={orgRoutes(orgId).settings.skillDetail(
-                                  skill.id,
-                                )}
-                              >
-                                <Pencil /> Edit in org settings
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onSelect={() => orgSkillDetach.open(skill)}
-                            >
-                              <Unlink /> Detach
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <RowActionsMenu
+                          name={skill.name}
+                          shared
+                          edit={{
+                            href: orgRoutes(orgId).settings.skillDetail(
+                              skill.id,
+                            ),
+                          }}
+                          remove={{
+                            onSelect: () => orgSkillDetach.open(skill),
+                          }}
+                        />
                       </ItemActions>
                     )}
                   </Item>
@@ -482,49 +455,33 @@ export const SkillsList = ({
                           {count === 0 && <UnattachedWarning />}
                         </ItemContent>
                         <ItemActions>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                className="text-muted-foreground"
-                                variant="ghost"
-                                size="icon"
-                                aria-label={`Actions for ${skill.name}`}
-                                onClick={(e) => e.preventDefault()}
-                              >
-                                <EllipsisVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              onClick={(e) => e.preventDefault()}
-                            >
-                              <DropdownMenuItem asChild>
-                                <Link href={`${editBasePath}/${skill.id}`}>
-                                  <Pencil /> Edit
-                                </Link>
-                              </DropdownMenuItem>
-                              {canPromote && (
-                                <DropdownMenuItem
-                                  onSelect={() => promote.open(skill)}
-                                >
-                                  <ArrowUpFromLine /> Promote to organization
-                                </DropdownMenuItem>
-                              )}
-                              {!workspaceId && canManageOrg && (
-                                <DropdownMenuItem
-                                  onSelect={() => setSkillToManage(skill)}
-                                >
-                                  <Share2 /> Manage attachments
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onSelect={() => handleDeleteClick(skill)}
-                              >
-                                <Trash2 /> Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <RowActionsMenu
+                            name={skill.name}
+                            edit={{ href: `${editBasePath}/${skill.id}` }}
+                            actions={[
+                              ...(canPromote
+                                ? [
+                                    {
+                                      label: "Promote to organization",
+                                      icon: <ArrowUpFromLine />,
+                                      onSelect: () => promote.open(skill),
+                                    },
+                                  ]
+                                : []),
+                              ...(!workspaceId && canManageOrg
+                                ? [
+                                    {
+                                      label: "Manage attachments",
+                                      icon: <Share2 />,
+                                      onSelect: () => setSkillToManage(skill),
+                                    },
+                                  ]
+                                : []),
+                            ]}
+                            remove={{
+                              onSelect: () => handleDeleteClick(skill),
+                            }}
+                          />
                         </ItemActions>
                       </Link>
                     </Item>
