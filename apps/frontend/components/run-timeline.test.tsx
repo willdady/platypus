@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { RunEvent } from "@platypus/schemas";
+import { activityColor, activityLabel } from "./activity-row";
 import {
   RunTimeline,
   RUN_TIMELINE_EMPTY_NOTICE,
@@ -79,12 +80,22 @@ describe("RunTimeline", () => {
     );
 
     expect(
-      screen.getByText("Generating arguments for delegate…"),
+      screen.getByText(
+        activityLabel({
+          type: "tool-input",
+          toolName: "delegate",
+          status: "completed",
+        }),
+      ),
     ).toBeInTheDocument();
     const [input, call] = Array.from(
       container.querySelectorAll<HTMLElement>('[role="img"]'),
     );
-    expect(input.className).not.toBe(call.className);
+    expect(activityColor["tool-input"].bg).not.toBe(
+      activityColor["tool-call"].bg,
+    );
+    expect(input.className).toContain(activityColor["tool-input"].bg);
+    expect(call.className).toContain(activityColor["tool-call"].bg);
   });
 
   it("draws parallel tool calls as overlapping bars", () => {
