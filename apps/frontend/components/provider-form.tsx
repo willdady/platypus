@@ -8,7 +8,6 @@ import {
   FieldError,
   FieldDescription,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextareaField } from "@/components/form-textarea-field";
 import { FormTextField } from "@/components/form-text-field";
@@ -20,30 +19,19 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
+import { ListState } from "@/components/list-state";
+import { ModelEntryDialog } from "@/components/model-entry-dialog";
 import {
   Building,
-  ChevronRight,
   ChevronsUpDown,
-  Info,
   OctagonX,
+  Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
@@ -57,13 +45,9 @@ import {
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
-import { nanoid } from "nanoid";
 import { useRouter } from "next/navigation";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import {
-  CONTEXT_WINDOW_MAX,
-  CONTEXT_WINDOW_MIN,
-  DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   providerHasNativeSearch,
   PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH,
   SEARCH_SOURCE_NATIVE,
@@ -80,402 +64,113 @@ import {
   defaultPassthroughFileTypes,
   type ModelConfigView,
 } from "@/lib/model-config";
-import {
-  CONTEXT_WINDOW_CUSTOM,
-  CONTEXT_WINDOW_PRESETS,
-  CONTEXT_WINDOW_UNSET,
-  contextWindowForOption,
-  optionForContextWindow,
-  parseContextWindowInput,
-} from "@/lib/context-window";
+import { CONTEXT_WINDOW_PRESETS } from "@/lib/context-window";
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import type { Serialized } from "@/lib/api-write";
 
-/**
- * Per-field help for a model row. The fields each need a paragraph of
- * explanation, which as one block under the list was a wall nobody read and
- * left the reader matching sentences to fields by hand.
- */
-function InfoHint({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    // A short delay, so sweeping the pointer across a row of fields doesn't fire
-    // a tooltip at every icon on the way past.
-    <Tooltip delayDuration={400}>
-      <TooltipTrigger
-        // Focusable, so the help is reachable by keyboard and not hover-only.
-        type="button"
-        aria-label={`About ${label}`}
-        className="text-muted-foreground hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]"
-      >
-        <Info className="size-3.5" />
-      </TooltipTrigger>
-      <TooltipContent className="max-w-xs">{children}</TooltipContent>
-    </Tooltip>
-  );
+/** Errors reported against one Model entry, split by the field each belongs to. */
+type ModelEntryErrors = { row?: string; fields: Record<string, string> };
+
+/** What a card says about each optional setting, when it is set. */
+function modelDetails(model: ModelConfigView): string[] {
+  const details: string[] = [];
+  if (model.contextWindow !== undefined) {
+    const preset = CONTEXT_WINDOW_PRESETS.find(
+      (p) => p.tokens === model.contextWindow,
+    );
+    details.push(
+      `Context window: ${preset?.label ?? model.contextWindow.toLocaleString()}`,
+    );
+  }
+  // As entered: an empty list inherits the provider-type default, which the
+  // card does not restate.
+  if (model.passthroughFileTypes.length > 0) {
+    details.push(`Native file types: ${model.passthroughFileTypes.join(", ")}`);
+  }
+  if (model.maxExtractedTextChars !== undefined) {
+    details.push(
+      `Max extracted text characters: ${model.maxExtractedTextChars.toLocaleString()}`,
+    );
+  }
+  if (model.maxOutputTokens !== undefined) {
+    details.push(
+      `Max output tokens: ${model.maxOutputTokens.toLocaleString()}`,
+    );
+  }
+  return details;
 }
 
-function ModelField({
-  htmlFor,
-  label,
-  hint,
-  error,
-  children,
-}: {
-  htmlFor: string;
-  label: string;
-  hint: React.ReactNode;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1" data-invalid={!!error}>
-      <div className="flex items-center gap-1.5">
-        <FieldLabel htmlFor={htmlFor} className="text-xs text-muted-foreground">
-          {label}
-        </FieldLabel>
-        <InfoHint label={label}>{hint}</InfoHint>
-      </div>
-      {children}
-      {error && <FieldError>{error}</FieldError>}
-    </div>
-  );
-}
-
-/** Errors reported against one model row, split by the field each belongs to. */
-type ModelRowErrors = { row?: string; fields: Record<string, string> };
-
 /**
- * One entry in the Models list. The file-handling settings are collapsed by
- * default — most models take the provider-type defaults, and two extra inputs
- * per row turned a ten-model provider into a wall. A row that has either value
- * set opens expanded, so nothing configured is hidden from the reader.
+ * One entry in the Models list, view-only: editing happens in
+ * `ModelEntryDialog`. A card the server rejected shows why under its title.
  */
-function ModelRow({
+function ModelCard({
   model,
-  index,
-  disabled,
-  fileTypesPlaceholder,
   errors,
-  onChange,
+  readOnly,
+  disabled,
+  onEdit,
   onRemove,
 }: {
   model: ModelConfigView;
-  index: number;
+  errors: ModelEntryErrors;
+  readOnly: boolean;
   disabled: boolean;
-  fileTypesPlaceholder: string;
-  errors: ModelRowErrors;
-  onChange: (patch: Partial<ModelConfigView>) => void;
+  onEdit: () => void;
   onRemove: () => void;
 }) {
-  const [showAdvanced, setShowAdvanced] = useState(
-    model.passthroughFileTypes.length > 0 ||
-      model.maxExtractedTextChars !== undefined ||
-      model.maxOutputTokens !== undefined,
+  const details = modelDetails(model);
+  const messages = [errors.row, ...Object.values(errors.fields)].filter(
+    (m): m is string => !!m,
   );
-
-  // Whether the Context window is being typed rather than picked. State as well
-  // as derivation, because neither alone is enough: Custom chosen on a row with
-  // no window declared leaves the value undefined, so a purely derived control
-  // would snap back to "Not set" and the input the reader just asked for would
-  // vanish the moment they cleared it.
-  const [customContextWindow, setCustomContextWindow] = useState(
-    optionForContextWindow(model.contextWindow) === CONTEXT_WINDOW_CUSTOM,
-  );
-
-  // The trigger and the number input read one value, so they cannot disagree.
-  // Folding the stored value back in means a row holding an unlisted size
-  // always renders the input holding it, rather than a "Custom" trigger beside
-  // no input at all — which would leave a declared window invisible and
-  // uneditable until reload.
-  const storedContextWindowOption = optionForContextWindow(model.contextWindow);
-  const contextWindowOption =
-    customContextWindow || storedContextWindowOption === CONTEXT_WINDOW_CUSTOM
-      ? CONTEXT_WINDOW_CUSTOM
-      : storedContextWindowOption;
-
-  // A rejected row is no use collapsed: the reader has to see the field the
-  // server is complaining about.
-  const hasAdvancedError =
-    !!errors.fields.passthroughFileTypes ||
-    !!errors.fields.maxExtractedTextChars ||
-    !!errors.fields.maxOutputTokens;
-  const advancedOpen = showAdvanced || hasAdvancedError;
-
-  // Passthrough types are edited as a comma-separated string of media types.
-  const parsePassthroughTypes = (value: string): string[] =>
-    value
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
-
-  // The input holds the text as typed, not the parsed list: rendering from the
-  // list would drop a trailing comma the moment it was typed, so a second type
-  // could never be entered. The list stays what is stored; text that no longer
-  // parses to the stored list is stale and gives way to the list.
-  const storedFileTypesText = model.passthroughFileTypes.join(", ");
-  const [fileTypesText, setFileTypesText] = useState(storedFileTypesText);
-  const typedFileTypes = parsePassthroughTypes(fileTypesText);
-  const typedMatchesStored =
-    typedFileTypes.length === model.passthroughFileTypes.length &&
-    typedFileTypes.every((t, i) => t === model.passthroughFileTypes[i]);
-  const fileTypesInputValue = typedMatchesStored
-    ? fileTypesText
-    : storedFileTypesText;
-
-  // Shared by the two numeric Advanced fields. An empty (or nonsense) value
-  // means "unset, use the default" rather than 0 — sending 0 would truncate
-  // every extracted document to nothing (issue #342), and would cap every reply
-  // at nothing (issue #454). Undefined is also what clears a value already
-  // stored: the whole `modelIds` array is replaced on save, so the key simply
-  // stops being sent.
-  //
-  // `Number`, never `Number.parseInt`: parseInt truncates at the first
-  // character it cannot read, so `1e5` and `1.9` both became 1 — a value the
-  // schema accepts, which then capped every reply on the model at one token
-  // with nothing on screen pointing at the field. Anything numeric is passed
-  // through EXACTLY as typed and a non-integer is left for the schema to reject
-  // with a message, matching `parseContextWindowInput`. Silently coercing input
-  // into something storable is the one outcome neither field can afford.
-  const parsePositiveNumber = (value: string): number | undefined => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-  };
-
+  const invalid = messages.length > 0;
   return (
-    <div className="flex items-start gap-2 rounded-md border p-3">
-      <div className="flex flex-1 flex-col gap-3">
-        {errors.row && <FieldError>{errors.row}</FieldError>}
-
-        <ModelField
-          htmlFor={`model-id-${index}`}
-          label="Model ID"
-          hint="The model id sent to the vendor, exactly as the vendor names it."
-          error={errors.fields.id}
-        >
-          <Input
-            id={`model-id-${index}`}
-            placeholder="e.g. gpt-4o"
-            value={model.id}
-            onChange={(e) => onChange({ id: e.target.value })}
-            disabled={disabled}
-            aria-invalid={!!errors.fields.id}
-          />
-        </ModelField>
-
-        <ModelField
-          htmlFor={`alias-${index}`}
-          label="Alias"
-          hint="Optional stable name Agents and Chats can select instead of the model ID. Pointing the alias at a newer model upgrades all of them at once."
-          error={errors.fields.alias}
-        >
-          <Input
-            id={`alias-${index}`}
-            placeholder="e.g. flagship"
-            value={model.alias ?? ""}
-            aria-invalid={!!errors.fields.alias}
-            onChange={(e) =>
-              // An empty field means "no alias". Anything else goes to the
-              // schema as typed, so a whitespace-only name is rejected rather
-              // than silently dropped.
-              onChange({
-                alias: e.target.value === "" ? undefined : e.target.value,
-              })
-            }
-            disabled={disabled}
-          />
-        </ModelField>
-
-        {/*
-          Above Advanced, unlike the other optional per-model fields: this one
-          is the only thing that can tell Platypus a capacity it has no way to
-          discover, so a reader adding a model has to see that it exists.
-        */}
-        <ModelField
-          htmlFor={`context-window-${index}`}
-          label="Context window"
-          hint={
-            <>
-              The model&apos;s <strong>total</strong> token capacity, not a cap
-              on the reply. Listed sizes are decimal, so <code>128k</code> is
-              128,000. Optional; without it a Chat on this model shows no
-              context meter.
-            </>
-          }
-          error={errors.fields.contextWindow}
-        >
-          <div className="flex items-center gap-2">
-            <Select
-              value={contextWindowOption}
-              onValueChange={(value) => {
-                setCustomContextWindow(value === CONTEXT_WINDOW_CUSTOM);
-                onChange({
-                  contextWindow: contextWindowForOption(
-                    value,
-                    model.contextWindow,
-                  ),
-                });
-              }}
-              disabled={disabled}
-            >
-              <SelectTrigger
-                id={`context-window-${index}`}
-                aria-invalid={!!errors.fields.contextWindow}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={CONTEXT_WINDOW_UNSET}>Not set</SelectItem>
-                {CONTEXT_WINDOW_PRESETS.map((preset) => (
-                  <SelectItem key={preset.tokens} value={String(preset.tokens)}>
-                    {preset.label}
-                  </SelectItem>
-                ))}
-                <SelectItem value={CONTEXT_WINDOW_CUSTOM}>Custom</SelectItem>
-              </SelectContent>
-            </Select>
-            {contextWindowOption === CONTEXT_WINDOW_CUSTOM && (
-              <Input
-                aria-label="Context window in tokens"
-                type="number"
-                min={CONTEXT_WINDOW_MIN}
-                max={CONTEXT_WINDOW_MAX}
-                placeholder="e.g. 131072"
-                className="flex-1"
-                value={model.contextWindow ?? ""}
-                aria-invalid={!!errors.fields.contextWindow}
-                onChange={(e) =>
-                  onChange({
-                    contextWindow: parseContextWindowInput(e.target.value),
-                  })
-                }
-                disabled={disabled}
-              />
-            )}
-          </div>
-        </ModelField>
-
-        <Collapsible open={advancedOpen} onOpenChange={setShowAdvanced}>
-          <CollapsibleTrigger
-            // Not a ghost Button: the trigger sits flush with the left edge of
-            // the inputs above it, so it takes no horizontal padding and no
-            // hover fill. `h-9` matches an Input, keeping the hit box the size
-            // of the fields it sits among rather than the size of its text.
-            className="flex h-9 w-fit items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            <ChevronRight
-              className={cn(
-                "size-3.5 transition-transform",
-                advancedOpen && "rotate-90",
-              )}
-            />
-            Advanced
-          </CollapsibleTrigger>
-          <CollapsibleContent className="flex flex-col gap-3 pt-3">
-            <ModelField
-              htmlFor={`passthrough-${index}`}
-              label="Native file types"
-              hint={
-                <>
-                  Media types this model ingests <strong>natively</strong>,
-                  comma-separated (wildcards like <code>image/*</code> allowed).
-                  Other types are converted to text where possible, so this is a
-                  capability setting, <strong>not a security filter</strong>.
-                  Leave empty to use the provider-type default.
-                </>
-              }
-              error={errors.fields.passthroughFileTypes}
-            >
-              <Input
-                id={`passthrough-${index}`}
-                placeholder={fileTypesPlaceholder}
-                value={fileTypesInputValue}
-                onChange={(e) => {
-                  setFileTypesText(e.target.value);
-                  onChange({
-                    passthroughFileTypes: parsePassthroughTypes(e.target.value),
-                  });
-                }}
-                disabled={disabled}
-              />
-            </ModelField>
-
-            <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
-              <ModelField
-                htmlFor={`extracted-chars-${index}`}
-                label="Max extracted text characters"
-                hint="How much extracted document text a single file may add to a turn. Protects a small context window. Leave empty for the default."
-                error={errors.fields.maxExtractedTextChars}
-              >
-                <Input
-                  id={`extracted-chars-${index}`}
-                  type="number"
-                  min={1}
-                  placeholder={String(DEFAULT_MAX_EXTRACTED_TEXT_CHARS)}
-                  value={model.maxExtractedTextChars ?? ""}
-                  aria-invalid={!!errors.fields.maxExtractedTextChars}
-                  onChange={(e) =>
-                    onChange({
-                      maxExtractedTextChars: parsePositiveNumber(
-                        e.target.value,
-                      ),
-                    })
-                  }
-                  disabled={disabled}
-                />
-              </ModelField>
-
-              <ModelField
-                htmlFor={`max-output-tokens-${index}`}
-                label="Max output tokens"
-                hint={
-                  <>
-                    The most this model may produce in a{" "}
-                    <strong>single reply</strong> — a cap on the answer, not the
-                    window. Leave empty to use the vendor’s own default, which
-                    may be well below what the model can actually write.
-                  </>
-                }
-                error={errors.fields.maxOutputTokens}
-              >
-                <Input
-                  id={`max-output-tokens-${index}`}
-                  type="number"
-                  min={1}
-                  placeholder="Provider default"
-                  value={model.maxOutputTokens ?? ""}
-                  aria-invalid={!!errors.fields.maxOutputTokens}
-                  onChange={(e) =>
-                    onChange({
-                      maxOutputTokens: parsePositiveNumber(e.target.value),
-                    })
-                  }
-                  disabled={disabled}
-                />
-              </ModelField>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+    <li
+      data-invalid={invalid}
+      className={cn(
+        "flex items-center justify-between gap-2 rounded-md border px-3 py-2",
+        invalid && "border-destructive",
+      )}
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium">{model.id}</p>
+          {model.alias && <Badge variant="secondary">{model.alias}</Badge>}
+        </div>
+        {details.length > 0 && (
+          <p className="text-xs text-muted-foreground">{details.join(" · ")}</p>
+        )}
+        {messages.map((message) => (
+          <FieldError key={message}>{message}</FieldError>
+        ))}
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="shrink-0"
-        aria-label={`Remove model ${index + 1}`}
-        onClick={onRemove}
-        disabled={disabled}
-      >
-        <Trash2 />
-      </Button>
-    </div>
+      {!readOnly && (
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label={`Edit model ${model.id}`}
+            onClick={onEdit}
+            disabled={disabled}
+          >
+            <Pencil />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label={`Remove model ${model.id}`}
+            onClick={onRemove}
+            disabled={disabled}
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -487,24 +182,18 @@ type ProviderFormData = Omit<
   embeddingDimensions: string;
 };
 
-/** A ModelRow's box: three small labelled inputs, Advanced, and Remove. */
-function ModelRowSkeleton() {
+/** A ModelCard: its title, one line of detail, Edit and Remove. */
+function ModelCardSkeleton() {
   return (
-    <div className="flex items-start gap-2 rounded-md border p-3">
-      <div className="flex flex-1 flex-col gap-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="flex flex-col gap-1">
-            <div className="flex h-5 items-center">
-              <Skeleton className="h-3 w-20" />
-            </div>
-            <Skeleton className="h-9 w-full" />
-          </div>
-        ))}
-        <div className="flex h-9 items-center">
-          <Skeleton className="h-3 w-20" />
-        </div>
+    <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+      <div className="flex flex-col gap-1.5">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-48" />
       </div>
-      <Skeleton className="size-9 shrink-0" />
+      <div className="flex shrink-0 gap-2">
+        <Skeleton className="size-9" />
+        <Skeleton className="size-9" />
+      </div>
     </div>
   );
 }
@@ -524,12 +213,12 @@ function ProviderFormSkeleton({
           <FieldSkeleton />
           <FieldSkeleton />
           <FieldSkeleton description={1} />
-          {/* Models: its label, one row, Add model and the description. */}
+          {/* Models: its label, one card, Add model and the description. */}
           <div className="flex w-full flex-col gap-3">
             <div className="flex h-5 items-center">
               <Skeleton className="h-3.5 w-16" />
             </div>
-            <ModelRowSkeleton />
+            <ModelCardSkeleton />
             <Skeleton className="mt-2 h-8 w-28" />
             <Skeleton className="h-3.5 w-2/3" />
           </div>
@@ -828,20 +517,20 @@ function ProviderForm({
 
   // --- Per-model config editing (issue #328) ---
 
-  // Retracts the list's error and every row error under it, so a stale message
-  // doesn't sit under a row the user has already corrected.
+  // Retracts the list's error and every entry error under it, so a stale
+  // message doesn't sit on a card the user has already changed.
   const clearModelIdsError = () => {
     clearErrors("modelIds");
   };
 
   /**
-   * Split the outstanding errors for one row out of the flat map. A row rule
-   * reports as `modelIds.<index>.<field>`; `modelIds.<index>` is the row as a
-   * whole.
+   * Split the outstanding errors for one entry out of the flat map. An entry
+   * rule reports as `modelIds.<index>.<field>`; `modelIds.<index>` is the
+   * entry as a whole.
    */
-  const errorsForRow = (index: number): ModelRowErrors => {
+  const errorsForEntry = (index: number): ModelEntryErrors => {
     const prefix = `modelIds.${index}`;
-    const result: ModelRowErrors = { fields: {} };
+    const result: ModelEntryErrors = { fields: {} };
     for (const [key, message] of Object.entries(validationErrors)) {
       if (key === prefix) result.row = message;
       else if (key.startsWith(`${prefix}.`))
@@ -850,46 +539,28 @@ function ProviderForm({
     return result;
   };
 
-  // `parseValidationErrors` mirrors every row error onto `modelIds` as well, so
-  // a form that only knows flat names still shows something. This one knows
-  // better: when a row is showing the message, the list's own slot stays empty
-  // rather than repeating it.
-  const hasRowError = Object.keys(validationErrors).some((key) =>
+  // `parseValidationErrors` mirrors every entry error onto `modelIds` as well,
+  // so a form that only knows flat names still shows something. This one knows
+  // better: when a card is showing the message, the list's own slot stays
+  // empty rather than repeating it.
+  const hasEntryError = Object.keys(validationErrors).some((key) =>
     key.startsWith("modelIds."),
   );
-  const modelIdsError = hasRowError ? undefined : validationErrors.modelIds;
+  const modelIdsError = hasEntryError ? undefined : validationErrors.modelIds;
 
-  // A stable client-side key per model row, held beside `modelIds` rather than
-  // on it so it never reaches the payload. `ModelRow` keeps local state (the
-  // open Advanced panel, typed file types), and an index key would hand that
-  // state to the neighbour whenever a row above it is removed. Rebuilt whenever
-  // the counts disagree, which is how a freshly seeded record arrives.
-  const [modelRowKeys, setModelRowKeys] = useState<string[]>([]);
-  if (modelRowKeys.length !== formData.modelIds.length) {
-    setModelRowKeys(formData.modelIds.map(() => nanoid()));
-  }
+  // The open Model entry dialog: "new" adds, an index edits that entry.
+  const [modelDialog, setModelDialog] = useState<number | "new" | null>(null);
 
-  const updateModel = (index: number, patch: Partial<ModelConfigView>) => {
+  const stageModel = (model: ModelConfigView) => {
     clearModelIdsError();
     setFormData((prev) => ({
       ...prev,
-      modelIds: prev.modelIds.map((m, i) =>
-        i === index ? { ...m, ...patch } : m,
-      ),
+      modelIds:
+        modelDialog === "new"
+          ? [...prev.modelIds, model]
+          : prev.modelIds.map((m, i) => (i === modelDialog ? model : m)),
     }));
-  };
-
-  const addModel = () => {
-    clearModelIdsError();
-    setFormData((prev) => ({
-      ...prev,
-      // Leave file types empty: an empty set inherits the provider-type default
-      // at resolve time on the backend. The operator can widen or narrow it.
-      // This is a capability router, not a security allow-list — see the field
-      // description.
-      modelIds: [...prev.modelIds, { id: "", passthroughFileTypes: [] }],
-    }));
-    setModelRowKeys((prev) => [...prev, nanoid()]);
+    setModelDialog(null);
   };
 
   const removeModel = (index: number) => {
@@ -898,7 +569,6 @@ function ProviderForm({
       ...prev,
       modelIds: prev.modelIds.filter((_, i) => i !== index),
     }));
-    setModelRowKeys((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Placeholder for the native-file-types input: the provider-type default an
@@ -1054,40 +724,50 @@ function ProviderForm({
           />
 
           {/* Invalid only for an error against the list itself: `data-invalid`
-              reddens every descendant, which on a row error would paint the
-              innocent rows the same colour as the guilty one. */}
+              reddens every descendant, which on an entry error would paint the
+              innocent cards the same colour as the guilty one. */}
           <Field data-invalid={!!modelIdsError}>
             <FieldLabel htmlFor="modelIds">Models</FieldLabel>
-            <div className="flex flex-col gap-3">
-              {formData.modelIds.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No models added yet.
-                </p>
-              )}
-              {formData.modelIds.map((model, index) => (
-                <ModelRow
-                  key={modelRowKeys[index] ?? index}
-                  model={model}
-                  index={index}
-                  disabled={isSubmitting || isReadOnly}
-                  fileTypesPlaceholder={defaultFileTypesPlaceholder}
-                  errors={errorsForRow(index)}
-                  onChange={(patch) => updateModel(index, patch)}
-                  onRemove={() => removeModel(index)}
-                />
-              ))}
-            </div>
+            {formData.modelIds.length === 0 ? (
+              <ListState variant="empty">No models yet.</ListState>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {formData.modelIds.map((model, index) => (
+                  <ModelCard
+                    // Index: cards hold no state, and ids may repeat.
+                    key={index}
+                    model={model}
+                    errors={errorsForEntry(index)}
+                    readOnly={isReadOnly}
+                    disabled={isSubmitting}
+                    onEdit={() => setModelDialog(index)}
+                    onRemove={() => removeModel(index)}
+                  />
+                ))}
+              </ul>
+            )}
             {!isReadOnly && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="mt-2 w-fit"
-                onClick={addModel}
+                onClick={() => setModelDialog("new")}
                 disabled={isSubmitting}
               >
                 <Plus /> Add model
               </Button>
+            )}
+            {modelDialog !== null && (
+              <ModelEntryDialog
+                {...(modelDialog !== "new" && {
+                  model: formData.modelIds[modelDialog],
+                  errors: errorsForEntry(modelDialog).fields,
+                })}
+                fileTypesPlaceholder={defaultFileTypesPlaceholder}
+                onSubmit={stageModel}
+                onClose={() => setModelDialog(null)}
+              />
             )}
             <FieldDescription>
               The models this provider exposes. Agents and Chats choose from

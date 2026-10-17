@@ -194,10 +194,13 @@ everything on it beyond the id is **declared, not guessed**:
 Every field is optional except the id, and a Provider set up before any of them
 existed keeps working with none of them set.
 
-In the form, **Context window** sits on the model row itself; the last three sit
-behind **Advanced** on each row — collapsed unless that model already has one of
-them set. Every field carries an **i** you can hover or focus for the same
-explanation.
+In the form, each model shows as a card: its id, its alias as a badge, and
+whichever of the other fields are set. **Add model** and each card's pencil icon open
+a dialog holding all six fields; every field carries an **i** you can hover or
+focus for the same explanation. The dialog checks the entry on its own, but
+nothing is stored until you save the Provider — and a rule across models, such
+as an alias clashing with another model's, is only checked then. A card the
+save rejects is marked with the reason, and its dialog shows it on the field.
 
 #### Declaring a Context window
 

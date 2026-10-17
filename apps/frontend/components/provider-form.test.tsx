@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { Provider } from "@platypus/schemas";
 import {
   authMock,
@@ -24,6 +30,7 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { ProviderForm } from "./provider-form";
+import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -41,7 +48,42 @@ function renderEditForm(modelIds: Provider["modelIds"]) {
     taskModelId: "gpt-4o",
     memoryExtractionModelId: "gpt-4o",
   } as unknown as Provider);
-  return render(<ProviderForm orgId="org1" providerId="p1" />);
+  return render(<ProviderForm orgId="org1" providerId="p1" />, {
+    wrapper: UnsavedChangesProvider,
+  });
+}
+
+/** Whether leaving the page now would prompt, i.e. the form is dirty. */
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+/** The card for the model whose title reads `id`. */
+function modelCard(id: string) {
+  const card = screen
+    // Hidden too: an open dialog hides the form from the accessibility tree.
+    .getAllByRole("listitem", { hidden: true })
+    .find((li) => within(li).queryByText(id, { selector: "p" }));
+  if (!card) throw new Error(`No card for model "${id}"`);
+  return card;
+}
+
+function openAddDialog() {
+  fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+  return screen.getByRole("dialog", { name: "Add model" });
+}
+
+function openEditDialog(id: string) {
+  fireEvent.click(screen.getByRole("button", { name: `Edit model ${id}` }));
+  return screen.getByRole("dialog", { name: "Edit model" });
+}
+
+function type(dialog: HTMLElement, label: string, value: string) {
+  fireEvent.change(within(dialog).getByLabelText(label), {
+    target: { value },
+  });
 }
 
 /** The `modelIds` the form put on the wire for the last save. */
@@ -63,113 +105,83 @@ beforeEach(() => {
 
 // --- Tests -------------------------------------------------------------------
 
-describe("ProviderForm model rows", () => {
-  it("labels the Model ID input rather than relying on its placeholder", () => {
-    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
-
-    expect(screen.getByLabelText("Model ID")).toHaveValue("gpt-4o");
-  });
-
-  it("gives every model field an info control carrying its help text", () => {
-    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
-
-    for (const label of [
-      "Model ID",
-      "Alias",
-      "Context window",
-      "Native file types",
-      "Max extracted text characters",
-      "Max output tokens",
-    ]) {
-      expect(
-        screen.getByRole("button", { name: `About ${label}` }),
-      ).toBeInTheDocument();
-    }
-  });
-
-  it("hides the file-handling fields until the row is expanded", () => {
-    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
-
-    expect(
-      screen.queryByLabelText("Native file types"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Max extracted text characters"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText("Max output tokens"),
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-
-    expect(screen.getByLabelText("Native file types")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Max extracted text characters"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Max output tokens")).toBeInTheDocument();
-  });
-
-  // Unlike the file-handling pair, this one is visible on a collapsed row: an
-  // Org Admin who never opens Advanced still has to find out the field exists,
-  // because nothing else can tell Platypus a model's capacity.
-  it("shows the Context window control without expanding Advanced", () => {
-    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
-
-    expect(screen.getByLabelText("Context window")).toBeInTheDocument();
-    expect(screen.getByLabelText("Context window")).toHaveTextContent(
-      "Not set",
-    );
-  });
-
-  it("shows a stored listed size on the closed control", () => {
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: [], contextWindow: 128000 },
-    ]);
-
-    expect(screen.getByLabelText("Context window")).toHaveTextContent("128k");
-    expect(
-      screen.queryByLabelText("Context window in tokens"),
-    ).not.toBeInTheDocument();
-  });
-
-  // A proxied model with an unusual capacity comes back in the number input
-  // rather than snapping to whichever preset happens to be nearest.
-  it("shows a stored unlisted size as a Custom value in the number input", () => {
-    renderEditForm([
-      { id: "qwen", passthroughFileTypes: [], contextWindow: 131072 },
-    ]);
-
-    expect(screen.getByLabelText("Context window")).toHaveTextContent("Custom");
-    expect(screen.getByLabelText("Context window in tokens")).toHaveValue(
-      131072,
-    );
-  });
-
-  // Removing a row must leave its neighbour's control intact: a trigger reading
-  // "Custom" beside no input would leave a declared window invisible and
-  // uneditable until the page was reloaded.
-  it("keeps a Custom value editable after the row above it is removed", () => {
+describe("ProviderForm model cards", () => {
+  it("shows each model as a card, with no inputs outside a dialog", () => {
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: [] },
+      { id: "o3", passthroughFileTypes: [] },
+    ]);
+
+    expect(modelCard("gpt-4o")).toBeInTheDocument();
+    expect(modelCard("o3")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Model ID")).not.toBeInTheDocument();
+  });
+
+  it("shows the alias as a badge and only the fields that are set", () => {
+    renderEditForm([
+      {
+        id: "gpt-4o",
+        alias: "flagship",
+        passthroughFileTypes: ["image/*", "application/pdf"],
+        contextWindow: 128000,
+        maxOutputTokens: 64000,
+      },
+      { id: "o3", passthroughFileTypes: [] },
+    ]);
+
+    const full = modelCard("gpt-4o");
+    expect(within(full).getByText("flagship")).toBeInTheDocument();
+    expect(full).toHaveTextContent("Context window: 128k");
+    expect(full).toHaveTextContent(
+      "Native file types: image/*, application/pdf",
+    );
+    expect(full).toHaveTextContent("Max output tokens: 64,000");
+    expect(full).not.toHaveTextContent("Max extracted text characters");
+
+    const bare = modelCard("o3");
+    expect(bare).not.toHaveTextContent("Context window");
+    expect(bare).not.toHaveTextContent("Native file types");
+    expect(bare).not.toHaveTextContent("Max output tokens");
+  });
+
+  it("shows an unlisted Context window as its token count", () => {
+    renderEditForm([
       { id: "qwen", passthroughFileTypes: [], contextWindow: 131072 },
     ]);
 
-    fireEvent.click(screen.getByLabelText("Remove model 1"));
-
-    expect(screen.getByLabelText("Model ID")).toHaveValue("qwen");
-    expect(screen.getByLabelText("Context window")).toHaveTextContent("Custom");
-    expect(screen.getByLabelText("Context window in tokens")).toHaveValue(
-      131072,
-    );
+    expect(modelCard("qwen")).toHaveTextContent("Context window: 131,072");
   });
 
-  it("leaves a legacy string model row loadable with no window declared", () => {
+  it("leaves a legacy string model loadable as a card", () => {
     renderEditForm(["gpt-4o"] as unknown as Provider["modelIds"]);
 
-    expect(screen.getByLabelText("Model ID")).toHaveValue("gpt-4o");
-    expect(screen.getByLabelText("Context window")).toHaveTextContent(
-      "Not set",
+    expect(modelCard("gpt-4o")).toBeInTheDocument();
+  });
+
+  it("shows No models yet. for an empty list", () => {
+    renderEditForm([]);
+
+    expect(screen.getByText("No models yet.")).toBeInTheDocument();
+  });
+
+  it("removes a card straight away, with no confirm dialog", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [] },
+      { id: "o3", passthroughFileTypes: [] },
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove model gpt-4o" }),
     );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("gpt-4o")).not.toBeInTheDocument();
+    save();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)).toEqual([
+      { id: "o3", passthroughFileTypes: [] },
+    ]);
   });
 
   it("sends a declared window back unchanged, so it survives a save", async () => {
@@ -186,76 +198,217 @@ describe("ProviderForm model rows", () => {
     ]);
   });
 
-  // Both fields are optional on create and update: a row that never touches
-  // them must not start sending a number the Org Admin did not declare.
-  it("declares no window and no output ceiling for a row that was left alone", async () => {
+  // A Workspace viewing an Organization provider: the card already shows every
+  // set field, so there is nothing a dialog would add.
+  it("offers no Edit, Remove or Add model on a read-only provider", () => {
+    setData({
+      id: "p1",
+      name: "Shared",
+      providerType: "OpenAI",
+      apiMode: "responses",
+      scope: "organization",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    } as unknown as Provider);
+    render(<ProviderForm orgId="org1" workspaceId="ws1" providerId="p1" />);
+
+    expect(modelCard("gpt-4o")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit model gpt-4o" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove model gpt-4o" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add model" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("ProviderForm model dialog", () => {
+  it("opens Add model with all six fields and appends the card on Add", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
-    save();
+    expect(unload()).toBe(false);
 
+    const dialog = openAddDialog();
+    for (const label of [
+      "Model ID",
+      "Alias",
+      "Context window",
+      "Native file types",
+      "Max extracted text characters",
+      "Max output tokens",
+    ]) {
+      expect(within(dialog).getByLabelText(label)).toBeInTheDocument();
+      expect(
+        within(dialog).getByRole("button", { name: `About ${label}` }),
+      ).toBeInTheDocument();
+    }
+    expect(
+      within(dialog).queryByRole("button", { name: "Advanced" }),
+    ).not.toBeInTheDocument();
+
+    type(dialog, "Model ID", "o3");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(modelCard("o3")).toBeInTheDocument();
+    expect(unload()).toBe(true);
+    save();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(savedModelIds(fetchMock)).toEqual([
       { id: "gpt-4o", passthroughFileTypes: [] },
+      { id: "o3", passthroughFileTypes: [] },
     ]);
   });
 
-  // Editing a Custom value types straight through, bounds included, so a `128`
-  // meant as 128k is rejected by the server rather than silently swallowed.
-  it("sends a typed Custom value exactly as typed", async () => {
+  it("opens Edit model pre-filled and updates the card in place on Save", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
-    renderEditForm([
-      { id: "qwen", passthroughFileTypes: [], contextWindow: 131072 },
-    ]);
-    fireEvent.change(screen.getByLabelText("Context window in tokens"), {
-      target: { value: "128" },
-    });
-    save();
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedModelIds(fetchMock)[0].contextWindow).toBe(128);
-  });
-
-  it("opens a row already carrying file-handling config, so nothing set is hidden", () => {
     renderEditForm([
       {
         id: "gpt-4o",
-        passthroughFileTypes: ["image/*", "application/pdf"],
+        alias: "flagship",
+        passthroughFileTypes: ["image/*"],
         maxExtractedTextChars: 1000,
+        maxOutputTokens: 64000,
+        contextWindow: 131072,
       },
+      { id: "o3", passthroughFileTypes: [] },
     ]);
 
-    expect(screen.getByLabelText("Native file types")).toHaveValue(
-      "image/*, application/pdf",
+    const dialog = openEditDialog("gpt-4o");
+    expect(within(dialog).getByLabelText("Model ID")).toHaveValue("gpt-4o");
+    expect(within(dialog).getByLabelText("Alias")).toHaveValue("flagship");
+    expect(within(dialog).getByLabelText("Context window")).toHaveTextContent(
+      "Custom",
     );
-    expect(screen.getByLabelText("Max extracted text characters")).toHaveValue(
-      1000,
+    expect(
+      within(dialog).getByLabelText("Context window in tokens"),
+    ).toHaveValue(131072);
+    expect(within(dialog).getByLabelText("Native file types")).toHaveValue(
+      "image/*",
     );
+    expect(
+      within(dialog).getByLabelText("Max extracted text characters"),
+    ).toHaveValue(1000);
+    expect(within(dialog).getByLabelText("Max output tokens")).toHaveValue(
+      64000,
+    );
+
+    type(dialog, "Model ID", "gpt-5");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    save();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock).map((m: { id: string }) => m.id)).toEqual([
+      "gpt-5",
+      "o3",
+    ]);
   });
 
-  // The field was rendered from the parsed list, so `image/png,` parsed to
-  // `["image/png"]`, rendered back without its comma, and a second type could
-  // never be typed. What the reader typed has to stay in the field.
-  it("keeps a typed trailing comma in Native file types", () => {
-    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
+  it("leaves the form clean after Save with nothing changed", () => {
+    renderEditForm([
+      { id: "gpt-4o", alias: "flagship", passthroughFileTypes: ["image/*"] },
+      "o3",
+    ] as unknown as Provider["modelIds"]);
 
-    fireEvent.change(screen.getByLabelText("Native file types"), {
-      target: { value: "image/png," },
-    });
+    for (const id of ["gpt-4o", "o3"]) {
+      const dialog = openEditDialog(id);
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    }
 
-    expect(screen.getByLabelText("Native file types")).toHaveValue(
-      "image/png,",
+    expect(unload()).toBe(false);
+  });
+
+  it("makes the form dirty on Remove", () => {
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove model gpt-4o" }),
     );
+
+    expect(unload()).toBe(true);
+  });
+
+  it("shows a stored listed size on the closed control", () => {
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], contextWindow: 128000 },
+    ]);
+
+    const dialog = openEditDialog("gpt-4o");
+    expect(within(dialog).getByLabelText("Context window")).toHaveTextContent(
+      "128k",
+    );
+    expect(
+      within(dialog).queryByLabelText("Context window in tokens"),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "Cancel",
+      (dialog: HTMLElement) =>
+        fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" })),
+    ],
+    [
+      "Esc",
+      () => fireEvent.keyDown(document.activeElement!, { key: "Escape" }),
+    ],
+  ])("discards the dialog's edits on %s, with no prompt", (_, close) => {
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Model ID", "changed");
+    close(dialog);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+    expect(modelCard("gpt-4o")).toBeInTheDocument();
+    expect(unload()).toBe(false);
+  });
+
+  it("blocks Add on an empty Model ID and stages nothing", () => {
+    renderEditForm([]);
+
+    const dialog = openAddDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Model ID")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByText("No models yet.")).toBeInTheDocument();
+  });
+
+  it("blocks Save on an out-of-range Context window", () => {
+    renderEditForm([
+      { id: "qwen", passthroughFileTypes: [], contextWindow: 131072 },
+    ]);
+
+    const dialog = openEditDialog("qwen");
+    type(dialog, "Context window in tokens", "128");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(
+      within(dialog).getByLabelText("Context window in tokens"),
+    ).toHaveAttribute("aria-invalid", "true");
+    expect(modelCard("qwen")).toHaveTextContent("Context window: 131,072");
   });
 
   it("sends each comma-separated native file type as its own entry", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
-    fireEvent.change(screen.getByLabelText("Native file types"), {
-      target: { value: "image/png, application/pdf" },
-    });
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Native file types", "image/png, application/pdf,");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -269,56 +422,15 @@ describe("ProviderForm model rows", () => {
   // nothing but separators must not store an empty-string type.
   it("sends no native file types when the field holds only separators", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
-    fireEvent.change(screen.getByLabelText("Native file types"), {
-      target: { value: " , ," },
-    });
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Native file types", " , ,");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(savedModelIds(fetchMock)[0].passthroughFileTypes).toEqual([]);
-  });
-
-  // The typed text of a removed row must not land on its neighbour, which
-  // shows its own types, not the removed row's.
-  it("shows a row its own native file types after the row above it is removed", () => {
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: ["image/*"] },
-      { id: "claude", passthroughFileTypes: ["application/pdf"] },
-    ]);
-
-    fireEvent.change(screen.getAllByLabelText("Native file types")[0], {
-      target: { value: "image/png," },
-    });
-    fireEvent.click(screen.getByLabelText("Remove model 1"));
-
-    expect(screen.getByLabelText("Model ID")).toHaveValue("claude");
-    expect(screen.getByLabelText("Native file types")).toHaveValue(
-      "application/pdf",
-    );
-  });
-
-  // Same rule as the file-handling pair: a ceiling someone declared must not be
-  // hidden behind a collapsed section where the next reader won't find it.
-  it("opens a row whose only Advanced setting is a declared output ceiling", () => {
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
-    ]);
-
-    expect(screen.getByLabelText("Max output tokens")).toHaveValue(64000);
-  });
-
-  it("sends a declared output ceiling back unchanged, so it survives a save", async () => {
-    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
-    ]);
-    save();
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedModelIds(fetchMock)[0].maxOutputTokens).toBe(64000);
   });
 
   // Emptying the input has to actually clear the stored value. The whole
@@ -326,36 +438,28 @@ describe("ProviderForm model rows", () => {
   // but only if the form stops sending the old number.
   it("clears a declared output ceiling when the input is emptied", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
     ]);
-    fireEvent.change(screen.getByLabelText("Max output tokens"), {
-      target: { value: "" },
-    });
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Max output tokens", "");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(savedModelIds(fetchMock)[0]).not.toHaveProperty("maxOutputTokens");
   });
 
-  // `Number.parseInt` truncated at the first unreadable character, so `1e5` and
-  // `1.9` both saved as 1 — accepted by the schema, and every reply on the model
-  // then stopped after one token. A number must reach the server as typed or
-  // not at all: a fraction is left for the schema's `.int()` to reject with a
-  // message the reader can act on. The extracted-text cap shares the parser.
+  // `Number.parseInt` truncated at the first unreadable character, so `1e5`
+  // became 1 — accepted by the schema, and every reply on the model then
+  // stopped after one token. A number must be staged as typed or not at all.
   it.each([
     {
       field: "maxOutputTokens",
       label: "Max output tokens",
       typed: "1e5",
       sent: 100_000,
-    },
-    {
-      field: "maxOutputTokens",
-      label: "Max output tokens",
-      typed: "1.9",
-      sent: 1.9,
     },
     {
       field: "maxExtractedTextChars",
@@ -367,13 +471,11 @@ describe("ProviderForm model rows", () => {
     "sends $label typed as $typed as the number it denotes",
     async ({ field, label, typed, sent }) => {
       const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+      renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
 
-      renderEditForm([
-        { id: "gpt-4o", passthroughFileTypes: [], [field]: 1000 },
-      ]);
-      fireEvent.change(screen.getByLabelText(label), {
-        target: { value: typed },
-      });
+      const dialog = openEditDialog("gpt-4o");
+      type(dialog, label, typed);
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
       save();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -381,49 +483,43 @@ describe("ProviderForm model rows", () => {
     },
   );
 
-  it("expands only the row that has config, leaving its neighbours collapsed", () => {
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: [] },
-      { id: "gpt-4o-mini", passthroughFileTypes: ["image/*"] },
-    ]);
-
-    // One expanded row means one visible pair of file-handling inputs.
-    expect(screen.getAllByLabelText("Native file types")).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Advanced" })).toHaveLength(2);
-  });
-
-  it("keeps a row's open Advanced panel with its model when an earlier row is removed", () => {
-    renderEditForm([
-      { id: "gpt-4o", passthroughFileTypes: [] },
-      { id: "gpt-4o-mini", passthroughFileTypes: [] },
-      { id: "o3", passthroughFileTypes: [] },
-    ]);
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Advanced" })[2]);
-    fireEvent.click(screen.getByLabelText("Remove model 2"));
-
-    const modelIds = screen
-      .getAllByLabelText("Model ID")
-      .map((input) => (input as HTMLInputElement).value);
-    expect(modelIds).toEqual(["gpt-4o", "o3"]);
-    // One open panel, and it belongs to o3, now the second row.
-    expect(screen.getAllByLabelText("Native file types")).toHaveLength(1);
-    expect(
-      screen.getAllByRole("button", { name: "Advanced" })[1],
-    ).toHaveAttribute("aria-expanded", "true");
-  });
-
-  it("keeps the client-side row id out of the saved payload", async () => {
-    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+  // A fraction is left for the schema's `.int()` to reject with a message,
+  // never truncated into something storable.
+  it("rejects a fractional Max output tokens in the dialog", () => {
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
-    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
 
-    save();
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Max output tokens", "1.9");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    for (const row of savedModelIds(fetchMock)) {
-      expect(Object.keys(row)).not.toContain("key");
-    }
+    expect(within(dialog).getByLabelText("Max output tokens")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+
+  it("stages a model from the wizard's draft step", async () => {
+    const write = vi.fn().mockResolvedValue({
+      outcome: "success",
+      data: undefined,
+      revalidateKeys: [],
+    });
+    render(
+      <ProviderForm
+        orgId="org1"
+        draft={{ write, onBack: vi.fn(), submitText: "Next" }}
+      />,
+    );
+
+    const dialog = openAddDialog();
+    type(dialog, "Model ID", "gpt-4o");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => expect(write).toHaveBeenCalled());
+    expect(write.mock.calls[0][0].modelIds).toEqual([
+      { id: "gpt-4o", passthroughFileTypes: [] },
+    ]);
   });
 });
 
@@ -447,7 +543,7 @@ describe("ProviderForm switching Providers", () => {
     const { rerender } = render(<ProviderForm orgId="org1" providerId="p1" />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("OpenAI provider");
-    expect(screen.getByLabelText("Model ID")).toHaveValue("gpt-4o");
+    expect(modelCard("gpt-4o")).toBeInTheDocument();
 
     // Already resolved before the rerender, as it would be for a Provider
     // whose data is already warm in SWR's cache.
@@ -469,7 +565,7 @@ describe("ProviderForm switching Providers", () => {
     expect(screen.getByLabelText("Base URL")).toHaveValue(
       "https://p2.example.com",
     );
-    expect(screen.getByLabelText("Model ID")).toHaveValue("claude-opus");
+    expect(modelCard("claude-opus")).toBeInTheDocument();
   });
 
   // The specific behaviour the old initialised-flag ref protected: a Provider
@@ -506,7 +602,7 @@ describe("ProviderForm switching Providers", () => {
   });
 });
 
-describe("ProviderForm validation errors on model rows", () => {
+describe("ProviderForm validation errors on model cards", () => {
   const threeModels = () => [
     { id: "a", passthroughFileTypes: [] },
     { id: "b", alias: "dup", passthroughFileTypes: [] },
@@ -515,8 +611,8 @@ describe("ProviderForm validation errors on model rows", () => {
 
   // Keyed on the first path segment, both messages landed on the Models field
   // and the second overwrote the first: one message, one fix per round-trip,
-  // and no indication of which row was wrong.
-  it("shows every rejected row its own message, against the field that failed", async () => {
+  // and no indication of which model was wrong.
+  it("marks every rejected card invalid with its own message", async () => {
     stubRejectedSave([
       { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
       { path: ["modelIds", 2, "alias"], message: "Alias 'DUP' duplicates" },
@@ -526,18 +622,36 @@ describe("ProviderForm validation errors on model rows", () => {
     save();
 
     expect(
-      await screen.findByText("Alias 'dup' duplicates"),
+      await within(modelCard("b")).findByText("Alias 'dup' duplicates"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Alias 'DUP' duplicates")).toBeInTheDocument();
-
-    // The message lands on the row that failed, not on its neighbours.
-    const aliases = screen.getAllByLabelText("Alias");
-    expect(aliases[0]).not.toHaveAttribute("aria-invalid", "true");
-    expect(aliases[1]).toHaveAttribute("aria-invalid", "true");
-    expect(aliases[2]).toHaveAttribute("aria-invalid", "true");
+    expect(modelCard("c")).toHaveTextContent("Alias 'DUP' duplicates");
+    expect(modelCard("a")).not.toHaveAttribute("data-invalid", "true");
+    expect(modelCard("b")).toHaveAttribute("data-invalid", "true");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("does not repeat a row's message against the Models field", async () => {
+  it("shows a card's field error on the matching field in its Edit dialog", async () => {
+    stubRejectedSave([
+      { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
+    ]);
+
+    renderEditForm(threeModels());
+    save();
+    await within(modelCard("b")).findByText("Alias 'dup' duplicates");
+
+    const dialog = openEditDialog("b");
+    expect(within(dialog).getByLabelText("Alias")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(within(dialog).getByLabelText("Model ID")).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(dialog).toHaveTextContent("Alias 'dup' duplicates");
+  });
+
+  it("does not repeat a card's message against the Models field", async () => {
     stubRejectedSave([
       { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
     ]);
@@ -580,103 +694,50 @@ describe("ProviderForm validation errors on model rows", () => {
     expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
   });
 
-  it("retracts the row errors once the list is edited", async () => {
-    stubRejectedSave([
-      { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
-      { path: ["modelIds", 2, "alias"], message: "Alias 'DUP' duplicates" },
-    ]);
-
-    renderEditForm(threeModels());
-    save();
-
-    expect(
-      await screen.findByText("Alias 'dup' duplicates"),
-    ).toBeInTheDocument();
-
-    fireEvent.change(screen.getAllByLabelText("Alias")[1], {
-      target: { value: "unique" },
-    });
-
-    expect(
-      screen.queryByText("Alias 'dup' duplicates"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Alias 'DUP' duplicates"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("opens a collapsed row when the server rejects a field inside it", async () => {
-    stubRejectedSave([
-      {
-        path: ["modelIds", 0, "maxExtractedTextChars"],
-        message: "Too small",
+  it.each([
+    [
+      "edit",
+      () => {
+        const dialog = openEditDialog("b");
+        type(dialog, "Alias", "unique");
+        fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
       },
-    ]);
-
-    renderEditForm([{ id: "a", passthroughFileTypes: [] }]);
-    expect(
-      screen.queryByLabelText("Max extracted text characters"),
-    ).not.toBeInTheDocument();
-
-    save();
-
-    expect(
-      await screen.findByLabelText("Max extracted text characters"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Too small")).toBeInTheDocument();
-    expect(
-      screen.getByLabelText("Max extracted text characters"),
-    ).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText("Max output tokens")).not.toHaveAttribute(
-      "aria-invalid",
-      "true",
-    );
-  });
-
-  it("opens a collapsed row when the server rejects its output ceiling", async () => {
-    stubRejectedSave([
-      {
-        path: ["modelIds", 0, "maxOutputTokens"],
-        message: "Too small: expected number to be >0",
+    ],
+    [
+      "remove",
+      () =>
+        fireEvent.click(screen.getByRole("button", { name: "Remove model a" })),
+    ],
+    [
+      "add",
+      () => {
+        const dialog = openAddDialog();
+        type(dialog, "Model ID", "d");
+        fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
       },
-    ]);
+    ],
+  ])(
+    "retracts the card errors once a change is staged (%s)",
+    async (_, stage) => {
+      stubRejectedSave([
+        { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
+        { path: ["modelIds", 2, "alias"], message: "Alias 'DUP' duplicates" },
+      ]);
 
-    renderEditForm([{ id: "a", passthroughFileTypes: [] }]);
-    expect(
-      screen.queryByLabelText("Max output tokens"),
-    ).not.toBeInTheDocument();
+      renderEditForm(threeModels());
+      save();
+      await screen.findByText("Alias 'dup' duplicates");
 
-    save();
+      stage();
 
-    expect(
-      await screen.findByLabelText("Max output tokens"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Too small: expected number to be >0"),
-    ).toBeInTheDocument();
-  });
-
-  // The window sits outside Advanced, so its rejection needs no disclosure
-  // opened — it lands on a control the reader is already looking at.
-  it("shows a rejected Context window against the control itself", async () => {
-    stubRejectedSave([
-      {
-        path: ["modelIds", 0, "contextWindow"],
-        message: "Too small: expected number to be >=1000",
-      },
-    ]);
-
-    renderEditForm([{ id: "a", passthroughFileTypes: [], contextWindow: 128 }]);
-    save();
-
-    expect(
-      await screen.findByText("Too small: expected number to be >=1000"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Context window")).toHaveAttribute(
-      "aria-invalid",
-      "true",
-    );
-  });
+      expect(
+        screen.queryByText("Alias 'dup' duplicates"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Alias 'DUP' duplicates"),
+      ).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe("ProviderForm Web search selector", () => {
