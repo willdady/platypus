@@ -294,8 +294,8 @@ const eslintConfig = defineConfig([
     files: TEST_FILES,
     rules: {
       "@typescript-eslint/require-await": "warn", // 60
-      "@typescript-eslint/no-unsafe-member-access": "warn", // 38
-      "@typescript-eslint/no-unnecessary-type-assertion": "warn", // 33
+      "@typescript-eslint/no-unsafe-member-access": "warn", // 39
+      "@typescript-eslint/no-unnecessary-type-assertion": "warn", // 35
       "@typescript-eslint/no-unsafe-assignment": "warn", // 21
       "@typescript-eslint/unbound-method": "warn", // 13
       "@typescript-eslint/no-unsafe-return": "warn", // 10
