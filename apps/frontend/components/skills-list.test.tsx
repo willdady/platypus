@@ -235,6 +235,17 @@ describe("SkillsList unattached warning", () => {
     ).not.toBeInTheDocument();
     expect(card()).not.toHaveClass("border-warning");
   });
+
+  it("shows a non-admin no warning", async () => {
+    authState.actor = "member";
+    mockScopedSWR({ "/attachments?": [] });
+    await renderOrgSkills([orgSkill]);
+
+    expect(
+      screen.queryByText("Not attached to any workspaces."),
+    ).not.toBeInTheDocument();
+    expect(card()).not.toHaveClass("border-warning");
+  });
 });
 
 describe("SkillsList promote", () => {

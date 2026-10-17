@@ -129,7 +129,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                   {agent.avatarUrl ? (
                     <ItemMedia variant="image" className="size-12 rounded-full">
                       {/* Agent avatar URL is user-supplied (arbitrary host); not
-                  routable through the Next image optimizer. */}
+                      routable through the Next image optimizer. */}
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={agent.avatarUrl}

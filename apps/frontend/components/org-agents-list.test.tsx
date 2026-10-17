@@ -11,6 +11,7 @@ import {
   stubSaveSequence,
   stubAcceptedSave,
   mutate,
+  authState,
 } from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -102,6 +103,17 @@ describe("OrgAgentsList unattached warning", () => {
     mockScopedSWR({
       "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
     });
+    await renderAgents([sharedAgent]);
+
+    expect(
+      screen.queryByText("Not attached to any workspaces."),
+    ).not.toBeInTheDocument();
+    expect(card()).not.toHaveClass("border-warning");
+  });
+
+  it("shows a non-admin no warning", async () => {
+    authState.actor = "member";
+    mockScopedSWR({ "/attachments?": [] });
     await renderAgents([sharedAgent]);
 
     expect(
