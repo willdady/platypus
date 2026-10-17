@@ -1,5 +1,47 @@
 # Changelog
 
+## [3.22.0](https://github.com/willdady/platypus/compare/v3.21.0...v3.22.0) (2026-10-17)
+
+
+### Features
+
+* **frontend:** error boundaries for the root, segments and chat message parts ([4ed4722](https://github.com/willdady/platypus/commit/4ed47229f6ad617c413ae335e70614a26357e736)), closes [#1477](https://github.com/willdady/platypus/issues/1477)
+* **frontend:** tell the user when a Chat opens on a substitute model ([a6cc68e](https://github.com/willdady/platypus/commit/a6cc68e0f6ece18ea86a1c98400ead344e6cd4f9))
+* **frontend:** title Chat, Agent, Trigger and Organization pages by name ([d4bf7e2](https://github.com/willdady/platypus/commit/d4bf7e201f37ab4897485b43512fa4e3b89b904d)), closes [#1478](https://github.com/willdady/platypus/issues/1478)
+* **frontend:** title every page and keep the app out of search indexes ([2f6e089](https://github.com/willdady/platypus/commit/2f6e0892776eaaaa779f2a1bd79e639cc56f7276))
+
+
+### Bug Fixes
+
+* **backend:** say a rejected webhook URL may just be unreachable ([#1525](https://github.com/willdady/platypus/issues/1525)) ([ed3c4ae](https://github.com/willdady/platypus/commit/ed3c4ae6378553fa138ec89b04ede3739cf1b272))
+* **docs:** say a new Chat's last pick is per browser and lasts 24 hours ([#1512](https://github.com/willdady/platypus/issues/1512)) ([8c3d336](https://github.com/willdady/platypus/commit/8c3d336f15a8563228236e901e989fd08463a0d4))
+* **frontend:** announce the remaining inline errors and keep spinners turning under reduced motion ([0a5d81f](https://github.com/willdady/platypus/commit/0a5d81fb87fca0420da2913078cdc53836346ef9)), closes [#1481](https://github.com/willdady/platypus/issues/1481)
+* **frontend:** define --destructive-foreground and use it for destructive text ([a5d0c3e](https://github.com/willdady/platypus/commit/a5d0c3e453758b91ba0a8084b1dd22400828f46b)), closes [#1461](https://github.com/willdady/platypus/issues/1461)
+* **frontend:** describe the empty workspace contexts list and name its tests by behaviour ([409e352](https://github.com/willdady/platypus/commit/409e352ea7ec5131eee53f292fda4ccc3fdfd83d)), closes [#1471](https://github.com/willdady/platypus/issues/1471)
+* **frontend:** don't open a card on the Enter that drops it, and pick label text by luminance everywhere ([d3c932b](https://github.com/willdady/platypus/commit/d3c932be35945a09fce9d89d2f9a9cb829da3ced)), closes [#1480](https://github.com/willdady/platypus/issues/1480)
+* **frontend:** drop self-referencing shadow tokens so shadow utilities render ([5bba29f](https://github.com/willdady/platypus/commit/5bba29fda5bcfe9890e4d2c38c0aa6d7169c0eeb)), closes [#1457](https://github.com/willdady/platypus/issues/1457)
+* **frontend:** give the notification badge readable contrast in dark mode ([c7208a5](https://github.com/willdady/platypus/commit/c7208a5213e93708e42b699b33badee36108c591)), closes [#1461](https://github.com/willdady/platypus/issues/1461)
+* **frontend:** guard Kanban, card dialog, invitation and pin actions against double submit ([1249c16](https://github.com/willdady/platypus/commit/1249c16b82bf288867bb2c85fea85c8ba7877c66)), closes [#1474](https://github.com/willdady/platypus/issues/1474)
+* **frontend:** honour BASE_PATH in absolute URLs and complete lib/routes.ts ([5709815](https://github.com/willdady/platypus/commit/5709815fea59a22b72720926e88a8fee109f17d3)), closes [#1472](https://github.com/willdady/platypus/issues/1472)
+* **frontend:** key provider model rows on a stable id so row state stays with its model ([8bb9d60](https://github.com/willdady/platypus/commit/8bb9d60003c4cc8d092b0f5a7687b6b9c05d922f)), closes [#1468](https://github.com/willdady/platypus/issues/1468)
+* **frontend:** keyboard and screen-reader support for Kanban cards, notifications, the expand overlay and chat streaming ([758975d](https://github.com/willdady/platypus/commit/758975d267aca2ba01626fd9eace700b54216d8a)), closes [#1480](https://github.com/willdady/platypus/issues/1480)
+* **frontend:** label only the in-flight card or comment action as pending ([0ee9398](https://github.com/willdady/platypus/commit/0ee93989b14104aeeba3825d4a547e70b79ac79f)), closes [#1474](https://github.com/willdady/platypus/issues/1474)
+* **frontend:** let the delete guard hand over when there is no backend URL yet ([6de890d](https://github.com/willdady/platypus/commit/6de890daa23d3df66500ff3466587bb31515a7a3)), closes [#1488](https://github.com/willdady/platypus/issues/1488)
+* **frontend:** link form errors and labels, honour reduced motion, and add page landmarks ([9155474](https://github.com/willdady/platypus/commit/9155474fa1ead059288a2275c5ee2da435008e44)), closes [#1481](https://github.com/willdady/platypus/issues/1481)
+* **frontend:** make the root page spinner visible in dark mode ([a7de17c](https://github.com/willdady/platypus/commit/a7de17c2e7a1dce1e455069c909936eb23a2078c)), closes [#1462](https://github.com/willdady/platypus/issues/1462)
+* **frontend:** name inputs that had only a placeholder ([#1529](https://github.com/willdady/platypus/issues/1529)) ([adff74a](https://github.com/willdady/platypus/commit/adff74a924ead9e8d2aaaec5674ee49d4734718e))
+* **frontend:** open the Kanban card dialog on click again ([#1524](https://github.com/willdady/platypus/issues/1524)) ([47cbd4d](https://github.com/willdady/platypus/commit/47cbd4db2e2d85bed239d6d7b31350b67eb0fba2))
+* **frontend:** remember a Workspace's last selection only when it is picked ([ee4d4f1](https://github.com/willdady/platypus/commit/ee4d4f1f05901247893616a29c8414d1a3c4eb96)), closes [#1503](https://github.com/willdady/platypus/issues/1503)
+* **frontend:** report a Chat message part that stays broken only once ([5fa903a](https://github.com/willdady/platypus/commit/5fa903a891444dee69af51579afbb84a0c907746))
+* **frontend:** restore the route's tab title when a Chat loses its name ([baa2750](https://github.com/willdady/platypus/commit/baa27509122e726ef00087566acc0da913940e5c))
+* **frontend:** sort copies of SWR results so lists never mutate the cache ([6762c1f](https://github.com/willdady/platypus/commit/6762c1f01f234cce9a17b92b78590119423558d0)), closes [#1458](https://github.com/willdady/platypus/issues/1458)
+* **frontend:** stop prebuild clobbering .env.local, drop root force-dynamic, validate env and send security headers ([2bd0510](https://github.com/willdady/platypus/commit/2bd0510707a4c3de15862c1f37af9ce2e046c853)), closes [#1490](https://github.com/willdady/platypus/issues/1490)
+* **frontend:** stop revalidation wiping edits, stale Kanban card, OAuth double POST and blind delete guard ([91aa3bb](https://github.com/willdady/platypus/commit/91aa3bbe41f14491ccb8ba1d91add32017fd2944)), closes [#1488](https://github.com/willdady/platypus/issues/1488)
+* **frontend:** stop useIsMobile and the Kanban board resubscribing media queries ([c20a661](https://github.com/willdady/platypus/commit/c20a66180e701478b36fc63f53906d95a2ffa203)), closes [#1463](https://github.com/willdady/platypus/issues/1463)
+* **frontend:** stub fetch with vi.stubGlobal so attachment tests restore it ([cc278d0](https://github.com/willdady/platypus/commit/cc278d0f028a1e4a941313c29e358da38c1741bf)), closes [#1465](https://github.com/willdady/platypus/issues/1465)
+* **frontend:** title EmptyCards per ui-conventions ([cc2dc6d](https://github.com/willdady/platypus/commit/cc2dc6ddc2b978fb67c072b39a414f65622fa9f3)), closes [#1471](https://github.com/willdady/platypus/issues/1471)
+* **frontend:** truncate long URLs in list cards ([23175cf](https://github.com/willdady/platypus/commit/23175cf33495cec08aa7e3af839c5300ac8fb8a1)), closes [#1494](https://github.com/willdady/platypus/issues/1494)
+
 ## [3.21.0](https://github.com/willdady/platypus/compare/v3.20.0...v3.21.0) (2026-10-15)
 
 
