@@ -11,7 +11,7 @@ import {
 import { createAuthClient } from "better-auth/react";
 import { adminClient, inferAdditionalFields } from "better-auth/client/plugins";
 import { useParams } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { SWRConfig } from "swr";
 import type { Workspace } from "@platypus/schemas";
 import {
   type Actor,
@@ -25,6 +25,7 @@ import {
   type Serialized,
 } from "@/lib/api-write";
 import { fetcher, isNotFoundOrForbidden } from "@/lib/utils";
+import { sessionExpiryHandler } from "@/lib/session-expiry";
 
 type OrgMembership = {
   id: string;
@@ -125,6 +126,10 @@ function getAuthClient(backendUrl: string) {
   return client;
 }
 
+/**
+ * Also the app's root SWR config, so every read — the membership and
+ * Workspace reads below included — shares one `fetcher` and one 401 handler.
+ */
 export function AuthProvider({
   children,
   backendUrl,
@@ -133,6 +138,30 @@ export function AuthProvider({
   backendUrl: string;
 }) {
   const authClient = getAuthClient(backendUrl);
+  // `refetch` is fixed for the client's life, so the config never changes.
+  const { refetch } = authClient.useSession();
+  const swrConfig = useMemo(
+    () => ({ fetcher, onError: sessionExpiryHandler(refetch) }),
+    [refetch],
+  );
+  return (
+    <SWRConfig value={swrConfig}>
+      <AuthState backendUrl={backendUrl} authClient={authClient}>
+        {children}
+      </AuthState>
+    </SWRConfig>
+  );
+}
+
+function AuthState({
+  children,
+  backendUrl,
+  authClient,
+}: {
+  children: ReactNode;
+  backendUrl: string;
+  authClient: AuthClient;
+}) {
   const backend = useMemo(
     () => ({ backendUrl, authClient }),
     [backendUrl, authClient],
@@ -164,7 +193,6 @@ export function AuthProvider({
     mutate: mutateOrgMembership,
   } = useSWR<Serialized<OrgMembership>, unknown>(
     userId && orgId ? scopedUrl(backendUrl, membershipEntity, { orgId }) : null,
-    fetcher,
   );
 
   const {
@@ -176,7 +204,6 @@ export function AuthProvider({
     userId && orgId && workspaceId
       ? scopedUrl(backendUrl, workspaceEntity(workspaceId), { orgId })
       : null,
-    fetcher,
   );
 
   // better-auth clears the session on a 401 — the server saying signed out —

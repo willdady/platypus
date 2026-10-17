@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
+import { fetcher } from "@/lib/utils";
 import SignUpPage from "./page";
 
 const mockSignUpEmail = vi.fn();
@@ -37,7 +38,7 @@ function stubSignUpAvailability(open: boolean) {
  */
 function renderPage() {
   return render(
-    <SWRConfig value={{ provider: () => new Map() }}>
+    <SWRConfig value={{ provider: () => new Map(), fetcher }}>
       <SignUpPage />
     </SWRConfig>,
   );

@@ -62,8 +62,22 @@ const { swrCalls, membership, workspace, reads } = vi.hoisted(() => {
   };
 });
 
+const { swrConfig } = vi.hoisted(() => ({
+  swrConfig: { current: undefined as Record<string, unknown> | undefined },
+}));
+
 vi.mock("swr", () => ({
   __esModule: true,
+  SWRConfig: ({
+    value,
+    children,
+  }: {
+    value: Record<string, unknown>;
+    children: React.ReactNode;
+  }) => {
+    swrConfig.current = value;
+    return children;
+  },
   default: (key: string | null) => {
     if (key) swrCalls.push(key);
     if (key?.includes("/membership")) {
@@ -76,6 +90,7 @@ vi.mock("swr", () => ({
   },
 }));
 
+import { fetcher } from "@/lib/utils";
 import {
   AuthProvider,
   useAuth,
@@ -121,6 +136,19 @@ describe("AuthProvider", () => {
 
     expect(swrCalls).toContain("http://test/organizations/org1/membership");
     expect(swrCalls).toContain("http://test/organizations/org1/workspaces/ws1");
+  });
+
+  it("is the root SWR config: the shared fetcher, and a 401 re-reads the session", () => {
+    render(
+      <AuthProvider backendUrl="http://test">
+        <Consumer />
+      </AuthProvider>,
+    );
+
+    expect(swrConfig.current?.fetcher).toBe(fetcher);
+    const onError = swrConfig.current?.onError as (error: unknown) => void;
+    onError(Object.assign(new Error(), { status: 401 }));
+    expect(sessionState.refetch).toHaveBeenCalledTimes(1);
   });
 
   it("resolves the actor and delegation flags from those rows", () => {
