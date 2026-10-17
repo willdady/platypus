@@ -8,7 +8,7 @@ import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
 import { deepEqual } from "@/lib/deep-equal";
 import { Markdown } from "@/components/markdown";
 import { formatDate, formatDateTime } from "@/lib/format-date";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import type {
   KanbanCard,
   KanbanCardComment,
@@ -789,19 +789,17 @@ export function KanbanCardDialog({
   const [editingCommentBody, setEditingCommentBody] = useState("");
 
   // No card yet means no comment thread to name, so nothing is read.
-  const { data: commentsData, mutate: mutateComments } = useScopedSWR<{
-    results: KanbanCardComment[];
-  }>(
-    `boards/${boardId}/cards/${card?.id ?? ""}/comments`,
-    card ? { orgId, workspaceId } : null,
-  );
-
-  const comments = commentsData?.results ?? [];
+  const { results: comments, mutate: mutateComments } =
+    useScopedList<KanbanCardComment>(
+      `boards/${boardId}/cards/${card?.id ?? ""}/comments`,
+      card ? { orgId, workspaceId } : null,
+    );
 
   // Fetch workspace agents for assignee picker
-  const { data: agentsData } = useScopedSWR<{
-    results: AgentOption[];
-  }>("agents", { orgId, workspaceId });
+  const { results: agents } = useScopedList<AgentOption>("agents", {
+    orgId,
+    workspaceId,
+  });
 
   const enterEditing = (field: "title" | "body") => {
     setFocusField(field);
@@ -1038,7 +1036,7 @@ export function KanbanCardDialog({
                   selectedDueDate={selectedDueDate}
                   onDueDateChange={setSelectedDueDate}
                   user={user}
-                  agents={agentsData?.results}
+                  agents={agents}
                   selectedAssignees={selectedAssignees}
                   onToggleAssignee={toggleAssignee}
                 />
@@ -1136,7 +1134,7 @@ export function KanbanCardDialog({
               selectedDueDate={selectedDueDate}
               onDueDateChange={setSelectedDueDate}
               user={user}
-              agents={agentsData?.results}
+              agents={agents}
               selectedAssignees={selectedAssignees}
               onToggleAssignee={toggleAssignee}
             />

@@ -8,7 +8,7 @@ import { Mail, Check, X } from "lucide-react";
 import { EmptyCard } from "@/components/empty-card";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/components/auth-provider";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { formatDate } from "@/lib/format-date";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
@@ -22,9 +22,12 @@ import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 const UserInvitationsPage = () => {
   const backendUrl = useBackendUrl();
-  const { data, mutate, isLoading } = useScopedSWR<{
-    results: InvitationListItem[];
-  }>("users/me/invitations", {});
+  const {
+    data,
+    results: invitations,
+    mutate,
+    isLoading,
+  } = useScopedList<InvitationListItem>("users/me/invitations", {});
 
   const { mutate: globalMutate } = useSWRConfig();
 
@@ -81,7 +84,7 @@ const UserInvitationsPage = () => {
             </div>
           ))}
         </LoadingRegion>
-      ) : data?.results.length === 0 ? (
+      ) : data && invitations.length === 0 ? (
         <EmptyCard
           icon={<Mail />}
           title="No pending invitations"
@@ -89,7 +92,7 @@ const UserInvitationsPage = () => {
         />
       ) : (
         <div className="grid gap-4">
-          {data?.results.map((invite) => (
+          {invitations.map((invite) => (
             <div
               key={invite.id}
               className="p-4 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card"

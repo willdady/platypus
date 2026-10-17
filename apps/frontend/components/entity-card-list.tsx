@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { writeEntity } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
@@ -62,15 +62,16 @@ export const EntityCardList = ({
   workspaceId: string;
   config: EntityCardListConfig;
 }) => {
-  const { data, error, isLoading, mutate } = useScopedSWR<{
-    results: EntityCard[];
-  }>(config.entity, { orgId, workspaceId });
+  const {
+    results: rows,
+    error,
+    isLoading,
+    mutate,
+  } = useScopedList<EntityCard>(config.entity, { orgId, workspaceId });
 
   const routes = workspaceRoutes(orgId, workspaceId)[config.entity];
 
-  const cards = [...(data?.results || [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const cards = [...rows].sort((a, b) => a.name.localeCompare(b.name));
 
   const deleteFlow = useDeleteFlow<EntityCard>({
     mutate,

@@ -1,7 +1,7 @@
 "use client";
 
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { Plus, Radio } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
@@ -38,9 +38,10 @@ const WebhooksList = ({
   const routes = workspaceRoutes(orgId, workspaceId);
 
   const scope = { orgId, workspaceId };
-  const { data, error, isLoading, mutate } = useScopedSWR<{
-    results: Webhook[];
-  }>("webhooks", scope);
+  const { results, error, isLoading, mutate } = useScopedList<Webhook>(
+    "webhooks",
+    scope,
+  );
 
   const deleteFlow = useDeleteFlow<Webhook>({
     mutate,
@@ -63,7 +64,7 @@ const WebhooksList = ({
   }
   if (error) return <div>Failed to load webhooks.</div>;
 
-  const webhooks: Webhook[] = toggle.apply(data?.results ?? []);
+  const webhooks: Webhook[] = toggle.apply(results);
 
   if (!webhooks.length) {
     return (

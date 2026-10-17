@@ -32,7 +32,7 @@ import {
 import { AgentAvatar } from "@/components/agent-avatar";
 import { splitPinned } from "@/lib/pinned-agents";
 import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
 import { appRoutes, userRoutes, workspaceRoutes } from "@/lib/routes";
 
@@ -72,32 +72,30 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
   // Fetch agents for the workspace
   const {
     data: agentsData,
+    results: agents,
     error: agentsError,
     mutate: mutateAgents,
-  } = useScopedSWR<{ results: Agent[] }>("agents", scope);
+  } = useScopedList<Agent>("agents", scope);
 
-  const agents = agentsData?.results || [];
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);
 
   // Fetch boards for the workspace
   const {
     data: boardsData,
+    results: boards,
     error: boardsError,
     mutate: mutateBoards,
-  } = useScopedSWR<{ results: KanbanBoard[] }>("boards", scope);
-
-  const boards = boardsData?.results || [];
+  } = useScopedList<KanbanBoard>("boards", scope);
 
   // Fetch triggers for the workspace
   const {
     data: triggersData,
+    results: triggers,
     error: triggersError,
     mutate: mutateTriggers,
-  } = useScopedSWR<{ results: Trigger[] }>("triggers", scope);
+  } = useScopedList<Trigger>("triggers", scope);
   const hasNoProviders = useHasNoProviders(scope);
-
-  const triggers = triggersData?.results || [];
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {

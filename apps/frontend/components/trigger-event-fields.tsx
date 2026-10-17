@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEffect, useState } from "react";
 import {
   eventTriggerEventSchema,
@@ -88,11 +89,7 @@ const TriggerEventFields = ({
     saved?.filters?.changedFields || [],
   );
 
-  const { data: boardsData } = useScopedSWR<{ results: KanbanBoard[] }>(
-    "boards",
-    scope,
-  );
-  const boards = boardsData?.results || [];
+  const { results: boards } = useScopedList<KanbanBoard>("boards", scope);
   const { data: boardStateData } = useScopedSWR<KanbanBoardState>(
     `boards/${filterBoardId}/state`,
     filterBoardId ? scope : null,

@@ -12,7 +12,7 @@ import {
   type Workspace,
 } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { writeEntity, type WriteOutcome } from "@/lib/api-write";
 import {
   parseValidationErrors,
@@ -107,22 +107,16 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
   const [withSandbox, setWithSandbox] = useState(false);
 
   // Only admins reach this page (ADR-0008), and these reads are admin-only.
-  const { data: membersData } = useScopedSWR<{ results: Member[] }>("members", {
+  const { results: members } = useScopedList<Member>("members", { orgId });
+  const { results: sharedProviders } = useScopedList<Provider>("providers", {
     orgId,
   });
-  const { data: sharedData } = useScopedSWR<{ results: Provider[] }>(
-    "providers",
-    { orgId },
-  );
-  const { data: backendsData } = useScopedSWR<{ results: unknown[] }>(
-    "sandbox-backends",
-    { orgId },
-  );
-  const members = membersData?.results ?? [];
-  const sharedProviders = sharedData?.results ?? [];
+  const { results: backends } = useScopedList<unknown>("sandbox-backends", {
+    orgId,
+  });
   const providerSource =
     pickedSource ?? (sharedProviders.length > 0 ? "shared" : "new");
-  const hasSandboxBackends = (backendsData?.results.length ?? 0) > 0;
+  const hasSandboxBackends = backends.length > 0;
 
   // A super-admin acting on an org they're not enrolled in won't appear in
   // /members, but the backend lets them own a workspace by defaulting to

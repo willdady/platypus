@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus, Settings, FolderClosed } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { canCreateWorkspace, canOpenOrgSettings } from "@/lib/authorization";
 import { EmptyCard } from "@/components/empty-card";
 import type { Workspace } from "@platypus/schemas";
@@ -21,9 +21,11 @@ export function OrgHome({ orgId }: { orgId: string }) {
   const canOpenSettings = canOpenOrgSettings(actor);
   const routes = orgRoutes(orgId);
 
-  const { data: workspacesData, error: workspacesError } = useScopedSWR<{
-    results: Workspace[];
-  }>("workspaces", { orgId });
+  const {
+    data: workspacesData,
+    results: workspaces,
+    error: workspacesError,
+  } = useScopedList<Workspace>("workspaces", { orgId });
 
   // Wait for the org-membership fetch too, not just workspaces. Switching orgs
   // clears orgMembership and re-fetches it; if workspaces resolve first,
@@ -34,7 +36,6 @@ export function OrgHome({ orgId }: { orgId: string }) {
   // A failed read settles it as well: the list then reports the failure, and
   // the button row still offers an admin the way to the org settings.
   const isReady = (!!workspacesData || !!workspacesError) && !isAuthLoading;
-  const workspaces = workspacesData?.results || [];
 
   return (
     <div className="space-y-6">

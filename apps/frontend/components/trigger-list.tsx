@@ -64,7 +64,7 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import cronstrue from "cronstrue";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { writeEntity, type Scope } from "@/lib/api-write";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
 
@@ -198,18 +198,12 @@ export const TriggerList = ({
     error,
     isLoading,
     mutate,
-  } = useScopedSWR<{
-    results: Trigger[];
-  }>("triggers?includeFired=true", scope);
+    results: triggerRows,
+  } = useScopedList<Trigger>("triggers?includeFired=true", scope);
 
-  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
-    "agents",
-    scope,
-  );
+  const { results: agents } = useScopedList<Agent>("agents", scope);
 
-  const agentsById = Object.fromEntries(
-    (agentsData?.results || []).map((a) => [a.id, a]),
-  );
+  const agentsById = Object.fromEntries(agents.map((a) => [a.id, a]));
 
   const toggle = useEnabledToggle<Trigger>({
     entity: "triggers",
@@ -219,7 +213,7 @@ export const TriggerList = ({
 
   // Fired One-offs are read too and hidden here, so the list knows whether
   // the Workspace has any triggers at all.
-  const allTriggers = toggle.apply(triggersData?.results || []);
+  const allTriggers = toggle.apply(triggerRows);
   const triggers = allTriggers
     .filter((trigger) => showFired || !trigger.firedAt)
     .sort((a, b) => a.name.localeCompare(b.name));

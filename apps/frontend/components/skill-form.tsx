@@ -34,7 +34,7 @@ import {
   type Skill,
   type Agent,
 } from "@platypus/schemas";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
@@ -108,10 +108,10 @@ const SkillForm = ({
   const scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
   // Agent associations are a workspace concern; only fetched on that surface.
-  const { data: agentsData, isLoading: agentsLoading } = useScopedSWR<{
-    results: Agent[];
-  }>("agents", workspaceId ? scope : null);
-  const agents = agentsData?.results || [];
+  const { results: agents, isLoading: agentsLoading } = useScopedList<Agent>(
+    "agents",
+    workspaceId ? scope : null,
+  );
 
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
 

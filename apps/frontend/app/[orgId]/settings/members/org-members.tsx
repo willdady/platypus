@@ -7,6 +7,7 @@ import { ListError } from "@/components/list-state";
 import { Users } from "lucide-react";
 import { EmptyCard } from "@/components/empty-card";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { organizationEntity } from "@/lib/api-write";
 import {
   BadgeSkeleton,
@@ -23,9 +24,13 @@ const OrgMembersPage = () => {
     organizationEntity(orgId),
     {},
   );
-  const { data, error, mutate, isLoading } = useScopedSWR<{
-    results: OrgMemberListItem[];
-  }>("members", { orgId });
+  const {
+    data,
+    results: members,
+    error,
+    mutate,
+    isLoading,
+  } = useScopedList<OrgMemberListItem>("members", { orgId });
 
   return (
     <div className="space-y-8">
@@ -65,7 +70,7 @@ const OrgMembersPage = () => {
         </LoadingRegion>
       ) : error && !data ? (
         <ListError error={error} subject="members" onRetry={() => mutate()} />
-      ) : data?.results.length === 0 ? (
+      ) : data && members.length === 0 ? (
         <EmptyCard
           icon={<Users />}
           title="No members yet"
@@ -74,7 +79,7 @@ const OrgMembersPage = () => {
       ) : (
         <MembersList
           orgId={orgId}
-          members={data?.results || []}
+          members={members}
           onUpdate={() => mutate()}
         />
       )}

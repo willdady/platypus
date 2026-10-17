@@ -19,6 +19,7 @@ import {
   canOpenOrgSettings,
 } from "@/lib/authorization";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
@@ -139,11 +140,8 @@ export function AppSidebar() {
     );
   };
 
-  const { data, isLoading: isWorkspacesLoading } = useScopedSWR<{
-    results: Workspace[];
-  }>("workspaces", {
-    orgId,
-  });
+  const { results: allWorkspaces, isLoading: isWorkspacesLoading } =
+    useScopedList<Workspace>("workspaces", { orgId });
 
   const { data: chatData, isLoading: isChatListLoading } = useScopedSWR<{
     results: ChatListItem[];
@@ -203,7 +201,7 @@ export function AppSidebar() {
   const shownChatList =
     settledChatList?.scopeKey === chatListScopeKey ? settledChatList : null;
 
-  const workspaces = [...(data?.results ?? [])].sort((a, b) =>
+  const workspaces = [...allWorkspaces].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
   const chats = pins.apply(shownChatList?.data.results ?? []);

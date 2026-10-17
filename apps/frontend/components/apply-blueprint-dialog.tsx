@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldLabel } from "@/components/ui/field";
 import type { Workspace } from "@platypus/schemas";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
 import { useBackendUrl } from "@/components/auth-provider";
@@ -51,13 +51,11 @@ export const ApplyBlueprintDialog = ({
     total: number;
   } | null>(null);
 
-  const { data } = useScopedSWR<{ results: Workspace[] }>(
+  const { results } = useScopedList<Workspace>(
     "workspaces",
     open ? { orgId } : null,
   );
-  const workspaces = [...(data?.results || [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const workspaces = [...results].sort((a, b) => a.name.localeCompare(b.name));
 
   const reset = () => {
     setWorkspaceId("");

@@ -14,7 +14,7 @@ import { preload } from "swr";
 import { useEffect } from "react";
 import { fetcher } from "@/lib/utils";
 import { useBackendUrl } from "@/components/auth-provider";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl } from "@/lib/api-write";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization } from "@platypus/schemas";
@@ -27,7 +27,7 @@ interface OrgListSidebarProps {
 export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   const backendUrl = useBackendUrl();
 
-  const { data, error } = useScopedSWR<{ results: Organization[] }>(
+  const { data, results, error } = useScopedList<Organization>(
     "organizations",
     {},
   );
@@ -36,17 +36,17 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   // one pulsing forever.
   const isReady = !!data || !!error;
 
-  const organizations = [...(data?.results || [])].sort((a, b) =>
+  const organizations = [...results].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
 
   // Eagerly preload workspaces for all orgs so switching feels instant
   useEffect(() => {
-    if (!backendUrl || !data?.results) return;
-    for (const org of data.results) {
+    if (!backendUrl) return;
+    for (const org of results) {
       preload(scopedUrl(backendUrl, "workspaces", { orgId: org.id }), fetcher);
     }
-  }, [backendUrl, data]);
+  }, [backendUrl, results]);
 
   return (
     <SidebarContent>

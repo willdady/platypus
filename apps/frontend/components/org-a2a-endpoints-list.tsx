@@ -23,7 +23,7 @@ import {
   TableSkeleton,
 } from "@/components/list-skeletons";
 import { useBackendUrl } from "@/components/auth-provider";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
 import type { OrgA2aEndpoint } from "@platypus/schemas";
@@ -54,9 +54,13 @@ const COLUMNS = [
 export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
   const backendUrl = useBackendUrl();
   const scope = { orgId };
-  const { data, error, isLoading, mutate } = useScopedSWR<{
-    results: OrgA2aEndpoint[];
-  }>("a2a/endpoints", scope);
+  const {
+    data,
+    results: endpoints,
+    error,
+    isLoading,
+    mutate,
+  } = useScopedList<OrgA2aEndpoint>("a2a/endpoints", scope);
   const [toRevoke, setToRevoke] = useState<RevokeTarget | null>(null);
   const [isRevoking, setIsRevoking] = useState(false);
 
@@ -116,7 +120,6 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
     return <ListError error={error} subject="A2A endpoints" />;
   }
 
-  const endpoints = data?.results ?? [];
   if (!endpoints.length) {
     return (
       <EmptyCard

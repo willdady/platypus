@@ -26,7 +26,7 @@ import { ListState } from "@/components/list-state";
 import { defaultFilter } from "cmdk";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { AgentFormSkeleton } from "@/components/agent-form-skeleton";
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
@@ -58,7 +58,7 @@ import {
   type Provider,
   type Skill,
 } from "@platypus/schemas";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { writeAt, errorMessage, scopedUrl } from "@/lib/api-write";
 import {
   toastGuidanceOrError,
@@ -154,21 +154,15 @@ const AgentForm = ({
     : workspaceRoutes(orgId, workspaceId!).root;
 
   // Fetch providers
-  const { data: providersData, isLoading: providersLoading } = useScopedSWR<{
-    results: Provider[];
-  }>("providers", scope);
-  const providers = useMemo(
-    () => providersData?.results || [],
-    [providersData],
-  );
+  const { results: providers, isLoading: providersLoading } =
+    useScopedList<Provider>("providers", scope);
 
   // Fetch skills
-  const { data: skillsData, isLoading: skillsLoading } = useScopedSWR<{
-    results: Skill[];
-  }>("skills", scope);
-  const skills = [...(skillsData?.results || [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
+  const { results: allSkills, isLoading: skillsLoading } = useScopedList<Skill>(
+    "skills",
+    scope,
   );
+  const skills = [...allSkills].sort((a, b) => a.name.localeCompare(b.name));
   const [skillQuery, setSkillQuery] = useState("");
   const query = skillQuery.trim();
   // View-only: hidden Skills keep their place in formData.skillIds. cmdk's
@@ -178,10 +172,9 @@ const AgentForm = ({
   );
 
   // Fetch agents for Sub-Agent selection, unless the page handed them in
-  const { data: agentsData, isLoading: agentsLoading } = useScopedSWR<{
-    results: Agent[];
-  }>("agents", propAgents ? null : scope);
-  const agents = propAgents || agentsData?.results || [];
+  const { results: fetchedAgents, isLoading: agentsLoading } =
+    useScopedList<Agent>("agents", propAgents ? null : scope);
+  const agents = propAgents || fetchedAgents;
 
   const router = useRouter();
 

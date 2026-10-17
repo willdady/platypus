@@ -34,7 +34,7 @@ import {
 } from "@platypus/schemas";
 import { retractFieldError } from "@/lib/form-errors";
 import { providerModelLabel } from "@/lib/provider-model-label";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import {
   FieldSkeleton,
   FooterSkeleton,
@@ -90,13 +90,10 @@ const ResourceGroup = ({
   onToggle: (type: AttachmentResourceType, id: string, on: boolean) => void;
   disabled: boolean;
 }) => {
-  const { data, isLoading } = useScopedSWR<{ results: SharedResource[] }>(
-    collection,
-    { orgId },
-  );
-  const resources = [...(data?.results || [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const { results, isLoading } = useScopedList<SharedResource>(collection, {
+    orgId,
+  });
+  const resources = [...results].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <Card className="mb-4">
@@ -223,10 +220,8 @@ const BlueprintForm = ({
 
   // Org-scoped providers — the eligible set for Tier 2 pointer-settings, which
   // may only reference Shared resources (ADR-0008).
-  const { data: providersData, isLoading: providersLoading } = useScopedSWR<{
-    results: Provider[];
-  }>("providers", { orgId });
-  const providers = providersData?.results || [];
+  const { results: providers, isLoading: providersLoading } =
+    useScopedList<Provider>("providers", { orgId });
 
   // Selected items as a Set of `${type}:${id}` keys for cheap toggling.
   const [selected, setSelected] = useState<Set<string>>(new Set());
