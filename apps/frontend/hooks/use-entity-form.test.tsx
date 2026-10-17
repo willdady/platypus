@@ -25,7 +25,7 @@ import { useEntityDelete, useEntityForm } from "./use-entity-form";
 type Data = { name: string; description: string };
 
 const baseOptions = {
-  initialData: { name: "", description: "" } as Data,
+  initialData: { name: "", description: "" },
   entity: "skills",
   scope: { orgId: "org1" },
   retractableFields: ["name", "description"],

@@ -36,7 +36,7 @@ describe("LoadSkillTool", () => {
       <LoadSkillTool
         toolPart={loadSkillCall({
           output: { error: "Skill not found" },
-        } as Partial<LoadSkillPart>)}
+        })}
       />,
     );
 
@@ -82,7 +82,7 @@ describe("ReadSkillFileTool", () => {
       <ReadSkillFileTool
         toolPart={readSkillFileCall({
           output: { error: "'logo.png' is a binary file" },
-        } as Partial<ReadSkillFilePart>)}
+        })}
       />,
     );
 

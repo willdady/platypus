@@ -21,7 +21,6 @@ import {
 import { copyWithToast } from "@/lib/clipboard";
 import {
   TRIGGER_RUN_STATUS_LABELS,
-  type TriggerRunStats,
   type TriggerRunStatus,
   type TriggerRunWithTrigger,
   type UnloadedToolSet,
@@ -188,7 +187,7 @@ export function TriggerRunRow({
   /** Whether the row links to the run's page. Off on that page itself. */
   linkToDetail?: boolean;
 }) {
-  const stats = run.stats as TriggerRunStats | null | undefined;
+  const stats = run.stats;
 
   const routes = workspaceRoutes(orgId, workspaceId);
   const handleCopyRunId = () => void copyWithToast(run.id);

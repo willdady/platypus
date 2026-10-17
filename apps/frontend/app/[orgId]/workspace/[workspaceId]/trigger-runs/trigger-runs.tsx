@@ -87,7 +87,10 @@ function TriggerRunsPage({
     [backendUrl, user, orgId, workspaceId, triggerFilter, statusFilter],
   );
 
-  const { data, error, size, setSize, isLoading } = useSWRInfinite<RunPage>(
+  const { data, error, size, setSize, isLoading } = useSWRInfinite<
+    RunPage,
+    unknown
+  >(
     getKey,
     fetcher,
     // Every page already loaded refreshes on each tick, so a run can be watched

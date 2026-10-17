@@ -237,6 +237,7 @@ export function Tool({
   className,
   open,
   defaultOpen = false,
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Radix types this callback prop as a method; it never reads `this`.
   onOpenChange,
   children,
   ...props

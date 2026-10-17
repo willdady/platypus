@@ -103,7 +103,7 @@ export type PromoteFlow<T> = {
 
 function parseBlockers(body: unknown): PromoteBlocker[] {
   if (body && typeof body === "object" && "blockers" in body) {
-    const { blockers } = body as { blockers: unknown };
+    const { blockers } = body;
     if (Array.isArray(blockers)) return blockers as PromoteBlocker[];
   }
   return [];

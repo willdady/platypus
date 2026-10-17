@@ -407,7 +407,7 @@ describe("writeEntity — outcomes", () => {
         json: async () => {
           throw new SyntaxError("Unexpected end of input");
         },
-      } as unknown as Response),
+      }),
     );
 
     const result = await writeEntity(

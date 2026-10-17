@@ -271,7 +271,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>About</span>
           </CommandItem>
         </CommandGroup>
-        {agentsError && !agentsData && (
+        {!!agentsError && !agentsData && (
           <CommandGroup heading="Agents">
             <RetryReadItem subject="agents" onRetry={() => mutateAgents()} />
           </CommandGroup>
@@ -286,7 +286,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             {unpinnedAgents.map(renderAgentItem)}
           </CommandGroup>
         )}
-        {boardsError && !boardsData && (
+        {!!boardsError && !boardsData && (
           <CommandGroup heading="Boards">
             <RetryReadItem subject="boards" onRetry={() => mutateBoards()} />
           </CommandGroup>
@@ -306,7 +306,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             ))}
           </CommandGroup>
         )}
-        {triggersError && !triggersData && (
+        {!!triggersError && !triggersData && (
           <CommandGroup heading="Triggers">
             <RetryReadItem
               subject="triggers"

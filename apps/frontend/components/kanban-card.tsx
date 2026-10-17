@@ -97,7 +97,7 @@ function KanbanCardComponentInner({
   const visibleAssignees = resolvedAssignees.slice(0, 3);
   const overflowCount = resolvedAssignees.length - 3;
 
-  const dueDateStr = card.dueDate as string | null | undefined;
+  const dueDateStr = card.dueDate;
   const dueDateStatus = dueDateStr ? getDueDateStatus(dueDateStr) : null;
 
   return (

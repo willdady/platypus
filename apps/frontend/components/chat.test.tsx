@@ -42,7 +42,7 @@ const { harness } = vi.hoisted(() => ({
     responses: new Map<string, unknown>(),
     auth: { user: { id: "u1" }, ownsWorkspace: true, isAuthLoading: false },
     turn: {
-      status: "ready" as ChatStatus,
+      status: "ready",
       error: undefined as Error | undefined,
       messages: [] as PlatypusUIMessage[],
     },
@@ -387,7 +387,7 @@ function message(id: string, text: string): PlatypusUIMessage {
     id,
     role: id.startsWith("u") ? "user" : "assistant",
     parts: [{ type: "text", text }],
-  } as PlatypusUIMessage;
+  };
 }
 
 /** The config the Chat detail read was last built with. */
@@ -1154,12 +1154,11 @@ describe("holding the composer", () => {
  * a file resubmitted without it.
  */
 describe("editing a message", () => {
-  const withAttachment = (): PlatypusUIMessage =>
-    ({
-      id: "u1",
-      role: "user",
-      parts: [reportPdf, { type: "text", text: "What does this say?" }],
-    }) as PlatypusUIMessage;
+  const withAttachment = (): PlatypusUIMessage => ({
+    id: "u1",
+    role: "user",
+    parts: [reportPdf, { type: "text", text: "What does this say?" }],
+  });
 
   const openEditOn = (id: string) => {
     renderChat();

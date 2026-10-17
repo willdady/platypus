@@ -50,10 +50,17 @@ async function fetchError(res: Response) {
   return error;
 }
 
-export async function fetcher(input: RequestInfo | URL, init?: RequestInit) {
+/**
+ * A read's JSON body, typed as whatever the caller (usually `useSWR<T>`)
+ * expects. Unchecked: the backend is trusted to answer in that shape.
+ */
+export async function fetcher<T = unknown>(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<T> {
   const res = await fetch(input, { ...init, credentials: "include" });
   if (!res.ok) throw await fetchError(res);
-  return res.json();
+  return (await res.json()) as T;
 }
 
 /**
@@ -69,12 +76,12 @@ export async function fetcher(input: RequestInfo | URL, init?: RequestInit) {
  * A per-read concession, not a change to `fetcher`'s contract: everywhere else
  * a 404 is a failure and still surfaces as one.
  */
-export async function optionalFetcher(
+export async function optionalFetcher<T = unknown>(
   input: RequestInfo | URL,
   init?: RequestInit,
-) {
+): Promise<T | null> {
   const res = await fetch(input, { ...init, credentials: "include" });
   if (res.status === 404) return null;
   if (!res.ok) throw await fetchError(res);
-  return res.json();
+  return (await res.json()) as T;
 }

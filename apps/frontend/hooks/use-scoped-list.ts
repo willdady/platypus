@@ -20,9 +20,13 @@ export function useScopedList<T>(
   entity: string,
   scope: Scope | null,
   config?: SWRConfiguration<Serialized<{ results: T[] }>>,
-): SWRResponse<Serialized<{ results: T[] }>> & { results: Serialized<T>[] } {
+): ScopedList<T> {
   const response = useScopedSWR<{ results: T[] }>(entity, scope, config);
   return Object.create(response, {
     results: { get: () => response.data?.results ?? EMPTY },
-  });
+  }) as ScopedList<T>;
 }
+
+type ScopedList<T> = SWRResponse<Serialized<{ results: T[] }>, unknown> & {
+  results: Serialized<T>[];
+};

@@ -21,8 +21,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // A baseline for every response. `frame-ancestors` is the modern spelling of
   // X-Frame-Options; both are sent for older browsers.
-  async headers() {
-    return [
+  headers() {
+    return Promise.resolve([
       {
         source: "/:path*",
         headers: [
@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         ],
       },
-    ];
+    ]);
   },
   output: "standalone",
   // @swc/helpers 0.5.23 added a "module-sync" export condition that resolves

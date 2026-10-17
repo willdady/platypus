@@ -20,7 +20,7 @@ function user(text: string): PlatypusUIMessage {
     id: `u-${text}`,
     role: "user",
     parts: [{ type: "text", text }],
-  } as PlatypusUIMessage;
+  };
 }
 
 function assistant(text: string, extraParts = 0): PlatypusUIMessage {

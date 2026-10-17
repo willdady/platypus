@@ -5,7 +5,9 @@ import vitest from "@vitest/eslint-plugin";
 import testingLibrary from "eslint-plugin-testing-library";
 import jestDom from "eslint-plugin-jest-dom";
 import betterTailwindcss from "eslint-plugin-better-tailwindcss";
+import tseslint from "typescript-eslint";
 
+const TS_FILES = ["**/*.ts", "**/*.tsx"];
 const TEST_FILES = ["**/*.test.ts", "**/*.test.tsx"];
 
 const RAW_WRITE_FETCH = {
@@ -49,6 +51,14 @@ const TOP_LEVEL_FUNCTION_DECLARATIONS = {
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // The full type-checked preset, scoped to TypeScript so `.mjs` config files
+  // stay linted without type information. It comes before every block below so
+  // their settings win — notably the `no-unused-vars` warning, which the
+  // preset would otherwise make an error.
+  ...tseslint.configs.recommendedTypeChecked.map((config) => ({
+    ...config,
+    files: TS_FILES,
+  })),
   // eslint-config-next sets `settings.react.version = "detect"`, which makes
   // eslint-plugin-react@7.37.5 call the `context.getFilename()` API that was
   // removed in ESLint 10, crashing every lint run. Pin an explicit version to
@@ -87,7 +97,7 @@ const eslintConfig = defineConfig([
   // and `projectService` only finds a file's nearest `tsconfig.json`, so every
   // test file would fail to parse.
   {
-    files: ["**/*.ts", "**/*.tsx"],
+    files: TS_FILES,
     languageOptions: {
       parserOptions: {
         project: ["./tsconfig.json", "./tsconfig.test.json"],
@@ -275,6 +285,25 @@ const eslintConfig = defineConfig([
   {
     files: TEST_FILES,
     ...jestDom.configs["flat/recommended"],
+  },
+  // Ratchets on the type-checked preset, for tests and their helpers only:
+  // app code holds every one of these as an error. Each count is the
+  // violations when the preset landed (#1546). Fix them as you touch a file,
+  // and make each rule an error once it reaches 0.
+  {
+    files: [...TEST_FILES, "test/**"],
+    rules: {
+      "@typescript-eslint/require-await": "warn", // 60
+      "@typescript-eslint/no-unsafe-member-access": "warn", // 58
+      "@typescript-eslint/no-unnecessary-type-assertion": "warn", // 33
+      "@typescript-eslint/no-unsafe-assignment": "warn", // 22
+      "@typescript-eslint/no-unsafe-return": "warn", // 13
+      "@typescript-eslint/unbound-method": "warn", // 13
+      "@typescript-eslint/no-base-to-string": "warn", // 8
+      "@typescript-eslint/no-unsafe-argument": "warn", // 7
+      "@typescript-eslint/no-unsafe-call": "warn", // 7
+      "@typescript-eslint/prefer-promise-reject-errors": "warn", // 1
+    },
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([

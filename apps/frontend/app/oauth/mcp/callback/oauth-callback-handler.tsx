@@ -21,8 +21,9 @@ import {
 
 /** Post a message to the opener window (if any) and close this popup. */
 function notifyOpenerAndClose(data: Record<string, unknown>): boolean {
-  if (window.opener && !window.opener.closed) {
-    window.opener.postMessage(data, window.location.origin);
+  const opener = window.opener as Window | null;
+  if (opener && !opener.closed) {
+    opener.postMessage(data, window.location.origin);
     window.close();
     return true;
   }

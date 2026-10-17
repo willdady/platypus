@@ -57,9 +57,9 @@ function TriggerRunDetailPage({
   const fetchIncrementally = useCallback(
     async (url: string): Promise<Serialized<TriggerRunDetailResponse>> => {
       const sinceSeq = nextSinceSeq(heldEvents.current);
-      const page = (await fetcher(
+      const page = await fetcher<Serialized<TriggerRunDetailResponse>>(
         sinceSeq === undefined ? url : `${url}?sinceSeq=${sinceSeq}`,
-      )) as Serialized<TriggerRunDetailResponse>;
+      );
       heldEvents.current = mergeRunEvents(heldEvents.current, page.events);
       return { run: page.run, events: heldEvents.current };
     },

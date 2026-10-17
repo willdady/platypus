@@ -84,7 +84,7 @@ export function installSpeechRecognition() {
     }
   }
   (window as SpeechRecognitionWindow).SpeechRecognition =
-    TrackingSpeechRecognition as unknown as SpeechRecognitionWindow["SpeechRecognition"];
+    TrackingSpeechRecognition;
   return () => latest;
 }
 

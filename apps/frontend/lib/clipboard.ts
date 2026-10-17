@@ -90,11 +90,11 @@ export function installClipboardFallback() {
   if (window.isSecureContext !== false || navigator.clipboard) return;
   Object.defineProperty(navigator, "clipboard", {
     value: {
-      writeText: async (text: string) => {
-        if (copyWithCommand(text)) return;
+      writeText: (text: string) => {
+        if (copyWithCommand(text)) return Promise.resolve();
         // Streamdown reports a failed copy nowhere the user would see it.
         toast.error("Failed to copy to clipboard");
-        throw new Error("Copy failed");
+        return Promise.reject(new Error("Copy failed"));
       },
     },
     configurable: true,

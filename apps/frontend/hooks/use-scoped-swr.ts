@@ -33,14 +33,14 @@ export function useScopedSWR<T>(
   entity: string,
   scope: Scope | null,
   config?: SWRConfiguration<Serialized<T>>,
-): SWRResponse<Serialized<T>> {
+): SWRResponse<Serialized<T>, unknown> {
   const { user, isPending } = useAuth();
   const backendUrl = useBackendUrl();
   const { cache } = useSWRConfig();
   const pendingKey =
     backendUrl && scope ? scopedUrl(backendUrl, entity, scope) : null;
   const key = user ? pendingKey : null;
-  const response = useSWR<Serialized<T>>(
+  const response = useSWR<Serialized<T>, unknown>(
     key,
     config?.fetcher ?? fetcher,
     config,

@@ -41,7 +41,7 @@ export function parseValidationErrors(errorData: unknown): FormErrors {
   }
 
   const issues: Array<{ path: string[]; message: string }> = [];
-  for (const issue of errorData.error) {
+  for (const issue of errorData.error as unknown[]) {
     if (
       issue &&
       typeof issue === "object" &&

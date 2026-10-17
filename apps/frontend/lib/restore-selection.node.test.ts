@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { Agent, Chat, Provider } from "@platypus/schemas";
+import type { Agent, Provider } from "@platypus/schemas";
 import { resolveRestoredSelection } from "./restore-selection";
 import type { Serialized } from "./api-write";
 
@@ -26,7 +26,7 @@ function agent(over: Partial<Serialized<Agent>> = {}): Serialized<Agent> {
 describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
   it("restores the chat's Agent when it still exists", () => {
     const result = resolveRestoredSelection({
-      chatData: { agentId: "a1" } as Serialized<Chat>,
+      chatData: { agentId: "a1" },
       storedSelection: null,
       providers: [provider()],
       agents: [agent()],
@@ -44,7 +44,7 @@ describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
         agentId: "deleted-agent",
         providerId: "p1",
         modelId: "gpt-4",
-      } as Serialized<Chat>,
+      },
       storedSelection: null,
       providers: [provider()],
       // A non-empty list missing the target id — genuinely deleted, as
@@ -67,7 +67,7 @@ describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
         agentId: "a1",
         providerId: "p1",
         modelId: "gpt-4",
-      } as Serialized<Chat>,
+      },
       storedSelection: null,
       providers: [provider()],
       agents: [],
@@ -81,7 +81,7 @@ describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
 
   it("restores a bare model id to its aliased option (ADR-0017)", () => {
     const result = resolveRestoredSelection({
-      chatData: { providerId: "p1", modelId: "gpt-4" } as Serialized<Chat>,
+      chatData: { providerId: "p1", modelId: "gpt-4" },
       storedSelection: null,
       providers: [
         provider({
@@ -104,7 +104,7 @@ describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
       chatData: {
         providerId: "p1",
         modelId: "removed-model",
-      } as Serialized<Chat>,
+      },
       storedSelection: null,
       providers: [provider()],
       agents: [],
@@ -125,7 +125,7 @@ describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
       chatData: {
         providerId: "removed-provider",
         modelId: "gpt-4",
-      } as Serialized<Chat>,
+      },
       storedSelection: null,
       providers: [fallbackProvider],
       agents: [],
@@ -199,7 +199,7 @@ describe("resolveRestoredSelection — priority 2 (localStorage, new chats only)
     // edge case, but localStorage still must not leak into a real chat, so
     // this should fall through to priority 3 rather than the stored value.
     const result = resolveRestoredSelection({
-      chatData: {} as Serialized<Chat>,
+      chatData: {},
       storedSelection: { type: "agent", id: "a1" },
       providers: [provider()],
       agents: [agent()],
@@ -255,7 +255,7 @@ describe("resolveRestoredSelection — priority 3 (fallback)", () => {
 describe("resolveRestoredSelection — reporting a substitution", () => {
   it("reports nothing when the chat's own selection is restored", () => {
     const result = resolveRestoredSelection({
-      chatData: { providerId: "p1", modelId: "gpt-4" } as Serialized<Chat>,
+      chatData: { providerId: "p1", modelId: "gpt-4" },
       storedSelection: null,
       providers: [provider()],
       agents: [],
@@ -281,7 +281,7 @@ describe("resolveRestoredSelection — reporting a substitution", () => {
     ],
   ] as const)("says so when %s", (_name, chatData, expected) => {
     const result = resolveRestoredSelection({
-      chatData: chatData as Serialized<Chat>,
+      chatData,
       storedSelection: null,
       providers: [provider()],
       agents: [agent({ id: "other" })],
@@ -327,7 +327,7 @@ describe("resolveRestoredSelection — reporting a substitution", () => {
   it("does not log to the console", () => {
     const warn = vi.spyOn(console, "warn");
     resolveRestoredSelection({
-      chatData: { providerId: "gone", modelId: "gpt-4" } as Serialized<Chat>,
+      chatData: { providerId: "gone", modelId: "gpt-4" },
       storedSelection: null,
       providers: [provider()],
       agents: [],

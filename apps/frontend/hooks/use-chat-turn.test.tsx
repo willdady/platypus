@@ -187,7 +187,7 @@ describe("useChatTurn starting a turn", () => {
 
     expect(h.calls).toEqual(["setMessages", "sendMessage", "refreshChat"]);
     expect(h.sendMessage).toHaveBeenCalledWith(edit, { body });
-    const update = h.setMessages.mock.calls[0][0] as unknown as (
+    const update = h.setMessages.mock.calls[0][0] as (
       held: string[],
     ) => string[];
     expect(update(["u1", "a1", "u2"])).toEqual(["u1"]);
