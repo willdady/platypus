@@ -66,6 +66,12 @@ This is the from-source workflow for contributors. (To simply run Platypus, use 
 
 5. **Sign in** at `http://localhost:3001` using the admin credentials from your `.env`.
 
+6. **Optionally, run the end-to-end smoke test** (with `pnpm dev` running). It signs in, sends a chat to a stub model and waits for the streamed reply, in a throwaway Organization it deletes afterwards. Install Chromium once with `pnpm exec playwright install chromium`; set `FRONTEND_URL` / `BACKEND_URL` if you don't use `localhost`.
+
+   ```bash
+   pnpm smoke
+   ```
+
 ### Accessing from other devices on your network
 
 The dev setup is `localhost`-only by default. Session cookies are scoped to the host they were set on, so to reach Platypus from a phone or another machine you must use the **same** host (your LAN IP) consistently for both apps — mixing `localhost` and the IP in one browser silently breaks sign-in.

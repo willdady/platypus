@@ -18,6 +18,7 @@
     "website-deploy": "pnpm --filter @platypus/website run deploy",
     "website-upload": "pnpm --filter @platypus/website run upload",
     "gen:og": "node ./scripts/generate-og-image.ts",
+    "smoke": "node ./scripts/smoke.ts",
     "drizzle-kit-push": "turbo run drizzle-kit-push -F @platypus/backend",
     "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @platypus/backend",
     "drizzle-kit-migrate": "turbo run drizzle-kit-migrate -F @platypus/backend",
