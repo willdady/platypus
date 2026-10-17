@@ -10,12 +10,13 @@ import { SettingsShell } from "@/components/settings-shell";
 import { BackButton } from "@/components/back-button";
 import { HeaderHomeButton } from "@/components/header-home-button";
 import { ProtectedRoute } from "@/components/protected-route";
+import type { Serialized } from "@/lib/api-write";
 
 // Cached so the metadata and the layout body share one request: both need the
 // organization, and `cache` collapses them into a single backend call.
 const fetchOrganization = cache(async function fetchOrganization(
   orgId: string,
-): Promise<Organization | null> {
+): Promise<Serialized<Organization> | null> {
   const backendUrl = serverBackendUrl();
   const headersList = await headers();
   // Unlike the workspace shell, a failure here must not break the page: the

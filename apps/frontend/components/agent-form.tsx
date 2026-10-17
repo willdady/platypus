@@ -59,7 +59,12 @@ import {
   type Skill,
 } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { writeAt, errorMessage, scopedUrl } from "@/lib/api-write";
+import {
+  writeAt,
+  errorMessage,
+  scopedUrl,
+  type Serialized,
+} from "@/lib/api-write";
 import {
   toastGuidanceOrError,
   FIX_FORM_ERRORS_MESSAGE,
@@ -135,7 +140,7 @@ const AgentForm = ({
   // Set when the tool sets couldn't be read, so the form can say so instead of
   // presenting a failed read as an empty catalogue (issue #818).
   toolSetsError?: ToolSetsFailureReason;
-  agents?: Agent[];
+  agents?: Serialized<Agent>[];
   // When true the form edits an org-scoped (Shared) Agent on the Organization
   // surface, pulling its references from org-scoped lists and writing via the
   // org Agent routes (ADR-0007). Otherwise it edits a workspace Agent.

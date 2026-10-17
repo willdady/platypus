@@ -35,6 +35,7 @@ import type { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
 import { appRoutes, userRoutes, workspaceRoutes } from "@/lib/routes";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * What a group shows when its read failed: a Retry item in place of the rows,
@@ -114,7 +115,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
     command();
   }, []);
 
-  const renderAgentItem = (agent: Agent) => (
+  const renderAgentItem = (agent: Serialized<Agent>) => (
     <CommandItem
       key={agent.id}
       onSelect={() => {

@@ -34,7 +34,7 @@ export const InboundTokenDialog = ({
   token: string;
   endpointUrl: string;
   inputNames: string[];
-  expiresAt?: string | Date | null;
+  expiresAt?: string | null;
   onClose: () => void;
 }) => (
   <TokenDialog

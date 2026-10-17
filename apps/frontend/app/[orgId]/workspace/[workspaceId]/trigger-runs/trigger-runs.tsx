@@ -3,7 +3,7 @@
 import { use, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { scopedUrl } from "@/lib/api-write";
+import { scopedUrl, type Serialized } from "@/lib/api-write";
 import useSWRInfinite from "swr/infinite";
 import { History, TriangleAlert } from "lucide-react";
 import {
@@ -39,7 +39,7 @@ const PAGE_SIZE = 50;
 /** The value a Select carries for "no filter" — Radix rejects an empty one. */
 const ALL = "all";
 
-type RunPage = TriggerRunWithTriggerList;
+type RunPage = Serialized<TriggerRunWithTriggerList>;
 
 const TriggerRunsPage = ({
   params,

@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { Agent, Provider } from "@platypus/schemas";
 import { resolveModel } from "./resolve-model";
+import type { Serialized } from "./api-write";
 
-const provider = (over: Partial<Provider> = {}): Provider =>
+const provider = (
+  over: Partial<Serialized<Provider>> = {},
+): Serialized<Provider> =>
   ({
     id: "p1",
     name: "Test",
@@ -19,15 +22,15 @@ const provider = (over: Partial<Provider> = {}): Provider =>
       },
     ],
     ...over,
-  }) as unknown as Provider;
+  }) as unknown as Serialized<Provider>;
 
-const agent = (over: Partial<Agent> = {}): Agent =>
+const agent = (over: Partial<Serialized<Agent>> = {}): Serialized<Agent> =>
   ({
     id: "a1",
     providerId: "p1",
     modelId: "alias:flagship",
     ...over,
-  }) as unknown as Agent;
+  }) as unknown as Serialized<Agent>;
 
 describe("resolveModel", () => {
   it("resolves a direct provider/model selection", () => {
@@ -172,7 +175,7 @@ describe("resolveModel", () => {
           },
         ];
       },
-    } as unknown as Provider;
+    } as unknown as Serialized<Provider>;
 
     const resolved = resolveModel({
       providers: [counting],

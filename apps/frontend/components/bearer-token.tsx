@@ -81,7 +81,7 @@ export const TokenDialog = ({
  * the one format every token list shows, or "Never" for one that hasn't
  * happened yet.
  */
-export const TokenTime = ({ value }: { value: Date | string | null }) =>
+export const TokenTime = ({ value }: { value: string | null }) =>
   value ? (
     <time dateTime={new Date(value).toISOString()}>
       {formatDateTime(value)}
@@ -99,9 +99,9 @@ export const TokenCells = ({
 }: {
   token: {
     tokenStatus: BearerTokenStatus;
-    tokenExpiresAt: Date | string | null;
-    lastUsedAt: Date | string | null;
-    lastRejectedAt: Date | string | null;
+    tokenExpiresAt: string | null;
+    lastUsedAt: string | null;
+    lastRejectedAt: string | null;
   };
 }) => (
   <>

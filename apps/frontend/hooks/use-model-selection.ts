@@ -7,6 +7,7 @@ import {
   type SelectionSubstitution,
   type StoredSelection,
 } from "@/lib/restore-selection";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * Reads the selection this browser remembered for a workspace, or `null` when
@@ -49,14 +50,14 @@ export interface ModelSelection {
 
 export interface UseModelSelectionInput {
   /** The Chat's own row, once read; absent for a brand-new Chat. */
-  chatData: Chat | undefined;
-  providers: Provider[];
+  chatData: Serialized<Chat> | undefined;
+  providers: Serialized<Provider>[];
   /**
    * `undefined` while the Agent list is still in flight, which is a different
    * thing from a workspace with no Agents: an Agent reference cannot be
    * judged against a list that has not arrived.
    */
-  agents: Agent[] | undefined;
+  agents: Serialized<Agent>[] | undefined;
   /** Whether the Chat row read is still in flight. */
   isChatLoading?: boolean;
   workspaceId: string;

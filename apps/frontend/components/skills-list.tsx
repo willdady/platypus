@@ -66,7 +66,7 @@ import {
   DetachSharedDialog,
   PromoteSharedDialog,
 } from "@/components/shared-resource-actions";
-import { writeEntity, type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
 import {
   usePromoteShared,
   useSharedDeleteGuard,
@@ -84,7 +84,9 @@ import {
 // shows workspace-scoped Skills plus attached org-scoped Shared Skills as
 // locked cards, and the Organization settings surface (no workspaceId) where it
 // manages org-scoped Skills directly (ADR-0007).
-type SkillWithScope = Skill & { scope?: "organization" | "workspace" };
+type SkillWithScope = Serialized<Skill> & {
+  scope?: "organization" | "workspace";
+};
 
 /** The value a Select carries for "no filter" — Radix rejects an empty one. */
 const ALL = "all";
@@ -110,7 +112,7 @@ const UserInvocableBadge = ({ skill }: { skill: SkillWithScope }) => {
 // the Skill is attached to no agents. Rendered for both workspace-scoped and
 // attached org-scoped (Shared) Skills (#296). The trigger uses preventDefault
 // so tapping the count does not follow the card's link.
-const SkillAgentsIndicator = ({ agents }: { agents: Agent[] }) => (
+const SkillAgentsIndicator = ({ agents }: { agents: Serialized<Agent>[] }) => (
   <div className="mt-1 text-xs text-muted-foreground">
     {agents.length > 0 ? (
       <Tooltip>

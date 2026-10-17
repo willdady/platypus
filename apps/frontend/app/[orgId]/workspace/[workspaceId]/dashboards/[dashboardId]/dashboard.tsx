@@ -12,7 +12,7 @@ import { ResponsiveGridLayout } from "react-grid-layout";
 import type { LayoutItem } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import { cn } from "@/lib/utils";
-import { writeEntity } from "@/lib/api-write";
+import { writeEntity, type Serialized } from "@/lib/api-write";
 import {
   cancelPlan,
   commitPlan,
@@ -102,19 +102,19 @@ const WIDGET_TIMESTAMP_FORMAT: Intl.DateTimeFormatOptions = {
   minute: "2-digit",
 };
 
-function formatWidgetTimestamp(value: Date | string | number): string {
+function formatWidgetTimestamp(value: string): string {
   return new Date(value).toLocaleString("sv-SE", WIDGET_TIMESTAMP_FORMAT);
 }
 
 type WidgetTileProps = {
-  widget: Widget;
+  widget: Serialized<Widget>;
   editMode: boolean;
   isEditing: boolean;
   isExpanded: boolean;
   onEditToggle: (widgetId: string) => void;
   onDelete: (widgetId: string) => void;
   onExpand: (widgetId: string) => void;
-  onSave: (widget: Widget, data: object, title: string) => void;
+  onSave: (widget: Serialized<Widget>, data: object, title: string) => void;
 };
 
 /**
@@ -497,7 +497,7 @@ const DashboardPage = ({
 
   // Save widget data inline
   const handleSaveWidgetData = useCallback(
-    async (widget: Widget, data: object, title: string) => {
+    async (widget: Serialized<Widget>, data: object, title: string) => {
       if (!backendUrl) return;
       const outcome = await writeEntity(backendUrl, widgetsEntity, scope, {
         id: widget.id,

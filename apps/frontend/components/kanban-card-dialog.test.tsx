@@ -16,7 +16,7 @@ vi.mock("sonner", () => ({
 
 // The `GET .../comments` and `.../agents` lists this dialog renders. Set per
 // test.
-let comments: KanbanCardComment[] = [];
+let comments: Serialized<KanbanCardComment>[] = [];
 const mutateCommentsSpy = vi.fn();
 
 vi.mock("swr", () => ({
@@ -33,10 +33,11 @@ vi.mock("swr", () => ({
 import { KanbanCardDialog } from "./kanban-card-dialog";
 import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 import { jsonResponse, stubPendingSave } from "@/test/test-utils";
+import type { Serialized } from "@/lib/api-write";
 
 // --- Helpers -----------------------------------------------------------------
 
-const card: KanbanCard = {
+const card: Serialized<KanbanCard> = {
   id: "c1",
   title: "Ship the release",
   body: "Details",
@@ -46,14 +47,14 @@ const card: KanbanCard = {
   priority: "none",
   createdAt: new Date("2026-01-01").toISOString(),
   updatedAt: new Date("2026-01-01").toISOString(),
-} as unknown as KanbanCard;
+} as unknown as Serialized<KanbanCard>;
 
-const existingComment: KanbanCardComment = {
+const existingComment: Serialized<KanbanCardComment> = {
   id: "cm1",
   body: "First comment",
   createdByName: "Bob",
   createdAt: new Date("2026-01-01").toISOString(),
-} as unknown as KanbanCardComment;
+} as unknown as Serialized<KanbanCardComment>;
 
 // Answers the dialog's `max-width` query for a viewport `width` px wide.
 function setViewportWidth(width: number) {

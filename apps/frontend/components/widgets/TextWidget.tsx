@@ -9,13 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Markdown } from "@/components/markdown";
 import { Check } from "lucide-react";
+import type { Serialized } from "@/lib/api-write";
 
 export function TextWidget({
   widget,
   editing,
   onSave,
 }: {
-  widget: Widget;
+  widget: Serialized<Widget>;
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }) {

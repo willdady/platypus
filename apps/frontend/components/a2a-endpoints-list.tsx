@@ -15,7 +15,7 @@ import { useScopedList } from "@/hooks/use-scoped-list";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DisabledBadge } from "@/components/disabled-badge";
 import { RowActionsMenu } from "@/components/row-actions-menu";
-import { writeEntity } from "@/lib/api-write";
+import { writeEntity, type Serialized } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
 import { workspaceRoutes } from "@/lib/routes";
@@ -44,12 +44,12 @@ const A2aEndpointsList = ({
   const { data, results, error, isLoading, mutate } =
     useScopedList<A2aEndpointListItem>("a2a-endpoints", scope);
 
-  const deleteFlow = useDeleteFlow<A2aEndpointListItem>({
+  const deleteFlow = useDeleteFlow<Serialized<A2aEndpointListItem>>({
     mutate,
     delete: (endpoint, url) =>
       writeEntity(url, "a2a-endpoints", scope, { id: endpoint.id }),
   });
-  const toggle = useEnabledToggle<A2aEndpointListItem>({
+  const toggle = useEnabledToggle<Serialized<A2aEndpointListItem>>({
     entity: "a2a-endpoints",
     scope,
     mutate,

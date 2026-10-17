@@ -1,5 +1,5 @@
 import type { SWRConfiguration, SWRResponse } from "swr";
-import type { Scope } from "@/lib/api-write";
+import type { Scope, Serialized } from "@/lib/api-write";
 import { useScopedSWR } from "./use-scoped-swr";
 
 // One instance, so an empty list keeps its reference across renders (no
@@ -19,8 +19,8 @@ const EMPTY: never[] = [];
 export function useScopedList<T>(
   entity: string,
   scope: Scope | null,
-  config?: SWRConfiguration<{ results: T[] }>,
-): SWRResponse<{ results: T[] }> & { results: T[] } {
+  config?: SWRConfiguration<Serialized<{ results: T[] }>>,
+): SWRResponse<Serialized<{ results: T[] }>> & { results: Serialized<T>[] } {
   const response = useScopedSWR<{ results: T[] }>(entity, scope, config);
   return Object.create(response, {
     results: { get: () => response.data?.results ?? EMPTY },

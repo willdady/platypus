@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import type { WriteOutcome } from "./api-write";
+import type { Serialized, WriteOutcome } from "./api-write";
 
 /**
  * The default copy for a rejected write that mapped to fields the form can
@@ -20,7 +20,7 @@ export interface ApplyWriteOutcomeOptions<TResult> {
    */
   readonly conflictField?: string | null;
   /** Whatever genuinely differs per caller: navigation, dialog close, side-effects. */
-  readonly onSuccess?: (data: TResult) => void | Promise<void>;
+  readonly onSuccess?: (data: Serialized<TResult>) => void | Promise<void>;
   /** Overrides the default `setValidationErrors` + toast-if-no-field-errors handling. */
   readonly onInvalid?: (
     fieldErrors: Record<string, string>,
@@ -103,7 +103,7 @@ export async function applyWriteOutcome<TResult>(
 export interface ApplyDeleteOutcomeOptions<TResult> {
   /** Revalidates one SWR key — usually `useSWRConfig()`'s `mutate`. */
   readonly mutate: (key: string) => unknown;
-  readonly onSuccess?: (data: TResult) => void | Promise<void>;
+  readonly onSuccess?: (data: Serialized<TResult>) => void | Promise<void>;
   /** See `ApplyWriteOutcomeOptions.onError` — covers every delete failure. */
   readonly onError?: (message: string, outcome: WriteOutcome<TResult>) => void;
 }

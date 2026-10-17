@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import type { Agent, Provider } from "@platypus/schemas";
 import { ModelSelectorDialog } from "./model-selector-dialog";
+import type { Serialized } from "@/lib/api-write";
 
 const countingProvider = () => {
   let reads = 0;
@@ -12,11 +13,14 @@ const countingProvider = () => {
       reads += 1;
       return [{ id: "gpt-4o", passthroughFileTypes: [] }];
     },
-  } as unknown as Provider;
+  } as unknown as Serialized<Provider>;
   return { provider, reads: () => reads };
 };
 
-const dialog = (providers: Provider[], agents: Agent[] = []) => (
+const dialog = (
+  providers: Serialized<Provider>[],
+  agents: Serialized<Agent>[] = [],
+) => (
   <ModelSelectorDialog
     agents={agents}
     providers={providers}
@@ -48,7 +52,7 @@ describe("ModelSelectorDialog model options", () => {
 
 describe("ModelSelectorDialog agent groups", () => {
   const agent = (id: string, name: string, isPinned: boolean) =>
-    ({ id, name, isPinned }) as unknown as Agent;
+    ({ id, name, isPinned }) as unknown as Serialized<Agent>;
 
   const namesIn = (group: string) =>
     within(screen.getByRole("group", { name: group }))

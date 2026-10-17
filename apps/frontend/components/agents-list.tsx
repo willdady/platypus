@@ -66,7 +66,13 @@ import {
   DetachSharedDialog,
   PromoteSharedDialog,
 } from "@/components/shared-resource-actions";
-import { scopedUrl, writeAt, writeEntity, type Scope } from "@/lib/api-write";
+import {
+  scopedUrl,
+  writeAt,
+  writeEntity,
+  type Scope,
+  type Serialized,
+} from "@/lib/api-write";
 import { splitPinned } from "@/lib/pinned-agents";
 import {
   usePromoteShared,
@@ -79,7 +85,9 @@ import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 // The Agent is shown either in a Workspace, where it may be a workspace-scoped
 // Agent or an attached org-scoped (Shared) Agent rendered with an Organization
 // badge (ADR-0007). The backend tags each row with its scope.
-type AgentWithScope = Agent & { scope?: "organization" | "workspace" };
+type AgentWithScope = Serialized<Agent> & {
+  scope?: "organization" | "workspace";
+};
 
 // The card's New chat + menu sit beside the content from `xl`, and in a footer
 // row under it below that — the same split the loaded card makes.
@@ -131,7 +139,9 @@ export const AgentsList = ({
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
-  const [agentToClone, setAgentToClone] = useState<Agent | null>(null);
+  const [agentToClone, setAgentToClone] = useState<Serialized<Agent> | null>(
+    null,
+  );
   const [cloneName, setCloneName] = useState("");
   const [cloneError, setCloneError] = useState<string | null>(null);
 
@@ -216,7 +226,7 @@ export const AgentsList = ({
       .filter(Boolean) as string[];
   };
 
-  const handleCloneClick = (agent: Agent) => {
+  const handleCloneClick = (agent: Serialized<Agent>) => {
     setAgentToClone(agent);
     setCloneName(`${agent.name} (copy)`);
     setCloneError(null);
@@ -229,7 +239,7 @@ export const AgentsList = ({
     delete: (agent, url) => writeEntity(url, "agents", scope, { id: agent.id }),
   });
 
-  const handleDeleteClick = (agent: Agent) => {
+  const handleDeleteClick = (agent: Serialized<Agent>) => {
     deleteFlow.request(agent);
   };
 

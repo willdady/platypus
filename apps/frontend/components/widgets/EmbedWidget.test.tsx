@@ -2,15 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Widget } from "@platypus/schemas";
 import { EmbedWidget } from "./EmbedWidget";
+import type { Serialized } from "@/lib/api-write";
 
-const embedWidget: Widget = {
+const embedWidget: Serialized<Widget> = {
   id: "widget-embed",
   dashboardId: "dashboard-1",
   type: "embed",
   title: "Service status",
   data: { url: "https://status.example.com/embed" },
-  createdAt: new Date("2026-01-01T00:00:00Z"),
-  updatedAt: new Date("2026-01-01T00:00:00Z"),
+  createdAt: new Date("2026-01-01T00:00:00Z").toISOString(),
+  updatedAt: new Date("2026-01-01T00:00:00Z").toISOString(),
 };
 
 describe("EmbedWidget", () => {

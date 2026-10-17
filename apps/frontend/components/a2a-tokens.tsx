@@ -31,7 +31,7 @@ import { A2aTokenDialog } from "@/components/a2a-token-dialog";
 import { CopyRow } from "@/components/copy-row";
 import { TokenTime } from "@/components/bearer-token";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { scopedUrl, writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { a2aCardUrl } from "@/lib/a2a-endpoint";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import { ListState } from "@/components/list-state";
@@ -41,7 +41,7 @@ import { useEntityForm } from "@/hooks/use-entity-form";
 /** The anchor a new endpoint's page opens at, so its first token is next. */
 export const ACCESS_SECTION_ID = "access";
 
-type IssuedToken = A2aToken & { token: string };
+type IssuedToken = Serialized<A2aToken> & { token: string };
 
 /**
  * An existing endpoint's card URL and tokens (ADR-0032): the list, and for
@@ -54,7 +54,7 @@ export const A2aTokens = ({
   mutate,
 }: {
   orgId: string;
-  endpoint: A2aEndpoint & { tokens: A2aToken[] };
+  endpoint: Serialized<A2aEndpoint> & { tokens: Serialized<A2aToken>[] };
   /** Rereads the endpoint, so the list shows a token issued or removed. */
   mutate: () => Promise<unknown>;
 }) => {
@@ -63,9 +63,8 @@ export const A2aTokens = ({
   const readOnly = !ownsWorkspace;
 
   const [issued, setIssued] = useState<string | null>(null);
-  const [tokenToRegenerate, setTokenToRegenerate] = useState<A2aToken | null>(
-    null,
-  );
+  const [tokenToRegenerate, setTokenToRegenerate] =
+    useState<Serialized<A2aToken> | null>(null);
 
   // The browser's own jump to #access fires before the endpoint loads, so
   // land on the card URL and token controls once they render.
@@ -108,7 +107,7 @@ export const A2aTokens = ({
     },
   });
 
-  const tokenDelete = useDeleteFlow<A2aToken>({
+  const tokenDelete = useDeleteFlow<Serialized<A2aToken>>({
     delete: (token) =>
       writeAt(`${tokensUrl}/${token.id}`, { method: "DELETE" }),
     mutate,

@@ -30,8 +30,9 @@ import { useAuth } from "@/components/auth-provider";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { workspaceRoutes } from "@/lib/routes";
+import type { Serialized } from "@/lib/api-write";
 
-type Endpoint = A2aEndpoint & { tokens: A2aToken[] };
+type Endpoint = Serialized<A2aEndpoint> & { tokens: Serialized<A2aToken>[] };
 
 const INITIAL_DATA = {
   agentId: "",

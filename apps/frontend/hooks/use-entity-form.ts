@@ -3,7 +3,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSWRConfig, type KeyedMutator } from "swr";
-import { writeEntity, type Scope, type WriteOutcome } from "@/lib/api-write";
+import {
+  writeEntity,
+  type Scope,
+  type Serialized,
+  type WriteOutcome,
+} from "@/lib/api-write";
 import {
   applyDeleteOutcome,
   applyWriteOutcome,
@@ -53,12 +58,12 @@ export interface UseEntityFormOptions<
    * can't wipe an edit in progress. Read what must track the server from
    * `record` instead.
    */
-  fromRecord?: (record: TRecord) => TForm;
+  fromRecord?: (record: Serialized<TRecord>) => TForm;
   /**
    * Seeds record-derived state the form keeps outside `formData`, on the same
    * once-per-id rule as `fromRecord` (so only when `fromRecord` is given).
    */
-  onSeed?: (record: TRecord) => void;
+  onSeed?: (record: Serialized<TRecord>) => void;
   /**
    * The edits a form keeps outside `formData` (a selection, raw JSON text),
    * compared like `formData` for `isDirty`. Its clean value is the first
@@ -93,7 +98,7 @@ export interface UseEntityFormOptions<
    */
   failureMessage?: string;
   /** Called after a successful write, before `submit` resolves. */
-  onSuccess?: (data: TResult) => void | Promise<void>;
+  onSuccess?: (data: Serialized<TResult>) => void | Promise<void>;
   /** Overrides the default inline handling of a rejected write. */
   onInvalid?: ApplyWriteOutcomeOptions<TResult>["onInvalid"];
   /**
@@ -126,11 +131,11 @@ export interface UseEntityFormResult<
   TRecord = unknown,
 > {
   /** The loaded record; absent when creating or still loading. */
-  record: TRecord | undefined;
+  record: Serialized<TRecord> | undefined;
   /** Revalidates the record. What arrives does not re-seed `formData`. */
-  mutateRecord: KeyedMutator<TRecord>;
+  mutateRecord: KeyedMutator<Serialized<TRecord>>;
   /** Spread into `DetailFormState`. Never loading when creating. */
-  loadState: EntityLoadState<TRecord>;
+  loadState: EntityLoadState<Serialized<TRecord>>;
   formData: TForm;
   setFormData: React.Dispatch<React.SetStateAction<TForm>>;
   /**
@@ -169,7 +174,9 @@ export interface UseEntityFormResult<
    * Pass `silent` to skip the success toast (e.g. a save that only yields an
    * id for a follow-up call).
    */
-  submit: (options?: { silent?: boolean }) => Promise<TResult | undefined>;
+  submit: (options?: {
+    silent?: boolean;
+  }) => Promise<Serialized<TResult> | undefined>;
 }
 
 /**
@@ -300,7 +307,9 @@ export function useEntityForm<
   }, []);
 
   const submit = useCallback(
-    async (options?: { silent?: boolean }): Promise<TResult | undefined> => {
+    async (options?: {
+      silent?: boolean;
+    }): Promise<Serialized<TResult> | undefined> => {
       setIsSubmitting(true);
       setValidationErrors({});
       try {
@@ -311,7 +320,7 @@ export function useEntityForm<
               data: buildPayload?.(formData),
             });
 
-        let saved: TResult | undefined;
+        let saved: Serialized<TResult> | undefined;
         await applyWriteOutcome(result, {
           mutate,
           setValidationErrors,
@@ -396,7 +405,7 @@ export interface UseEntityDeleteOptions<TResult> {
   id?: string;
   /** Success toast copy, if the form shows one. */
   successMessage?: Message;
-  onSuccess?: (data: TResult) => void | Promise<void>;
+  onSuccess?: (data: Serialized<TResult>) => void | Promise<void>;
   /**
    * Treats a `forbidden` refusal as guidance rather than a failure — an info
    * toast, dialog closed. For Shared-resource deletes only (#570): the

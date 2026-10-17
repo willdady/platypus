@@ -5,7 +5,7 @@ import useSWR, {
 } from "swr";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher } from "@/lib/utils";
-import { scopedUrl, type Scope } from "@/lib/api-write";
+import { scopedUrl, type Scope, type Serialized } from "@/lib/api-write";
 
 /**
  * A GET through the request module: the same base-URL-and-signed-in-user
@@ -32,19 +32,23 @@ import { scopedUrl, type Scope } from "@/lib/api-write";
 export function useScopedSWR<T>(
   entity: string,
   scope: Scope | null,
-  config?: SWRConfiguration<T>,
-): SWRResponse<T> {
+  config?: SWRConfiguration<Serialized<T>>,
+): SWRResponse<Serialized<T>> {
   const { user, isPending } = useAuth();
   const backendUrl = useBackendUrl();
   const { cache } = useSWRConfig();
   const pendingKey =
     backendUrl && scope ? scopedUrl(backendUrl, entity, scope) : null;
   const key = user ? pendingKey : null;
-  const response = useSWR<T>(key, config?.fetcher ?? fetcher, config);
+  const response = useSWR<Serialized<T>>(
+    key,
+    config?.fetcher ?? fetcher,
+    config,
+  );
   if (!(pendingKey && !user && isPending)) return response;
   // Spreading reads every SWR getter, subscribing this caller to all of its
   // state — fine only here, where no key means nothing is loading anyway.
-  const cached = cache.get(pendingKey)?.data as T | undefined;
+  const cached = cache.get(pendingKey)?.data as Serialized<T> | undefined;
   return cached === undefined
     ? { ...response, isLoading: true }
     : { ...response, data: cached, isLoading: false };

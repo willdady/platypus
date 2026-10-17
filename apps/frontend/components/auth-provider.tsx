@@ -18,7 +18,12 @@ import {
   type WorkspaceDelegationFlags,
   resolveActor,
 } from "@/lib/authorization";
-import { scopedUrl, membershipEntity, workspaceEntity } from "@/lib/api-write";
+import {
+  scopedUrl,
+  membershipEntity,
+  workspaceEntity,
+  type Serialized,
+} from "@/lib/api-write";
 import { fetcher, isNotFoundOrForbidden } from "@/lib/utils";
 
 interface OrgMembership {
@@ -135,7 +140,7 @@ export function AuthProvider({
     error: orgMembershipError,
     isLoading: isOrgMembershipLoading,
     mutate: mutateOrgMembership,
-  } = useSWR<OrgMembership>(
+  } = useSWR<Serialized<OrgMembership>>(
     userId && orgId ? scopedUrl(backendUrl, membershipEntity, { orgId }) : null,
     fetcher,
   );
@@ -145,7 +150,7 @@ export function AuthProvider({
     error: workspaceError,
     isLoading: isWorkspaceLoading,
     mutate: mutateWorkspace,
-  } = useSWR<Workspace>(
+  } = useSWR<Serialized<Workspace>>(
     userId && orgId && workspaceId
       ? scopedUrl(backendUrl, workspaceEntity(workspaceId), { orgId })
       : null,

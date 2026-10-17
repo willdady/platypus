@@ -1,4 +1,5 @@
 import type { Provider } from "@platypus/schemas";
+import type { Serialized } from "./api-write";
 
 /** What a provider select picks a provider for, and so which model it runs. */
 export type ProviderModelRole = "task" | "memoryExtraction" | "embedding";
@@ -15,7 +16,7 @@ const ROLE_MODEL_ID = {
  * that role.
  */
 export const providerModelLabel = (
-  provider: Provider,
+  provider: Serialized<Provider>,
   role: ProviderModelRole,
 ) => {
   const modelId = provider[ROLE_MODEL_ID[role]];

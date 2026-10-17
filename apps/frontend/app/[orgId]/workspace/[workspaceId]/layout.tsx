@@ -17,13 +17,14 @@ import { workspaceRoutes } from "@/lib/routes";
 import { ProtectedRoute } from "@/components/protected-route";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import type { Workspace } from "@platypus/schemas";
+import type { Serialized } from "@/lib/api-write";
 
 // Cached so the metadata and the layout body share one request: both need the
 // workspace, and `cache` collapses them into a single backend call.
 const fetchWorkspace = cache(async function fetchWorkspace(
   orgId: string,
   workspaceId: string,
-): Promise<{ response: Response; workspace: Workspace | null }> {
+): Promise<{ response: Response; workspace: Serialized<Workspace> | null }> {
   const backendUrl = serverBackendUrl();
   const headersList = await headers();
   const response = await fetch(
@@ -34,7 +35,7 @@ const fetchWorkspace = cache(async function fetchWorkspace(
       },
     },
   );
-  const workspace: Workspace | null = response.ok
+  const workspace: Serialized<Workspace> | null = response.ok
     ? await response.json()
     : null;
   return { response, workspace };

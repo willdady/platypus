@@ -21,6 +21,20 @@ export interface WriteOptions<TData> {
 }
 
 /**
+ * What `JSON.parse` makes of `T`: every `Date` arrives as its ISO string.
+ * `@platypus/schemas` describes the backend's stored `Date` shape, so a
+ * response typed with a schema type goes through this at the fetch seam.
+ */
+export type Serialized<T> = T extends Date
+  ? string
+  : // A branded primitive (`string & { __brand }`) is still the primitive.
+    T extends string | number | boolean
+    ? T
+    : T extends object
+      ? { [K in keyof T]: Serialized<T[K]> }
+      : T;
+
+/**
  * The outcomes the backend's central `onError` (ADR-0010) can produce for a
  * write, plus the field-level shape `sValidator` returns for a 400 before it
  * ever reaches that seam. A caller destructures `outcome` and TypeScript
@@ -37,7 +51,7 @@ export interface WriteOptions<TData> {
 export type WriteOutcome<TResult> =
   | {
       readonly outcome: "success";
-      readonly data: TResult;
+      readonly data: Serialized<TResult>;
       /** SWR keys this write should invalidate — the caller still calls `mutate`. */
       readonly revalidateKeys: readonly string[];
     }
@@ -206,7 +220,11 @@ async function performWrite<TResult, TData>(
   const body: unknown = await response.json().catch(() => null);
 
   if (response.ok) {
-    return { outcome: "success", data: body as TResult, revalidateKeys };
+    return {
+      outcome: "success",
+      data: body as Serialized<TResult>,
+      revalidateKeys,
+    };
   }
 
   switch (response.status) {

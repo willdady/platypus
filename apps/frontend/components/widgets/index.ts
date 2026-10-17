@@ -18,6 +18,7 @@ import { EmbedWidget } from "./EmbedWidget";
 import { WeatherWidget } from "./WeatherWidget";
 import { CartesianChartWidget } from "./CartesianChartWidget";
 import { PieChartWidget } from "./PieChartWidget";
+import type { Serialized } from "@/lib/api-write";
 
 export {
   MetricWidget,
@@ -30,7 +31,7 @@ export {
 };
 
 type WidgetComponent = ComponentType<{
-  widget: Widget;
+  widget: Serialized<Widget>;
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }>;

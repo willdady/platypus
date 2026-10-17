@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { serverBackendUrl } from "@/lib/env";
 import { joinUrl } from "@/lib/utils";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * Reads one backend resource during server rendering as the signed-in user,
@@ -13,13 +14,15 @@ import { joinUrl } from "@/lib/utils";
  * session cookie (issue #819), so there the read is refused and the caller's
  * fallback is what shows.
  */
-export async function readForLabel<T>(path: string): Promise<T | null> {
+export async function readForLabel<T>(
+  path: string,
+): Promise<Serialized<T> | null> {
   try {
     const headersList = await headers();
     const response = await fetch(joinUrl(serverBackendUrl(), path), {
       headers: { cookie: headersList.get("cookie") || "" },
     });
-    return response.ok ? ((await response.json()) as T) : null;
+    return response.ok ? ((await response.json()) as Serialized<T>) : null;
   } catch {
     return null;
   }

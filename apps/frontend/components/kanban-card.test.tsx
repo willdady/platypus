@@ -2,8 +2,11 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { KanbanCard, KanbanLabel } from "@platypus/schemas";
 import { KanbanCardComponent } from "./kanban-card";
+import type { Serialized } from "@/lib/api-write";
 
-function makeCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
+function makeCard(
+  overrides: Partial<Serialized<KanbanCard>> = {},
+): Serialized<KanbanCard> {
   return {
     id: "card-1",
     columnId: "col-1",
@@ -16,13 +19,13 @@ function makeCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
     position: 1,
     resolvedAssignees: [],
     commentCount: 0,
-    createdAt: new Date("2026-01-01"),
-    updatedAt: new Date("2026-01-01"),
+    createdAt: new Date("2026-01-01").toISOString(),
+    updatedAt: new Date("2026-01-01").toISOString(),
     ...overrides,
-  } as KanbanCard;
+  } as Serialized<KanbanCard>;
 }
 
-function renderCard(card: KanbanCard, labels: KanbanLabel[] = []) {
+function renderCard(card: Serialized<KanbanCard>, labels: KanbanLabel[] = []) {
   const onCardClick = vi.fn();
   render(
     <KanbanCardComponent

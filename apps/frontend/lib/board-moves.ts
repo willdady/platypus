@@ -1,6 +1,6 @@
 import { arrayMove } from "@dnd-kit/sortable";
 import type { KanbanCard, KanbanColumn } from "@platypus/schemas";
-import { writeAt } from "./api-write";
+import { writeAt, type Serialized } from "./api-write";
 import { joinUrl } from "./utils";
 
 /**
@@ -9,7 +9,9 @@ import { joinUrl } from "./utils";
  * stale-board guard and its conflict handling can't be skipped by one of them.
  */
 
-export type ColumnWithCards = KanbanColumn & { cards: KanbanCard[] };
+export type ColumnWithCards = Serialized<KanbanColumn> & {
+  cards: Serialized<KanbanCard>[];
+};
 
 const DROP_ZONE_PREFIX = "column-drop-";
 

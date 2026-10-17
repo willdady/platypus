@@ -16,6 +16,7 @@ import {
   writeAt,
   type FormDraft,
   type WriteOutcome,
+  type Serialized,
 } from "@/lib/api-write";
 import { optionalFetcher } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -289,7 +290,7 @@ const SandboxSettings = ({
     },
   });
 
-  function seedFrom(record: Sandbox) {
+  function seedFrom(record: Serialized<Sandbox>) {
     setIsReplacingKey(false);
     const config = (record.config ?? {}) as {
       networks?: string[];

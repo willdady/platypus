@@ -16,7 +16,7 @@ import { useAuth, useBackendUrl, type User } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
+import { writeAt, type Serialized } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { toast } from "sonner";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
@@ -31,14 +31,8 @@ import {
 } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/**
- * A row of `list-users`, read as plain JSON rather than through the auth
- * client, so its timestamps arrive as strings.
- */
-export type ListedUser = Omit<User, "createdAt" | "updatedAt"> & {
-  createdAt: string;
-  updatedAt: string;
-};
+/** A row of `list-users`, read as plain JSON rather than through the auth client. */
+export type ListedUser = Serialized<User>;
 
 interface ListUsersResponse {
   users: ListedUser[];

@@ -10,11 +10,14 @@ import {
   encodeAgentSelection,
   encodeProviderSelection,
 } from "@/lib/selection-reference";
+import type { Serialized } from "@/lib/api-write";
 
 const WORKSPACE_ID = "w1";
 const STORAGE_KEY = `platypus:workspace:${WORKSPACE_ID}:lastSelection`;
 
-const provider = (over: Partial<Provider> = {}): Provider =>
+const provider = (
+  over: Partial<Serialized<Provider>> = {},
+): Serialized<Provider> =>
   ({
     id: "p1",
     name: "Test",
@@ -23,16 +26,16 @@ const provider = (over: Partial<Provider> = {}): Provider =>
       { id: "gpt-5", passthroughFileTypes: [] },
     ],
     ...over,
-  }) as unknown as Provider;
+  }) as unknown as Serialized<Provider>;
 
-const agent = (over: Partial<Agent> = {}): Agent =>
+const agent = (over: Partial<Serialized<Agent>> = {}): Serialized<Agent> =>
   ({
     id: "a1",
     name: "Agent One",
     providerId: "p1",
     modelId: "gpt-4",
     ...over,
-  }) as unknown as Agent;
+  }) as unknown as Serialized<Agent>;
 
 const store = (value: unknown) =>
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ value }));
@@ -116,7 +119,7 @@ describe("useModelSelection — nothing paints before the ladder resolves", () =
       agentId: "a2",
       providerId: "p1",
       modelId: "gpt-4",
-    } as Chat;
+    } as Serialized<Chat>;
     const { painted, rerender } = renderTracked({
       ...base,
       chatData,
@@ -139,7 +142,7 @@ describe("useModelSelection — nothing paints before the ladder resolves", () =
     store({ type: "agent", id: "a1" });
     const { painted } = renderTracked({
       ...base,
-      chatData: { providerId: "p1", modelId: "gpt-5" } as Chat,
+      chatData: { providerId: "p1", modelId: "gpt-5" } as Serialized<Chat>,
     });
 
     expect(painted()[0]).toEqual({
@@ -188,7 +191,7 @@ describe("useModelSelection — initialAgentId (?agentId=)", () => {
   it("loses to an existing chat row's own Agent", () => {
     const { painted } = renderTracked({
       ...base,
-      chatData: { agentId: "a1" } as Chat,
+      chatData: { agentId: "a1" } as Serialized<Chat>,
       initialAgentId: "a2",
       agents: [agent(), agent({ id: "a2" })],
     });
@@ -224,7 +227,7 @@ describe("useModelSelection — user choice", () => {
     act(() => result.current.handleModelChange(encodeAgentSelection("a1")));
     rerender({
       ...base,
-      chatData: { providerId: "p1", modelId: "gpt-5" } as Chat,
+      chatData: { providerId: "p1", modelId: "gpt-5" } as Serialized<Chat>,
     });
 
     expect(result.current.selection.agentId).toBe("a1");
@@ -267,7 +270,7 @@ describe("useModelSelection — workspace and stale references", () => {
   it("says why it substituted when the chat's Provider is gone", () => {
     const { result } = renderTracked({
       ...base,
-      chatData: { providerId: "gone", modelId: "gpt-4" } as Chat,
+      chatData: { providerId: "gone", modelId: "gpt-4" } as Serialized<Chat>,
     });
 
     expect(result.current.selection).toEqual({
@@ -307,7 +310,7 @@ describe("useModelSelection — only a pick is remembered", () => {
     store({ type: "agent", id: "a1" });
     renderTracked({
       ...base,
-      chatData: { providerId: "p1", modelId: "gpt-5" } as Chat,
+      chatData: { providerId: "p1", modelId: "gpt-5" } as Serialized<Chat>,
     });
 
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject(

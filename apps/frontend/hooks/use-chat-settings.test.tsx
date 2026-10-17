@@ -2,14 +2,15 @@ import { describe, it, expect } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { Chat } from "@platypus/schemas";
 import { useChatSettings } from "./use-chat-settings";
+import type { Serialized } from "@/lib/api-write";
 
-const chat = (over: Partial<Chat> = {}): Chat =>
+const chat = (over: Partial<Serialized<Chat>> = {}): Serialized<Chat> =>
   ({
     id: "chat-1",
     instructions: "Be brief.",
     temperature: 0.5,
     ...over,
-  }) as unknown as Chat;
+  }) as unknown as Serialized<Chat>;
 
 describe("useChatSettings", () => {
   it("seeds the form from the chat row", () => {
@@ -24,7 +25,7 @@ describe("useChatSettings", () => {
   // flush; re-syncing on the object discarded whatever the user had typed.
   it("keeps unsaved edits when a poll flush replaces the row", () => {
     const { result, rerender } = renderHook(
-      ({ data }: { data: Chat }) => useChatSettings(data, ""),
+      ({ data }: { data: Serialized<Chat> }) => useChatSettings(data, ""),
       { initialProps: { data: chat() } },
     );
 
@@ -44,7 +45,7 @@ describe("useChatSettings", () => {
 
   it("re-syncs when the chat identity changes", () => {
     const { result, rerender } = renderHook(
-      ({ data }: { data: Chat }) => useChatSettings(data, ""),
+      ({ data }: { data: Serialized<Chat> }) => useChatSettings(data, ""),
       { initialProps: { data: chat() } },
     );
 

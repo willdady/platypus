@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Widget } from "@platypus/schemas";
 import { CartesianChartWidget } from "./CartesianChartWidget";
+import type { Serialized } from "@/lib/api-write";
 
 // jsdom gives ResponsiveContainer no layout, so it would render nothing. Hand
 // the chart a fixed box instead of its measured one; everything below this
@@ -21,11 +22,11 @@ vi.mock("recharts", async (importOriginal) => {
 
 const base = {
   dashboardId: "dashboard-1",
-  createdAt: new Date("2026-01-01T00:00:00Z"),
-  updatedAt: new Date("2026-01-01T00:00:00Z"),
+  createdAt: new Date("2026-01-01T00:00:00Z").toISOString(),
+  updatedAt: new Date("2026-01-01T00:00:00Z").toISOString(),
 };
 
-const barWidget: Widget = {
+const barWidget: Serialized<Widget> = {
   ...base,
   id: "widget-bar",
   type: "bar-chart",
@@ -37,7 +38,7 @@ const barWidget: Widget = {
   },
 };
 
-const lineWidget: Widget = {
+const lineWidget: Serialized<Widget> = {
   ...base,
   id: "widget-line",
   type: "line-chart",

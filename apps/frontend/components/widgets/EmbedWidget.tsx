@@ -8,6 +8,7 @@ import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Check } from "lucide-react";
+import type { Serialized } from "@/lib/api-write";
 
 const HTTPS_URL_ERROR = "Embed URL must use HTTPS";
 
@@ -28,7 +29,7 @@ export function EmbedWidget({
   editing,
   onSave,
 }: {
-  widget: Widget;
+  widget: Serialized<Widget>;
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }) {

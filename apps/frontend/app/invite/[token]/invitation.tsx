@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { optionalFetcher, joinUrl } from "@/lib/utils";
-import { scopedUrl, writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
@@ -51,7 +51,9 @@ export default function InviteTokenPage() {
     window.history.replaceState(null, "", withBasePath(appRoutes.invite));
   }, []);
 
-  const { data, error, isLoading } = useSWR<InvitationLinkResolution>(
+  const { data, error, isLoading } = useSWR<
+    Serialized<InvitationLinkResolution>
+  >(
     backendUrl && redeemToken
       ? joinUrl(backendUrl, `/invitation-links/${redeemToken}`)
       : null,

@@ -15,24 +15,25 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { RemoveMemberDialog } from "./remove-member-dialog";
+import type { Serialized } from "@/lib/api-write";
 
 const memberOf = (
   id: string,
   name: string,
-  extra: Partial<OrgMemberListItem> = {},
-): OrgMemberListItem =>
+  extra: Partial<Serialized<OrgMemberListItem>> = {},
+): Serialized<OrgMemberListItem> =>
   ({
     id: `m-${id}`,
     organizationId: "org1",
     userId: id,
     role: "member",
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     user: { id, name, email: `${id}@example.com` },
     isSuperAdmin: false,
     isBanned: false,
     ...extra,
-  }) as OrgMemberListItem;
+  }) as Serialized<OrgMemberListItem>;
 
 const olive = memberOf("u-old", "Olive");
 const nina = memberOf("u-new", "Nina");
@@ -46,7 +47,7 @@ const workspace = (id: string, name: string, ownerId = "u-old") => ({
 });
 
 const onSuccess = vi.fn();
-const renderDialog = (members: OrgMemberListItem[]) =>
+const renderDialog = (members: Serialized<OrgMemberListItem>[]) =>
   renderList(
     <RemoveMemberDialog
       orgId="org1"

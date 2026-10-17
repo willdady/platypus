@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Check, Plus, X } from "lucide-react";
 import { genId, toEditorEntries } from "./chart-utils";
 import { colorForIndex } from "./chart-colors";
+import type { Serialized } from "@/lib/api-write";
 
 interface SegmentEntry {
   id: string;
@@ -30,7 +31,7 @@ export function PieChartWidget({
   editing,
   onSave,
 }: {
-  widget: Widget;
+  widget: Serialized<Widget>;
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }) {

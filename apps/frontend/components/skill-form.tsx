@@ -39,6 +39,7 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { SkillBundleCard } from "@/components/skill-bundle";
+import type { Serialized } from "@/lib/api-write";
 
 const RETRACTABLE_FIELDS = [
   "name",
@@ -55,7 +56,7 @@ const INITIAL_DATA = {
   disableModelInvocation: false,
 };
 
-const toForm = (skill: Skill) => ({
+const toForm = (skill: Serialized<Skill>) => ({
   name: skill.name,
   description: skill.description,
   body: skill.body,

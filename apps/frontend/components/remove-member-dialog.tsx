@@ -26,7 +26,7 @@ import {
 } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { scopedUrl, writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import {
   NoRecipientHint,
   TransferFields,
@@ -37,9 +37,9 @@ import { AlertTriangle } from "lucide-react";
 
 interface RemoveMemberDialogProps {
   orgId: string;
-  member: OrgMemberListItem;
+  member: Serialized<OrgMemberListItem>;
   /** The Organization's members, from which a transfer's recipient is picked. */
-  members: OrgMemberListItem[];
+  members: Serialized<OrgMemberListItem>[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;

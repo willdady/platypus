@@ -71,6 +71,7 @@ import {
   isNormalizedWebToolPart,
   webSearchSources,
 } from "./web-search-tool";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * What the person reading a reply is told when it stopped at the model's
@@ -219,7 +220,7 @@ interface ChatMessageProps {
    */
   editor?: ReactNode;
   /** Available agents for resolving avatars */
-  agents: Agent[];
+  agents: Serialized<Agent>[];
   /** Callback when user starts editing a message */
   onEditStart: (messageId: string) => void;
   /** Callback when user deletes a message */

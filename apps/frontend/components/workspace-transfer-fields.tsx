@@ -12,15 +12,16 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { orgRoutes } from "@/lib/routes";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * Who may receive a Workspace transfer (ADR-0035): any member of the
  * Organization who is not banned and does not already own it.
  */
 export const transferRecipients = (
-  members: OrgMemberListItem[],
+  members: Serialized<OrgMemberListItem>[],
   ownerId: string,
-): OrgMemberListItem[] =>
+): Serialized<OrgMemberListItem>[] =>
   members.filter((m) => m.userId !== ownerId && !m.isBanned);
 
 /** What a transfer does with the Workspace's history, for either choice. */
@@ -43,7 +44,7 @@ export const NoRecipientHint = ({ orgId }: { orgId: string }) => (
 type TransferFieldsProps = {
   /** Prefixes the field ids, so several sets can share a page. */
   idPrefix: string;
-  recipients: OrgMemberListItem[];
+  recipients: Serialized<OrgMemberListItem>[];
   newOwnerId: string;
   keepHistory: boolean;
   onChange: (change: { newOwnerId?: string; keepHistory?: boolean }) => void;

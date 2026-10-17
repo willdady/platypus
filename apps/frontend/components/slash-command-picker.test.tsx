@@ -6,11 +6,12 @@ import { Composer } from "./composer";
 import { SlashCommandPicker } from "./slash-command-picker";
 import { useSlashCommands } from "@/hooks/use-slash-commands";
 import { composerProvider } from "@/test/chat-test-fixtures";
+import type { Serialized } from "@/lib/api-write";
 
 const skill = (
   name: string,
-  extra: Partial<Skill> = {},
-): Pick<Skill, "name" | "description" | "argumentHint"> => ({
+  extra: Partial<Serialized<Skill>> = {},
+): Pick<Serialized<Skill>, "name" | "description" | "argumentHint"> => ({
   name,
   description: `Does ${name}`,
   argumentHint: null,
@@ -29,7 +30,7 @@ const renderPicker = ({
   commands,
   enabled = true,
 }: {
-  commands: Pick<Skill, "name" | "description" | "argumentHint">[];
+  commands: Pick<Serialized<Skill>, "name" | "description" | "argumentHint">[];
   enabled?: boolean;
 }) => {
   const onSubmit = vi.fn();

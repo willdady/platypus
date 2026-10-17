@@ -27,6 +27,7 @@ import {
 import { toEditorEntries, yAxisLabelContent } from "./chart-utils";
 import { colorForIndex } from "./chart-colors";
 import { SeriesEditor, type SeriesEntry } from "./SeriesEditor";
+import type { Serialized } from "@/lib/api-write";
 
 type CartesianChartWidgetData = BarChartWidgetData | LineChartWidgetData;
 
@@ -40,7 +41,7 @@ export function CartesianChartWidget({
   editing,
   onSave,
 }: {
-  widget: Widget;
+  widget: Serialized<Widget>;
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }) {

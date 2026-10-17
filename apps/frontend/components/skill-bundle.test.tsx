@@ -12,6 +12,7 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { SkillBundleCard } from "./skill-bundle";
+import type { Serialized } from "@/lib/api-write";
 
 const file = (path: string, isText: boolean) => ({
   id: path,
@@ -21,7 +22,7 @@ const file = (path: string, isText: boolean) => ({
   isText,
 });
 
-const skill = (overrides: Partial<Skill>): Skill =>
+const skill = (overrides: Partial<Serialized<Skill>>): Serialized<Skill> =>
   ({
     id: "s1",
     name: "pdf",
@@ -31,12 +32,15 @@ const skill = (overrides: Partial<Skill>): Skill =>
     needsSandbox: false,
     files: [],
     ...overrides,
-  }) as Skill;
+  }) as Serialized<Skill>;
 
 const WARNING =
   "Some files in this Skill can't be copied to this Workspace's Sandbox.";
 
-const renderCard = (value: Skill, workspaceId: string | undefined = "ws1") =>
+const renderCard = (
+  value: Serialized<Skill>,
+  workspaceId: string | undefined = "ws1",
+) =>
   render(
     <SkillBundleCard
       scope={workspaceId ? { orgId: "org1", workspaceId } : { orgId: "org1" }}
