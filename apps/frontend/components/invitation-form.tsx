@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
+import type { Serialized } from "@/lib/api-write";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -75,7 +76,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
     },
   });
 
-  const { data: blueprintsData } = useSWR<{ results: Blueprint[] }>(
+  const { data: blueprintsData } = useSWR<Serialized<{ results: Blueprint[] }>>(
     backendUrl && user
       ? joinUrl(backendUrl, `/organizations/${orgId}/blueprints`)
       : null,

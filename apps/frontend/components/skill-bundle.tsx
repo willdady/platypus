@@ -15,12 +15,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldDescription } from "@/components/ui/field";
 import { useBackendUrl } from "@/components/auth-provider";
-import { scopedUrl, writeAt, type Scope } from "@/lib/api-write";
+import {
+  scopedUrl,
+  writeAt,
+  type Scope,
+  type Serialized,
+} from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { optionalFetcher } from "@/lib/utils";
 
 /** Marks a Skill whose scripts or binary files only a Sandbox can use. */
-export const NeedsSandboxBadge = ({ skill }: { skill: Skill }) => {
+export const NeedsSandboxBadge = ({ skill }: { skill: Serialized<Skill> }) => {
   if (!skill.needsSandbox) return null;
 
   return (
@@ -41,7 +46,7 @@ export const NeedsSandboxBadge = ({ skill }: { skill: Skill }) => {
  */
 const useZipUpload = <TResult,>(
   method: "POST" | "PUT",
-  onSuccess: (result: TResult) => void,
+  onSuccess: (result: Serialized<TResult>) => void,
 ) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -77,10 +82,10 @@ export const SkillImportButton = ({
   onImported,
 }: {
   scope: Scope;
-  onImported: (skill: Skill) => void;
+  onImported: (skill: Serialized<Skill>) => void;
 }) => {
   const backendUrl = useBackendUrl();
-  const upload = useZipUpload<Skill>("POST", (skill) => {
+  const upload = useZipUpload<Serialized<Skill>>("POST", (skill) => {
     toast.success(`Imported skill ${skill.name}`);
     onImported(skill);
   });
@@ -120,12 +125,12 @@ export const SkillBundleCard = ({
   onReplaced,
 }: {
   scope: Scope;
-  skill: Skill;
-  onReplaced: (skill: Skill) => void;
+  skill: Serialized<Skill>;
+  onReplaced: (skill: Serialized<Skill>) => void;
 }) => {
   const backendUrl = useBackendUrl();
   const skillUrl = scopedUrl(backendUrl, `skills/${skill.id}`, scope);
-  const upload = useZipUpload<Skill>("PUT", (replaced) => {
+  const upload = useZipUpload<Serialized<Skill>>("PUT", (replaced) => {
     toast.success("Bundle replaced");
     onReplaced(replaced);
   });

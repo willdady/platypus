@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Check } from "lucide-react";
+import type { Serialized } from "@/lib/api-write";
 
 const weatherConditionIcon: Record<WeatherCondition, string> = {
   "clear-day": "/weather/clear-day.svg",
@@ -73,7 +74,7 @@ export function WeatherWidget({
   editing,
   onSave,
 }: {
-  widget: Widget;
+  widget: Serialized<Widget>;
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }) {

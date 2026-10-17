@@ -67,7 +67,7 @@ import {
   Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { writeEntity } from "@/lib/api-write";
+import { writeEntity, type Serialized } from "@/lib/api-write";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -414,7 +414,7 @@ function CardDetailsPane({
 
 // Who wrote a comment and when, so each comment's Edit and Delete are told
 // apart by a screen reader rather than all reading "Edit" and "Delete".
-const commentLabel = (comment: KanbanCardComment) =>
+const commentLabel = (comment: Serialized<KanbanCardComment>) =>
   `${comment.createdByName ?? "Unknown"}, ${formatRelativeTime(comment.createdAt)}`;
 
 // The comment list and composer. Shared by both layouts.
@@ -434,7 +434,7 @@ function CommentsSection({
   commentAction,
 }: {
   className?: string;
-  comments: KanbanCardComment[];
+  comments: Serialized<KanbanCardComment>[];
   newCommentBody: string;
   onNewCommentBodyChange: (body: string) => void;
   editingCommentId: string | null;
@@ -443,7 +443,7 @@ function CommentsSection({
   onAddComment: () => void;
   onSaveComment: (commentId: string) => void;
   onDeleteComment: (commentId: string) => void;
-  onStartEditComment: (comment: KanbanCardComment) => void;
+  onStartEditComment: (comment: Serialized<KanbanCardComment>) => void;
   onCancelEditComment: () => void;
   /**
    * The comment write in flight — `add`, `edit:<id>` or `delete:<id>` — or
@@ -583,9 +583,9 @@ function CardMetadataSection({
   onToggleAssignee,
 }: {
   className?: string;
-  createdAt: KanbanCard["createdAt"];
+  createdAt: Serialized<KanbanCard>["createdAt"];
   createdByName: KanbanCard["createdByName"];
-  updatedAt: KanbanCard["updatedAt"];
+  updatedAt: Serialized<KanbanCard>["updatedAt"];
   lastEditedByName: KanbanCard["lastEditedByName"];
   columns: Pick<KanbanColumn, "id" | "name">[];
   selectedColumnId: string | null;
@@ -755,7 +755,7 @@ export function KanbanCardDialog({
   workspaceId,
   boardId,
 }: {
-  card: KanbanCard | null;
+  card: Serialized<KanbanCard> | null;
   labels: KanbanLabel[];
   columns: Pick<KanbanColumn, "id" | "name">[];
   columnId: string | null;
@@ -914,7 +914,7 @@ export function KanbanCardDialog({
     });
   };
 
-  const startEditingComment = (comment: KanbanCardComment) => {
+  const startEditingComment = (comment: Serialized<KanbanCardComment>) => {
     setEditingCommentId(comment.id);
     setEditingCommentBody(comment.body);
   };

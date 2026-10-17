@@ -11,20 +11,9 @@ import {
 } from "@/components/ui/collapsible";
 import type {
   KanbanCardHistoryChange,
+  KanbanCardHistoryEntry,
   KanbanCardHistoryRef,
 } from "@platypus/schemas";
-
-/**
- * A card's history as the API returns it — timestamps arrive as JSON strings
- * rather than the `Date` the shared schema describes.
- */
-type HistoryEntry = {
-  id: string;
-  kind: "created" | "updated";
-  changes: KanbanCardHistoryChange[];
-  actorName?: string | null;
-  createdAt: string;
-};
 
 const formatDate = (value: string | null): string =>
   value ? new Date(value).toLocaleDateString() : "none";
@@ -131,7 +120,7 @@ export function KanbanCardHistory({
     results: entries,
     error,
     mutate,
-  } = useScopedList<HistoryEntry>(
+  } = useScopedList<KanbanCardHistoryEntry>(
     `boards/${boardId}/cards/${cardId}/history`,
     open ? { orgId, workspaceId } : null,
   );

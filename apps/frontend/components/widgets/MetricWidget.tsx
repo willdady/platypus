@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
+import type { Serialized } from "@/lib/api-write";
 
 export function MetricWidget({
   widget,
   editing,
   onSave,
 }: {
-  widget: Widget;
+  widget: Serialized<Widget>;
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }) {

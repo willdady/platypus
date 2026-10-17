@@ -42,7 +42,7 @@ import type {
   KanbanLabel,
 } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
-import { writeEntity, type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
 import {
   applyCardMove,
   moveCard,
@@ -263,7 +263,7 @@ export function KanbanBoard({
   // Stable across drag frames so the memoized columns and cards it is passed
   // through are not re-rendered on every drag-over update.
   const handleCardClick = useCallback(
-    (card: KanbanCard) => updateCardIdParam(card.id),
+    (card: Serialized<KanbanCard>) => updateCardIdParam(card.id),
     [updateCardIdParam],
   );
 

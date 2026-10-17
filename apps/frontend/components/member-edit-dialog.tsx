@@ -21,12 +21,12 @@ import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
+import { writeAt, type Serialized } from "@/lib/api-write";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
 interface MemberEditDialogProps {
   orgId: string;
-  member: OrgMemberListItem;
+  member: Serialized<OrgMemberListItem>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;

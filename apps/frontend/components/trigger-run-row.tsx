@@ -44,6 +44,7 @@ import { formatTokens } from "@/lib/context-window";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { workspaceRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * What the runs list says about a firing the run-rate breaker dropped before it
@@ -153,7 +154,7 @@ export const triggerRunDetailHref = (
   runId: string,
 ) => workspaceRoutes(orgId, workspaceId).triggerRuns.detail(runId);
 
-const formatDuration = (run: TriggerRunWithTrigger) => {
+const formatDuration = (run: Serialized<TriggerRunWithTrigger>) => {
   if (!run.completedAt) return null;
   const ms =
     new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime();
@@ -177,7 +178,7 @@ export const TriggerRunRow = ({
   workspaceId,
   linkToDetail = true,
 }: {
-  run: TriggerRunWithTrigger;
+  run: Serialized<TriggerRunWithTrigger>;
   orgId: string;
   workspaceId: string;
   /** Whether the row links to the run's page. Off on that page itself. */

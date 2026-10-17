@@ -12,8 +12,9 @@ import {
   stubRejectedSave,
   stubSaveSequence,
 } from "@/test/test-utils";
+import type { Serialized } from "./api-write";
 
-const card = (id: string) => ({ id }) as KanbanCard;
+const card = (id: string) => ({ id }) as Serialized<KanbanCard>;
 
 const column = (id: string, cardIds: string[]) =>
   ({ id, cards: cardIds.map(card) }) as ColumnWithCards;

@@ -24,7 +24,7 @@ import {
 } from "@/components/list-skeletons";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { scopedUrl, writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
 import type { OrgA2aEndpoint } from "@platypus/schemas";
 import { formatDate } from "@/lib/format-date";
@@ -32,8 +32,8 @@ import { TokenCells, TokenTime } from "@/components/bearer-token";
 
 /** What a revoke stops: the endpoint, or just one of its tokens. */
 interface RevokeTarget {
-  endpoint: OrgA2aEndpoint;
-  token?: OrgA2aEndpoint["tokens"][number];
+  endpoint: Serialized<OrgA2aEndpoint>;
+  token?: Serialized<OrgA2aEndpoint>["tokens"][number];
 }
 
 const COLUMNS = [

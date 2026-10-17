@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import type { Chat } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import type { Serialized } from "@/lib/api-write";
 
 export interface ChatSettings {
   instructions: string;
@@ -14,7 +15,7 @@ export interface ChatSettings {
 }
 
 export const useChatSettings = (
-  chatData: Chat | undefined,
+  chatData: Serialized<Chat> | undefined,
   agentId: string,
 ) => {
   const [settings, setSettings] = useState<ChatSettings>({

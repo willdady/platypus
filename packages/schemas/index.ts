@@ -3174,6 +3174,10 @@ export const kanbanCardHistoryEntrySchema = z.object({
   createdAt: z.date(),
 });
 
+export type KanbanCardHistoryEntry = z.infer<
+  typeof kanbanCardHistoryEntrySchema
+>;
+
 // Kanban Board State (nested response)
 
 export const kanbanBoardStateSchema = z.object({

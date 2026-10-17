@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, expectTypeOf, vi } from "vitest";
 import {
   writeEntity,
   writeAt,
@@ -6,6 +6,7 @@ import {
   attachmentsEntity,
   chatListEntity,
   organizationEntity,
+  type Serialized,
 } from "./api-write";
 import { jsonResponse } from "@/test/test-utils";
 
@@ -17,6 +18,34 @@ const respond = (status: number, body: unknown = {}) => {
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 };
+
+describe("Serialized — what JSON.parse makes of a type", () => {
+  it("turns every Date into a string, leaving other fields alone", () => {
+    type Row = {
+      id: string;
+      count: number;
+      createdAt: Date;
+      deletedAt: Date | null;
+      seenAt?: Date;
+      owner: { joinedAt: Date };
+      items: { at: Date }[];
+    };
+    expectTypeOf<Serialized<Row>>().toEqualTypeOf<{
+      id: string;
+      count: number;
+      createdAt: string;
+      deletedAt: string | null;
+      seenAt?: string;
+      owner: { joinedAt: string };
+      items: { at: string }[];
+    }>();
+  });
+
+  it("keeps a branded string branded", () => {
+    type Id = string & { readonly __brand: "Id" };
+    expectTypeOf<Serialized<Id>>().toEqualTypeOf<Id>();
+  });
+});
 
 describe("writeEntity — transport", () => {
   it("POSTs to the org-scoped collection path when creating with no workspace scope", async () => {

@@ -67,7 +67,11 @@ import {
 } from "@platypus/schemas";
 import type { FormErrors } from "@/lib/form-errors";
 import { workspaceRoutes } from "@/lib/routes";
-import { organizationEntity, workspaceEntity } from "@/lib/api-write";
+import {
+  organizationEntity,
+  workspaceEntity,
+  type Serialized,
+} from "@/lib/api-write";
 import { TRIGGER_TYPE_LABELS } from "@/components/trigger-list";
 
 const INSTRUCTION_PLACEHOLDERS: Record<TriggerType, string> = {
@@ -113,7 +117,7 @@ export type TriggerFieldsProps = {
    */
   active: boolean;
   /** The saved trigger being edited; absent when creating. */
-  trigger?: Trigger;
+  trigger?: Serialized<Trigger>;
   scope: { orgId: string; workspaceId: string };
   disabled: boolean;
   errors: FormErrors;

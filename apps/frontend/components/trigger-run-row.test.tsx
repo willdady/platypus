@@ -7,23 +7,24 @@ import {
   RUN_WARNINGS_LABEL,
 } from "./trigger-run-row";
 import { openDropdownMenu } from "@/test/test-utils";
+import type { Serialized } from "@/lib/api-write";
 
 const run = (
-  over: Partial<TriggerRunWithTrigger> = {},
-): TriggerRunWithTrigger => ({
+  over: Partial<Serialized<TriggerRunWithTrigger>> = {},
+): Serialized<TriggerRunWithTrigger> => ({
   id: "run-1",
   triggerId: "trigger-1",
   triggerName: "Nightly digest",
   status: "success",
   eventType: null,
   eventData: null,
-  startedAt: new Date("2026-01-01T09:00:00Z"),
-  completedAt: new Date("2026-01-01T09:00:10Z"),
+  startedAt: new Date("2026-01-01T09:00:00Z").toISOString(),
+  completedAt: new Date("2026-01-01T09:00:10Z").toISOString(),
   errorMessage: null,
   stats: null,
   unloadedToolSets: [],
   failedToolCalls: 0,
-  createdAt: new Date("2026-01-01T09:00:00Z"),
+  createdAt: new Date("2026-01-01T09:00:00Z").toISOString(),
   ...over,
 });
 

@@ -15,14 +15,15 @@ import {
   STEP_LIMIT_NOTICE,
   isGenericToolPart,
 } from "./chat-message";
+import type { Serialized } from "@/lib/api-write";
 
-const makeAgent = (overrides: Partial<Agent>): Agent =>
+const makeAgent = (overrides: Partial<Serialized<Agent>>): Serialized<Agent> =>
   ({
     id: "agent-1",
     name: "Research Agent",
     avatarUrl: "https://example.com/agent-1.png",
     ...overrides,
-  }) as Agent;
+  }) as Serialized<Agent>;
 
 const agents = [makeAgent({})];
 

@@ -37,7 +37,7 @@ import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
-import { scopedPath, writeAt } from "@/lib/api-write";
+import { scopedPath, writeAt, type Serialized } from "@/lib/api-write";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/components/auth-provider";
@@ -55,7 +55,7 @@ import {
 } from "@/lib/constants";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
-type McpRecord = MCP & {
+type McpRecord = Serialized<MCP> & {
   oauthAuthorized?: boolean;
   headers?: Record<string, string>;
 };

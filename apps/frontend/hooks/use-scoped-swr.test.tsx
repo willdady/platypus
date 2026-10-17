@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, expectTypeOf, afterEach, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 const authState: { user: { id: string } | null; isPending?: boolean } = {
@@ -22,6 +22,7 @@ vi.mock("swr", () => ({
   },
 }));
 
+import type { Agent } from "@platypus/schemas";
 import { useScopedSWR } from "./use-scoped-swr";
 import { fetcher, optionalFetcher } from "@/lib/utils";
 
@@ -30,6 +31,15 @@ describe("useScopedSWR", () => {
     authState.user = { id: "u1" };
     authState.isPending = false;
     cache.clear();
+  });
+
+  it("types a fetched schema timestamp as the string JSON carries", () => {
+    const { result } = renderHook(() =>
+      useScopedSWR<Agent>("agents/a1", { orgId: "org1" }),
+    );
+    expectTypeOf(result.current.data?.createdAt).toEqualTypeOf<
+      string | undefined
+    >();
   });
 
   it("resolves the workspace-scoped URL as the SWR key", () => {

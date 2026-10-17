@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Check } from "lucide-react";
+import type { Serialized } from "@/lib/api-write";
 
 export function ImageWidget({
   widget,
   editing,
   onSave,
 }: {
-  widget: Widget;
+  widget: Serialized<Widget>;
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }) {

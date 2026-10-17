@@ -38,8 +38,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization, Workspace, Context } from "@platypus/schemas";
 import { CONTEXT_MAX_LENGTH } from "@platypus/schemas";
 import { userRoutes } from "@/lib/routes";
+import type { Serialized } from "@/lib/api-write";
 
-interface WorkspaceWithOrg extends Workspace {
+interface WorkspaceWithOrg extends Serialized<Workspace> {
   organizationName?: string;
 }
 
@@ -138,15 +139,15 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
     data: orgs,
     error: orgsError,
     mutate: mutateOrgs,
-  } = useSWR<{ results: Organization[] }>(
+  } = useSWR<Serialized<{ results: Organization[] }>>(
     user ? joinUrl(backendUrl, "/organizations") : null,
     fetcher,
   );
 
   // Fetch all contexts to filter out workspaces that already have contexts
-  const { data: allContexts, error: allContextsError } = useSWR<{
-    results: Context[];
-  }>(user ? contextsUrl : null, fetcher);
+  const { data: allContexts, error: allContextsError } = useSWR<
+    Serialized<{ results: Context[] }>
+  >(user ? contextsUrl : null, fetcher);
 
   // Every workspace across every organization the user belongs to. The API has
   // no user-scoped workspace route, so the per-organization fan-out lives in
@@ -154,7 +155,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   // new request, and a failure reaches the form as `error` rather than a
   // `console.error` in an effect that cannot cancel itself.
   const fetchOrgWorkspaces = async (
-    organizations: Organization[] | null,
+    organizations: Serialized<Organization>[] | null,
   ): Promise<WorkspaceWithOrg[]> => {
     if (!organizations) return [];
 
@@ -162,7 +163,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
       organizations.map(async (org) => {
         const data = (await fetcher(
           joinUrl(backendUrl, `/organizations/${org.id}/workspaces`),
-        )) as { results: Workspace[] };
+        )) as { results: Serialized<Workspace>[] };
         return data.results.map((workspace) => ({
           ...workspace,
           organizationName: org.name,

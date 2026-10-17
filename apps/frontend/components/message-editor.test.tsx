@@ -24,6 +24,7 @@ import {
   installSpeechRecognition,
   uninstallSpeechRecognition,
 } from "@/test/chat-test-fixtures";
+import type { Serialized } from "@/lib/api-write";
 
 /** The session the editor most recently constructed. */
 let recognition: ReturnType<typeof installSpeechRecognition>;
@@ -40,7 +41,7 @@ const provider = {
   id: "p1",
   name: "OpenRouter",
   modelIds: [{ id: "m1", passthroughFileTypes: [] }],
-} as unknown as Provider;
+} as unknown as Serialized<Provider>;
 
 const renderEditor = (
   overrides: Partial<React.ComponentProps<typeof MessageEditor>> = {},

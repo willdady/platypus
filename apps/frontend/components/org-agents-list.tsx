@@ -32,7 +32,7 @@ import {
 } from "@/components/manage-sharing";
 import { DeleteBlockedDialog } from "@/components/shared-resource-actions";
 import { cn } from "@/lib/utils";
-import { writeEntity, type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { orgRoutes } from "@/lib/routes";
 import { useSharedDeleteGuard } from "@/hooks/use-shared-resource-actions";
@@ -44,7 +44,9 @@ import { useSharedDeleteGuard } from "@/hooks/use-shared-resource-actions";
 export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   const { actor } = useAuth();
   const canManage = canManageOrgSharedResource(actor);
-  const [agentToManage, setAgentToManage] = useState<Agent | null>(null);
+  const [agentToManage, setAgentToManage] = useState<Serialized<Agent> | null>(
+    null,
+  );
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -60,12 +62,12 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
 
   const agents = [...rows].sort((a, b) => a.name.localeCompare(b.name));
 
-  const deleteFlow = useDeleteFlow<Agent>({
+  const deleteFlow = useDeleteFlow<Serialized<Agent>>({
     mutate,
     delete: (agent, url) => writeEntity(url, "agents", scope, { id: agent.id }),
   });
 
-  const deleteGuard = useSharedDeleteGuard<Agent>({
+  const deleteGuard = useSharedDeleteGuard<Serialized<Agent>>({
     resourceType: "agent",
     scope,
     onAllowed: deleteFlow.request,

@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { cn } from "@/lib/utils";
 import { readableTextColor } from "@/lib/color";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * How each due-date status reads: its colour, and the words that carry it for
@@ -59,11 +60,11 @@ const KanbanCardComponentInner = function KanbanCardComponent({
   disabled = false,
   onCardClick,
 }: {
-  card: KanbanCard;
+  card: Serialized<KanbanCard>;
   labels: KanbanLabel[];
   draggable?: boolean;
   disabled?: boolean;
-  onCardClick: (card: KanbanCard) => void;
+  onCardClick: (card: Serialized<KanbanCard>) => void;
 }) {
   const {
     attributes,

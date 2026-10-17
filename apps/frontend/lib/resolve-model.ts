@@ -11,6 +11,7 @@ import {
   getSearchCapability,
   passthroughFileTypesFor,
 } from "./model-config";
+import type { Serialized } from "./api-write";
 
 export type ModelSelectionInput = {
   /** Omit entirely for a caller (like the Agent form) that never selects by Agent. */
@@ -48,14 +49,14 @@ export type ResolvedModel = {
  * model or it doesn't.
  */
 export const resolveModel = (input: {
-  providers: Provider[];
+  providers: Serialized<Provider>[];
   /** Omit for a caller (like the Agent form) that never selects by Agent. */
-  agents?: Agent[];
+  agents?: Serialized<Agent>[];
   selection: ModelSelectionInput;
 }): ResolvedModel | null => {
   const { providers, agents = [], selection } = input;
 
-  let provider: Provider | undefined;
+  let provider: Serialized<Provider> | undefined;
   let modelReference: string | undefined;
 
   if (selection.agentId) {

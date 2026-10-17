@@ -2,6 +2,7 @@ import useSWR from "swr";
 import type { SignUpAvailability } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
 import { fetcher, joinUrl } from "@/lib/utils";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * Whether the deployment accepts public sign-up (#550, ADR-0019), read from
@@ -12,7 +13,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
  */
 export function useSignUpOpen(): boolean | undefined {
   const backendUrl = useBackendUrl();
-  const { data } = useSWR<SignUpAvailability>(
+  const { data } = useSWR<Serialized<SignUpAvailability>>(
     backendUrl ? joinUrl(backendUrl, "/sign-up") : null,
     fetcher,
   );

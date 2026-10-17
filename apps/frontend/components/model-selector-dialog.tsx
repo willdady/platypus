@@ -21,6 +21,7 @@ import {
 import { formatTokens } from "@/lib/context-window";
 import { splitPinned } from "@/lib/pinned-agents";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import type { Serialized } from "@/lib/api-write";
 
 const filterByKeywords = (
   _value: string,
@@ -50,8 +51,8 @@ const filterByKeywords = (
 const keepFocus = (event: MouseEvent) => event.preventDefault();
 
 interface ModelSelectorDialogProps {
-  agents: Agent[];
-  providers: Provider[];
+  agents: Serialized<Agent>[];
+  providers: Serialized<Provider>[];
   agentId: string;
   modelId: string;
   providerId: string;
@@ -162,7 +163,7 @@ export const ModelSelectorDialog = ({
 
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);
-  const renderAgentItem = (agent: Agent) => (
+  const renderAgentItem = (agent: Serialized<Agent>) => (
     <ModelSelectorItem
       key={agent.id}
       value={encodeAgentSelection(agent.id)}

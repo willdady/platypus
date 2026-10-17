@@ -1,5 +1,6 @@
 import type { Agent, Chat, Provider } from "@platypus/schemas";
 import { findModelOption, getModelOptions } from "./model-config";
+import type { Serialized } from "./api-write";
 
 /** The shape a Chat's last selection is persisted as under its localStorage key. */
 export type StoredSelection =
@@ -11,8 +12,8 @@ export type RestoreLadderInput = {
   chatData: Pick<Chat, "agentId" | "providerId" | "modelId"> | undefined;
   /** The Chat's last selection read from localStorage, or `null` if none/expired. */
   storedSelection: StoredSelection | null;
-  providers: Provider[];
-  agents: Agent[];
+  providers: Serialized<Provider>[];
+  agents: Serialized<Agent>[];
 };
 
 /**

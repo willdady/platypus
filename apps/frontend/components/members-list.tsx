@@ -23,19 +23,19 @@ import { type OrgMemberListItem } from "@platypus/schemas";
 import { useState } from "react";
 import { MemberEditDialog } from "@/components/member-edit-dialog";
 import { RemoveMemberDialog } from "@/components/remove-member-dialog";
+import type { Serialized } from "@/lib/api-write";
 
 interface MembersListProps {
   orgId: string;
-  members: OrgMemberListItem[];
+  members: Serialized<OrgMemberListItem>[];
   onUpdate: () => void;
 }
 
 export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
-  const [editingMember, setEditingMember] = useState<OrgMemberListItem | null>(
-    null,
-  );
+  const [editingMember, setEditingMember] =
+    useState<Serialized<OrgMemberListItem> | null>(null);
   const [removingMember, setRemovingMember] =
-    useState<OrgMemberListItem | null>(null);
+    useState<Serialized<OrgMemberListItem> | null>(null);
 
   return (
     <>

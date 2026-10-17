@@ -4,6 +4,7 @@ import type {
   PlatypusUIMessage,
 } from "@platypus/schemas";
 import type { ChatStatus as TurnStatus } from "ai";
+import type { Serialized } from "./api-write";
 
 /**
  * Recovering a Chat turn whose stream was cut (issue #648).
@@ -234,6 +235,6 @@ export const snapshotMayLand = (
  * land when every message is deleted.
  */
 export const snapshotMessages = (
-  chat: Chat | null | undefined,
+  chat: Serialized<Chat> | null | undefined,
 ): PlatypusUIMessage[] | undefined =>
   chat?.messages as PlatypusUIMessage[] | undefined;

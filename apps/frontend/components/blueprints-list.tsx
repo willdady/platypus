@@ -22,7 +22,7 @@ import {
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import { Layers, Play, Plus } from "lucide-react";
 import type { Blueprint } from "@platypus/schemas";
-import { writeEntity } from "@/lib/api-write";
+import { writeEntity, type Serialized } from "@/lib/api-write";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import Link from "next/link";
@@ -32,9 +32,8 @@ import { orgRoutes } from "@/lib/routes";
 export const BlueprintsList = ({ orgId }: { orgId: string }) => {
   const routes = orgRoutes(orgId).settings;
 
-  const [blueprintToApply, setBlueprintToApply] = useState<Blueprint | null>(
-    null,
-  );
+  const [blueprintToApply, setBlueprintToApply] =
+    useState<Serialized<Blueprint> | null>(null);
 
   const { results, error, isLoading, mutate } = useScopedList<Blueprint>(
     "blueprints",
@@ -43,7 +42,7 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
 
   const blueprints = [...results].sort((a, b) => a.name.localeCompare(b.name));
 
-  const deleteFlow = useDeleteFlow<Blueprint>({
+  const deleteFlow = useDeleteFlow<Serialized<Blueprint>>({
     mutate,
     delete: (blueprint, url) =>
       writeEntity(url, "blueprints", { orgId }, { id: blueprint.id }),

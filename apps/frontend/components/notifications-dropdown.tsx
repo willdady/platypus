@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { writeEntity } from "@/lib/api-write";
+import { writeEntity, type Serialized } from "@/lib/api-write";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
@@ -73,7 +73,7 @@ export function NotificationsDropdown({
   );
 
   // Marking read and dismissing show at once and revert if refused.
-  const optimistic = useOptimisticRows<NotificationListItem>();
+  const optimistic = useOptimisticRows<Serialized<NotificationListItem>>();
   const notifications = optimistic.apply(notificationRows);
   // An unread notification being marked read or dismissed already reads as
   // gone from the badge.
@@ -137,7 +137,7 @@ export function NotificationsDropdown({
     );
   };
 
-  const handleNotificationClick = (notif: NotificationListItem) => {
+  const handleNotificationClick = (notif: Serialized<NotificationListItem>) => {
     if (!notif.isRead) {
       handleMarkAsRead(notif.id);
     }

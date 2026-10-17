@@ -91,6 +91,7 @@ import {
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * Per-field help for a model row. The fields each need a paragraph of
@@ -550,7 +551,9 @@ const ProviderForm = ({
   draft?: FormDraft;
 }) => {
   // Add scope to Provider type for this component
-  type ProviderWithScope = Provider & { scope: "organization" | "workspace" };
+  type ProviderWithScope = Serialized<Provider> & {
+    scope: "organization" | "workspace";
+  };
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();

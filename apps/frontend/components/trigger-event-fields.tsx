@@ -26,6 +26,7 @@ import {
 } from "@platypus/schemas";
 import type { Scope } from "@/lib/api-write";
 import type { TriggerFieldsProps } from "@/components/trigger-form";
+import type { Serialized } from "@/lib/api-write";
 
 // The events an Event Trigger can subscribe to. Webhook-only events
 // (`trigger_run.*`) are not among them.
@@ -50,7 +51,7 @@ const CHANGED_FIELD_OPTIONS = [
  * for the skeleton.
  */
 const useEventFilterListsLoading = (
-  trigger: Trigger | undefined,
+  trigger: Serialized<Trigger> | undefined,
   scope: Scope,
 ) => {
   const { isLoading: boardsLoading } = useScopedSWR<{

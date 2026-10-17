@@ -8,6 +8,7 @@ import {
   organizationEntity,
   scopedUrl,
   writeEntity,
+  type Serialized,
 } from "@/lib/api-write";
 import { toast } from "sonner";
 import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
@@ -115,7 +116,7 @@ export function AppSidebar() {
   const router = useRouter();
 
   const [renameChatId, setRenameChatId] = useState<string | null>(null);
-  const pins = useOptimisticRows<ChatListItem>();
+  const pins = useOptimisticRows<Serialized<ChatListItem>>();
 
   const { mutate } = useSWRConfig();
 
@@ -189,7 +190,7 @@ export function AppSidebar() {
   const [settledChatList, setSettledChatList] = useState<{
     scopeKey: string;
     search: string;
-    data: { results: ChatListItem[] };
+    data: { results: Serialized<ChatListItem>[] };
   } | null>(null);
   if (chatData && settledChatList?.data !== chatData) {
     setSettledChatList({
@@ -277,7 +278,7 @@ export function AppSidebar() {
     },
   });
 
-  const handleTogglePin = (chat: ChatListItem) => {
+  const handleTogglePin = (chat: Serialized<ChatListItem>) => {
     const data = { isPinned: !chat.isPinned };
     void pins.run(
       chat.id,

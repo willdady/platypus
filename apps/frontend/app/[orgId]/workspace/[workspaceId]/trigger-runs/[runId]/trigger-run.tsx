@@ -18,6 +18,7 @@ import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
 import { fetcher } from "@/lib/utils";
 import { mergeRunEvents, nextSinceSeq } from "@/lib/run-timeline";
 import { workspaceRoutes } from "@/lib/routes";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * How often the page re-reads a run that is still running. Events reach the
@@ -54,11 +55,11 @@ const TriggerRunDetailPage = ({
   const heldEvents = useRef<RunEvent[]>([]);
 
   const fetchIncrementally = useCallback(
-    async (url: string): Promise<TriggerRunDetailResponse> => {
+    async (url: string): Promise<Serialized<TriggerRunDetailResponse>> => {
       const sinceSeq = nextSinceSeq(heldEvents.current);
       const page = (await fetcher(
         sinceSeq === undefined ? url : `${url}?sinceSeq=${sinceSeq}`,
-      )) as TriggerRunDetailResponse;
+      )) as Serialized<TriggerRunDetailResponse>;
       heldEvents.current = mergeRunEvents(heldEvents.current, page.events);
       return { run: page.run, events: heldEvents.current };
     },

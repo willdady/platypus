@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import {
   eventTriggerEventSchema,
   triggerRunWebhookEventSchema,
+  type Webhook,
 } from "@platypus/schemas";
 import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
@@ -47,19 +48,6 @@ import { copyWithToast } from "@/lib/clipboard";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Eye, EyeOff, Copy, RefreshCw } from "lucide-react";
 import { workspaceRoutes } from "@/lib/routes";
-
-interface Webhook {
-  id: string;
-  workspaceId: string;
-  name: string;
-  url: string;
-  signingSecret: string;
-  headers: Record<string, string> | null;
-  enabled: boolean;
-  events: string[];
-  createdAt: string;
-  updatedAt: string;
-}
 
 interface WebhookFormProps {
   orgId: string;

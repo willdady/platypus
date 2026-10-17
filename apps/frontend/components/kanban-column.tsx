@@ -28,16 +28,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { Serialized } from "@/lib/api-write";
 
 type KanbanColumnProps = {
-  column: KanbanColumn & { cards: KanbanCard[] };
+  column: Serialized<KanbanColumn> & { cards: Serialized<KanbanCard>[] };
   labels: KanbanLabel[];
   draggable?: boolean;
   isDraggingColumn?: boolean;
   overlay?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
-  onCardClick: (card: KanbanCard) => void;
+  onCardClick: (card: Serialized<KanbanCard>) => void;
   onAddCard: (columnId: string) => void;
   onEditColumn: (columnId: string) => void;
   onDeleteColumn: (columnId: string, hasCards: boolean) => void;
@@ -61,12 +62,12 @@ function ColumnContent({
   overlay,
   isDraggingColumn,
 }: {
-  column: KanbanColumn & { cards: KanbanCard[] };
+  column: Serialized<KanbanColumn> & { cards: Serialized<KanbanCard>[] };
   labels: KanbanLabel[];
   draggable?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
-  onCardClick: (card: KanbanCard) => void;
+  onCardClick: (card: Serialized<KanbanCard>) => void;
   onAddCard: (columnId: string) => void;
   onEditColumn: (columnId: string) => void;
   onDeleteColumn: (columnId: string, hasCards: boolean) => void;

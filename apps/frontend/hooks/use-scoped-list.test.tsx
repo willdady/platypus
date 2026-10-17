@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, expectTypeOf, afterEach, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
 vi.mock("@/components/auth-provider", () => ({
@@ -20,6 +20,7 @@ vi.mock("swr", () => ({
   },
 }));
 
+import type { Agent } from "@platypus/schemas";
 import { useScopedList } from "./use-scoped-list";
 
 const scope = { orgId: "org1", workspaceId: "ws1" };
@@ -28,6 +29,11 @@ describe("useScopedList", () => {
   afterEach(() => {
     swr.key = undefined;
     swr.data = undefined;
+  });
+
+  it("types a fetched row's schema timestamp as the string JSON carries", () => {
+    type Row = ReturnType<typeof useScopedList<Agent>>["results"][number];
+    expectTypeOf<Row["createdAt"]>().toEqualTypeOf<string>();
   });
 
   it("unwraps the envelope's results", () => {

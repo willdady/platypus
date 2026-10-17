@@ -51,7 +51,7 @@ import { formatDateTime } from "@/lib/format-date";
 import { formatRelativeTime } from "@/lib/relative-time";
 import cronstrue from "cronstrue";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { writeEntity, type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
@@ -108,7 +108,7 @@ export const TriggerCardsSkeleton = ({ cards }: { cards?: number }) => (
 const InboundSummary = ({
   trigger,
 }: {
-  trigger: Extract<Trigger, { type: "inbound" }>;
+  trigger: Extract<Serialized<Trigger>, { type: "inbound" }>;
 }) => {
   const config = trigger.config;
   const inputs = config.inputs;
@@ -193,7 +193,7 @@ export const TriggerList = ({
 
   const agentsById = Object.fromEntries(agents.map((a) => [a.id, a]));
 
-  const toggle = useEnabledToggle<Trigger>({
+  const toggle = useEnabledToggle<Serialized<Trigger>>({
     entity: "triggers",
     scope,
     mutate,
@@ -206,7 +206,7 @@ export const TriggerList = ({
     .filter((trigger) => showFired || !trigger.firedAt)
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const deleteFlow = useDeleteFlow<Trigger>({
+  const deleteFlow = useDeleteFlow<Serialized<Trigger>>({
     mutate,
     delete: (trigger, url) =>
       writeEntity(url, "triggers", scope, { id: trigger.id }),

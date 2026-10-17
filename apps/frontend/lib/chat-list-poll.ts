@@ -1,4 +1,5 @@
 import { UNTITLED_CHAT_TITLE, type ChatListItem } from "@platypus/schemas";
+import type { Serialized } from "./api-write";
 
 /**
  * When the sidebar's chat list has to re-read itself (issue #853).
@@ -40,13 +41,11 @@ export const MISSING_CHAT_WATCH_MS = 60_000;
 /** How long to keep expecting a generated title for a recently updated chat. */
 export const UNTITLED_CHAT_WATCH_MS = 60_000;
 
-/**
- * The part of a listed chat these decisions read. `updatedAt` is a `Date` on
- * the schema and a string once it has been through JSON, so both are accepted.
- */
-export type ListedChat = Pick<ChatListItem, "id" | "status" | "title"> & {
-  updatedAt: Date | string;
-};
+/** The part of a listed chat these decisions read. */
+export type ListedChat = Pick<
+  Serialized<ChatListItem>,
+  "id" | "status" | "title" | "updatedAt"
+>;
 
 /** A chat whose row the sidebar is waiting on, and when it started waiting. */
 export type WatchedChat = {

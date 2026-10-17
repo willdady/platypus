@@ -23,7 +23,12 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEntityForm } from "@/hooks/use-entity-form";
-import { scopedUrl, workspaceEntity, writeAt } from "@/lib/api-write";
+import {
+  scopedUrl,
+  workspaceEntity,
+  writeAt,
+  type Serialized,
+} from "@/lib/api-write";
 import {
   historyOutcome,
   NoRecipientHint,
@@ -35,7 +40,7 @@ type TransferWorkspaceActionProps = {
   orgId: string;
   workspaceId: string;
   /** The Providers visible in the Workspace; its own are listed for review. */
-  providers: Provider[];
+  providers: Serialized<Provider>[];
 };
 
 /**

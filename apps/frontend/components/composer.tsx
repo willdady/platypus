@@ -37,6 +37,7 @@ import { FileCompatibilityWarning } from "./file-compatibility-warning";
 import { SelectionSubstitutedNotice } from "./selection-substituted-notice";
 import type { SelectionSubstitution } from "@/lib/restore-selection";
 import { ModelSelectorDialog } from "./model-selector-dialog";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * What a composer needs to render the model picker. The pieces travel together
@@ -44,8 +45,8 @@ import { ModelSelectorDialog } from "./model-selector-dialog";
  * individually through every surface (issue #724).
  */
 export interface ModelSelection {
-  agents: Agent[];
-  providers: Provider[];
+  agents: Serialized<Agent>[];
+  providers: Serialized<Provider>[];
   agentId: string;
   modelId: string;
   providerId: string;

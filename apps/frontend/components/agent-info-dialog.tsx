@@ -17,13 +17,14 @@ import { ChevronsUpDown, Pencil } from "lucide-react";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { workspaceRoutes } from "@/lib/routes";
+import type { Serialized } from "@/lib/api-write";
 
 interface AgentInfoDialogProps {
-  agent: Agent;
-  agents: Agent[];
+  agent: Serialized<Agent>;
+  agents: Serialized<Agent>[];
   toolSets: ToolSet[];
-  skills: Skill[];
-  providers: Provider[];
+  skills: Serialized<Skill>[];
+  providers: Serialized<Provider>[];
   onClose?: () => void;
 }
 

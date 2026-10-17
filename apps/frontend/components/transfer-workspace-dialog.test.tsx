@@ -16,6 +16,7 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { TransferWorkspaceAction } from "./transfer-workspace-dialog";
+import type { Serialized } from "@/lib/api-write";
 
 const memberOf = (id: string, name: string, isBanned = false) =>
   ({
@@ -25,7 +26,7 @@ const memberOf = (id: string, name: string, isBanned = false) =>
     user: { id, name, email: `${id}@example.com` },
     isSuperAdmin: false,
     isBanned,
-  }) as OrgMemberListItem;
+  }) as Serialized<OrgMemberListItem>;
 
 const workspace = {
   id: "ws-1",
@@ -36,7 +37,7 @@ const workspace = {
 const providers = [
   { id: "p-1", name: "Team OpenAI", workspaceId: "ws-1" },
   { id: "p-org", name: "Shared Anthropic", organizationId: "org1" },
-] as Provider[];
+] as Serialized<Provider>[];
 
 const renderAction = () =>
   renderList(

@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import type { FileUIPart } from "ai";
 import type { Provider } from "@platypus/schemas";
+import type { Serialized } from "@/lib/api-write";
 
 /**
  * The fixtures and fakes the chat-surface tests share — the composer, the
@@ -108,7 +109,7 @@ export const composerProvider = {
   id: "provider-1",
   name: "OpenAI",
   modelIds: ["gpt-4o"],
-} as unknown as Provider;
+} as unknown as Serialized<Provider>;
 
 /** A persisted PDF attachment, as a stored message carries one. */
 export const reportPdf: FileUIPart = {
