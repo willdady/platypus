@@ -509,4 +509,26 @@ describe("McpForm OAuth", () => {
     unmount();
     expect(live()).toHaveLength(0);
   });
+
+  // A blocked popup must not strand the reader: authorization continues in
+  // this window instead.
+  it("falls back to this window when the popup is blocked", async () => {
+    stubSaveSequence(
+      { status: 200, body: { id: "m1" } },
+      { status: 200, body: { authorizationUrl: "https://idp.test/auth" } },
+    );
+    vi.stubGlobal(
+      "open",
+      vi.fn(() => null),
+    );
+    const replace = vi.fn();
+    vi.stubGlobal("location", { ...window.location, replace });
+    renderOAuthMcp(false);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Authorize" }));
+
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("https://idp.test/auth"),
+    );
+  });
 });

@@ -173,3 +173,46 @@ describe("ChatSettingsDialog", () => {
     }
   });
 });
+
+describe("ChatSettingsDialog inputs", () => {
+  const numberFields = [
+    ["Temperature", "temperature", "0.7", 0.7],
+    ["Seed", "seed", "42", 42],
+    ["Top-p", "topP", "0.9", 0.9],
+    ["Top-k", "topK", "40", 40],
+    ["Presence Penalty", "presencePenalty", "0.5", 0.5],
+    ["Frequency Penalty", "frequencyPenalty", "-0.5", -0.5],
+  ] as const;
+
+  // Each setting reaches the Chat as a number of the kind the schema expects:
+  // floats for the continuous ones, whole numbers for the counts.
+  it.each(numberFields)(
+    "forwards a typed %s as a number",
+    (label, field, value, parsed) => {
+      const onChange = renderDialog();
+
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+      expect(onChange).toHaveBeenCalledWith({ [field]: parsed });
+    },
+  );
+
+  // Emptying a field unsets it, so the Provider's default applies again.
+  it.each(numberFields)("clears %s when emptied", (label, field) => {
+    const onChange = renderDialog({ [field]: 1 });
+
+    fireEvent.change(screen.getByLabelText(label), { target: { value: "" } });
+
+    expect(onChange).toHaveBeenCalledWith({ [field]: undefined });
+  });
+
+  it("forwards typed instructions", () => {
+    const onChange = renderDialog();
+
+    fireEvent.change(screen.getByLabelText("Instructions"), {
+      target: { value: "Be terse." },
+    });
+
+    expect(onChange).toHaveBeenCalledWith({ instructions: "Be terse." });
+  });
+});
