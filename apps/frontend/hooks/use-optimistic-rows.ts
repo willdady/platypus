@@ -16,23 +16,17 @@ type Override<T> = Partial<T> | null;
  * list through `apply`; `isPending` is true only while that row's write runs.
  */
 export function useOptimisticRows<T extends { readonly id: string }>() {
-  const [overrides, setOverrides] = useState<ReadonlyMap<string, Override<T>>>(
-    new Map(),
-  );
-
-  const setOverride = (id: string, override?: Override<T>) =>
-    setOverrides((prev) => {
-      const next = new Map(prev);
-      if (override === undefined) next.delete(id);
-      else next.set(id, override);
-      return next;
-    });
+  // Each run's entry is its own object, so a run only clears the override it
+  // set, not one a later write on the same row laid over it.
+  const [overrides, setOverrides] = useState<
+    ReadonlyMap<string, { readonly override: Override<T> }>
+  >(new Map());
 
   const apply = (rows: readonly T[]): T[] =>
     rows.flatMap((row) => {
-      if (!overrides.has(row.id)) return [row];
-      const override = overrides.get(row.id);
-      return override ? [{ ...row, ...override }] : [];
+      const entry = overrides.get(row.id);
+      if (!entry) return [row];
+      return entry.override ? [{ ...row, ...entry.override }] : [];
     });
 
   const run = async (
@@ -41,7 +35,8 @@ export function useOptimisticRows<T extends { readonly id: string }>() {
     write: () => Promise<WriteOutcome<unknown>>,
     revalidate: () => unknown,
   ) => {
-    setOverride(id, override);
+    const entry = { override };
+    setOverrides((prev) => new Map(prev).set(id, entry));
     try {
       const outcome = await write();
       if (outcome.outcome === "success") {
@@ -50,7 +45,12 @@ export function useOptimisticRows<T extends { readonly id: string }>() {
         toast.error(outcome.message);
       }
     } finally {
-      setOverride(id);
+      setOverrides((prev) => {
+        if (prev.get(id) !== entry) return prev;
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 

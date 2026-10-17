@@ -317,18 +317,15 @@ export function AppSidebar() {
     }
   };
 
-  const handleTogglePin = (chat: ChatListItem) =>
+  const handleTogglePin = (chat: ChatListItem) => {
+    const data = { isPinned: !chat.isPinned };
     void pins.run(
       chat.id,
-      { isPinned: !chat.isPinned },
-      () =>
-        writeEntity(backendUrl, "chat", scope, {
-          id: chat.id,
-          data: { isPinned: !chat.isPinned },
-        }),
+      data,
+      () => writeEntity(backendUrl, "chat", scope, { id: chat.id, data }),
       revalidateChatList,
     );
-
+  };
 
   return (
     <>

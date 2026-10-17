@@ -201,9 +201,9 @@ export const AgentsList = ({
     );
   };
 
-  const agents = pins.apply(agentsData?.results || []).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const agents = pins
+    .apply(agentsData?.results || [])
+    .sort((a, b) => a.name.localeCompare(b.name));
   // A Pinned Agent shows only in the Pinned group, above the rest.
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);

@@ -85,8 +85,12 @@ export function NotificationsDropdown({
   );
   const totalCount = unreadNotificationCount + invitations.length;
 
-  const revalidate = () =>
-    Promise.all([mutateNotifications(), mutateUnreadCount()]);
+  // The list first: while a row's override stands the badge already counts
+  // it as read, so a new count landing before the list would count it twice.
+  const revalidate = async () => {
+    await mutateNotifications();
+    await mutateUnreadCount();
+  };
 
   const handleMarkAsRead = (notificationId: string) => {
     if (!backendUrl || !orgId || !workspaceId) return;
