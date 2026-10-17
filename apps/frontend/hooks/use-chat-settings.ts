@@ -52,8 +52,9 @@ export const useChatSettings = (
   useResetOnChange(chatData?.id, initializeFromChat);
   useResetOnChange(agentId, initializeFromChat);
 
-  // A new object only when a patch arrives, so the turn built from it — and
-  // the callbacks `ChatMessage` is memoised on — survive a streamed token (#869).
+  // One object held in state, replaced only by a patch or a re-sync, so the
+  // turn built from it — and the callbacks `ChatMessage` is memoised on —
+  // survive a streamed token (#869).
   const updateSettings = useCallback(
     (patch: Partial<ChatSettings>) =>
       setSettings((prev) => ({ ...prev, ...patch })),

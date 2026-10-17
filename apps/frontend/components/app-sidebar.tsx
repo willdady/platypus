@@ -119,6 +119,7 @@ export function AppSidebar() {
   >({});
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isTogglingPin, setIsTogglingPin] = useState(false);
 
   const { mutate } = useSWRConfig();
@@ -289,13 +290,14 @@ export function AppSidebar() {
     if (!deleteChatId) return;
 
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       const outcome = await writeEntity(backendUrl, "chat", scope, {
         id: deleteChatId,
       });
 
       if (outcome.outcome !== "success") {
-        toast.error(outcome.message);
+        setDeleteError(outcome.message);
         return;
       }
 
@@ -695,11 +697,17 @@ export function AppSidebar() {
 
       <DeleteConfirmDialog
         open={!!deleteChatId}
-        onOpenChange={(open) => !open && setDeleteChatId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteChatId(null);
+            setDeleteError(null);
+          }
+        }}
         title="Delete Chat"
         description="Are you sure you want to delete this chat? This action cannot be undone."
         onConfirm={handleDeleteChat}
         loading={isDeleting}
+        error={deleteError}
       />
     </>
   );
