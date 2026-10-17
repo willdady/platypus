@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import {
   authMock,
+  authState,
   swrMock,
   mockScopedSWR,
   resetListHarness,
@@ -118,5 +119,19 @@ describe("UsersList list states", () => {
       screen.getByRole("columnheader", { name: "Created" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("No users found.")).not.toBeInTheDocument();
+  });
+});
+
+describe("UsersList session gate", () => {
+  it("makes no request until the session has settled", async () => {
+    authState.user = null;
+    authState.isPending = true;
+    // Strict with nothing registered: any non-null key would throw.
+    mockScopedSWR({}, { strict: true });
+    await renderList(<UsersList />);
+
+    expect(
+      screen.getByRole("status", { name: "Loading users" }),
+    ).toBeInTheDocument();
   });
 });

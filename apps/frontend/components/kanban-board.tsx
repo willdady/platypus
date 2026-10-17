@@ -41,8 +41,12 @@ import type {
   KanbanCardPriority,
   KanbanLabel,
 } from "@platypus/schemas";
-import { joinUrl } from "@/lib/utils";
-import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
+import {
+  scopedUrl,
+  writeEntity,
+  type Scope,
+  type Serialized,
+} from "@/lib/api-write";
 import {
   applyCardMove,
   moveCard,
@@ -133,15 +137,12 @@ export function KanbanBoard({
   );
   const searchParams = useSearchParams();
 
-  const baseUrl = joinUrl(
-    backendUrl,
-    `/organizations/${orgId}/workspaces/${workspaceId}/boards/${boardId}`,
-  );
   const scope: Scope = useMemo(
     () => ({ orgId, workspaceId }),
     [orgId, workspaceId],
   );
   const boardPath = `boards/${boardId}`;
+  const baseUrl = scopedUrl(backendUrl, boardPath, scope);
 
   const { data, error, mutate } = useScopedSWR<KanbanBoardState>(
     `${boardPath}/state`,

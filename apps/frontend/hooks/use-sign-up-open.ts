@@ -13,6 +13,7 @@ import type { Serialized } from "@/lib/api-write";
  */
 export function useSignUpOpen(): boolean | undefined {
   const backendUrl = useBackendUrl();
+  // Raw `useSWR`, not `useScopedSWR`: read signed out, on the sign-in page.
   const { data } = useSWR<Serialized<SignUpAvailability>>(
     backendUrl ? joinUrl(backendUrl, "/sign-up") : null,
     fetcher,

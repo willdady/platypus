@@ -51,6 +51,7 @@ export default function InviteTokenPage() {
     window.history.replaceState(null, "", withBasePath(appRoutes.invite));
   }, []);
 
+  // Raw `useSWR`, not `useScopedSWR`: the link resolves before sign-in.
   const { data, error, isLoading } = useSWR<
     Serialized<InvitationLinkResolution>
   >(

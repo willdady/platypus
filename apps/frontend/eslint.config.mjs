@@ -15,6 +15,17 @@ const RAW_WRITE_FETCH = {
     "Writes go through writeEntity()/writeAt() in lib/api-write.ts, not a raw fetch() — see ADR-0010 and #563.",
 };
 
+// A backend path is built by `scopedUrl`/`scopedPath` (lib/api-write.ts), or by
+// `backendPath` (lib/server-read.ts) on the server — a tagged template, so
+// exempt here. A hand-built copy is a second spelling of the SWR key, and seeding
+// or invalidation silently misses when the two drift (#1554).
+const HAND_BUILT_ORG_PATH = {
+  selector:
+    "TemplateLiteral[quasis.0.value.raw=/^\\/organizations\\//]:not(TaggedTemplateExpression > .quasi)",
+  message:
+    "Build backend paths with scopedUrl()/scopedPath() from lib/api-write.ts (or backendPath on the server), not a template literal.",
+};
+
 // Call sites allowed a raw write `fetch()` (see the rule below).
 const RAW_FETCH_EXEMPT = [
   "lib/api-write.ts",
@@ -116,12 +127,25 @@ const eslintConfig = defineConfig([
         "error",
         TOP_LEVEL_FUNCTION_DECLARATIONS,
         RAW_WRITE_FETCH,
+        HAND_BUILT_ORG_PATH,
       ],
     },
   },
-  // The files exempt from the raw-fetch rule above still get the top-level one.
+  // The files exempt from the raw-fetch rule above still get the others, bar
+  // lib/api-write.ts, home of the `scopedPath` everyone else must use.
   {
     files: RAW_FETCH_EXEMPT,
+    ignores: ["lib/api-write.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        TOP_LEVEL_FUNCTION_DECLARATIONS,
+        HAND_BUILT_ORG_PATH,
+      ],
+    },
+  },
+  {
+    files: ["lib/api-write.ts"],
     rules: {
       "no-restricted-syntax": ["error", TOP_LEVEL_FUNCTION_DECLARATIONS],
     },
@@ -153,7 +177,7 @@ const eslintConfig = defineConfig([
   {
     files: ["components/widgets/**"],
     rules: {
-      "no-restricted-syntax": ["error", RAW_WRITE_FETCH],
+      "no-restricted-syntax": ["error", RAW_WRITE_FETCH, HAND_BUILT_ORG_PATH],
       "@typescript-eslint/consistent-type-definitions": "off",
       "better-tailwindcss/enforce-shorthand-classes": "off",
       "better-tailwindcss/no-restricted-classes": "off",

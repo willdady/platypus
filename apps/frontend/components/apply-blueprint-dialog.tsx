@@ -21,8 +21,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldLabel } from "@/components/ui/field";
 import type { Workspace } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt } from "@/lib/api-write";
 import { useBackendUrl } from "@/components/auth-provider";
 
 // Apply a Blueprint to an existing Workspace (ADR-0008). The macro is additive
@@ -73,16 +72,10 @@ export function ApplyBlueprintDialog({
       attached: number;
       skipped: number;
       total: number;
-    }>(
-      joinUrl(
-        backendUrl,
-        `/organizations/${orgId}/blueprints/${blueprintId}/apply`,
-      ),
-      {
-        method: "POST",
-        data: { workspaceId },
-      },
-    );
+    }>(scopedUrl(backendUrl, `blueprints/${blueprintId}/apply`, { orgId }), {
+      method: "POST",
+      data: { workspaceId },
+    });
     if (outcome.outcome === "success") {
       setResult(outcome.data);
     } else {

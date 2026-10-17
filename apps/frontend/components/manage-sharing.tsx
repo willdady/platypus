@@ -25,8 +25,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useState, type ReactNode } from "react";
-import { cn, joinUrl } from "@/lib/utils";
-import { attachmentsEntity, writeAt } from "@/lib/api-write";
+import { cn } from "@/lib/utils";
+import { attachmentsEntity, scopedUrl, writeAt } from "@/lib/api-write";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -196,16 +196,17 @@ export function ManageAttachmentsDialog({
     try {
       const outcome = isAttached
         ? await writeAt(
-            joinUrl(
+            scopedUrl(
               backendUrl,
-              `/organizations/${orgId}/attachments/${resourceType}/${resourceId}/${workspaceId}`,
+              `attachments/${resourceType}/${resourceId}/${workspaceId}`,
+              { orgId },
             ),
             { method: "DELETE" },
           )
-        : await writeAt(
-            joinUrl(backendUrl, `/organizations/${orgId}/attachments`),
-            { method: "POST", data: { resourceType, resourceId, workspaceId } },
-          );
+        : await writeAt(scopedUrl(backendUrl, "attachments", { orgId }), {
+            method: "POST",
+            data: { resourceType, resourceId, workspaceId },
+          });
       if (outcome.outcome !== "success") {
         setError(outcome.message);
         return;
