@@ -612,9 +612,13 @@ filtered to that Trigger.
 
 The timeline answers "where did this run's time go?". It is a waterfall: one
 line per thing the Agent did, laid out against the run's whole span, so a long
-bar is a long wait. Each line is one of four kinds:
+bar is a long wait. Each line is one of five kinds:
 
 - a **tool call**, named for the tool;
+- a stretch of **generating arguments** for a tool call, named for the tool:
+  the model writing out what to pass to it, which comes just before the call
+  itself and can take a minute or more when that is a long text, such as a
+  task handed to a Sub-Agent;
 - a stretch of **thinking** (the model's reasoning);
 - a stretch of **generating** (the model writing its answer);
 - a **delegation** to a Sub-Agent, named for that Sub-Agent, with the

@@ -210,7 +210,7 @@ One execution of a **Trigger** — the headless shape of a **Drive**. Recorded s
 _Avoid_: trigger execution, scheduled run (ambiguous between the Trigger shapes).
 
 **Run event**:
-A durable, timestamped record of one thing that happened during a **Trigger run** — a tool call, a stretch of reasoning, a stretch of generated text, or a delegation to a **Sub-Agent**. Carries what kind of thing it was, when it started, how long it took and how it ended; never what it said. No tool inputs, no tool outputs, no reasoning or message content (ADR-0023). A failed event carries a capped error string, and nothing else carries content at all.
+A durable, timestamped record of one thing that happened during a **Trigger run** — a tool call, the model streaming a tool call's arguments before it runs, a stretch of reasoning, a stretch of generated text, or a delegation to a **Sub-Agent**. Carries what kind of thing it was, when it started, how long it took and how it ended; never what it said. No tool inputs, no tool outputs, no reasoning or message content (ADR-0023). A failed event carries a capped error string, and nothing else carries content at all.
 _Avoid_: span, trace, log entry — the first two drag OpenTelemetry's model in and these are not OTel spans; the third implies free-text and unbounded.
 
 **Run timeline**:

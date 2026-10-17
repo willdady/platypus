@@ -349,12 +349,14 @@ describe("a delegated run's Run events", () => {
     ]);
 
     // Each delegate's own work hangs off ITS delegate event — the tool call it
-    // made and the text it wrote — and nothing of either is at the root.
+    // made (its arguments' stretch, then the call) and the text it wrote — and
+    // nothing of any of them is at the root.
     for (const delegate of delegates) {
       const children = events.events.filter(
         (e) => e.parentEventId === delegate.id,
       );
       expect(children.map((c) => [c.type, c.toolName, c.status])).toEqual([
+        ["tool-input", "work", "completed"],
         ["tool-call", "work", "completed"],
         ["text", null, "completed"],
       ]);
@@ -363,10 +365,12 @@ describe("a delegated run's Run events", () => {
       }
     }
     const rootEvents = events.events.filter((e) => e.parentEventId === null);
-    expect(rootEvents.map((e) => e.type)).toEqual([
-      "delegate",
-      "delegate",
-      "text",
+    expect(rootEvents.map((e) => [e.type, e.toolName])).toEqual([
+      ["tool-input", DELEGATE_TOOL_NAME],
+      ["delegate", "Alpha"],
+      ["tool-input", DELEGATE_TOOL_NAME],
+      ["delegate", "Beta"],
+      ["text", null],
     ]);
 
     // Nothing the delegates saw or said is on the timeline.

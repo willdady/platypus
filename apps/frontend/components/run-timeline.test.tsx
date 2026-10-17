@@ -67,6 +67,26 @@ describe("RunTimeline", () => {
     expect(depths).toEqual(["0", "1", "0"]);
   });
 
+  it("labels argument generation for its tool, in its own colour", () => {
+    const { container } = render(
+      <RunTimeline
+        events={[
+          event({ id: "i", type: "tool-input", toolName: "delegate" }),
+          event({ id: "c", seq: 1, startedAt: T0 + 100 }),
+        ]}
+        runStatus="success"
+      />,
+    );
+
+    expect(
+      screen.getByText("Generating arguments for delegate…"),
+    ).toBeInTheDocument();
+    const [input, call] = Array.from(
+      container.querySelectorAll<HTMLElement>('[role="img"]'),
+    );
+    expect(input.className).not.toBe(call.className);
+  });
+
   it("draws parallel tool calls as overlapping bars", () => {
     const { container } = render(
       <RunTimeline

@@ -2739,14 +2739,16 @@ export type TriggerRunWithTriggerList = z.infer<
 // Run events (#647, ADR-0023)
 
 /**
- * What kind of thing a **Run event** records. Shape only: a tool call, a
- * stretch of reasoning, a stretch of generated text, or a delegation to a
- * Sub-Agent (whose own events nest beneath it). There is deliberately no
+ * What kind of thing a **Run event** records. Shape only: a tool call, the
+ * model streaming a tool call's arguments (`tool-input`, before the call
+ * runs), a stretch of reasoning, a stretch of generated text, or a delegation
+ * to a Sub-Agent (whose own events nest beneath it). There is deliberately no
  * `step` — the SDK exposes only a step-finish hook, so a step event could not
  * exist when its children are emitted — and no `failed`: failure is a status.
  */
 export const runEventTypeSchema = z.enum([
   "tool-call",
+  "tool-input",
   "reasoning",
   "text",
   "delegate",

@@ -1141,7 +1141,7 @@ export const triggerRunEvent = pgTable(
     // Monotonic insertion order within the run, for incremental polling.
     // Display order is `startedAt`, so parallel tool calls read as overlapping.
     seq: t.integer("seq").notNull(),
-    // tool-call | reasoning | text | delegate
+    // tool-call | tool-input | reasoning | text | delegate
     type: t.text("type").notNull(),
     toolName: t.text("tool_name"),
     // An absolute wall-clock instant in epoch milliseconds — not an offset from

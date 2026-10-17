@@ -316,7 +316,7 @@ const toolKey = (scope: RunEventScope, toolCallId: string): string =>
 
 const stretchKey = (
   scope: RunEventScope,
-  kind: "text" | "reasoning",
+  kind: "text" | "reasoning" | "tool-input",
   id: string,
 ): string => `${scope.parentEventId ?? "root"}:${kind}:${id}`;
 
@@ -343,11 +343,12 @@ const toolSpec = (toolName: string, input: unknown): OpenSpec => {
  *
  * The UI stream is the instrumentation surface all three drives already fold,
  * so one switch serves the headless drive and a delegate's alike. A text or
- * reasoning stretch opens at its start chunk and closes at its end; a tool
- * call opens once its input is complete — not at input start, which would
- * count the model's own argument streaming as tool time — and closes on its
- * output or error. Deltas, inputs and outputs are read for their ids and
- * nothing else.
+ * reasoning stretch opens at its start chunk and closes at its end. The model
+ * streaming a tool call's arguments is a `tool-input` stretch of its own, from
+ * input start to input complete (#1561); the tool call opens only once its
+ * input is complete, so its duration stays pure tool time, and closes on its
+ * output or error. A provider that sends the input whole records no argument
+ * stretch. Deltas, inputs and outputs are read for their ids and nothing else.
  */
 export const recordUiChunk = (
   scope: RunEventScope,
@@ -377,7 +378,17 @@ export const recordUiChunk = (
         status: "completed",
       });
       return;
+    case "tool-input-start":
+      recorder.openKeyed(
+        stretchKey(scope, "tool-input", chunk.toolCallId),
+        parentEventId,
+        { type: "tool-input", toolName: chunk.toolName },
+      );
+      return;
     case "tool-input-available":
+      recorder.closeKeyed(stretchKey(scope, "tool-input", chunk.toolCallId), {
+        status: "completed",
+      });
       recorder.openKeyed(
         toolKey(scope, chunk.toolCallId),
         parentEventId,
@@ -387,6 +398,10 @@ export const recordUiChunk = (
     case "tool-input-error":
       // The model produced an input the tool could not take: the call never
       // ran, and that is the failure the event records.
+      recorder.closeKeyed(stretchKey(scope, "tool-input", chunk.toolCallId), {
+        status: "error",
+        error: chunk.errorText,
+      });
       recorder.openKeyed(
         toolKey(scope, chunk.toolCallId),
         parentEventId,

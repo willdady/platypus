@@ -319,22 +319,28 @@ describe("recordUiChunk", () => {
     ]);
   });
 
-  it("opens a tool call when its input is complete and closes it on its output", () => {
-    const { scope, recorder } = scopeOf();
+  it("records argument streaming as its own event, then the tool call from input-available to output", () => {
+    const { recorder, c } = recorderOf();
+    const scope = { recorder, parentEventId: null };
 
     recordUiChunk(scope, {
       type: "tool-input-start",
       toolCallId: "tc1",
       toolName: "search",
     });
-    expect(recorder.events).toHaveLength(0);
-
+    c.tick(70_000);
+    recordUiChunk(scope, {
+      type: "tool-input-delta",
+      toolCallId: "tc1",
+      inputTextDelta: '{"query":"secret things"}',
+    });
     recordUiChunk(scope, {
       type: "tool-input-available",
       toolCallId: "tc1",
       toolName: "search",
       input: { query: "secret things" },
     });
+    c.tick(250);
     recordUiChunk(scope, {
       type: "tool-output-available",
       toolCallId: "tc1",
@@ -343,14 +349,117 @@ describe("recordUiChunk", () => {
 
     expect(recorder.events).toEqual([
       expect.objectContaining({
+        type: "tool-input",
+        toolName: "search",
+        status: "completed",
+        durationMs: 70_000,
+      }),
+      expect.objectContaining({
         type: "tool-call",
         toolName: "search",
         status: "completed",
+        durationMs: 250,
       }),
     ]);
     // Neither the input nor the output survives anywhere on the event.
     expect(JSON.stringify(recorder.events)).not.toContain("secret things");
     expect(JSON.stringify(recorder.events)).not.toContain("xxxxx");
+  });
+
+  it("records a tool call whose input arrived whole with no argument event", () => {
+    const { scope, recorder } = scopeOf();
+
+    recordUiChunk(scope, {
+      type: "tool-input-available",
+      toolCallId: "tc1",
+      toolName: "search",
+      input: {},
+    });
+
+    expect(recorder.events.map((e) => e.type)).toEqual(["tool-call"]);
+  });
+
+  it("names a delegation's argument event for the tool, and nests a Sub-Agent's beneath its delegate", () => {
+    const { scope, recorder } = scopeOf();
+
+    recordUiChunk(scope, {
+      type: "tool-input-start",
+      toolCallId: "tc1",
+      toolName: DELEGATE_TOOL_NAME,
+    });
+    recordUiChunk(scope, {
+      type: "tool-input-available",
+      toolCallId: "tc1",
+      toolName: DELEGATE_TOOL_NAME,
+      input: { subAgent: "Researcher", task: "find everything" },
+    });
+    const delegateId = recorder.events[1].id;
+    const child = { recorder, parentEventId: delegateId };
+    // The Sub-Agent reuses tool-call ids its parent already used.
+    recordUiChunk(child, {
+      type: "tool-input-start",
+      toolCallId: "tc1",
+      toolName: "search",
+    });
+    recordUiChunk(child, {
+      type: "tool-input-available",
+      toolCallId: "tc1",
+      toolName: "search",
+      input: {},
+    });
+
+    expect(
+      recorder.events.map((e) => [e.type, e.toolName, e.parentEventId]),
+    ).toEqual([
+      ["tool-input", DELEGATE_TOOL_NAME, null],
+      ["delegate", "Researcher", null],
+      ["tool-input", "search", delegateId],
+      ["tool-call", "search", delegateId],
+    ]);
+    expect(recorder.events[2].status).toBe("completed");
+  });
+
+  it("closes a rejected input's argument event as an error, counting the call failed once", () => {
+    const { scope, recorder } = scopeOf();
+
+    recordUiChunk(scope, {
+      type: "tool-input-start",
+      toolCallId: "tc1",
+      toolName: "search",
+    });
+    recordUiChunk(scope, {
+      type: "tool-input-error",
+      toolCallId: "tc1",
+      toolName: "search",
+      input: {},
+      errorText: "Invalid input for tool search",
+    });
+
+    expect(recorder.events.map((e) => [e.type, e.status])).toEqual([
+      ["tool-input", "error"],
+      ["tool-call", "error"],
+    ]);
+    expect(recorder.events[0].error).toMatchObject({
+      message: "Invalid input for tool search",
+      truncated: false,
+    });
+    expect(recorder.failedToolCalls).toBe(1);
+  });
+
+  it("leaves no argument event running once the run ends mid-stream", () => {
+    const { scope, recorder } = scopeOf();
+
+    recordUiChunk(scope, {
+      type: "tool-input-start",
+      toolCallId: "tc1",
+      toolName: "search",
+    });
+    recorder.closeOpen("cancelled");
+
+    expect(recorder.events[0]).toMatchObject({
+      type: "tool-input",
+      status: "cancelled",
+    });
   });
 
   it("records a tool error as a status with the error string", () => {
