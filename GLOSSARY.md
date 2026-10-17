@@ -132,6 +132,10 @@ _Avoid_: tool context (that is the scope handed to a Tool set factory), tool loa
 The one presentation a reader sees for a native Provider search, a Web-search backend's `web_search` or `read_url`, and `@platypus/web-fetch`'s `fetchUrl` alike — a reader cannot tell which of them ran. Backed by a normalized result the backend computes once, server-side, discriminated by `kind: "search" | "page" | "find"` rather than by which tool produced it; the frontend renders only that shape and carries no vendor knowledge of its own. A tool the backend does not recognise as one of these — an MCP server's own `web_search`, a native search whose vendor payload it cannot read — keeps the generic Tool renderer, on the same "never guess a tool's identity from its payload" rule the block itself is built on.
 _Avoid_: web search card, search result block (both name only the search case; the block also covers a page read).
 
+**Tool call group**:
+Adjacent tool calls in one Chat message, shown as a single collapsible row that expands to each call in its own right. Any other part between two calls — text, reasoning, or a call with interactive UI of its own (a Sub-Agent delegation, a file download) — ends the group. Display only; the **Transcript** keeps every call as it was.
+_Avoid_: tool group (reads as a **Tool set**), tool run (a run is something else), batch, roll-up.
+
 **MCP**:
 A Model Context Protocol server registered at Workspace scope, or — as a Shared resource — at Organization scope. Resolves to a Tool set at Chat-turn time.
 

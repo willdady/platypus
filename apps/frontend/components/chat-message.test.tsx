@@ -101,6 +101,15 @@ describe("ChatMessage agent attribution", () => {
 
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
+/** Opens every Tool call group, so the calls inside it can be reached. */
+function openToolCallGroups() {
+  for (const header of screen.queryAllByRole("button", {
+    name: /^\d+ tool calls?:/,
+  })) {
+    fireEvent.click(header);
+  }
+}
+
 describe("ChatMessage part that fails to render", () => {
   // A tool input no JSON can carry: rendering it throws, the way a malformed
   // part from a misbehaving tool would.
@@ -123,8 +132,10 @@ describe("ChatMessage part that fails to render", () => {
     ],
   };
 
-  const openBrokenTool = () =>
-    fireEvent.click(screen.getByRole("button", { name: /broken/ }));
+  const openBrokenTool = () => {
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^broken/ }));
+  };
 
   it("replaces only that part with a compact notice", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
@@ -267,8 +278,10 @@ describe("ChatMessage sources from a Web-search backend", () => {
     fireEvent.click(screen.getByRole("button", { name: /Used \d+ sources/ }));
 
   /** Same for the tool card, whose body holds the answer and any error. */
-  const openToolCard = () =>
-    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
+  const openToolCard = () => {
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^Web search/ }));
+  };
 
   it("renders a Sources pill per result, titled by the backend's title", () => {
     renderMessage(
@@ -440,11 +453,11 @@ describe("ChatMessage sources from a Web-search backend", () => {
     renderMessage(
       searchMessage({ kind: "search", query: "platypus habitat", results }),
     );
+    openToolCard();
 
     expect(
-      screen.getByRole("button", { name: /Web search.*platypus habitat/ }),
+      screen.getByRole("button", { name: /^Web search.*platypus habitat/ }),
     ).toBeInTheDocument();
-    openToolCard();
 
     expect(screen.getByText(/2 results/)).toBeInTheDocument();
     expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
@@ -530,7 +543,8 @@ describe("ChatMessage sources from a Web-search backend", () => {
     } as unknown as PlatypusUIMessage);
 
     expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^Web search/ }));
     expect(screen.getByText("Parameters")).toBeInTheDocument();
   });
 });
@@ -572,7 +586,8 @@ describe("ChatMessage and provider-executed web_search", () => {
   it("shows a bare count on the compact card, not the raw vendor payload", () => {
     renderMessage(nativeSearchMessage());
 
-    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^Web search/ }));
     expect(screen.getByText("1 result")).toBeInTheDocument();
     expect(
       screen.queryByText(/listed above as sources/),
@@ -678,7 +693,8 @@ describe("ChatMessage and provider-executed web_search", () => {
       ],
     } as unknown as PlatypusUIMessage);
 
-    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^Web search/ }));
     expect(screen.getByText("Parameters")).toBeInTheDocument();
     expect(screen.queryByText("Searching…")).not.toBeInTheDocument();
     expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
@@ -1288,9 +1304,10 @@ describe("ChatMessage dynamic tool renderer", () => {
 
   it("names the row after the tool and stays collapsed until clicked", () => {
     renderMessage(dynamicToolMessage("output-available"));
+    openToolCallGroups();
 
     const trigger = screen.getByRole("button", {
-      name: /github__create_issue/,
+      name: /^github__create_issue/,
     });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Completed")).toBeInTheDocument();
@@ -1306,5 +1323,137 @@ describe("ChatMessage dynamic tool renderer", () => {
     renderMessage(dynamicToolMessage("input-available"));
 
     expect(screen.getByText("Running")).toBeInTheDocument();
+  });
+});
+
+describe("ChatMessage Tool call groups", () => {
+  const call = (id: string, toolName: string, state = "output-available") =>
+    ({
+      type: "dynamic-tool",
+      toolName,
+      toolCallId: id,
+      state,
+      input: {},
+      output: state === "output-available" ? "ok" : undefined,
+      errorText: state === "output-error" ? "boom" : undefined,
+    }) as unknown as MessagePart;
+
+  const delegate = {
+    type: "tool-delegateToResearchBot",
+    toolCallId: "d1",
+    state: "output-available",
+    input: { task: "Find it" },
+    output: { entries: [], text: "Found." },
+  } as unknown as MessagePart;
+
+  const message = (parts: MessagePart[]): PlatypusUIMessage => ({
+    id: "m1",
+    role: "assistant",
+    parts,
+  });
+
+  const groupHeaders = () =>
+    screen.queryAllByRole("button", { name: /^\d+ tool calls?:/ });
+
+  it("folds adjacent calls into one group, across a step boundary", () => {
+    renderMessage(
+      message([
+        call("c1", "alpha"),
+        { type: "step-start" },
+        call("c2", "beta"),
+        call("c3", "alpha"),
+      ]),
+    );
+
+    expect(groupHeaders().map((header) => header.ariaLabel)).toEqual([
+      "3 tool calls: alpha, beta",
+    ]);
+  });
+
+  it("ends a group at text and at a Sub-Agent delegation", () => {
+    renderMessage(
+      message([
+        call("c1", "alpha"),
+        { type: "text", text: "Between" },
+        call("c2", "beta"),
+        delegate,
+        call("c3", "gamma"),
+      ]),
+    );
+
+    expect(groupHeaders().map((header) => header.ariaLabel)).toEqual([
+      "1 tool call: alpha",
+      "1 tool call: beta",
+      "1 tool call: gamma",
+    ]);
+    // The delegation renders as its own card, outside any group.
+    expect(screen.getByText("Research Bot")).toBeVisible();
+  });
+
+  it("keeps each call its own disclosure inside an opened group", () => {
+    renderMessage(message([call("c1", "alpha"), call("c2", "beta")]));
+    openToolCallGroups();
+
+    fireEvent.click(screen.getByRole("button", { name: /^beta/ }));
+
+    expect(screen.getByRole("button", { name: /^alpha/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: /^beta/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("shows a verb while the last group of a streaming reply is active", () => {
+    renderMessage(message([call("c1", "alpha", "input-available")]), {
+      status: "streaming",
+    });
+
+    expect(groupHeaders()[0]).not.toHaveTextContent("alpha");
+  });
+
+  it("settles a group once a later part follows it, mid-turn", () => {
+    renderMessage(
+      message([call("c1", "alpha"), { type: "text", text: "Next" }]),
+      { status: "streaming" },
+    );
+
+    expect(groupHeaders()[0]).toHaveTextContent("alpha");
+  });
+
+  it("settles the last group when the turn is stopped", () => {
+    const parts = [call("c1", "alpha", "input-available")];
+    const { rerender } = renderMessage(message(parts), { status: "streaming" });
+    expect(groupHeaders()[0]).not.toHaveTextContent("alpha");
+
+    rerender(
+      <ChatMessage
+        message={message(parts)}
+        isLastMessage
+        status="ready"
+        canSendMessages
+        agents={agents}
+        onEditStart={vi.fn()}
+        onMessageDelete={vi.fn()}
+        onSwitchAlternative={vi.fn()}
+        onCopyMessage={vi.fn()}
+        copiedMessageId={null}
+      />,
+    );
+
+    expect(groupHeaders()[0]).toHaveTextContent("alpha");
+  });
+
+  it("badges a settled group when one of its calls failed", () => {
+    renderMessage(
+      message([call("c1", "alpha"), call("c2", "beta", "output-error")]),
+    );
+
+    expect(groupHeaders()[0]).toHaveAccessibleName(
+      "2 tool calls: alpha, beta (with errors)",
+    );
+    expect(groupHeaders()[0]).toHaveTextContent("Error");
   });
 });

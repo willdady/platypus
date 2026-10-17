@@ -25,6 +25,7 @@ import {
   ToolHeader,
   ToolInput,
   ToolOutput,
+  humanizeToolType,
 } from "./ai-elements/tool";
 import type {
   DynamicToolUIPart,
@@ -69,8 +70,11 @@ import { FsDownloadTool } from "./fs-download-tool";
 import {
   WebToolCard,
   isNormalizedWebToolPart,
+  normalizedWebTool,
   webSearchSources,
+  webToolTitle,
 } from "./web-search-tool";
+import { ToolCallGroup, partitionParts } from "./tool-call-group";
 import type { Serialized } from "@/lib/api-write";
 
 /**
@@ -191,6 +195,37 @@ export function isGenericToolPart(part: MessagePart): part is MessageToolPart {
     isToolUIPart(part) &&
     !specializedToolMatchers.some((matches) => matches(part))
   );
+}
+
+/**
+ * Tool calls that sit in a Tool call group. Sub-Agent delegations and file
+ * downloads have interactive UI of their own, so they stand alone and end
+ * the group around them.
+ */
+function isGroupableToolPart(
+  part: MessagePart,
+): part is MessageToolPart | DynamicToolUIPart {
+  return (
+    isToolUIPart(part) && !isSubAgentToolPart(part) && !isFsDownloadPart(part)
+  );
+}
+
+/** A call's name in its group's header: the Tool's name, not its row's label. */
+function toolCallName(part: MessageToolPart | DynamicToolUIPart): string {
+  if (isDynamicToolPart(part)) return part.toolName;
+  const web = normalizedWebTool(part);
+  return web ? webToolTitle(web.kind) : humanizeToolType(part.type);
+}
+
+/** Whether a call's own row shows it as failed. */
+function toolCallErrored(part: MessagePart): boolean {
+  if (isLoadSkillPart(part) || isReadSkillFilePart(part)) {
+    return !!(part.errorText || (part.output && "error" in part.output));
+  }
+  if (isWebToolPart(part)) {
+    return !!(part.errorText ?? normalizedWebTool(part)?.error);
+  }
+  return isToolUIPart(part) && part.state === "output-error";
 }
 
 function isImageFilePart(part: MessagePart): part is FileUIPart {
@@ -488,6 +523,18 @@ export const ChatMessage = memo(function ChatMessage({
   const isTurnInFlight = isInFlight(status);
   const isAwaitedReply =
     message.role === "assistant" && isLastMessage && isTurnInFlight;
+
+  const renderPart = (part: MessagePart, i: number) => {
+    const renderer = partRenderers.find((r) => r.matches(part));
+    return renderer ? (
+      <MessagePartBoundary
+        key={`${message.id}-${i}`}
+        resetKey={part}
+        render={() => renderer.render(part, i)}
+      />
+    ) : null;
+  };
+  const segments = partitionParts(message.parts ?? [], isGroupableToolPart);
   // Named for what it sits under, never "version" or "branch" (ADR-0026).
   const alternativeNoun = message.role === "user" ? "Message" : "Response";
   const alternativeLabel =
@@ -547,15 +594,20 @@ export const ChatMessage = memo(function ChatMessage({
           ))}
         </Sources>
       )}
-      {message.parts?.map((part, i) => {
-        const renderer = partRenderers.find((r) => r.matches(part));
-        return renderer ? (
-          <MessagePartBoundary
-            key={`${message.id}-${i}`}
-            resetKey={part}
-            render={() => renderer.render(part, i)}
-          />
-        ) : null;
+      {segments.map((segment, segmentIndex) => {
+        if (segment.kind === "part")
+          return renderPart(segment.part, segment.index);
+        const calls = segment.entries.map(({ part }) => part);
+        return (
+          <ToolCallGroup
+            key={`${message.id}-${segment.entries[0].index}`}
+            names={calls.map(toolCallName)}
+            errored={calls.some(toolCallErrored)}
+            active={isAwaitedReply && segmentIndex === segments.length - 1}
+          >
+            {segment.entries.map(({ part, index }) => renderPart(part, index))}
+          </ToolCallGroup>
+        );
       })}
       {/* How the reply was produced, then how it ended — both rows render when
       both apply, in that order. */}
