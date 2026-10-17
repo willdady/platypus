@@ -32,7 +32,7 @@ import {
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { useState, useMemo } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { ChevronsUpDown, ShieldOff } from "lucide-react";
@@ -105,6 +105,11 @@ export type TriggerTypeFields = {
 
 /** The props every trigger type's fields component takes. */
 export type TriggerFieldsProps = {
+  /**
+   * Whether the fields show. Every type's fields stay mounted, so switching
+   * type on a new trigger keeps what was entered under each.
+   */
+  active: boolean;
   /** The saved trigger being edited; absent when creating. */
   trigger?: Trigger;
   scope: { orgId: string; workspaceId: string };
@@ -200,8 +205,16 @@ const TriggerForm = ({
   const defaultAgentId = triggerId ? "" : (agents[0]?.id ?? "");
 
   const [triggerType, setTriggerType] = useState<TriggerType>("cron");
-  // The selected type's slice of the save, as its fields last reported it.
-  const [typeFields, setTypeFields] = useState<TriggerTypeFields | null>(null);
+  // Each type's slice of the save, as its fields last reported it.
+  const [typeFields, setTypeFields] = useState<
+    Partial<Record<TriggerType, TriggerTypeFields>>
+  >({});
+  const reportTypeFields = useCallback(
+    (fields: TriggerTypeFields) =>
+      setTypeFields((prev) => ({ ...prev, [fields.type]: fields })),
+    [],
+  );
+  const selectedFields = typeFields[triggerType];
 
   // Whether the Organization gate lets this Workspace take calls, so an Owner
   // is told before they wire up a caller that would only ever get 404.
@@ -270,10 +283,10 @@ const TriggerForm = ({
       search: data.search,
       includeMemories: data.includeMemories,
       type: triggerType,
-      config: typeFields?.config,
+      config: selectedFields?.config,
     }),
     onSuccess: (saved) => {
-      if (typeFields?.onSaved?.(saved)) return;
+      if (selectedFields?.onSaved?.(saved)) return;
       router.push(workspaceRoutes(orgId, workspaceId).root);
     },
     failureMessage: "Error saving trigger",
@@ -296,7 +309,7 @@ const TriggerForm = ({
   });
 
   // Until the selected type's fields report, there is nothing to save.
-  const typeFieldsValid = typeFields?.type === triggerType && typeFields.valid;
+  const typeFieldsValid = selectedFields?.valid ?? false;
 
   // A fired One-off can be renamed or deleted, never re-armed.
   const scheduleLocked = isSubmitting || !!trigger?.firedAt;
@@ -313,8 +326,6 @@ const TriggerForm = ({
     );
 
   const inboundBlocked = triggerType === "inbound" && gateClosed;
-
-  const TypeFields = TRIGGER_TYPE_FIELDS[triggerType];
 
   const form = (
     <div>
@@ -411,17 +422,25 @@ const TriggerForm = ({
                   {INSTRUCTION_DESCRIPTIONS[triggerType]}
                 </FieldDescription>
               </Field>
+            </>
+          )}
 
-              <TypeFields
-                trigger={trigger}
-                scope={scope}
-                disabled={isSubmitting}
-                errors={validationErrors}
-                clearErrors={clearErrors}
-                onChange={setTypeFields}
-                mutateRecord={mutateRecord}
-              />
+          {Object.entries(TRIGGER_TYPE_FIELDS).map(([type, TypeFields]) => (
+            <TypeFields
+              key={type}
+              active={type === triggerType && !inboundBlocked}
+              trigger={trigger}
+              scope={scope}
+              disabled={isSubmitting}
+              errors={validationErrors}
+              clearErrors={clearErrors}
+              onChange={reportTypeFields}
+              mutateRecord={mutateRecord}
+            />
+          ))}
 
+          {!inboundBlocked && (
+            <>
               <FormTextField
                 className="w-1/2"
                 label="Max Runs to Keep"

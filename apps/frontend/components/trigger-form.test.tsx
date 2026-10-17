@@ -74,6 +74,18 @@ describe("TriggerForm — event picker", () => {
   });
 });
 
+describe("TriggerForm — switching type", () => {
+  it("keeps what was entered under a type when the user switches away and back", async () => {
+    await renderEventTriggerForm();
+    fireEvent.click(screen.getByLabelText("card.updated"));
+
+    await selectOption("Event", "Cron");
+    await selectOption("Cron", "Event");
+
+    expect(screen.getByLabelText("card.updated")).toBeChecked();
+  });
+});
+
 describe("TriggerForm — board and column filters", () => {
   it("hides the column filter until a board is selected", async () => {
     await renderEventTriggerForm();

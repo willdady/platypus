@@ -65,6 +65,7 @@ const useEventFilterListsLoading = (
 
 /** An Event Trigger's events and its board, column and changed-field filters. */
 const TriggerEventFields = ({
+  active,
   trigger,
   scope,
   disabled,
@@ -126,6 +127,8 @@ const TriggerEventFields = ({
     filterColumnId,
     filterChangedFields,
   ]);
+
+  if (!active) return null;
 
   const handleEventToggle = (event: string) => {
     clearErrors("config");

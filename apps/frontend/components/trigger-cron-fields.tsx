@@ -65,6 +65,7 @@ const DEFAULT_SIMPLE_SCHEDULE: SimpleSchedule = {
 
 /** A Cron Trigger's schedule, timezone and One-off switch. */
 const TriggerCronFields = ({
+  active,
   trigger,
   disabled,
   errors,
@@ -135,6 +136,8 @@ const TriggerCronFields = ({
       valid: isCronValid,
     });
   }, [onChange, effectiveCronExpression, timezone, isOneOff, isCronValid]);
+
+  if (!active) return null;
 
   return (
     <>

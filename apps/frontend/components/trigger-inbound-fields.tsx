@@ -79,6 +79,7 @@ type ShownToken = {
  * once saved, its token: status, regenerate, and the one-time token dialog.
  */
 const TriggerInboundFields = ({
+  active,
   trigger,
   scope,
   disabled,
@@ -210,203 +211,211 @@ const TriggerInboundFields = ({
 
   return (
     <>
-      <Field
-        aria-labelledby="trigger-inputs-label"
-        data-invalid={inboundConfigErrors.length > 0}
-      >
-        <FieldTitle id="trigger-inputs-label">Inputs</FieldTitle>
-        <FieldDescription>
-          The values a caller sends as <code>{`{ "inputs": { ... } }`}</code>.
-          Every value is a string. A call with a missing required input, an
-          undeclared one, or a value that isn&apos;t a string is refused.
-        </FieldDescription>
-        <div className="flex flex-col gap-3 mt-2">
-          {inboundInputs.map((input, index) => (
-            <div
-              key={index}
-              className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-start"
-            >
-              <Input
-                aria-label={`Input ${index + 1} name`}
-                placeholder="issueKey"
-                className="font-mono sm:w-44"
-                value={input.name}
-                maxLength={INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH}
-                onChange={(e) =>
-                  updateInboundInput(index, {
-                    name: e.target.value,
-                  })
-                }
-                disabled={disabled}
-              />
-              <Input
-                aria-label={`Input ${index + 1} description`}
-                placeholder="What the agent should know about it"
-                className="flex-1"
-                value={input.description}
-                maxLength={INBOUND_TRIGGER_INPUT_DESCRIPTION_MAX_LENGTH}
-                onChange={(e) =>
-                  updateInboundInput(index, {
-                    description: e.target.value,
-                  })
-                }
-                disabled={disabled}
-              />
-              <div className="flex items-center justify-between gap-3 sm:h-9">
-                <Field orientation="horizontal" className="w-auto">
-                  <Switch
-                    id={`input-${index}-required`}
-                    className="cursor-pointer"
-                    checked={input.required}
-                    onCheckedChange={(checked) =>
+      {/* The dialogs outlive the fields, so a gate that closes while a new
+          token is on screen can't take the token with it. */}
+      {active && (
+        <>
+          <Field
+            aria-labelledby="trigger-inputs-label"
+            data-invalid={inboundConfigErrors.length > 0}
+          >
+            <FieldTitle id="trigger-inputs-label">Inputs</FieldTitle>
+            <FieldDescription>
+              The values a caller sends as{" "}
+              <code>{`{ "inputs": { ... } }`}</code>. Every value is a string. A
+              call with a missing required input, an undeclared one, or a value
+              that isn&apos;t a string is refused.
+            </FieldDescription>
+            <div className="flex flex-col gap-3 mt-2">
+              {inboundInputs.map((input, index) => (
+                <div
+                  key={index}
+                  className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-start"
+                >
+                  <Input
+                    aria-label={`Input ${index + 1} name`}
+                    placeholder="issueKey"
+                    className="font-mono sm:w-44"
+                    value={input.name}
+                    maxLength={INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH}
+                    onChange={(e) =>
                       updateInboundInput(index, {
-                        required: checked,
+                        name: e.target.value,
                       })
                     }
                     disabled={disabled}
                   />
-                  <FieldLabel htmlFor={`input-${index}-required`}>
-                    Required
-                  </FieldLabel>
-                </Field>
+                  <Input
+                    aria-label={`Input ${index + 1} description`}
+                    placeholder="What the agent should know about it"
+                    className="flex-1"
+                    value={input.description}
+                    maxLength={INBOUND_TRIGGER_INPUT_DESCRIPTION_MAX_LENGTH}
+                    onChange={(e) =>
+                      updateInboundInput(index, {
+                        description: e.target.value,
+                      })
+                    }
+                    disabled={disabled}
+                  />
+                  <div className="flex items-center justify-between gap-3 sm:h-9">
+                    <Field orientation="horizontal" className="w-auto">
+                      <Switch
+                        id={`input-${index}-required`}
+                        className="cursor-pointer"
+                        checked={input.required}
+                        onCheckedChange={(checked) =>
+                          updateInboundInput(index, {
+                            required: checked,
+                          })
+                        }
+                        disabled={disabled}
+                      />
+                      <FieldLabel htmlFor={`input-${index}-required`}>
+                        Required
+                      </FieldLabel>
+                    </Field>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="cursor-pointer shrink-0"
+                      aria-label={`Remove input ${index + 1}`}
+                      onClick={() =>
+                        updateInboundInputs((prev) =>
+                          prev.filter((_, i) => i !== index),
+                        )
+                      }
+                      disabled={disabled}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <div>
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="cursor-pointer shrink-0"
-                  aria-label={`Remove input ${index + 1}`}
+                  variant="outline"
+                  className="cursor-pointer"
                   onClick={() =>
-                    updateInboundInputs((prev) =>
-                      prev.filter((_, i) => i !== index),
-                    )
+                    updateInboundInputs((prev) => [
+                      ...prev,
+                      { name: "", required: true, description: "" },
+                    ])
                   }
-                  disabled={disabled}
+                  disabled={
+                    disabled ||
+                    inboundInputs.length >= INBOUND_TRIGGER_MAX_INPUTS
+                  }
                 >
-                  <X className="h-4 w-4" />
+                  <Plus className="h-4 w-4" /> Add input
                 </Button>
               </div>
             </div>
-          ))}
-          <div>
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() =>
-                updateInboundInputs((prev) => [
-                  ...prev,
-                  { name: "", required: true, description: "" },
-                ])
-              }
-              disabled={
-                disabled || inboundInputs.length >= INBOUND_TRIGGER_MAX_INPUTS
-              }
-            >
-              <Plus className="h-4 w-4" /> Add input
-            </Button>
-          </div>
-        </div>
-        {inputsProblem && <FieldError>{inputsProblem}</FieldError>}
-        {inboundConfigErrors.map((message) => (
-          <FieldError key={message}>{message}</FieldError>
-        ))}
-      </Field>
+            {inputsProblem && <FieldError>{inputsProblem}</FieldError>}
+            {inboundConfigErrors.map((message) => (
+              <FieldError key={message}>{message}</FieldError>
+            ))}
+          </Field>
 
-      <FormSelectField
-        label="Record key"
-        name="recordKey"
-        value={effectiveRecordKey || "__none__"}
-        onValueChange={(value) =>
-          setRecordKey(value === "__none__" ? "" : value)
-        }
-        disabled={disabled}
-        description="The required input that says which record a call is about, such as an issue key. Only one run per record is active at a time, and the run-rate limit counts each record separately. With none, the limit counts the whole trigger. Marking one is the expected setup."
-      >
-        <SelectItem value="__none__">None</SelectItem>
-        {requiredInputNames.map((name) => (
-          <SelectItem key={name} value={name}>
-            {name}
-          </SelectItem>
-        ))}
-      </FormSelectField>
+          <FormSelectField
+            label="Record key"
+            name="recordKey"
+            value={effectiveRecordKey || "__none__"}
+            onValueChange={(value) =>
+              setRecordKey(value === "__none__" ? "" : value)
+            }
+            disabled={disabled}
+            description="The required input that says which record a call is about, such as an issue key. Only one run per record is active at a time, and the run-rate limit counts each record separately. With none, the limit counts the whole trigger. Marking one is the expected setup."
+          >
+            <SelectItem value="__none__">None</SelectItem>
+            {requiredInputNames.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </FormSelectField>
 
-      <FormSelectField
-        label="Token lifetime"
-        name="tokenExpiryDays"
-        value={String(tokenExpiryDays)}
-        onValueChange={(value) => setTokenExpiryDays(Number(value))}
-        disabled={disabled}
-        description={
-          trigger
-            ? "Applies to the next token you issue. The current token keeps its expiry date."
-            : "How long the token works. You get a notification 30 and 7 days before it expires."
-        }
-      >
-        {BEARER_TOKEN_EXPIRY_DAYS.map((days) => (
-          <SelectItem key={days} value={String(days)}>
-            {days} days
-          </SelectItem>
-        ))}
-      </FormSelectField>
+          <FormSelectField
+            label="Token lifetime"
+            name="tokenExpiryDays"
+            value={String(tokenExpiryDays)}
+            onValueChange={(value) => setTokenExpiryDays(Number(value))}
+            disabled={disabled}
+            description={
+              trigger
+                ? "Applies to the next token you issue. The current token keeps its expiry date."
+                : "How long the token works. You get a notification 30 and 7 days before it expires."
+            }
+          >
+            {BEARER_TOKEN_EXPIRY_DAYS.map((days) => (
+              <SelectItem key={days} value={String(days)}>
+                {days} days
+              </SelectItem>
+            ))}
+          </FormSelectField>
 
-      {trigger && (
-        <Field>
-          <FieldTitle>Token</FieldTitle>
-          <div className="flex flex-col gap-2 rounded-md border p-3 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <Badge variant={TOKEN_STATUS_VARIANTS[tokenStatus]}>
-                {TOKEN_STATUS_LABELS[tokenStatus]}
-              </Badge>
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => setIsRegenerateDialogOpen(true)}
-                disabled={disabled}
-              >
-                <RefreshCw className="h-4 w-4" />{" "}
-                {hasToken ? "Regenerate" : "Issue token"}
-              </Button>
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-muted-foreground">
-              <dt>Issued</dt>
-              <dd>
-                {trigger.tokenCreatedAt
-                  ? formatDateTime(trigger.tokenCreatedAt)
-                  : "—"}
-              </dd>
-              <dt>Expires</dt>
-              <dd>
-                {trigger.tokenExpiresAt
-                  ? formatDateTime(trigger.tokenExpiresAt)
-                  : "—"}
-              </dd>
-              <dt>Last used</dt>
-              <dd>
-                {trigger.lastUsedAt
-                  ? formatDateTime(trigger.lastUsedAt)
-                  : "Never"}
-              </dd>
-              <dt>Last rejected</dt>
-              <dd>
-                {trigger.lastRejectedAt
-                  ? formatDateTime(trigger.lastRejectedAt)
-                  : "Never"}
-              </dd>
-            </dl>
-            {backendUrl && (
-              <p className="break-all text-muted-foreground">
-                Endpoint:{" "}
-                <code>{inboundEndpointUrl(backendUrl, trigger.id)}</code>
-              </p>
-            )}
-          </div>
-          <FieldDescription>
-            {hasToken
-              ? "The token was shown once, when it was issued. Regenerating stops the current one working straight away."
-              : "This trigger has no token, so every call is refused. An Org Admin may have revoked it. Issue a new one and update the system that calls it."}
-          </FieldDescription>
-        </Field>
+          {trigger && (
+            <Field>
+              <FieldTitle>Token</FieldTitle>
+              <div className="flex flex-col gap-2 rounded-md border p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <Badge variant={TOKEN_STATUS_VARIANTS[tokenStatus]}>
+                    {TOKEN_STATUS_LABELS[tokenStatus]}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={() => setIsRegenerateDialogOpen(true)}
+                    disabled={disabled}
+                  >
+                    <RefreshCw className="h-4 w-4" />{" "}
+                    {hasToken ? "Regenerate" : "Issue token"}
+                  </Button>
+                </div>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-muted-foreground">
+                  <dt>Issued</dt>
+                  <dd>
+                    {trigger.tokenCreatedAt
+                      ? formatDateTime(trigger.tokenCreatedAt)
+                      : "—"}
+                  </dd>
+                  <dt>Expires</dt>
+                  <dd>
+                    {trigger.tokenExpiresAt
+                      ? formatDateTime(trigger.tokenExpiresAt)
+                      : "—"}
+                  </dd>
+                  <dt>Last used</dt>
+                  <dd>
+                    {trigger.lastUsedAt
+                      ? formatDateTime(trigger.lastUsedAt)
+                      : "Never"}
+                  </dd>
+                  <dt>Last rejected</dt>
+                  <dd>
+                    {trigger.lastRejectedAt
+                      ? formatDateTime(trigger.lastRejectedAt)
+                      : "Never"}
+                  </dd>
+                </dl>
+                {backendUrl && (
+                  <p className="break-all text-muted-foreground">
+                    Endpoint:{" "}
+                    <code>{inboundEndpointUrl(backendUrl, trigger.id)}</code>
+                  </p>
+                )}
+              </div>
+              <FieldDescription>
+                {hasToken
+                  ? "The token was shown once, when it was issued. Regenerating stops the current one working straight away."
+                  : "This trigger has no token, so every call is refused. An Org Admin may have revoked it. Issue a new one and update the system that calls it."}
+              </FieldDescription>
+            </Field>
+          )}
+        </>
       )}
 
       <ConfirmDialog
