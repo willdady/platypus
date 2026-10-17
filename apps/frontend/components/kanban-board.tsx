@@ -518,54 +518,42 @@ export function KanbanBoard({
 
   const closeDialog = useCallback(() => setDialog(null), []);
 
-  /** Sends a dialog's write; closes the dialog once it lands. */
-  const submitDialogWrite = useCallback(
-    async (...args: Parameters<typeof writeEntity>) => {
-      const outcome = await writeEntity(...args);
-      if (outcome.outcome === "success") {
-        setDialog(null);
-        await mutate();
-      } else {
-        toast.error(outcome.message);
-      }
-    },
-    [mutate],
-  );
+  /** Sends a dialog's write under the board; closes the dialog once it lands. */
+  const submitDialogWrite = async (
+    path: string,
+    body: Parameters<typeof writeEntity>[3],
+  ) => {
+    const outcome = await writeEntity(
+      backendUrl,
+      `${boardPath}/${path}`,
+      scope,
+      body,
+    );
+    if (outcome.outcome === "success") {
+      setDialog(null);
+      await mutate();
+    } else {
+      toast.error(outcome.message);
+    }
+  };
 
-  const handleAddColumn = useCallback(
-    (data: { name: string }) =>
-      submitDialogWrite(backendUrl, `${boardPath}/columns`, scope, { data }),
-    [submitDialogWrite, backendUrl, boardPath, scope],
-  );
+  const submitAddColumn = (data: { name: string }) =>
+    submitDialogWrite("columns", { data });
 
-  const handleAddCard = useCallback(
-    (
-      columnId: string,
-      { title, labelIds }: { title: string; labelIds: string[] },
-    ) =>
-      submitDialogWrite(
-        backendUrl,
-        `${boardPath}/columns/${columnId}/cards`,
-        scope,
-        { data: { title, ...(labelIds.length > 0 && { labelIds }) } },
-      ),
-    [submitDialogWrite, backendUrl, boardPath, scope],
-  );
+  const submitAddCard = (
+    columnId: string,
+    { title, labelIds }: { title: string; labelIds: string[] },
+  ) =>
+    submitDialogWrite(`columns/${columnId}/cards`, {
+      data: { title, ...(labelIds.length > 0 && { labelIds }) },
+    });
 
-  const handleEditColumn = useCallback(
-    (columnId: string, data: { name: string }) =>
-      submitDialogWrite(backendUrl, `${boardPath}/columns`, scope, {
-        id: columnId,
-        data,
-      }),
-    [submitDialogWrite, backendUrl, boardPath, scope],
-  );
+  const submitEditColumn = (columnId: string, data: { name: string }) =>
+    submitDialogWrite("columns", { id: columnId, data });
 
   // The delete runs once per confirm: a double click would send it twice.
   const deleteColumn = useMutation((columnId: string) =>
-    submitDialogWrite(backendUrl, `${boardPath}/columns`, scope, {
-      id: columnId,
-    }),
+    submitDialogWrite("columns", { id: columnId }),
   );
 
   const openAddCard = useCallback(
@@ -905,19 +893,19 @@ export function KanbanBoard({
       </DndContext>
 
       {dialog?.kind === "addColumn" && (
-        <AddColumnDialog onSubmit={handleAddColumn} onClose={closeDialog} />
+        <AddColumnDialog onSubmit={submitAddColumn} onClose={closeDialog} />
       )}
       {dialog?.kind === "addCard" && (
         <AddCardDialog
           labels={labels}
-          onSubmit={(values) => handleAddCard(dialog.columnId, values)}
+          onSubmit={(values) => submitAddCard(dialog.columnId, values)}
           onClose={closeDialog}
         />
       )}
       {dialog?.kind === "editColumn" && (
         <EditColumnDialog
           initialName={dialog.name}
-          onSubmit={(values) => handleEditColumn(dialog.columnId, values)}
+          onSubmit={(values) => submitEditColumn(dialog.columnId, values)}
           onClose={closeDialog}
         />
       )}

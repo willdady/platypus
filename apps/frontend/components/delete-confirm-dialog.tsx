@@ -14,6 +14,7 @@ interface DeleteConfirmDialogProps {
   readonly confirmPhrase?: string;
   /** Keeps the confirm button disabled while the delete is not allowed. */
   readonly confirmDisabled?: boolean;
+  /** Defaults to "Cancel". */
   readonly cancelLabel?: string;
   readonly onConfirm: () => void;
   readonly loading?: boolean;

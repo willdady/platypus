@@ -28,15 +28,15 @@ interface BoardDialogProps<Values> {
 }
 
 /**
- * Runs `onSubmit` once per submit: a double click or Enter held down would
- * otherwise create duplicate columns or cards. Blank text submits nothing.
+ * Runs `submit` with the trimmed text once per submit: a double click or
+ * Enter held down would otherwise create duplicate columns or cards. Blank
+ * text submits nothing.
  */
-function useGuardedSubmit<Values>(
+function useGuardedSubmit(
   text: string,
-  values: (trimmed: string) => Values,
-  onSubmit: (values: Values) => Promise<void>,
+  submit: (trimmed: string) => Promise<void>,
 ) {
-  const mutation = useMutation(() => onSubmit(values(text.trim())));
+  const mutation = useMutation(() => submit(text.trim()));
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (text.trim()) void mutation.run();
@@ -49,10 +49,8 @@ export function AddColumnDialog({
   onClose,
 }: BoardDialogProps<{ name: string }>) {
   const [name, setName] = useState("");
-  const { handleSubmit, pending } = useGuardedSubmit(
-    name,
-    (trimmed) => ({ name: trimmed }),
-    onSubmit,
+  const { handleSubmit, pending } = useGuardedSubmit(name, (trimmed) =>
+    onSubmit({ name: trimmed }),
   );
 
   return (
@@ -96,10 +94,8 @@ export function AddCardDialog({
 }) {
   const [title, setTitle] = useState("");
   const [labelIds, setLabelIds] = useState<string[]>([]);
-  const { handleSubmit, pending } = useGuardedSubmit(
-    title,
-    (trimmed) => ({ title: trimmed, labelIds }),
-    onSubmit,
+  const { handleSubmit, pending } = useGuardedSubmit(title, (trimmed) =>
+    onSubmit({ title: trimmed, labelIds }),
   );
 
   return (
@@ -179,10 +175,8 @@ export function EditColumnDialog({
   onClose,
 }: BoardDialogProps<{ name: string }> & { readonly initialName: string }) {
   const [name, setName] = useState(initialName);
-  const { handleSubmit, pending } = useGuardedSubmit(
-    name,
-    (trimmed) => ({ name: trimmed }),
-    onSubmit,
+  const { handleSubmit, pending } = useGuardedSubmit(name, (trimmed) =>
+    onSubmit({ name: trimmed }),
   );
 
   return (
