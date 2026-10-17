@@ -29,16 +29,17 @@ import { deepEqual } from "@/lib/deep-equal";
 /** The success copy a write shows, or a thunk for a message that varies. */
 type Message = string | (() => string);
 
-const resolveMessage = (message: Message | undefined): string | undefined =>
-  typeof message === "function" ? message() : message;
+function resolveMessage(message: Message | undefined): string | undefined {
+  return typeof message === "function" ? message() : message;
+}
 
 const NO_RETRACTABLE_FIELDS: readonly string[] = [];
 
-export interface UseEntityFormOptions<
+export type UseEntityFormOptions<
   TForm extends object,
   TResult,
   TRecord = unknown,
-> {
+> = {
   /** The values the form starts with, before any record is loaded. */
   initialData: TForm;
   /**
@@ -116,20 +117,20 @@ export interface UseEntityFormOptions<
    * collection member (e.g. a user-scoped `writeAt`).
    */
   write?: (data: TForm) => Promise<WriteOutcome<TResult>>;
-}
+};
 
 /** The record read's state, shaped to spread into `DetailFormState`. */
-export interface EntityLoadState<TRecord> {
+export type EntityLoadState<TRecord> = {
   isLoading: boolean;
   error?: unknown;
   data?: TRecord;
-}
+};
 
-export interface UseEntityFormResult<
+export type UseEntityFormResult<
   TForm extends object,
   TResult,
   TRecord = unknown,
-> {
+> = {
   /** The loaded record; absent when creating or still loading. */
   record: Serialized<TRecord> | undefined;
   /** Revalidates the record. What arrives does not re-seed `formData`. */
@@ -177,7 +178,7 @@ export interface UseEntityFormResult<
   submit: (options?: {
     silent?: boolean;
   }) => Promise<Serialized<TResult> | undefined>;
-}
+};
 
 /**
  * Owns the scaffold every write-backed form re-implemented by hand: the
@@ -398,7 +399,7 @@ export function useEntityForm<
   };
 }
 
-export interface UseEntityDeleteOptions<TResult> {
+export type UseEntityDeleteOptions<TResult> = {
   entity: string;
   scope: Scope;
   /** Absent on a create form; then the delete dialog never opens. */
@@ -423,9 +424,9 @@ export interface UseEntityDeleteOptions<TResult> {
    * the default handling (inline, or `guidanceOnForbidden`) still applies.
    */
   onError?: (message: string, outcome: WriteOutcome<TResult>) => boolean;
-}
+};
 
-export interface UseEntityDeleteResult {
+export type UseEntityDeleteResult = {
   isDeleteDialogOpen: boolean;
   setIsDeleteDialogOpen: (open: boolean) => void;
   isDeleting: boolean;
@@ -433,7 +434,7 @@ export interface UseEntityDeleteResult {
   /** Opens the shared delete dialog. */
   openDeleteDialog: () => void;
   handleDelete: () => Promise<void>;
-}
+};
 
 /**
  * Owns the delete half of the entity-form lifecycle: the dialog open/loading/

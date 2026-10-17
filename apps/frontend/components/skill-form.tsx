@@ -56,15 +56,17 @@ const INITIAL_DATA = {
   disableModelInvocation: false,
 };
 
-const toForm = (skill: Serialized<Skill>) => ({
-  name: skill.name,
-  description: skill.description,
-  body: skill.body,
-  argumentHint: skill.argumentHint ?? "",
-  disableModelInvocation: skill.disableModelInvocation,
-});
+function toForm(skill: Serialized<Skill>) {
+  return {
+    name: skill.name,
+    description: skill.description,
+    body: skill.body,
+    argumentHint: skill.argumentHint ?? "",
+    disableModelInvocation: skill.disableModelInvocation,
+  };
+}
 
-const SkillFormSkeleton = ({
+function SkillFormSkeleton({
   className,
   editing,
   agents,
@@ -73,23 +75,25 @@ const SkillFormSkeleton = ({
   editing: boolean;
   /** Whether the Agents card shows (the workspace surface). */
   agents: boolean;
-}) => (
-  <div className={className}>
-    <FormSkeletonSet>
-      <FormSkeletonGroup className="gap-4">
-        <FieldSkeleton counter />
-        <TextareaSkeleton counter />
-        <TextareaSkeleton heightClassName="h-[200px]" counter />
-        <FieldSkeleton description={1} counter />
-        <SwitchRowSkeleton />
-      </FormSkeletonGroup>
-    </FormSkeletonSet>
-    {agents && <SwitchCardSkeleton className="mb-6" rows={2} description />}
-    <FooterSkeleton buttons={editing ? 2 : 1} />
-  </div>
-);
+}) {
+  return (
+    <div className={className}>
+      <FormSkeletonSet>
+        <FormSkeletonGroup className="gap-4">
+          <FieldSkeleton counter />
+          <TextareaSkeleton counter />
+          <TextareaSkeleton heightClassName="h-[200px]" counter />
+          <FieldSkeleton description={1} counter />
+          <SwitchRowSkeleton />
+        </FormSkeletonGroup>
+      </FormSkeletonSet>
+      {agents && <SwitchCardSkeleton className="mb-6" rows={2} description />}
+      <FooterSkeleton buttons={editing ? 2 : 1} />
+    </div>
+  );
+}
 
-const SkillForm = ({
+function SkillForm({
   classNames,
   orgId,
   workspaceId,
@@ -101,7 +105,7 @@ const SkillForm = ({
   // org-scoped Shared Skill (ADR-0007).
   workspaceId?: string;
   skillId?: string;
-}) => {
+}) {
   // The scope determines the backend collection and where we return after save.
   const returnPath = workspaceId
     ? workspaceRoutes(orgId, workspaceId).root
@@ -261,7 +265,7 @@ const SkillForm = ({
               }
               disabled={isSubmitting}
             />
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <FieldLabel htmlFor="disableModelInvocation">
                 User-invocable only
               </FieldLabel>
@@ -375,6 +379,6 @@ const SkillForm = ({
       {form}
     </DetailFormState>
   );
-};
+}
 
 export { SkillForm };

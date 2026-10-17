@@ -11,8 +11,8 @@ import {
   getSearchCapability,
 } from "./model-config";
 
-const provider = (modelIds: unknown, over: Partial<Provider> = {}) =>
-  ({
+function provider(modelIds: unknown, over: Partial<Provider> = {}) {
+  return {
     id: "p1",
     name: "Test",
     workspaceId: "ws-1",
@@ -26,7 +26,8 @@ const provider = (modelIds: unknown, over: Partial<Provider> = {}) =>
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,
-  }) as unknown as Provider;
+  } as unknown as Provider;
+}
 
 const aliased = provider([
   { id: "gpt-4", passthroughFileTypes: [], alias: "flagship" },

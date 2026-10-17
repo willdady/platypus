@@ -10,7 +10,7 @@ import {
 } from "./ai-elements/prompt-input";
 import { Composer, type ModelSelection } from "./composer";
 
-interface MessageEditorProps {
+type MessageEditorProps = {
   /** The message's text as it stands, which the editor opens on. */
   initialText: string;
   /** The attachments it already carries, which the editor opens holding. */
@@ -20,7 +20,7 @@ interface MessageEditorProps {
   passthroughFileTypes: string[];
   onSubmit: (message: PromptInputMessage) => void;
   onCancel: () => void;
-}
+};
 
 /**
  * Editing a message in place, through the same composer the message was
@@ -43,14 +43,14 @@ interface MessageEditorProps {
  * `globalDrop` is deliberately absent: the composer claims the window-level
  * drop, and two inputs claiming it would both take the same file.
  */
-export const MessageEditor = ({
+export function MessageEditor({
   initialText,
   initialAttachments,
   modelSelection,
   passthroughFileTypes,
   onSubmit,
   onCancel,
-}: MessageEditorProps) => {
+}: MessageEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(initialText);
 
@@ -93,4 +93,4 @@ export const MessageEditor = ({
       }
     />
   );
-};
+}

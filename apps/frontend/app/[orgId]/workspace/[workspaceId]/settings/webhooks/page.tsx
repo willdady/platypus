@@ -3,11 +3,11 @@ import { WebhooksList } from "@/components/webhooks-list";
 
 export const metadata: Metadata = { title: "Webhooks" };
 
-const WebhooksPage = async ({
+async function WebhooksPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = await params;
 
   return (
@@ -16,6 +16,6 @@ const WebhooksPage = async ({
       <WebhooksList orgId={orgId} workspaceId={workspaceId} />
     </div>
   );
-};
+}
 
 export default WebhooksPage;

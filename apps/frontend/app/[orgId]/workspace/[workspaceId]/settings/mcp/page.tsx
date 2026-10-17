@@ -3,11 +3,11 @@ import { McpList } from "@/components/mcp-list";
 
 export const metadata: Metadata = { title: "MCP Servers" };
 
-const McpPage = async ({
+async function McpPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = await params;
 
   return (
@@ -16,6 +16,6 @@ const McpPage = async ({
       <McpList orgId={orgId} workspaceId={workspaceId} />
     </div>
   );
-};
+}
 
 export default McpPage;

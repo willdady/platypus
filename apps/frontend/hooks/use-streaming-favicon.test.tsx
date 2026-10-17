@@ -17,9 +17,13 @@ class FakeImage {
   }
 }
 
-const icon = () => document.querySelector<HTMLLinkElement>('link[rel="icon"]')!;
+function icon() {
+  return document.querySelector<HTMLLinkElement>('link[rel="icon"]')!;
+}
 
-const flush = () => act(async () => {});
+function flush() {
+  return act(async () => {});
+}
 
 describe("useStreamingFavicon", () => {
   beforeEach(() => {

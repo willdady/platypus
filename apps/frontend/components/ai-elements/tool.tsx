@@ -201,13 +201,13 @@ type ToolContextValue = { isOpen: boolean };
 
 const ToolContext = createContext<ToolContextValue | null>(null);
 
-const useTool = () => {
+function useTool() {
   const context = useContext(ToolContext);
   if (!context) {
     throw new Error("Tool components must be used within Tool");
   }
   return context;
-};
+}
 
 /**
  * The row every tool call — collapsible or not — is drawn with, shared with
@@ -233,14 +233,14 @@ export type ToolProps = ComponentProps<typeof Collapsible>;
  * is the only thing that expands it — and it keeps its own open state so a
  * chevron answers to its row alone, however deep a Sub-Agent nests them.
  */
-export const Tool = ({
+export function Tool({
   className,
   open,
   defaultOpen = false,
   onOpenChange,
   children,
   ...props
-}: ToolProps) => {
+}: ToolProps) {
   const [isOpen, setIsOpen] = useControllableState({
     prop: open,
     defaultProp: defaultOpen,
@@ -259,7 +259,7 @@ export const Tool = ({
       </Collapsible>
     </ToolContext.Provider>
   );
-};
+}
 
 export type ToolHeaderProps = {
   title?: string;
@@ -283,7 +283,7 @@ export type ToolHeaderProps = {
  * How a tool call stands, in the words the Chat has always used for it. The
  * one copy of the state → wording table; every tool renderer draws this.
  */
-export const ToolStatus = ({ state }: { state: ToolUIPart["state"] }) => {
+export function ToolStatus({ state }: { state: ToolUIPart["state"] }) {
   const labels: Record<ToolUIPart["state"], string> = {
     "input-streaming": "Pending",
     "input-available": "Running",
@@ -310,7 +310,7 @@ export const ToolStatus = ({ state }: { state: ToolUIPart["state"] }) => {
       {labels[state]}
     </span>
   );
-};
+}
 
 /**
  * Shown on a tool part whose result Tool-result clearing (ADR-0018 Notes,
@@ -318,25 +318,27 @@ export const ToolStatus = ({ state }: { state: ToolUIPart["state"] }) => {
  * expandable below this header — the badge says only that the model no
  * longer has it, never that it's gone.
  */
-export const ClearedResultBadge = () => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <Badge
-        className="gap-1 rounded-full text-xs text-muted-foreground"
-        variant="outline"
-      >
-        <EyeOffIcon className="size-3" />
-        Not sent to model
-      </Badge>
-    </TooltipTrigger>
-    <TooltipContent>
-      This result was left out of the last model call to free up space in the
-      context window. It is still here — expand to read it.
-    </TooltipContent>
-  </Tooltip>
-);
+export function ClearedResultBadge() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          className="gap-1 rounded-full text-xs text-muted-foreground"
+          variant="outline"
+        >
+          <EyeOffIcon className="size-3" />
+          Not sent to model
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>
+        This result was left out of the last model call to free up space in the
+        context window. It is still here — expand to read it.
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
-export const ToolHeader = ({
+export function ToolHeader({
   className,
   title,
   label,
@@ -345,7 +347,7 @@ export const ToolHeader = ({
   durationMs,
   cleared,
   ...props
-}: ToolHeaderProps) => {
+}: ToolHeaderProps) {
   const { isOpen } = useTool();
   const name = title ?? humanizeToolType(type);
 
@@ -386,23 +388,25 @@ export const ToolHeader = ({
       />
     </CollapsibleTrigger>
   );
-};
+}
 
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 
-export const ToolContent = ({ className, ...props }: ToolContentProps) => (
-  <CollapsibleContent
-    className={cn(
-      // Indented past the icon slot to the chat text's left edge, the way
-      // Thinking's body sits. Sections stack with a gap rather than rules
-      // between them.
-      "mt-3 space-y-4 pl-8 text-sm",
-      "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-      className,
-    )}
-    {...props}
-  />
-);
+export function ToolContent({ className, ...props }: ToolContentProps) {
+  return (
+    <CollapsibleContent
+      className={cn(
+        // Indented past the icon slot to the chat text's left edge, the way
+        // Thinking's body sits. Sections stack with a gap rather than rules
+        // between them.
+        "mt-3 flex flex-col gap-4 pl-8 text-sm",
+        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
 /**
  * How a tool's Parameters and Result panels are drawn: preformatted text that
@@ -420,28 +424,30 @@ export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolUIPart["input"];
 };
 
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2", className)} {...props}>
-    <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      Parameters
-    </h4>
-    <pre className={cn(toolPanelClassName, "rounded-md bg-muted/50")}>
-      {JSON.stringify(input, null, 2)}
-    </pre>
-  </div>
-);
+export function ToolInput({ className, input, ...props }: ToolInputProps) {
+  return (
+    <div className={cn("flex flex-col gap-2", className)} {...props}>
+      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        Parameters
+      </h4>
+      <pre className={cn(toolPanelClassName, "rounded-md bg-muted/50")}>
+        {JSON.stringify(input, null, 2)}
+      </pre>
+    </div>
+  );
+}
 
 export type ToolOutputProps = ComponentProps<"div"> & {
   output: ToolUIPart["output"];
   errorText: ToolUIPart["errorText"];
 };
 
-export const ToolOutput = ({
+export function ToolOutput({
   className,
   output,
   errorText,
   ...props
-}: ToolOutputProps) => {
+}: ToolOutputProps) {
   if (!(output || errorText)) {
     return null;
   }
@@ -459,7 +465,7 @@ export const ToolOutput = ({
   }
 
   return (
-    <div className={cn("space-y-2", className)} {...props}>
+    <div className={cn("flex flex-col gap-2", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {errorText ? "Error" : "Result"}
       </h4>
@@ -476,4 +482,4 @@ export const ToolOutput = ({
       </div>
     </div>
   );
-};
+}

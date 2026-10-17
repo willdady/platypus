@@ -18,10 +18,10 @@ export type AlternativePosition = {
  * from the Chat's `tree`. A message with none, or one the tree does not list
  * yet, has no entry.
  */
-export const alternativePositions = (
+export function alternativePositions(
   tree: NonNullable<Chat["tree"]> | undefined,
   pathIds: readonly string[],
-): Map<string, AlternativePosition> => {
+): Map<string, AlternativePosition> {
   const parentOf = new Map<string, string | null>();
   const alternativesUnder = new Map<string | null, string[]>();
   for (const { id, parentId } of tree ?? []) {
@@ -46,4 +46,4 @@ export const alternativePositions = (
     });
   }
   return positions;
-};
+}

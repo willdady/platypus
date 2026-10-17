@@ -5,11 +5,11 @@ import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Webhook" };
 
-const WebhookEditPage = async ({
+async function WebhookEditPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string; webhookId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId, webhookId } = await params;
 
   return (
@@ -24,6 +24,6 @@ const WebhookEditPage = async ({
       />
     </ResourcePage>
   );
-};
+}
 
 export default WebhookEditPage;

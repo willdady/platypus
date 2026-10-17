@@ -29,7 +29,7 @@ import Link from "next/link";
 import { ApplyBlueprintDialog } from "@/components/apply-blueprint-dialog";
 import { orgRoutes } from "@/lib/routes";
 
-export const BlueprintsList = ({ orgId }: { orgId: string }) => {
+export function BlueprintsList({ orgId }: { orgId: string }) {
   const routes = orgRoutes(orgId).settings;
 
   const [blueprintToApply, setBlueprintToApply] =
@@ -155,4 +155,4 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
       />
     </>
   );
-};
+}

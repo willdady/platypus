@@ -49,11 +49,11 @@ type TransferWorkspaceActionProps = {
  * the Workspace, and the dialog that picks a recipient and the history, then
  * confirms what the transfer does.
  */
-export const TransferWorkspaceAction = ({
+export function TransferWorkspaceAction({
   orgId,
   workspaceId,
   providers,
-}: TransferWorkspaceActionProps) => {
+}: TransferWorkspaceActionProps) {
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const { data: workspace } = useScopedSWR<Workspace>(
@@ -154,8 +154,8 @@ export const TransferWorkspaceAction = ({
               />
             </FieldGroup>
           ) : (
-            <div className="space-y-3 text-sm">
-              <ul className="list-disc space-y-1 pl-5">
+            <div className="flex flex-col gap-3 text-sm">
+              <ul className="list-disc flex flex-col gap-1 pl-5">
                 <li>
                   {nameOf(newOwnerId)} becomes the owner.{" "}
                   {nameOf(workspace.ownerId)}{" "}
@@ -226,4 +226,4 @@ export const TransferWorkspaceAction = ({
       </Dialog>
     </>
   );
-};
+}

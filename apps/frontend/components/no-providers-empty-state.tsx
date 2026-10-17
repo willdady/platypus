@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { workspaceRoutes } from "@/lib/routes";
 
-interface NoProvidersEmptyStateProps {
+type NoProvidersEmptyStateProps = {
   orgId: string;
   /** Absent on the Organization's own settings page, which always passes `action`. */
   workspaceId?: string;
@@ -13,14 +13,14 @@ interface NoProvidersEmptyStateProps {
   canManage?: boolean;
   /** Replaces the default CTA, e.g. the settings list's own Add / Attach buttons. */
   action?: ReactNode;
-}
+};
 
-export const NoProvidersEmptyState = ({
+export function NoProvidersEmptyState({
   orgId,
   workspaceId,
   canManage = true,
   action,
-}: NoProvidersEmptyStateProps) => {
+}: NoProvidersEmptyStateProps) {
   const cta =
     action ??
     (canManage && workspaceId && (
@@ -50,4 +50,4 @@ export const NoProvidersEmptyState = ({
       action={cta}
     />
   );
-};
+}

@@ -7,8 +7,8 @@ vi.mock("@/lib/clipboard", () => ({ copyToClipboard }));
 
 import { CopyRow } from "./copy-row";
 
-const renderRow = (multiline = false) =>
-  render(
+function renderRow(multiline = false) {
+  return render(
     <CopyRow
       id="card-url"
       label="Agent card URL"
@@ -17,6 +17,7 @@ const renderRow = (multiline = false) =>
       multiline={multiline}
     />,
   );
+}
 
 beforeEach(() => {
   copyToClipboard.mockReset();

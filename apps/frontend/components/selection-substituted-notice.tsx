@@ -8,10 +8,11 @@ const MISSING_LABEL: Record<SelectionSubstitution["missing"], string> = {
   model: "model",
 };
 
-const sentence = ({ missing, source }: SelectionSubstitution) =>
-  source === "chat"
+function sentence({ missing, source }: SelectionSubstitution) {
+  return source === "chat"
     ? `This chat's ${MISSING_LABEL[missing]} is no longer available, so it's using a different model.`
     : `The ${MISSING_LABEL[missing]} you last used is no longer available, so this chat is using a different one.`;
+}
 
 /**
  * Says that the Chat opened against something other than what it asked for —
@@ -19,11 +20,11 @@ const sentence = ({ missing, source }: SelectionSubstitution) =>
  * to a different model without knowing it. The picker beside it shows what
  * took its place, and picking anything there clears the notice.
  */
-export const SelectionSubstitutedNotice = ({
+export function SelectionSubstitutedNotice({
   substitution,
 }: {
   substitution: SelectionSubstitution | undefined;
-}) => {
+}) {
   if (!substitution) return null;
 
   return (
@@ -35,4 +36,4 @@ export const SelectionSubstitutedNotice = ({
       <span>{sentence(substitution)}</span>
     </div>
   );
-};
+}

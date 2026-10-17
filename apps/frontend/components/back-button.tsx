@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 
-interface BackButtonProps {
+type BackButtonProps = {
   /**
    * Where to land when there is no browser history to go back to (a direct
    * link). Omitted for the header variant, which only ever steps back.
@@ -12,11 +13,14 @@ interface BackButtonProps {
   fallbackHref?: string;
   /** `page` is the labelled button above a resource page; `header` is the icon button in a shell header. */
   variant?: "page" | "header";
-}
+  /** Merged onto the `page` variant's button. */
+  className?: string;
+};
 
 export function BackButton({
   fallbackHref,
   variant = "page",
+  className,
 }: BackButtonProps) {
   const router = useRouter();
 
@@ -38,13 +42,18 @@ export function BackButton({
         onClick={handleClick}
         aria-label="Back"
       >
-        <ArrowLeft className="size-4" />
+        <ArrowLeft />
       </Button>
     );
   }
 
   return (
-    <Button className="mb-8" variant="outline" size="sm" onClick={handleClick}>
+    <Button
+      className={cn("mb-8", className)}
+      variant="outline"
+      size="sm"
+      onClick={handleClick}
+    >
       <ArrowLeft /> Back
     </Button>
   );

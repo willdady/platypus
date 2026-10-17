@@ -12,16 +12,19 @@ import {
   startEditSession,
 } from "./dashboard-edit-session";
 
-const item = (i: string, y = 0, h = 5): RglLayoutItem => ({
-  i,
-  x: 0,
-  y,
-  w: 3,
-  h,
-});
+function item(i: string, y = 0, h = 5): RglLayoutItem {
+  return {
+    i,
+    x: 0,
+    y,
+    w: 3,
+    h,
+  };
+}
 
-const types = (entries: Record<string, WidgetType>) =>
-  new Map(Object.entries(entries));
+function types(entries: Record<string, WidgetType>) {
+  return new Map(Object.entries(entries));
+}
 
 const server = {
   desktopLayout: [item("a", 0), item("b", 5)],

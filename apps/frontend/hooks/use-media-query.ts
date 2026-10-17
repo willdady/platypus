@@ -23,4 +23,6 @@ export function useMediaQuery(query: string): boolean {
   return React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
-const getServerSnapshot = () => false;
+function getServerSnapshot() {
+  return false;
+}

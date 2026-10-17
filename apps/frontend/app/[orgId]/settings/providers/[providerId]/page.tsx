@@ -5,11 +5,11 @@ import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Organization Provider" };
 
-const EditOrgProviderPage = async ({
+async function EditOrgProviderPage({
   params,
 }: {
   params: Promise<{ orgId: string; providerId: string }>;
-}) => {
+}) {
   const { orgId, providerId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const EditOrgProviderPage = async ({
       <ProviderForm orgId={orgId} providerId={providerId} />
     </ResourcePage>
   );
-};
+}
 
 export default EditOrgProviderPage;

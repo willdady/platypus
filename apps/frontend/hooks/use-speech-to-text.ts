@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 
-interface SpeechRecognition extends EventTarget {
+type SpeechRecognition = {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
@@ -20,12 +20,12 @@ interface SpeechRecognition extends EventTarget {
     ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
   onerror:
     ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
-}
+} & EventTarget;
 
-interface SpeechRecognitionEvent extends Event {
+type SpeechRecognitionEvent = {
   results: SpeechRecognitionResultList;
   resultIndex: number;
-}
+} & Event;
 
 type SpeechRecognitionResultList = {
   readonly length: number;
@@ -45,20 +45,15 @@ type SpeechRecognitionAlternative = {
   confidence: number;
 };
 
-interface SpeechRecognitionErrorEvent extends Event {
+type SpeechRecognitionErrorEvent = {
   error: string;
-}
+} & Event;
 
-declare global {
-  interface Window {
-    SpeechRecognition: {
-      new (): SpeechRecognition;
-    };
-    webkitSpeechRecognition: {
-      new (): SpeechRecognition;
-    };
-  }
-}
+/** `window` in a browser with the Web Speech API, under either name. */
+export type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognition;
+  webkitSpeechRecognition?: new () => SpeechRecognition;
+};
 
 /**
  * Why dictation is not working, as a code the caller turns into words
@@ -104,14 +99,14 @@ const RECOGNITION_FAULT_CODES = new Set<string>([
  * Engines differ on whether a result carries its own leading space, so both
  * gluing the words and doubling the space are possible without this.
  */
-const joinSpoken = (left: string, right: string) => {
+function joinSpoken(left: string, right: string) {
   if (!left || !right) {
     return left + right;
   }
   return /\s$/.test(left) || /^\s/.test(right)
     ? left + right
     : `${left} ${right}`;
-};
+}
 
 /**
  * The transcript the result list describes, whichever way the engine chose to
@@ -129,7 +124,7 @@ const joinSpoken = (left: string, right: string) => {
  * its neighbour rather than the list as a whole keeps a coincidence — one
  * phrase that happens to open the next — down to that pair.
  */
-const readTranscript = (results: SpeechRecognitionResultList) => {
+function readTranscript(results: SpeechRecognitionResultList) {
   const finals: string[] = [];
 
   for (let i = 0; i < results.length; i++) {
@@ -148,7 +143,7 @@ const readTranscript = (results: SpeechRecognitionResultList) => {
       return next === undefined || !next.startsWith(transcript);
     })
     .reduce(joinSpoken, "");
-};
+}
 
 export type UseSpeechToTextOptions = {
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
@@ -182,9 +177,10 @@ export function useSpeechToText({
       return;
     }
 
-    if (!(
-      "SpeechRecognition" in window || "webkitSpeechRecognition" in window
-    )) {
+    const speechWindow = window as SpeechRecognitionWindow;
+    const SpeechRecognitionCtor =
+      speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailability("unsupported");
       return;
@@ -199,8 +195,6 @@ export function useSpeechToText({
       return;
     }
 
-    const SpeechRecognitionCtor =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognitionCtor();
 
     recognition.continuous = true;

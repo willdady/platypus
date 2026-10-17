@@ -27,10 +27,10 @@ import { ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH } from "@platypus/schemas";
 import { toast } from "sonner";
 import { appRoutes, orgRoutes, withBasePath } from "@/lib/routes";
 
-interface OrganizationFormProps {
+type OrganizationFormProps = {
   classNames?: string;
   orgId?: string;
-}
+};
 
 const RETRACTABLE_FIELDS = ["name", "identityContext"] as const;
 
@@ -39,7 +39,7 @@ const INITIAL_DATA = {
   identityContext: "",
 };
 
-const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
+function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
   const router = useRouter();
 
   const {
@@ -181,6 +181,6 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
       </div>
     </DetailFormState>
   );
-};
+}
 
 export { OrganizationForm };

@@ -38,7 +38,7 @@ beforeEach(() => {
   mockScopedSWR({ "/invitations": [invitation] });
 });
 
-const confirmDelete = async () => {
+async function confirmDelete() {
   await renderList(<OrgInvitationsPage />);
   fireEvent.click(
     screen.getByRole("button", {
@@ -48,7 +48,7 @@ const confirmDelete = async () => {
   const dialog = screen.getByRole("dialog");
   fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
   return dialog;
-};
+}
 
 describe("OrgInvitationsPage delete", () => {
   it("deletes an invitation, says so and rereads the list", async () => {

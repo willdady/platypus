@@ -33,17 +33,17 @@ import {
 import { CHAT_MAX_STEPS_ERROR, CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
 
-interface ChatSettingsDialogProps {
+type ChatSettingsDialogProps = {
   settings: ChatSettings;
   onChange: (patch: Partial<ChatSettings>) => void;
   onClose?: () => void;
-}
+};
 
-export const ChatSettingsDialog = ({
+export function ChatSettingsDialog({
   settings,
   onChange,
   onClose,
-}: ChatSettingsDialogProps) => {
+}: ChatSettingsDialogProps) {
   const {
     instructions,
     temperature,
@@ -295,4 +295,4 @@ export const ChatSettingsDialog = ({
       </DialogFooter>
     </DialogContent>
   );
-};
+}

@@ -12,24 +12,27 @@ import {
 
 const NOW = Date.parse("2026-09-19T10:00:00.000Z");
 
-const chat = (over: Partial<ListedChat> = {}): ListedChat => ({
-  id: "chat-1",
-  status: "succeeded",
-  title: "A title",
-  updatedAt: new Date(NOW - 10 * 60_000).toISOString(),
-  ...over,
-});
+function chat(over: Partial<ListedChat> = {}): ListedChat {
+  return {
+    id: "chat-1",
+    status: "succeeded",
+    title: "A title",
+    updatedAt: new Date(NOW - 10 * 60_000).toISOString(),
+    ...over,
+  };
+}
 
-const poll = (
+function poll(
   over: Partial<Parameters<typeof chatListPoll>[0]> = {},
-): ReturnType<typeof chatListPoll> =>
-  chatListPoll({
+): ReturnType<typeof chatListPoll> {
+  return chatListPoll({
     watched: [],
     listed: [],
     activeChatId: null,
     now: NOW,
     ...over,
   });
+}
 
 describe("activeChatIdFromPathname", () => {
   it("reads the chat id out of a chat route", () => {

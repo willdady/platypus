@@ -38,7 +38,7 @@ const LABEL: Record<ResourceType, string> = {
  * (ADR-0007 / #154). Lists the organization's resources that are not yet
  * attached here; attaching one makes it appear in the workspace as a locked card.
  */
-const AttachSharedResourceDialog = ({
+function AttachSharedResourceDialog({
   open,
   onOpenChange,
   orgId,
@@ -54,7 +54,7 @@ const AttachSharedResourceDialog = ({
   resourceType: ResourceType;
   attachedIds: string[];
   onAttached: () => void;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
   const collection = COLLECTION[resourceType];
   const label = LABEL[resourceType];
@@ -157,6 +157,6 @@ const AttachSharedResourceDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}
 
 export { AttachSharedResourceDialog };

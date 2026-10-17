@@ -8,7 +8,7 @@ import type { Serialized, WriteOutcome } from "./api-write";
  */
 export const FIX_FORM_ERRORS_MESSAGE = "Please fix the errors in the form";
 
-export interface ApplyWriteOutcomeOptions<TResult> {
+export type ApplyWriteOutcomeOptions<TResult> = {
   /** Revalidates one SWR key — usually `useSWRConfig()`'s `mutate`. */
   readonly mutate: (key: string) => unknown;
   readonly setValidationErrors: (errors: Record<string, string>) => void;
@@ -41,7 +41,7 @@ export interface ApplyWriteOutcomeOptions<TResult> {
    * resource's lock refusal reads as guidance, not a failure — #570).
    */
   readonly onError?: (message: string, outcome: WriteOutcome<TResult>) => void;
-}
+};
 
 /**
  * The near-byte-identical `switch (result.outcome)` handler duplicated
@@ -100,13 +100,13 @@ export async function applyWriteOutcome<TResult>(
   }
 }
 
-export interface ApplyDeleteOutcomeOptions<TResult> {
+export type ApplyDeleteOutcomeOptions<TResult> = {
   /** Revalidates one SWR key — usually `useSWRConfig()`'s `mutate`. */
   readonly mutate: (key: string) => unknown;
   readonly onSuccess?: (data: Serialized<TResult>) => void | Promise<void>;
   /** See `ApplyWriteOutcomeOptions.onError` — covers every delete failure. */
   readonly onError?: (message: string, outcome: WriteOutcome<TResult>) => void;
-}
+};
 
 /**
  * `applyWriteOutcome` for a delete: there's no field to validate or key a

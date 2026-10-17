@@ -49,11 +49,11 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { Eye, EyeOff, Copy, RefreshCw } from "lucide-react";
 import { workspaceRoutes } from "@/lib/routes";
 
-interface WebhookFormProps {
+type WebhookFormProps = {
   orgId: string;
   workspaceId: string;
   webhookId?: string;
-}
+};
 
 /**
  * The picker's groups. Trigger run events are Webhook-only: an Event Trigger
@@ -109,45 +109,49 @@ const INITIAL_DATA = {
 };
 
 /** A switch beside a single-line label, as the Enabled and event rows are. */
-const InlineSwitchSkeleton = () => (
-  <div className="flex items-center gap-3">
-    <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
-    <Skeleton className="h-3.5 w-32" />
-  </div>
-);
+function InlineSwitchSkeleton() {
+  return (
+    <div className="flex items-center gap-3">
+      <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
+      <Skeleton className="h-3.5 w-32" />
+    </div>
+  );
+}
 
-const WebhookFormSkeleton = ({ editing }: { editing: boolean }) => (
-  <div>
-    <FormSkeletonSet>
-      <FormSkeletonGroup>
-        <FieldSkeleton />
-        <FieldSkeleton description={1} />
-        <div className="flex flex-col gap-3">
-          <InlineSwitchSkeleton />
-          <Skeleton className="h-3.5 w-1/2" />
-        </div>
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-3.5 w-16" />
-          <Skeleton className="mb-3 h-3.5 w-1/2" />
-          <div className="grid grid-cols-2 gap-3">
-            {ALL_EVENTS.map((event) => (
-              <InlineSwitchSkeleton key={event} />
-            ))}
+function WebhookFormSkeleton({ editing }: { editing: boolean }) {
+  return (
+    <div>
+      <FormSkeletonSet>
+        <FormSkeletonGroup>
+          <FieldSkeleton />
+          <FieldSkeleton description={1} />
+          <div className="flex flex-col gap-3">
+            <InlineSwitchSkeleton />
+            <Skeleton className="h-3.5 w-1/2" />
           </div>
-        </div>
-        {editing && <FieldSkeleton description={1} />}
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-3.5 w-28" />
-          <Skeleton className="mb-3 h-3.5 w-1/2" />
-          <Skeleton className="h-9 w-32" />
-        </div>
-      </FormSkeletonGroup>
-    </FormSkeletonSet>
-    <FooterSkeleton buttons={editing ? 2 : 1} />
-  </div>
-);
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-3.5 w-16" />
+            <Skeleton className="mb-3 h-3.5 w-1/2" />
+            <div className="grid grid-cols-2 gap-3">
+              {ALL_EVENTS.map((event) => (
+                <InlineSwitchSkeleton key={event} />
+              ))}
+            </div>
+          </div>
+          {editing && <FieldSkeleton description={1} />}
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-3.5 w-28" />
+            <Skeleton className="mb-3 h-3.5 w-1/2" />
+            <Skeleton className="h-9 w-32" />
+          </div>
+        </FormSkeletonGroup>
+      </FormSkeletonSet>
+      <FooterSkeleton buttons={editing ? 2 : 1} />
+    </div>
+  );
+}
 
-const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
+function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
   const backendUrl = useBackendUrl();
   const router = useRouter();
 
@@ -384,11 +388,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                   className="shrink-0"
                   onClick={() => setShowSecret(!showSecret)}
                 >
-                  {showSecret ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showSecret ? <EyeOff /> : <Eye />}
                 </Button>
                 <Button
                   type="button"
@@ -398,7 +398,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                   className="shrink-0"
                   onClick={handleCopySecret}
                 >
-                  <Copy className="h-4 w-4" />
+                  <Copy />
                 </Button>
                 <Button
                   type="button"
@@ -407,7 +407,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                   onClick={() => setIsRegenerateDialogOpen(true)}
                   disabled={isSubmitting}
                 >
-                  <RefreshCw className="h-4 w-4" /> Regenerate
+                  <RefreshCw /> Regenerate
                 </Button>
               </div>
               <FieldDescription>
@@ -484,6 +484,6 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
       {form}
     </DetailFormState>
   );
-};
+}
 
 export { WebhookForm };

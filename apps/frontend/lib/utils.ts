@@ -22,25 +22,25 @@ export function joinUrl(base: string, path: string): string {
  * The HTTP status a failed read's error carries (see `fetchError`), if any —
  * what tells a deleted or forbidden record from a read that merely failed.
  */
-export const errorStatus = (error: unknown): number | undefined => {
+export function errorStatus(error: unknown): number | undefined {
   if (error && typeof error === "object" && "status" in error) {
     const { status } = error as { status?: unknown };
     if (typeof status === "number") return status;
   }
   return undefined;
-};
+}
 
 /**
  * Whether a failed read was the server's answer — gone (404) or forbidden
  * (403) — rather than a failure that reading again might clear.
  */
-export const isNotFoundOrForbidden = (error: unknown): boolean => {
+export function isNotFoundOrForbidden(error: unknown): boolean {
   const status = errorStatus(error);
   return status === 403 || status === 404;
-};
+}
 
 /** The error a failed read throws, carrying the status and the response body. */
-const fetchError = async (res: Response) => {
+async function fetchError(res: Response) {
   const error: Error & { info?: unknown; status?: number } = new Error(
     "An error occurred while fetching the data.",
   );
@@ -48,13 +48,13 @@ const fetchError = async (res: Response) => {
   error.info = await res.json().catch(() => ({}));
   error.status = res.status;
   return error;
-};
+}
 
-export const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+export async function fetcher(input: RequestInfo | URL, init?: RequestInit) {
   const res = await fetch(input, { ...init, credentials: "include" });
   if (!res.ok) throw await fetchError(res);
   return res.json();
-};
+}
 
 /**
  * A read whose subject may legitimately not exist yet: 404 resolves to `null`
@@ -69,12 +69,12 @@ export const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
  * A per-read concession, not a change to `fetcher`'s contract: everywhere else
  * a 404 is a failure and still surfaces as one.
  */
-export const optionalFetcher = async (
+export async function optionalFetcher(
   input: RequestInfo | URL,
   init?: RequestInit,
-) => {
+) {
   const res = await fetch(input, { ...init, credentials: "include" });
   if (res.status === 404) return null;
   if (!res.ok) throw await fetchError(res);
   return res.json();
-};
+}

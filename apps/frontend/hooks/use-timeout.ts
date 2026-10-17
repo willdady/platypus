@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
  * timer, and unmounting drops it, so rapid clicks never overlap and nothing
  * fires into an unmounted component.
  */
-export const useTimeout = (): ((fn: () => void, ms: number) => void) => {
+export function useTimeout(): (fn: () => void, ms: number) => void {
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -14,4 +14,4 @@ export const useTimeout = (): ((fn: () => void, ms: number) => void) => {
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(fn, ms);
   }, []);
-};
+}

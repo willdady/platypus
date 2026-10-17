@@ -18,15 +18,16 @@ vi.mock("swr", () => swrMock);
 import { TransferWorkspaceAction } from "./transfer-workspace-dialog";
 import type { Serialized } from "@/lib/api-write";
 
-const memberOf = (id: string, name: string, isBanned = false) =>
-  ({
+function memberOf(id: string, name: string, isBanned = false) {
+  return {
     id: `m-${id}`,
     userId: id,
     role: "member",
     user: { id, name, email: `${id}@example.com` },
     isSuperAdmin: false,
     isBanned,
-  }) as Serialized<OrgMemberListItem>;
+  } as Serialized<OrgMemberListItem>;
+}
 
 const workspace = {
   id: "ws-1",
@@ -39,14 +40,15 @@ const providers = [
   { id: "p-org", name: "Shared Anthropic", organizationId: "org1" },
 ] as Serialized<Provider>[];
 
-const renderAction = () =>
-  renderList(
+function renderAction() {
+  return renderList(
     <TransferWorkspaceAction
       orgId="org1"
       workspaceId="ws-1"
       providers={providers}
     />,
   );
+}
 
 beforeEach(() => resetListHarness());
 

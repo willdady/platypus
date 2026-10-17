@@ -31,9 +31,9 @@ type ResponseMetrics = {
  * of the new fields and so renders no panel, unless it happens to carry
  * `toolDurations` from #353.
  */
-export const responseMetrics = (
+export function responseMetrics(
   metadata: ChatMessageMetadata | undefined,
-): ResponseMetrics | undefined => {
+): ResponseMetrics | undefined {
   const tokenUsage = metadata?.tokenUsage;
   const prepDurationMs = metadata?.prepDurationMs;
   const modelDurationMs = metadata?.modelDurationMs;
@@ -60,16 +60,20 @@ export const responseMetrics = (
     modelDurationMs,
     measuredToolDurationMs,
   };
-};
+}
 
-const formatTokenCount = (n: number) => n.toLocaleString();
+function formatTokenCount(n: number) {
+  return n.toLocaleString();
+}
 
-const MetricRow = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex items-center justify-between gap-4">
-    <span className="text-muted-foreground">{label}</span>
-    <span className="tabular-nums">{value}</span>
-  </div>
-);
+function MetricRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="tabular-nums">{value}</span>
+    </div>
+  );
+}
 
 /**
  * The panel's body. A leaf that reads only the metrics it is handed, so
@@ -81,7 +85,7 @@ const MetricRow = ({ label, value }: { label: string; value: string }) => (
  * step run concurrently, so summed tool time can legitimately exceed the
  * Model phase it is measured inside of.
  */
-const ResponseMetricsContent = ({ metrics }: { metrics: ResponseMetrics }) => {
+function ResponseMetricsContent({ metrics }: { metrics: ResponseMetrics }) {
   const {
     tokenUsage,
     prepDurationMs,
@@ -99,9 +103,9 @@ const ResponseMetricsContent = ({ metrics }: { metrics: ResponseMetrics }) => {
   const toolLineIsNested = modelDurationMs !== undefined;
 
   return (
-    <div className="space-y-3 text-sm">
+    <div className="flex flex-col gap-3 text-sm">
       {tokenUsage && (
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <MetricRow
             label="Input"
             value={formatTokenCount(tokenUsage.inputTokens)}
@@ -128,7 +132,7 @@ const ResponseMetricsContent = ({ metrics }: { metrics: ResponseMetrics }) => {
         </div>
       )}
       {hasTiming && (
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           {prepDurationMs !== undefined && (
             <MetricRow
               label="Preparation"
@@ -156,7 +160,7 @@ const ResponseMetricsContent = ({ metrics }: { metrics: ResponseMetrics }) => {
       )}
     </div>
   );
-};
+}
 
 export type ResponseMetricsPopoverProps = {
   /** The assistant message's metadata. Absent fields simply omit that row —
@@ -172,9 +176,9 @@ export type ResponseMetricsPopoverProps = {
  * Renders nothing when no metric at all is available, which is also true of
  * every message persisted before this change.
  */
-export const ResponseMetricsPopover = ({
+export function ResponseMetricsPopover({
   metadata,
-}: ResponseMetricsPopoverProps) => {
+}: ResponseMetricsPopoverProps) {
   const metrics = responseMetrics(metadata);
   if (!metrics) return null;
 
@@ -195,4 +199,4 @@ export const ResponseMetricsPopover = ({
       </PopoverContent>
     </Popover>
   );
-};
+}

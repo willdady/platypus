@@ -8,13 +8,13 @@ import { Check, Plus, X } from "lucide-react";
 import { colorForIndex } from "./chart-colors";
 import { genId, seriesValuesToText, textToSeriesValues } from "./chart-utils";
 
-export interface SeriesEntry {
+export type SeriesEntry = {
   id: string;
   label: string;
   values: (number | null)[];
-}
+};
 
-interface Props {
+type Props = {
   title: string;
   onTitleChange: (v: string) => void;
   yAxisLabel: string;
@@ -24,7 +24,7 @@ interface Props {
   series: SeriesEntry[];
   onSeriesChange: (s: SeriesEntry[]) => void;
   onSave: () => void;
-}
+};
 
 export function SeriesEditor({
   title,
@@ -46,7 +46,7 @@ export function SeriesEditor({
 
   return (
     <div className="flex flex-col gap-2 p-3 h-full overflow-auto">
-      <div className="space-y-1">
+      <div className="flex flex-col gap-1">
         <Label htmlFor={`${id}-name`} className="text-xs">
           Name
         </Label>
@@ -57,7 +57,7 @@ export function SeriesEditor({
           className="h-7 text-sm"
         />
       </div>
-      <div className="space-y-1">
+      <div className="flex flex-col gap-1">
         <Label htmlFor={`${id}-y-axis-label`} className="text-xs">
           Y-axis label (optional)
         </Label>
@@ -69,7 +69,7 @@ export function SeriesEditor({
           className="h-7 text-sm"
         />
       </div>
-      <div className="space-y-1">
+      <div className="flex flex-col gap-1">
         <Label htmlFor={`${id}-categories`} className="text-xs">
           Categories (comma-separated)
         </Label>
@@ -81,7 +81,11 @@ export function SeriesEditor({
           className="h-7 text-sm"
         />
       </div>
-      <div role="group" aria-labelledby={`${id}-series`} className="space-y-2">
+      <div
+        role="group"
+        aria-labelledby={`${id}-series`}
+        className="flex flex-col gap-2"
+      >
         <div className="flex items-center justify-between">
           <span
             id={`${id}-series`}
@@ -94,14 +98,14 @@ export function SeriesEditor({
             onClick={handleAddSeries}
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Plus className="h-3 w-3" /> Add series
+            <Plus className="size-3" /> Add series
           </button>
         </div>
         {series.map((s, i) => (
-          <div key={s.id} className="space-y-1 rounded border p-2">
+          <div key={s.id} className="flex flex-col gap-1 rounded border p-2">
             <div className="flex items-center gap-1">
               <div
-                className="h-2 w-2 shrink-0 rounded-full"
+                className="size-2 shrink-0 rounded-full"
                 style={{
                   backgroundColor: colorForIndex(i),
                 }}
@@ -127,7 +131,7 @@ export function SeriesEditor({
                   onClick={() => handleRemoveSeries(s.id)}
                   className="text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="size-3" />
                 </button>
               )}
             </div>
@@ -149,7 +153,7 @@ export function SeriesEditor({
         ))}
       </div>
       <Button size="sm" className="mt-auto" onClick={onSave}>
-        <Check className="h-3 w-3" /> Save
+        <Check className="size-3" /> Save
       </Button>
     </div>
   );

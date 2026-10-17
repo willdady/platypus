@@ -76,37 +76,39 @@ const RETRACTABLE_FIELDS = [
   "oauthRequestedScope",
 ] as const;
 
-const McpFormSkeleton = ({
+function McpFormSkeleton({
   className,
   editing,
 }: {
   className?: string;
   editing: boolean;
-}) => (
-  <div className={className}>
-    <FormSkeletonSet>
-      <FormSkeletonGroup>
-        <FieldSkeleton />
-        <FieldSkeleton description={1} />
-        <div className="grid grid-cols-3 gap-4">
-          <FieldSkeleton className="col-span-1" />
-        </div>
-        {/* Custom Headers: label, description, Add header */}
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <Skeleton className="h-3.5 w-28" />
-            <Skeleton className="h-3.5 w-2/3" />
+}) {
+  return (
+    <div className={className}>
+      <FormSkeletonSet>
+        <FormSkeletonGroup>
+          <FieldSkeleton />
+          <FieldSkeleton description={1} />
+          <div className="grid grid-cols-3 gap-4">
+            <FieldSkeleton className="col-span-1" />
           </div>
-          <Skeleton className="h-8 w-28" />
-        </div>
-      </FormSkeletonGroup>
-      <Skeleton className="h-9 w-40" />
-    </FormSkeletonSet>
-    <FooterSkeleton buttons={editing ? 2 : 1} />
-  </div>
-);
+          {/* Custom Headers: label, description, Add header */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <Skeleton className="h-3.5 w-28" />
+              <Skeleton className="h-3.5 w-2/3" />
+            </div>
+            <Skeleton className="h-8 w-28" />
+          </div>
+        </FormSkeletonGroup>
+        <Skeleton className="h-9 w-40" />
+      </FormSkeletonSet>
+      <FooterSkeleton buttons={editing ? 2 : 1} />
+    </div>
+  );
+}
 
-const McpForm = ({
+function McpForm({
   classNames,
   orgId,
   workspaceId,
@@ -116,7 +118,7 @@ const McpForm = ({
   orgId: string;
   workspaceId?: string;
   mcpId?: string;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
 
   // An MCP is scoped to either a Workspace or the Organization (ADR-0007).
@@ -624,9 +626,9 @@ const McpForm = ({
           <div
             role="group"
             aria-labelledby="mcp-headers-label"
-            className="space-y-3"
+            className="flex flex-col gap-3"
           >
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <FieldTitle id="mcp-headers-label">Custom Headers</FieldTitle>
               <FieldDescription>
                 Optional HTTP headers sent with every request to the MCP server.
@@ -649,7 +651,7 @@ const McpForm = ({
 
           {/* OAuth Authorization Section */}
           {formData.authType === "OAuth" && (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               {oauthAuthorized ? (
                 <Alert variant="success">
                   <ShieldCheck />
@@ -701,8 +703,9 @@ const McpForm = ({
         </FieldGroup>
 
         {/* Test Connection Section */}
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <Button
+            className="self-start"
             type="button"
             variant="outline"
             onClick={handleTestConnection}
@@ -728,14 +731,14 @@ const McpForm = ({
               </AlertTitle>
               <AlertDescription>
                 {testResult.success ? (
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-2">
                     <p>
                       Found {testResult.toolNames?.length || 0} tool
                       {(testResult.toolNames?.length || 0) !== 1 ? "s" : ""}
                     </p>
                     {testResult.toolNames &&
                       testResult.toolNames.length > 0 && (
-                        <div className="mt-2">
+                        <div>
                           <p className="text-xs font-medium mb-1">
                             Available tools:
                           </p>
@@ -753,7 +756,7 @@ const McpForm = ({
                       )}
                     {testResult.invalidToolNames &&
                       testResult.invalidToolNames.length > 0 && (
-                        <div className="mt-2">
+                        <div>
                           <p className="text-xs font-medium mb-1 text-destructive">
                             These tools&apos; names are too long once namespaced
                             and will be unavailable. Rename this MCP shorter to
@@ -813,6 +816,6 @@ const McpForm = ({
       {form}
     </DetailFormState>
   );
-};
+}
 
 export { McpForm };

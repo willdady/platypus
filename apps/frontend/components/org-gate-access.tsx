@@ -34,8 +34,9 @@ const GATE_OPTIONS: { value: OrgGate; label: string }[] = [
 
 type Draft = { gate: OrgGate; allowed: Set<string> };
 
-const sameSet = (a: Set<string>, b: Set<string>) =>
-  a.size === b.size && [...a].every((id) => b.has(id));
+function sameSet(a: Set<string>, b: Set<string>) {
+  return a.size === b.size && [...a].every((id) => b.has(id));
+}
 
 /** One Workspace as a gate's access screen lists it. */
 type GateWorkspace = Access["workspaces"][number];
@@ -63,13 +64,13 @@ type GateCopy = {
  * switching to Selected never refuses calls for the Workspaces that should
  * keep them while the Admin ticks them one by one.
  */
-export const OrgGateAccess = ({
+export function OrgGateAccess({
   orgId,
   copy,
 }: {
   orgId: string;
   copy: GateCopy;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
   const scope = { orgId };
   const { data, error, isLoading, mutate } = useScopedSWR<Access>(
@@ -219,7 +220,7 @@ export const OrgGateAccess = ({
       </div>
     </div>
   );
-};
+}
 
 const INBOUND_TRIGGER_GATE: GateCopy = {
   entity: "inbound-triggers/access",
@@ -239,9 +240,9 @@ const INBOUND_TRIGGER_GATE: GateCopy = {
 };
 
 /** Which Workspaces take Inbound Trigger calls (ADR-0030). */
-export const OrgInboundTriggerAccess = ({ orgId }: { orgId: string }) => (
-  <OrgGateAccess orgId={orgId} copy={INBOUND_TRIGGER_GATE} />
-);
+export function OrgInboundTriggerAccess({ orgId }: { orgId: string }) {
+  return <OrgGateAccess orgId={orgId} copy={INBOUND_TRIGGER_GATE} />;
+}
 
 const A2A_GATE: GateCopy = {
   entity: "a2a/access",
@@ -264,6 +265,6 @@ const A2A_GATE: GateCopy = {
  * Which Workspaces may have A2A endpoints (ADR-0032). Separate from the
  * Inbound Trigger gate, and off by default.
  */
-export const OrgA2aAccess = ({ orgId }: { orgId: string }) => (
-  <OrgGateAccess orgId={orgId} copy={A2A_GATE} />
-);
+export function OrgA2aAccess({ orgId }: { orgId: string }) {
+  return <OrgGateAccess orgId={orgId} copy={A2A_GATE} />;
+}

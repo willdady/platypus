@@ -45,7 +45,7 @@ import {
 } from "./shared-resource-actions";
 
 /** A list row as the API returns it: an id, a name, and — inside a workspace — its scope. */
-interface ScopedResource {
+type ScopedResource = {
   readonly id: string;
   readonly name: string;
   readonly scope?: "organization" | "workspace";
@@ -53,16 +53,16 @@ interface ScopedResource {
   readonly providerType?: string;
   /** An MCP server's URL. */
   readonly url?: string;
-}
+};
 
-interface EmptyStateProps {
+type EmptyStateProps = {
   readonly orgId: string;
   readonly workspaceId?: string;
   readonly canManage: boolean;
   readonly action?: ReactNode;
-}
+};
 
-export interface ResourceListLabels {
+export type ResourceListLabels = {
   /** Create CTA: "Add provider" / "Add MCP server". */
   readonly add: string;
   /** Attach CTA: "Attach shared provider" / "Attach shared MCP". */
@@ -75,9 +75,9 @@ export interface ResourceListLabels {
   readonly noun: string;
   /** The resource named in a fetch failure: "providers" / "MCP servers". */
   readonly plural: string;
-}
+};
 
-export interface ResourceListConfig {
+export type ResourceListConfig = {
   /** Collection entity as the API spells it: "providers" / "mcps". */
   readonly entity: string;
   /** Which Shared resource this is — names the attach/detach endpoints (ADR-0007). */
@@ -91,7 +91,7 @@ export interface ResourceListConfig {
   readonly secondLine: "providerType" | "url";
   /** Rendered when the list has no resources, holding whichever Add / Attach buttons the caller gets. */
   readonly emptyState: ComponentType<EmptyStateProps>;
-}
+};
 
 /**
  * The Organization-or-Workspace list of a Scoped resource (ADR-0007), one
@@ -100,7 +100,7 @@ export interface ResourceListConfig {
  * read, the org-scoped lock, attach, detach, and the fetch-error state — is
  * shared, so the two resources cannot drift apart again.
  */
-export const ResourceList = ({
+export function ResourceList({
   orgId,
   workspaceId,
   config,
@@ -108,7 +108,7 @@ export const ResourceList = ({
   orgId: string;
   workspaceId?: string;
   config: ResourceListConfig;
-}) => {
+}) {
   const { actor, workspaceDelegation } = useAuth();
   const [resourceToManage, setResourceToManage] =
     useState<ScopedResource | null>(null);
@@ -382,11 +382,13 @@ export const ResourceList = ({
       />
     </>
   );
-};
+}
 
-export const OrganizationBadge = () => (
-  <Badge variant="pill">
-    <Building />
-    Organization
-  </Badge>
-);
+export function OrganizationBadge() {
+  return (
+    <Badge variant="pill">
+      <Building />
+      Organization
+    </Badge>
+  );
+}

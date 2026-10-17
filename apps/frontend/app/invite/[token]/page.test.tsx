@@ -50,9 +50,9 @@ const WORKSPACE_PATH = "/org-9/workspace/ws-9";
  * Stubs `fetch` to answer the link's resolution with `RESOLUTION_BODY`, and
  * `/register` or `/accept` with whatever the test stages for them.
  */
-const stubInvite = (
+function stubInvite(
   routes: Partial<Record<"register" | "accept", [number, unknown]>> = {},
-) => {
+) {
   const fetchMock = vi.fn(async (url: string) => {
     const route = (["register", "accept"] as const).find((r) =>
       String(url).endsWith(`/${r}`),
@@ -62,12 +62,13 @@ const stubInvite = (
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
-};
+}
 
-const called = (fetchMock: ReturnType<typeof stubInvite>, suffix: string) =>
-  fetchMock.mock.calls.some(([url]) => String(url).endsWith(suffix));
+function called(fetchMock: ReturnType<typeof stubInvite>, suffix: string) {
+  return fetchMock.mock.calls.some(([url]) => String(url).endsWith(suffix));
+}
 
-const fillRegistration = async () => {
+async function fillRegistration() {
   fireEvent.change(await screen.findByLabelText("Name"), {
     target: { value: "Robin" },
   });
@@ -75,7 +76,7 @@ const fillRegistration = async () => {
     target: { value: "at-least-8-chars" },
   });
   fireEvent.click(screen.getByRole("button", { name: /accept invitation/i }));
-};
+}
 
 describe("InviteTokenPage", () => {
   let tokenCounter = 0;

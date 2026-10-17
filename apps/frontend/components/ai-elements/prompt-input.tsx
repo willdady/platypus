@@ -84,7 +84,7 @@ const PromptInputAttachmentsContext = createContext<AttachmentsContext | null>(
   null,
 );
 
-export const usePromptInputAttachments = () => {
+export function usePromptInputAttachments() {
   const context = useContext(PromptInputAttachmentsContext);
   if (!context) {
     throw new Error(
@@ -92,7 +92,7 @@ export const usePromptInputAttachments = () => {
     );
   }
   return context;
-};
+}
 
 function fileMatchesAccept(file: File, accept: string): boolean {
   const patterns = accept
@@ -183,7 +183,7 @@ export function PromptInputAttachment({
         </div>
       </HoverCardTrigger>
       <HoverCardContent align="start" className="w-auto p-2">
-        <div className="w-auto space-y-3">
+        <div className="w-auto flex flex-col gap-3">
           {isImage && (
             <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
               {/* Attachment served from a blob:/data:/backend URL; not
@@ -200,7 +200,7 @@ export function PromptInputAttachment({
             </div>
           )}
           <div className="flex items-center gap-2.5">
-            <div className="min-w-0 flex-1 space-y-1 px-0.5">
+            <div className="min-w-0 flex-1 flex flex-col gap-1 px-0.5">
               <h4 className="truncate font-semibold text-sm leading-none">
                 {filename || (isImage ? "Image" : "Attachment")}
               </h4>
@@ -289,10 +289,10 @@ export type PromptInputActionAddAttachmentsProps = ComponentProps<
   label?: string;
 };
 
-export const PromptInputActionAddAttachments = ({
+export function PromptInputActionAddAttachments({
   label = "Add photos or files",
   ...props
-}: PromptInputActionAddAttachmentsProps) => {
+}: PromptInputActionAddAttachmentsProps) {
   const attachments = usePromptInputAttachments();
 
   return (
@@ -307,11 +307,11 @@ export const PromptInputActionAddAttachments = ({
       {label}
     </DropdownMenuItem>
   );
-};
+}
 
-export const PromptInputActionAddSandboxUploads = (
+export function PromptInputActionAddSandboxUploads(
   props: ComponentProps<typeof DropdownMenuItem>,
-) => {
+) {
   const attachments = usePromptInputAttachments();
 
   return (
@@ -326,7 +326,7 @@ export const PromptInputActionAddSandboxUploads = (
       Upload to Sandbox
     </DropdownMenuItem>
   );
-};
+}
 
 export type PromptInputMessage = {
   text: string;
@@ -357,7 +357,7 @@ export type PromptInputProps = Omit<
   ) => void | Promise<void>;
 };
 
-export const PromptInput = ({
+export function PromptInput({
   className,
   accept,
   initialAttachments,
@@ -366,7 +366,7 @@ export const PromptInput = ({
   onSubmit,
   children,
   ...props
-}: PromptInputProps) => {
+}: PromptInputProps) {
   // Refs
   const inputRef = useRef<HTMLInputElement | null>(null);
   const sandboxInputRef = useRef<HTMLInputElement | null>(null);
@@ -684,16 +684,13 @@ export const PromptInput = ({
       </form>
     </PromptInputAttachmentsContext.Provider>
   );
-};
+}
 
 export type PromptInputBodyProps = HTMLAttributes<HTMLDivElement>;
 
-export const PromptInputBody = ({
-  className,
-  ...props
-}: PromptInputBodyProps) => (
-  <div className={cn("contents", className)} {...props} />
-);
+export function PromptInputBody({ className, ...props }: PromptInputBodyProps) {
+  return <div className={cn("contents", className)} {...props} />;
+}
 
 export type PromptInputTextareaProps = ComponentProps<
   typeof InputGroupTextarea
@@ -701,13 +698,13 @@ export type PromptInputTextareaProps = ComponentProps<
   status?: ChatStatus;
 };
 
-export const PromptInputTextarea = ({
+export function PromptInputTextarea({
   className,
   placeholder = "What would you like to know?",
   status,
   onKeyDown,
   ...props
-}: PromptInputTextareaProps) => {
+}: PromptInputTextareaProps) {
   const attachments = usePromptInputAttachments();
   const [isComposing, setIsComposing] = useState(false);
   const isMobile = useIsMobile();
@@ -801,41 +798,45 @@ export const PromptInputTextarea = ({
       {...props}
     />
   );
-};
+}
 
 export type PromptInputFooterProps = Omit<
   ComponentProps<typeof InputGroupAddon>,
   "align"
 >;
 
-export const PromptInputFooter = ({
+export function PromptInputFooter({
   className,
   ...props
-}: PromptInputFooterProps) => (
-  <InputGroupAddon
-    align="block-end"
-    className={cn("justify-between gap-1", className)}
-    {...props}
-  />
-);
+}: PromptInputFooterProps) {
+  return (
+    <InputGroupAddon
+      align="block-end"
+      className={cn("justify-between gap-1", className)}
+      {...props}
+    />
+  );
+}
 
 export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>;
 
-export const PromptInputTools = ({
+export function PromptInputTools({
   className,
   ...props
-}: PromptInputToolsProps) => (
-  <div className={cn("flex items-center gap-1", className)} {...props} />
-);
+}: PromptInputToolsProps) {
+  return (
+    <div className={cn("flex items-center gap-1", className)} {...props} />
+  );
+}
 
 export type PromptInputButtonProps = ComponentProps<typeof InputGroupButton>;
 
-export const PromptInputButton = ({
+export function PromptInputButton({
   variant = "ghost",
   className,
   size,
   ...props
-}: PromptInputButtonProps) => {
+}: PromptInputButtonProps) {
   const newSize =
     size ?? (Children.count(props.children) > 1 ? "sm" : "icon-sm");
 
@@ -848,49 +849,53 @@ export const PromptInputButton = ({
       {...props}
     />
   );
-};
+}
 
 export type PromptInputActionMenuProps = ComponentProps<typeof DropdownMenu>;
-export const PromptInputActionMenu = (props: PromptInputActionMenuProps) => (
-  <DropdownMenu {...props} />
-);
+export function PromptInputActionMenu(props: PromptInputActionMenuProps) {
+  return <DropdownMenu {...props} />;
+}
 
 export type PromptInputActionMenuTriggerProps = PromptInputButtonProps;
 
-export const PromptInputActionMenuTrigger = ({
+export function PromptInputActionMenuTrigger({
   className,
   children,
   ...props
-}: PromptInputActionMenuTriggerProps) => (
-  <DropdownMenuTrigger asChild>
-    <PromptInputButton className={className} {...props}>
-      {children ?? <PlusIcon className="size-4" />}
-    </PromptInputButton>
-  </DropdownMenuTrigger>
-);
+}: PromptInputActionMenuTriggerProps) {
+  return (
+    <DropdownMenuTrigger asChild>
+      <PromptInputButton className={className} {...props}>
+        {children ?? <PlusIcon className="size-4" />}
+      </PromptInputButton>
+    </DropdownMenuTrigger>
+  );
+}
 
 export type PromptInputActionMenuContentProps = ComponentProps<
   typeof DropdownMenuContent
 >;
-export const PromptInputActionMenuContent = ({
+export function PromptInputActionMenuContent({
   className,
   ...props
-}: PromptInputActionMenuContentProps) => (
-  <DropdownMenuContent align="start" className={cn(className)} {...props} />
-);
+}: PromptInputActionMenuContentProps) {
+  return (
+    <DropdownMenuContent align="start" className={cn(className)} {...props} />
+  );
+}
 
 export type PromptInputSubmitProps = ComponentProps<typeof InputGroupButton> & {
   status?: ChatStatus;
 };
 
-export const PromptInputSubmit = ({
+export function PromptInputSubmit({
   className,
   variant = "default",
   size = "icon-sm",
   status,
   children,
   ...props
-}: PromptInputSubmitProps) => {
+}: PromptInputSubmitProps) {
   let Icon = <CornerDownLeftIcon className="size-4" />;
 
   if (status === "submitted") {
@@ -913,7 +918,7 @@ export const PromptInputSubmit = ({
       {children ?? Icon}
     </InputGroupButton>
   );
-};
+}
 
 export type PromptInputSpeechButtonProps = ComponentProps<
   typeof PromptInputButton
@@ -943,13 +948,13 @@ const SPEECH_FAULT_MESSAGES: Record<SpeechToTextFaultCode, string> = {
   unknown: "Voice input stopped unexpectedly.",
 };
 
-export const PromptInputSpeechButton = ({
+export function PromptInputSpeechButton({
   className,
   textareaRef,
   onTranscriptionChange,
   onClick,
   ...props
-}: PromptInputSpeechButtonProps) => {
+}: PromptInputSpeechButtonProps) {
   const { isListening, fault, toggleListening } = useSpeechToText({
     textareaRef,
     onTranscriptionChange,
@@ -988,4 +993,4 @@ export const PromptInputSpeechButton = ({
       <MicIcon className="size-4" />
     </PromptInputButton>
   );
-};
+}

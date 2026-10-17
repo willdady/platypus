@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyCard } from "@/components/empty-card";
 import { errorStatus, isNotFoundOrForbidden } from "@/lib/utils";
 
-const noticeFor = (subject: string, error: unknown) => {
+function noticeFor(subject: string, error: unknown) {
   switch (errorStatus(error)) {
     case 404:
       return {
@@ -27,7 +27,7 @@ const noticeFor = (subject: string, error: unknown) => {
         description: `This ${subject} couldn't be loaded. Try again in a moment.`,
       };
   }
-};
+}
 
 /**
  * The notice a failed record read shows in place of the record: what went
@@ -37,7 +37,7 @@ const noticeFor = (subject: string, error: unknown) => {
  * `onRetry` (the read's `mutate`), anything else also offers to read again;
  * a 403 or 404 doesn't, since reading again won't change the answer.
  */
-export const FetchErrorNotice = ({
+export function FetchErrorNotice({
   error,
   subject,
   backHref,
@@ -50,7 +50,7 @@ export const FetchErrorNotice = ({
   backHref: string;
   backLabel: string;
   onRetry?: () => void;
-}) => {
+}) {
   const notice = noticeFor(subject, error);
   const retryable = onRetry && !isNotFoundOrForbidden(error);
   return (
@@ -68,4 +68,4 @@ export const FetchErrorNotice = ({
       }
     />
   );
-};
+}

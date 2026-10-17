@@ -16,39 +16,41 @@ vi.mock("swr", () => swrMock);
 import { formatDateTime } from "@/lib/format-date";
 import { OrgA2aEndpointsList } from "./org-a2a-endpoints-list";
 
-const endpoint = (over: Record<string, unknown> = {}) => ({
-  id: "ep-1",
-  name: "Support desk",
-  enabled: true,
-  agentId: "agent-1",
-  agentName: "Helper",
-  workspaceId: "ws-1",
-  workspaceName: "Support",
-  ownerId: "user-1",
-  ownerName: "Dana Owner",
-  createdAt: "2026-09-01T10:00:00.000Z",
-  tokens: [
-    {
-      id: "tok-1",
-      endpointId: "ep-1",
-      name: "Telegram",
-      createdAt: "2026-09-02T10:00:00.000Z",
-      tokenStatus: "expiring",
-      tokenCreatedAt: "2026-07-01T10:00:00.000Z",
-      tokenExpiresAt: "2026-10-15T10:00:00.000Z",
-      lastUsedAt: null,
-      lastRejectedAt: "2026-09-28T10:00:00.000Z",
-    },
-  ],
-  ...over,
-});
+function endpoint(over: Record<string, unknown> = {}) {
+  return {
+    id: "ep-1",
+    name: "Support desk",
+    enabled: true,
+    agentId: "agent-1",
+    agentName: "Helper",
+    workspaceId: "ws-1",
+    workspaceName: "Support",
+    ownerId: "user-1",
+    ownerName: "Dana Owner",
+    createdAt: "2026-09-01T10:00:00.000Z",
+    tokens: [
+      {
+        id: "tok-1",
+        endpointId: "ep-1",
+        name: "Telegram",
+        createdAt: "2026-09-02T10:00:00.000Z",
+        tokenStatus: "expiring",
+        tokenCreatedAt: "2026-07-01T10:00:00.000Z",
+        tokenExpiresAt: "2026-10-15T10:00:00.000Z",
+        lastUsedAt: null,
+        lastRejectedAt: "2026-09-28T10:00:00.000Z",
+      },
+    ],
+    ...over,
+  };
+}
 
 /** Opens the row's revoke dialog, then confirms it. */
-const revoke = async (name: string, label: string) => {
+async function revoke(name: string, label: string) {
   fireEvent.click(screen.getByRole("button", { name }));
   const buttons = await screen.findAllByRole("button", { name: label });
   fireEvent.click(buttons[buttons.length - 1]);
-};
+}
 
 beforeEach(resetListHarness);
 

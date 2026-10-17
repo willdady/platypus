@@ -122,7 +122,7 @@ type AgentFormData = {
   frequencyPenalty?: number;
 };
 
-const AgentForm = ({
+function AgentForm({
   classNames,
   orgId,
   workspaceId,
@@ -145,7 +145,7 @@ const AgentForm = ({
   // surface, pulling its references from org-scoped lists and writing via the
   // org Agent routes (ADR-0007). Otherwise it edits a workspace Agent.
   orgScoped?: boolean;
-}) => {
+}) {
   const [isOpen, setIsOpen] = useState(false);
 
   const backendUrl = useBackendUrl();
@@ -473,7 +473,7 @@ const AgentForm = ({
               className="relative group flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               disabled={isSubmitting || readOnly}
             >
-              <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
+              <div className="size-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
                 {avatarPreviewUrl ? (
                   // Local blob:/object-URL preview of the chosen file; the Next
                   // image optimizer cannot process object URLs.
@@ -481,18 +481,18 @@ const AgentForm = ({
                   <img
                     src={avatarPreviewUrl}
                     alt="Avatar"
-                    className="w-full h-full object-cover"
+                    className="size-full object-cover"
                     width={80}
                     height={80}
                     decoding="async"
                   />
                 ) : (
-                  <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                  <ImageIcon className="size-8 text-muted-foreground" />
                 )}
               </div>
               {avatarPreviewUrl && (
                 <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
-                  <Camera className="w-6 h-6 text-white" />
+                  <Camera className="size-6 text-white" />
                 </div>
               )}
             </button>
@@ -505,7 +505,7 @@ const AgentForm = ({
                 className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-destructive whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 disabled={isSubmitting || readOnly}
               >
-                <X className="w-4 h-4" />
+                <X className="size-4" />
                 Remove
               </button>
             )}
@@ -976,6 +976,6 @@ const AgentForm = ({
       {form}
     </DetailFormState>
   );
-};
+}
 
 export { AgentForm };

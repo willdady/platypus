@@ -16,7 +16,7 @@ export type ToolDurationProps = {
  * re-hydrates — so the duration appears once, when the run is persisted, and
  * never changes afterwards.
  */
-export const ToolDuration = ({ durationMs }: ToolDurationProps) => {
+export function ToolDuration({ durationMs }: ToolDurationProps) {
   if (durationMs === undefined) return null;
 
   // A sibling of the name rather than part of it: the name truncates, and the
@@ -28,4 +28,4 @@ export const ToolDuration = ({ durationMs }: ToolDurationProps) => {
       &mdash; {formatToolDuration(durationMs)}
     </span>
   );
-};
+}

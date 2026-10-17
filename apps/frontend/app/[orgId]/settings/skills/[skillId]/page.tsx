@@ -5,11 +5,11 @@ import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Organization Skill" };
 
-const EditOrgSkillPage = async ({
+async function EditOrgSkillPage({
   params,
 }: {
   params: Promise<{ orgId: string; skillId: string }>;
-}) => {
+}) {
   const { orgId, skillId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const EditOrgSkillPage = async ({
       <SkillForm orgId={orgId} skillId={skillId} />
     </ResourcePage>
   );
-};
+}
 
 export default EditOrgSkillPage;

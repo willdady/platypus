@@ -43,9 +43,9 @@ const provider = {
   modelIds: [{ id: "m1", passthroughFileTypes: [] }],
 } as unknown as Serialized<Provider>;
 
-const renderEditor = (
+function renderEditor(
   overrides: Partial<React.ComponentProps<typeof MessageEditor>> = {},
-) => {
+) {
   const onSubmit = vi.fn();
   const onCancel = vi.fn();
   const view = render(
@@ -70,10 +70,11 @@ const renderEditor = (
     />,
   );
   return { ...view, onSubmit, onCancel };
-};
+}
 
-const save = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+function save() {
+  return fireEvent.click(screen.getByRole("button", { name: "Save" }));
+}
 
 describe("MessageEditor", () => {
   it("opens holding the message's text and its attachments", () => {

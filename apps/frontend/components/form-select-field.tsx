@@ -31,7 +31,7 @@ export type FormSelectFieldProps = {
 // Composes the ui/field + ui/select atoms so the
 // Field/FieldLabel/Select/SelectTrigger/SelectValue/FieldError block doesn't
 // have to be hand-wired at every call site, matching `FormTextField`.
-export const FormSelectField = ({
+export function FormSelectField({
   label,
   name,
   value,
@@ -43,7 +43,7 @@ export const FormSelectField = ({
   disabled,
   className,
   triggerClassName,
-}: FormSelectFieldProps) => {
+}: FormSelectFieldProps) {
   const ids = formFieldIds(name, { description, error });
   return (
     <Field className={className} data-invalid={!!error}>
@@ -68,4 +68,4 @@ export const FormSelectField = ({
       {error && <FieldError id={ids.errorId}>{error}</FieldError>}
     </Field>
   );
-};
+}

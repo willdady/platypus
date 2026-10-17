@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { cachedTokenBreakdown } from "./cached-tokens";
 
-const raw = (n: number) => n.toLocaleString();
+function raw(n: number) {
+  return n.toLocaleString();
+}
 
 describe("cachedTokenBreakdown", () => {
   it("renders the read and write copy, formatted by the caller's formatter", () => {

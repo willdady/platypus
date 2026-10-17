@@ -8,20 +8,21 @@ import {
   SUB_AGENT_STEP_LIMIT_NOTICE,
 } from "./sub-agent-tool";
 
-const delegateCall = (toolMetadata?: Record<string, unknown>): ToolUIPart =>
-  ({
+function delegateCall(toolMetadata?: Record<string, unknown>): ToolUIPart {
+  return {
     type: "tool-delegateToResearchBot",
     toolCallId: "call-1",
     state: "output-available",
     input: { task: "Find the release date" },
     output: { entries: [], text: "It shipped in March." },
     toolMetadata,
-  }) as unknown as ToolUIPart;
+  } as unknown as ToolUIPart;
+}
 
-const truncatedDelegateCall = (
+function truncatedDelegateCall(
   entries: Array<Record<string, unknown>> = [],
-): ToolUIPart =>
-  ({
+): ToolUIPart {
+  return {
     type: "tool-delegateToResearchBot",
     toolCallId: "call-1",
     state: "output-available",
@@ -31,7 +32,8 @@ const truncatedDelegateCall = (
       text: "It shipped in Mar",
       truncatedByTokenLimit: true,
     },
-  }) as unknown as ToolUIPart;
+  } as unknown as ToolUIPart;
+}
 
 // The two shapes a delegation is ever stored in. `tool-delegate` is what every
 // new one writes and names its target in the input; `tool-delegateTo<Name>` is

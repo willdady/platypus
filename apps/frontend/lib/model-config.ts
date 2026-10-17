@@ -42,10 +42,10 @@ export type ModelConfigView = {
 };
 
 /** Normalize a provider's models to objects, tolerating the legacy `string[]`. */
-export const getModelConfigs = (
+export function getModelConfigs(
   provider: Pick<Provider, "modelIds">,
-): ModelConfigView[] =>
-  (
+): ModelConfigView[] {
+  return (
     provider.modelIds as unknown as Array<
       string | (Partial<ModelConfigView> & { id: string })
     >
@@ -61,6 +61,7 @@ export const getModelConfigs = (
           contextWindow: m.contextWindow,
         },
   );
+}
 
 /**
  * One entry of a model picker. Value and label diverge for the first time with
@@ -77,13 +78,14 @@ export type ModelOption = {
  * selectors. The Provider's own pointer-setting inputs are free text over
  * concrete ids and deliberately do not use this.
  */
-export const getModelOptions = (
+export function getModelOptions(
   provider: Pick<Provider, "modelIds">,
-): ModelOption[] =>
-  getModelConfigs(provider).map((model) => ({
+): ModelOption[] {
+  return getModelConfigs(provider).map((model) => ({
     value: modelReferenceFor(model),
     label: modelLabelFor(model),
   }));
+}
 
 /**
  * The option a stored reference selects, matched by ENTRY rather than by
@@ -95,26 +97,27 @@ export const getModelOptions = (
  * placeholder over an Agent that is in fact configured. `undefined` means the
  * model is genuinely gone from the Provider, which behaves as it always has.
  */
-export const findModelOption = (
+export function findModelOption(
   provider: Pick<Provider, "modelIds">,
   reference: string,
-): ModelOption | undefined => {
+): ModelOption | undefined {
   const entry = findModelEntry(getModelConfigs(provider), reference);
   return entry
     ? { value: modelReferenceFor(entry), label: modelLabelFor(entry) }
     : undefined;
-};
+}
 
 /**
  * Resolve a stored reference to the concrete model it names — the frontend's
  * sole producer of `ConcreteModelId`, mirroring the backend resolver so a raw
  * `agent.modelId` cannot reach capability logic keyed on real model ids.
  */
-export const resolveModelId = (
+export function resolveModelId(
   provider: Pick<Provider, "modelIds">,
   reference: string,
-): ConcreteModelId | undefined =>
-  resolveModelReference(getModelConfigs(provider), reference);
+): ConcreteModelId | undefined {
+  return resolveModelReference(getModelConfigs(provider), reference);
+}
 
 /**
  * The resolved passthrough types for one already-normalised model entry,
@@ -122,10 +125,10 @@ export const resolveModelId = (
  * a caller that has normalised the provider's list once can answer this
  * without normalising it again (issue #869).
  */
-export const passthroughFileTypesFor = (
+export function passthroughFileTypesFor(
   provider: Pick<Provider, "providerType" | "apiMode">,
   model: ModelConfigView | undefined,
-): string[] => {
+): string[] {
   const declared = model?.passthroughFileTypes ?? [];
   return declared.length > 0
     ? declared
@@ -133,17 +136,18 @@ export const passthroughFileTypesFor = (
         providerType: provider.providerType,
         apiMode: provider.apiMode,
       });
-};
+}
 
 /** The resolved passthrough types for a model, filling the provider default. */
-export const getPassthroughFileTypes = (
+export function getPassthroughFileTypes(
   provider: Pick<Provider, "modelIds" | "providerType" | "apiMode">,
   modelId: ConcreteModelId,
-): string[] =>
-  passthroughFileTypesFor(
+): string[] {
+  return passthroughFileTypesFor(
     provider,
     getModelConfigs(provider).find((m) => m.id === modelId),
   );
+}
 
 /**
  * The total token capacity declared for a model, or `undefined` where none was
@@ -154,22 +158,25 @@ export const getPassthroughFileTypes = (
  * discover a context window, so an undeclared one stays unknown rather than
  * being guessed at.
  */
-export const getContextWindow = (
+export function getContextWindow(
   provider: Pick<Provider, "modelIds">,
   modelId: ConcreteModelId,
-): number | undefined =>
-  getModelConfigs(provider).find((m) => m.id === modelId)?.contextWindow;
+): number | undefined {
+  return getModelConfigs(provider).find((m) => m.id === modelId)?.contextWindow;
+}
 
 /**
  * The output-token ceiling declared for a model, or `undefined` where the
  * Provider declares none (issue #454) — which leaves the vendor's own default
  * in force. Mirrors the backend's `maxOutputTokensForModel`.
  */
-export const getMaxOutputTokens = (
+export function getMaxOutputTokens(
   provider: Pick<Provider, "modelIds">,
   modelId: ConcreteModelId,
-): number | undefined =>
-  getModelConfigs(provider).find((m) => m.id === modelId)?.maxOutputTokens;
+): number | undefined {
+  return getModelConfigs(provider).find((m) => m.id === modelId)
+    ?.maxOutputTokens;
+}
 
 /**
  * Whether a searching turn against this Provider would actually serve search
@@ -181,13 +188,16 @@ export const getMaxOutputTokens = (
  * chat-completions OpenAI Provider has none, so setting `searchSource` to
  * `"native"` there resolves to no capability at all.
  */
-export const getSearchCapability = (
+export function getSearchCapability(
   provider: Pick<Provider, "providerType" | "apiMode" | "searchSource">,
-): boolean =>
-  provider.searchSource !== SEARCH_SOURCE_NONE &&
-  (provider.searchSource === SEARCH_SOURCE_NATIVE
-    ? providerHasNativeSearch(provider)
-    : Boolean(provider.searchSource));
+): boolean {
+  return (
+    provider.searchSource !== SEARCH_SOURCE_NONE &&
+    (provider.searchSource === SEARCH_SOURCE_NATIVE
+      ? providerHasNativeSearch(provider)
+      : Boolean(provider.searchSource))
+  );
+}
 
 /**
  * Classify an attachment against a model's passthrough set — the metadata-only
@@ -196,7 +206,9 @@ export const getSearchCapability = (
  * DOCX, issue #342) goes through, but lossily — worth telling the user about
  * without blocking them.
  */
-export const classifyAttachment = (
+export function classifyAttachment(
   file: { mediaType?: string; filename?: string },
   passthroughFileTypes: string[],
-) => classifyFile(file, passthroughFileTypes);
+) {
+  return classifyFile(file, passthroughFileTypes);
+}

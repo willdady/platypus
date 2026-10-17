@@ -51,10 +51,10 @@ if (typeof window !== "undefined") {
     locationListeners.forEach((listener) => listener());
   };
 }
-const subscribeToLocation = (listener: () => void) => {
+function subscribeToLocation(listener: () => void) {
   locationListeners.add(listener);
   return () => locationListeners.delete(listener);
-};
+}
 function useLocationSearchParams() {
   const search = useSyncExternalStore(
     subscribeToLocation,

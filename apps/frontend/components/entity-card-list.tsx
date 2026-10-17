@@ -18,13 +18,13 @@ import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
 
 /** The card fields Boards and Dashboards both expose. */
-interface EntityCard {
+type EntityCard = {
   readonly id: string;
   readonly name: string;
   readonly description?: string | null;
-}
+};
 
-export interface EntityCardListConfig {
+export type EntityCardListConfig = {
   /** Collection entity as the API spells it, and the key to its routes. */
   readonly entity: "boards" | "dashboards";
   readonly labels: {
@@ -37,7 +37,7 @@ export interface EntityCardListConfig {
     /** The phrase the user types to confirm: "delete board" / "delete dashboard". */
     readonly confirmPhrase: string;
   };
-}
+};
 
 /**
  * The workspace's sorted card list of a named entity, one component for
@@ -45,7 +45,7 @@ export interface EntityCardListConfig {
  * same edit/delete menu; the entity noun, delete copy, and confirmation
  * phrase are the parameters.
  */
-export const EntityCardList = ({
+export function EntityCardList({
   orgId,
   workspaceId,
   config,
@@ -53,7 +53,7 @@ export const EntityCardList = ({
   orgId: string;
   workspaceId: string;
   config: EntityCardListConfig;
-}) => {
+}) {
   const {
     results: rows,
     error,
@@ -143,4 +143,4 @@ export const EntityCardList = ({
       />
     </>
   );
-};
+}

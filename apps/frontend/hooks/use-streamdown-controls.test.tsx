@@ -3,11 +3,12 @@ import { renderHook } from "@testing-library/react";
 import { useStreamdownControls } from "./use-streamdown-controls";
 
 // jsdom does not define `isSecureContext` at all.
-const stubSecureContext = (secure: boolean) =>
-  Object.defineProperty(window, "isSecureContext", {
+function stubSecureContext(secure: boolean) {
+  return Object.defineProperty(window, "isSecureContext", {
     value: secure,
     configurable: true,
   });
+}
 
 afterEach(() => {
   Reflect.deleteProperty(window, "isSecureContext");

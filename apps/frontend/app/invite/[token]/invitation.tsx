@@ -151,7 +151,10 @@ export default function InviteTokenPage() {
     // lands on: heading and invite line, then email, name, password, submit.
     return (
       <InviteShell>
-        <LoadingRegion label="Loading invitation" className="space-y-8">
+        <LoadingRegion
+          label="Loading invitation"
+          className="flex flex-col gap-8"
+        >
           <div className="flex flex-col items-center">
             <SkeletonLine lineClassName="h-8" className="h-6 w-44" />
             <SkeletonLine
@@ -159,9 +162,9 @@ export default function InviteTokenPage() {
               className="h-4 w-64 max-w-full"
             />
           </div>
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {["w-10", "w-12", "w-16"].map((width) => (
-              <div key={width} className="space-y-2">
+              <div key={width} className="flex flex-col gap-2">
                 <SkeletonLine lineClassName="h-3.5" className={width} />
                 <Skeleton className="h-9 w-full" />
               </div>
@@ -178,7 +181,7 @@ export default function InviteTokenPage() {
 
   if (error !== undefined || !data) {
     return (
-      <InviteShell className="space-y-4 text-center">
+      <InviteShell className="flex flex-col gap-4 text-center">
         <h1 className="text-2xl font-bold">Invitation not found</h1>
         <p className="text-muted-foreground">
           This invitation link is not valid. It may have already been used,
@@ -192,7 +195,7 @@ export default function InviteTokenPage() {
   // offer sign-out, and leave the Invitation pending (untouched).
   if (user && user.email !== data.email) {
     return (
-      <InviteShell className="space-y-4 text-center">
+      <InviteShell className="flex flex-col gap-4 text-center">
         <h1 className="text-2xl font-bold">Wrong account</h1>
         <p className="text-muted-foreground">
           This invitation to join{" "}
@@ -210,7 +213,7 @@ export default function InviteTokenPage() {
   // Signed in as the invited address: a single Accept action.
   if (user && user.email === data.email) {
     return (
-      <InviteShell className="space-y-6 text-center">
+      <InviteShell className="flex flex-col gap-6 text-center">
         <div>
           <h1 className="text-2xl font-bold">You&apos;re invited</h1>
           <p className="text-muted-foreground mt-2">
@@ -236,7 +239,7 @@ export default function InviteTokenPage() {
 
   // No session: register or sign in here, retaining the resolved token.
   return (
-    <InviteShell className="space-y-8">
+    <InviteShell className="flex flex-col gap-8">
       <div className="text-center">
         <h1 className="text-2xl font-bold">You&apos;re invited</h1>
         <p className="text-muted-foreground mt-2">
@@ -247,7 +250,7 @@ export default function InviteTokenPage() {
 
       <form
         onSubmit={isSigningIn ? handleSignIn : handleRegister}
-        className="space-y-4"
+        className="flex flex-col gap-4"
       >
         {formError && (
           <Alert variant="destructive">
@@ -255,13 +258,13 @@ export default function InviteTokenPage() {
           </Alert>
         )}
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" value={data.email} disabled readOnly />
         </div>
 
         {!isSigningIn && (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="name">Name</Label>
             <Input
               id="name"
@@ -275,7 +278,7 @@ export default function InviteTokenPage() {
           </div>
         )}
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="password">Password</Label>
           <RevealableInput
             id="password"

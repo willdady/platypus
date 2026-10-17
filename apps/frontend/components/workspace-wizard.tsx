@@ -64,11 +64,13 @@ const sandboxStepSchema = workspaceCreateSchema.shape.sandbox.unwrap();
 
 type Member = { userId: string; user: { name: string; email: string } };
 
-const invalid = (issues: readonly unknown[]): WriteOutcome<undefined> => ({
-  outcome: "invalid",
-  message: "Please fix the errors below",
-  fieldErrors: parseValidationErrors({ error: issues }),
-});
+function invalid(issues: readonly unknown[]): WriteOutcome<undefined> {
+  return {
+    outcome: "invalid",
+    message: "Please fix the errors below",
+    fieldErrors: parseValidationErrors({ error: issues }),
+  };
+}
 
 const accepted: WriteOutcome<undefined> = {
   outcome: "success",
@@ -82,7 +84,7 @@ const accepted: WriteOutcome<undefined> = {
  * the last step, which creates all of it in one request — a Workspace without
  * a Provider cannot run a Chat, so none is created without one.
  */
-export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
+export function WorkspaceWizard({ orgId }: { orgId: string }) {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
@@ -428,4 +430,4 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
       </div>
     </div>
   );
-};
+}

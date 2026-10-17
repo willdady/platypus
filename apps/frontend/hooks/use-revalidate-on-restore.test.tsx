@@ -6,11 +6,11 @@ import {
 } from "./use-revalidate-on-restore";
 
 /** A `pageshow` as the browser fires it; jsdom has no PageTransitionEvent. */
-const pageshow = (persisted: boolean) => {
+function pageshow(persisted: boolean) {
   const event = new Event("pageshow");
   Object.defineProperty(event, "persisted", { value: persisted });
   window.dispatchEvent(event);
-};
+}
 
 describe("useRevalidateOnRestore", () => {
   afterEach(() => {

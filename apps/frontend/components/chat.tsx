@@ -80,7 +80,7 @@ import { ListError } from "./list-state";
 import type { ModelSelection } from "./composer";
 import { skillsForAgent } from "@/lib/slash-commands";
 
-export const Chat = ({
+export function Chat({
   orgId,
   workspaceId,
   chatId,
@@ -90,7 +90,7 @@ export const Chat = ({
   workspaceId: string;
   chatId: string;
   initialAgentId?: string;
-}) => {
+}) {
   const { ownsWorkspace, isAuthLoading } = useAuth();
   const canSendMessages = canSendChatMessages(ownsWorkspace);
   const backendUrl = useBackendUrl();
@@ -933,4 +933,4 @@ export const Chat = ({
       />
     </div>
   );
-};
+}

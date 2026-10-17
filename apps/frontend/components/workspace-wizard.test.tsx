@@ -16,21 +16,24 @@ vi.mock("swr", () => swrMock);
 
 import { WorkspaceWizard } from "./workspace-wizard";
 
-const click = (name: string) =>
-  fireEvent.click(
+function click(name: string) {
+  return fireEvent.click(
     screen
       .getAllByRole("button", { name })
       // Every step stays mounted; only the visible step's button is clickable.
       .find((button) => !button.closest("[hidden], [data-state=inactive]"))!,
   );
+}
 
 // The Provider step has a Name field too; the Workspace's is first.
-const workspaceName = () => screen.getAllByLabelText("Name")[0];
+function workspaceName() {
+  return screen.getAllByLabelText("Name")[0];
+}
 
-const fillWorkspaceStep = (name = "Research") => {
+function fillWorkspaceStep(name = "Research") {
   fireEvent.change(workspaceName(), { target: { value: name } });
   click("Next");
-};
+}
 
 beforeEach(() => {
   resetFormHarness();

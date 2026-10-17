@@ -11,11 +11,11 @@ import { ContextsList } from "@/components/contexts-list";
 import { ListError } from "@/components/list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
-interface ContextWithWorkspaceName extends Context {
+type ContextWithWorkspaceName = {
   workspaceName?: string | null;
-}
+} & Context;
 
-const ContextsPage = () => {
+function ContextsPage() {
   const {
     data,
     results: contexts,
@@ -59,12 +59,12 @@ const ContextsPage = () => {
     <div>
       <h1 className="text-2xl font-bold mb-6">Contexts</h1>
 
-      <div className="space-y-8">
+      <div className="flex flex-col gap-8">
         {/* Global Context Section */}
         <div>
           <div className="mb-4">
             <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
-              <Globe className="w-5 h-5" />
+              <Globe className="size-5" />
               Global Context
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -73,9 +73,9 @@ const ContextsPage = () => {
               that should always be available to the AI.
             </p>
           </div>
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <div className="border rounded-lg p-4 bg-muted/30">
-              <div className="space-y-3">
+              <div className="flex flex-col gap-3">
                 {isLoaded ? (
                   <ExpandableTextarea
                     id="global-context-edit"
@@ -115,7 +115,7 @@ const ContextsPage = () => {
         <div>
           <div className="mb-4">
             <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
-              <FolderClosed className="w-5 h-5" />
+              <FolderClosed className="size-5" />
               Workspace Contexts
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -129,6 +129,6 @@ const ContextsPage = () => {
       </div>
     </div>
   );
-};
+}
 
 export default ContextsPage;

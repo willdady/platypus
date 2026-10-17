@@ -18,8 +18,9 @@ function Harness({ onChange }: { onChange?: (value: string) => void }) {
   );
 }
 
-const expand = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+function expand() {
+  return fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+}
 
 describe("ExpandableTextarea expanded editor", () => {
   it("opens as a modal dialog named after the field", async () => {

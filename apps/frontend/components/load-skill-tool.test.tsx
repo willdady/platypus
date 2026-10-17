@@ -6,15 +6,16 @@ import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 
 type LoadSkillPart = ComponentProps<typeof LoadSkillTool>["toolPart"];
 
-const loadSkillCall = (overrides: Partial<LoadSkillPart> = {}): LoadSkillPart =>
-  ({
+function loadSkillCall(overrides: Partial<LoadSkillPart> = {}): LoadSkillPart {
+  return {
     type: "tool-loadSkill",
     toolCallId: "call-1",
     state: "output-available",
     input: { name: "release-notes" },
     output: { name: "release-notes", content: "..." },
     ...overrides,
-  }) as unknown as LoadSkillPart;
+  } as unknown as LoadSkillPart;
+}
 
 // Issue #834. Loading a Skill is a one-shot status line, not an execution
 // record with a body to read, so it shares the disclosure row's look but
@@ -52,17 +53,18 @@ describe("LoadSkillTool", () => {
 
 type ReadSkillFilePart = ComponentProps<typeof ReadSkillFileTool>["toolPart"];
 
-const readSkillFileCall = (
+function readSkillFileCall(
   overrides: Partial<ReadSkillFilePart> = {},
-): ReadSkillFilePart =>
-  ({
+): ReadSkillFilePart {
+  return {
     type: "tool-readSkillFile",
     toolCallId: "call-2",
     state: "output-available",
     input: { name: "pdf", path: "references/forms.md" },
     output: { path: "references/forms.md", content: "..." },
     ...overrides,
-  }) as unknown as ReadSkillFilePart;
+  } as unknown as ReadSkillFilePart;
+}
 
 describe("ReadSkillFileTool", () => {
   it("names the skill and file on the same one-shot row", () => {

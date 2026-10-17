@@ -27,7 +27,7 @@ const alice = {
   name: "Alice",
 };
 
-const renderDialog = () => {
+function renderDialog() {
   const onSuccess = vi.fn();
   render(
     <ChangePasswordDialog
@@ -38,10 +38,13 @@ const renderDialog = () => {
     />,
   );
   return { onSuccess, input: screen.getByLabelText("New Password") };
-};
+}
 
-const submit = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Update password" }));
+function submit() {
+  return fireEvent.click(
+    screen.getByRole("button", { name: "Update password" }),
+  );
+}
 
 describe("ChangePasswordDialog", () => {
   it("masks the new password until revealed", () => {

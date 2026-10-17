@@ -56,8 +56,9 @@ function mobileHeight(type: WidgetType | undefined): number {
   );
 }
 
-const bottomOf = (items: readonly RglLayoutItem[]) =>
-  items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+function bottomOf(items: readonly RglLayoutItem[]) {
+  return items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+}
 
 /** A full-width stack of the desktop items, in desktop reading order. */
 function mobileFallback(

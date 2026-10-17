@@ -17,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Mirrors the read-only `GET /organizations/:orgId/plugins` payload (ADR-0013).
 // Contributions are the ids the plugin registered — tool sets, sandbox
 // backends, and web backends all tie back to their originating plugin here.
-interface InstalledPlugin {
+type InstalledPlugin = {
   name: string;
   version: string;
   origin: "core" | "third-party";
@@ -26,15 +26,15 @@ interface InstalledPlugin {
     sandboxBackends: string[];
     webBackends: string[];
   };
-}
+};
 
-const PluginsList = ({
+function PluginsList({
   className,
   orgId,
 }: {
   className?: string;
   orgId: string;
-}) => {
+}) {
   const {
     data,
     error,
@@ -183,6 +183,6 @@ const PluginsList = ({
       })}
     </ul>
   );
-};
+}
 
 export { PluginsList };

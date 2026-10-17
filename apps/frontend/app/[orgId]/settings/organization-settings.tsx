@@ -5,7 +5,7 @@ import { Copy } from "lucide-react";
 import { copyWithToast } from "@/lib/clipboard";
 import { OrganizationForm } from "@/components/organization-form";
 
-const OrgSettingsPage = ({ orgId }: { orgId: string }) => {
+function OrgSettingsPage({ orgId }: { orgId: string }) {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Organization Settings</h1>
@@ -21,7 +21,7 @@ const OrgSettingsPage = ({ orgId }: { orgId: string }) => {
               aria-label="Copy Organization ID"
               onClick={() => copyWithToast(orgId)}
             >
-              <Copy className="h-4 w-4" />
+              <Copy />
             </Button>
           </div>
         </div>
@@ -32,6 +32,6 @@ const OrgSettingsPage = ({ orgId }: { orgId: string }) => {
       </div>
     </div>
   );
-};
+}
 
 export default OrgSettingsPage;

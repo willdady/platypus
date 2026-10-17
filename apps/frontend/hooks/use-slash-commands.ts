@@ -12,7 +12,9 @@ import {
 
 const LISTBOX_ID = "slash-command-picker";
 
-const optionId = (name: string) => `slash-command-option-${name}`;
+function optionId(name: string) {
+  return `slash-command-option-${name}`;
+}
 
 /** The ARIA the textarea wears while it is acting as a combobox. */
 export type SlashComboboxProps = {
@@ -46,7 +48,7 @@ export type UseSlashCommandsResult = {
  * `enabled` is how "no Agent selected" becomes "no `/` handling at all" —
  * a Direct turn advertises no Skills, so the key is left to the textarea.
  */
-export const useSlashCommands = ({
+export function useSlashCommands({
   commands,
   enabled,
   value,
@@ -59,7 +61,7 @@ export const useSlashCommands = ({
   value: string;
   onChange: (value: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-}): UseSlashCommandsResult => {
+}): UseSlashCommandsResult {
   // The value Escape was pressed on. Editing the token reopens the picker,
   // which is what an editor does — Escape dismisses this token, not the feature.
   const [dismissedFor, setDismissedFor] = useState<string | null>(null);
@@ -172,4 +174,4 @@ export const useSlashCommands = ({
       onSelect: accept,
     },
   };
-};
+}

@@ -21,14 +21,15 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/org1/settings",
 }));
 
-const renderGate = (
+function renderGate(
   props: Omit<Parameters<typeof ProtectedRoute>[0], "children">,
-) =>
-  render(
+) {
+  return render(
     <ProtectedRoute {...props}>
       <p>Secret page</p>
     </ProtectedRoute>,
   );
+}
 
 beforeEach(() => {
   replace.mockReset();

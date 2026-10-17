@@ -25,18 +25,18 @@ import {
   LoadingRegion,
 } from "./list-skeletons";
 
-const StatusBadge = ({ children }: { children: ReactNode }) => (
-  <Badge variant="pill">{children}</Badge>
-);
+function StatusBadge({ children }: { children: ReactNode }) {
+  return <Badge variant="pill">{children}</Badge>;
+}
 
 /** A Workspace's A2A endpoints (ADR-0032). Only the Owner adds or edits one. */
-const A2aEndpointsList = ({
+function A2aEndpointsList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId: string;
-}) => {
+}) {
   const routes = workspaceRoutes(orgId, workspaceId);
   const { ownsWorkspace } = useAuth();
 
@@ -165,6 +165,6 @@ const A2aEndpointsList = ({
       />
     </>
   );
-};
+}
 
 export { A2aEndpointsList };

@@ -18,7 +18,7 @@ import type { SlashCommandPickerProps } from "@/lib/slash-commands";
  * it already is. The muted empty line is the only warning, and it is deliberate
  * — it makes a typo visible before Enter without styling the text itself.
  */
-export const SlashCommandPicker = ({
+export function SlashCommandPicker({
   open,
   items,
   hasCommands,
@@ -26,7 +26,7 @@ export const SlashCommandPicker = ({
   listboxId,
   optionId,
   onSelect,
-}: SlashCommandPickerProps) => {
+}: SlashCommandPickerProps) {
   if (!open) return null;
 
   // Clicking an option must not blur the textarea: the caret is restored after
@@ -86,4 +86,4 @@ export const SlashCommandPicker = ({
       </div>
     </div>
   );
-};
+}

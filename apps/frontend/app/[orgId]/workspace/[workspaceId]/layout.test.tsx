@@ -14,14 +14,15 @@ vi.mock("next/headers", () => ({
 import WorkspaceLayout, { generateMetadata } from "./layout";
 import { SERVER_READ_TIMEOUT_MS } from "@/lib/server-read";
 
-const renderLayout = () =>
-  WorkspaceLayout({
+function renderLayout() {
+  return WorkspaceLayout({
     children: null,
     params: Promise.resolve({ orgId: "org1", workspaceId: "ws1" }),
   });
+}
 
-const stubWorkspaceRead = (status: number) =>
-  vi.stubGlobal(
+function stubWorkspaceRead(status: number) {
+  return vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
       status === 200
@@ -31,6 +32,7 @@ const stubWorkspaceRead = (status: number) =>
         : new Response("{}", { status }),
     ),
   );
+}
 
 beforeEach(() => {
   notFound.mockClear();

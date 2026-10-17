@@ -60,8 +60,9 @@ const endpoint = {
   ],
 };
 
-const asOwner = (owns: boolean) =>
-  Object.assign(authState, { ownsWorkspace: owns });
+function asOwner(owns: boolean) {
+  return Object.assign(authState, { ownsWorkspace: owns });
+}
 
 beforeEach(() => {
   resetFormHarness();

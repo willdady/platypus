@@ -16,22 +16,25 @@ export type KeyValueRow = { id: string; key: string; value: string };
 // self-hosted install may be served over plain http.
 let lastRowId = 0;
 
-export const newRow = (key = "", value = ""): KeyValueRow => ({
-  id: String(++lastRowId),
-  key,
-  value,
-});
+export function newRow(key = "", value = ""): KeyValueRow {
+  return {
+    id: String(++lastRowId),
+    key,
+    value,
+  };
+}
 
-export const recordToRows = (
+export function recordToRows(
   rec: Record<string, string> | null | undefined,
-): KeyValueRow[] =>
-  Object.entries(rec ?? {}).map(([key, value]) => newRow(key, value));
+): KeyValueRow[] {
+  return Object.entries(rec ?? {}).map(([key, value]) => newRow(key, value));
+}
 
 /** Trims keys and drops rows without one; `empty` is returned when none remain. */
-export const rowsToRecord = <E,>(
+export function rowsToRecord<E>(
   rows: KeyValueRow[],
   empty: E,
-): Record<string, string> | E => {
+): Record<string, string> | E {
   const out: Record<string, string> = {};
   for (const { key, value } of rows) {
     const trimmedKey = key.trim();
@@ -39,7 +42,7 @@ export const rowsToRecord = <E,>(
     out[trimmedKey] = value;
   }
   return Object.keys(out).length > 0 ? out : empty;
-};
+}
 
 export type RowAriaLabels = {
   key: (n: number) => string;
@@ -53,7 +56,7 @@ export const HEADER_ROW_LABELS: RowAriaLabels = {
   remove: () => "Remove header",
 };
 
-export const KeyValueRowsEditor = ({
+export function KeyValueRowsEditor({
   rows,
   onChange,
   disabled,
@@ -79,7 +82,7 @@ export const KeyValueRowsEditor = ({
   maskValue?: boolean;
   mono?: boolean;
   rowError?: (row: KeyValueRow) => string | undefined;
-}) => {
+}) {
   const ariaLabels = labels ?? {
     key: (n: number) => `${keyPlaceholder} ${n}`,
     value: (n: number) => `${valuePlaceholder} ${n}`,
@@ -156,4 +159,4 @@ export const KeyValueRowsEditor = ({
       )}
     </div>
   );
-};
+}

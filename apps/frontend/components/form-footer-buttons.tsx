@@ -13,7 +13,7 @@ export type FormFooterButtonsProps = {
   type?: "button" | "submit";
 };
 
-export const FormFooterButtons = ({
+export function FormFooterButtons({
   submitText,
   onSubmit,
   submitDisabled,
@@ -23,7 +23,7 @@ export const FormFooterButtons = ({
   deleteClassName,
   onDelete,
   type = "button",
-}: FormFooterButtonsProps) => {
+}: FormFooterButtonsProps) {
   return (
     <div className="flex gap-2">
       <Button
@@ -48,4 +48,4 @@ export const FormFooterButtons = ({
       )}
     </div>
   );
-};
+}

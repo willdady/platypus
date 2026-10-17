@@ -22,7 +22,7 @@ vi.mock("@/components/auth-provider", () => ({
 }));
 
 /** What the backend's sign-up availability endpoint answers. */
-const stubSignUpAvailability = (open: boolean) => {
+function stubSignUpAvailability(open: boolean) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
@@ -31,7 +31,7 @@ const stubSignUpAvailability = (open: boolean) => {
       json: async () => ({ open }),
     }),
   );
-};
+}
 
 /**
  * Renders the page with an SWR cache of its own, so no test sees another's
@@ -39,7 +39,7 @@ const stubSignUpAvailability = (open: boolean) => {
  * landed — the point after which "the link is not there" means the page chose
  * not to show it, rather than that it has not heard yet.
  */
-const renderPage = () => {
+function renderPage() {
   const onSuccess = vi.fn();
   const utils = render(
     <SWRConfig value={{ provider: () => new Map(), onSuccess }}>
@@ -49,7 +49,7 @@ const renderPage = () => {
   const availabilityRead = () =>
     waitFor(() => expect(onSuccess).toHaveBeenCalled());
   return { ...utils, availabilityRead };
-};
+}
 
 describe("SignInPage sign-up link", () => {
   it("offers Sign up while sign-up is open", async () => {

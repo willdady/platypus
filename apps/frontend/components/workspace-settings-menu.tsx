@@ -12,10 +12,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { workspaceSettingsLinks } from "@/lib/settings-links";
 
-interface WorkspaceSettingsMenuProps {
+type WorkspaceSettingsMenuProps = {
   orgId: string;
   workspaceId: string;
-}
+};
 
 export function WorkspaceSettingsMenu({
   orgId,

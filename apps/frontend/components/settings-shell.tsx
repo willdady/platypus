@@ -17,7 +17,7 @@ const menuWidthClass: Record<MenuWidth, { width: string; offset: string }> = {
   wide: { width: "md:w-64", offset: "md:ml-64" },
 };
 
-export interface SettingsColumnsProps {
+export type SettingsColumnsProps = {
   /** The navigation column, fixed beside the content at `md` and up. */
   menu: ReactNode;
   children: ReactNode;
@@ -30,7 +30,7 @@ export interface SettingsColumnsProps {
    * shell already provides one (the Workspace settings sit inside it).
    */
   isMain?: boolean;
-}
+};
 
 /**
  * The menu column + content column every settings-like surface shares. The
@@ -76,9 +76,9 @@ export function SettingsColumns({
   );
 }
 
-export interface SettingsShellProps extends SettingsColumnsProps {
+export type SettingsShellProps = {
   headerLeft?: ReactNode;
-}
+} & SettingsColumnsProps;
 
 /**
  * The full-height settings chrome: sidebar provider, header, and the centered

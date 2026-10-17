@@ -14,10 +14,10 @@ import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { interceptedHref } from "@/lib/unsaved-changes";
 
-interface UnsavedChangesContextValue {
+type UnsavedChangesContextValue = {
   setDirty: (key: string, dirty: boolean) => void;
   confirmDiscard: (onDiscard: () => void) => void;
-}
+};
 
 // Set by `hardNavigate`, so the unload it starts isn't held.
 let leavingDeliberately = false;

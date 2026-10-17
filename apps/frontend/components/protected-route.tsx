@@ -16,21 +16,21 @@ import Link from "next/link";
 import { orgRoutes, signInReturningTo } from "@/lib/routes";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
 
-interface ProtectedRouteProps {
+type ProtectedRouteProps = {
   children: React.ReactNode;
   /** Require the caller to be an Org Admin; implies `requireOrgAccess`. */
   requireOrgAdmin?: boolean;
   requireOrgAccess?: boolean;
   requireWorkspaceAccess?: boolean;
   requireSuperAdmin?: boolean;
-}
+};
 
-interface AccessDeniedProps {
+type AccessDeniedProps = {
   title: string;
   description: React.ReactNode;
   /** `organization` swaps the home button for one back to the Organization. */
   variant?: "home" | "organization";
-}
+};
 
 function AccessDenied({
   title,

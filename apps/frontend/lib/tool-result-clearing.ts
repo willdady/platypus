@@ -25,9 +25,9 @@ import { isToolUIPart } from "ai";
  */
 
 /** Every clearable Tool name any assistant message in `messages` has reported. */
-const clearableToolNamesOf = (
+function clearableToolNamesOf(
   messages: readonly PlatypusUIMessage[],
-): ReadonlySet<string> => {
+): ReadonlySet<string> {
   const names = new Set<string>();
   for (const message of messages) {
     for (const name of message.metadata?.readOnlyToolNames ?? []) {
@@ -35,7 +35,7 @@ const clearableToolNamesOf = (
     }
   }
   return names;
-};
+}
 
 /**
  * The one "nothing is cleared" answer. The Transcript memo compares this value
@@ -52,20 +52,24 @@ type ToolLikePart = {
   toolName?: string;
 };
 
-const isToolLikePart = (part: unknown): part is ToolLikePart =>
-  typeof part === "object" &&
-  part !== null &&
-  "toolCallId" in part &&
-  "state" in part &&
-  "type" in part;
+function isToolLikePart(part: unknown): part is ToolLikePart {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "toolCallId" in part &&
+    "state" in part &&
+    "type" in part
+  );
+}
 
 /** The bare tool name a UI message part carries, static or dynamic. */
-const toolNameOf = (part: ToolLikePart): string =>
-  part.type === "dynamic-tool"
+function toolNameOf(part: ToolLikePart): string {
+  return part.type === "dynamic-tool"
     ? (part.toolName ?? "")
     : isToolUIPart(part as never)
       ? part.type.slice("tool-".length)
       : "";
+}
 
 /**
  * The `toolCallId`s of tool results this session's Chat meter would report as
@@ -77,10 +81,10 @@ const toolNameOf = (part: ToolLikePart): string =>
  * itself does nothing when occupancy or the Context window is unknown, and the
  * SAME empty set every time, so the Transcript memo is not defeated.
  */
-export const clearedToolCallIds = (
+export function clearedToolCallIds(
   messages: readonly PlatypusUIMessage[],
   reading: { occupancy?: number; contextWindow?: number },
-): ReadonlySet<string> => {
+): ReadonlySet<string> {
   const { occupancy, contextWindow } = reading;
   if (occupancy === undefined || contextWindow === undefined) {
     return NOTHING_CLEARED;
@@ -109,4 +113,4 @@ export const clearedToolCallIds = (
     return NOTHING_CLEARED;
   }
   return new Set(clearableIds.slice(0, staleCount));
-};
+}

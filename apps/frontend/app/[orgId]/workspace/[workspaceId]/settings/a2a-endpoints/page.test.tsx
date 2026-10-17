@@ -13,12 +13,13 @@ vi.mock("swr", () => swrMock);
 
 import A2aEndpointsPage from "./page";
 
-const renderPage = async () =>
-  renderList(
+async function renderPage() {
+  return renderList(
     await A2aEndpointsPage({
       params: Promise.resolve({ orgId: "org1", workspaceId: "ws1" }),
     }),
   );
+}
 
 beforeEach(() => resetListHarness());
 

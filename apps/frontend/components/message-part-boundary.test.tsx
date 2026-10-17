@@ -5,9 +5,11 @@ import { MessagePartBoundary } from "./message-part-boundary";
 
 afterEach(() => setErrorReporter(null));
 
-const failWith = (message: string) => () => {
-  throw new Error(message);
-};
+function failWith(message: string) {
+  return () => {
+    throw new Error(message);
+  };
+}
 
 describe("MessagePartBoundary", () => {
   it("reports a part that stays broken while it streams only once", () => {

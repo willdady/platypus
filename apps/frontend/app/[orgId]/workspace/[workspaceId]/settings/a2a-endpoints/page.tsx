@@ -6,11 +6,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export const metadata: Metadata = { title: "A2A endpoints" };
 
-const A2aEndpointsPage = async ({
+async function A2aEndpointsPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = await params;
 
   return (
@@ -36,6 +36,6 @@ const A2aEndpointsPage = async ({
       <A2aEndpointsList orgId={orgId} workspaceId={workspaceId} />
     </div>
   );
-};
+}
 
 export default A2aEndpointsPage;

@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { TurnAnnouncer } from "./turn-announcer";
 
-const status = () => screen.getByRole("status");
+function status() {
+  return screen.getByRole("status");
+}
 
 describe("TurnAnnouncer", () => {
   it("says nothing before a turn has run", () => {

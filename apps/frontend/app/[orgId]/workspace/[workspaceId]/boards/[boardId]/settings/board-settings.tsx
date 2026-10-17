@@ -10,11 +10,11 @@ import { KanbanBoardForm } from "@/components/kanban-board-form";
 import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { workspaceRoutes } from "@/lib/routes";
 
-const BoardSettingsPage = ({
+function BoardSettingsPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string; boardId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId, boardId } = use(params);
   const routes = workspaceRoutes(orgId, workspaceId);
   const router = useRouter();
@@ -71,6 +71,6 @@ const BoardSettingsPage = ({
       />
     </ResourcePage>
   );
-};
+}
 
 export default BoardSettingsPage;

@@ -3,7 +3,7 @@ import type { Chat } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import type { Serialized } from "@/lib/api-write";
 
-export interface ChatSettings {
+export type ChatSettings = {
   instructions: string;
   temperature: number | undefined;
   topP: number | undefined;
@@ -12,12 +12,12 @@ export interface ChatSettings {
   presencePenalty: number | undefined;
   frequencyPenalty: number | undefined;
   maxSteps: number | undefined;
-}
+};
 
-export const useChatSettings = (
+export function useChatSettings(
   chatData: Serialized<Chat> | undefined,
   agentId: string,
-) => {
+) {
   const [settings, setSettings] = useState<ChatSettings>({
     instructions: "",
     temperature: undefined,
@@ -63,4 +63,4 @@ export const useChatSettings = (
   );
 
   return { settings, updateSettings };
-};
+}

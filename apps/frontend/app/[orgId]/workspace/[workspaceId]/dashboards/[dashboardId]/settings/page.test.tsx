@@ -31,7 +31,7 @@ import DashboardSettingsPage from "./page";
 const COLLECTION = "http://test/organizations/org1/workspaces/ws1/dashboards";
 const MEMBER = `${COLLECTION}/d1`;
 
-const renderPage = async () => {
+async function renderPage() {
   // `params` is unwrapped with `use`, so the first render suspends.
   await act(async () => {
     render(
@@ -46,7 +46,7 @@ const renderPage = async () => {
       </Suspense>,
     );
   });
-};
+}
 
 describe("DashboardSettingsPage", () => {
   beforeEach(() => resetFormHarness());

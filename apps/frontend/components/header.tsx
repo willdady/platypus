@@ -14,7 +14,7 @@ import {
 import { Settings } from "lucide-react";
 import Link from "next/link";
 
-interface HeaderProps {
+type HeaderProps = {
   leftContent?: React.ReactNode;
   /** Controls rendered before the shared notification/theme/user cluster. */
   rightContent?: React.ReactNode;
@@ -25,7 +25,7 @@ interface HeaderProps {
    * omits it; every other shell keeps it.
    */
   bordered?: boolean;
-}
+};
 
 export function Header({
   leftContent,
@@ -71,7 +71,7 @@ function WorkspaceSettingsDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-xs" aria-label="Workspace settings">
-          <Settings className="size-4" />
+          <Settings />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

@@ -24,11 +24,7 @@ type FsDownloadToolPart = Extract<
  * download route — the model never sees it. Errors never reach this card;
  * they render through the generic tool renderer.
  */
-export const FsDownloadTool = ({
-  toolPart,
-}: {
-  toolPart: FsDownloadToolPart;
-}) => {
+export function FsDownloadTool({ toolPart }: { toolPart: FsDownloadToolPart }) {
   const backendUrl = useBackendUrl();
   const scope = useParams<{ orgId: string; workspaceId: string }>();
   const path = toolPart.output?.path ?? toolPart.input?.path;
@@ -52,4 +48,4 @@ export const FsDownloadTool = ({
       )}
     </div>
   );
-};
+}

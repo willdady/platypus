@@ -3,11 +3,11 @@ import { ProvidersList } from "@/components/providers-list";
 
 export const metadata: Metadata = { title: "Organization Providers" };
 
-const OrgProvidersPage = async ({
+async function OrgProvidersPage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
-}) => {
+}) {
   const { orgId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const OrgProvidersPage = async ({
       <ProvidersList orgId={orgId} />
     </div>
   );
-};
+}
 
 export default OrgProvidersPage;

@@ -39,11 +39,11 @@ vi.mock("swr", () => ({
 let rerender: (() => void) | undefined;
 
 /** One poll, as SWR would run it: the page's fetcher against its key. */
-const poll = async () => {
+async function poll() {
   await waitFor(() => expect(state.fetcher).toBeDefined());
   state.data = await state.fetcher!(state.key!);
   rerender?.();
-};
+}
 
 vi.mock("@/lib/utils", async () => {
   const actual =
@@ -74,38 +74,42 @@ import { openDropdownMenu } from "@/test/test-utils";
 
 const T0 = 1_767_258_000_000;
 
-const run = (over: Partial<TriggerRunDetail> = {}): TriggerRunDetail => ({
-  id: "run-1",
-  triggerId: "trigger-1",
-  triggerName: "Nightly digest",
-  status: "success",
-  eventType: null,
-  eventData: null,
-  startedAt: new Date(T0),
-  completedAt: new Date(T0 + 5_000),
-  errorMessage: null,
-  stats: null,
-  unloadedToolSets: [],
-  failedToolCalls: 0,
-  createdAt: new Date(T0),
-  finalText: "Three cards moved to Done.",
-  eventsTruncated: false,
-  ...over,
-});
+function run(over: Partial<TriggerRunDetail> = {}): TriggerRunDetail {
+  return {
+    id: "run-1",
+    triggerId: "trigger-1",
+    triggerName: "Nightly digest",
+    status: "success",
+    eventType: null,
+    eventData: null,
+    startedAt: new Date(T0),
+    completedAt: new Date(T0 + 5_000),
+    errorMessage: null,
+    stats: null,
+    unloadedToolSets: [],
+    failedToolCalls: 0,
+    createdAt: new Date(T0),
+    finalText: "Three cards moved to Done.",
+    eventsTruncated: false,
+    ...over,
+  };
+}
 
-const event = (over: Partial<RunEvent> & { id: string }): RunEvent => ({
-  runId: "run-1",
-  parentEventId: null,
-  seq: 0,
-  type: "tool-call",
-  toolName: "search",
-  startedAt: T0,
-  durationMs: 100,
-  status: "completed",
-  error: null,
-  childrenTruncated: false,
-  ...over,
-});
+function event(over: Partial<RunEvent> & { id: string }): RunEvent {
+  return {
+    runId: "run-1",
+    parentEventId: null,
+    seq: 0,
+    type: "tool-call",
+    toolName: "search",
+    startedAt: T0,
+    durationMs: 100,
+    status: "completed",
+    error: null,
+    childrenTruncated: false,
+    ...over,
+  };
+}
 
 const params = Promise.resolve({
   orgId: "org-1",
@@ -113,7 +117,7 @@ const params = Promise.resolve({
   runId: "run-1",
 });
 
-const renderPage = async () => {
+async function renderPage() {
   // `params` is a promise the page unwraps with `use`, so the first render
   // suspends; flush it before asserting.
   let view!: ReturnType<typeof render>;
@@ -133,7 +137,7 @@ const renderPage = async () => {
         </Suspense>,
       );
     });
-};
+}
 
 describe("TriggerRunDetailPage", () => {
   beforeEach(() => {

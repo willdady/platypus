@@ -48,12 +48,12 @@ export type ResolvedModel = {
  * that was removed). There is no partial result — a Chat turn either has a
  * model or it doesn't.
  */
-export const resolveModel = (input: {
+export function resolveModel(input: {
   providers: Serialized<Provider>[];
   /** Omit for a caller (like the Agent form) that never selects by Agent. */
   agents?: Serialized<Agent>[];
   selection: ModelSelectionInput;
-}): ResolvedModel | null => {
+}): ResolvedModel | null {
   const { providers, agents = [], selection } = input;
 
   let provider: Serialized<Provider> | undefined;
@@ -89,4 +89,4 @@ export const resolveModel = (input: {
     passthroughFileTypes: passthroughFileTypesFor(provider, entry),
     canSearch: getSearchCapability(provider),
   };
-};
+}

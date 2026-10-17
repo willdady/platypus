@@ -5,11 +5,11 @@ import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Provider" };
 
-const ProviderEditPage = async ({
+async function ProviderEditPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string; providerId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId, providerId } = await params;
 
   return (
@@ -24,6 +24,6 @@ const ProviderEditPage = async ({
       />
     </ResourcePage>
   );
-};
+}
 
 export default ProviderEditPage;

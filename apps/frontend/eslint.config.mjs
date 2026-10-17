@@ -4,8 +4,21 @@ import nextTs from "eslint-config-next/typescript";
 import vitest from "@vitest/eslint-plugin";
 import testingLibrary from "eslint-plugin-testing-library";
 import jestDom from "eslint-plugin-jest-dom";
+import betterTailwindcss from "eslint-plugin-better-tailwindcss";
 
 const TEST_FILES = ["**/*.test.ts", "**/*.test.tsx"];
+
+// Top-level functions are declarations (`function X() {}`), not a const holding
+// an arrow or function expression. `func-style: "declaration"` can't do this:
+// it also flags every `const handleX = () => …` inside a component, which stay
+// arrows. Lives in `no-restricted-syntax`, so every block setting that rule
+// spreads it in.
+const TOP_LEVEL_FUNCTION_DECLARATIONS = {
+  selector:
+    ":matches(Program, Program > ExportNamedDeclaration) > VariableDeclaration > VariableDeclarator > :matches(ArrowFunctionExpression, FunctionExpression)",
+  message:
+    "Declare top-level functions and components with `function`, not a const arrow.",
+};
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -62,6 +75,7 @@ const eslintConfig = defineConfig([
         "error",
         { disallowTypeAnnotations: false },
       ],
+      "@typescript-eslint/consistent-type-definitions": ["error", "type"],
       "@typescript-eslint/no-floating-promises": "error",
       // React ignores the promise an event handler returns, so `onClick={async
       // () => …}` is fine; wrapping each in `void` would only add noise.
@@ -90,11 +104,46 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-syntax": [
         "error",
+        TOP_LEVEL_FUNCTION_DECLARATIONS,
         {
           selector:
             "CallExpression[callee.name='fetch']:has(Property[key.name='method'][value.value!='GET'])",
           message:
             "Writes go through writeEntity()/writeAt() in lib/api-write.ts, not a raw fetch() — see ADR-0010 and #563.",
+        },
+      ],
+    },
+  },
+  // The files exempt from the raw-fetch rule above still get the top-level one.
+  {
+    files: [
+      "lib/api-write.ts",
+      "components/change-password-dialog.tsx",
+      "components/agent-form.tsx",
+      "hooks/use-shared-resource-actions.ts",
+    ],
+    rules: {
+      "no-restricted-syntax": ["error", TOP_LEVEL_FUNCTION_DECLARATIONS],
+    },
+  },
+  // Tailwind: `size-N` over a matching `h-N w-N` pair (and the other
+  // shorthands), and `flex flex-col gap-*` over `space-y-*`.
+  {
+    plugins: { "better-tailwindcss": betterTailwindcss },
+    settings: {
+      "better-tailwindcss": { entryPoint: "app/globals.css" },
+    },
+    rules: {
+      "better-tailwindcss/enforce-shorthand-classes": "error",
+      "better-tailwindcss/no-restricted-classes": [
+        "error",
+        {
+          restrict: [
+            {
+              pattern: "^(.*:)?space-y-.*$",
+              message: "Use `flex flex-col gap-*` instead of `space-y-*`.",
+            },
+          ],
         },
       ],
     },

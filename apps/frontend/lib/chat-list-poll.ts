@@ -59,11 +59,11 @@ export type WatchedChat = {
  * Returns null off a chat route, and for a chat under some other workspace —
  * that chat belongs to a different list than the one being polled.
  */
-export const activeChatIdFromPathname = (
+export function activeChatIdFromPathname(
   pathname: string,
   orgId: string | undefined,
   workspaceId: string | undefined,
-): string | null => {
+): string | null {
   if (!orgId || !workspaceId) return null;
   const segments = pathname.split("/").filter(Boolean);
   const [routeOrgId, workspaceLiteral, routeWorkspaceId, chatLiteral, chatId] =
@@ -71,7 +71,7 @@ export const activeChatIdFromPathname = (
   if (routeOrgId !== orgId || workspaceLiteral !== "workspace") return null;
   if (routeWorkspaceId !== workspaceId || chatLiteral !== "chat") return null;
   return chatId ?? null;
-};
+}
 
 /**
  * The chats still worth waiting for, given what the list just returned.
@@ -81,7 +81,7 @@ export const activeChatIdFromPathname = (
  * the route cannot keep renewing a watch it has already exhausted. Leaving
  * that chat discards the exhausted entry; coming back starts a fresh watch.
  */
-const watchedAfterFetch = ({
+function watchedAfterFetch({
   watched,
   listedIds,
   activeChatId,
@@ -91,7 +91,7 @@ const watchedAfterFetch = ({
   listedIds: Set<string>;
   activeChatId: string | null;
   now: number;
-}): WatchedChat[] => {
+}): WatchedChat[] {
   const next = watched.filter(
     (entry) =>
       !listedIds.has(entry.id) &&
@@ -105,15 +105,15 @@ const watchedAfterFetch = ({
     next.push({ id: activeChatId, since: now });
   }
   return next;
-};
+}
 
 /** Whether a chat is recent enough that its generated title may still land. */
-const isAwaitingTitle = (chat: ListedChat, now: number): boolean => {
+function isAwaitingTitle(chat: ListedChat, now: number): boolean {
   if (chat.title !== UNTITLED_CHAT_TITLE) return false;
   const updatedAt = new Date(chat.updatedAt).getTime();
   if (Number.isNaN(updatedAt)) return false;
   return now - updatedAt <= UNTITLED_CHAT_WATCH_MS;
-};
+}
 
 /**
  * What the sidebar should do next about its chat list.
@@ -126,7 +126,7 @@ const isAwaitingTitle = (chat: ListedChat, now: number): boolean => {
  * (the chat being waited on is still on its way) and they do not call for a
  * poll of their own.
  */
-export const chatListPoll = ({
+export function chatListPoll({
   watched,
   listed,
   activeChatId,
@@ -138,7 +138,7 @@ export const chatListPoll = ({
   activeChatId: string | null;
   now: number;
   isSearching?: boolean;
-}): { watched: WatchedChat[]; intervalMs: number } => {
+}): { watched: WatchedChat[]; intervalMs: number } {
   const listedIds = new Set((listed ?? []).map((chat) => chat.id));
   const nextWatched = isSearching
     ? watched
@@ -160,4 +160,4 @@ export const chatListPoll = ({
     watched: nextWatched,
     intervalMs: pending ? CHAT_LIST_POLL_INTERVAL_MS : 0,
   };
-};
+}

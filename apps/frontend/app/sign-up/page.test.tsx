@@ -20,7 +20,7 @@ vi.mock("@/components/auth-provider", () => ({
 }));
 
 /** What the backend's sign-up availability endpoint answers. */
-const stubSignUpAvailability = (open: boolean) => {
+function stubSignUpAvailability(open: boolean) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
@@ -29,26 +29,27 @@ const stubSignUpAvailability = (open: boolean) => {
       json: async () => ({ open }),
     }),
   );
-};
+}
 
 /**
  * Renders the page with an SWR cache of its own, so no test sees another's
  * answer to the availability read.
  */
-const renderPage = () =>
-  render(
+function renderPage() {
+  return render(
     <SWRConfig value={{ provider: () => new Map() }}>
       <SignUpPage />
     </SWRConfig>,
   );
+}
 
 /** Renders the page on a deployment with open sign-up, form shown. */
-const renderOpen = async () => {
+async function renderOpen() {
   stubSignUpAvailability(true);
   const utils = renderPage();
   await screen.findByLabelText("Password");
   return utils;
-};
+}
 
 describe("SignUpPage when an invitation is required", () => {
   it("says sign-up is by invitation and offers no form", async () => {

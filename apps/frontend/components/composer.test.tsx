@@ -49,7 +49,7 @@ vi.mock("sonner", () => ({
 /** The session the composer most recently constructed. */
 let recognition: ReturnType<typeof installSpeechRecognition>;
 
-const renderComposer = ({
+function renderComposer({
   canUploadToSandbox = false,
   onSubmit = vi.fn(),
   placeholder = "Ask anything",
@@ -57,7 +57,7 @@ const renderComposer = ({
   canUploadToSandbox?: boolean;
   onSubmit?: (message: PromptInputMessage) => void;
   placeholder?: string;
-} = {}) => {
+} = {}) {
   const onModelChange = vi.fn();
 
   const Harness = () => {
@@ -102,19 +102,19 @@ const renderComposer = ({
     trigger: screen.getByText("Select model").closest("button")!,
     mic: screen.getByRole("button", { name: "Microphone" }),
   };
-};
+}
 
-const openPicker = (trigger: HTMLElement) => {
+function openPicker(trigger: HTMLElement) {
   fireEvent.click(trigger);
   return screen.getByText("gpt-4o");
-};
+}
 
 /** Records every element that takes focus from this point on, in order. */
-const recordFocus = () => {
+function recordFocus() {
   const targets: EventTarget[] = [];
   document.addEventListener("focusin", (e) => targets.push(e.target!));
   return targets;
-};
+}
 
 beforeEach(() => {
   setSecureContext(true);

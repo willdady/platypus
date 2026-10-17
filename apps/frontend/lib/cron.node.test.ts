@@ -5,8 +5,15 @@ import {
   type SimpleSchedule,
 } from "./cron";
 
-const build = (s: SimpleSchedule) =>
-  buildCronExpression(s.frequency, s.minute, s.hour, s.dayOfWeek, s.dayOfMonth);
+function build(s: SimpleSchedule) {
+  return buildCronExpression(
+    s.frequency,
+    s.minute,
+    s.hour,
+    s.dayOfWeek,
+    s.dayOfMonth,
+  );
+}
 
 describe("cron helpers", () => {
   it.each([

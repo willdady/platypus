@@ -104,7 +104,7 @@ function ColumnContent({
               className="p-1 hover:bg-muted rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={(e) => e.stopPropagation()}
             >
-              <MoreVertical className="h-4 w-4" />
+              <MoreVertical className="size-4" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
@@ -112,25 +112,25 @@ function ColumnContent({
               disabled={isFirst}
               onSelect={() => onMoveColumn?.(column.id, "left")}
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="size-4" />
               Move column left
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={isLast}
               onSelect={() => onMoveColumn?.(column.id, "right")}
             >
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="size-4" />
               Move column right
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => onEditColumn(column.id)}>
-              <Pencil className="h-4 w-4" />
+              <Pencil className="size-4" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => onDeleteColumn(column.id, hasCards)}
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="size-4" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -139,7 +139,7 @@ function ColumnContent({
       <div
         ref={cardDropRef}
         className={cn(
-          "flex-1 overflow-y-auto p-2 space-y-2 min-h-[100px] transition-colors",
+          "flex-1 overflow-y-auto p-2 flex flex-col gap-2 min-h-[100px] transition-colors",
           isOver && "bg-primary/10 rounded-md",
         )}
       >
@@ -177,7 +177,7 @@ function ColumnContent({
           className="w-full justify-start text-muted-foreground"
           onClick={() => onAddCard(column.id)}
         >
-          <Plus className="h-4 w-4 mr-2" /> Add card
+          <Plus className="mr-2" /> Add card
         </Button>
       </div>
     </>

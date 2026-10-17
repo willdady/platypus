@@ -48,7 +48,7 @@ type IssuedToken = Serialized<A2aToken> & { token: string };
  * the Workspace Owner issuing, regenerating and deleting them. A new token's
  * value is shown once, in a dialog, and never again.
  */
-export const A2aTokens = ({
+export function A2aTokens({
   orgId,
   endpoint,
   mutate,
@@ -57,7 +57,7 @@ export const A2aTokens = ({
   endpoint: Serialized<A2aEndpoint> & { tokens: Serialized<A2aToken>[] };
   /** Rereads the endpoint, so the list shows a token issued or removed. */
   mutate: () => Promise<unknown>;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
   const { ownsWorkspace } = useAuth();
   const readOnly = !ownsWorkspace;
@@ -192,7 +192,7 @@ export const A2aTokens = ({
                       aria-label={`Regenerate token ${token.name}`}
                       onClick={() => setTokenToRegenerate(token)}
                     >
-                      <RefreshCw className="h-4 w-4" />
+                      <RefreshCw />
                     </Button>
                     <Button
                       type="button"
@@ -201,7 +201,7 @@ export const A2aTokens = ({
                       aria-label={`Delete token ${token.name}`}
                       onClick={() => tokenDelete.request(token)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 />
                     </Button>
                   </div>
                 )}
@@ -247,7 +247,7 @@ export const A2aTokens = ({
               disabled={isIssuing || !tokenForm.name.trim()}
               onClick={() => void issueToken()}
             >
-              <Plus className="h-4 w-4" /> Add token
+              <Plus /> Add token
             </Button>
           </div>
         )}
@@ -291,4 +291,4 @@ export const A2aTokens = ({
       )}
     </div>
   );
-};
+}

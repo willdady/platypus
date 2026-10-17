@@ -41,7 +41,7 @@ import { useSharedDeleteGuard } from "@/hooks/use-shared-resource-actions";
 // manage every Shared Agent, attached or not. Promotion (from a Workspace) is
 // the way a Shared Agent is created; it is then edited, shared, and deleted
 // here on the Organization surface — in Workspaces it is locked.
-export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
+export function OrgAgentsList({ orgId }: { orgId: string }) {
   const { actor } = useAuth();
   const canManage = canManageOrgSharedResource(actor);
   const [agentToManage, setAgentToManage] = useState<Serialized<Agent> | null>(
@@ -141,7 +141,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                       variant="icon"
                       className="size-12 rounded-full [&_svg]:!size-7"
                     >
-                      <Bot className="h-7 w-7 text-muted-foreground" />
+                      <Bot className="size-7 text-muted-foreground" />
                     </ItemMedia>
                   )}
                   <ItemContent>
@@ -215,4 +215,4 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
       />
     </>
   );
-};
+}

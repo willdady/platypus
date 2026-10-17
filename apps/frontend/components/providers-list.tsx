@@ -20,16 +20,18 @@ const providersConfig: ResourceListConfig = {
   emptyState: NoProvidersEmptyState,
 };
 
-export const ProvidersList = ({
+export function ProvidersList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId?: string;
-}) => (
-  <ResourceList
-    orgId={orgId}
-    workspaceId={workspaceId}
-    config={providersConfig}
-  />
-);
+}) {
+  return (
+    <ResourceList
+      orgId={orgId}
+      workspaceId={workspaceId}
+      config={providersConfig}
+    />
+  );
+}

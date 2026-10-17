@@ -56,18 +56,19 @@ function Surface({ dirty }: { dirty: boolean }) {
   return <Link href="/elsewhere">Elsewhere</Link>;
 }
 
-const renderGuarded = (dirty: boolean) =>
-  render(
+function renderGuarded(dirty: boolean) {
+  return render(
     <UnsavedChangesProvider>
       <Surface dirty={dirty} />
     </UnsavedChangesProvider>,
   );
+}
 
-const unload = () => {
+function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
-};
+}
 
 describe("UnsavedChangesProvider", () => {
   afterEach(() => push.mockClear());

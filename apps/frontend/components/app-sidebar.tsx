@@ -412,7 +412,7 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarHeader>
           <SidebarSeparator className="mx-0 mt-1" />
-          <div className="px-2 py-2">
+          <div className="p-2">
             <SearchInput
               placeholder="Search chats..."
               aria-label="Search chats"
@@ -434,7 +434,7 @@ export function AppSidebar() {
               {chatGroups.map((group) => (
                 <SidebarGroup key={group.label}>
                   <SidebarGroupLabel>
-                    <group.icon className="mr-2 h-4 w-4" />
+                    <group.icon className="mr-2 size-4" />
                     {group.label}
                   </SidebarGroupLabel>
                   <SidebarGroupContent>
@@ -451,13 +451,13 @@ export function AppSidebar() {
                               <Link href={routes.chat.detail(chat.id)}>
                                 {chat.status === "running" && (
                                   <Loader2
-                                    className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
+                                    className="size-3 shrink-0 animate-spin text-muted-foreground"
                                     aria-label="Run in progress"
                                   />
                                 )}
                                 {chat.a2aClientName && (
                                   <Network
-                                    className="h-3 w-3 shrink-0 text-muted-foreground"
+                                    className="size-3 shrink-0 text-muted-foreground"
                                     role="img"
                                     aria-label={`Over A2A from ${chat.a2aClientName}`}
                                   >
@@ -475,7 +475,7 @@ export function AppSidebar() {
                                     className="text-muted-foreground"
                                     aria-label="Chat options"
                                   >
-                                    <EllipsisVertical className="h-4 w-4" />
+                                    <EllipsisVertical className="size-4" />
                                   </SidebarMenuAction>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
@@ -491,11 +491,11 @@ export function AppSidebar() {
                                       >
                                         {chat.isPinned ? (
                                           <>
-                                            <PinOff className="h-4 w-4" /> Unpin
+                                            <PinOff className="size-4" /> Unpin
                                           </>
                                         ) : (
                                           <>
-                                            <Pin className="h-4 w-4" /> Pin
+                                            <Pin className="size-4" /> Pin
                                           </>
                                         )}
                                       </DropdownMenuItem>
@@ -509,14 +509,14 @@ export function AppSidebar() {
                                           setRenameValidationErrors({});
                                         }}
                                       >
-                                        <Pencil className="h-4 w-4" /> Edit
+                                        <Pencil className="size-4" /> Edit
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
                                         onSelect={() =>
                                           chatDelete.request(chat.id)
                                         }
                                       >
-                                        <Trash2 className="h-4 w-4" /> Delete
+                                        <Trash2 className="size-4" /> Delete
                                       </DropdownMenuItem>
                                     </>
                                   )}
@@ -576,7 +576,7 @@ export function AppSidebar() {
               Update the chat title and tags.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
+          <div className="py-4 flex flex-col gap-4">
             <Field data-invalid={!!renameValidationErrors.title}>
               <FieldLabel htmlFor="title">Title</FieldLabel>
               <Input

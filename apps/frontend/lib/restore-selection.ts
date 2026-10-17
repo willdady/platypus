@@ -50,9 +50,9 @@ export type RestoredSelection = {
  * nothing can be resolved yet — the caller should leave its state as-is
  * rather than committing an empty selection.
  */
-export const resolveRestoredSelection = (
+export function resolveRestoredSelection(
   input: RestoreLadderInput,
-): RestoredSelection | null => {
+): RestoredSelection | null {
   const { chatData, storedSelection, providers, agents } = input;
 
   if (providers.length === 0) return null;
@@ -144,4 +144,4 @@ export const resolveRestoredSelection = (
     providerId: fallbackProvider.id,
     modelId: getModelOptions(fallbackProvider)[0]?.value ?? "",
   });
-};
+}

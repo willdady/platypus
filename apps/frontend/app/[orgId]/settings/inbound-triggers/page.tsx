@@ -4,11 +4,11 @@ import { OrgInboundTriggersList } from "@/components/org-inbound-triggers-list";
 
 export const metadata: Metadata = { title: "Inbound Triggers" };
 
-const OrgInboundTriggersPage = async ({
+async function OrgInboundTriggersPage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
-}) => {
+}) {
   const { orgId } = await params;
 
   return (
@@ -30,6 +30,6 @@ const OrgInboundTriggersPage = async ({
       <OrgInboundTriggersList orgId={orgId} />
     </div>
   );
-};
+}
 
 export default OrgInboundTriggersPage;

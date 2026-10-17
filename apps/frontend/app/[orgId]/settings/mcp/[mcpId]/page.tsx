@@ -5,11 +5,11 @@ import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Organization MCP" };
 
-const EditOrgMcpPage = async ({
+async function EditOrgMcpPage({
   params,
 }: {
   params: Promise<{ orgId: string; mcpId: string }>;
-}) => {
+}) {
   const { orgId, mcpId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const EditOrgMcpPage = async ({
       <McpForm orgId={orgId} mcpId={mcpId} />
     </ResourcePage>
   );
-};
+}
 
 export default EditOrgMcpPage;

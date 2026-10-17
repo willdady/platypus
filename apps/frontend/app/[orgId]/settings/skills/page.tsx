@@ -3,11 +3,11 @@ import { SkillsList } from "@/components/skills-list";
 
 export const metadata: Metadata = { title: "Organization Skills" };
 
-const OrgSkillsPage = async ({
+async function OrgSkillsPage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
-}) => {
+}) {
   const { orgId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const OrgSkillsPage = async ({
       <SkillsList orgId={orgId} />
     </div>
   );
-};
+}
 
 export default OrgSkillsPage;

@@ -15,26 +15,31 @@ import type {
   KanbanCardHistoryRef,
 } from "@platypus/schemas";
 
-const formatDate = (value: string | null): string =>
-  value ? new Date(value).toLocaleDateString() : "none";
+function formatDate(value: string | null): string {
+  return value ? new Date(value).toLocaleDateString() : "none";
+}
 
-const formatTimestamp = (value: string): string =>
-  new Date(value).toLocaleString(undefined, {
+function formatTimestamp(value: string): string {
+  return new Date(value).toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
 
-const labelNames = (labels: KanbanCardHistoryRef[]): string =>
-  labels.length > 0 ? labels.map((label) => label.name).join(", ") : "none";
+function labelNames(labels: KanbanCardHistoryRef[]): string {
+  return labels.length > 0
+    ? labels.map((label) => label.name).join(", ")
+    : "none";
+}
 
 /**
  * A value a change moved between. Rendered heavier than the sentence around it
  * so a Column or Label called "moved" or "none" still reads as the value
  * rather than as part of the wording.
  */
-const Value = ({ children }: { children: ReactNode }) => (
-  <span className="font-medium text-foreground">{children}</span>
-);
+function Value({ children }: { children: ReactNode }) {
+  return <span className="font-medium text-foreground">{children}</span>;
+}
 
 /**
  * One change, in a sentence. Values are the snapshots the entry was written
@@ -129,7 +134,7 @@ export function KanbanCardHistory({
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left text-sm font-medium">
         History
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=closed]:-rotate-90" />
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=closed]:-rotate-90" />
       </CollapsibleTrigger>
       <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
         <div className="pt-3">
@@ -146,9 +151,9 @@ export function KanbanCardHistory({
               No changes recorded yet.
             </p>
           ) : (
-            <ol className="space-y-3">
+            <ol className="flex flex-col gap-3">
               {entries.map((entry) => (
-                <li key={entry.id} className="space-y-1">
+                <li key={entry.id} className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium">
                       {entry.actorName ?? "Unknown"}
@@ -157,7 +162,7 @@ export function KanbanCardHistory({
                       {formatTimestamp(entry.createdAt)}
                     </span>
                   </div>
-                  <ul className="text-xs text-muted-foreground space-y-0.5">
+                  <ul className="text-xs text-muted-foreground flex flex-col gap-0.5">
                     {entry.changes.map((change, index) => (
                       <li key={`${entry.id}-${index}`}>
                         {describeChange(change)}

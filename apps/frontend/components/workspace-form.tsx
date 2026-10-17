@@ -58,10 +58,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes, withBasePath, workspaceRoutes } from "@/lib/routes";
 
-interface WorkspaceFormProps {
+type WorkspaceFormProps = {
   orgId: string;
   workspaceId: string;
-}
+};
 
 // providerSelfManagement, mcpSelfManagement and inboundTriggersAllowed are
 // deliberately excluded:
@@ -88,40 +88,44 @@ type WorkspaceFormData = {
 };
 
 /** A delegation flag: label and description, its Switch on the right. */
-const DelegationRowSkeleton = () => (
-  <div className="flex w-full items-center justify-between gap-3">
-    <div className="flex flex-1 flex-col gap-1.5">
-      <Skeleton className="h-3.5 w-44" />
-      <Skeleton className="h-3.5 w-3/4" />
+function DelegationRowSkeleton() {
+  return (
+    <div className="flex w-full items-center justify-between gap-3">
+      <div className="flex flex-1 flex-col gap-1.5">
+        <Skeleton className="h-3.5 w-44" />
+        <Skeleton className="h-3.5 w-3/4" />
+      </div>
+      <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
     </div>
-    <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
-  </div>
-);
+  );
+}
 
-const WorkspaceFormSkeleton = ({ delegation }: { delegation: boolean }) => (
-  <div>
-    <FormSkeletonSet>
-      <FormSkeletonGroup>
-        <FieldSkeleton />
-        <TextareaSkeleton counter description={1} />
-        <FieldSkeleton description={2} />
-        <FieldSkeleton description={2} />
-        <FieldSkeleton description={2} />
-        <FieldSkeleton description={1} />
-        {delegation && (
-          <>
-            <DelegationRowSkeleton />
-            <DelegationRowSkeleton />
-            <DelegationRowSkeleton />
-          </>
-        )}
-      </FormSkeletonGroup>
-    </FormSkeletonSet>
-    <FooterSkeleton buttons={2} />
-  </div>
-);
+function WorkspaceFormSkeleton({ delegation }: { delegation: boolean }) {
+  return (
+    <div>
+      <FormSkeletonSet>
+        <FormSkeletonGroup>
+          <FieldSkeleton />
+          <TextareaSkeleton counter description={1} />
+          <FieldSkeleton description={2} />
+          <FieldSkeleton description={2} />
+          <FieldSkeleton description={2} />
+          <FieldSkeleton description={1} />
+          {delegation && (
+            <>
+              <DelegationRowSkeleton />
+              <DelegationRowSkeleton />
+              <DelegationRowSkeleton />
+            </>
+          )}
+        </FormSkeletonGroup>
+      </FormSkeletonSet>
+      <FooterSkeleton buttons={2} />
+    </div>
+  );
+}
 
-const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
+function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
   const { actor } = useAuth();
   const canManageDelegation = canManageWorkspaceDelegation(actor);
   const canTransfer = canTransferWorkspace(actor);
@@ -550,6 +554,6 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
       </div>
     </DetailFormState>
   );
-};
+}
 
 export { WorkspaceForm };

@@ -18,7 +18,7 @@ import type { Serialized } from "@/lib/api-write";
  * Values written before the expiry was dropped also carry an `expiresAt`; it
  * is ignored, so a pick made under the old rule is still restored.
  */
-const readStoredSelection = (key: string): StoredSelection | null => {
+function readStoredSelection(key: string): StoredSelection | null {
   try {
     const item = localStorage.getItem(key);
     if (!item) return null;
@@ -27,28 +27,28 @@ const readStoredSelection = (key: string): StoredSelection | null => {
   } catch {
     return null;
   }
-};
+}
 
 /**
  * Persists a pick so the next new Chat in this workspace opens against it. A
  * write that fails (storage full, or blocked) leaves the previous value in
  * place; the pick just won't be remembered.
  */
-const writeStoredSelection = (key: string, value: StoredSelection): void => {
+function writeStoredSelection(key: string, value: StoredSelection): void {
   try {
     localStorage.setItem(key, JSON.stringify({ value }));
   } catch {
     // Deliberately swallowed: nothing to recover, and nothing to tell the user.
   }
-};
+}
 
-export interface ModelSelection {
+export type ModelSelection = {
   agentId: string;
   modelId: string;
   providerId: string;
-}
+};
 
-export interface UseModelSelectionInput {
+export type UseModelSelectionInput = {
   /** The Chat's own row, once read; absent for a brand-new Chat. */
   chatData: Serialized<Chat> | undefined;
   providers: Serialized<Provider>[];
@@ -63,7 +63,7 @@ export interface UseModelSelectionInput {
   workspaceId: string;
   /** The Agent named by `?agentId=`, which opens a new Chat against it. */
   initialAgentId?: string;
-}
+};
 
 /** What the picker shows before anything has resolved: no selection at all. */
 const EMPTY_SELECTION: ModelSelection = {
@@ -88,14 +88,14 @@ const EMPTY_SELECTION: ModelSelection = {
  * `selection` therefore only ever means "nothing to show yet", never "the user
  * has nothing selected".
  */
-export const useModelSelection = ({
+export function useModelSelection({
   chatData,
   providers,
   agents,
   isChatLoading = false,
   workspaceId,
   initialAgentId,
-}: UseModelSelectionInput) => {
+}: UseModelSelectionInput) {
   const STORAGE_KEY = `platypus:workspace:${workspaceId}:lastSelection`;
 
   // Read during the first render rather than from an effect: the ladder is
@@ -217,4 +217,4 @@ export const useModelSelection = ({
   );
 
   return { selection, isResolved, substitution, handleModelChange };
-};
+}

@@ -6,8 +6,9 @@ vi.mock("next/headers", () => ({
 
 import { generateMetadata } from "./layout";
 
-const metadataFor = () =>
-  generateMetadata({ params: Promise.resolve({ orgId: "org1" }) });
+function metadataFor() {
+  return generateMetadata({ params: Promise.resolve({ orgId: "org1" }) });
+}
 
 describe("OrgSettingsLayout metadata", () => {
   it("names the Organization in the title of every settings page", async () => {

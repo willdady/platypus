@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { TagInput } from "./tag-input";
 
-const renderTagInput = (value: string[] = []) => {
+function renderTagInput(value: string[] = []) {
   const onChange = vi.fn();
   render(
     <>
@@ -11,12 +11,12 @@ const renderTagInput = (value: string[] = []) => {
     </>,
   );
   return { onChange, input: screen.getByLabelText("Tags") };
-};
+}
 
-const enterTag = (input: HTMLElement, text: string, key = "Enter") => {
+function enterTag(input: HTMLElement, text: string, key = "Enter") {
   fireEvent.change(input, { target: { value: text } });
   fireEvent.keyDown(input, { key });
-};
+}
 
 describe("TagInput", () => {
   it.each(["Enter", ","])("adds the typed tag on %s", (key) => {

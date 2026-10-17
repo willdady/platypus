@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { useState, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
-interface ConfirmDialogProps {
+type ConfirmDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -33,9 +33,9 @@ interface ConfirmDialogProps {
   confirmPhrase?: string;
   // Keeps the confirm button disabled, e.g. while the action is not allowed.
   confirmDisabled?: boolean;
-}
+};
 
-export const ConfirmDialog = ({
+export function ConfirmDialog({
   open,
   onOpenChange,
   title,
@@ -50,7 +50,7 @@ export const ConfirmDialog = ({
   error = null,
   confirmPhrase,
   confirmDisabled = false,
-}: ConfirmDialogProps) => {
+}: ConfirmDialogProps) {
   const [typedPhrase, setTypedPhrase] = useState("");
 
   useResetOnChange(open, () => {
@@ -125,4 +125,4 @@ export const ConfirmDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

@@ -12,15 +12,16 @@ import { FsDownloadTool } from "./fs-download-tool";
 
 type FsDownloadPart = ComponentProps<typeof FsDownloadTool>["toolPart"];
 
-const part = (overrides: Partial<FsDownloadPart> = {}): FsDownloadPart =>
-  ({
+function part(overrides: Partial<FsDownloadPart> = {}): FsDownloadPart {
+  return {
     type: "tool-fsDownload",
     toolCallId: "call-1",
     state: "output-available",
     input: { path: "out/report 1.pdf" },
     output: { path: "out/report 1.pdf", size: 1234 },
     ...overrides,
-  }) as unknown as FsDownloadPart;
+  } as unknown as FsDownloadPart;
+}
 
 describe("FsDownloadTool", () => {
   it("offers the file as a Download link to the Workspace's download route", () => {

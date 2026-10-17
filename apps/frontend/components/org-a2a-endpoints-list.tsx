@@ -31,10 +31,10 @@ import { formatDate } from "@/lib/format-date";
 import { TokenCells, TokenTime } from "@/components/bearer-token";
 
 /** What a revoke stops: the endpoint, or just one of its tokens. */
-interface RevokeTarget {
+type RevokeTarget = {
   endpoint: Serialized<OrgA2aEndpoint>;
   token?: Serialized<OrgA2aEndpoint>["tokens"][number];
-}
+};
 
 const COLUMNS = [
   "Endpoint",
@@ -51,7 +51,7 @@ const COLUMNS = [
  * and the Workspace Owner is notified. The Organization's A2A setting is the
  * lasting off switch.
  */
-export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
+export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
   const backendUrl = useBackendUrl();
   const scope = { orgId };
   const {
@@ -228,4 +228,4 @@ export const OrgA2aEndpointsList = ({ orgId }: { orgId: string }) => {
       />
     </>
   );
-};
+}

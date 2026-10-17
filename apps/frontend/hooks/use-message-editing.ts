@@ -34,10 +34,10 @@ export type MessageBeingEdited = {
  * `truncateAt`, sends, and answers whether it did. A refused resend leaves the
  * surface open, so the user can fix what refused it and try again.
  */
-export const useMessageEditing = <T extends UIMessage = UIMessage>(
+export function useMessageEditing<T extends UIMessage = UIMessage>(
   messages: T[],
   resend: (truncateAt: number, message: TurnMessage) => boolean,
-) => {
+) {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   const editing = useMemo<MessageBeingEdited | null>(() => {
@@ -91,4 +91,4 @@ export const useMessageEditing = <T extends UIMessage = UIMessage>(
     handleMessageEditCancel,
     handleMessageEditSubmit,
   };
-};
+}

@@ -20,11 +20,11 @@ import { genId, toEditorEntries } from "./chart-utils";
 import { colorForIndex } from "./chart-colors";
 import type { Serialized } from "@/lib/api-write";
 
-interface SegmentEntry {
+type SegmentEntry = {
   id: string;
   label: string;
   value: number;
-}
+};
 
 export function PieChartWidget({
   widget,
@@ -63,7 +63,7 @@ export function PieChartWidget({
 
     return (
       <div className="flex flex-col gap-2 p-3 h-full overflow-auto">
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <Label htmlFor={`${id}-name`} className="text-xs">
             Name
           </Label>
@@ -75,7 +75,7 @@ export function PieChartWidget({
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label htmlFor={`${id}-center-label`} className="text-xs">
               Center label (optional)
             </Label>
@@ -88,7 +88,7 @@ export function PieChartWidget({
               className="h-7 text-sm"
             />
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label htmlFor={`${id}-center-sub-label`} className="text-xs">
               Center sub-label (optional)
             </Label>
@@ -105,7 +105,7 @@ export function PieChartWidget({
         <div
           role="group"
           aria-labelledby={`${id}-segments`}
-          className="space-y-2"
+          className="flex flex-col gap-2"
         >
           <div className="flex items-center justify-between">
             <span
@@ -119,13 +119,13 @@ export function PieChartWidget({
               onClick={handleAddSegment}
               className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Plus className="h-3 w-3" /> Add segment
+              <Plus className="size-3" /> Add segment
             </button>
           </div>
           {segments.map((s, i) => (
             <div key={s.id} className="flex items-center gap-1.5">
               <div
-                className="h-2 w-2 shrink-0 rounded-full"
+                className="size-2 shrink-0 rounded-full"
                 style={{
                   backgroundColor: colorForIndex(i),
                 }}
@@ -166,7 +166,7 @@ export function PieChartWidget({
                   onClick={() => handleRemoveSegment(s.id)}
                   className="text-muted-foreground hover:text-destructive shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="size-3" />
                 </button>
               )}
             </div>
@@ -189,7 +189,7 @@ export function PieChartWidget({
             )
           }
         >
-          <Check className="h-3 w-3" /> Save
+          <Check className="size-3" /> Save
         </Button>
       </div>
     );
@@ -213,7 +213,7 @@ export function PieChartWidget({
   return (
     <ChartContainer
       config={chartConfig}
-      className="h-full w-full aspect-auto px-2 pt-2 pb-1"
+      className="size-full aspect-auto px-2 pt-2 pb-1"
     >
       <PieChart>
         <ChartTooltip content={<ChartTooltipContent />} />

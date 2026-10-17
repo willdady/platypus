@@ -4,7 +4,7 @@ import { OAuthCallbackHandler } from "./oauth-callback-handler";
 
 export const metadata: Metadata = { title: "Connecting MCP" };
 
-const OAuthCallbackPage = async ({
+async function OAuthCallbackPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -13,7 +13,7 @@ const OAuthCallbackPage = async ({
     error?: string;
     error_description?: string;
   }>;
-}) => {
+}) {
   const { code, state, error, error_description } = await searchParams;
 
   return (
@@ -26,6 +26,6 @@ const OAuthCallbackPage = async ({
       />
     </main>
   );
-};
+}
 
 export default OAuthCallbackPage;

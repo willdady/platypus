@@ -16,28 +16,33 @@ vi.mock("swr", () => swrMock);
 
 import { OrgA2aAccess, OrgInboundTriggerAccess } from "./org-gate-access";
 
-const workspace = (over: Record<string, unknown> = {}) => ({
-  id: "ws-1",
-  name: "Support",
-  ownerName: "Dana Owner",
-  allowed: false,
-  count: 0,
-  ...over,
-});
-
-const access = (over: Record<string, unknown> = {}) => ({
-  data: {
-    gate: "all",
-    workspaces: [
-      workspace({ count: 2 }),
-      workspace({ id: "ws-2", name: "Billing" }),
-    ],
+function workspace(over: Record<string, unknown> = {}) {
+  return {
+    id: "ws-1",
+    name: "Support",
+    ownerName: "Dana Owner",
+    allowed: false,
+    count: 0,
     ...over,
-  },
-});
+  };
+}
 
-const sentBody = (fetchMock: ReturnType<typeof stubAcceptedSave>) =>
-  JSON.parse(fetchMock.mock.calls[0][1].body as string);
+function access(over: Record<string, unknown> = {}) {
+  return {
+    data: {
+      gate: "all",
+      workspaces: [
+        workspace({ count: 2 }),
+        workspace({ id: "ws-2", name: "Billing" }),
+      ],
+      ...over,
+    },
+  };
+}
+
+function sentBody(fetchMock: ReturnType<typeof stubAcceptedSave>) {
+  return JSON.parse(fetchMock.mock.calls[0][1].body as string);
+}
 
 beforeEach(resetListHarness);
 

@@ -33,7 +33,7 @@ type Outgoing =
  * message with Sandbox uploads goes as parts, in the order the SDK gives a
  * text-and-files one: files, then the text.
  */
-const outgoing = ({ text, files, sandboxUploads }: TurnMessage): Outgoing => {
+function outgoing({ text, files, sandboxUploads }: TurnMessage): Outgoing {
   const words = text || ATTACHMENTS_ONLY_TEXT;
   if (!sandboxUploads?.length) return { text: words, files };
   return {
@@ -46,9 +46,9 @@ const outgoing = ({ text, files, sandboxUploads }: TurnMessage): Outgoing => {
       { type: "text", text: words },
     ],
   };
-};
+}
 
-export interface UseChatTurnInput<T extends UIMessage> {
+export type UseChatTurnInput<T extends UIMessage> = {
   selection: ModelSelection;
   settings: ChatSettings;
   search: boolean;
@@ -65,7 +65,7 @@ export interface UseChatTurnInput<T extends UIMessage> {
   backendUrl: string | undefined;
   scope: Scope;
   chatId: string;
-}
+};
 
 /**
  * Starting a Chat turn, whichever entry point asks: the composer, Regenerate,
@@ -81,7 +81,7 @@ export interface UseChatTurnInput<T extends UIMessage> {
  * The starts are stable while their inputs are: `ChatMessage` is memoised on
  * its callbacks, and a streamed token changes none of them (#869).
  */
-export const useChatTurn = <T extends UIMessage>({
+export function useChatTurn<T extends UIMessage>({
   selection,
   settings,
   search,
@@ -91,7 +91,7 @@ export const useChatTurn = <T extends UIMessage>({
   backendUrl,
   scope,
   chatId,
-}: UseChatTurnInput<T>) => {
+}: UseChatTurnInput<T>) {
   const request = useMemo(
     () => turnRequest({ selection, settings, search }),
     [selection, settings, search],
@@ -179,4 +179,4 @@ export const useChatTurn = <T extends UIMessage>({
   }, [backendUrl, chatId, scope, stop]);
 
   return { send, regenerate, resendEdited, cancel };
-};
+}

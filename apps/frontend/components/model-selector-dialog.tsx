@@ -23,14 +23,10 @@ import { splitPinned } from "@/lib/pinned-agents";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import type { Serialized } from "@/lib/api-write";
 
-const filterByKeywords = (
-  _value: string,
-  search: string,
-  keywords?: string[],
-) => {
+function filterByKeywords(_value: string, search: string, keywords?: string[]) {
   const haystack = (keywords ?? []).join(" ").toLowerCase();
   return haystack.includes(search.toLowerCase()) ? 1 : 0;
-};
+}
 
 /**
  * Stops a press from moving focus, which is what keeps the on-screen keyboard
@@ -48,9 +44,11 @@ const filterByKeywords = (
  * Opening and selecting both run off `click`, so neither is affected, and Tab
  * still reaches these elements for anyone using a hardware keyboard.
  */
-const keepFocus = (event: MouseEvent) => event.preventDefault();
+function keepFocus(event: MouseEvent) {
+  return event.preventDefault();
+}
 
-interface ModelSelectorDialogProps {
+type ModelSelectorDialogProps = {
   agents: Serialized<Agent>[];
   providers: Serialized<Provider>[];
   agentId: string;
@@ -85,9 +83,9 @@ interface ModelSelectorDialogProps {
    * and says why on hover.
    */
   lockedReason?: string;
-}
+};
 
-export const ModelSelectorDialog = ({
+export function ModelSelectorDialog({
   agents,
   providers,
   agentId,
@@ -100,7 +98,7 @@ export const ModelSelectorDialog = ({
   maxOutputTokens,
   onCloseAutoFocus,
   lockedReason,
-}: ModelSelectorDialogProps) => {
+}: ModelSelectorDialogProps) {
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
   // Normalising every Provider's model list is pure work, but it ran on every
@@ -250,4 +248,4 @@ export const ModelSelectorDialog = ({
       </ModelSelectorContent>
     </ModelSelector>
   );
-};
+}

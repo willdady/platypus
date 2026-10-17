@@ -116,11 +116,13 @@ function renderEditForm() {
 }
 
 /** Picks the first workspace through the Radix select, as a keyboard user would. */
-const chooseWorkspace = () =>
-  selectOption(screen.getByRole("combobox"), "Alpha");
+function chooseWorkspace() {
+  return selectOption(screen.getByRole("combobox"), "Alpha");
+}
 
-const submit = () =>
-  fireEvent.click(screen.getByRole("button", { name: /Save|Update/ }));
+function submit() {
+  return fireEvent.click(screen.getByRole("button", { name: /Save|Update/ }));
+}
 
 // --- Tests -------------------------------------------------------------------
 

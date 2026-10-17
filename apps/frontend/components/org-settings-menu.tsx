@@ -26,7 +26,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { orgRoutes } from "@/lib/routes";
 
-interface OrgSettingsMenuProps {
+type OrgSettingsMenuProps = {
   orgId: string;
   /**
    * Resolved by the settings layout. Undefined when the organization could not
@@ -34,7 +34,7 @@ interface OrgSettingsMenuProps {
    * settings pages behind an error.
    */
   organizationName?: string;
-}
+};
 
 export function OrgSettingsMenu({
   orgId,

@@ -19,7 +19,7 @@ export async function generateMetadata({
   return { title: agent?.name || "Edit Agent" };
 }
 
-const AgentEditPage = async ({ params }: { params: Params }) => {
+async function AgentEditPage({ params }: { params: Params }) {
   const { orgId, workspaceId, agentId } = await params;
 
   // Fetch tool sets from the server. A failed read is reported to the form
@@ -42,6 +42,6 @@ const AgentEditPage = async ({ params }: { params: Params }) => {
       />
     </ResourcePage>
   );
-};
+}
 
 export default AgentEditPage;

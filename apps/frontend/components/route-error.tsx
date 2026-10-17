@@ -18,22 +18,24 @@ export type ErrorBoundaryProps = {
 };
 
 /** A fallback card centred in the content area a failed or missing page left. */
-export const RouteFallback = (props: ComponentProps<typeof EmptyCard>) => (
-  <div className="flex min-h-[50vh] items-center justify-center p-4">
-    <EmptyCard className="max-w-md" {...props} />
-  </div>
-);
+export function RouteFallback(props: ComponentProps<typeof EmptyCard>) {
+  return (
+    <div className="flex min-h-[50vh] items-center justify-center p-4">
+      <EmptyCard className="max-w-md" {...props} />
+    </div>
+  );
+}
 
 /**
  * What an `error.tsx` boundary shows in place of the page that threw. Placed
  * per segment, it renders inside that segment's layout, so the sidebar and
  * header stay put and only the content area is replaced.
  */
-export const RouteError = ({
+export function RouteError({
   error,
   retry,
   source,
-}: ErrorBoundaryProps & { source: ErrorSource }) => {
+}: ErrorBoundaryProps & { source: ErrorSource }) {
   useEffect(() => {
     console.error("Unhandled error:", error);
     reportClientError(
@@ -50,4 +52,4 @@ export const RouteError = ({
       action={<Button onClick={() => retry()}>Try again</Button>}
     />
   );
-};
+}

@@ -13,12 +13,12 @@ export type Scope =
   | { readonly orgId: string; readonly workspaceId?: undefined }
   | { readonly orgId: string; readonly workspaceId: string };
 
-export interface WriteOptions<TData> {
+export type WriteOptions<TData> = {
   /** Omit to create; provide to update or delete an existing entity. */
   readonly id?: string;
   /** Omit only when `id` is set and the write is a delete. */
   readonly data?: TData;
-}
+};
 
 /**
  * What `JSON.parse` makes of `T`: every `Date` arrives as its ISO string.
@@ -295,7 +295,7 @@ export async function writeEntity<TResult = unknown, TData = unknown>(
   return performWrite<TResult, TData>(url, method, data, revalidateKeys);
 }
 
-export interface WriteAtOptions<TData> {
+export type WriteAtOptions<TData> = {
   readonly method: "POST" | "PUT" | "PATCH" | "DELETE";
   /** Omit for a write with no body. A `Blob` is sent as the raw body. */
   readonly data?: TData;
@@ -306,7 +306,7 @@ export interface WriteAtOptions<TData> {
    * better-auth admin actions that must echo the browser's `Origin`.
    */
   readonly headers?: Record<string, string>;
-}
+};
 
 /**
  * Same transport and ADR-0010 outcome mapping as `writeEntity`, for the

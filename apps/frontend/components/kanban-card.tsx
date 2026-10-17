@@ -53,7 +53,7 @@ function formatDueDate(dueDate: string): string {
   });
 }
 
-const KanbanCardComponentInner = function KanbanCardComponent({
+function KanbanCardComponentInner({
   card,
   labels,
   draggable = true,
@@ -215,6 +215,6 @@ const KanbanCardComponentInner = function KanbanCardComponent({
       )}
     </div>
   );
-};
+}
 
 export const KanbanCardComponent = memo(KanbanCardComponentInner);

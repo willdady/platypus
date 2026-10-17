@@ -60,13 +60,15 @@ function mockReads({
   );
 }
 
-const renderSettings = () =>
-  renderList(<SandboxSettings orgId="org1" workspaceId="ws1" />);
+function renderSettings() {
+  return renderList(<SandboxSettings orgId="org1" workspaceId="ws1" />);
+}
 
 const SANDBOX_URL = "http://test/organizations/org1/workspaces/ws1/sandbox";
 
-const save = () =>
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+function save() {
+  return fireEvent.click(screen.getByRole("button", { name: "Save" }));
+}
 
 beforeEach(resetListHarness);
 

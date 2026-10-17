@@ -19,7 +19,7 @@ export const RESTORE_THROTTLE_MS = 3_000;
  * Only an actual restore is acted on. An ordinary navigation fires `pageshow`
  * too, with `persisted` false, and that page already revalidates on mount.
  */
-export const useRevalidateOnRestore = (revalidate: () => void) => {
+export function useRevalidateOnRestore(revalidate: () => void) {
   const revalidateRef = useRef(revalidate);
   useEffect(() => {
     revalidateRef.current = revalidate;
@@ -37,4 +37,4 @@ export const useRevalidateOnRestore = (revalidate: () => void) => {
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
   }, []);
-};
+}

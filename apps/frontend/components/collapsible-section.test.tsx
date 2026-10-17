@@ -4,12 +4,13 @@ import { CollapsibleSection } from "./collapsible-section";
 
 const KEY = "section:test:open";
 
-const renderSection = () =>
-  render(
+function renderSection() {
+  return render(
     <CollapsibleSection title="Skills" storageKey={KEY}>
       <p>Section body</p>
     </CollapsibleSection>,
   );
+}
 
 afterEach(() => {
   localStorage.clear();

@@ -15,15 +15,16 @@ import {
   transcriptExtent,
 } from "./chat-recovery";
 
-const user = (text: string): PlatypusUIMessage =>
-  ({
+function user(text: string): PlatypusUIMessage {
+  return {
     id: `u-${text}`,
     role: "user",
     parts: [{ type: "text", text }],
-  }) as PlatypusUIMessage;
+  } as PlatypusUIMessage;
+}
 
-const assistant = (text: string, extraParts = 0): PlatypusUIMessage =>
-  ({
+function assistant(text: string, extraParts = 0): PlatypusUIMessage {
+  return {
     id: "a-1",
     role: "assistant",
     parts: [
@@ -36,14 +37,17 @@ const assistant = (text: string, extraParts = 0): PlatypusUIMessage =>
         output: {},
       })),
     ],
-  }) as PlatypusUIMessage;
+  } as PlatypusUIMessage;
+}
 
 /** The three readings the recovery decisions are made from. */
-const belief = (
+function belief(
   runStatus: RunStatus | undefined,
   turnStatus: TurnStatus,
   turnEstablished = false,
-) => ({ runStatus, turnStatus, turnEstablished });
+) {
+  return { runStatus, turnStatus, turnEstablished };
+}
 
 describe("chatPollIntervalMs", () => {
   // This tab's own stream is the live source; a read under it lands nowhere.

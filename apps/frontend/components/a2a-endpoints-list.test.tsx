@@ -19,8 +19,9 @@ vi.mock("swr", () => swrMock);
 
 import { A2aEndpointsList } from "./a2a-endpoints-list";
 
-const asOwner = (owns: boolean) =>
-  Object.assign(authState, { ownsWorkspace: owns });
+function asOwner(owns: boolean) {
+  return Object.assign(authState, { ownsWorkspace: owns });
+}
 
 const ENDPOINT = {
   id: "ep-1",

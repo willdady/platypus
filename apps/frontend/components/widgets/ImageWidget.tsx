@@ -29,7 +29,7 @@ export function ImageWidget({
   if (editing) {
     return (
       <div className="flex flex-col gap-2 p-3 h-full">
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <Label htmlFor={`${id}-name`} className="text-xs">
             Name
           </Label>
@@ -40,7 +40,7 @@ export function ImageWidget({
             className="h-7 text-sm"
           />
         </div>
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <Label htmlFor={`${id}-url`} className="text-xs">
             Image URL
           </Label>
@@ -57,7 +57,7 @@ export function ImageWidget({
           className="mt-auto"
           onClick={() => onSave({ url }, title)}
         >
-          <Check className="h-3 w-3" /> Save
+          <Check className="size-3" /> Save
         </Button>
       </div>
     );
@@ -70,7 +70,7 @@ export function ImageWidget({
         <img
           src={data.url}
           alt={widget.title}
-          className="w-full h-full object-contain"
+          className="size-full object-contain"
           loading="lazy"
           decoding="async"
         />

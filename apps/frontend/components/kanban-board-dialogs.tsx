@@ -22,10 +22,10 @@ import { Badge } from "@/components/ui/badge";
  * its inputs start fresh every time it opens. `onSubmit` resolves once the
  * write has landed or been refused; the board closes the dialog on success.
  */
-interface BoardDialogProps<Values> {
+type BoardDialogProps<Values> = {
   readonly onSubmit: (values: Values) => Promise<void>;
   readonly onClose: () => void;
-}
+};
 
 /**
  * Runs `submit` with the trimmed text once per submit: a double click or
@@ -105,7 +105,7 @@ export function AddCardDialog({
           <DialogTitle>Add Card</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
-          <div className="py-4 space-y-4">
+          <div className="py-4 flex flex-col gap-4">
             <div>
               <Label htmlFor="cardTitle">Card Title</Label>
               <Input

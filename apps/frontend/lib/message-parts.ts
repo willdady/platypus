@@ -23,9 +23,11 @@ export const ATTACHMENTS_ONLY_TEXT = "Sent with attachments";
  * src>` — falling back to the file card there is strictly better than a
  * broken image, so the URL is required alongside the media type (issue #579).
  */
-export const isImageAttachment = (
+export function isImageAttachment(
   part: Pick<FileUIPart, "mediaType" | "url">,
-): boolean => Boolean(part.mediaType?.startsWith("image/") && part.url);
+): boolean {
+  return Boolean(part.mediaType?.startsWith("image/") && part.url);
+}
 
 /**
  * The message as one string: every text part, in order, joined. A turn can
@@ -33,13 +35,12 @@ export const isImageAttachment = (
  * they are one message to a reader, so Copy and the edit surface both open
  * from this rather than each keeping their own idea of it.
  */
-export const messageText = (
-  parts: readonly UnknownPart[] | undefined,
-): string =>
-  (parts ?? [])
+export function messageText(parts: readonly UnknownPart[] | undefined): string {
+  return (parts ?? [])
     .filter((part): part is TextUIPart => part.type === "text")
     .map((part) => part.text)
     .join("");
+}
 
 /**
  * Every file the message carries, in the order it carries them. Images are
@@ -47,15 +48,19 @@ export const messageText = (
  * edit surface, and an edit that kept only the non-image ones would drop the
  * screenshot the question was about (issue #710).
  */
-export const messageAttachments = (
+export function messageAttachments(
   parts: readonly UnknownPart[] | undefined,
-): FileUIPart[] =>
-  (parts ?? []).filter((part): part is FileUIPart => part.type === "file");
+): FileUIPart[] {
+  return (parts ?? []).filter(
+    (part): part is FileUIPart => part.type === "file",
+  );
+}
 
 /** The Sandbox uploads the message records, in order. */
-export const messageSandboxUploads = (
+export function messageSandboxUploads(
   parts: readonly UnknownPart[] | undefined,
-): SandboxUpload[] =>
-  (parts ?? [])
+): SandboxUpload[] {
+  return (parts ?? [])
     .filter((part) => part.type === "data-sandbox-upload")
     .map((part) => part.data as SandboxUpload);
+}

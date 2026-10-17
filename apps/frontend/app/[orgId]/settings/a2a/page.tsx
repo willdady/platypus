@@ -4,11 +4,7 @@ import { OrgA2aEndpointsList } from "@/components/org-a2a-endpoints-list";
 
 export const metadata: Metadata = { title: "A2A endpoints" };
 
-const OrgA2aPage = async ({
-  params,
-}: {
-  params: Promise<{ orgId: string }>;
-}) => {
+async function OrgA2aPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
 
   return (
@@ -30,6 +26,6 @@ const OrgA2aPage = async ({
       <OrgA2aEndpointsList orgId={orgId} />
     </div>
   );
-};
+}
 
 export default OrgA2aPage;

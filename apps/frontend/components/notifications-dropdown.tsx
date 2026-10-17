@@ -36,10 +36,10 @@ const Markdown = dynamic(
   { ssr: false },
 );
 
-interface NotificationsDropdownProps {
+type NotificationsDropdownProps = {
   orgId?: string;
   workspaceId?: string;
-}
+};
 
 export function NotificationsDropdown({
   orgId,
@@ -175,9 +175,9 @@ export function NotificationsDropdown({
             totalCount > 0 ? `Notifications (${totalCount})` : "Notifications"
           }
         >
-          <Bell className="h-5 w-5" />
+          <Bell className="size-5" />
           {totalCount > 0 && (
-            <span className="absolute -top-0 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-2xs font-medium text-destructive-foreground dark:bg-destructive/60">
+            <span className="absolute -top-0 -right-0.5 flex size-4 items-center justify-center rounded-full bg-destructive text-2xs font-medium text-destructive-foreground dark:bg-destructive/60">
               {totalCount}
             </span>
           )}
@@ -346,7 +346,7 @@ export function NotificationsDropdown({
                     className="flex flex-col items-start gap-1 p-3"
                   >
                     <div className="flex items-center gap-2 font-medium">
-                      <Mail className="h-4 w-4" />
+                      <Mail className="size-4" />
                       Organization Invitation
                     </div>
                     <div className="text-xs text-muted-foreground line-clamp-2">

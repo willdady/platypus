@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "./markdown";
 
 // A Kanban card: Markdown inside a modal Radix Dialog.
-const Card = ({ body }: { body: string }) => {
+function Card({ body }: { body: string }) {
   const [open, setOpen] = useState(true);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -15,17 +15,19 @@ const Card = ({ body }: { body: string }) => {
       </DialogContent>
     </Dialog>
   );
-};
+}
 
 // Streamdown opens the confirmation after an async link check; clicking inside
 // act lets the nested layer finish mounting before the test presses Escape.
-const clickLink = (name: string) =>
-  act(async () => {
+function clickLink(name: string) {
+  return act(async () => {
     fireEvent.click(screen.getByRole("button", { name }));
   });
+}
 
-const confirmation = () =>
-  screen.getByRole("dialog", { name: "Open external link?" });
+function confirmation() {
+  return screen.getByRole("dialog", { name: "Open external link?" });
+}
 
 describe("link safety inside a Radix Dialog", () => {
   it("confirms an external link, showing the URL in full", async () => {

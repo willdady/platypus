@@ -39,7 +39,7 @@ export type RowAction = {
  * "Edit in org settings" and Detach instead. Each item is left out when its
  * prop is; with none, there is no ⋮ at all.
  */
-export const RowActionsMenu = ({
+export function RowActionsMenu({
   name,
   shared = false,
   edit,
@@ -58,7 +58,7 @@ export const RowActionsMenu = ({
   clone?: { onSelect: () => void };
   toggle?: { enabled: boolean; onSelect: () => void; disabled?: boolean };
   remove?: { onSelect: () => void };
-}) => {
+}) {
   if (!edit && !actions.length && !clone && !toggle && !remove) return null;
 
   return (
@@ -71,7 +71,7 @@ export const RowActionsMenu = ({
           aria-label={`Actions for ${name}`}
           onClick={(e) => e.preventDefault()}
         >
-          <EllipsisVertical className="h-4 w-4" />
+          <EllipsisVertical />
         </Button>
       </DropdownMenuTrigger>
       {/* The row may be a link, and React bubbles the portalled menu's clicks
@@ -152,4 +152,4 @@ export const RowActionsMenu = ({
       </DropdownMenuContent>
     </DropdownMenu>
   );
-};
+}

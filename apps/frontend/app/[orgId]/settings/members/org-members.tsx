@@ -18,7 +18,7 @@ import {
   UserCellSkeleton,
 } from "@/components/list-skeletons";
 
-const OrgMembersPage = () => {
+function OrgMembersPage() {
   const { orgId } = useParams<{ orgId: string }>();
   const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
     organizationEntity(orgId),
@@ -33,7 +33,7 @@ const OrgMembersPage = () => {
   } = useScopedList<OrgMemberListItem>("members", { orgId });
 
   return (
-    <div className="space-y-8">
+    <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-2xl font-bold mb-4">Members</h1>
         <p className="text-muted-foreground">
@@ -85,6 +85,6 @@ const OrgMembersPage = () => {
       )}
     </div>
   );
-};
+}
 
 export default OrgMembersPage;

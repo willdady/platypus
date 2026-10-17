@@ -23,12 +23,12 @@ import { useEntityForm } from "@/hooks/use-entity-form";
 const RETRACTABLE_FIELDS = ["newPassword"] as const;
 const INITIAL_DATA = { newPassword: "" };
 
-interface ChangePasswordDialogProps {
+type ChangePasswordDialogProps = {
   user: Pick<User, "id" | "email" | "name">;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-}
+};
 
 export function ChangePasswordDialog({
   user,

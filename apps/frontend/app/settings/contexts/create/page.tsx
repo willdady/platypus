@@ -5,7 +5,7 @@ import { userRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Create Workspace Context" };
 
-const WorkspaceContextCreatePage = () => {
+function WorkspaceContextCreatePage() {
   return (
     <ResourcePage
       backFallbackHref={userRoutes.contexts}
@@ -14,6 +14,6 @@ const WorkspaceContextCreatePage = () => {
       <WorkspaceContextForm />
     </ResourcePage>
   );
-};
+}
 
 export default WorkspaceContextCreatePage;

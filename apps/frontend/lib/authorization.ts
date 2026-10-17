@@ -16,14 +16,14 @@ export type OrgRole = "admin" | "member";
  */
 export type Actor = "operator" | "org-admin" | "workspace-owner" | "org-member";
 
-export interface ActorContext {
+export type ActorContext = {
   /** The platform super-admin, i.e. `user.role === "admin"`. */
   isOperator: boolean;
   /** The caller's role in the Organization in scope, or null outside one. */
   orgRole: OrgRole | null;
   /** Whether the caller owns the Workspace in scope. */
   ownsWorkspace: boolean;
-}
+};
 
 export function resolveActor(context: ActorContext): Actor {
   if (context.isOperator) return "operator";
@@ -32,8 +32,9 @@ export function resolveActor(context: ActorContext): Actor {
   return "org-member";
 }
 
-const isOrgAdminOrAbove = (actor: Actor): boolean =>
-  actor === "operator" || actor === "org-admin";
+function isOrgAdminOrAbove(actor: Actor): boolean {
+  return actor === "operator" || actor === "org-admin";
+}
 
 // ---- Shared resources: attach / detach / Promote (ADR-0007) ----
 
@@ -57,10 +58,10 @@ export type DelegatableResourceType = "provider" | "mcp";
 export type CredentialResourceType = DelegatableResourceType | "sandbox";
 
 /** A Workspace's own ADR-0006 delegation flags, as stored on its row. */
-export interface WorkspaceDelegationFlags {
+export type WorkspaceDelegationFlags = {
   providerSelfManagement: boolean;
   mcpSelfManagement: boolean;
-}
+};
 
 /**
  * ADR-0006: may this actor configure a credential- and reach-bearing
@@ -126,7 +127,9 @@ export function isOperator(actor: Actor): boolean {
 // ---- Org-Admin-tier actions with no Workspace requirement ----
 
 /** Shared body for every Org-Admin-tier, no-Workspace-requirement capability below. */
-const orgAdminOnly = (actor: Actor): boolean => isOrgAdminOrAbove(actor);
+function orgAdminOnly(actor: Actor): boolean {
+  return isOrgAdminOrAbove(actor);
+}
 
 /**
  * May this actor manage a Shared resource on the Organization settings

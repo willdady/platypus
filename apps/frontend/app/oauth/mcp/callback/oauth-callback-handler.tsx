@@ -20,16 +20,16 @@ import {
 } from "@/lib/constants";
 
 /** Post a message to the opener window (if any) and close this popup. */
-const notifyOpenerAndClose = (data: Record<string, unknown>): boolean => {
+function notifyOpenerAndClose(data: Record<string, unknown>): boolean {
   if (window.opener && !window.opener.closed) {
     window.opener.postMessage(data, window.location.origin);
     window.close();
     return true;
   }
   return false;
-};
+}
 
-export const OAuthCallbackHandler = ({
+export function OAuthCallbackHandler({
   code,
   state,
   error: providerError,
@@ -40,7 +40,7 @@ export const OAuthCallbackHandler = ({
   /** The provider's `?error=`, sent instead of a code when it refuses. */
   error?: string;
   errorDescription?: string;
-}) => {
+}) {
   const backendUrl = useBackendUrl();
   // The URL params are fixed for the lifetime of this view, so an error they
   // already carry is derived at init rather than set in an effect. A provider
@@ -124,7 +124,7 @@ export const OAuthCallbackHandler = ({
   if (isProcessing) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
         <p className="text-muted-foreground">Completing authorization...</p>
       </div>
     );
@@ -144,4 +144,4 @@ export const OAuthCallbackHandler = ({
   }
 
   return null;
-};
+}

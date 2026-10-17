@@ -109,23 +109,29 @@ type PartOfType<T extends MessagePart["type"]> = Extract<
   { type: T }
 >;
 
-const isTextPart = (part: MessagePart): part is TextUIPart =>
-  part.type === "text";
+function isTextPart(part: MessagePart): part is TextUIPart {
+  return part.type === "text";
+}
 
-const isReasoningPart = (part: MessagePart): part is ReasoningUIPart =>
-  part.type === "reasoning";
+function isReasoningPart(part: MessagePart): part is ReasoningUIPart {
+  return part.type === "reasoning";
+}
 
-const isDynamicToolPart = (part: MessagePart): part is DynamicToolUIPart =>
-  part.type === "dynamic-tool";
+function isDynamicToolPart(part: MessagePart): part is DynamicToolUIPart {
+  return part.type === "dynamic-tool";
+}
 
-const isLoadSkillPart = (
+function isLoadSkillPart(
   part: MessagePart,
-): part is PartOfType<"tool-loadSkill"> => part.type === "tool-loadSkill";
+): part is PartOfType<"tool-loadSkill"> {
+  return part.type === "tool-loadSkill";
+}
 
-const isReadSkillFilePart = (
+function isReadSkillFilePart(
   part: MessagePart,
-): part is PartOfType<"tool-readSkillFile"> =>
-  part.type === "tool-readSkillFile";
+): part is PartOfType<"tool-readSkillFile"> {
+  return part.type === "tool-readSkillFile";
+}
 
 /**
  * Both shapes a delegation is stored in. `tool-delegate` is what every new one
@@ -133,19 +139,24 @@ const isReadSkillFilePart = (
  * dispatcher hold, permanently — stored messages are never rewritten, so this
  * predicate matches the old shape IN ADDITION to the new one, for ever.
  */
-const isSubAgentToolPart = (part: MessagePart): part is MessageToolPart =>
-  isToolUIPart(part) &&
-  (part.type === "tool-delegate" || part.type.startsWith("tool-delegateTo"));
+function isSubAgentToolPart(part: MessagePart): part is MessageToolPart {
+  return (
+    isToolUIPart(part) &&
+    (part.type === "tool-delegate" || part.type.startsWith("tool-delegateTo"))
+  );
+}
 
 // A failed download has nothing to offer, so it falls through to the generic
 // renderer as an ordinary tool error.
-const isFsDownloadPart = (
+function isFsDownloadPart(
   part: MessagePart,
-): part is Exclude<PartOfType<"tool-fsDownload">, { state: "output-error" }> =>
-  part.type === "tool-fsDownload" && part.state !== "output-error";
+): part is Exclude<PartOfType<"tool-fsDownload">, { state: "output-error" }> {
+  return part.type === "tool-fsDownload" && part.state !== "output-error";
+}
 
-const isWebToolPart = (part: MessagePart): part is MessageToolPart =>
-  isToolUIPart(part) && isNormalizedWebToolPart(part);
+function isWebToolPart(part: MessagePart): part is MessageToolPart {
+  return isToolUIPart(part) && isNormalizedWebToolPart(part);
+}
 
 /**
  * Every tool-shaped part that has its own specialised renderer below. Kept as
@@ -175,32 +186,38 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
  * repeat what the specialised card (and, for search, the Sources row above
  * the parts loop) already shows.
  */
-export const isGenericToolPart = (part: MessagePart): part is MessageToolPart =>
-  isToolUIPart(part) &&
-  !specializedToolMatchers.some((matches) => matches(part));
+export function isGenericToolPart(part: MessagePart): part is MessageToolPart {
+  return (
+    isToolUIPart(part) &&
+    !specializedToolMatchers.some((matches) => matches(part))
+  );
+}
 
-const isImageFilePart = (part: MessagePart): part is FileUIPart =>
-  part.type === "file" && isImageAttachment(part);
+function isImageFilePart(part: MessagePart): part is FileUIPart {
+  return part.type === "file" && isImageAttachment(part);
+}
 
-interface PartRenderer {
+type PartRenderer = {
   matches: (part: MessagePart) => boolean;
   render: (part: MessagePart, i: number) => ReactNode;
-}
+};
 
 /**
  * Pairs a type guard with a renderer that takes the part it guards, so
  * `render` needs no cast. The guard runs again inside `render`, which keeps
  * the entry honest if it is ever called for a part `matches` did not claim.
  */
-const partRenderer = <P extends MessagePart>(
+function partRenderer<P extends MessagePart>(
   matches: (part: MessagePart) => part is P,
   render: (part: P, i: number) => ReactNode,
-): PartRenderer => ({
-  matches,
-  render: (part, i) => (matches(part) ? render(part, i) : null),
-});
+): PartRenderer {
+  return {
+    matches,
+    render: (part, i) => (matches(part) ? render(part, i) : null),
+  };
+}
 
-interface ChatMessageProps {
+type ChatMessageProps = {
   /** The message object to render */
   message: PlatypusUIMessage;
   /** Whether this is the last message in the conversation */
@@ -245,7 +262,7 @@ interface ChatMessageProps {
    * renders every tool part exactly as before.
    */
   staleToolCallIds?: ReadonlySet<string>;
-}
+};
 
 export const ChatMessage = memo(function ChatMessage({
   message,

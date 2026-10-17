@@ -6,7 +6,7 @@ import {
 } from "@/lib/apply-write-outcome";
 import { useBackendUrl } from "@/components/auth-provider";
 
-export interface UseDeleteFlowOptions<T> {
+export type UseDeleteFlowOptions<T> = {
   /**
    * Runs the delete for one target and resolves to its outcome. The base URL is
    * passed in so the caller never has to non-null-assert the auth context.
@@ -27,9 +27,9 @@ export interface UseDeleteFlowOptions<T> {
   readonly guidanceOnForbidden?: boolean;
   /** Extra work after a successful delete — e.g. a per-list success toast. */
   readonly onSuccess?: (target: T) => void;
-}
+};
 
-export interface DeleteFlow<T> {
+export type DeleteFlow<T> = {
   /** The item the confirm dialog is open for, or null when closed. */
   readonly target: T | null;
   readonly open: boolean;
@@ -42,7 +42,7 @@ export interface DeleteFlow<T> {
   readonly close: () => void;
   /** Run the open dialog's delete. */
   readonly confirm: () => Promise<void>;
-}
+};
 
 /**
  * The delete sequence eight lists used to re-implement (#877): open a confirm

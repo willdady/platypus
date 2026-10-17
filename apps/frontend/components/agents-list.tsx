@@ -99,42 +99,44 @@ const agentCardActions = (
 );
 
 /** The agent cards as they load; the workspace home draws them too. */
-export const AgentCardsSkeleton = ({ cards }: { cards?: number }) => (
-  <CardGridSkeleton
-    cards={cards}
-    media
-    className="items-stretch"
-    descriptionLines={2}
-    extra={
-      // The tool set / skill / sub-agent counts.
-      <div className="flex gap-3 mt-auto">
-        {["w-16", "w-14", "w-20"].map((width) => (
-          <SkeletonLine
-            key={width}
-            lineClassName="h-4"
-            className={`h-3 ${width}`}
-          />
-        ))}
-      </div>
-    }
-    actions={
-      <ItemActions className="hidden xl:flex">{agentCardActions}</ItemActions>
-    }
-    footer={
-      <ItemFooter className="xl:hidden mt-0 pl-16">
-        {agentCardActions}
-      </ItemFooter>
-    }
-  />
-);
+export function AgentCardsSkeleton({ cards }: { cards?: number }) {
+  return (
+    <CardGridSkeleton
+      cards={cards}
+      media
+      className="items-stretch"
+      descriptionLines={2}
+      extra={
+        // The tool set / skill / sub-agent counts.
+        <div className="flex gap-3 mt-auto">
+          {["w-16", "w-14", "w-20"].map((width) => (
+            <SkeletonLine
+              key={width}
+              lineClassName="h-4"
+              className={`h-3 ${width}`}
+            />
+          ))}
+        </div>
+      }
+      actions={
+        <ItemActions className="hidden xl:flex">{agentCardActions}</ItemActions>
+      }
+      footer={
+        <ItemFooter className="xl:hidden mt-0 pl-16">
+          {agentCardActions}
+        </ItemFooter>
+      }
+    />
+  );
+}
 
-export const AgentsList = ({
+export function AgentsList({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId: string;
-}) => {
+}) {
   const { actor, ownsWorkspace } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
@@ -395,7 +397,7 @@ export const AgentsList = ({
               variant="icon"
               className="size-12 rounded-full [&_svg]:!size-7"
             >
-              <Bot className="h-7 w-7 text-muted-foreground" />
+              <Bot className="size-7 text-muted-foreground" />
             </ItemMedia>
           )}
           <ItemContent>
@@ -411,7 +413,7 @@ export const AgentsList = ({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="flex items-center gap-1 cursor-default">
-                      <Wrench className="h-3 w-3" />
+                      <Wrench className="size-3" />
                       {toolSetNames.length} tool set
                       {toolSetNames.length !== 1 && "s"}
                     </span>
@@ -426,14 +428,14 @@ export const AgentsList = ({
                 </Tooltip>
               ) : (
                 <span className="flex items-center gap-1 cursor-default">
-                  <Wrench className="h-3 w-3" />0 tool sets
+                  <Wrench className="size-3" />0 tool sets
                 </span>
               )}
               {skillNames.length ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="flex items-center gap-1 cursor-default">
-                      <Sparkles className="h-3 w-3" />
+                      <Sparkles className="size-3" />
                       {skillNames.length} skill
                       {skillNames.length !== 1 && "s"}
                     </span>
@@ -448,14 +450,14 @@ export const AgentsList = ({
                 </Tooltip>
               ) : (
                 <span className="flex items-center gap-1 cursor-default">
-                  <Sparkles className="h-3 w-3" />0 skills
+                  <Sparkles className="size-3" />0 skills
                 </span>
               )}
               {subAgentNames.length ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="flex items-center gap-1 cursor-default">
-                      <Bot className="h-3 w-3" />
+                      <Bot className="size-3" />
                       {subAgentNames.length} sub-agent
                       {subAgentNames.length !== 1 && "s"}
                     </span>
@@ -470,7 +472,7 @@ export const AgentsList = ({
                 </Tooltip>
               ) : (
                 <span className="flex items-center gap-1 cursor-default">
-                  <Bot className="h-3 w-3" />0 sub-agents
+                  <Bot className="size-3" />0 sub-agents
                 </span>
               )}
             </div>
@@ -531,14 +533,14 @@ export const AgentsList = ({
       ) : (
         <>
           {pinnedAgents.length > 0 && (
-            <div className="mb-6 space-y-2">
+            <div className="mb-6 flex flex-col gap-2">
               <h3 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                 <Pin className="size-4" /> Pinned
               </h3>
               <ul aria-label="Pinned agents" className={gridClassName}>
                 {pinnedAgents.map(renderCard)}
               </ul>
-              <hr className="mt-6" />
+              <hr className="mt-4" />
             </div>
           )}
           {unpinnedAgents.length > 0 && (
@@ -616,4 +618,4 @@ export const AgentsList = ({
       />
     </>
   );
-};
+}

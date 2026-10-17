@@ -14,13 +14,13 @@ import { organizationEntity, workspaceEntity } from "@/lib/api-write";
  * Tells the Owner when the Organization's gate excludes this Workspace, so
  * its A2A endpoints don't answer at all.
  */
-export const A2aEndpointNotices = ({
+export function A2aEndpointNotices({
   orgId,
   workspaceId,
 }: {
   orgId: string;
   workspaceId: string;
-}) => {
+}) {
   const { data: organization } = useScopedSWR<Organization>(
     organizationEntity(orgId),
     {},
@@ -49,4 +49,4 @@ export const A2aEndpointNotices = ({
       </AlertDescription>
     </Alert>
   );
-};
+}

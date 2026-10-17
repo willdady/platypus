@@ -32,7 +32,7 @@ const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
 // Any named or numeric entity, so a future &rsquo; or &hellip; is covered too.
 const ENTITY = /&(?:[a-zA-Z][a-zA-Z0-9]{1,10}|#\d+|#x[0-9a-fA-F]+);/g;
 
-const tsxFiles = (dir: string): string[] => {
+function tsxFiles(dir: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules" || entry === ".next") continue;
@@ -41,28 +41,30 @@ const tsxFiles = (dir: string): string[] => {
     else if (full.endsWith(".tsx")) found.push(full);
   }
   return found;
-};
+}
 
 /** String literals in emitted JS, in source order. */
-const literals = (code: string): string[] => {
+function literals(code: string): string[] {
   const found: string[] = [];
   const re = /"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(code))) found.push(match[1] ?? match[2]);
   return found;
-};
+}
 
 // Deliberately excludes \xa0 so an intentional &nbsp; at an edge is not a diff.
-const edgeSignature = (s: string) =>
-  `${/^[ \t\n\r]*/.exec(s)![0].length}|${/[ \t\n\r]*$/.exec(s)![0].length}`;
+function edgeSignature(s: string) {
+  return `${/^[ \t\n\r]*/.exec(s)![0].length}|${/[ \t\n\r]*$/.exec(s)![0].length}`;
+}
 
-const compile = async (source: string, filename: string) =>
-  (
+async function compile(source: string, filename: string) {
+  return (
     await swc.transform(source, {
       filename,
       jsc: { parser: { syntax: "typescript", tsx: true } },
     })
   ).code as string;
+}
 
 describe("HTML entities in JSX text", () => {
   it("does not lose spaces around the entity's text run", async () => {

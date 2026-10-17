@@ -3,11 +3,7 @@ import { McpList } from "@/components/mcp-list";
 
 export const metadata: Metadata = { title: "Organization MCP Servers" };
 
-const OrgMcpPage = async ({
-  params,
-}: {
-  params: Promise<{ orgId: string }>;
-}) => {
+async function OrgMcpPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
 
   return (
@@ -20,6 +16,6 @@ const OrgMcpPage = async ({
       <McpList orgId={orgId} />
     </div>
   );
-};
+}
 
 export default OrgMcpPage;

@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import type { FileUIPart } from "ai";
 import type { Provider } from "@platypus/schemas";
 import type { Serialized } from "@/lib/api-write";
+import type { SpeechRecognitionWindow } from "@/hooks/use-speech-to-text";
 
 /**
  * The fixtures and fakes the chat-surface tests share — the composer, the
@@ -82,8 +83,8 @@ export function installSpeechRecognition() {
       register(this);
     }
   }
-  window.SpeechRecognition =
-    TrackingSpeechRecognition as unknown as Window["SpeechRecognition"];
+  (window as SpeechRecognitionWindow).SpeechRecognition =
+    TrackingSpeechRecognition as unknown as SpeechRecognitionWindow["SpeechRecognition"];
   return () => latest;
 }
 

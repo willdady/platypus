@@ -20,19 +20,21 @@ vi.mock("sonner", () => ({
   },
 }));
 
-const fields = () => ({
-  current: screen.getByLabelText("Current Password"),
-  next: screen.getByLabelText("New Password"),
-  confirm: screen.getByLabelText("Confirm New Password"),
-});
+function fields() {
+  return {
+    current: screen.getByLabelText("Current Password"),
+    next: screen.getByLabelText("New Password"),
+    confirm: screen.getByLabelText("Confirm New Password"),
+  };
+}
 
-const fill = (current: string, next: string, confirm: string) => {
+function fill(current: string, next: string, confirm: string) {
   const f = fields();
   fireEvent.change(f.current, { target: { value: current } });
   fireEvent.change(f.next, { target: { value: next } });
   fireEvent.change(f.confirm, { target: { value: confirm } });
   fireEvent.click(screen.getByRole("button", { name: "Change password" }));
-};
+}
 
 // Toggle independence is RevealableInput's own; here, only that each field is
 // masked and its toggle is wired to it.

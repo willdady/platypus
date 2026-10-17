@@ -12,12 +12,12 @@ import { Skeleton } from "./ui/skeleton";
 import { ListError } from "./list-state";
 import { EmptyCard } from "@/components/empty-card";
 
-interface ContextWithNames extends Context {
+type ContextWithNames = {
   workspaceName?: string | null;
   organizationName?: string | null;
-}
+} & Context;
 
-const ContextsList = ({ className }: { className?: string }) => {
+function ContextsList({ className }: { className?: string }) {
   const {
     results: contexts,
     error,
@@ -99,12 +99,12 @@ const ContextsList = ({ className }: { className?: string }) => {
       </ul>
       <Button asChild>
         <Link href={userRoutes.createContext}>
-          <Plus className="w-4 h-4" />
+          <Plus />
           Add workspace context
         </Link>
       </Button>
     </>
   );
-};
+}
 
 export { ContextsList };

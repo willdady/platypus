@@ -7,11 +7,11 @@ import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Create Agent" };
 
-const AgentCreatePage = async ({
+async function AgentCreatePage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = await params;
 
   // Fetch tool sets from the server. A failed read is reported to the form
@@ -33,6 +33,6 @@ const AgentCreatePage = async ({
       />
     </ResourcePage>
   );
-};
+}
 
 export default AgentCreatePage;

@@ -20,7 +20,9 @@ function CachedPage({ fetcher }: { fetcher: () => Promise<string> }) {
   return <div>{data ?? "Loading page"}</div>;
 }
 
-const touchAt = (clientY: number) => ({ clientX: 0, clientY });
+function touchAt(clientY: number) {
+  return { clientX: 0, clientY };
+}
 
 // Use the real pull-to-refresh component, including its settle period.
 async function pullDown(container: HTMLElement) {

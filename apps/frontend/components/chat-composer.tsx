@@ -8,7 +8,7 @@ import { SlashCommandPicker } from "./slash-command-picker";
 import { useSlashCommands } from "@/hooks/use-slash-commands";
 import type { SlashCommand } from "@/lib/slash-commands";
 
-interface ChatComposerProps {
+type ChatComposerProps = {
   /**
    * Runs on submit; the composer clears its own text afterwards, or keeps it
    * if the returned promise rejects.
@@ -32,7 +32,7 @@ interface ChatComposerProps {
   footerContent?: ReactNode;
   /** The submit control, and anything beside it. */
   submit: ReactNode;
-}
+};
 
 /**
  * The Chat's composing surface, and the owner of everything that changes as
@@ -42,7 +42,7 @@ interface ChatComposerProps {
  * along with the composer (issue #869). The transcript and the composer now
  * have separate owners, and a keystroke re-renders only this subtree.
  */
-export const ChatComposer = ({
+export function ChatComposer({
   onSubmit,
   canUploadToSandbox,
   commands,
@@ -56,7 +56,7 @@ export const ChatComposer = ({
   tools,
   footerContent,
   submit,
-}: ChatComposerProps) => {
+}: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [inputValue, setInputValue] = useState("");
   const slash = useSlashCommands({
@@ -102,4 +102,4 @@ export const ChatComposer = ({
       />
     </>
   );
-};
+}

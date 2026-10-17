@@ -35,7 +35,7 @@ import {
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 
-interface RemoveMemberDialogProps {
+type RemoveMemberDialogProps = {
   orgId: string;
   member: Serialized<OrgMemberListItem>;
   /** The Organization's members, from which a transfer's recipient is picked. */
@@ -43,7 +43,7 @@ interface RemoveMemberDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-}
+};
 
 /** One Workspace's choice while it is being made. */
 type Draft = {
@@ -55,10 +55,10 @@ type Draft = {
 const EMPTY_DRAFT: Draft = { newOwnerId: "", keepHistory: true };
 
 /** The decision a draft makes, or undefined while it is incomplete. */
-const decisionOf = (
+function decisionOf(
   workspaceId: string,
   draft: Draft,
-): MemberWorkspaceDecision | undefined => {
+): MemberWorkspaceDecision | undefined {
   if (draft.action === "delete") return { workspaceId, action: "delete" };
   if (draft.action === "transfer" && draft.newOwnerId) {
     return {
@@ -69,7 +69,7 @@ const decisionOf = (
     };
   }
   return undefined;
-};
+}
 
 /**
  * Remove from Org (ADR-0035). Each Workspace the member owns needs Transfer
@@ -138,7 +138,7 @@ export function RemoveMemberDialog({
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
-            <AlertTriangle className="h-5 w-5" />
+            <AlertTriangle className="size-5" />
             Remove Member
           </DialogTitle>
           <DialogDescription>
@@ -148,7 +148,7 @@ export function RemoveMemberDialog({
         </DialogHeader>
 
         {owned.length > 0 && (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">
               They own {owned.length === 1 ? "a workspace" : "these workspaces"}{" "}
               here. Transfer each one to another member, or delete it. A
@@ -202,6 +202,7 @@ export function RemoveMemberDialog({
                 variant="outline"
                 size="sm"
                 onClick={applyToAll}
+                className="self-start"
                 disabled={isSubmitting || !draftOf(owned[0].id).action}
               >
                 Apply to all

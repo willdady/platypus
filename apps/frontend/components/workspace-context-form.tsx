@@ -40,9 +40,9 @@ import { CONTEXT_MAX_LENGTH } from "@platypus/schemas";
 import { userRoutes } from "@/lib/routes";
 import type { Serialized } from "@/lib/api-write";
 
-interface WorkspaceWithOrg extends Serialized<Workspace> {
+type WorkspaceWithOrg = {
   organizationName?: string;
-}
+} & Serialized<Workspace>;
 
 const RETRACTABLE_FIELDS = ["content", "workspaceId"] as const;
 
@@ -52,33 +52,37 @@ const INITIAL_DATA = {
 };
 
 /** An edit shows the fixed Organization and Workspace as plain text. */
-const ReadOnlyFieldSkeleton = () => (
-  <div className="flex w-full flex-col gap-3">
-    <Skeleton className="h-3.5 w-24" />
-    <Skeleton className="h-3.5 w-40" />
-  </div>
-);
+function ReadOnlyFieldSkeleton() {
+  return (
+    <div className="flex w-full flex-col gap-3">
+      <Skeleton className="h-3.5 w-24" />
+      <Skeleton className="h-3.5 w-40" />
+    </div>
+  );
+}
 
-const WorkspaceContextFormSkeleton = ({ editing }: { editing: boolean }) => (
-  <div>
-    <FormSkeletonSet>
-      <FormSkeletonGroup className="gap-4">
-        {editing ? (
-          <>
-            <ReadOnlyFieldSkeleton />
-            <ReadOnlyFieldSkeleton />
-          </>
-        ) : (
-          <FieldSkeleton />
-        )}
-        <TextareaSkeleton counter />
-      </FormSkeletonGroup>
-    </FormSkeletonSet>
-    <FooterSkeleton buttons={editing ? 2 : 1} />
-  </div>
-);
+function WorkspaceContextFormSkeleton({ editing }: { editing: boolean }) {
+  return (
+    <div>
+      <FormSkeletonSet>
+        <FormSkeletonGroup className="gap-4">
+          {editing ? (
+            <>
+              <ReadOnlyFieldSkeleton />
+              <ReadOnlyFieldSkeleton />
+            </>
+          ) : (
+            <FieldSkeleton />
+          )}
+          <TextareaSkeleton counter />
+        </FormSkeletonGroup>
+      </FormSkeletonSet>
+      <FooterSkeleton buttons={editing ? 2 : 1} />
+    </div>
+  );
+}
 
-export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
+export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
   const router = useRouter();
   const backendUrl = useBackendUrl();
   const { user } = useAuth();
@@ -354,4 +358,4 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
       </form>
     </DetailFormState>
   );
-};
+}

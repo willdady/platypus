@@ -5,11 +5,11 @@ import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Blueprint" };
 
-const EditBlueprintPage = async ({
+async function EditBlueprintPage({
   params,
 }: {
   params: Promise<{ orgId: string; blueprintId: string }>;
-}) => {
+}) {
   const { orgId, blueprintId } = await params;
 
   return (
@@ -20,6 +20,6 @@ const EditBlueprintPage = async ({
       <BlueprintForm orgId={orgId} blueprintId={blueprintId} />
     </ResourcePage>
   );
-};
+}
 
 export default EditBlueprintPage;

@@ -53,7 +53,7 @@ export default function SignUpPage() {
       id={MAIN_CONTENT_ID}
       className="flex min-h-screen items-center justify-center"
     >
-      <div className="w-full max-w-md space-y-8 p-8">
+      <div className="w-full max-w-md flex flex-col gap-8 p-8">
         {/* The Operator requires an invitation (#550, ADR-0019): say so rather
             than offer a form the backend would refuse. The route stays — a 404
             would read as a broken deployment, not a closed door. */}
@@ -79,14 +79,14 @@ export default function SignUpPage() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
@@ -99,7 +99,7 @@ export default function SignUpPage() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
@@ -111,7 +111,7 @@ export default function SignUpPage() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor="password">Password</Label>
                 <RevealableInput
                   id="password"

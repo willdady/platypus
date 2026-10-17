@@ -14,11 +14,11 @@ import { writeEntity } from "@/lib/api-write";
 import type { Dashboard } from "@platypus/schemas";
 import { workspaceRoutes } from "@/lib/routes";
 
-const CreateDashboardPage = ({
+function CreateDashboardPage({
   params,
 }: {
   params: Promise<{ orgId: string; workspaceId: string }>;
-}) => {
+}) {
   const { orgId, workspaceId } = use(params);
   const routes = workspaceRoutes(orgId, workspaceId);
   const router = useRouter();
@@ -66,7 +66,7 @@ const CreateDashboardPage = ({
       title="New Dashboard"
       variant="narrow"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormTextField
           label="Name"
           name="name"
@@ -75,7 +75,7 @@ const CreateDashboardPage = ({
           placeholder="My Dashboard"
           required
         />
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="description">Description</Label>
           <Textarea
             id="description"
@@ -89,12 +89,16 @@ const CreateDashboardPage = ({
             {error}
           </p>
         )}
-        <Button type="submit" disabled={loading || !name.trim()}>
+        <Button
+          type="submit"
+          className="self-start"
+          disabled={loading || !name.trim()}
+        >
           {loading ? "Saving..." : "Save"}
         </Button>
       </form>
     </ResourcePage>
   );
-};
+}
 
 export default CreateDashboardPage;

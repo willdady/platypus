@@ -11,7 +11,7 @@ import { orgRoutes } from "@/lib/routes";
  * A Workspace that doesn't exist (or was deleted), shown inside the shell
  * with the way back to its Organization.
  */
-export const WorkspaceNotFound = () => {
+export function WorkspaceNotFound() {
   const { orgId } = useParams<{ orgId: string }>();
   return (
     <RouteFallback
@@ -25,4 +25,4 @@ export const WorkspaceNotFound = () => {
       }
     />
   );
-};
+}

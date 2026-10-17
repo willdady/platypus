@@ -68,13 +68,15 @@ const UNLOADED_REASON_LABELS: Record<UnloadedToolSetReason, string> = {
  * One granted Tool set or MCP that served the run no tools (#1184), by its
  * display name — or its id when the id names nothing any more.
  */
-const unloadedToolSetNotice = ({ toolSetId, name, reason }: UnloadedToolSet) =>
-  `'${name ?? toolSetId}' loaded no tools: ${UNLOADED_REASON_LABELS[reason]}`;
+function unloadedToolSetNotice({ toolSetId, name, reason }: UnloadedToolSet) {
+  return `'${name ?? toolSetId}' loaded no tools: ${UNLOADED_REASON_LABELS[reason]}`;
+}
 
-const failedToolCallsNotice = (count: number) =>
-  `${count} tool call${count !== 1 ? "s" : ""} failed`;
+function failedToolCallsNotice(count: number) {
+  return `${count} tool call${count !== 1 ? "s" : ""} failed`;
+}
 
-export const statusBadge = (status: TriggerRunStatus) => {
+export function statusBadge(status: TriggerRunStatus) {
   switch (status) {
     case "success":
       return (
@@ -87,7 +89,7 @@ export const statusBadge = (status: TriggerRunStatus) => {
     case "running":
       return (
         <Badge variant="secondary">
-          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+          <Loader2 className="size-3 mr-1 animate-spin" />
           {TRIGGER_RUN_STATUS_LABELS.running}
         </Badge>
       );
@@ -96,14 +98,14 @@ export const statusBadge = (status: TriggerRunStatus) => {
     case "cancelled":
       return (
         <Badge variant="outline">
-          <Ban className="w-3 h-3 mr-1" />
+          <Ban className="size-3 mr-1" />
           {TRIGGER_RUN_STATUS_LABELS.cancelled}
         </Badge>
       );
     case "suppressed":
       return (
         <Badge variant="destructive">
-          <Ban className="w-3 h-3 mr-1" />
+          <Ban className="size-3 mr-1" />
           {TRIGGER_RUN_STATUS_LABELS.suppressed}
         </Badge>
       );
@@ -113,7 +115,7 @@ export const statusBadge = (status: TriggerRunStatus) => {
         <Badge variant="outline">{TRIGGER_RUN_STATUS_LABELS.pending}</Badge>
       );
   }
-};
+}
 
 const STATUS_ICONS: Record<
   TriggerRunStatus,
@@ -129,7 +131,7 @@ const STATUS_ICONS: Record<
 };
 
 /** A run status as a colored icon, named by its label, for tight spaces. */
-export const StatusIcon = ({ status }: { status: TriggerRunStatus }) => {
+export function StatusIcon({ status }: { status: TriggerRunStatus }) {
   const { icon: Icon, className } =
     STATUS_ICONS[status] ?? STATUS_ICONS.pending;
   const label = TRIGGER_RUN_STATUS_LABELS[status];
@@ -142,26 +144,28 @@ export const StatusIcon = ({ status }: { status: TriggerRunStatus }) => {
       title={label}
       className="flex translate-y-px"
     >
-      <Icon className={cn("h-3 w-3", className)} />
+      <Icon className={cn("size-3", className)} />
     </span>
   );
-};
+}
 
 /** The run detail page's address, where the list's rows lead. */
-export const triggerRunDetailHref = (
+export function triggerRunDetailHref(
   orgId: string,
   workspaceId: string,
   runId: string,
-) => workspaceRoutes(orgId, workspaceId).triggerRuns.detail(runId);
+) {
+  return workspaceRoutes(orgId, workspaceId).triggerRuns.detail(runId);
+}
 
-const formatDuration = (run: Serialized<TriggerRunWithTrigger>) => {
+function formatDuration(run: Serialized<TriggerRunWithTrigger>) {
   if (!run.completedAt) return null;
   const ms =
     new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime();
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}m`;
-};
+}
 
 /**
  * One run in the workspace-wide Trigger runs list. The list mixes runs from
@@ -172,7 +176,7 @@ const formatDuration = (run: Serialized<TriggerRunWithTrigger>) => {
  * turns `linkToDetail` off: the row is then no link, and its menu gains a way
  * back to the Trigger's other runs.
  */
-export const TriggerRunRow = ({
+export function TriggerRunRow({
   run,
   orgId,
   workspaceId,
@@ -183,7 +187,7 @@ export const TriggerRunRow = ({
   workspaceId: string;
   /** Whether the row links to the run's page. Off on that page itself. */
   linkToDetail?: boolean;
-}) => {
+}) {
   const stats = run.stats as TriggerRunStats | null | undefined;
 
   const routes = workspaceRoutes(orgId, workspaceId);
@@ -222,14 +226,14 @@ export const TriggerRunRow = ({
         {stats && (
           <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
             <span className="flex items-center gap-1 whitespace-nowrap">
-              <Footprints className="h-3 w-3" />
+              <Footprints className="size-3" />
               {stats.steps} step{stats.steps !== 1 ? "s" : ""}
             </span>
             {stats.toolCalls.length > 0 ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                    <Wrench className="h-3 w-3" />
+                    <Wrench className="size-3" />
                     {toolCallCount} tool call
                     {toolCallCount !== 1 ? "s" : ""}
                   </span>
@@ -246,7 +250,7 @@ export const TriggerRunRow = ({
               </Tooltip>
             ) : (
               <span className="flex items-center gap-1 whitespace-nowrap">
-                <Wrench className="h-3 w-3" />0 tool calls
+                <Wrench className="size-3" />0 tool calls
               </span>
             )}
             {/* Cached input is a breakdown of the in figure above, which
@@ -259,10 +263,10 @@ export const TriggerRunRow = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                    <MessageSquare className="h-3 w-3" />
+                    <MessageSquare className="size-3" />
                     {formatTokens(stats.inputTokens)} in /{" "}
                     {formatTokens(stats.outputTokens)} out
-                    <Database className="h-3 w-3 text-muted-foreground" />
+                    <Database className="size-3 text-muted-foreground" />
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -275,7 +279,7 @@ export const TriggerRunRow = ({
               </Tooltip>
             ) : (
               <span className="flex items-center gap-1 whitespace-nowrap">
-                <MessageSquare className="h-3 w-3" />
+                <MessageSquare className="size-3" />
                 {formatTokens(stats.inputTokens)} in /{" "}
                 {formatTokens(stats.outputTokens)} out
               </span>
@@ -288,7 +292,7 @@ export const TriggerRunRow = ({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
-                    <Gauge className="h-3 w-3" />
+                    <Gauge className="size-3" />
                     {formatTokens(stats.contextOccupancy)} context
                   </span>
                 </TooltipTrigger>
@@ -368,4 +372,4 @@ export const TriggerRunRow = ({
       {rowBody}
     </Link>
   );
-};
+}

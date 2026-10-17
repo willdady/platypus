@@ -140,12 +140,12 @@ export function KanbanBoardForm({
       {...loadState}
       subject="board"
       skeleton={
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <FieldSkeleton />
           <TextareaSkeleton />
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Skeleton className="h-3.5 w-16" />
-            <Skeleton className="mt-1 h-8 w-28" />
+            <Skeleton className="h-8 w-28" />
           </div>
           <FooterSkeleton buttons={isEditing && onDelete ? 2 : 1} />
         </div>
@@ -158,7 +158,7 @@ export function KanbanBoardForm({
           e.preventDefault();
           void submit();
         }}
-        className="space-y-4"
+        className="flex flex-col gap-4"
       >
         <FormTextField
           label="Name"
@@ -184,7 +184,7 @@ export function KanbanBoardForm({
         <div
           role="group"
           aria-labelledby="kanban-board-labels-label"
-          className="space-y-2"
+          className="flex flex-col gap-2"
         >
           <FieldTitle id="kanban-board-labels-label">Labels</FieldTitle>
           {labels.map((label) => (
@@ -205,7 +205,7 @@ export function KanbanBoardForm({
                     type="button"
                     title={c.name}
                     onClick={() => handleLabelColorChange(label.id, c.value)}
-                    className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="size-5 rounded-full border-2 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     style={{
                       backgroundColor: c.value,
                       borderColor:
@@ -226,7 +226,7 @@ export function KanbanBoardForm({
                 onClick={() => handleDeleteLabel(label.id)}
                 disabled={isSubmitting}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 />
               </Button>
             </div>
           ))}
@@ -236,9 +236,9 @@ export function KanbanBoardForm({
             size="sm"
             onClick={handleAddLabel}
             disabled={isSubmitting}
-            className="mt-1"
+            className="self-start"
           >
-            <Plus className="h-4 w-4" />
+            <Plus />
             Add label
           </Button>
         </div>

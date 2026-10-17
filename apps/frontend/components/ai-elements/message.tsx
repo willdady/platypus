@@ -25,75 +25,81 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   avatar?: ReactNode;
 };
 
-export const Message = ({
+export function Message({
   className,
   from,
   avatar,
   children,
   ...props
-}: MessageProps) => (
-  <div
-    className={cn(
-      // Wider on a phone, where 80% of a narrow column costs more than the
-      // gutter it buys back.
-      "group flex w-full max-w-[85%] gap-2 sm:max-w-[80%]",
-      from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
-      className,
-    )}
-    {...props}
-  >
-    {from === "assistant" && avatar && (
-      <div className="mt-0.5 flex-shrink-0">{avatar}</div>
-    )}
-    <div className="flex min-w-0 flex-col gap-2">{children}</div>
-  </div>
-);
+}: MessageProps) {
+  return (
+    <div
+      className={cn(
+        // Wider on a phone, where 80% of a narrow column costs more than the
+        // gutter it buys back.
+        "group flex w-full max-w-[85%] gap-2 sm:max-w-[80%]",
+        from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
+        className,
+      )}
+      {...props}
+    >
+      {from === "assistant" && avatar && (
+        <div className="mt-0.5 flex-shrink-0">{avatar}</div>
+      )}
+      <div className="flex min-w-0 flex-col gap-2">{children}</div>
+    </div>
+  );
+}
 
 export type MessageContentProps = HTMLAttributes<HTMLDivElement>;
 
-export const MessageContent = ({
+export function MessageContent({
   children,
   className,
   ...props
-}: MessageContentProps) => (
-  <div
-    className={cn(
-      "is-user:dark flex w-fit flex-col gap-2 overflow-hidden text-sm",
-      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
-      "group-[.is-assistant]:text-foreground",
-      className,
-    )}
-    {...props}
-  >
-    {children}
-  </div>
-);
+}: MessageContentProps) {
+  return (
+    <div
+      className={cn(
+        "is-user:dark flex w-fit flex-col gap-2 overflow-hidden text-sm",
+        "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+        "group-[.is-assistant]:text-foreground",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
 
 export type MessageActionsProps = ComponentProps<"div">;
 
-export const MessageActions = ({
+export function MessageActions({
   className,
   children,
   ...props
-}: MessageActionsProps) => (
-  <div className={cn("flex items-center gap-1", className)} {...props}>
-    {children}
-  </div>
-);
+}: MessageActionsProps) {
+  return (
+    <div className={cn("flex items-center gap-1", className)} {...props}>
+      {children}
+    </div>
+  );
+}
 
 export type MessageActionProps = ComponentProps<typeof Button> & {
   tooltip?: string;
   label?: string;
 };
 
-export const MessageAction = ({
+export function MessageAction({
   tooltip,
   children,
   label,
   variant = "ghost",
   size = "icon-sm",
   ...props
-}: MessageActionProps) => {
+}: MessageActionProps) {
   const button = (
     <Button size={size} type="button" variant={variant} {...props}>
       {children}
@@ -114,7 +120,7 @@ export const MessageAction = ({
   }
 
   return button;
-};
+}
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 

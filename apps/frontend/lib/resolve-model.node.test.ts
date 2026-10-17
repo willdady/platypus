@@ -3,10 +3,10 @@ import type { Agent, Provider } from "@platypus/schemas";
 import { resolveModel } from "./resolve-model";
 import type { Serialized } from "./api-write";
 
-const provider = (
+function provider(
   over: Partial<Serialized<Provider>> = {},
-): Serialized<Provider> =>
-  ({
+): Serialized<Provider> {
+  return {
     id: "p1",
     name: "Test",
     providerType: "Anthropic",
@@ -22,15 +22,17 @@ const provider = (
       },
     ],
     ...over,
-  }) as unknown as Serialized<Provider>;
+  } as unknown as Serialized<Provider>;
+}
 
-const agent = (over: Partial<Serialized<Agent>> = {}): Serialized<Agent> =>
-  ({
+function agent(over: Partial<Serialized<Agent>> = {}): Serialized<Agent> {
+  return {
     id: "a1",
     providerId: "p1",
     modelId: "alias:flagship",
     ...over,
-  }) as unknown as Serialized<Agent>;
+  } as unknown as Serialized<Agent>;
+}
 
 describe("resolveModel", () => {
   it("resolves a direct provider/model selection", () => {

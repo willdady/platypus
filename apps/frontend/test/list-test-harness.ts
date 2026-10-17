@@ -45,12 +45,12 @@ export {
  * ```
  */
 
-export interface SwrResponse {
+export type SwrResponse = {
   data: unknown;
   error?: unknown;
   isLoading: boolean;
   mutate: Mock;
-}
+};
 
 /**
  * The revalidation every list asserts on. One spy shared by every registered

@@ -15,10 +15,10 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => ({ user: { id: "u1" } }),
 }));
 
-interface SwrCall {
+type SwrCall = {
   key: string | null;
   config?: { refreshInterval?: number };
-}
+};
 
 const { swrCalls, feeds, mutate, toastError } = vi.hoisted(() => ({
   swrCalls: [] as SwrCall[],

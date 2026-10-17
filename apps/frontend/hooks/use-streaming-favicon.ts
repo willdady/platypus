@@ -3,8 +3,8 @@ import { useEffect, useRef } from "react";
 const BLINK_MS = 1000;
 
 /** The favicon with a solid dot in its bottom-right corner, or null if it can't be drawn. */
-const drawDotFrame = (href: string): Promise<string | null> =>
-  new Promise((resolve) => {
+function drawDotFrame(href: string): Promise<string | null> {
+  return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const size = Math.max(img.width, img.height) || 32;
@@ -36,13 +36,14 @@ const drawDotFrame = (href: string): Promise<string | null> =>
     img.onerror = () => resolve(null);
     img.src = href;
   });
+}
 
 /**
  * Blinks a dot on the tab favicon while `active`, restoring the original icon
  * exactly when it turns false or the caller unmounts. Uses `setInterval` rather
  * than `requestAnimationFrame`, which is paused in background tabs.
  */
-export const useStreamingFavicon = (active: boolean) => {
+export function useStreamingFavicon(active: boolean) {
   const dotFrame = useRef<Promise<string | null> | null>(null);
 
   useEffect(() => {
@@ -78,4 +79,4 @@ export const useStreamingFavicon = (active: boolean) => {
       restore();
     };
   }, [active]);
-};
+}

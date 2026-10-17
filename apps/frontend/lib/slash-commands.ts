@@ -43,16 +43,16 @@ export type SlashCommandPickerProps = {
  * Skill from the *model's* catalogue, and this menu is the user invoking one
  * themselves, which is the case the flag exists for.
  */
-export const skillsForAgent = <T extends { id: string }>(
+export function skillsForAgent<T extends { id: string }>(
   skills: T[],
   skillIds: string[] | undefined,
-): T[] => {
+): T[] {
   const byId = new Map(skills.map((skill) => [skill.id, skill]));
   return (skillIds ?? []).flatMap((id) => {
     const skill = byId.get(id);
     return skill ? [skill] : [];
   });
-};
+}
 
 /**
  * The picker is open while the whole value is one unfinished token at position
@@ -69,8 +69,9 @@ export const skillsForAgent = <T extends { id: string }>(
 const SLASH_QUERY_PATTERN = /^\/(\S*)$/;
 
 /** The partial name being typed, or `null` when the value is not a command. */
-export const slashQueryOf = (value: string): string | null =>
-  SLASH_QUERY_PATTERN.exec(value)?.[1] ?? null;
+export function slashQueryOf(value: string): string | null {
+  return SLASH_QUERY_PATTERN.exec(value)?.[1] ?? null;
+}
 
 /**
  * The commands matching `query`, best first: an exact name, then names that
@@ -82,10 +83,10 @@ export const slashQueryOf = (value: string): string | null =>
  * the user has fully typed is the one highlighted, so Tab accepts what is
  * visibly selected rather than whichever name happened to sort first.
  */
-export const rankSlashCommands = (
+export function rankSlashCommands(
   commands: SlashCommand[],
   query: string,
-): SlashCommand[] => {
+): SlashCommand[] {
   const needle = query.toLowerCase();
   const tierOf = (name: string): number => {
     const haystack = name.toLowerCase();
@@ -102,10 +103,12 @@ export const rankSlashCommands = (
       (a, b) => a.tier - b.tier || a.command.name.localeCompare(b.command.name),
     )
     .map(({ command }) => command);
-};
+}
 
 /**
  * The value a completed command leaves in the textarea. The trailing space both
  * closes the picker and puts the caret where the user's prompt goes.
  */
-export const completeSlashCommand = (name: string): string => `/${name} `;
+export function completeSlashCommand(name: string): string {
+  return `/${name} `;
+}

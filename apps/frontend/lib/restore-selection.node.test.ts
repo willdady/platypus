@@ -3,23 +3,25 @@ import type { Agent, Chat, Provider } from "@platypus/schemas";
 import { resolveRestoredSelection } from "./restore-selection";
 import type { Serialized } from "./api-write";
 
-const provider = (
+function provider(
   over: Partial<Serialized<Provider>> = {},
-): Serialized<Provider> =>
-  ({
+): Serialized<Provider> {
+  return {
     id: "p1",
     name: "Test",
     modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
     ...over,
-  }) as unknown as Serialized<Provider>;
+  } as unknown as Serialized<Provider>;
+}
 
-const agent = (over: Partial<Serialized<Agent>> = {}): Serialized<Agent> =>
-  ({
+function agent(over: Partial<Serialized<Agent>> = {}): Serialized<Agent> {
+  return {
     id: "a1",
     providerId: "p1",
     modelId: "gpt-4",
     ...over,
-  }) as unknown as Serialized<Agent>;
+  } as unknown as Serialized<Agent>;
+}
 
 describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
   it("restores the chat's Agent when it still exists", () => {
