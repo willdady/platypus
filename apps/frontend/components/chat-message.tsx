@@ -26,18 +26,17 @@ import {
   ToolInput,
   ToolOutput,
 } from "./ai-elements/tool";
-import {
+import type {
   DynamicToolUIPart,
   FileUIPart,
   ReasoningUIPart,
   SourceUrlUIPart,
   TextUIPart,
   ToolUIPart,
-  isToolUIPart,
-  type ChatStatus,
 } from "ai";
+import { isToolUIPart, type ChatStatus } from "ai";
+import type { Agent } from "@platypus/schemas";
 import {
-  Agent,
   formatFileSize,
   isPresentableUrl,
   type CustomUITools,

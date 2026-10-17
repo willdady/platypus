@@ -43,6 +43,34 @@ const eslintConfig = defineConfig([
       "jsx-a11y/no-autofocus": "warn",
     },
   },
+  // Type-aware rules for TypeScript files. `project` lists both tsconfigs
+  // rather than using `projectService`: the app tsconfig excludes the tests,
+  // and `projectService` only finds a file's nearest `tsconfig.json`, so every
+  // test file would fail to parse.
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    languageOptions: {
+      parserOptions: {
+        project: ["./tsconfig.json", "./tsconfig.test.json"],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      // `typeof import("…")` stays allowed: it's Vitest's idiom for typing
+      // `importOriginal`/`vi.importActual` inside a `vi.mock` factory.
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        { disallowTypeAnnotations: false },
+      ],
+      "@typescript-eslint/no-floating-promises": "error",
+      // React ignores the promise an event handler returns, so `onClick={async
+      // () => …}` is fine; wrapping each in `void` would only add noise.
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        { checksVoidReturn: { attributes: false } },
+      ],
+    },
+  },
   // A write (any `fetch` call whose `method` is anything but `"GET"`) must go
   // through the typed-outcome request module (lib/api-write.ts, #563) rather
   // than a hand-rolled call — that module is the only seam that maps the

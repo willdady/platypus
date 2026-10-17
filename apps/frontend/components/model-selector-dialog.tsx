@@ -1,5 +1,5 @@
 import { useMemo, type MouseEvent } from "react";
-import { Agent, Provider } from "@platypus/schemas";
+import type { Agent, Provider } from "@platypus/schemas";
 import {
   ModelSelector,
   ModelSelectorContent,

@@ -333,8 +333,8 @@ const AgentForm = ({
       // write landed — refetch so the list shows the new avatar.
       if (avatarDeleted || avatarFile) {
         const agentsUrl = scopedUrl(backendUrl, "agents", scope);
-        mutate(agentsUrl);
-        mutate(`${agentsUrl}/${savedAgentId}`);
+        void mutate(agentsUrl);
+        void mutate(`${agentsUrl}/${savedAgentId}`);
       }
 
       router.push(doneHref);

@@ -173,7 +173,7 @@ export const WorkspaceWizard = ({ orgId }: { orgId: string }) => {
       },
     );
     if (outcome.outcome === "success") {
-      outcome.revalidateKeys.forEach((key) => mutate(key));
+      outcome.revalidateKeys.forEach((key) => void mutate(key));
       toast.success("Workspace created");
       router.push(workspaceRoutes(orgId, outcome.data.id).root);
       return accepted;

@@ -136,7 +136,7 @@ export default function InviteTokenPage() {
       return;
     }
     // The sidebar's Organization list now has one more.
-    mutate(scopedUrl(backendUrl, "organizations", {}));
+    void mutate(scopedUrl(backendUrl, "organizations", {}));
     enterWorkspace(outcome.data);
   };
 

@@ -19,7 +19,7 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => ({ actor: null, isAuthLoading: false }),
 }));
 
-vi.mock("swr", () => ({ preload: vi.fn() }));
+vi.mock("swr", () => ({ preload: vi.fn(() => Promise.resolve()) }));
 
 // Everything the Organization home reads is already in the client cache, as
 // it is on a switch from another Organization.

@@ -10,7 +10,7 @@ vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
 }));
 
-vi.mock("swr", () => ({ preload: vi.fn() }));
+vi.mock("swr", () => ({ preload: vi.fn(() => Promise.resolve()) }));
 
 vi.mock("@/hooks/use-scoped-swr", () => ({
   useScopedSWR: () => ({ data: read.data, error: undefined }),

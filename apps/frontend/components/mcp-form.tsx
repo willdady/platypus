@@ -358,7 +358,7 @@ const McpForm = ({
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type === OAUTH_MCP_SUCCESS_EVENT) {
-        mutateMcp();
+        void mutateMcp();
         toast.success("OAuth authorization completed");
         setIsAuthorizing(false);
       } else if (event.data?.type === OAUTH_MCP_ERROR_EVENT) {
@@ -423,7 +423,7 @@ const McpForm = ({
         // Backend silently refreshed via stored refresh_token. Treat as
         // success rather than an error toast.
         toast.success("Already authorized");
-        mutateMcp();
+        void mutateMcp();
         setIsAuthorizing(false);
         return;
       }
@@ -491,7 +491,7 @@ const McpForm = ({
 
     if (outcome.outcome === "success") {
       toast.success("OAuth authorization revoked");
-      mutateMcp();
+      void mutateMcp();
       setTestResult(null);
     } else {
       toast.error(outcome.message);

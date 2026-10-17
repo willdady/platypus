@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { FileUIPart, UIMessage } from "ai";
+import type { FileUIPart, UIMessage } from "ai";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import type { TurnMessage } from "@/hooks/use-chat-turn";
 import {

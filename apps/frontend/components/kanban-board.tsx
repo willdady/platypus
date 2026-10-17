@@ -5,21 +5,23 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useMutation } from "@/hooks/use-mutation";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import type {
+  CollisionDetection,
+  DragStartEvent,
+  DragEndEvent,
+  DragOverEvent,
+} from "@dnd-kit/core";
 import {
   DndContext,
   closestCorners,
   closestCenter,
   pointerWithin,
-  CollisionDetection,
-  DragStartEvent,
-  DragEndEvent,
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
   TouchSensor,
   useSensor,
   useSensors,
-  DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,

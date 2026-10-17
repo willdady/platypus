@@ -1376,7 +1376,7 @@ const ProviderForm = ({
         confirmLabel="Continue"
         onConfirm={() => {
           setIsEmbeddingChangeDialogOpen(false);
-          doSubmit();
+          void doSubmit();
         }}
       />
     </div>

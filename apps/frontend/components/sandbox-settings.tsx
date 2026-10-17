@@ -429,7 +429,7 @@ const SandboxSettings = ({
     await mutate(null, { revalidate: false });
     setIsConfiguring(false);
     seedFormData(DEFAULT_FORM);
-    mutate();
+    void mutate();
   }
 
   const handleSave = () => {

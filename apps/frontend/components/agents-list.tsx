@@ -261,7 +261,7 @@ export const AgentsList = ({
     });
 
     if (outcome.outcome === "success") {
-      mutate();
+      void mutate();
       setCloneDialogOpen(false);
       setAgentToClone(null);
       setCloneName("");
@@ -576,7 +576,7 @@ export const AgentsList = ({
               placeholder="Agent name"
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  handleCloneConfirm();
+                  void handleCloneConfirm();
                 }
               }}
             />

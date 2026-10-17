@@ -16,12 +16,14 @@ import { DefaultChatTransport } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
-import {
+import type {
   Chat as ChatType,
   Provider,
   Agent,
   ToolSet,
   Skill,
+} from "@platypus/schemas";
+import {
   nextTurnOccupancy,
   type Sandbox,
   UNTITLED_CHAT_TITLE,

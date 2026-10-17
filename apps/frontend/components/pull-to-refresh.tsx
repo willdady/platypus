@@ -18,6 +18,8 @@ const SETTLE_DISTANCE = 15;
 const SETTLE_PERIOD_MS = 100;
 
 interface PullToRefreshProps {
+  /** Must not reject: callers pass SWR revalidation, which reports failure
+   * through the hook. */
   onRefresh: () => Promise<void>;
   disabled?: boolean;
   className?: string;
@@ -149,14 +151,15 @@ export function PullToRefresh({
     const el = containerRef.current;
     if (!el) return;
 
+    const onTouchEnd = () => void handleTouchEnd();
     el.addEventListener("touchstart", handleTouchStart, { passive: true });
     el.addEventListener("touchmove", handleTouchMove, { passive: false });
-    el.addEventListener("touchend", handleTouchEnd, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
 
     return () => {
       el.removeEventListener("touchstart", handleTouchStart);
       el.removeEventListener("touchmove", handleTouchMove);
-      el.removeEventListener("touchend", handleTouchEnd);
+      el.removeEventListener("touchend", onTouchEnd);
     };
   }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 

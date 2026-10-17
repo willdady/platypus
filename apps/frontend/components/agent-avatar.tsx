@@ -1,4 +1,4 @@
-import { Agent } from "@platypus/schemas";
+import type { Agent } from "@platypus/schemas";
 import { Bot } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 

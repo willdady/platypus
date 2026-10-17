@@ -122,7 +122,7 @@ export function RemoveMemberDialog({
         ],
       });
       if (outcome.outcome === "success") {
-        outcome.revalidateKeys.forEach((key) => mutate(key));
+        outcome.revalidateKeys.forEach((key) => void mutate(key));
         toast.success("Member removed from organization");
         onSuccess();
       } else {
