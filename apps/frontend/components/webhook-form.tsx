@@ -40,7 +40,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import { joinUrl } from "@/lib/utils";
 import { retractExactKeys } from "@/lib/form-errors";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
@@ -228,15 +227,13 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     });
   };
 
-  const webhooksBaseUrl = scopedUrl(backendUrl, "webhooks", {
-    orgId,
-    workspaceId,
-  });
-
   const handleRegenerateSecret = async () => {
     setIsRegenerating(true);
     const outcome = await writeAt(
-      joinUrl(webhooksBaseUrl, `/${webhookId}/regenerate-secret`),
+      scopedUrl(backendUrl, `webhooks/${webhookId}/regenerate-secret`, {
+        orgId,
+        workspaceId,
+      }),
       { method: "POST" },
     );
 
