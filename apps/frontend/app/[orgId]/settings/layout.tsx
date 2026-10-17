@@ -1,40 +1,17 @@
-import { serverBackendUrl } from "@/lib/env";
-import { cache } from "react";
-import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { scopedTitle } from "@/lib/page-title";
 import type { Organization } from "@platypus/schemas";
-import { joinUrl } from "@/lib/utils";
+import { backendPath, readForLabel } from "@/lib/server-read";
 import { OrgSettingsMenu } from "@/components/org-settings-menu";
 import { SettingsShell } from "@/components/settings-shell";
 import { BackButton } from "@/components/back-button";
 import { HeaderHomeButton } from "@/components/header-home-button";
 import { ProtectedRoute } from "@/components/protected-route";
-import type { Serialized } from "@/lib/api-write";
 
-// Cached so the metadata and the layout body share one request: both need the
-// organization, and `cache` collapses them into a single backend call.
-const fetchOrganization = cache(async function fetchOrganization(
-  orgId: string,
-): Promise<Serialized<Organization> | null> {
-  const backendUrl = serverBackendUrl();
-  const headersList = await headers();
-  // Unlike the workspace shell, a failure here must not break the page: the
-  // organization is only a label and the title, so it degrades to null.
-  try {
-    const response = await fetch(
-      joinUrl(backendUrl, `/organizations/${orgId}`),
-      {
-        headers: {
-          cookie: headersList.get("cookie") || "",
-        },
-      },
-    );
-    return response.ok ? await response.json() : null;
-  } catch {
-    return null;
-  }
-});
+// Unlike the workspace shell, a failure here must not break the page: the
+// organization is only a label and the title, so it degrades to null.
+const readOrganization = (orgId: string) =>
+  readForLabel<Organization>(backendPath`/organizations/${orgId}`);
 
 export async function generateMetadata({
   params,
@@ -42,7 +19,7 @@ export async function generateMetadata({
   params: Promise<{ orgId: string }>;
 }): Promise<Metadata> {
   const { orgId } = await params;
-  const organization = await fetchOrganization(orgId);
+  const organization = await readOrganization(orgId);
 
   return { title: scopedTitle(organization?.name) };
 }
@@ -55,7 +32,7 @@ export default async function OrgSettingsLayout({
   params: Promise<{ orgId: string }>;
 }>) {
   const { orgId } = await params;
-  const organization = await fetchOrganization(orgId);
+  const organization = await readOrganization(orgId);
 
   return (
     <ProtectedRoute requireOrgAdmin>

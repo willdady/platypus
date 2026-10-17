@@ -1,6 +1,5 @@
-import { serverBackendUrl } from "@/lib/env";
 import { type ToolSet } from "@platypus/schemas";
-import { joinUrl } from "@/lib/utils";
+import { serverRead } from "@/lib/server-read";
 
 /**
  * Why a server-side tool sets read failed.
@@ -19,8 +18,7 @@ export type ToolSetsResult =
   | { ok: false; reason: ToolSetsFailureReason };
 
 /**
- * Reads a tool sets collection from the backend during server-side rendering,
- * forwarding the caller's cookie header.
+ * Reads a tool sets collection from the backend during server-side rendering.
  *
  * Never throws and never returns `undefined`: a failed read is reported as a
  * value so the page can render an honest error instead of dying mid-render.
@@ -28,38 +26,19 @@ export type ToolSetsResult =
  * return an empty collection — "none exist" stays distinguishable from
  * "couldn't ask".
  */
-export async function fetchToolSets(
-  path: string,
-  cookie: string,
-): Promise<ToolSetsResult> {
-  // Internal URL for SSR, falling back to BACKEND_URL for local dev.
-  const backendUrl = serverBackendUrl();
-
-  let response: Response;
-  try {
-    response = await fetch(joinUrl(backendUrl, path), { headers: { cookie } });
-  } catch {
-    return { ok: false, reason: "unavailable" };
-  }
-
-  if (!response.ok) {
+export async function fetchToolSets(path: string): Promise<ToolSetsResult> {
+  const result = await serverRead<unknown>(path);
+  if (!result.ok) {
     return {
       ok: false,
       reason:
-        response.status === 401 || response.status === 403
+        result.status === 401 || result.status === 403
           ? "unauthorized"
           : "unavailable",
     };
   }
 
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    return { ok: false, reason: "unavailable" };
-  }
-
-  const results = (body as { results?: unknown } | null)?.results;
+  const results = (result.body as { results?: unknown } | null)?.results;
   if (!Array.isArray(results)) {
     return { ok: false, reason: "unavailable" };
   }

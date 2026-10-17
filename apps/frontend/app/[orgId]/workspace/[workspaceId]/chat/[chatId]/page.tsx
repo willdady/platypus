@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { Workspace } from "@platypus/schemas";
 import { Chat } from "@/components/chat";
-import { readForLabel } from "@/lib/server-read";
+import { backendPath, readForLabel } from "@/lib/server-read";
 import { ChatDocumentTitle } from "./chat-document-title";
 
 // The Chat's own name is set from the browser, which follows it as it changes.
@@ -16,9 +16,9 @@ const ChatWithIdPage = async ({
 }) => {
   const { orgId, workspaceId, chatId } = await params;
   const { agentId } = await searchParams;
-  // The Workspace layout reads the same row; Next shares the one request.
+  // The Workspace layout reads the same row; `serverRead` shares the one request.
   const workspace = await readForLabel<Workspace>(
-    `/organizations/${orgId}/workspaces/${workspaceId}`,
+    backendPath`/organizations/${orgId}/workspaces/${workspaceId}`,
   );
 
   return (
