@@ -47,10 +47,8 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { TriggerCronFields } from "@/components/trigger-cron-fields";
-import {
-  TriggerEventFields,
-  useEventFilterListsLoading,
-} from "@/components/trigger-event-fields";
+import { TriggerEventFields } from "@/components/trigger-event-fields";
+import { useEventFilterListsLoading } from "@/hooks/use-event-filter-lists-loading";
 import { TriggerInboundFields } from "@/components/trigger-inbound-fields";
 import {
   type Trigger,

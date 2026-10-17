@@ -51,6 +51,8 @@ managed: guidance, not an error the user can act on in this dialog. With the
 option set, a `forbidden` refusal closes the dialog and shows the message as
 an info toast. Every other refusal still stays inline.
 
+A dialog's Cancel button is `variant="outline"`, never `ghost`.
+
 ## Leaving with unsaved changes
 
 Every form built on `useEntityForm` is guarded for free: while its values
