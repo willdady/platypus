@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const { notFound } = vi.hoisted(() => ({
   notFound: vi.fn(() => {
@@ -12,6 +12,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import WorkspaceLayout, { generateMetadata } from "./layout";
+import { SERVER_READ_TIMEOUT_MS } from "@/lib/server-read";
 
 const renderLayout = () =>
   WorkspaceLayout({
@@ -33,6 +34,10 @@ const stubWorkspaceRead = (status: number) =>
 
 beforeEach(() => {
   notFound.mockClear();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("WorkspaceLayout", () => {
@@ -59,6 +64,41 @@ describe("WorkspaceLayout", () => {
       expect(notFound).not.toHaveBeenCalled();
     },
   );
+
+  it("fails a Workspace read the backend never answers once it times out", async () => {
+    vi.useFakeTimers();
+    // A fetch that only settles when its request is aborted.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) =>
+            init.signal?.addEventListener("abort", () =>
+              reject(init.signal?.reason),
+            ),
+          ),
+      ),
+    );
+
+    await Promise.all([
+      expect(renderLayout()).rejects.toThrow("unreachable"),
+      vi.advanceTimersByTimeAsync(SERVER_READ_TIMEOUT_MS),
+    ]);
+  });
+
+  it("encodes route ids so they can't change the backend path", async () => {
+    stubWorkspaceRead(200);
+
+    await WorkspaceLayout({
+      children: null,
+      params: Promise.resolve({ orgId: "org1", workspaceId: "a/b?c" }),
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/organizations\/org1\/workspaces\/a%2Fb%3Fc$/),
+      expect.anything(),
+    );
+  });
 
   // Access is the client gate's call, which can say why.
   it("leaves a forbidden Workspace to the access gate", async () => {

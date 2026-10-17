@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { AgentForm } from "@/components/agent-form";
-import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
+import { backendPath } from "@/lib/server-read";
 import { workspaceRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Create Agent" };
@@ -16,10 +16,8 @@ const AgentCreatePage = async ({
 
   // Fetch tool sets from the server. A failed read is reported to the form
   // rather than thrown, so the page still renders (issue #818).
-  const headersList = await headers();
   const toolSetsResult = await fetchToolSets(
-    `/organizations/${orgId}/workspaces/${workspaceId}/tools`,
-    headersList.get("cookie") || "",
+    backendPath`/organizations/${orgId}/workspaces/${workspaceId}/tools`,
   );
 
   return (

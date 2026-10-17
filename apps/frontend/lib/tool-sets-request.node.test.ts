@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchToolSets } from "./tool-sets-request";
 
 const cookie = "better-auth.session_token=abc";
+
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ cookie }),
+}));
+
+import { fetchToolSets } from "./tool-sets-request";
 
 function stubFetch(impl: () => Promise<Response> | Response) {
   const spy = vi.fn(impl);
@@ -28,7 +33,7 @@ describe("fetchToolSets", () => {
   it("returns the tool sets when the request succeeds", async () => {
     stubFetch(() => httpResponse({ results: [{ id: "ts1", name: "Web" }] }));
 
-    const result = await fetchToolSets("/organizations/o1/tools", cookie);
+    const result = await fetchToolSets("/organizations/o1/tools");
 
     expect(result).toEqual({
       ok: true,
@@ -39,7 +44,7 @@ describe("fetchToolSets", () => {
   it("returns an empty list, not a failure, when the workspace has no tool sets", async () => {
     stubFetch(() => httpResponse({ results: [] }));
 
-    const result = await fetchToolSets("/organizations/o1/tools", cookie);
+    const result = await fetchToolSets("/organizations/o1/tools");
 
     expect(result).toEqual({ ok: true, toolSets: [] });
   });
@@ -47,11 +52,11 @@ describe("fetchToolSets", () => {
   it("forwards the caller's cookie to the backend so SSR requests carry the session", async () => {
     const spy = stubFetch(() => httpResponse({ results: [] }));
 
-    await fetchToolSets("/organizations/o1/tools", cookie);
+    await fetchToolSets("/organizations/o1/tools");
 
     expect(spy).toHaveBeenCalledWith(
       "http://backend:4000/organizations/o1/tools",
-      { headers: { cookie } },
+      expect.objectContaining({ headers: { cookie } }),
     );
   });
 
@@ -60,7 +65,7 @@ describe("fetchToolSets", () => {
     async (status) => {
       stubFetch(() => httpResponse({ error: "Unauthorized" }, status));
 
-      const result = await fetchToolSets("/organizations/o1/tools", cookie);
+      const result = await fetchToolSets("/organizations/o1/tools");
 
       expect(result).toEqual({ ok: false, reason: "unauthorized" });
     },
@@ -80,7 +85,7 @@ describe("fetchToolSets", () => {
   ])("reports an unavailable failure on %s", async (_name, impl) => {
     stubFetch(impl);
 
-    const result = await fetchToolSets("/organizations/o1/tools", cookie);
+    const result = await fetchToolSets("/organizations/o1/tools");
 
     expect(result).toEqual({ ok: false, reason: "unavailable" });
   });
@@ -90,11 +95,11 @@ describe("fetchToolSets", () => {
     vi.stubEnv("BACKEND_URL", "http://localhost:4000");
     const spy = stubFetch(() => httpResponse({ results: [] }));
 
-    await fetchToolSets("/organizations/o1/tools", cookie);
+    await fetchToolSets("/organizations/o1/tools");
 
     expect(spy).toHaveBeenCalledWith(
       "http://localhost:4000/organizations/o1/tools",
-      { headers: { cookie } },
+      expect.objectContaining({ headers: { cookie } }),
     );
   });
 });

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { AgentForm } from "@/components/agent-form";
-import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
+import { backendPath } from "@/lib/server-read";
 import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Shared Agent" };
@@ -17,10 +17,8 @@ const OrgAgentEditPage = async ({
   // Org-scoped tool sets: static sets + org MCPs (the only ones a Shared agent
   // may reference under the no-cascade rule). A failed read is reported to the
   // form rather than thrown, so the page still renders (issue #818).
-  const headersList = await headers();
   const toolSetsResult = await fetchToolSets(
-    `/organizations/${orgId}/tools`,
-    headersList.get("cookie") || "",
+    backendPath`/organizations/${orgId}/tools`,
   );
 
   return (

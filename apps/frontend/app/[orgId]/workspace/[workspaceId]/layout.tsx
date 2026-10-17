@@ -1,8 +1,5 @@
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
-import { serverBackendUrl } from "@/lib/env";
-import { cache } from "react";
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { scopedTitle } from "@/lib/page-title";
 import { CommandMenu } from "@/components/command-menu";
@@ -11,35 +8,17 @@ import { Kbd } from "@/components/ui/kbd";
 import { Search, Home } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { joinUrl } from "@/lib/utils";
+import { backendPath, serverRead } from "@/lib/server-read";
 import { Header } from "@/components/header";
 import { workspaceRoutes } from "@/lib/routes";
 import { ProtectedRoute } from "@/components/protected-route";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import type { Workspace } from "@platypus/schemas";
-import type { Serialized } from "@/lib/api-write";
 
-// Cached so the metadata and the layout body share one request: both need the
-// workspace, and `cache` collapses them into a single backend call.
-const fetchWorkspace = cache(async function fetchWorkspace(
-  orgId: string,
-  workspaceId: string,
-): Promise<{ response: Response; workspace: Serialized<Workspace> | null }> {
-  const backendUrl = serverBackendUrl();
-  const headersList = await headers();
-  const response = await fetch(
-    joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`),
-    {
-      headers: {
-        cookie: headersList.get("cookie") || "",
-      },
-    },
+const readWorkspace = (orgId: string, workspaceId: string) =>
+  serverRead<Workspace>(
+    backendPath`/organizations/${orgId}/workspaces/${workspaceId}`,
   );
-  const workspace: Serialized<Workspace> | null = response.ok
-    ? await response.json()
-    : null;
-  return { response, workspace };
-});
 
 export async function generateMetadata({
   params,
@@ -47,9 +26,9 @@ export async function generateMetadata({
   params: Promise<{ orgId: string; workspaceId: string }>;
 }): Promise<Metadata> {
   const { orgId, workspaceId } = await params;
-  const { workspace } = await fetchWorkspace(orgId, workspaceId);
+  const workspace = await readWorkspace(orgId, workspaceId);
 
-  return { title: scopedTitle(workspace?.name) };
+  return { title: scopedTitle(workspace.ok ? workspace.body.name : undefined) };
 }
 
 export default async function WorkspaceLayout({
@@ -60,17 +39,17 @@ export default async function WorkspaceLayout({
   params: Promise<{ orgId: string; workspaceId: string }>;
 }>) {
   const { orgId, workspaceId } = await params;
-  const { response } = await fetchWorkspace(orgId, workspaceId);
+  const workspace = await readWorkspace(orgId, workspaceId);
 
-  if (response.status === 404) {
+  if (!workspace.ok && workspace.status === 404) {
     notFound();
   }
-  // Any other failure goes to the error boundary, which offers to try again,
-  // rather than rendering the Workspace over a read that failed. A 401 or 403
-  // is left to `ProtectedRoute`, which signs the caller in or says why they
-  // are turned away.
-  if (!response.ok && response.status !== 401 && response.status !== 403) {
-    throw new Error(`Workspace read failed with status ${response.status}`);
+  // Any other failure — a timeout included — goes to the error boundary,
+  // which offers to try again, rather than rendering the Workspace over a read
+  // that failed. A 401 or 403 is left to `ProtectedRoute`, which signs the
+  // caller in or says why they are turned away.
+  if (!workspace.ok && workspace.status !== 401 && workspace.status !== 403) {
+    throw new Error(`Workspace read failed: ${workspace.status}`);
   }
 
   const routes = workspaceRoutes(orgId, workspaceId);
