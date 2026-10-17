@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { replaceSearchParam } from "@/lib/search-params";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import {
   Item,
@@ -175,8 +176,17 @@ export const TriggerList = ({
   workspaceId: string;
 }) => {
   const routes = workspaceRoutes(orgId, workspaceId);
-  const [showFired, setShowFired] = useState(false);
-  const [typeFilter, setTypeFilter] = useState<TriggerType | typeof ALL>(ALL);
+  const searchParams = useSearchParams();
+
+  // Both filters live in the URL, so they survive a refresh and Back. An
+  // unknown type reads as no filter.
+  const showFired = searchParams.get("triggerShowFired") === "true";
+  const parsedType = triggerTypeSchema.safeParse(
+    searchParams.get("triggerType"),
+  );
+  const typeFilter: TriggerType | typeof ALL = parsedType.success
+    ? parsedType.data
+    : ALL;
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -243,7 +253,7 @@ export const TriggerList = ({
       <Select
         value={typeFilter}
         onValueChange={(value) =>
-          setTypeFilter(value as TriggerType | typeof ALL)
+          replaceSearchParam("triggerType", value === ALL ? null : value)
         }
       >
         <SelectTrigger className="w-36" aria-label="Filter by type">
@@ -262,7 +272,9 @@ export const TriggerList = ({
         <Switch
           id="show-fired-triggers"
           checked={showFired}
-          onCheckedChange={setShowFired}
+          onCheckedChange={(checked) =>
+            replaceSearchParam("triggerShowFired", checked ? "true" : null)
+          }
           // Only a One-off fires, and a One-off is always Cron.
           disabled={typeFilter === "event" || typeFilter === "inbound"}
         />

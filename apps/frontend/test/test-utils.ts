@@ -1,3 +1,4 @@
+import { useMemo, useSyncExternalStore } from "react";
 import { vi, type Mock } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -39,7 +40,33 @@ export const authMock = {
   useAuth: () => authState,
   useBackendUrl: () => "http://test",
 };
-export const navigationMock = { useRouter: () => ({ push, refresh }) };
+// Next keeps `useSearchParams` in step with `history.replaceState`; the default
+// mock does the same off jsdom's location, so a list that writes its filters
+// there re-renders as it would in the app.
+const locationListeners = new Set<() => void>();
+if (typeof window !== "undefined") {
+  const nativeReplaceState = window.history.replaceState.bind(window.history);
+  window.history.replaceState = (...args) => {
+    nativeReplaceState(...args);
+    locationListeners.forEach((listener) => listener());
+  };
+}
+const subscribeToLocation = (listener: () => void) => {
+  locationListeners.add(listener);
+  return () => locationListeners.delete(listener);
+};
+function useLocationSearchParams() {
+  const search = useSyncExternalStore(
+    subscribeToLocation,
+    () => window.location.search,
+  );
+  return useMemo(() => new URLSearchParams(search), [search]);
+}
+
+export const navigationMock = {
+  useRouter: () => ({ push, refresh }),
+  useSearchParams: useLocationSearchParams,
+};
 export const toastMock = {
   toast: { error: toastError, success: toastSuccess, info: toastInfo },
 };
@@ -54,6 +81,7 @@ export function resetSharedSpies() {
   authState.user = { id: "u1" };
   authState.actor = "org-admin";
   authState.workspaceDelegation = null;
+  if (typeof window !== "undefined") window.history.replaceState(null, "", "/");
 }
 
 /**

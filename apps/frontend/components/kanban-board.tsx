@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { workspaceRoutes } from "@/lib/routes";
+import { replaceSearchParam } from "@/lib/search-params";
 
 const EMPTY_LABELS: KanbanLabel[] = [];
 
@@ -249,26 +250,10 @@ export function KanbanBoard({
   // card writes it, closing clears it, and a shared link arrives with it. The
   // card itself is looked up from the polled columns on every render, so the
   // open dialog always shows the board's latest copy.
-  //
-  // `history.replaceState` rather than `router.replace`: Next keeps
-  // `useSearchParams` in step with it, and it opens the dialog without a
-  // round-trip. A relative `?…` URL keeps the path, base path included. Pass
-  // `null`, not `history.state`: Next copies its own state across, and skips
-  // the sync entirely for state already carrying its `__NA` marker.
-  const updateCardIdParam = useCallback((cardId: string | null) => {
-    const params = new URLSearchParams(window.location.search);
-    if (cardId) {
-      params.set("cardId", cardId);
-    } else {
-      params.delete("cardId");
-    }
-    const qs = params.toString();
-    window.history.replaceState(
-      null,
-      "",
-      qs ? `?${qs}` : window.location.pathname,
-    );
-  }, []);
+  const updateCardIdParam = useCallback(
+    (cardId: string | null) => replaceSearchParam("cardId", cardId),
+    [],
+  );
 
   const openCardId = searchParams.get("cardId");
   const selectedCard = useMemo(
