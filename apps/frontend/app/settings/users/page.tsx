@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "User Management" };
 
 export default function UsersPage() {
   return (
-    <ProtectedRoute requireSuperAdmin={true}>
+    <ProtectedRoute requireSuperAdmin>
       <div>
         <h1 className="text-2xl font-bold mb-4">User Management</h1>
         <p className="text-muted-foreground mb-6">

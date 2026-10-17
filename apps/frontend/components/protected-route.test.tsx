@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ProtectedRoute } from "./protected-route";
 
-const { auth, push } = vi.hoisted(() => ({
+const { auth, replace } = vi.hoisted(() => ({
   auth: {
     user: { id: "u1" } as { id: string } | null,
     isAuthLoading: false,
@@ -11,13 +11,14 @@ const { auth, push } = vi.hoisted(() => ({
     accessReadError: null as unknown,
     retryAccessReads: vi.fn(),
   },
-  push: vi.fn(),
+  replace: vi.fn(),
 }));
 
 vi.mock("@/components/auth-provider", () => ({ useAuth: () => auth }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ replace }),
   useParams: () => ({ orgId: "org1" }),
+  usePathname: () => "/org1/settings",
 }));
 
 const renderGate = (
@@ -30,7 +31,7 @@ const renderGate = (
   );
 
 beforeEach(() => {
-  push.mockReset();
+  replace.mockReset();
   Object.assign(auth, {
     user: { id: "u1" },
     isAuthLoading: false,
@@ -42,12 +43,16 @@ beforeEach(() => {
 });
 
 describe("ProtectedRoute", () => {
-  it("sends a signed-out reader to sign in and renders nothing", () => {
+  it("sends a signed-out reader to sign in, to return here, and renders nothing", () => {
+    window.history.replaceState(null, "", "/org1/settings?tab=a");
     auth.user = null;
     const { container } = renderGate({ requireOrgAccess: true });
 
-    expect(push).toHaveBeenCalledWith("/sign-in");
+    expect(replace).toHaveBeenCalledWith(
+      "/sign-in?next=%2Forg1%2Fsettings%3Ftab%3Da",
+    );
     expect(container).toBeEmptyDOMElement();
+    window.history.replaceState(null, "", "/");
   });
 
   // A session read that never landed says nothing about the session (#1204).
@@ -55,7 +60,7 @@ describe("ProtectedRoute", () => {
     Object.assign(auth, { user: null, accessReadError: { status: 500 } });
     renderGate({});
 
-    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
     expect(screen.getByText("Couldn't load")).toBeInTheDocument();
     expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
 
@@ -81,7 +86,7 @@ describe("ProtectedRoute", () => {
     {
       name: "a plain member from an Org Admin page",
       state: { actor: "workspace-owner", orgMembership: { role: "member" } },
-      props: { requireOrgAccess: true, requireOrgAdmin: true },
+      props: { requireOrgAdmin: true },
       title: "Insufficient Organization Permissions",
       back: ["Return Home", "/"],
     },
@@ -131,13 +136,27 @@ describe("ProtectedRoute", () => {
     expect(screen.getByText("Secret page")).toBeInTheDocument();
   });
 
-  // The gate only decides once the session has resolved.
-  it("renders the page while the session is still resolving", () => {
+  // The gate only decides once the session has resolved, and the page must
+  // not mount and fire reads before then.
+  it("holds the page back while the session is still resolving", () => {
     Object.assign(auth, { user: null, isAuthLoading: true });
     renderGate({ requireSuperAdmin: true });
 
+    expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
+    expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("keeps an admitted page up through a later read", () => {
+    const { rerender } = renderGate({ requireOrgAccess: true });
+    auth.isAuthLoading = true;
+    rerender(
+      <ProtectedRoute requireOrgAccess>
+        <p>Secret page</p>
+      </ProtectedRoute>,
+    );
+
     expect(screen.getByText("Secret page")).toBeInTheDocument();
-    expect(push).not.toHaveBeenCalled();
   });
 });
 

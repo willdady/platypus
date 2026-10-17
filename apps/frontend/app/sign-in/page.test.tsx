@@ -4,11 +4,11 @@ import { SWRConfig } from "swr";
 import SignInPage from "./page";
 
 const mockSignInEmail = vi.fn();
-const mockPush = vi.fn();
+const mockReplace = vi.fn();
 const auth = vi.hoisted(() => ({ user: null as { id: string } | null }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ replace: mockReplace }),
 }));
 
 vi.mock("@/components/auth-provider", () => ({
@@ -109,11 +109,39 @@ describe("SignInPage form", () => {
 
     submit(container);
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
     expect(mockSignInEmail).toHaveBeenCalledWith({
       email: "user@example.com",
       password: "super-secret-123",
     });
+  });
+
+  it("returns to the page that asked for sign-in", async () => {
+    window.history.replaceState(null, "", "/sign-in?next=%2Forg1%3Ftab%3Da");
+    mockSignInEmail.mockResolvedValue({});
+    const { container } = renderPage();
+
+    submit(container);
+
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith("/org1?tab=a"),
+    );
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("goes home rather than off-site", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/sign-in?next=%2F%2Fevil.example%2Forg1",
+    );
+    mockSignInEmail.mockResolvedValue({});
+    const { container } = renderPage();
+
+    submit(container);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
+    window.history.replaceState(null, "", "/");
   });
 
   it.each([
@@ -141,7 +169,7 @@ describe("SignInPage form", () => {
     submit(container);
 
     expect(await screen.findByText(message)).toBeInTheDocument();
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
   });
 });
@@ -157,14 +185,14 @@ describe("SignInPage with a session", () => {
     auth.user = { id: "u1" };
     renderPage();
 
-    expect(mockPush).toHaveBeenCalledWith("/");
+    expect(mockReplace).toHaveBeenCalledWith("/");
   });
 
   // Also what a failed session read leaves: no user to go on.
   it("shows the form while signed out", () => {
     renderPage();
 
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
-import { appRoutes } from "@/lib/routes";
+import { appRoutes, signInDestination } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
@@ -11,6 +11,10 @@ import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+
+/** Where the gate that sent the reader here asked to return them to. */
+const destination = () =>
+  signInDestination(new URLSearchParams(window.location.search).get("next"));
 
 export default function SignInPage() {
   const { authClient, user } = useAuth();
@@ -22,7 +26,7 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (user) router.push(appRoutes.home);
+    if (user) router.replace(destination());
   }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,7 +45,7 @@ export default function SignInPage() {
         return;
       }
 
-      router.push(appRoutes.home);
+      router.replace(destination());
     } catch {
       setError("An unexpected error occurred");
     } finally {
