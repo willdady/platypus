@@ -249,7 +249,7 @@ function CardTitleActions({
             aria-label="Edit card"
             onClick={onEdit}
           >
-            <Pencil className="size-3.5" />
+            <Pencil />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Edit card</TooltipContent>

@@ -193,7 +193,7 @@ const WidgetTile = memo(function WidgetTile({
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onEditToggle(widget.id)}
               >
-                <Pencil className="size-3" />
+                <Pencil />
               </Button>
               <Button
                 variant="ghost"
@@ -203,7 +203,7 @@ const WidgetTile = memo(function WidgetTile({
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onDelete(widget.id)}
               >
-                <Trash2 className="size-3" />
+                <Trash2 />
               </Button>
             </>
           )}

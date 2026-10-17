@@ -127,8 +127,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                         disabled
                         className="text-muted-foreground"
                       >
-                        <Shield className="size-3" /> Super Admin - No actions
-                        available
+                        <Shield /> Super Admin - No actions available
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
