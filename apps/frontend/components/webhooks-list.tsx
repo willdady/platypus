@@ -63,7 +63,7 @@ const WebhooksList = ({
   }
   if (error) return <div>Failed to load webhooks.</div>;
 
-  const webhooks: Webhook[] = data?.results ?? [];
+  const webhooks: Webhook[] = toggle.apply(data?.results ?? []);
 
   if (!webhooks.length) {
     return (
@@ -108,7 +108,7 @@ const WebhooksList = ({
                     toggle={{
                       enabled: webhook.enabled,
                       onSelect: () => void toggle.toggle(webhook),
-                      disabled: toggle.togglingId === webhook.id,
+                      disabled: toggle.isToggling(webhook.id),
                     }}
                     remove={{
                       kind: "delete",

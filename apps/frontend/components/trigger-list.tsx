@@ -211,9 +211,15 @@ export const TriggerList = ({
     (agentsData?.results || []).map((a) => [a.id, a]),
   );
 
+  const toggle = useEnabledToggle<Trigger>({
+    entity: "triggers",
+    scope,
+    mutate,
+  });
+
   // Fired One-offs are read too and hidden here, so the list knows whether
   // the Workspace has any triggers at all.
-  const allTriggers = triggersData?.results || [];
+  const allTriggers = toggle.apply(triggersData?.results || []);
   const triggers = allTriggers
     .filter((trigger) => showFired || !trigger.firedAt)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -222,12 +228,6 @@ export const TriggerList = ({
     mutate,
     delete: (trigger, url) =>
       writeEntity(url, "triggers", scope, { id: trigger.id }),
-  });
-
-  const toggle = useEnabledToggle<Trigger>({
-    entity: "triggers",
-    scope,
-    mutate,
   });
 
   if (isLoading && !triggersData) {
@@ -423,7 +423,7 @@ export const TriggerList = ({
                         <DropdownMenuItem
                           className="cursor-pointer"
                           onSelect={() => void toggle.toggle(trigger)}
-                          disabled={toggle.togglingId === trigger.id}
+                          disabled={toggle.isToggling(trigger.id)}
                         >
                           {trigger.enabled ? (
                             <>

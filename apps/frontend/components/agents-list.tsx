@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation } from "@/hooks/use-mutation";
 import { useState } from "react";
 import {
   Item,
@@ -80,12 +79,12 @@ import {
 } from "@/components/shared-resource-actions";
 import { scopedUrl, writeAt, writeEntity, type Scope } from "@/lib/api-write";
 import { splitPinned } from "@/lib/pinned-agents";
-import { toast } from "sonner";
 import {
   usePromoteShared,
   useSharedDetach,
 } from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 // The Agent is shown either in a Workspace, where it may be a workspace-scoped
@@ -186,7 +185,23 @@ export const AgentsList = ({
     mutate,
   });
 
-  const agents = [...(agentsData?.results || [])].sort((a, b) =>
+  // A pin shows at once and reverts if refused; each agent's Pin item is
+  // disabled only while its own write runs.
+  const pins = useOptimisticRows<AgentWithScope>();
+  const togglePin = (agent: AgentWithScope) => {
+    if (!backendUrl) return;
+    void pins.run(
+      agent.id,
+      { isPinned: !agent.isPinned },
+      () =>
+        writeAt(scopedUrl(backendUrl, `agents/${agent.id}/pin`, scope), {
+          method: agent.isPinned ? "DELETE" : "PUT",
+        }),
+      mutate,
+    );
+  };
+
+  const agents = pins.apply(agentsData?.results || []).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
   // A Pinned Agent shows only in the Pinned group, above the rest.
@@ -238,28 +253,6 @@ export const AgentsList = ({
   const handleDeleteClick = (agent: Agent) => {
     deleteFlow.request(agent);
   };
-
-  // One pin write at a time across the list; only the agent being written
-  // reads as pending.
-  const [pinningId, setPinningId] = useState<string | null>(null);
-  const togglePin = useMutation(async (agent: AgentWithScope) => {
-    if (!backendUrl) return;
-    setPinningId(agent.id);
-    let outcome;
-    try {
-      outcome = await writeAt(
-        scopedUrl(backendUrl, `agents/${agent.id}/pin`, scope),
-        { method: agent.isPinned ? "DELETE" : "PUT" },
-      );
-    } finally {
-      setPinningId(null);
-    }
-    if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
-      return;
-    }
-    mutate();
-  });
 
   const handleCloneConfirm = async () => {
     if (!agentToClone || !backendUrl) return;
@@ -329,20 +322,19 @@ export const AgentsList = ({
   // Clone → separator → Delete; a Shared Agent's Detach takes Delete's place.
   const renderMenuItems = (agent: AgentWithScope) => {
     const isOrgScoped = agent.scope === "organization";
-    const pinning = pinningId === agent.id;
     const pinItem = canPin && (
       <DropdownMenuItem
         className="cursor-pointer"
-        onSelect={() => void togglePin.run(agent)}
-        disabled={togglePin.pending}
+        onSelect={() => togglePin(agent)}
+        disabled={pins.isPending(agent.id)}
       >
         {agent.isPinned ? (
           <>
-            <PinOff /> {pinning ? "Unpinning..." : "Unpin"}
+            <PinOff /> Unpin
           </>
         ) : (
           <>
-            <Pin /> {pinning ? "Pinning..." : "Pin"}
+            <Pin /> Pin
           </>
         )}
       </DropdownMenuItem>

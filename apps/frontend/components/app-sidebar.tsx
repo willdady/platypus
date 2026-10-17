@@ -20,6 +20,7 @@ import {
 } from "@/lib/authorization";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
+import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import {
   Sidebar,
   SidebarContent,
@@ -120,7 +121,7 @@ export function AppSidebar() {
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isTogglingPin, setIsTogglingPin] = useState(false);
+  const pins = useOptimisticRows<ChatListItem>();
 
   const { mutate } = useSWRConfig();
 
@@ -212,7 +213,7 @@ export function AppSidebar() {
   const workspaces = [...(data?.results ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const chats = shownChatList?.data.results ?? [];
+  const chats = pins.apply(shownChatList?.data.results ?? []);
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
   // Separate pinned chats from regular chats
@@ -316,28 +317,18 @@ export function AppSidebar() {
     }
   };
 
-  const handleTogglePin = async (chatId: string) => {
-    const currentChat = chats.find((chat) => chat.id === chatId);
-    if (!currentChat) return;
+  const handleTogglePin = (chat: ChatListItem) =>
+    void pins.run(
+      chat.id,
+      { isPinned: !chat.isPinned },
+      () =>
+        writeEntity(backendUrl, "chat", scope, {
+          id: chat.id,
+          data: { isPinned: !chat.isPinned },
+        }),
+      revalidateChatList,
+    );
 
-    setIsTogglingPin(true);
-    try {
-      const outcome = await writeEntity(backendUrl, "chat", scope, {
-        id: chatId,
-        data: { isPinned: !currentChat.isPinned },
-      });
-
-      if (outcome.outcome !== "success") {
-        toast.error(outcome.message);
-        return;
-      }
-
-      // Revalidate the chat list
-      await revalidateChatList();
-    } finally {
-      setIsTogglingPin(false);
-    }
-  };
 
   return (
     <>
@@ -544,10 +535,8 @@ export function AppSidebar() {
                                     <>
                                       <DropdownMenuItem
                                         className="cursor-pointer"
-                                        onSelect={() =>
-                                          handleTogglePin(chat.id)
-                                        }
-                                        disabled={isTogglingPin}
+                                        onSelect={() => handleTogglePin(chat)}
+                                        disabled={pins.isPending(chat.id)}
                                       >
                                         {chat.isPinned ? (
                                           <>
