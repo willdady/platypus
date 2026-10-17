@@ -172,7 +172,9 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                             onSelect: () => setAgentToManage(agent),
                           },
                         ]}
-                        remove={{ onSelect: () => deleteGuard.request(agent) }}
+                        remove={{
+                          onSelect: () => void deleteGuard.request(agent),
+                        }}
                       />
                     </ItemActions>
                   )}

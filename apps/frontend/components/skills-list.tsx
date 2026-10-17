@@ -474,7 +474,7 @@ export const SkillsList = ({
                                 : []),
                             ]}
                             remove={{
-                              onSelect: () => handleDeleteClick(skill),
+                              onSelect: () => void handleDeleteClick(skill),
                             }}
                           />
                         </ItemActions>
