@@ -28,7 +28,7 @@ const member = {
 
 const onSuccess = vi.fn();
 
-const changeRoleToAdmin = async () => {
+const renderDialog = () =>
   render(
     <MemberEditDialog
       orgId="org1"
@@ -38,6 +38,9 @@ const changeRoleToAdmin = async () => {
       onSuccess={onSuccess}
     />,
   );
+
+const changeRoleToAdmin = async () => {
+  renderDialog();
   await selectOption(
     screen.getByRole("combobox", { name: "Organization Role" }),
     "Admin",
@@ -53,15 +56,7 @@ beforeEach(() => {
 describe("MemberEditDialog", () => {
   // Saving the role the member already has would be a no-op write.
   it("keeps Save disabled until the role changes", () => {
-    render(
-      <MemberEditDialog
-        orgId="org1"
-        member={member}
-        open
-        onOpenChange={() => {}}
-        onSuccess={onSuccess}
-      />,
-    );
+    renderDialog();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
@@ -79,16 +74,14 @@ describe("MemberEditDialog", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Member role updated");
   });
 
-  // No field renders a server error, so the backend's reason (last admin,
-  // self-demotion) has to reach the reader as a toast.
+  // No field renders a server error, so the backend's refusal has to reach
+  // the reader as a toast.
   it("toasts the backend's message on a refusal and stays open", async () => {
-    stubRejectedSave("Cannot demote the last organization admin", 400);
+    stubRejectedSave("Member not found", 400);
     await changeRoleToAdmin();
 
     await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith(
-        "Cannot demote the last organization admin",
-      ),
+      expect(toastError).toHaveBeenCalledWith("Member not found"),
     );
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();

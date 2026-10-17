@@ -175,32 +175,30 @@ describe("ChatSettingsDialog", () => {
 });
 
 describe("ChatSettingsDialog inputs", () => {
+  const numberFields = [
+    ["Temperature", "temperature", "0.7", 0.7],
+    ["Seed", "seed", "42", 42],
+    ["Top-p", "topP", "0.9", 0.9],
+    ["Top-k", "topK", "40", 40],
+    ["Presence Penalty", "presencePenalty", "0.5", 0.5],
+    ["Frequency Penalty", "frequencyPenalty", "-0.5", -0.5],
+  ] as const;
+
   // Each setting reaches the Chat as a number of the kind the schema expects:
   // floats for the continuous ones, whole numbers for the counts.
-  it.each([
-    ["Temperature", "0.7", { temperature: 0.7 }],
-    ["Seed", "42", { seed: 42 }],
-    ["Top-p", "0.9", { topP: 0.9 }],
-    ["Top-k", "40", { topK: 40 }],
-    ["Presence Penalty", "0.5", { presencePenalty: 0.5 }],
-    ["Frequency Penalty", "-0.5", { frequencyPenalty: -0.5 }],
-  ])("forwards a typed %s as a number", (label, value, patch) => {
-    const onChange = renderDialog();
+  it.each(numberFields)(
+    "forwards a typed %s as a number",
+    (label, field, value, parsed) => {
+      const onChange = renderDialog();
 
-    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
-    expect(onChange).toHaveBeenCalledWith(patch);
-  });
+      expect(onChange).toHaveBeenCalledWith({ [field]: parsed });
+    },
+  );
 
   // Emptying a field unsets it, so the Provider's default applies again.
-  it.each([
-    ["Temperature", "temperature"],
-    ["Seed", "seed"],
-    ["Top-p", "topP"],
-    ["Top-k", "topK"],
-    ["Presence Penalty", "presencePenalty"],
-    ["Frequency Penalty", "frequencyPenalty"],
-  ] as const)("clears %s when emptied", (label, field) => {
+  it.each(numberFields)("clears %s when emptied", (label, field) => {
     const onChange = renderDialog({ [field]: 1 });
 
     fireEvent.change(screen.getByLabelText(label), { target: { value: "" } });

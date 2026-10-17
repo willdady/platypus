@@ -41,12 +41,12 @@ const renderMembers = (members: Serialized<OrgMemberListItem>[]) =>
   renderList(
     <MembersList orgId="org1" members={members} onUpdate={onUpdate} />,
   );
+let user: ReturnType<typeof setupUser>;
 const openActionsFor = (name: string) =>
-  setupUser().click(
-    screen.getByRole("button", { name: `Actions for ${name}` }),
-  );
+  user.click(screen.getByRole("button", { name: `Actions for ${name}` }));
 
 beforeEach(() => {
+  user = setupUser();
   resetListHarness();
   onUpdate.mockReset();
   mockScopedSWR({ "/workspaces": [] }, { strict: true });
@@ -83,14 +83,14 @@ describe("MembersList", () => {
     stubAcceptedSave({ id: "m-u-nina", role: "admin" });
     await renderMembers([nina]);
     await openActionsFor("Nina");
-    await setupUser().click(screen.getByText("Edit org role"));
+    await user.click(screen.getByText("Edit org role"));
 
     expect(await screen.findByText("Edit Member Role")).toBeInTheDocument();
     await selectOption(
       screen.getByRole("combobox", { name: "Organization Role" }),
       "Admin",
     );
-    await setupUser().click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onUpdate).toHaveBeenCalled());
     await waitFor(() =>
@@ -101,7 +101,7 @@ describe("MembersList", () => {
   it("opens the remove dialog for the chosen member", async () => {
     await renderMembers([nina]);
     await openActionsFor("Nina");
-    await setupUser().click(screen.getByText("Remove from Org"));
+    await user.click(screen.getByText("Remove from Org"));
 
     expect(await screen.findByRole("dialog")).toHaveTextContent("Nina");
   });

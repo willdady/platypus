@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -16,12 +16,10 @@ const SETTINGS_ROOT = path.join(
   "app/[orgId]/settings",
 );
 
-const layouts = (dir: string): string[] =>
-  readdirSync(dir).flatMap((entry) => {
-    const full = path.join(dir, entry);
-    if (statSync(full).isDirectory()) return layouts(full);
-    return entry === "layout.tsx" ? [full] : [];
-  });
+const layouts = (dir: string) =>
+  readdirSync(dir, { recursive: true, encoding: "utf8" })
+    .filter((entry) => path.basename(entry) === "layout.tsx")
+    .map((entry) => path.join(dir, entry));
 
 /** `requireOrgAdmin` bare, or `requireOrgAdmin={true}`. */
 const requiresOrgAdmin = (opening: ts.JsxOpeningLikeElement) =>

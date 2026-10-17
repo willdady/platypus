@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { setupUser } from "@/test/test-utils";
 
@@ -18,10 +18,12 @@ const renderDialog = (
 
 const copyButton = () =>
   screen.getByRole("button", { name: "Copy error details" });
-// lucide tags each icon's svg with its name; the swap has no accessible name.
-const showsCheck = () => copyButton().innerHTML.includes("lucide-check");
+// The icon swap has no accessible name, so compare the button's markup with
+// its resting state rather than lean on lucide's class names.
+const iconMarkup = () => copyButton().innerHTML;
 
 beforeEach(() => copyWithToast.mockReset());
+afterEach(() => vi.useRealTimers());
 
 describe("ChatErrorDialog", () => {
   // The failed turn's reason is what the user needs to act on.
@@ -57,15 +59,14 @@ describe("ChatErrorDialog", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     copyWithToast.mockResolvedValue(true);
     renderDialog();
-    expect(showsCheck()).toBe(false);
+    const resting = iconMarkup();
 
     await setupUser().click(copyButton());
 
     expect(copyWithToast).toHaveBeenCalledWith("Rate limited", false);
-    await waitFor(() => expect(showsCheck()).toBe(true));
+    await waitFor(() => expect(iconMarkup()).not.toBe(resting));
     vi.advanceTimersByTime(2000);
-    await waitFor(() => expect(showsCheck()).toBe(false));
-    vi.useRealTimers();
+    await waitFor(() => expect(iconMarkup()).toBe(resting));
   });
 
   // copyWithToast already reported the failure; the icon must not claim
@@ -73,10 +74,11 @@ describe("ChatErrorDialog", () => {
   it("keeps the copy icon when copying fails", async () => {
     copyWithToast.mockResolvedValue(false);
     renderDialog();
+    const resting = iconMarkup();
 
     await setupUser().click(copyButton());
 
     await waitFor(() => expect(copyWithToast).toHaveBeenCalled());
-    expect(showsCheck()).toBe(false);
+    expect(iconMarkup()).toBe(resting);
   });
 });
