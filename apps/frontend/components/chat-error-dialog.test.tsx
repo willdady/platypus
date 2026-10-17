@@ -8,19 +8,22 @@ vi.mock("@/lib/clipboard", () => ({ copyWithToast }));
 import { ChatErrorDialog } from "./chat-error-dialog";
 
 // Takes the error as a property so an explicit `undefined` isn't defaulted.
-const renderDialog = (
+function renderDialog(
   { error }: { error?: Error } = { error: new Error("Rate limited") },
-) => {
+) {
   const onOpenChange = vi.fn();
   render(<ChatErrorDialog isOpen onOpenChange={onOpenChange} error={error} />);
   return onOpenChange;
-};
+}
 
-const copyButton = () =>
-  screen.getByRole("button", { name: "Copy error details" });
+function copyButton() {
+  return screen.getByRole("button", { name: "Copy error details" });
+}
 // The icon swap has no accessible name, so compare the button's markup with
 // its resting state rather than lean on lucide's class names.
-const iconMarkup = () => copyButton().innerHTML;
+function iconMarkup() {
+  return copyButton().innerHTML;
+}
 
 beforeEach(() => copyWithToast.mockReset());
 afterEach(() => vi.useRealTimers());

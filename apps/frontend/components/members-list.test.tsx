@@ -19,31 +19,36 @@ vi.mock("swr", () => swrMock);
 
 import { MembersList } from "./members-list";
 
-const memberOf = (
+function memberOf(
   id: string,
   name: string,
   extra: Partial<Serialized<OrgMemberListItem>> = {},
-) =>
-  ({
+) {
+  return {
     id: `m-${id}`,
     role: "member",
     user: { id, name, email: `${id}@example.com` },
     isSuperAdmin: false,
     isBanned: false,
     ...extra,
-  }) as unknown as Serialized<OrgMemberListItem>;
+  } as unknown as Serialized<OrgMemberListItem>;
+}
 
 const nina = memberOf("u-nina", "Nina");
 const sam = memberOf("u-sam", "Sam", { role: "admin", isSuperAdmin: true });
 
 const onUpdate = vi.fn();
-const renderMembers = (members: Serialized<OrgMemberListItem>[]) =>
-  renderList(
+function renderMembers(members: Serialized<OrgMemberListItem>[]) {
+  return renderList(
     <MembersList orgId="org1" members={members} onUpdate={onUpdate} />,
   );
+}
 let user: ReturnType<typeof setupUser>;
-const openActionsFor = (name: string) =>
-  user.click(screen.getByRole("button", { name: `Actions for ${name}` }));
+function openActionsFor(name: string) {
+  return user.click(
+    screen.getByRole("button", { name: `Actions for ${name}` }),
+  );
+}
 
 beforeEach(() => {
   user = setupUser();

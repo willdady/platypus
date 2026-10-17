@@ -11,11 +11,13 @@ import { linkSafety } from "@/components/link-safety";
  * the repair pass for half-written syntax, and the copy/download controls on
  * code blocks and tables.
  */
-export const Markdown = (props: ComponentProps<typeof Streamdown>) => (
-  <Streamdown
-    controls={false}
-    mode="static"
-    linkSafety={linkSafety}
-    {...props}
-  />
-);
+export function Markdown(props: ComponentProps<typeof Streamdown>) {
+  return (
+    <Streamdown
+      controls={false}
+      mode="static"
+      linkSafety={linkSafety}
+      {...props}
+    />
+  );
+}

@@ -14,10 +14,10 @@ function readSectionOpen(storageKey: string): boolean {
   }
 }
 
-const subscribeToStorage = (onChange: () => void) => {
+function subscribeToStorage(onChange: () => void) {
   window.addEventListener("storage", onChange);
   return () => window.removeEventListener("storage", onChange);
-};
+}
 
 /**
  * The persisted open state, read during render so a section mounted on the

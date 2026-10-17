@@ -40,7 +40,7 @@ const chunks: UIMessageChunk[] = [
   { type: "finish" },
 ];
 
-const sseResponse = () => {
+function sseResponse() {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -59,7 +59,7 @@ const sseResponse = () => {
       "x-vercel-ai-ui-message-stream": "v1",
     },
   });
-};
+}
 
 const reads: Record<string, unknown> = {
   [`${BASE}/providers`]: { results: [provider] },
