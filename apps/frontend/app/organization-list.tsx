@@ -4,7 +4,8 @@ import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import type { Organization } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { AlertCircle, Building, Loader2, Plus } from "lucide-react";
+import { AlertCircle, Building, Plus } from "lucide-react";
+import { PageSpinner } from "@/components/page-spinner";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -14,14 +15,6 @@ import { useAuth } from "@/components/auth-provider";
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { appRoutes, orgRoutes } from "@/lib/routes";
-
-const Spinner = () => (
-  <Loader2
-    role="status"
-    aria-label="Loading"
-    className="size-8 animate-spin text-muted-foreground"
-  />
-);
 
 export default function Home() {
   const { user, isAuthLoading: isAuthLoadingUser } = useAuth();
@@ -41,11 +34,7 @@ export default function Home() {
   }, [organizations, router]);
 
   if (isAuthLoadingUser || (user && isLoading)) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Spinner />
-      </div>
-    );
+    return <PageSpinner />;
   }
 
   if (error) {
@@ -90,9 +79,5 @@ export default function Home() {
   }
 
   // Show loading while redirecting
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Spinner />
-    </div>
-  );
+  return <PageSpinner />;
 }

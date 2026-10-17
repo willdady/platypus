@@ -11,9 +11,9 @@ import { useEffect, useState } from "react";
 import { EmptyCard } from "@/components/empty-card";
 import { Button } from "@/components/ui/button";
 import { OctagonX, Home, Building } from "lucide-react";
+import { PageSpinner } from "@/components/page-spinner";
 import Link from "next/link";
 import { orgRoutes, signInReturningTo } from "@/lib/routes";
-import { Skeleton } from "@/components/ui/skeleton";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
 
 interface ProtectedRouteProps {
@@ -132,15 +132,7 @@ export function ProtectedRoute({
   // the page up: the `[orgId]` layout stays mounted across a Workspace switch,
   // and swapping it for a skeleton would blank the whole Organization.
   if (isAuthLoading) {
-    return hasSettled ? (
-      <>{children}</>
-    ) : (
-      <Skeleton
-        role="status"
-        aria-label="Loading"
-        className="m-4 h-[calc(100dvh-2rem)] flex-1"
-      />
-    );
+    return hasSettled ? <>{children}</> : <PageSpinner />;
   }
 
   if (!user) {
