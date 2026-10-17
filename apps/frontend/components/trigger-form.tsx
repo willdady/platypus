@@ -6,8 +6,6 @@ import {
   FieldGroup,
   FieldSet,
   FieldDescription,
-  FieldError,
-  FieldTitle,
 } from "@/components/ui/field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
@@ -35,115 +33,40 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useState, useMemo } from "react";
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import { ChevronsUpDown, Plus, RefreshCw, ShieldOff, X } from "lucide-react";
+import { ChevronsUpDown, ShieldOff } from "lucide-react";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { TriggerCronFields } from "@/components/trigger-cron-fields";
 import {
-  InboundTokenDialog,
-  inboundEndpointUrl,
-} from "@/components/inbound-token-dialog";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+  TriggerEventFields,
+  useEventFilterListsLoading,
+} from "@/components/trigger-event-fields";
+import { TriggerInboundFields } from "@/components/trigger-inbound-fields";
 import {
   type Trigger,
   type Agent,
   type Organization,
   type TriggerType,
-  type KanbanBoard,
-  type KanbanBoardState,
   type Workspace,
 } from "@platypus/schemas";
 import {
-  DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
-  eventTriggerEventSchema,
   gateAdmits,
-  INBOUND_TRIGGER_INPUT_DESCRIPTION_MAX_LENGTH,
-  INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH,
-  INBOUND_TRIGGER_MAX_INPUTS,
-  BEARER_TOKEN_EXPIRY_DAYS,
-  inboundTriggerInputNameRegex,
   TRIGGER_INSTRUCTION_MAX_LENGTH,
   TRIGGER_MAX_RUNS_TO_KEEP_MAX,
   TRIGGER_MAX_RUNS_TO_KEEP_MIN,
 } from "@platypus/schemas";
-import { retractFieldError } from "@/lib/form-errors";
-import { Cron } from "croner";
-import { formatDateTime } from "@/lib/format-date";
-import { toast } from "sonner";
+import type { FormErrors } from "@/lib/form-errors";
 import { workspaceRoutes } from "@/lib/routes";
-import {
-  organizationEntity,
-  scopedUrl,
-  workspaceEntity,
-  writeAt,
-} from "@/lib/api-write";
-import { joinUrl } from "@/lib/utils";
-import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
+import { organizationEntity, workspaceEntity } from "@/lib/api-write";
 import { TRIGGER_TYPE_LABELS } from "@/components/trigger-list";
-import { getBrowserTimezone, TIMEZONES } from "@/lib/timezones";
-
-type Frequency =
-  | "every-5-minutes"
-  | "every-10-minutes"
-  | "every-15-minutes"
-  | "every-30-minutes"
-  | "hourly"
-  | "daily"
-  | "weekly"
-  | "monthly";
-
-const DAYS_OF_WEEK = [
-  { value: "0", label: "Sunday" },
-  { value: "1", label: "Monday" },
-  { value: "2", label: "Tuesday" },
-  { value: "3", label: "Wednesday" },
-  { value: "4", label: "Thursday" },
-  { value: "5", label: "Friday" },
-  { value: "6", label: "Saturday" },
-];
-
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
-  value: i.toString(),
-  label: i.toString().padStart(2, "0"),
-}));
-
-const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => ({
-  value: i.toString(),
-  label: i.toString().padStart(2, "0"),
-}));
-
-const DAY_OF_MONTH_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
-  value: (i + 1).toString(),
-  label: (i + 1).toString(),
-}));
-
-// The events an Event Trigger can subscribe to. Webhook-only events
-// (`trigger_run.*`) are not among them.
-const AVAILABLE_EVENTS = eventTriggerEventSchema.options;
-
-// Mirrors the fields kanban.ts's changedCardFields diffs (updatedAt,
-// lastEditedBy*, and position are bookkeeping and never appear there).
-const CHANGED_FIELD_OPTIONS = [
-  { value: "title", label: "Title" },
-  { value: "body", label: "Body" },
-  { value: "labelIds", label: "Labels" },
-  { value: "assignees", label: "Assignees" },
-  { value: "dueDate", label: "Due date" },
-  { value: "priority", label: "Priority" },
-] as const;
 
 const INSTRUCTION_PLACEHOLDERS: Record<TriggerType, string> = {
   cron: "Generate a daily report of...",
@@ -159,219 +82,46 @@ const INSTRUCTION_DESCRIPTIONS: Record<TriggerType, string> = {
     "The message sent to the agent on each call. The call's inputs appear above it with their descriptions, so refer to them by name.",
 };
 
-const buildCronExpression = (
-  frequency: Frequency,
-  minute: string,
-  hour: string,
-  dayOfWeek: string,
-  dayOfMonth: string,
-): string => {
-  switch (frequency) {
-    case "every-5-minutes":
-      return "*/5 * * * *";
-    case "every-10-minutes":
-      return "*/10 * * * *";
-    case "every-15-minutes":
-      return "*/15 * * * *";
-    case "every-30-minutes":
-      return "*/30 * * * *";
-    case "hourly":
-      return `${minute} * * * *`;
-    case "daily":
-      return `${minute} ${hour} * * *`;
-    case "weekly":
-      return `${minute} ${hour} * * ${dayOfWeek}`;
-    case "monthly":
-      return `${minute} ${hour} ${dayOfMonth} * *`;
-    default:
-      return "0 9 * * *";
-  }
-};
-
-const parseCronExpression = (
-  expression: string,
-): {
-  frequency: Frequency;
-  minute: string;
-  hour: string;
-  dayOfWeek: string;
-  dayOfMonth: string;
-} | null => {
-  const parts = expression.trim().split(/\s+/);
-  if (parts.length !== 5) return null;
-
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-
-  if (
-    minute === "*/5" &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      frequency: "every-5-minutes",
-      minute: "0",
-      hour: "0",
-      dayOfWeek: "0",
-      dayOfMonth: "1",
-    };
-  }
-
-  if (
-    minute === "*/10" &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      frequency: "every-10-minutes",
-      minute: "0",
-      hour: "0",
-      dayOfWeek: "0",
-      dayOfMonth: "1",
-    };
-  }
-
-  if (
-    minute === "*/15" &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      frequency: "every-15-minutes",
-      minute: "0",
-      hour: "0",
-      dayOfWeek: "0",
-      dayOfMonth: "1",
-    };
-  }
-
-  if (
-    minute === "*/30" &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      frequency: "every-30-minutes",
-      minute: "0",
-      hour: "0",
-      dayOfWeek: "0",
-      dayOfMonth: "1",
-    };
-  }
-
-  if (
-    /^\d+$/.test(minute) &&
-    /^\d+$/.test(hour) &&
-    /^\d+$/.test(dayOfMonth) &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      frequency: "monthly",
-      minute,
-      hour,
-      dayOfWeek: "0",
-      dayOfMonth,
-    };
-  }
-
-  if (
-    /^\d+$/.test(minute) &&
-    /^\d+$/.test(hour) &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    /^\d+$/.test(dayOfWeek)
-  ) {
-    return {
-      frequency: "weekly",
-      minute,
-      hour,
-      dayOfWeek,
-      dayOfMonth: "1",
-    };
-  }
-
-  if (
-    /^\d+$/.test(minute) &&
-    /^\d+$/.test(hour) &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      frequency: "daily",
-      minute,
-      hour,
-      dayOfWeek: "0",
-      dayOfMonth: "1",
-    };
-  }
-
-  if (
-    /^\d+$/.test(minute) &&
-    hour === "*" &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      frequency: "hourly",
-      minute,
-      hour: "0",
-      dayOfWeek: "0",
-      dayOfMonth: "1",
-    };
-  }
-
-  return null;
-};
-
-/** One declared input as the form edits it; saved as `inputs[]` (ADR-0030). */
-type InboundInputDraft = {
-  name: string;
-  required: boolean;
-  description: string;
-};
-
-/**
- * What stops the declared inputs from saving, if anything. The backend checks
- * the same rules; this only moves the message next to the rows.
- */
-const inboundInputsProblem = (inputs: InboundInputDraft[]): string | null => {
-  const names = inputs.map((input) => input.name.trim());
-  if (names.some((name) => name === "")) return "Every input needs a name.";
-  const bad = names.find((name) => !inboundTriggerInputNameRegex.test(name));
-  if (bad !== undefined) {
-    return `"${bad}" is not a valid input name. Start with a letter or underscore, then use only letters, digits and underscores.`;
-  }
-  const duplicate = names.find((name, i) => names.indexOf(name) !== i);
-  if (duplicate !== undefined) {
-    return `"${duplicate}" is declared more than once.`;
-  }
-  return null;
-};
-
 /** What a save answers: a new Inbound Trigger's carries its token, once. */
-type SavedTrigger = {
+export type SavedTrigger = {
   id: string;
   token?: string;
   tokenExpiresAt?: string | null;
 };
 
-/** A token being shown in the one-time dialog, and where to go after. */
-type ShownToken = {
-  token: string;
-  triggerId: string;
-  expiresAt?: string | null;
-  leaveOnClose: boolean;
+/** What a trigger type's fields contribute to the save. */
+export type TriggerTypeFields = {
+  type: TriggerType;
+  /** The payload's `config`. */
+  config: unknown;
+  /** Whether the fields let the trigger save. */
+  valid: boolean;
+  /**
+   * Takes over once the save lands, e.g. to show a new token before leaving.
+   * Returns true when it did, so the form doesn't navigate away itself.
+   */
+  onSaved?: (saved: SavedTrigger) => boolean;
 };
+
+/** The props every trigger type's fields component takes. */
+export type TriggerFieldsProps = {
+  /** The saved trigger being edited; absent when creating. */
+  trigger?: Trigger;
+  scope: { orgId: string; workspaceId: string };
+  disabled: boolean;
+  errors: FormErrors;
+  clearErrors: (...ids: string[]) => void;
+  /** Called with the fields' slice of the save whenever it changes. */
+  onChange: (fields: TriggerTypeFields) => void;
+  /** Revalidates the saved trigger. */
+  mutateRecord: () => Promise<unknown>;
+};
+
+const TRIGGER_TYPE_FIELDS = {
+  cron: TriggerCronFields,
+  event: TriggerEventFields,
+  inbound: TriggerInboundFields,
+} satisfies Record<TriggerType, React.ComponentType<TriggerFieldsProps>>;
 
 // isOneOff, maxRunsToKeep, search, includeMemories,
 // filterBoardId/filterColumnId, and enabled are deliberately excluded: this
@@ -391,9 +141,6 @@ type TriggerFormData = {
   description: string;
   agentId: string;
   instruction: string;
-  cronExpression: string;
-  timezone: string;
-  isOneOff: boolean;
   enabled: boolean;
   maxRunsToKeep: number;
   search: boolean;
@@ -452,29 +199,9 @@ const TriggerForm = ({
   // can never overwrite the user's pick.
   const defaultAgentId = triggerId ? "" : (agents[0]?.id ?? "");
 
-  const { data: boardsData, isLoading: boardsLoading } = useScopedSWR<{
-    results: KanbanBoard[];
-  }>("boards", scope);
-  const boards = boardsData?.results || [];
-
   const [triggerType, setTriggerType] = useState<TriggerType>("cron");
-  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
-  const [filterBoardId, setFilterBoardId] = useState<string>("");
-  const [filterColumnId, setFilterColumnId] = useState<string>("");
-  const [timezoneTouched, setTimezoneTouched] = useState(false);
-  const [filterChangedFields, setFilterChangedFields] = useState<string[]>([]);
-  const [inboundInputs, setInboundInputs] = useState<InboundInputDraft[]>([]);
-  const [recordKey, setRecordKey] = useState<string>("");
-  const [tokenExpiryDays, setTokenExpiryDays] = useState<number>(
-    DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
-  );
-  const [shownToken, setShownToken] = useState<ShownToken | null>(null);
-  const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
-  const backendUrl = useBackendUrl();
-  const { user } = useAuth();
-  // A new Trigger's zone: the User timezone, else the browser's, else UTC
-  const defaultTimezone = user?.timezone ?? getBrowserTimezone();
+  // The selected type's slice of the save, as its fields last reported it.
+  const [typeFields, setTypeFields] = useState<TriggerTypeFields | null>(null);
 
   // Whether the Organization gate lets this Workspace take calls, so an Owner
   // is told before they wire up a caller that would only ever get 404.
@@ -487,39 +214,7 @@ const TriggerForm = ({
     { orgId },
   );
 
-  const { data: boardStateData, isLoading: boardStateLoading } =
-    useScopedSWR<KanbanBoardState>(
-      `boards/${filterBoardId}/state`,
-      filterBoardId ? scope : null,
-    );
-  const columns = boardStateData?.columns || [];
-
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
-  const [scheduleMode, setScheduleMode] = useState<"simple" | "advanced">(
-    "simple",
-  );
-  const [simpleSchedule, setSimpleSchedule] = useState<{
-    frequency: Frequency;
-    minute: string;
-    hour: string;
-    dayOfWeek: string;
-    dayOfMonth: string;
-  }>({
-    frequency: "daily",
-    minute: "0",
-    hour: "9",
-    dayOfWeek: "1",
-    dayOfMonth: "1",
-  });
-
-  const requiredInputNames = inboundInputs
-    .filter((input) => input.required && input.name.trim())
-    .map((input) => input.name.trim());
-  // The record key names an input, so renaming, removing or un-requiring that
-  // input unmarks it rather than saving a key that names nothing.
-  const effectiveRecordKey = requiredInputNames.includes(recordKey)
-    ? recordKey
-    : "";
 
   const router = useRouter();
 
@@ -530,13 +225,13 @@ const TriggerForm = ({
     formData,
     setFormData,
     validationErrors,
-    setValidationErrors,
     isSubmitting,
     canSubmit,
     handleChange,
     toFieldChange,
     setNumberField,
     setField,
+    clearErrors,
     submit,
   } = useEntityForm<TriggerFormData, SavedTrigger, Trigger>({
     initialData: {
@@ -544,9 +239,6 @@ const TriggerForm = ({
       description: "",
       agentId: "",
       instruction: "",
-      cronExpression: "0 9 * * *",
-      timezone: defaultTimezone,
-      isOneOff: false,
       enabled: true,
       maxRunsToKeep: 10,
       search: false,
@@ -560,132 +252,34 @@ const TriggerForm = ({
       description: trigger.description || "",
       agentId: trigger.agentId,
       instruction: trigger.instruction,
-      cronExpression:
-        trigger.type === "cron" ? trigger.config.cronExpression : "0 9 * * *",
-      timezone:
-        trigger.type === "cron" ? trigger.config.timezone : defaultTimezone,
-      isOneOff: trigger.type === "cron" ? trigger.config.isOneOff : false,
       enabled: trigger.enabled,
       maxRunsToKeep: trigger.maxRunsToKeep,
       search: trigger.search ?? false,
       includeMemories: trigger.includeMemories ?? false,
     }),
-    onSeed: (trigger) => {
-      setTriggerType(trigger.type);
-      if (trigger.type === "cron") {
-        const parsed = parseCronExpression(trigger.config.cronExpression);
-        if (parsed) {
-          setSimpleSchedule(parsed);
-          setScheduleMode("simple");
-        } else {
-          setScheduleMode("advanced");
-        }
-      } else if (trigger.type === "event") {
-        const { events, filters } = trigger.config;
-        setSelectedEvents(events);
-        setFilterBoardId(filters?.boardId || "");
-        setFilterColumnId(filters?.columnId || "");
-        setFilterChangedFields(filters?.changedFields || []);
-      } else if (trigger.type === "inbound") {
-        const inboundConfig = trigger.config;
-        setInboundInputs(
-          inboundConfig.inputs.map((input) => ({
-            name: input.name,
-            required: input.required,
-            description: input.description ?? "",
-          })),
-        );
-        setRecordKey(inboundConfig.recordKey ?? "");
-        setTokenExpiryDays(inboundConfig.tokenExpiryDays);
-      }
-    },
+    onSeed: (trigger) => setTriggerType(trigger.type),
     retractableFields: RETRACTABLE_FIELDS,
-    buildPayload: (data): unknown => {
-      const commonFields = {
-        workspaceId,
-        agentId: data.agentId || defaultAgentId,
-        name: data.name,
-        description: data.description || undefined,
-        instruction: data.instruction,
-        enabled: data.enabled,
-        maxRunsToKeep: data.maxRunsToKeep,
-        search: data.search,
-        includeMemories: data.includeMemories,
-      };
-
-      if (triggerType === "inbound") {
-        return {
-          ...commonFields,
-          type: "inbound" as const,
-          config: {
-            inputs: inboundInputs.map((input) => ({
-              name: input.name.trim(),
-              required: input.required,
-              ...(input.description.trim()
-                ? { description: input.description.trim() }
-                : {}),
-            })),
-            ...(effectiveRecordKey ? { recordKey: effectiveRecordKey } : {}),
-            tokenExpiryDays,
-          },
-        };
-      }
-
-      return triggerType === "cron"
-        ? {
-            ...commonFields,
-            type: "cron" as const,
-            config: {
-              cronExpression: effectiveCronExpression,
-              timezone: data.timezone,
-              isOneOff: data.isOneOff,
-            },
-          }
-        : {
-            ...commonFields,
-            type: "event" as const,
-            config: {
-              events: selectedEvents,
-              ...(filterBoardId || filterChangedFields.length > 0
-                ? {
-                    filters: {
-                      ...(filterBoardId ? { boardId: filterBoardId } : {}),
-                      ...(filterBoardId && filterColumnId
-                        ? { columnId: filterColumnId }
-                        : {}),
-                      ...(filterChangedFields.length > 0
-                        ? { changedFields: filterChangedFields }
-                        : {}),
-                    },
-                  }
-                : {}),
-            },
-          };
-    },
+    buildPayload: (data): unknown => ({
+      workspaceId,
+      agentId: data.agentId || defaultAgentId,
+      name: data.name,
+      description: data.description || undefined,
+      instruction: data.instruction,
+      enabled: data.enabled,
+      maxRunsToKeep: data.maxRunsToKeep,
+      search: data.search,
+      includeMemories: data.includeMemories,
+      type: triggerType,
+      config: typeFields?.config,
+    }),
     onSuccess: (saved) => {
-      // A new Inbound Trigger's token is in this response and never again, so
-      // it is shown before leaving the page.
-      if (saved?.token) {
-        setShownToken({
-          token: saved.token,
-          triggerId: saved.id,
-          expiresAt: saved.tokenExpiresAt,
-          leaveOnClose: true,
-        });
-        return;
-      }
+      if (typeFields?.onSaved?.(saved)) return;
       router.push(workspaceRoutes(orgId, workspaceId).root);
     },
     failureMessage: "Error saving trigger",
   });
 
-  // On a cold load the session lands after mount: move a new Trigger onto the
-  // User timezone once it arrives, unless the User has already picked a zone.
-  useResetOnChange(user?.timezone, () => {
-    const timezone = user?.timezone;
-    if (triggerId || !timezone || timezoneTouched) return;
-    setFormData((prev) => ({ ...prev, timezone }));
-  });
+  const filterListsLoading = useEventFilterListsLoading(trigger, scope);
 
   const {
     isDeleteDialogOpen,
@@ -701,45 +295,11 @@ const TriggerForm = ({
     onSuccess: () => router.push(workspaceRoutes(orgId, workspaceId).root),
   });
 
-  const effectiveCronExpression =
-    scheduleMode === "simple"
-      ? buildCronExpression(
-          simpleSchedule.frequency,
-          simpleSchedule.minute,
-          simpleSchedule.hour,
-          simpleSchedule.dayOfWeek,
-          simpleSchedule.dayOfMonth,
-        )
-      : formData.cronExpression;
+  // Until the selected type's fields report, there is nothing to save.
+  const typeFieldsValid = typeFields?.type === triggerType && typeFields.valid;
 
-  const { isCronValid, nextRunPreview } = useMemo(() => {
-    if (triggerType !== "cron")
-      return { isCronValid: true, nextRunPreview: null };
-    try {
-      const cron = new Cron(effectiveCronExpression, {
-        timezone: formData.timezone,
-      });
-      const next = cron.nextRun();
-      return {
-        isCronValid: true,
-        nextRunPreview: next ? formatDateTime(next) : null,
-      };
-    } catch {
-      return { isCronValid: false, nextRunPreview: null };
-    }
-  }, [triggerType, effectiveCronExpression, formData.timezone]);
-
-  const inputsProblem =
-    triggerType === "inbound" ? inboundInputsProblem(inboundInputs) : null;
-  const inboundConfigErrors = Object.entries(validationErrors)
-    .filter(([key]) => key === "config" || key.startsWith("config."))
-    .map(([, message]) => message);
-
-  const tokenStatus = trigger?.tokenStatus ?? "none";
   // A fired One-off can be renamed or deleted, never re-armed.
-  const fired = !!trigger?.firedAt;
-  const scheduleLocked = isSubmitting || fired;
-  const hasToken = tokenStatus !== "none";
+  const scheduleLocked = isSubmitting || !!trigger?.firedAt;
   // Only once everything the answer depends on has loaded: under `selected`
   // that includes the Workspace's own flag, and a Workspace still loading (or
   // failed to load) is unknown, not disallowed.
@@ -754,73 +314,7 @@ const TriggerForm = ({
 
   const inboundBlocked = triggerType === "inbound" && gateClosed;
 
-  const updateInboundInputs = (
-    update: (prev: InboundInputDraft[]) => InboundInputDraft[],
-  ) => {
-    setValidationErrors((prev) => retractFieldError(prev, "config"));
-    setInboundInputs(update);
-  };
-
-  const updateInboundInput = (
-    index: number,
-    patch: Partial<InboundInputDraft>,
-  ) =>
-    updateInboundInputs((prev) =>
-      prev.map((input, i) => (i === index ? { ...input, ...patch } : input)),
-    );
-
-  const handleRegenerateToken = async () => {
-    if (!backendUrl || !triggerId) return;
-    setIsRegenerating(true);
-    const outcome = await writeAt<{ token: string; tokenExpiresAt: string }>(
-      joinUrl(scopedUrl(backendUrl, "triggers", scope), `/${triggerId}/token`),
-      { method: "POST" },
-    );
-    if (outcome.outcome === "success") {
-      setShownToken({
-        token: outcome.data.token,
-        triggerId,
-        expiresAt: outcome.data.tokenExpiresAt,
-        leaveOnClose: false,
-      });
-      await mutateRecord();
-    } else {
-      toast.error(outcome.message);
-    }
-    setIsRegenerateDialogOpen(false);
-    setIsRegenerating(false);
-  };
-
-  const closeTokenDialog = () => {
-    const leave = shownToken?.leaveOnClose;
-    setShownToken(null);
-    if (leave) router.push(workspaceRoutes(orgId, workspaceId).root);
-  };
-
-  const handleEventToggle = (event: string) => {
-    setValidationErrors((prev) => retractFieldError(prev, "config"));
-    setSelectedEvents((prev) => {
-      const next = prev.includes(event)
-        ? prev.filter((e) => e !== event)
-        : [...prev, event];
-      // Clear board and column filters if no card events remain
-      if (!next.some((e) => e.startsWith("card."))) {
-        setFilterBoardId("");
-        setFilterColumnId("");
-      }
-      // The changed-fields filter only makes sense against card.updated
-      if (!next.includes("card.updated")) {
-        setFilterChangedFields([]);
-      }
-      return next;
-    });
-  };
-
-  const handleChangedFieldToggle = (field: string) => {
-    setFilterChangedFields((prev) =>
-      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
-    );
-  };
+  const TypeFields = TRIGGER_TYPE_FIELDS[triggerType];
 
   const form = (
     <div>
@@ -918,661 +412,15 @@ const TriggerForm = ({
                 </FieldDescription>
               </Field>
 
-              {/* Cron-specific fields */}
-              {triggerType === "cron" && (
-                <>
-                  {fired && (
-                    <p className="text-sm text-muted-foreground">
-                      This One-off Trigger has fired, so its schedule can&apos;t
-                      change and it can&apos;t be enabled again. Create a new
-                      Trigger to run it again.
-                    </p>
-                  )}
-                  {/* Schedule Mode Toggle */}
-                  <Field aria-labelledby="trigger-schedule-mode-label">
-                    <FieldTitle id="trigger-schedule-mode-label">
-                      Schedule Mode
-                    </FieldTitle>
-                    <ButtonGroup>
-                      <Button
-                        type="button"
-                        variant={
-                          scheduleMode === "simple" ? "default" : "outline"
-                        }
-                        onClick={() => setScheduleMode("simple")}
-                        disabled={scheduleLocked}
-                        className="cursor-pointer"
-                      >
-                        Simple
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={
-                          scheduleMode === "advanced" ? "default" : "outline"
-                        }
-                        onClick={() => {
-                          setScheduleMode("advanced");
-                          setFormData((prev) => ({
-                            ...prev,
-                            cronExpression: effectiveCronExpression,
-                          }));
-                        }}
-                        disabled={scheduleLocked}
-                        className="cursor-pointer"
-                      >
-                        Advanced
-                      </Button>
-                    </ButtonGroup>
-                  </Field>
-
-                  {/* Simple Mode Fields */}
-                  {scheduleMode === "simple" && (
-                    <>
-                      <Field>
-                        <FieldLabel htmlFor="trigger-frequency">
-                          Frequency
-                        </FieldLabel>
-                        <Select
-                          value={simpleSchedule.frequency}
-                          onValueChange={(value) =>
-                            setSimpleSchedule((prev) => ({
-                              ...prev,
-                              frequency: value as Frequency,
-                            }))
-                          }
-                          disabled={scheduleLocked}
-                        >
-                          <SelectTrigger
-                            id="trigger-frequency"
-                            disabled={scheduleLocked}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              <SelectItem value="every-5-minutes">
-                                Every 5 minutes
-                              </SelectItem>
-                              <SelectItem value="every-10-minutes">
-                                Every 10 minutes
-                              </SelectItem>
-                              <SelectItem value="every-15-minutes">
-                                Every 15 minutes
-                              </SelectItem>
-                              <SelectItem value="every-30-minutes">
-                                Every 30 minutes
-                              </SelectItem>
-                              <SelectItem value="hourly">Hourly</SelectItem>
-                              <SelectItem value="daily">Daily</SelectItem>
-                              <SelectItem value="weekly">Weekly</SelectItem>
-                              <SelectItem value="monthly">Monthly</SelectItem>
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </Field>
-
-                      {simpleSchedule.frequency !== "every-5-minutes" &&
-                        simpleSchedule.frequency !== "every-10-minutes" &&
-                        simpleSchedule.frequency !== "every-15-minutes" &&
-                        simpleSchedule.frequency !== "every-30-minutes" && (
-                          <div className="flex gap-4">
-                            {simpleSchedule.frequency !== "hourly" && (
-                              <Field className="flex-1">
-                                <FieldLabel htmlFor="trigger-hour">
-                                  Hour
-                                </FieldLabel>
-                                <Select
-                                  value={simpleSchedule.hour}
-                                  onValueChange={(value) =>
-                                    setSimpleSchedule((prev) => ({
-                                      ...prev,
-                                      hour: value,
-                                    }))
-                                  }
-                                  disabled={scheduleLocked}
-                                >
-                                  <SelectTrigger
-                                    id="trigger-hour"
-                                    disabled={scheduleLocked}
-                                  >
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectGroup>
-                                      {HOUR_OPTIONS.map((opt) => (
-                                        <SelectItem
-                                          key={opt.value}
-                                          value={opt.value}
-                                        >
-                                          {opt.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectGroup>
-                                  </SelectContent>
-                                </Select>
-                              </Field>
-                            )}
-
-                            <Field className="flex-1">
-                              <FieldLabel htmlFor="trigger-minute">
-                                Minute
-                              </FieldLabel>
-                              <Select
-                                value={simpleSchedule.minute}
-                                onValueChange={(value) =>
-                                  setSimpleSchedule((prev) => ({
-                                    ...prev,
-                                    minute: value,
-                                  }))
-                                }
-                                disabled={scheduleLocked}
-                              >
-                                <SelectTrigger
-                                  id="trigger-minute"
-                                  disabled={scheduleLocked}
-                                >
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectGroup>
-                                    {MINUTE_OPTIONS.map((opt) => (
-                                      <SelectItem
-                                        key={opt.value}
-                                        value={opt.value}
-                                      >
-                                        {opt.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                </SelectContent>
-                              </Select>
-                            </Field>
-                          </div>
-                        )}
-
-                      {simpleSchedule.frequency === "weekly" && (
-                        <Field>
-                          <FieldLabel htmlFor="trigger-day-of-week">
-                            Day of Week
-                          </FieldLabel>
-                          <Select
-                            value={simpleSchedule.dayOfWeek}
-                            onValueChange={(value) =>
-                              setSimpleSchedule((prev) => ({
-                                ...prev,
-                                dayOfWeek: value,
-                              }))
-                            }
-                            disabled={scheduleLocked}
-                          >
-                            <SelectTrigger
-                              id="trigger-day-of-week"
-                              disabled={scheduleLocked}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectGroup>
-                                {DAYS_OF_WEEK.map((day) => (
-                                  <SelectItem key={day.value} value={day.value}>
-                                    {day.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-                      )}
-
-                      {simpleSchedule.frequency === "monthly" && (
-                        <Field>
-                          <FieldLabel htmlFor="trigger-day-of-month">
-                            Day of Month
-                          </FieldLabel>
-                          <Select
-                            value={simpleSchedule.dayOfMonth}
-                            onValueChange={(value) =>
-                              setSimpleSchedule((prev) => ({
-                                ...prev,
-                                dayOfMonth: value,
-                              }))
-                            }
-                            disabled={scheduleLocked}
-                          >
-                            <SelectTrigger
-                              id="trigger-day-of-month"
-                              disabled={scheduleLocked}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectGroup>
-                                {DAY_OF_MONTH_OPTIONS.map((opt) => (
-                                  <SelectItem key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-                      )}
-                    </>
-                  )}
-
-                  {/* Advanced Mode */}
-                  {scheduleMode === "advanced" && (
-                    <FormTextField
-                      label="Cron Expression"
-                      name="cronExpression"
-                      placeholder="0 9 * * *"
-                      value={formData.cronExpression}
-                      onChange={toFieldChange("cronExpression")}
-                      disabled={scheduleLocked}
-                      inputClassName={!isCronValid ? "border-destructive" : ""}
-                      error={
-                        validationErrors.cronExpression ||
-                        (!isCronValid ? "Invalid cron expression" : undefined)
-                      }
-                      description={
-                        <>
-                          Format: minute hour day-of-month month day-of-week.
-                          Example: &quot;0 9 * * *&quot; runs daily at 9:00 AM.
-                        </>
-                      }
-                    />
-                  )}
-
-                  <FormSelectField
-                    label="Timezone"
-                    name="timezone"
-                    value={formData.timezone}
-                    onValueChange={(value) => {
-                      setTimezoneTouched(true);
-                      setField("timezone", value);
-                    }}
-                    disabled={scheduleLocked}
-                    placeholder="Select timezone"
-                    error={validationErrors.timezone}
-                  >
-                    <SelectGroup>
-                      {TIMEZONES.map((tz) => (
-                        <SelectItem key={tz} value={tz}>
-                          {tz}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </FormSelectField>
-
-                  {nextRunPreview && isCronValid && (
-                    <Field>
-                      <FieldTitle>Next Run Preview</FieldTitle>
-                      <div className="text-sm text-muted-foreground p-2 bg-muted rounded-md">
-                        {nextRunPreview}
-                      </div>
-                    </Field>
-                  )}
-
-                  <Field orientation="horizontal">
-                    <Switch
-                      id="isOneOff"
-                      className="cursor-pointer"
-                      checked={formData.isOneOff}
-                      onCheckedChange={(checked) =>
-                        setFormData((prev) => ({ ...prev, isOneOff: checked }))
-                      }
-                      disabled={scheduleLocked}
-                    />
-                    <FieldLabel
-                      htmlFor="isOneOff"
-                      className="flex-col items-stretch gap-0"
-                    >
-                      <p>One-off Trigger</p>
-                      <p className="text-xs text-muted-foreground">
-                        Run once and then disable
-                      </p>
-                    </FieldLabel>
-                  </Field>
-                </>
-              )}
-
-              {/* Event-specific fields */}
-              {triggerType === "event" && (
-                <Field aria-labelledby="trigger-events-label">
-                  <FieldTitle id="trigger-events-label">Events</FieldTitle>
-                  <FieldDescription>
-                    Select the events that will trigger this agent.
-                  </FieldDescription>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                    {AVAILABLE_EVENTS.map((event) => (
-                      <Field key={event} orientation="horizontal">
-                        <Switch
-                          id={`event-${event}`}
-                          className="cursor-pointer"
-                          checked={selectedEvents.includes(event)}
-                          onCheckedChange={() => handleEventToggle(event)}
-                          disabled={isSubmitting}
-                        />
-                        <FieldLabel htmlFor={`event-${event}`}>
-                          {event}
-                        </FieldLabel>
-                      </Field>
-                    ))}
-                  </div>
-                  {validationErrors.config && (
-                    <FieldError>{validationErrors.config}</FieldError>
-                  )}
-                </Field>
-              )}
-
-              {/* Board and column filters for card events */}
-              {triggerType === "event" &&
-                selectedEvents.some((e) => e.startsWith("card.")) && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field>
-                      <FieldLabel htmlFor="trigger-filter-board">
-                        Only cards in this Board
-                      </FieldLabel>
-                      <Select
-                        value={filterBoardId || "__all__"}
-                        onValueChange={(value) => {
-                          setFilterBoardId(value === "__all__" ? "" : value);
-                          setFilterColumnId("");
-                        }}
-                        disabled={isSubmitting}
-                      >
-                        <SelectTrigger
-                          id="trigger-filter-board"
-                          disabled={isSubmitting}
-                        >
-                          <SelectValue placeholder="All boards" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__all__">All boards</SelectItem>
-                          {boards.map((board) => (
-                            <SelectItem key={board.id} value={board.id}>
-                              {board.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    {filterBoardId && (
-                      <Field>
-                        <FieldLabel htmlFor="trigger-filter-column">
-                          Only cards in this Column
-                        </FieldLabel>
-                        <Select
-                          value={filterColumnId || "__all__"}
-                          onValueChange={(value) =>
-                            setFilterColumnId(value === "__all__" ? "" : value)
-                          }
-                          disabled={isSubmitting}
-                        >
-                          <SelectTrigger
-                            id="trigger-filter-column"
-                            disabled={isSubmitting}
-                          >
-                            <SelectValue placeholder="All columns" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__all__">All columns</SelectItem>
-                            {columns.map((col) => (
-                              <SelectItem key={col.id} value={col.id}>
-                                {col.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Field>
-                    )}
-                  </div>
-                )}
-
-              {/* Changed-fields filter — only meaningful against card.updated */}
-              {triggerType === "event" &&
-                selectedEvents.includes("card.updated") && (
-                  <Field aria-labelledby="trigger-changed-fields-label">
-                    <FieldTitle id="trigger-changed-fields-label">
-                      Only when these fields change (card.updated)
-                    </FieldTitle>
-                    <FieldDescription>
-                      Only fire on a card update when one of these fields
-                      actually changed. Leave all off to fire on any change.
-                      Other selected events are unaffected — to fire on a column
-                      change, select card.moved.
-                    </FieldDescription>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
-                      {CHANGED_FIELD_OPTIONS.map((field) => (
-                        <Field key={field.value} orientation="horizontal">
-                          <Switch
-                            id={`changed-field-${field.value}`}
-                            className="cursor-pointer"
-                            checked={filterChangedFields.includes(field.value)}
-                            onCheckedChange={() =>
-                              handleChangedFieldToggle(field.value)
-                            }
-                            disabled={isSubmitting}
-                          />
-                          <FieldLabel htmlFor={`changed-field-${field.value}`}>
-                            {field.label}
-                          </FieldLabel>
-                        </Field>
-                      ))}
-                    </div>
-                  </Field>
-                )}
-
-              {/* Inbound-specific fields (ADR-0030) */}
-              {triggerType === "inbound" && (
-                <>
-                  <Field
-                    aria-labelledby="trigger-inputs-label"
-                    data-invalid={inboundConfigErrors.length > 0}
-                  >
-                    <FieldTitle id="trigger-inputs-label">Inputs</FieldTitle>
-                    <FieldDescription>
-                      The values a caller sends as{" "}
-                      <code>{`{ "inputs": { ... } }`}</code>. Every value is a
-                      string. A call with a missing required input, an
-                      undeclared one, or a value that isn&apos;t a string is
-                      refused.
-                    </FieldDescription>
-                    <div className="flex flex-col gap-3 mt-2">
-                      {inboundInputs.map((input, index) => (
-                        <div
-                          key={index}
-                          className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-start"
-                        >
-                          <Input
-                            aria-label={`Input ${index + 1} name`}
-                            placeholder="issueKey"
-                            className="font-mono sm:w-44"
-                            value={input.name}
-                            maxLength={INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH}
-                            onChange={(e) =>
-                              updateInboundInput(index, {
-                                name: e.target.value,
-                              })
-                            }
-                            disabled={isSubmitting}
-                          />
-                          <Input
-                            aria-label={`Input ${index + 1} description`}
-                            placeholder="What the agent should know about it"
-                            className="flex-1"
-                            value={input.description}
-                            maxLength={
-                              INBOUND_TRIGGER_INPUT_DESCRIPTION_MAX_LENGTH
-                            }
-                            onChange={(e) =>
-                              updateInboundInput(index, {
-                                description: e.target.value,
-                              })
-                            }
-                            disabled={isSubmitting}
-                          />
-                          <div className="flex items-center justify-between gap-3 sm:h-9">
-                            <Field orientation="horizontal" className="w-auto">
-                              <Switch
-                                id={`input-${index}-required`}
-                                className="cursor-pointer"
-                                checked={input.required}
-                                onCheckedChange={(checked) =>
-                                  updateInboundInput(index, {
-                                    required: checked,
-                                  })
-                                }
-                                disabled={isSubmitting}
-                              />
-                              <FieldLabel htmlFor={`input-${index}-required`}>
-                                Required
-                              </FieldLabel>
-                            </Field>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="cursor-pointer shrink-0"
-                              aria-label={`Remove input ${index + 1}`}
-                              onClick={() =>
-                                updateInboundInputs((prev) =>
-                                  prev.filter((_, i) => i !== index),
-                                )
-                              }
-                              disabled={isSubmitting}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                      <div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="cursor-pointer"
-                          onClick={() =>
-                            updateInboundInputs((prev) => [
-                              ...prev,
-                              { name: "", required: true, description: "" },
-                            ])
-                          }
-                          disabled={
-                            isSubmitting ||
-                            inboundInputs.length >= INBOUND_TRIGGER_MAX_INPUTS
-                          }
-                        >
-                          <Plus className="h-4 w-4" /> Add input
-                        </Button>
-                      </div>
-                    </div>
-                    {inputsProblem && <FieldError>{inputsProblem}</FieldError>}
-                    {inboundConfigErrors.map((message) => (
-                      <FieldError key={message}>{message}</FieldError>
-                    ))}
-                  </Field>
-
-                  <FormSelectField
-                    label="Record key"
-                    name="recordKey"
-                    value={effectiveRecordKey || "__none__"}
-                    onValueChange={(value) =>
-                      setRecordKey(value === "__none__" ? "" : value)
-                    }
-                    disabled={isSubmitting}
-                    description="The required input that says which record a call is about, such as an issue key. Only one run per record is active at a time, and the run-rate limit counts each record separately. With none, the limit counts the whole trigger. Marking one is the expected setup."
-                  >
-                    <SelectItem value="__none__">None</SelectItem>
-                    {requiredInputNames.map((name) => (
-                      <SelectItem key={name} value={name}>
-                        {name}
-                      </SelectItem>
-                    ))}
-                  </FormSelectField>
-
-                  <FormSelectField
-                    label="Token lifetime"
-                    name="tokenExpiryDays"
-                    value={String(tokenExpiryDays)}
-                    onValueChange={(value) => setTokenExpiryDays(Number(value))}
-                    disabled={isSubmitting}
-                    description={
-                      triggerId
-                        ? "Applies to the next token you issue. The current token keeps its expiry date."
-                        : "How long the token works. You get a notification 30 and 7 days before it expires."
-                    }
-                  >
-                    {BEARER_TOKEN_EXPIRY_DAYS.map((days) => (
-                      <SelectItem key={days} value={String(days)}>
-                        {days} days
-                      </SelectItem>
-                    ))}
-                  </FormSelectField>
-
-                  {triggerId && trigger && (
-                    <Field>
-                      <FieldTitle>Token</FieldTitle>
-                      <div className="flex flex-col gap-2 rounded-md border p-3 text-sm">
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant={TOKEN_STATUS_VARIANTS[tokenStatus]}>
-                            {TOKEN_STATUS_LABELS[tokenStatus]}
-                          </Badge>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="cursor-pointer"
-                            onClick={() => setIsRegenerateDialogOpen(true)}
-                            disabled={isSubmitting}
-                          >
-                            <RefreshCw className="h-4 w-4" />{" "}
-                            {hasToken ? "Regenerate" : "Issue token"}
-                          </Button>
-                        </div>
-                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-muted-foreground">
-                          <dt>Issued</dt>
-                          <dd>
-                            {trigger.tokenCreatedAt
-                              ? formatDateTime(trigger.tokenCreatedAt)
-                              : "—"}
-                          </dd>
-                          <dt>Expires</dt>
-                          <dd>
-                            {trigger.tokenExpiresAt
-                              ? formatDateTime(trigger.tokenExpiresAt)
-                              : "—"}
-                          </dd>
-                          <dt>Last used</dt>
-                          <dd>
-                            {trigger.lastUsedAt
-                              ? formatDateTime(trigger.lastUsedAt)
-                              : "Never"}
-                          </dd>
-                          <dt>Last rejected</dt>
-                          <dd>
-                            {trigger.lastRejectedAt
-                              ? formatDateTime(trigger.lastRejectedAt)
-                              : "Never"}
-                          </dd>
-                        </dl>
-                        {backendUrl && (
-                          <p className="break-all text-muted-foreground">
-                            Endpoint:{" "}
-                            <code>
-                              {inboundEndpointUrl(backendUrl, triggerId)}
-                            </code>
-                          </p>
-                        )}
-                      </div>
-                      <FieldDescription>
-                        {hasToken
-                          ? "The token was shown once, when it was issued. Regenerating stops the current one working straight away."
-                          : "This trigger has no token, so every call is refused. An Org Admin may have revoked it. Issue a new one and update the system that calls it."}
-                      </FieldDescription>
-                    </Field>
-                  )}
-                </>
-              )}
+              <TypeFields
+                trigger={trigger}
+                scope={scope}
+                disabled={isSubmitting}
+                errors={validationErrors}
+                clearErrors={clearErrors}
+                onChange={setTypeFields}
+                mutateRecord={mutateRecord}
+              />
 
               <FormTextField
                 className="w-1/2"
@@ -1686,12 +534,7 @@ const TriggerForm = ({
         submitText={triggerId ? "Update" : "Save"}
         onSubmit={() => void submit()}
         submitDisabled={
-          isSubmitting ||
-          !canSubmit ||
-          !isCronValid ||
-          (triggerType === "event" && selectedEvents.length === 0) ||
-          inputsProblem !== null ||
-          inboundBlocked
+          isSubmitting || !canSubmit || !typeFieldsValid || inboundBlocked
         }
         deleteVisible={!!triggerId}
         deleteDisabled={isSubmitting}
@@ -1707,51 +550,13 @@ const TriggerForm = ({
         loading={isDeleting}
         error={deleteError}
       />
-
-      <ConfirmDialog
-        open={isRegenerateDialogOpen}
-        onOpenChange={setIsRegenerateDialogOpen}
-        title={hasToken ? "Regenerate token" : "Issue token"}
-        description={
-          hasToken
-            ? "The current token stops working straight away. Update the system that calls this trigger with the new one."
-            : "A new token is issued and shown once."
-        }
-        confirmLabel={hasToken ? "Regenerate" : "Issue token"}
-        onConfirm={() => void handleRegenerateToken()}
-        loading={isRegenerating}
-      />
-
-      {shownToken && (
-        <InboundTokenDialog
-          token={shownToken.token}
-          endpointUrl={inboundEndpointUrl(
-            backendUrl ?? "",
-            shownToken.triggerId,
-          )}
-          inputNames={inboundInputs
-            .map((input) => input.name.trim())
-            .filter(Boolean)}
-          expiresAt={shownToken.expiresAt}
-          onClose={closeTokenDialog}
-        />
-      )}
     </div>
   );
 
   return (
     <DetailFormState
       {...loadState}
-      // A saved board/column filter needs its lists to show a name rather
-      // than a blank Select. Only a *seeded* column waits on the board's
-      // columns: picking another board clears the column, so a later board
-      // change never swaps the whole form back for the skeleton.
-      isLoading={
-        agentsLoading ||
-        boardsLoading ||
-        (!!filterColumnId && boardStateLoading) ||
-        loadState.isLoading
-      }
+      isLoading={agentsLoading || filterListsLoading || loadState.isLoading}
       subject="trigger"
       skeleton={<TriggerFormSkeleton editing={!!triggerId} />}
       backHref={workspaceRoutes(orgId, workspaceId).root}
