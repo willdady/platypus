@@ -11,6 +11,7 @@ import {
   stubSaveSequence,
   stubAcceptedSave,
   mutate,
+  authState,
 } from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -81,6 +82,44 @@ describe("OrgAgentsList delete", () => {
     await confirmDialog("Delete");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
+  });
+});
+
+describe("OrgAgentsList unattached warning", () => {
+  const card = () =>
+    screen.getByText(sharedAgent.name).closest('[data-slot="item"]');
+
+  it("warns about an agent attached to no Workspaces", async () => {
+    mockScopedSWR({ "/attachments?": [] });
+    await renderAgents([sharedAgent]);
+
+    expect(
+      screen.getByText("Not attached to any workspaces."),
+    ).toBeInTheDocument();
+    expect(card()).toHaveClass("border-warning");
+  });
+
+  it("doesn't warn about an agent attached to a Workspace", async () => {
+    mockScopedSWR({
+      "/attachments?": [{ workspaceId: "ws1", workspaceName: "Eng" }],
+    });
+    await renderAgents([sharedAgent]);
+
+    expect(
+      screen.queryByText("Not attached to any workspaces."),
+    ).not.toBeInTheDocument();
+    expect(card()).not.toHaveClass("border-warning");
+  });
+
+  it("shows a non-admin no warning", async () => {
+    authState.actor = "member";
+    mockScopedSWR({ "/attachments?": [] });
+    await renderAgents([sharedAgent]);
+
+    expect(
+      screen.queryByText("Not attached to any workspaces."),
+    ).not.toBeInTheDocument();
+    expect(card()).not.toHaveClass("border-warning");
   });
 });
 
