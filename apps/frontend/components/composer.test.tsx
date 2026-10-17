@@ -52,9 +52,11 @@ let recognition: ReturnType<typeof installSpeechRecognition>;
 const renderComposer = ({
   canUploadToSandbox = false,
   onSubmit = vi.fn(),
+  placeholder = "Ask anything",
 }: {
   canUploadToSandbox?: boolean;
   onSubmit?: (message: PromptInputMessage) => void;
+  placeholder?: string;
 } = {}) => {
   const onModelChange = vi.fn();
 
@@ -84,7 +86,7 @@ const renderComposer = ({
           ref: textareaRef,
           value,
           onChange: (e) => setValue(e.target.value),
-          placeholder: "Ask anything",
+          placeholder,
         }}
         onTranscriptionChange={vi.fn()}
         submit={<button type="submit">Send</button>}
@@ -96,7 +98,7 @@ const renderComposer = ({
 
   return {
     onModelChange,
-    textarea: screen.getByPlaceholderText("Ask anything"),
+    textarea: screen.getByRole("textbox", { name: "Message" }),
     trigger: screen.getByText("Select model").closest("button")!,
     mic: screen.getByRole("button", { name: "Microphone" }),
   };
@@ -120,6 +122,16 @@ beforeEach(() => {
 });
 
 afterEach(uninstallSpeechRecognition);
+
+describe("Composer textarea name", () => {
+  it("is named Message whatever the placeholder says", () => {
+    renderComposer({ placeholder: "Run in progress…" });
+
+    expect(
+      screen.getByRole("textbox", { name: "Message" }),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("Composer model picker focus", () => {
   it("returns focus to the textarea when a model is selected", async () => {

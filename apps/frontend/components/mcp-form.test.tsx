@@ -213,6 +213,15 @@ describe("McpForm save payload", () => {
 
     await selectOption(screen.getByRole("combobox", { name: "Auth" }), "None");
     fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    expect(screen.getByRole("textbox", { name: "Header 1 name" })).toHaveValue(
+      "X-Api",
+    );
+    expect(screen.getByRole("textbox", { name: "Header 2 name" })).toHaveValue(
+      "",
+    );
+    expect(screen.getByRole("textbox", { name: "Header 1 value" })).toHaveValue(
+      "1",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());

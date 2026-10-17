@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldLabel } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -279,13 +280,17 @@ function CardTitleSection({
 }) {
   if (isEditing) {
     return (
-      <Input
-        autoFocus={focusField === "title"}
-        value={title}
-        onChange={(e) => onTitleChange(e.target.value)}
-        className="text-xl font-semibold"
-        placeholder="Card title"
-      />
+      <div className="space-y-2">
+        <FieldLabel htmlFor="kanban-card-title">Title</FieldLabel>
+        <Input
+          id="kanban-card-title"
+          autoFocus={focusField === "title"}
+          value={title}
+          onChange={(e) => onTitleChange(e.target.value)}
+          className="text-xl font-semibold"
+          placeholder="Card title"
+        />
+      </div>
     );
   }
   return (
@@ -317,14 +322,20 @@ function CardBodySection({
 }) {
   if (isEditing) {
     return (
-      <Textarea
-        autoFocus={focusField === "body"}
-        value={body}
-        onChange={(e) => onBodyChange(e.target.value)}
-        placeholder="Add a description..."
-        rows={6}
-        className="min-h-[150px]"
-      />
+      <div>
+        <FieldLabel htmlFor="kanban-card-description" className="mb-3">
+          Description
+        </FieldLabel>
+        <Textarea
+          id="kanban-card-description"
+          autoFocus={focusField === "body"}
+          value={body}
+          onChange={(e) => onBodyChange(e.target.value)}
+          placeholder="Add a description..."
+          rows={6}
+          className="min-h-[150px]"
+        />
+      </div>
     );
   }
   return (
@@ -534,6 +545,7 @@ function CommentsSection({
           value={newCommentBody}
           onChange={(e) => onNewCommentBodyChange(e.target.value)}
           placeholder="Add a comment..."
+          aria-label="Add a comment"
           rows={3}
         />
         <Button
@@ -1032,8 +1044,10 @@ export function KanbanCardDialog({
         ) : (
           <div className="flex flex-row gap-2 min-h-0 flex-1 overflow-hidden">
             {/* Main content - Title, Body, Comments, and History */}
+            {/* The gutter pads the pane's children, not the pane, so the
+                body's scrollbar sits in the gutter instead of over the text. */}
             <CardDetailsPane
-              className="min-w-0 pr-6"
+              className="min-w-0 [&>*]:pr-6"
               title={title}
               body={body}
               isEditing={isEditing}
