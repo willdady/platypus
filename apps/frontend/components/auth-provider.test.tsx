@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, expectTypeOf, vi, beforeEach } from "vitest";
 import { memo, useRef, useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 
@@ -76,7 +76,12 @@ vi.mock("swr", () => ({
   },
 }));
 
-import { AuthProvider, useAuth } from "./auth-provider";
+import {
+  AuthProvider,
+  useAuth,
+  useBackendUrl,
+  type Session,
+} from "./auth-provider";
 
 const onRender = vi.fn();
 
@@ -188,6 +193,61 @@ describe("AuthProvider", () => {
     fireEvent.click(screen.getByRole("button"));
 
     expect(onRender).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AuthProvider static backend context", () => {
+  it("doesn't re-render a useBackendUrl() reader when the session or membership changes", () => {
+    const onBackendRender = vi.fn();
+    const BackendReader = memo(function BackendReader() {
+      const backendUrl = useBackendUrl();
+      onBackendRender();
+      return <p>{backendUrl}</p>;
+    });
+    // A fresh element each time: React skips re-rendering an identical one.
+    const tree = () => (
+      <AuthProvider backendUrl="http://test">
+        <BackendReader />
+        <Consumer />
+      </AuthProvider>
+    );
+    const view = render(tree());
+
+    sessionState.data = { ...sessionData, user: { id: "u2", role: "user" } };
+    view.rerender(tree());
+    reads.membership = {
+      data: { ...membership, role: "member" },
+      error: undefined,
+      isLoading: false,
+    };
+    view.rerender(tree());
+
+    // The auth consumer saw both changes; the backend reader saw neither.
+    expect(onRender).toHaveBeenCalledTimes(3);
+    expect(onBackendRender).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("http://test")).toBeInTheDocument();
+  });
+});
+
+describe("AuthProvider session", () => {
+  it("leaves the session token out", () => {
+    sessionState.data = {
+      ...sessionData,
+      session: { id: "s1", token: "t" },
+    } as typeof sessionData;
+    let seen: Session | null = null;
+    function SessionReader() {
+      seen = useAuth().session;
+      return null;
+    }
+    render(
+      <AuthProvider backendUrl="http://test">
+        <SessionReader />
+      </AuthProvider>,
+    );
+
+    expect(seen).toEqual({ id: "s1" });
+    expectTypeOf<Session>().not.toHaveProperty("token");
   });
 });
 

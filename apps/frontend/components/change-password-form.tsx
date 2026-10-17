@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@/components/auth-provider";
+import { useAuthClient } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import {
@@ -25,7 +25,7 @@ const INITIAL_DATA = {
 };
 
 export function ChangePasswordForm() {
-  const { authClient } = useAuth();
+  const authClient = useAuthClient();
 
   const {
     formData,

@@ -4,7 +4,11 @@ import { appRoutes, withBasePath, workspaceRoutes } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import {
+  useAuth,
+  useAuthClient,
+  useBackendUrl,
+} from "@/components/auth-provider";
 import { optionalFetcher, joinUrl } from "@/lib/utils";
 import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
@@ -33,12 +37,8 @@ import type {
 export default function InviteTokenPage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
-  const {
-    user,
-    authClient,
-    refreshSession,
-    isPending: isAuthPending,
-  } = useAuth();
+  const { user, refreshSession, isPending: isAuthPending } = useAuth();
+  const authClient = useAuthClient();
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
 

@@ -12,11 +12,9 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://backend.test",
-  useAuth: () => ({
-    authClient: {
-      signUp: {
-        email: mockSignUpEmail,
-      },
+  useAuthClient: () => ({
+    signUp: {
+      email: mockSignUpEmail,
     },
   }),
 }));

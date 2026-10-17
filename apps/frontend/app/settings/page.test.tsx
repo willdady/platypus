@@ -12,13 +12,13 @@ const { authState, updateUser } = vi.hoisted(() => {
         email: string;
         timezone?: string | null;
       } | null,
-      authClient: { updateUser },
     },
   };
 });
 
 vi.mock("@/components/auth-provider", () => ({
   useAuth: () => authState,
+  useAuthClient: () => ({ updateUser }),
   useBackendUrl: () => "http://test",
 }));
 

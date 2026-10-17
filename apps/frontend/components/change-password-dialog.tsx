@@ -17,7 +17,7 @@ import {
   FieldGroup,
   FieldSet,
 } from "@/components/ui/field";
-import { useAuth, type User } from "@/components/auth-provider";
+import { useAuthClient, type User } from "@/components/auth-provider";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
 const RETRACTABLE_FIELDS = ["newPassword"] as const;
@@ -36,7 +36,7 @@ export function ChangePasswordDialog({
   onOpenChange,
   onSuccess,
 }: ChangePasswordDialogProps) {
-  const { authClient } = useAuth();
+  const authClient = useAuthClient();
 
   const {
     formData,

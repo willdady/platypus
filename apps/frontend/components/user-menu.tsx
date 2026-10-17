@@ -1,7 +1,7 @@
 "use client";
 
 import { appRoutes } from "@/lib/routes";
-import { useAuth } from "@/components/auth-provider";
+import { useAuth, useAuthClient } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { LogOut, User } from "lucide-react";
 import Link from "next/link";
@@ -18,7 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { userSettingsLinks } from "@/lib/settings-links";
 
 export function UserMenu() {
-  const { user, isPending, authClient } = useAuth();
+  const { user, isPending } = useAuth();
+  const authClient = useAuthClient();
   const router = useRouter();
 
   const handleSignOut = async () => {

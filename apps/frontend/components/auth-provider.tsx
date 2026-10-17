@@ -33,13 +33,11 @@ interface OrgMembership {
 }
 
 interface AuthContextType {
-  backendUrl: string;
   user: User | null;
   session: Session | null;
   isPending: boolean;
   isAuthLoading: boolean;
   error: Error | null;
-  authClient: AuthClient;
   refreshSession: () => Promise<void>;
   orgMembership: OrgMembership | null;
   /** The named actor for this request — see `lib/authorization.ts`. */
@@ -73,6 +71,17 @@ const transientReadError = (error: unknown, data: unknown): unknown =>
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * What never changes for the life of the page, apart from the session and
+ * membership state, so its readers don't re-render when those do.
+ */
+interface BackendContextType {
+  backendUrl: string;
+  authClient: AuthClient;
+}
+
+const BackendContext = createContext<BackendContextType | undefined>(undefined);
+
 // One client per backend URL for the life of the page, outside React. The
 // client owns the session store, and merely reading that store mounts it and
 // fires `/auth/get-session`. A `useMemo` in the component is recomputed on
@@ -102,8 +111,8 @@ type AuthClient = ReturnType<typeof newAuthClient>;
 type AuthSession = AuthClient["$Infer"]["Session"];
 /** The signed-in User, as better-auth returns it. */
 export type User = AuthSession["user"];
-/** The current session, as better-auth returns it. */
-export type Session = AuthSession["session"];
+/** The current session, without the token nothing here needs to hold. */
+export type Session = Omit<AuthSession["session"], "token">;
 
 const getAuthClient = (backendUrl: string) => {
   let client = authClients.get(backendUrl);
@@ -122,8 +131,18 @@ export function AuthProvider({
   backendUrl: string;
 }) {
   const authClient = getAuthClient(backendUrl);
+  const backend = useMemo(
+    () => ({ backendUrl, authClient }),
+    [backendUrl, authClient],
+  );
 
   const { data, isPending, error, refetch } = authClient.useSession();
+  const rawSession = data?.session;
+  const session = useMemo<Session | null>(() => {
+    if (!rawSession) return null;
+    const { token: _token, ...rest } = rawSession;
+    return rest;
+  }, [rawSession]);
   const params = useParams();
 
   const orgId = params.orgId as string | undefined;
@@ -207,13 +226,11 @@ export function AuthProvider({
 
   const value = useMemo<AuthContextType>(
     () => ({
-      backendUrl,
       user: data?.user ?? null,
-      session: data?.session ?? null,
+      session,
       isPending,
       isAuthLoading,
       error,
-      authClient,
       refreshSession: refetch,
       orgMembership: orgMembership ?? null,
       actor,
@@ -223,13 +240,11 @@ export function AuthProvider({
       retryAccessReads,
     }),
     [
-      backendUrl,
       data?.user,
-      data?.session,
+      session,
       isPending,
       isAuthLoading,
       error,
-      authClient,
       refetch,
       orgMembership,
       actor,
@@ -253,7 +268,9 @@ export function AuthProvider({
   const provided = deferredValue.isAuthLoading ? deferredValue : value;
 
   return (
-    <AuthContext.Provider value={provided}>{children}</AuthContext.Provider>
+    <BackendContext.Provider value={backend}>
+      <AuthContext.Provider value={provided}>{children}</AuthContext.Provider>
+    </BackendContext.Provider>
   );
 }
 
@@ -265,6 +282,18 @@ export function useAuth() {
   return context;
 }
 
+function useBackend() {
+  const context = useContext(BackendContext);
+  if (context === undefined) {
+    throw new Error("useBackendUrl must be used within an AuthProvider");
+  }
+  return context;
+}
+
 export function useBackendUrl() {
-  return useAuth().backendUrl;
+  return useBackend().backendUrl;
+}
+
+export function useAuthClient() {
+  return useBackend().authClient;
 }

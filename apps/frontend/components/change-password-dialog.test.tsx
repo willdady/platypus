@@ -10,8 +10,8 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => ({
     user: null,
     isPending: false,
-    authClient: { admin: { setUserPassword } },
   }),
+  useAuthClient: () => ({ admin: { setUserPassword } }),
 }));
 
 vi.mock("sonner", () => ({
