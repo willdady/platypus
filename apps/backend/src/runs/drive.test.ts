@@ -1089,6 +1089,7 @@ describe("driveOnce run events", () => {
     const byType = events.events.map((e) => [e.type, e.toolName, e.status]);
     expect(byType).toEqual([
       ["reasoning", null, "completed"],
+      ["tool-input", "lookup", "completed"],
       ["tool-call", "lookup", "completed"],
       ["text", null, "completed"],
     ]);
@@ -1096,7 +1097,7 @@ describe("driveOnce run events", () => {
       expect(event.startedAt).toBeGreaterThan(0);
       expect(event.durationMs).toBeGreaterThanOrEqual(0);
     }
-    expect(events.events[1].durationMs).toBeGreaterThanOrEqual(15);
+    expect(events.events[2].durationMs).toBeGreaterThanOrEqual(15);
   });
 
   it("stores no tool input, tool output, reasoning or message content", async () => {

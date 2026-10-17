@@ -3,6 +3,7 @@
 import {
   BanIcon,
   BotIcon,
+  BracesIcon,
   BrainIcon,
   CheckCircleIcon,
   PenLineIcon,
@@ -43,6 +44,7 @@ export type ActivityRowEntry = {
 export const activityColor: Record<RunEventType, { text: string; bg: string }> =
   {
     "tool-call": { text: "text-blue-500", bg: "bg-blue-500" },
+    "tool-input": { text: "text-cyan-500", bg: "bg-cyan-500" },
     reasoning: { text: "text-purple-500", bg: "bg-purple-500" },
     text: { text: "text-amber-500", bg: "bg-amber-500" },
     delegate: { text: "text-emerald-500", bg: "bg-emerald-500" },
@@ -60,6 +62,11 @@ const config: Record<
     icon: WrenchIcon,
     activeColor: activityColor["tool-call"].text,
     label: (entry) => entry.toolName ?? "tool",
+  },
+  "tool-input": {
+    icon: BracesIcon,
+    activeColor: activityColor["tool-input"].text,
+    label: (entry) => `Generating arguments for ${entry.toolName ?? "tool"}…`,
   },
   reasoning: {
     icon: BrainIcon,

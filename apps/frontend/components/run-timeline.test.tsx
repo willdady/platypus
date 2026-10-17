@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { RunEvent } from "@platypus/schemas";
+import { activityColor, activityLabel } from "./activity-row";
 import {
   RunTimeline,
   RUN_TIMELINE_EMPTY_NOTICE,
@@ -65,6 +66,36 @@ describe("RunTimeline", () => {
       (li) => li.getAttribute("data-depth"),
     );
     expect(depths).toEqual(["0", "1", "0"]);
+  });
+
+  it("labels argument generation for its tool, in its own colour", () => {
+    const { container } = render(
+      <RunTimeline
+        events={[
+          event({ id: "i", type: "tool-input", toolName: "delegate" }),
+          event({ id: "c", seq: 1, startedAt: T0 + 100 }),
+        ]}
+        runStatus="success"
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        activityLabel({
+          type: "tool-input",
+          toolName: "delegate",
+          status: "completed",
+        }),
+      ),
+    ).toBeInTheDocument();
+    const [input, call] = Array.from(
+      container.querySelectorAll<HTMLElement>('[role="img"]'),
+    );
+    expect(activityColor["tool-input"].bg).not.toBe(
+      activityColor["tool-call"].bg,
+    );
+    expect(input.className).toContain(activityColor["tool-input"].bg);
+    expect(call.className).toContain(activityColor["tool-call"].bg);
   });
 
   it("draws parallel tool calls as overlapping bars", () => {
