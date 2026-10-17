@@ -74,8 +74,8 @@ function ExpandableTextarea({
     <Button
       type="button"
       variant="ghost"
-      size="icon"
-      className="size-6 text-muted-foreground"
+      size="icon-2xs"
+      className="text-muted-foreground"
       onClick={openExpanded}
       ref={expandButtonRef}
     >
@@ -134,8 +134,8 @@ function ExpandableTextarea({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="size-6 text-muted-foreground"
+                  size="icon-2xs"
+                  className="text-muted-foreground"
                 >
                   <Minimize2 className="size-3.5" />
                   <span className="sr-only">Collapse</span>

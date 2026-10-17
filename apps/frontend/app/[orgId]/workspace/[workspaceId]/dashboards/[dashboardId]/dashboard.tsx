@@ -899,8 +899,8 @@ const DashboardPage = ({
                         <Button
                           type="button"
                           variant="ghost"
-                          size="icon"
-                          className="size-6 text-muted-foreground"
+                          size="icon-2xs"
+                          className="text-muted-foreground"
                           onClick={() => setExpandedWidgetId(null)}
                         >
                           <Minimize2 className="size-3.5" />
