@@ -167,7 +167,6 @@ export const ModelSelectorDialog = ({
       key={agent.id}
       value={encodeAgentSelection(agent.id)}
       keywords={[agent.name]}
-      className="cursor-pointer"
       onMouseDown={keepFocus}
       onSelect={() => {
         onModelChange(encodeAgentSelection(agent.id));
@@ -231,7 +230,6 @@ export const ModelSelectorDialog = ({
               {options.map((model) => (
                 <ModelSelectorItem
                   key={encodeProviderSelection(provider.id, model.value)}
-                  className="cursor-pointer"
                   value={encodeProviderSelection(provider.id, model.value)}
                   keywords={[model.label, provider.name]}
                   onMouseDown={keepFocus}

@@ -36,6 +36,7 @@ import {
   UnattachedWarning,
 } from "./manage-sharing";
 import { RowActionsMenu } from "./row-actions-menu";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
   AttachSharedAction,
@@ -385,9 +386,9 @@ export const ResourceList = ({
   );
 };
 
-const OrganizationBadge = () => (
-  <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-    <Building className="size-3" />
+export const OrganizationBadge = () => (
+  <Badge variant="pill">
+    <Building />
     Organization
-  </div>
+  </Badge>
 );

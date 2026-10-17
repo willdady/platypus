@@ -23,11 +23,11 @@ import { readableTextColor } from "@/lib/color";
 const DUE_DATE_STATUS = {
   overdue: {
     prefix: "Overdue: due",
-    className: "text-red-600 dark:text-red-400",
+    className: "text-destructive",
   },
   "due-soon": {
     prefix: "Due soon:",
-    className: "text-amber-700 dark:text-amber-400",
+    className: "text-warning-foreground",
   },
   normal: { prefix: "Due", className: "text-muted-foreground" },
 } as const;

@@ -229,7 +229,6 @@ const A2aEndpointForm = ({
           <Field orientation="horizontal">
             <Switch
               id="includeMemories"
-              className="cursor-pointer"
               checked={formData.includeMemories}
               onCheckedChange={(checked) =>
                 setField("includeMemories", checked)
@@ -252,7 +251,6 @@ const A2aEndpointForm = ({
           <Field orientation="horizontal">
             <Switch
               id="extractMemories"
-              className="cursor-pointer"
               checked={formData.extractMemories}
               onCheckedChange={(checked) =>
                 setField("extractMemories", checked)

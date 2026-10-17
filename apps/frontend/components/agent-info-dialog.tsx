@@ -161,8 +161,7 @@ export const AgentInfoDialog = ({
               <span className="cursor-default">Advanced settings</span>
               <Button
                 variant="ghost"
-                size="icon"
-                className="size-8"
+                size="icon-sm"
                 aria-label="Toggle advanced settings"
                 aria-expanded={isAdvancedOpen}
               >

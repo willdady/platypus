@@ -297,11 +297,11 @@ export const ToolStatus = ({ state }: { state: ToolUIPart["state"] }) => {
   const icons: Record<ToolUIPart["state"], ReactNode> = {
     "input-streaming": <CircleIcon className="size-3.5" />,
     "input-available": <ClockIcon className="size-3.5 animate-pulse" />,
-    "output-available": <CheckCircleIcon className="size-3.5 text-green-600" />,
-    "output-error": <XCircleIcon className="size-3.5 text-red-600" />,
+    "output-available": <CheckCircleIcon className="size-3.5 text-success" />,
+    "output-error": <XCircleIcon className="size-3.5 text-destructive" />,
     "approval-requested": <ClockIcon className="size-3.5" />,
     "approval-responded": <CheckCircleIcon className="size-3.5" />,
-    "output-denied": <XCircleIcon className="size-3.5 text-red-600" />,
+    "output-denied": <XCircleIcon className="size-3.5 text-destructive" />,
   };
 
   return (
@@ -356,7 +356,7 @@ export const ToolHeader = ({
     <CollapsibleTrigger
       className={cn(
         toolRowClassName,
-        "cursor-pointer transition-colors hover:text-foreground",
+        "transition-colors hover:text-foreground",
         className,
       )}
       {...props}

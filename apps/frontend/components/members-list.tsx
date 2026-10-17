@@ -38,110 +38,106 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
     useState<OrgMemberListItem | null>(null);
 
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <Table className="min-w-[600px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Org Role</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {members.map((member) => (
-              <TableRow key={member.id}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                      {member.user.image ? (
-                        // Avatar URL comes from an arbitrary OAuth/external
-                        // host; not routable through the Next image optimizer.
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={member.user.image}
-                          alt={member.user.name}
-                          className="h-full w-full object-cover"
-                          width={32}
-                          height={32}
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <User className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{member.user.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {member.user.email}
-                      </span>
-                    </div>
+    <>
+      <Table bordered className="min-w-[600px]">
+        <TableHeader>
+          <TableRow>
+            <TableHead>User</TableHead>
+            <TableHead>Org Role</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {members.map((member) => (
+            <TableRow key={member.id}>
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                    {member.user.image ? (
+                      // Avatar URL comes from an arbitrary OAuth/external
+                      // host; not routable through the Next image optimizer.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={member.user.image}
+                        alt={member.user.name}
+                        className="h-full w-full object-cover"
+                        width={32}
+                        height={32}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <User className="h-4 w-4 text-muted-foreground" />
+                    )}
                   </div>
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      member.isSuperAdmin
+                  <div className="flex flex-col">
+                    <span className="font-medium">{member.user.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {member.user.email}
+                    </span>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge
+                  variant={
+                    member.isSuperAdmin
+                      ? "default"
+                      : member.role === "admin"
                         ? "default"
-                        : member.role === "admin"
-                          ? "default"
-                          : "secondary"
-                    }
-                    className="capitalize"
-                  >
-                    {member.isSuperAdmin && <Shield className="h-3 w-3" />}
-                    {member.isSuperAdmin ? "Super Admin" : member.role}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Actions for ${member.user.name}`}
-                        className="cursor-pointer"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      {!member.isSuperAdmin && (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() => setEditingMember(member)}
-                            className="cursor-pointer"
-                          >
-                            <Edit className="h-4 w-4" /> Edit org role
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => setRemovingMember(member)}
-                            className="text-destructive focus:text-destructive cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" /> Remove from Org
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      {member.isSuperAdmin && (
+                        : "secondary"
+                  }
+                  className="capitalize"
+                >
+                  {member.isSuperAdmin && <Shield className="h-3 w-3" />}
+                  {member.isSuperAdmin ? "Super Admin" : member.role}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Actions for ${member.user.name}`}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    {!member.isSuperAdmin && (
+                      <>
                         <DropdownMenuItem
-                          disabled
-                          className="text-muted-foreground"
+                          onClick={() => setEditingMember(member)}
                         >
-                          <Shield className="h-3 w-3" /> Super Admin - No
-                          actions available
+                          <Edit className="h-4 w-4" /> Edit org role
                         </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => setRemovingMember(member)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" /> Remove from Org
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {member.isSuperAdmin && (
+                      <DropdownMenuItem
+                        disabled
+                        className="text-muted-foreground"
+                      >
+                        <Shield className="h-3 w-3" /> Super Admin - No actions
+                        available
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
       {editingMember && (
         <MemberEditDialog
@@ -169,6 +165,6 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
           }}
         />
       )}
-    </div>
+    </>
   );
 }

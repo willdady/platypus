@@ -217,8 +217,7 @@ function CardTitleActions({
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            size="icon"
-            className="h-7 w-7"
+            size="icon-xs"
             aria-label="Copy link to card"
             onClick={onCopyLink}
           >
@@ -231,8 +230,7 @@ function CardTitleActions({
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            size="icon"
-            className="h-7 w-7"
+            size="icon-xs"
             aria-label="Copy card as Markdown"
             onClick={onCopyMarkdown}
           >
@@ -245,8 +243,7 @@ function CardTitleActions({
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            size="icon"
-            className="h-7 w-7"
+            size="icon-xs"
             aria-label="Edit card"
             onClick={onEdit}
           >

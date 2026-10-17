@@ -106,7 +106,7 @@ const UserInvitationsPage = () => {
               <div className="flex gap-2">
                 <Button
                   variant="default"
-                  className="flex-1 md:flex-none cursor-pointer"
+                  className="flex-1 md:flex-none"
                   onClick={() => void accept.run(invite.id)}
                   disabled={accept.pending}
                 >
@@ -115,7 +115,7 @@ const UserInvitationsPage = () => {
                 </Button>
                 <Button
                   variant="outline"
-                  className="flex-1 md:flex-none cursor-pointer"
+                  className="flex-1 md:flex-none"
                   onClick={() => decline.request(invite.id)}
                 >
                   <X className="h-4 w-4" /> Decline

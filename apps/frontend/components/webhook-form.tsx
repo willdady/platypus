@@ -393,7 +393,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                   size="icon"
                   aria-label="Show signing secret"
                   aria-pressed={showSecret}
-                  className="shrink-0 cursor-pointer"
+                  className="shrink-0"
                   onClick={() => setShowSecret(!showSecret)}
                 >
                   {showSecret ? (
@@ -407,7 +407,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                   variant="outline"
                   size="icon"
                   aria-label="Copy signing secret"
-                  className="shrink-0 cursor-pointer"
+                  className="shrink-0"
                   onClick={handleCopySecret}
                 >
                   <Copy className="h-4 w-4" />
@@ -415,7 +415,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                 <Button
                   type="button"
                   variant="outline"
-                  className="shrink-0 cursor-pointer"
+                  className="shrink-0"
                   onClick={() => setIsRegenerateDialogOpen(true)}
                   disabled={isSubmitting}
                 >

@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { ListTree, TriangleAlert } from "lucide-react";
 import type { RunEvent, TriggerRunStatus } from "@platypus/schemas";
-import { ActivityRow } from "@/components/activity-row";
+import { ActivityRow, activityColor } from "@/components/activity-row";
 import { EmptyCard } from "@/components/empty-card";
 import {
   Tooltip,
@@ -33,13 +33,6 @@ export const RUN_TIMELINE_TRUNCATED_NOTICE =
 
 /** How an event whose end nobody saw is labelled in place of a duration. */
 export const UNKNOWN_DURATION_LABEL = "Unknown duration";
-
-const barColor: Record<RunEvent["type"], string> = {
-  "tool-call": "bg-blue-500",
-  reasoning: "bg-purple-500",
-  text: "bg-amber-500",
-  delegate: "bg-emerald-500",
-};
 
 const Bar = ({ row, totalMs }: { row: TimelineRow; totalMs: number }) => {
   const { left, width } = barGeometry(row, totalMs);
@@ -73,8 +66,10 @@ const Bar = ({ row, totalMs }: { row: TimelineRow; totalMs: number }) => {
         <span
           className={cn(
             "absolute top-1 h-4 min-w-[3px] rounded-sm",
-            cancelled ? "bg-muted-foreground/40" : barColor[row.event.type],
-            failed && "ring-2 ring-red-500",
+            cancelled
+              ? "bg-muted-foreground/40"
+              : activityColor[row.event.type].bg,
+            failed && "ring-2 ring-destructive",
             row.end.kind === "running" && "animate-pulse",
           )}
           style={style}

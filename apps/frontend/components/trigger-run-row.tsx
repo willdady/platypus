@@ -125,7 +125,7 @@ const STATUS_ICONS: Record<
   TriggerRunStatus,
   { icon: LucideIcon; className: string }
 > = {
-  success: { icon: CircleCheck, className: "text-green-600" },
+  success: { icon: CircleCheck, className: "text-success" },
   failed: { icon: CircleX, className: "text-destructive" },
   running: { icon: Loader2, className: "animate-spin" },
   // Neutral, like its badge: a cancel is not a crash (#647).
@@ -341,7 +341,7 @@ export const TriggerRunRow = ({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              className="cursor-pointer text-muted-foreground"
+              className="text-muted-foreground"
               variant="ghost"
               size="icon"
               aria-label={`Actions for ${run.triggerName} run`}
@@ -354,27 +354,18 @@ export const TriggerRunRow = ({
           {/* Portalled, but React still bubbles its clicks to the row link. */}
           <DropdownMenuContent onClick={(e) => e.preventDefault()}>
             <DropdownMenuItem asChild>
-              <Link
-                className="cursor-pointer"
-                href={routes.triggers.detail(run.triggerId)}
-              >
+              <Link href={routes.triggers.detail(run.triggerId)}>
                 <Pencil /> Edit trigger
               </Link>
             </DropdownMenuItem>
             {!linkToDetail && (
               <DropdownMenuItem asChild>
-                <Link
-                  className="cursor-pointer"
-                  href={routes.triggerRuns.forTrigger(run.triggerId)}
-                >
+                <Link href={routes.triggerRuns.forTrigger(run.triggerId)}>
                   <List /> View trigger&apos;s runs
                 </Link>
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem
-              className="cursor-pointer"
-              onSelect={handleCopyRunId}
-            >
+            <DropdownMenuItem onSelect={handleCopyRunId}>
               <Copy /> Copy run id
             </DropdownMenuItem>
           </DropdownMenuContent>

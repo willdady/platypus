@@ -11,7 +11,9 @@ import {
   ItemDescription,
   ItemContent,
 } from "@/components/ui/item";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { OrganizationBadge } from "@/components/resource-list";
 import { SearchInput } from "@/components/search-input";
 import {
   Select,
@@ -44,7 +46,6 @@ import {
 import {
   ArrowUpFromLine,
   Bot,
-  Building,
   EllipsisVertical,
   Pencil,
   Plus,
@@ -104,13 +105,13 @@ const UserInvocableBadge = ({ skill }: { skill: SkillWithScope }) => {
   if (!skill.disableModelInvocation) return null;
 
   return (
-    <span
-      className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider"
+    <Badge
+      variant="pill"
       title="This skill is only invoked when a user triggers it"
     >
-      <UserRound className="size-3" />
+      <UserRound />
       User-invocable only
-    </span>
+    </Badge>
   );
 };
 
@@ -394,10 +395,7 @@ export const SkillsList = ({
                         <ItemTitle>{skill.name}</ItemTitle>
                         <UserInvocableBadge skill={skill} />
                         <NeedsSandboxBadge skill={skill} />
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-                          <Building className="size-3" />
-                          Organization
-                        </div>
+                        <OrganizationBadge />
                       </div>
                       <ItemDescription className="text-xs line-clamp-2">
                         {skill.description}
@@ -409,7 +407,7 @@ export const SkillsList = ({
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
-                              className="cursor-pointer text-muted-foreground"
+                              className="text-muted-foreground"
                               variant="ghost"
                               size="icon"
                               aria-label={`Actions for ${skill.name}`}
@@ -420,7 +418,6 @@ export const SkillsList = ({
                           <DropdownMenuContent>
                             <DropdownMenuItem asChild>
                               <Link
-                                className="cursor-pointer"
                                 href={orgRoutes(orgId).settings.skillDetail(
                                   skill.id,
                                 )}
@@ -430,7 +427,6 @@ export const SkillsList = ({
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              className="cursor-pointer"
                               onSelect={() => orgSkillDetach.open(skill)}
                             >
                               <Unlink /> Detach
@@ -489,7 +485,7 @@ export const SkillsList = ({
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
-                                className="cursor-pointer text-muted-foreground"
+                                className="text-muted-foreground"
                                 variant="ghost"
                                 size="icon"
                                 aria-label={`Actions for ${skill.name}`}
@@ -502,16 +498,12 @@ export const SkillsList = ({
                               onClick={(e) => e.preventDefault()}
                             >
                               <DropdownMenuItem asChild>
-                                <Link
-                                  className="cursor-pointer"
-                                  href={`${editBasePath}/${skill.id}`}
-                                >
+                                <Link href={`${editBasePath}/${skill.id}`}>
                                   <Pencil /> Edit
                                 </Link>
                               </DropdownMenuItem>
                               {canPromote && (
                                 <DropdownMenuItem
-                                  className="cursor-pointer"
                                   onSelect={() => promote.open(skill)}
                                 >
                                   <ArrowUpFromLine /> Promote to organization
@@ -519,7 +511,6 @@ export const SkillsList = ({
                               )}
                               {!workspaceId && canManageOrg && (
                                 <DropdownMenuItem
-                                  className="cursor-pointer"
                                   onSelect={() => setSkillToManage(skill)}
                                 >
                                   <Share2 /> Manage attachments
@@ -527,7 +518,7 @@ export const SkillsList = ({
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                className="cursor-pointer text-destructive focus:text-destructive"
+                                className="text-destructive focus:text-destructive"
                                 onSelect={() => handleDeleteClick(skill)}
                               >
                                 <Trash2 /> Delete

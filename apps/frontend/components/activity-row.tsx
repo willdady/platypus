@@ -36,6 +36,18 @@ export type ActivityRowEntry = {
   count?: number;
 };
 
+/**
+ * The colour each kind of Run event is drawn in, wherever activity is shown:
+ * `text` for an icon, `bg` for a timeline bar.
+ */
+export const activityColor: Record<RunEventType, { text: string; bg: string }> =
+  {
+    "tool-call": { text: "text-blue-500", bg: "bg-blue-500" },
+    reasoning: { text: "text-purple-500", bg: "bg-purple-500" },
+    text: { text: "text-amber-500", bg: "bg-amber-500" },
+    delegate: { text: "text-emerald-500", bg: "bg-emerald-500" },
+  };
+
 const config: Record<
   ActivityRowEntry["type"],
   {
@@ -46,27 +58,27 @@ const config: Record<
 > = {
   "tool-call": {
     icon: WrenchIcon,
-    activeColor: "text-blue-500",
+    activeColor: activityColor["tool-call"].text,
     label: (entry) => entry.toolName ?? "tool",
   },
   reasoning: {
     icon: BrainIcon,
-    activeColor: "text-purple-500",
+    activeColor: activityColor.reasoning.text,
     label: () => "Thinking…",
   },
   text: {
     icon: PenLineIcon,
-    activeColor: "text-amber-500",
+    activeColor: activityColor.text.text,
     label: () => "Generating response…",
   },
   delegate: {
     icon: BotIcon,
-    activeColor: "text-emerald-500",
+    activeColor: activityColor.delegate.text,
     label: (entry) => entry.toolName ?? "Sub-Agent",
   },
   failed: {
     icon: XCircleIcon,
-    activeColor: "text-red-500",
+    activeColor: "text-destructive",
     label: () => "Run failed",
   },
 };
@@ -81,7 +93,7 @@ const StatusMark = ({ status }: { status: RunEventStatus }) => {
       return (
         <Badge
           variant="secondary"
-          className="rounded-full text-[10px] px-1.5 py-0"
+          className="rounded-full text-2xs px-1.5 py-0"
         >
           running
         </Badge>
@@ -89,7 +101,7 @@ const StatusMark = ({ status }: { status: RunEventStatus }) => {
     case "error":
       return (
         <XCircleIcon
-          className="size-3.5 shrink-0 text-red-600"
+          className="size-3.5 shrink-0 text-destructive"
           aria-label="Failed"
         />
       );
@@ -103,7 +115,7 @@ const StatusMark = ({ status }: { status: RunEventStatus }) => {
     default:
       return (
         <CheckCircleIcon
-          className="size-3.5 shrink-0 text-green-600"
+          className="size-3.5 shrink-0 text-success"
           aria-label="Completed"
         />
       );
@@ -132,7 +144,7 @@ export const ActivityRow = ({
             isRunning
               ? `${activeColor} animate-pulse`
               : entry.status === "error"
-                ? "text-red-500"
+                ? "text-destructive"
                 : "text-muted-foreground",
           )}
         />
@@ -148,7 +160,7 @@ export const ActivityRow = ({
         {trailing}
       </div>
       {entry.error && (
-        <span className="ml-5.5 text-xs text-red-600 truncate">
+        <span className="ml-5.5 text-xs text-destructive truncate">
           {entry.error}
         </span>
       )}

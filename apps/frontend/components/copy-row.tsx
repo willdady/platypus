@@ -41,7 +41,7 @@ export const CopyRow = ({
         type="button"
         variant="outline"
         size="icon"
-        className="shrink-0 cursor-pointer"
+        className="shrink-0"
         aria-label={`Copy ${label.toLowerCase()}`}
         onClick={async () => {
           if (await copyToClipboard(value)) {

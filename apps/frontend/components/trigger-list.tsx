@@ -400,7 +400,7 @@ export const TriggerList = ({
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
-                        className="cursor-pointer text-muted-foreground"
+                        className="text-muted-foreground"
                         variant="ghost"
                         size="icon"
                         aria-label={`Actions for ${trigger.name}`}
@@ -411,17 +411,13 @@ export const TriggerList = ({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent onClick={(e) => e.preventDefault()}>
                       <DropdownMenuItem asChild>
-                        <Link
-                          className="cursor-pointer"
-                          href={routes.triggers.detail(trigger.id)}
-                        >
+                        <Link href={routes.triggers.detail(trigger.id)}>
                           <Pencil /> Edit
                         </Link>
                       </DropdownMenuItem>
                       {/* A fired One-off is spent: it cannot be re-armed. */}
                       {!trigger.firedAt && (
                         <DropdownMenuItem
-                          className="cursor-pointer"
                           onSelect={() => void toggle.toggle(trigger)}
                           disabled={toggle.isToggling(trigger.id)}
                         >
@@ -438,7 +434,7 @@ export const TriggerList = ({
                       )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        className="cursor-pointer text-destructive focus:text-destructive"
+                        className="text-destructive focus:text-destructive"
                         onSelect={() => deleteFlow.request(trigger)}
                       >
                         <Trash2 /> Delete

@@ -42,7 +42,7 @@ export const FileCompatibilityWarning = ({
       {blocked.length > 0 && (
         <div
           role="status"
-          className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
+          className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground"
         >
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
           <span>

@@ -186,10 +186,9 @@ const WidgetTile = memo(function WidgetTile({
             <>
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-2xs"
                 aria-label="Edit widget"
                 aria-pressed={isEditing}
-                className="h-6 w-6"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onEditToggle(widget.id)}
               >
@@ -197,9 +196,9 @@ const WidgetTile = memo(function WidgetTile({
               </Button>
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-2xs"
                 aria-label="Delete widget"
-                className="h-6 w-6 text-destructive hover:text-destructive"
+                className="text-destructive hover:text-destructive"
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => onDelete(widget.id)}
               >
@@ -637,7 +636,7 @@ const DashboardPage = ({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors cursor-pointer min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors min-w-0 max-w-[300px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="truncate">{dashboard.name}</span>
                 <ChevronDown className="h-4 w-4 shrink-0" />
@@ -650,7 +649,7 @@ const DashboardPage = ({
                   <DropdownMenuItem key={d.id} asChild>
                     <Link
                       href={routes.dashboards.detail(d.id)}
-                      className="flex items-center gap-2 cursor-pointer"
+                      className="flex items-center gap-2"
                     >
                       <LayoutDashboard className="h-4 w-4" />
                       <span className="truncate">{d.name}</span>
@@ -661,7 +660,7 @@ const DashboardPage = ({
               <DropdownMenuItem asChild>
                 <Link
                   href={routes.dashboards.create}
-                  className="flex items-center gap-2 cursor-pointer"
+                  className="flex items-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Create new dashboard</span>
@@ -899,8 +898,8 @@ const DashboardPage = ({
                         <Button
                           type="button"
                           variant="ghost"
-                          size="icon"
-                          className="size-6 cursor-pointer text-muted-foreground"
+                          size="icon-2xs"
+                          className="text-muted-foreground"
                           onClick={() => setExpandedWidgetId(null)}
                         >
                           <Minimize2 className="size-3.5" />

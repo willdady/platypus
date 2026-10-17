@@ -11,6 +11,7 @@ import {
   ItemFooter,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
+import { OrganizationBadge } from "@/components/resource-list";
 import {
   Dialog,
   DialogContent,
@@ -48,7 +49,6 @@ import {
   ArrowUpFromLine,
   Bot,
   BotMessageSquare,
-  Building,
   Copy,
   EllipsisVertical,
   Pencil,
@@ -324,7 +324,6 @@ export const AgentsList = ({
     const isOrgScoped = agent.scope === "organization";
     const pinItem = canPin && (
       <DropdownMenuItem
-        className="cursor-pointer"
         onSelect={() => togglePin(agent)}
         disabled={pins.isPending(agent.id)}
       >
@@ -347,10 +346,7 @@ export const AgentsList = ({
         <>
           {canManageShared && (
             <DropdownMenuItem asChild>
-              <Link
-                className="cursor-pointer"
-                href={orgRoutes(orgId).settings.agentDetail(agent.id)}
-              >
+              <Link href={orgRoutes(orgId).settings.agentDetail(agent.id)}>
                 <Pencil /> Edit in org settings
               </Link>
             </DropdownMenuItem>
@@ -359,10 +355,7 @@ export const AgentsList = ({
           {canManageShared && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => orgAgentDetach.open(agent)}
-              >
+              <DropdownMenuItem onSelect={() => orgAgentDetach.open(agent)}>
                 <Unlink /> Detach
               </DropdownMenuItem>
             </>
@@ -374,31 +367,22 @@ export const AgentsList = ({
     return (
       <>
         <DropdownMenuItem asChild>
-          <Link
-            className="cursor-pointer"
-            href={routes.agents.detail(agent.id)}
-          >
+          <Link href={routes.agents.detail(agent.id)}>
             <Pencil /> Edit
           </Link>
         </DropdownMenuItem>
         {pinItem}
         {canManageShared && (
-          <DropdownMenuItem
-            className="cursor-pointer"
-            onSelect={() => promote.open(agent)}
-          >
+          <DropdownMenuItem onSelect={() => promote.open(agent)}>
             <ArrowUpFromLine /> Promote to organization
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onSelect={() => handleCloneClick(agent)}
-        >
+        <DropdownMenuItem onSelect={() => handleCloneClick(agent)}>
           <Copy /> Clone
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          className="cursor-pointer text-destructive focus:text-destructive"
+          className="text-destructive focus:text-destructive"
           onSelect={() => handleDeleteClick(agent)}
         >
           <Trash2 /> Delete
@@ -448,12 +432,7 @@ export const AgentsList = ({
           <ItemContent>
             <div className="flex items-center gap-2">
               <ItemTitle>{agent.name}</ItemTitle>
-              {isOrgScoped && (
-                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-                  <Building className="size-3" />
-                  Organization
-                </div>
-              )}
+              {isOrgScoped && <OrganizationBadge />}
             </div>
             <ItemDescription className="text-xs line-clamp-3">
               {agent.description}
@@ -537,7 +516,7 @@ export const AgentsList = ({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    className="cursor-pointer text-muted-foreground"
+                    className="text-muted-foreground"
                     variant="ghost"
                     size="icon"
                     aria-label={`Actions for ${agent.name}`}
@@ -561,7 +540,7 @@ export const AgentsList = ({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    className="cursor-pointer text-muted-foreground"
+                    className="text-muted-foreground"
                     variant="ghost"
                     size="icon"
                     aria-label={`Actions for ${agent.name}`}
@@ -681,11 +660,7 @@ export const AgentsList = ({
             </p>
           )}
           <DialogFooter>
-            <Button
-              className="cursor-pointer"
-              variant="ghost"
-              onClick={() => setCloneDialogOpen(false)}
-            >
+            <Button variant="ghost" onClick={() => setCloneDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleCloneConfirm}>Clone</Button>

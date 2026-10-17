@@ -190,7 +190,6 @@ export const A2aTokens = ({
                       variant="outline"
                       size="icon"
                       aria-label={`Regenerate token ${token.name}`}
-                      className="cursor-pointer"
                       onClick={() => setTokenToRegenerate(token)}
                     >
                       <RefreshCw className="h-4 w-4" />
@@ -200,7 +199,6 @@ export const A2aTokens = ({
                       variant="outline"
                       size="icon"
                       aria-label={`Delete token ${token.name}`}
-                      className="cursor-pointer"
                       onClick={() => tokenDelete.request(token)}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -245,7 +243,7 @@ export const A2aTokens = ({
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 cursor-pointer"
+              className="shrink-0"
               disabled={isIssuing || !tokenForm.name.trim()}
               onClick={() => void issueToken()}
             >

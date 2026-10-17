@@ -249,10 +249,8 @@ export function KanbanBoardForm({
           submitDisabled={
             isSubmitting || isDeleting || !formData.name.trim() || !canSubmit
           }
-          submitClassName=""
           deleteVisible={isEditing && !!onDelete}
           deleteDisabled={isSubmitting || isDeleting}
-          deleteClassName=""
           onDelete={onDelete}
         />
       </form>

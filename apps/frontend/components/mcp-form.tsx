@@ -650,7 +650,7 @@ const McpForm = ({
           {formData.authType === "OAuth" && (
             <div className="space-y-3">
               {oauthAuthorized ? (
-                <Alert className="border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/20 dark:text-green-300 [&>svg]:text-green-600 dark:[&>svg]:text-green-400">
+                <Alert variant="success">
                   <ShieldCheck />
                   <AlertTitle>Authorized</AlertTitle>
                   <AlertDescription>
@@ -672,7 +672,6 @@ const McpForm = ({
                 <Button
                   type="button"
                   variant={oauthAuthorized ? "outline" : "default"}
-                  className="cursor-pointer"
                   onClick={handleOAuthAuthorize}
                   disabled={isAuthorizing || isSubmitting}
                 >
@@ -688,7 +687,6 @@ const McpForm = ({
                   <Button
                     type="button"
                     variant="outline"
-                    className="cursor-pointer"
                     onClick={handleOAuthRevoke}
                     disabled={isRevoking || isSubmitting}
                   >
@@ -706,7 +704,6 @@ const McpForm = ({
           <Button
             type="button"
             variant="outline"
-            className="cursor-pointer"
             onClick={handleTestConnection}
             disabled={
               isTesting ||
@@ -721,14 +718,7 @@ const McpForm = ({
 
           {/* Display test results */}
           {testResult && (
-            <Alert
-              variant={testResult.success ? "default" : "destructive"}
-              className={
-                testResult.success
-                  ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/20 dark:text-green-300 [&>svg]:text-green-600 dark:[&>svg]:text-green-400"
-                  : ""
-              }
-            >
+            <Alert variant={testResult.success ? "success" : "destructive"}>
               {testResult.success ? <Check /> : <X />}
               <AlertTitle>
                 {testResult.success

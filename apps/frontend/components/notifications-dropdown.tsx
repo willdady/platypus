@@ -177,7 +177,7 @@ export function NotificationsDropdown({
         >
           <Bell className="h-5 w-5" />
           {totalCount > 0 && (
-            <span className="absolute -top-0 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground dark:bg-destructive/60">
+            <span className="absolute -top-0 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-2xs font-medium text-destructive-foreground dark:bg-destructive/60">
               {totalCount}
             </span>
           )}
@@ -202,7 +202,7 @@ export function NotificationsDropdown({
                       (and marks it read) without closing the menu; Delete
                       dismisses it. */}
                     <DropdownMenuItem
-                      className="group/notif flex items-start gap-3 p-3 cursor-pointer rounded-sm relative"
+                      className="group/notif flex items-start gap-3 p-3 rounded-sm relative"
                       textValue={notif.title ?? notif.agentName ?? "Platypus"}
                       aria-expanded={isExpanded}
                       aria-keyshortcuts="Delete"
@@ -321,7 +321,7 @@ export function NotificationsDropdown({
                     {href && (
                       <DropdownMenuItem
                         asChild
-                        className="ml-10 mb-1 w-fit px-2 py-0.5 text-xs text-primary cursor-pointer"
+                        className="ml-10 mb-1 w-fit px-2 py-0.5 text-xs text-primary"
                       >
                         <Link
                           href={href}
@@ -343,7 +343,7 @@ export function NotificationsDropdown({
                 <DropdownMenuItem key={invite.id} asChild>
                   <Link
                     href={userRoutes.invitations}
-                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                    className="flex flex-col items-start gap-1 p-3"
                   >
                     <div className="flex items-center gap-2 font-medium">
                       <Mail className="h-4 w-4" />
@@ -361,7 +361,7 @@ export function NotificationsDropdown({
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="w-full justify-center text-center font-medium cursor-pointer"
+                  className="w-full justify-center text-center font-medium"
                   onClick={handleMarkAllAsRead}
                 >
                   Mark all as read

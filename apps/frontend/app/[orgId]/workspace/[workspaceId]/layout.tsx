@@ -81,13 +81,12 @@ export default async function WorkspaceLayout({
           bordered={false}
           leftContent={
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="cursor-pointer" />
+              <SidebarTrigger />
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-xs"
                 aria-label="Workspace home"
                 asChild
-                className="size-7 cursor-pointer"
               >
                 <Link href={routes.root}>
                   <Home />

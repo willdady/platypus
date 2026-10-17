@@ -57,6 +57,8 @@
   --sidebar-ring: oklch(0.708 0 0);
   --warning: oklch(0.78 0.16 75);
   --warning-foreground: oklch(0.35 0.12 75);
+  --success: oklch(0.627 0.194 149.214);
+  --success-foreground: oklch(0.448 0.119 151.328);
 }
 
 .dark {
@@ -78,7 +80,7 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.6 0.105 180);
   --chart-1: oklch(0.65 0.18 180);
   --chart-2: oklch(0.65 0.2 230);
   --chart-3: oklch(0.65 0.2 270);
@@ -95,6 +97,8 @@
   --sidebar-ring: oklch(0.439 0 0);
   --warning: oklch(0.75 0.15 75);
   --warning-foreground: oklch(0.9 0.1 75);
+  --success: oklch(0.792 0.209 151.711);
+  --success-foreground: oklch(0.871 0.15 154.449);
 }
 
 @keyframes collapsible-down {
@@ -152,6 +156,8 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
@@ -159,6 +165,10 @@
     var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+
+  --text-2xs: 0.625rem;
+  /* A Badge's rendered height, for the Skeletons that stand in for one. */
+  --spacing-badge: 22px;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

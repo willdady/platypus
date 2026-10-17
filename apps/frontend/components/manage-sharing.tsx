@@ -234,8 +234,8 @@ export const ManageAttachmentsDialog = ({
             className="flex flex-wrap gap-1"
             aria-label="Loading attachments"
           >
-            <Skeleton className="h-[22px] w-24 rounded-full" />
-            <Skeleton className="h-[22px] w-20 rounded-full" />
+            <Skeleton className="h-badge w-24 rounded-full" />
+            <Skeleton className="h-badge w-20 rounded-full" />
           </div>
         ) : count > 0 ? (
           <div className="flex flex-wrap gap-1">
@@ -247,7 +247,7 @@ export const ManageAttachmentsDialog = ({
                   aria-label={`Detach ${a.workspaceName}`}
                   disabled={busyId === a.workspaceId}
                   onClick={() => toggle(a.workspaceId, true)}
-                  className="cursor-pointer rounded-sm hover:text-destructive disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-sm hover:text-destructive disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="size-3" />
                 </button>

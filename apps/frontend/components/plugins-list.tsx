@@ -52,13 +52,13 @@ const PluginsList = ({
                 {/* Name, version badge, origin badge */}
                 <div className="flex items-center gap-2">
                   <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-[22px] w-12 rounded-full" />
-                  <Skeleton className="h-[22px] w-12 rounded-full" />
+                  <Skeleton className="h-badge w-12 rounded-full" />
+                  <Skeleton className="h-badge w-12 rounded-full" />
                 </div>
                 {/* One contribution row: its label, then an id badge */}
                 <div className="mt-1 flex items-center gap-1.5">
                   <Skeleton className="mr-1 h-3 w-16" />
-                  <Skeleton className="h-[22px] w-20 rounded-full" />
+                  <Skeleton className="h-badge w-20 rounded-full" />
                 </div>
               </ItemContent>
             </Item>

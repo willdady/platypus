@@ -102,7 +102,6 @@ const UserSettingsPage = () => {
               <Button
                 onClick={handleUpdateName}
                 disabled={isLoading || name.trim() === user.name}
-                className="cursor-pointer"
               >
                 {isLoading ? "Saving..." : "Save"}
               </Button>
@@ -113,7 +112,6 @@ const UserSettingsPage = () => {
                   setName(user.name);
                 }}
                 disabled={isLoading}
-                className="cursor-pointer"
               >
                 Cancel
               </Button>
@@ -126,7 +124,6 @@ const UserSettingsPage = () => {
                 size="icon"
                 aria-label="Edit name"
                 onClick={() => setIsEditing(true)}
-                className="cursor-pointer"
               >
                 <Pencil className="w-4 h-4" />
               </Button>
@@ -156,7 +153,6 @@ const UserSettingsPage = () => {
               variant="outline"
               onClick={() => setTimezone(detectedTimezone)}
               disabled={isSavingTimezone}
-              className="cursor-pointer"
             >
               Use detected ({detectedTimezone})
             </Button>
@@ -165,7 +161,6 @@ const UserSettingsPage = () => {
               aria-label="Clear timezone"
               onClick={() => setTimezone(null)}
               disabled={isSavingTimezone || timezone === null}
-              className="cursor-pointer"
             >
               Clear
             </Button>
@@ -173,7 +168,6 @@ const UserSettingsPage = () => {
               aria-label="Save timezone"
               onClick={() => timezoneForm.submit()}
               disabled={isSavingTimezone || timezone === savedTimezone}
-              className="cursor-pointer"
             >
               {isSavingTimezone ? "Saving..." : "Save"}
             </Button>

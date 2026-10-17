@@ -182,7 +182,7 @@ export const ResponseMetricsPopover = ({
     <Popover>
       <PopoverTrigger asChild>
         <MessageAction
-          className="cursor-pointer text-muted-foreground"
+          className="text-muted-foreground"
           variant="ghost"
           size="icon"
           label="Response metrics"

@@ -17,10 +17,10 @@ export const FormFooterButtons = ({
   submitText,
   onSubmit,
   submitDisabled,
-  submitClassName = "cursor-pointer",
+  submitClassName,
   deleteVisible = false,
   deleteDisabled,
-  deleteClassName = "cursor-pointer",
+  deleteClassName,
   onDelete,
   type = "button",
 }: FormFooterButtonsProps) => {

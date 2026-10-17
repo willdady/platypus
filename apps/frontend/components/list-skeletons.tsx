@@ -82,7 +82,7 @@ export const ButtonSkeleton = ({ className }: { className?: string }) => (
 
 /** The pill badge beside a row's title (`Badge`, or the Organization pill). */
 export const BadgeSkeleton = ({ className }: { className?: string }) => (
-  <Skeleton className={cn("h-[22px] w-16 rounded-full", className)} />
+  <Skeleton className={cn("h-badge w-16 rounded-full", className)} />
 );
 
 /**
@@ -247,30 +247,26 @@ export const TableSkeleton = ({
   /** The loaded table's own classes: its `min-w-[…]`. */
   tableClassName?: string;
 }) => (
-  <div className="border rounded-lg overflow-hidden">
-    <div className="overflow-x-auto">
-      <Table className={tableClassName}>
-        <TableHeader>
-          <TableRow>
-            {columns.map((column) => (
-              <TableHead key={column.header} className={column.className}>
-                {column.header}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Array.from({ length: rows }, (_, i) => (
-            <TableRow key={i}>
-              {columns.map((column) => (
-                <TableCell key={column.header} className={column.className}>
-                  {column.cell}
-                </TableCell>
-              ))}
-            </TableRow>
+  <Table bordered className={tableClassName}>
+    <TableHeader>
+      <TableRow>
+        {columns.map((column) => (
+          <TableHead key={column.header} className={column.className}>
+            {column.header}
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
+    <TableBody>
+      {Array.from({ length: rows }, (_, i) => (
+        <TableRow key={i}>
+          {columns.map((column) => (
+            <TableCell key={column.header} className={column.className}>
+              {column.cell}
+            </TableCell>
           ))}
-        </TableBody>
-      </Table>
-    </div>
-  </div>
+        </TableRow>
+      ))}
+    </TableBody>
+  </Table>
 );

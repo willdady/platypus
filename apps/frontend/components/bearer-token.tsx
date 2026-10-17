@@ -68,7 +68,7 @@ export const TokenDialog = ({
       {children}
 
       <DialogFooter>
-        <Button type="button" className="cursor-pointer" onClick={onClose}>
+        <Button type="button" onClick={onClose}>
           I&apos;ve copied it
         </Button>
       </DialogFooter>

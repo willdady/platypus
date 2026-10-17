@@ -524,10 +524,8 @@ const WorkspaceForm = ({ orgId, workspaceId }: WorkspaceFormProps) => {
             submitText="Save"
             onSubmit={() => void submit()}
             submitDisabled={isSubmitting || !canSubmit}
-            submitClassName=""
             deleteVisible
             deleteDisabled={isSubmitting}
-            deleteClassName=""
             onDelete={openDeleteDialog}
           />
           {canTransfer && (

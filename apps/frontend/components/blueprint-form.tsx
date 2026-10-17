@@ -122,7 +122,6 @@ const ResourceGroup = ({
                 <Field key={resource.id} orientation="horizontal">
                   <Switch
                     id={key}
-                    className="cursor-pointer"
                     checked={selected.has(key)}
                     onCheckedChange={(checked) =>
                       onToggle(type, resource.id, checked)

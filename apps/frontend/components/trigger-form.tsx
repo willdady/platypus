@@ -457,7 +457,6 @@ const TriggerForm = ({
               <Field orientation="horizontal">
                 <Switch
                   id="search"
-                  className="cursor-pointer"
                   checked={formData.search}
                   onCheckedChange={(checked) =>
                     setFormData((prev) => ({ ...prev, search: checked }))
@@ -479,7 +478,6 @@ const TriggerForm = ({
               <Field orientation="horizontal">
                 <Switch
                   id="enabled"
-                  className="cursor-pointer"
                   checked={formData.enabled}
                   onCheckedChange={(checked) =>
                     setFormData((prev) => ({ ...prev, enabled: checked }))
@@ -506,11 +504,7 @@ const TriggerForm = ({
                 <CollapsibleTrigger asChild>
                   <div className="flex text-sm justify-between items-center">
                     <span className="cursor-default">Advanced settings</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="cursor-pointer size-8"
-                    >
+                    <Button variant="ghost" size="icon-sm">
                       <ChevronsUpDown />
                       <span className="sr-only">Toggle</span>
                     </Button>
@@ -520,7 +514,6 @@ const TriggerForm = ({
                   <Field orientation="horizontal" className="pt-2">
                     <Switch
                       id="includeMemories"
-                      className="cursor-pointer"
                       checked={formData.includeMemories}
                       onCheckedChange={(checked) =>
                         setFormData((prev) => ({

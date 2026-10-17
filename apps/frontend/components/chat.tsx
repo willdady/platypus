@@ -848,7 +848,6 @@ export const Chat = ({
                         <TooltipTrigger asChild>
                           <PromptInputButton
                             aria-label="Search"
-                            className="cursor-pointer"
                             onClick={() => setSearch(!search)}
                             variant={search ? "default" : "ghost"}
                           >

@@ -345,7 +345,7 @@ export function AppSidebar() {
                         ).root;
                         return (
                           <DropdownMenuItem key={workspace.id} asChild>
-                            <Link className="cursor-pointer" href={href}>
+                            <Link href={href}>
                               {pathname.startsWith(href) ? (
                                 <FolderOpen />
                               ) : (
@@ -362,25 +362,19 @@ export function AppSidebar() {
                       {/* ADR-0008: Workspace creation is org-admin-only. */}
                       {canCreateWorkspace(actor) && (
                         <DropdownMenuItem asChild>
-                          <Link
-                            className="cursor-pointer"
-                            href={org.createWorkspace}
-                          >
+                          <Link href={org.createWorkspace}>
                             <Plus /> Add workspace
                           </Link>
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem asChild>
-                        <Link className="cursor-pointer" href={org.root}>
+                        <Link href={org.root}>
                           <ArrowLeftRight /> Switch org
                         </Link>
                       </DropdownMenuItem>
                       {canOpenOrgSettings(actor) && (
                         <DropdownMenuItem asChild>
-                          <Link
-                            className="cursor-pointer"
-                            href={org.settings.root}
-                          >
+                          <Link href={org.settings.root}>
                             <Settings /> Organization settings
                           </Link>
                         </DropdownMenuItem>
@@ -478,7 +472,7 @@ export function AppSidebar() {
                               <DropdownMenu modal={false}>
                                 <DropdownMenuTrigger asChild>
                                   <SidebarMenuAction
-                                    className="cursor-pointer text-muted-foreground"
+                                    className="text-muted-foreground"
                                     aria-label="Chat options"
                                   >
                                     <EllipsisVertical className="h-4 w-4" />
@@ -492,7 +486,6 @@ export function AppSidebar() {
                                   {canChange && (
                                     <>
                                       <DropdownMenuItem
-                                        className="cursor-pointer"
                                         onSelect={() => handleTogglePin(chat)}
                                         disabled={pins.isPending(chat.id)}
                                       >
@@ -507,7 +500,6 @@ export function AppSidebar() {
                                         )}
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
-                                        className="cursor-pointer"
                                         onSelect={() => {
                                           setRenameChatId(chat.id);
                                           setRenameData({
@@ -520,7 +512,6 @@ export function AppSidebar() {
                                         <Pencil className="h-4 w-4" /> Edit
                                       </DropdownMenuItem>
                                       <DropdownMenuItem
-                                        className="cursor-pointer"
                                         onSelect={() =>
                                           chatDelete.request(chat.id)
                                         }
@@ -619,14 +610,12 @@ export function AppSidebar() {
               variant="outline"
               onClick={() => setRenameChatId(null)}
               disabled={isRenaming}
-              className="cursor-pointer"
             >
               Cancel
             </Button>
             <Button
               onClick={() => void submitRename()}
               disabled={isRenaming || !renameData.title.trim()}
-              className="cursor-pointer"
             >
               {isRenaming ? "Saving..." : "Save"}
             </Button>

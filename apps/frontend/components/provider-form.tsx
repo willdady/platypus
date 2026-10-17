@@ -1135,11 +1135,7 @@ const ProviderForm = ({
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">
               <span className="cursor-default">Advanced settings</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="cursor-pointer size-8"
-              >
+              <Button variant="ghost" size="icon-sm">
                 <ChevronsUpDown />
                 <span className="sr-only">Toggle</span>
               </Button>

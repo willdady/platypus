@@ -41,7 +41,7 @@ export const TimezoneCombobox = ({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className="w-full justify-between font-normal cursor-pointer"
+          className="w-full justify-between font-normal"
         >
           <span className={cn(!value && "text-muted-foreground")}>
             {value ?? "Not set"}

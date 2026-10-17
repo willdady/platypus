@@ -85,14 +85,10 @@ export const MessageEditor = ({
       onTranscriptionChange={setText}
       submit={
         <div className="flex items-center gap-1">
-          <PromptInputButton
-            aria-label="Cancel"
-            className="cursor-pointer"
-            onClick={onCancel}
-          >
+          <PromptInputButton aria-label="Cancel" onClick={onCancel}>
             <XIcon className="size-4" />
           </PromptInputButton>
-          <PromptInputSubmit aria-label="Save" className="cursor-pointer" />
+          <PromptInputSubmit aria-label="Save" />
         </div>
       }
     />
