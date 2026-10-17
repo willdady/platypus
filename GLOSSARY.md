@@ -69,12 +69,16 @@ _Avoid_: prompt, preamble, prompt template.
 **Provider**:
 A configured connection to an AI vendor (OpenAI, OpenRouter, Bedrock, Anthropic, Google, …). Carries credentials, base URL, the enabled `modelIds`, and a `taskModelId` for one-shot tasks. Lives at either Organization or Workspace scope.
 
+**Model entry**:
+One model a Provider exposes, identified by the concrete model id sent to the vendor, with its optional **Model alias**, **Context window**, native file types, extracted-text cap and **Output ceiling**. A Provider's model entries are the list Agents and Chats choose from.
+_Avoid_: model row, model config.
+
 **Model alias**:
 A stable name a Provider assigns to one of its enabled models, which an Agent or Chat may select in place of a concrete model id. Repointing the alias at a different model upgrades every Agent and Chat using it at once. Provider-scoped: an alias never spans Providers, and the Provider's own pointer-settings (`taskModelId`, `memoryExtractionModelId`, `embeddingModelId`) always name a concrete model, never an alias.
 _Avoid_: model alias name, model shortcut.
 
 **Context window**:
-The total token capacity of a `(Provider, model)` pair, declared by an Org Admin on the Provider's model entry. Asserted, never discovered: no vendor exposes it through the model API and no standard exists, so Platypus cannot query it — and a model reached through a proxy may not have the capacity its name implies. Optional; a model without one runs normally, but its **Context occupancy** cannot be judged against anything. Unrelated to **Context** (User Context) despite the shared word.
+The total token capacity of a `(Provider, model)` pair, declared by an Org Admin on the Provider's **Model entry**. Asserted, never discovered: no vendor exposes it through the model API and no standard exists, so Platypus cannot query it — and a model reached through a proxy may not have the capacity its name implies. Optional; a model without one runs normally, but its **Context occupancy** cannot be judged against anything. Unrelated to **Context** (User Context) despite the shared word.
 _Avoid_: context size, token limit, max tokens (that names an output cap).
 
 **Context occupancy**:
@@ -106,7 +110,7 @@ The tokens a **Chat turn** or run was billed for — the vendor's reported input
 _Avoid_: tokens used (ambiguous between this and **Context occupancy** — name which one), cost, spend, context usage.
 
 **Output ceiling**:
-The most a `(Provider, model)` pair may produce in a single reply, declared by an Org Admin on the Provider's model entry and surfaced as **Max output tokens**. Unlike the **Context window** it is enforced: it is sent as the output limit on every **Chat turn** and delegated **Sub-Agent** run against that model. The Provider's own one-shot executions — Chat metadata and memory extraction, which run against its pointer-settings — do not carry it. Optional; a model without one is sent no limit at all, leaving the vendor's own default in force, which on Bedrock is far below the model's real capability. Bounds a reply, never the conversation.
+The most a `(Provider, model)` pair may produce in a single reply, declared by an Org Admin on the Provider's **Model entry** and surfaced as **Max output tokens**. Unlike the **Context window** it is enforced: it is sent as the output limit on every **Chat turn** and delegated **Sub-Agent** run against that model. The Provider's own one-shot executions — Chat metadata and memory extraction, which run against its pointer-settings — do not carry it. Optional; a model without one is sent no limit at all, leaving the vendor's own default in force, which on Bedrock is far below the model's real capability. Bounds a reply, never the conversation.
 _Avoid_: max tokens, token limit, context window (that names the total capacity), output budget.
 
 **Step ceiling**:
