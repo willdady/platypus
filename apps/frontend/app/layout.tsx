@@ -12,7 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/components/auth-provider";
 import { MotionProvider } from "@/components/motion-provider";
 import { UnsavedChangesProvider } from "@/components/unsaved-changes-guard";
-import { ClipboardFallback } from "@/lib/clipboard";
+import { ClipboardFallback } from "@/components/clipboard-fallback";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

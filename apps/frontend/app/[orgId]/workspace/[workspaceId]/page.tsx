@@ -5,10 +5,8 @@ import { SkillsList } from "@/components/skills-list";
 import { TriggerCardsSkeleton, TriggerList } from "@/components/trigger-list";
 import { BoardsList } from "@/components/boards-list";
 import { DashboardsList } from "@/components/dashboards-list";
-import {
-  CollapsibleSection,
-  useSectionOpen,
-} from "@/components/collapsible-section";
+import { CollapsibleSection } from "@/components/collapsible-section";
+import { useSectionOpen } from "@/hooks/use-section-open";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";

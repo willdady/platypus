@@ -111,7 +111,7 @@ export const ConfirmDialog = ({
           </Alert>
         )}
         <DialogFooter>
-          <Button variant="ghost" onClick={handleCancel} disabled={loading}>
+          <Button variant="outline" onClick={handleCancel} disabled={loading}>
             {cancelLabel}
           </Button>
           <Button

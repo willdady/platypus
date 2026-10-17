@@ -1,6 +1,3 @@
-"use client";
-
-import { useEffect } from "react";
 import { toast } from "sonner";
 
 /**
@@ -102,10 +99,4 @@ export function installClipboardFallback() {
     },
     configurable: true,
   });
-}
-
-/** Installs {@link installClipboardFallback} once, from the root layout. */
-export function ClipboardFallback() {
-  useEffect(installClipboardFallback, []);
-  return null;
 }

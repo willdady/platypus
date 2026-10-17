@@ -22,11 +22,8 @@ import {
   eventTriggerEventSchema,
   type KanbanBoard,
   type KanbanBoardState,
-  type Trigger,
 } from "@platypus/schemas";
-import type { Scope } from "@/lib/api-write";
 import type { TriggerFieldsProps } from "@/components/trigger-form";
-import type { Serialized } from "@/lib/api-write";
 
 // The events an Event Trigger can subscribe to. Webhook-only events
 // (`trigger_run.*`) are not among them.
@@ -42,28 +39,6 @@ const CHANGED_FIELD_OPTIONS = [
   { value: "dueDate", label: "Due date" },
   { value: "priority", label: "Priority" },
 ] as const;
-
-/**
- * Whether the lists a saved board/column filter names are still loading. The
- * form waits on them so the filter shows a name rather than a blank Select.
- * Only a *saved* column waits on its board's columns: picking another board
- * clears the column, so a later board change never swaps the whole form back
- * for the skeleton.
- */
-const useEventFilterListsLoading = (
-  trigger: Serialized<Trigger> | undefined,
-  scope: Scope,
-) => {
-  const { isLoading: boardsLoading } = useScopedSWR<{
-    results: KanbanBoard[];
-  }>("boards", scope);
-  const filters = trigger?.type === "event" ? trigger.config.filters : null;
-  const { isLoading: columnsLoading } = useScopedSWR<KanbanBoardState>(
-    `boards/${filters?.boardId}/state`,
-    filters?.boardId && filters.columnId ? scope : null,
-  );
-  return boardsLoading || columnsLoading;
-};
 
 /** An Event Trigger's events and its board, column and changed-field filters. */
 const TriggerEventFields = ({
@@ -265,4 +240,4 @@ const TriggerEventFields = ({
   );
 };
 
-export { TriggerEventFields, useEventFilterListsLoading };
+export { TriggerEventFields };

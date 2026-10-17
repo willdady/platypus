@@ -59,7 +59,7 @@ const useAttachments = (
  * the read is pending (or withheld by a `null` orgId, for a viewer who can't
  * see attachments).
  */
-export const useAttachmentCount = (
+const useAttachmentCount = (
   orgId: string | null,
   resourceType: ResourceType,
   resourceId: string,

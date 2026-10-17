@@ -122,6 +122,37 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // A hook lives in `hooks/`, not in a component module. The exceptions pair a
+  // hook with the context it reads, which their module keeps private; `ui/`
+  // and `ai-elements/` are vendored (shadcn, AI Elements).
+  {
+    files: ["components/**/*.ts", "components/**/*.tsx"],
+    ignores: [
+      ...TEST_FILES,
+      "components/auth-provider.tsx",
+      "components/unsaved-changes-guard.tsx",
+      "components/ui/**",
+      "components/ai-elements/**",
+    ],
+    rules: {
+      "no-restricted-exports": [
+        "error",
+        { restrictedNamedExportsPattern: "^use[A-Z]" },
+      ],
+    },
+  },
+  // `lib/` holds plain helpers; a component (a PascalCase export) belongs in
+  // `components/`.
+  {
+    files: ["lib/**/*.ts", "lib/**/*.tsx"],
+    ignores: TEST_FILES,
+    rules: {
+      "no-restricted-exports": [
+        "error",
+        { restrictedNamedExportsPattern: "^[A-Z][a-z]" },
+      ],
+    },
+  },
   // Test files: Vitest, Testing Library and jest-dom rules.
   {
     files: TEST_FILES,

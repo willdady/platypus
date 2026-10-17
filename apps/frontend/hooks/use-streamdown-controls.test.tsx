@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
-import { useStreamdownControls } from "./markdown";
+import { useStreamdownControls } from "./use-streamdown-controls";
 
 // jsdom does not define `isSecureContext` at all.
 const stubSecureContext = (secure: boolean) =>

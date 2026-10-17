@@ -597,7 +597,7 @@ export const AgentsList = ({
             </p>
           )}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setCloneDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setCloneDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleCloneConfirm}>Clone</Button>
