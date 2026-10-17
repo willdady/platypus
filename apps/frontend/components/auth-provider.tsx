@@ -72,8 +72,8 @@ const transientReadError = (error: unknown, data: unknown): unknown =>
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 /**
- * What never changes for the life of the page, apart from the session and
- * membership state, so its readers don't re-render when those do.
+ * What stays fixed for the life of the page, kept apart from the session and
+ * membership state so its readers don't re-render when those change.
  */
 interface BackendContextType {
   backendUrl: string;
@@ -285,7 +285,9 @@ export function useAuth() {
 function useBackend() {
   const context = useContext(BackendContext);
   if (context === undefined) {
-    throw new Error("useBackendUrl must be used within an AuthProvider");
+    throw new Error(
+      "useBackendUrl and useAuthClient must be used within an AuthProvider",
+    );
   }
   return context;
 }
