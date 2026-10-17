@@ -42,8 +42,9 @@ vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: vi.fn() }) }));
 const LOADING = { data: undefined, isLoading: true };
 
 vi.mock("@/hooks/use-scoped-swr", () => ({
-  useScopedSWR: (entity: string, scope: { workspaceId?: string }) =>
-    reads.get(`${scope.workspaceId ?? ""}|${entity}`) ?? LOADING,
+  // A null scope is a skipped read — the edit dialog's form reads nothing.
+  useScopedSWR: (entity: string, scope: { workspaceId?: string } | null) =>
+    reads.get(`${scope?.workspaceId ?? ""}|${entity}`) ?? LOADING,
 }));
 
 import { AppSidebar } from "./app-sidebar";
@@ -426,6 +427,28 @@ describe("AppSidebar chat actions", () => {
     expect(screen.getByText("Pinned")).toBeInTheDocument();
     await act(async () => refuse());
     expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
+  });
+
+  it("keeps a refused delete in its dialog with the backend's message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(409, { error: "Chat is busy" })),
+    );
+    seedHeader();
+    setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });
+    renderSidebar();
+
+    fireEvent.click(
+      within(openChatMenu("First chat")).getByRole("menuitem", {
+        name: "Delete",
+      }),
+    );
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Chat is busy",
+    );
   });
 
   // The backend refuses every one of these to anyone but the Workspace Owner

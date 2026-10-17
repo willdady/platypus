@@ -19,6 +19,7 @@ const { authState, updateUser } = vi.hoisted(() => {
 
 vi.mock("@/components/auth-provider", () => ({
   useAuth: () => authState,
+  useBackendUrl: () => "http://test",
 }));
 
 import UserSettingsPage from "./page";

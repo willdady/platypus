@@ -34,9 +34,10 @@ const swrState = vi.hoisted(() => ({
   response: {} as { data?: unknown; isLoading: boolean; error?: unknown },
 }));
 const mutate = vi.fn();
+const configuredMutate = vi.hoisted(() => vi.fn());
 
 vi.mock("swr", () => ({
-  useSWRConfig: () => ({ cache: new Map() }),
+  useSWRConfig: () => ({ cache: new Map(), mutate: configuredMutate }),
   __esModule: true,
   default: () => ({ ...swrState.response, mutate }),
 }));
@@ -125,7 +126,9 @@ describe("ContextsPage saving the global context", () => {
     expect(url).toBe("http://test/users/me/contexts/ctx1");
     expect(init).toMatchObject({ method: "PUT" });
     expect(JSON.parse(init.body)).toEqual({ content: "updated" });
-    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(configuredMutate).toHaveBeenCalledWith(
+      "http://test/users/me/contexts",
+    );
   });
 
   it("creates the global context when there is none yet", async () => {
@@ -145,23 +148,22 @@ describe("ContextsPage saving the global context", () => {
   });
 
   it.each([
-    [
-      "a create refused because one already exists",
-      NONE,
-      409,
-      "You already have a global context",
-    ],
-    ["a failed create", NONE, 500, "Failed to create context"],
-    ["a failed update", WARM, 409, "Failed to update context"],
-  ])("reports %s", async (_name, response, status, message) => {
-    swrState.response = response;
-    stubRejectedSave("Nope", status);
-    render(<ContextsPage />);
+    ["a create refused because one already exists", NONE, 409],
+    ["a failed create", NONE, 500],
+    ["a failed update", WARM, 409],
+  ])(
+    "reports %s with the server's message",
+    async (_name, response, status) => {
+      swrState.response = response;
+      configuredMutate.mockClear();
+      stubRejectedSave("Nope", status);
+      render(<ContextsPage />);
 
-    save("text");
+      save("text");
 
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith(message));
-    expect(mutate).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
-  });
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith("Nope"));
+      expect(configuredMutate).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    },
+  );
 });

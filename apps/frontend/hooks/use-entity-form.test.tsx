@@ -251,6 +251,27 @@ describe("useEntityForm submit lifecycle", () => {
     expect(result.current.validationErrors.name).toBe("Name is taken");
     expect(onSuccess).not.toHaveBeenCalled();
   });
+
+  it("toasts a default failure when the save throws", async () => {
+    stubAcceptedSave({ id: "s1" });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { result } = renderHook(() =>
+      useEntityForm<Data, unknown>({
+        ...baseOptions,
+        onSuccess: () => {
+          throw new Error("boom");
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(toastError).toHaveBeenCalledWith("Couldn't save");
+    expect(result.current.isSubmitting).toBe(false);
+  });
 });
 
 describe("useEntityDelete lifecycle", () => {
@@ -393,6 +414,25 @@ describe("useEntityDelete lifecycle", () => {
       await result.current.handleDelete();
     });
     expect(result.current.deleteError).toBe("Still referenced");
+  });
+
+  it("clears the pending flag and stays inline when the delete throws", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { result } = renderHook(() =>
+      useEntityDelete({
+        entity: "skills",
+        scope: { orgId: "org1" },
+        id: "s1",
+        write: () => Promise.reject(new Error("boom")),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleDelete();
+    });
+
+    expect(result.current.isDeleting).toBe(false);
+    expect(result.current.deleteError).toBe("Couldn't delete");
   });
 });
 

@@ -1,16 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useBackendUrl } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
 import { type Context } from "@platypus/schemas";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Globe, FolderClosed } from "lucide-react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityForm } from "@/hooks/use-entity-form";
 import { ContextsList } from "@/components/contexts-list";
 import { ListError } from "@/components/list-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,13 +20,10 @@ const findGlobalContext = (contexts?: {
 }) => contexts?.results.find((c) => !c.workspaceId);
 
 const ContextsPage = () => {
-  const backendUrl = useBackendUrl();
-
   const {
     data: contexts,
     error,
     isLoading,
-    mutate,
   } = useScopedSWR<{
     results: ContextWithWorkspaceName[];
   }>("users/me/contexts", {});
@@ -39,50 +32,33 @@ const ContextsPage = () => {
   // duplicate, and anything typed would be overwritten when the data arrives.
   const isLoaded = contexts !== undefined;
 
-  const [globalContextContent, setGlobalContextContent] = useState(
-    () => findGlobalContext(contexts)?.content || "",
-  );
-  const [isSavingGlobal, setIsSavingGlobal] = useState(false);
+  const globalCtx = findGlobalContext(contexts);
+
+  const {
+    formData,
+    setField,
+    setFormData,
+    validationErrors,
+    isSubmitting,
+    submit,
+  } = useEntityForm({
+    initialData: { content: globalCtx?.content || "" },
+    entity: "users/me/contexts",
+    scope: {},
+    id: globalCtx?.id,
+    buildPayload: (data) => data,
+    // No field to key it to: the backend's refusal is the message to show.
+    conflictField: null,
+    successMessage: "Global context saved",
+  });
 
   // Seed the editor from the global context once it is known, and again only
   // when a different one arrives (the first save creates it). Keyed on the id,
   // not the list: a revalidation hands back a new array, and re-seeding on that
   // would overwrite what the user is typing.
-  useResetOnChange(
-    isLoaded ? (findGlobalContext(contexts)?.id ?? null) : undefined,
-    () => setGlobalContextContent(findGlobalContext(contexts)?.content || ""),
+  useResetOnChange(isLoaded ? (globalCtx?.id ?? null) : undefined, () =>
+    setFormData({ content: globalCtx?.content || "" }),
   );
-
-  const handleSaveGlobal = async () => {
-    if (!isLoaded) return;
-    const globalCtx = findGlobalContext(contexts);
-    setIsSavingGlobal(true);
-
-    const outcome = globalCtx
-      ? await writeAt(
-          joinUrl(backendUrl, `/users/me/contexts/${globalCtx.id}`),
-          {
-            method: "PUT",
-            data: { content: globalContextContent },
-          },
-        )
-      : await writeAt(joinUrl(backendUrl, "/users/me/contexts"), {
-          method: "POST",
-          data: { content: globalContextContent, workspaceId: undefined },
-        });
-
-    if (outcome.outcome === "success") {
-      toast.success("Global context saved");
-      mutate();
-    } else if (!globalCtx && outcome.outcome === "conflict") {
-      toast.error("You already have a global context");
-    } else {
-      toast.error(
-        globalCtx ? "Failed to update context" : "Failed to create context",
-      );
-    }
-    setIsSavingGlobal(false);
-  };
 
   return (
     <div>
@@ -110,8 +86,9 @@ const ContextsPage = () => {
                     id="global-context-edit"
                     label=""
                     placeholder="Enter context about yourself, your preferences, or general instructions..."
-                    value={globalContextContent}
-                    onChange={(e) => setGlobalContextContent(e.target.value)}
+                    value={formData.content}
+                    onChange={(e) => setField("content", e.target.value)}
+                    error={validationErrors.content}
                     className="!font-mono"
                     maxLength={1000}
                   />
@@ -128,10 +105,10 @@ const ContextsPage = () => {
                 )}
                 <div className="flex items-center justify-between">
                   <Button
-                    onClick={handleSaveGlobal}
-                    disabled={!isLoaded || isSavingGlobal}
+                    onClick={() => void submit()}
+                    disabled={!isLoaded || isSubmitting}
                   >
-                    Save
+                    {isSubmitting ? "Saving..." : "Save"}
                   </Button>
                 </div>
               </div>
