@@ -439,7 +439,7 @@ export type UseEntityDeleteResult = {
 /**
  * Owns the delete half of the entity-form lifecycle: the dialog open/loading/
  * error trio, the DELETE write, and `applyDeleteOutcome`. The dialog itself is
- * `EntityDeleteDialog`, so the confirm copy and destructive styling are
+ * `DeleteConfirmDialog`, so the confirm copy and destructive styling are
  * single-sourced too.
  */
 export function useEntityDelete<TResult = unknown>({

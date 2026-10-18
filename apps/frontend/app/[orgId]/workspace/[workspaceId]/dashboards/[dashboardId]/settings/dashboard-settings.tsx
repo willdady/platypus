@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import type { Dashboard } from "@platypus/schemas";
 import { workspaceRoutes } from "@/lib/routes";
 
@@ -147,7 +147,7 @@ function DashboardSettingsPage({
         </form>
       </DetailFormState>
 
-      <EntityDeleteDialog
+      <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Dashboard"

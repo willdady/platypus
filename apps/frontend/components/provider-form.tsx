@@ -33,7 +33,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import {
@@ -1043,7 +1043,7 @@ function ProviderForm({
         )
       )}
 
-      <EntityDeleteDialog
+      <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Provider"

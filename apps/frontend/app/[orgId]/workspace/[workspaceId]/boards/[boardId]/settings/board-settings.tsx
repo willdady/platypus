@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import type { KanbanBoard } from "@platypus/schemas";
 import { ResourcePage } from "@/components/resource-page";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
-import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { workspaceRoutes } from "@/lib/routes";
 
 function BoardSettingsPage({
@@ -53,7 +53,7 @@ function BoardSettingsPage({
         isDeleting={isDeleting}
       />
 
-      <EntityDeleteDialog
+      <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Board"

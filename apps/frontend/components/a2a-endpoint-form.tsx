@@ -22,7 +22,7 @@ import { FormTextareaField } from "@/components/form-textarea-field";
 import { FormSelectField } from "@/components/form-select-field";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
-import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { A2aEndpointNotices } from "@/components/a2a-endpoint-notices";
 import { A2aTokens, ACCESS_SECTION_ID } from "@/components/a2a-tokens";
@@ -288,7 +288,7 @@ function A2aEndpointForm({
         />
       )}
 
-      <EntityDeleteDialog
+      <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete A2A endpoint"
