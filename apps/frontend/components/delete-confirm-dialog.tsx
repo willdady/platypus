@@ -6,9 +6,10 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 type DeleteConfirmDialogProps = {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
+  /** The dialog title, e.g. `"Delete Skill"`. */
   readonly title: string;
   readonly description: ReactNode;
-  /** Defaults to "Delete"; the entity form is the caller's copy. */
+  /** Defaults to "Delete"; override only to name what is deleted. */
   readonly confirmLabel?: string;
   /** When set, the confirm button stays disabled until the phrase is typed. */
   readonly confirmPhrase?: string;
@@ -18,13 +19,14 @@ type DeleteConfirmDialogProps = {
   readonly cancelLabel?: string;
   readonly onConfirm: () => void;
   readonly loading?: boolean;
+  /** A failed delete's message, shown in the dialog rather than a toast. */
   readonly error?: string | null;
 };
 
 /**
- * The destructive confirm dialog shared by every list's delete flow (#877):
- * `ConfirmDialog` with the delete variant, label, and loading copy fixed so
- * lists declare only their title and description.
+ * The destructive confirm dialog shared by every list's and entity form's
+ * delete flow (#877): `ConfirmDialog` with the delete variant, label default,
+ * and loading copy fixed so a delete never drifts between callers.
  */
 export function DeleteConfirmDialog({
   open,
