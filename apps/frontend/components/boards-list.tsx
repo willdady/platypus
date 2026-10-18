@@ -7,6 +7,7 @@ import {
 
 const boardsConfig: WorkspaceEntityCardListConfig = {
   entity: "boards",
+  queryParam: "boardQuery",
   labels: {
     deleteTitle: "Delete Board",
     deleteNoun: "board",

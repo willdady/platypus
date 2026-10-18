@@ -1,6 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import { defaultFilter } from "cmdk";
 import {
   Item,
   ItemTitle,
@@ -12,11 +14,13 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import { CardGridSkeleton, LoadingRegion } from "@/components/list-skeletons";
 import { RowActionsMenu } from "@/components/row-actions-menu";
+import { SearchInput } from "@/components/search-input";
 import Link from "next/link";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { writeEntity } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
+import { replaceSearchParam } from "@/lib/search-params";
 import { cn } from "@/lib/utils";
 
 /** The card fields every entity card shows. */
@@ -138,6 +142,8 @@ export function EntityCardList<T extends EntityCard>({
 export type WorkspaceEntityCardListConfig = {
   /** Collection entity as the API spells it, and the key to its routes. */
   readonly entity: "boards" | "dashboards";
+  /** The URL param holding the name search: "boardQuery" / "dashboardQuery". */
+  readonly queryParam: "boardQuery" | "dashboardQuery";
   readonly labels: {
     /** Delete confirmation title: "Delete Board" / "Delete Dashboard". */
     readonly deleteTitle: string;
@@ -153,8 +159,8 @@ export type WorkspaceEntityCardListConfig = {
 /**
  * The workspace's sorted card list of a named entity, one component for
  * Boards and Dashboards. Each card links to its detail page and carries the
- * same edit/delete menu; the entity noun, delete copy, and confirmation
- * phrase are the parameters.
+ * same edit/delete menu; the entity noun, search param, delete copy, and
+ * confirmation phrase are the parameters.
  */
 export function WorkspaceEntityCardList({
   orgId,
@@ -172,9 +178,25 @@ export function WorkspaceEntityCardList({
     mutate,
   } = useScopedList<EntityCard>(config.entity, { orgId, workspaceId });
 
+  const searchParams = useSearchParams();
+  // The input reads local state, seeded from the URL: the URL write below
+  // lands a render later, and an input bound straight to it drops keystrokes.
+  const [nameFilter, setNameFilterState] = useState(
+    () => searchParams.get(config.queryParam) ?? "",
+  );
+  // An empty search leaves its param out.
+  const setNameFilter = (value: string) => {
+    setNameFilterState(value);
+    replaceSearchParam(config.queryParam, value.trim() || null);
+  };
+
   const routes = workspaceRoutes(orgId, workspaceId)[config.entity];
 
-  const cards = [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const query = nameFilter.trim();
+  // The Command palette's own scorer, applied to the name.
+  const cards = [...rows]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter((card) => !query || defaultFilter(card.name, query) > 0);
 
   const deleteFlow = useDeleteFlow<EntityCard>({
     mutate,
@@ -191,13 +213,31 @@ export function WorkspaceEntityCardList({
 
   return (
     <>
+      {/* Nothing to filter, no controls. */}
+      {rows.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <SearchInput
+            placeholder={`Search ${config.entity}…`}
+            aria-label={`Search ${config.entity}`}
+            value={nameFilter}
+            onValueChange={setNameFilter}
+            className="w-full sm:w-64"
+          />
+        </div>
+      )}
       <EntityCardList
         items={cards}
         isLoading={isLoading}
         error={error}
         subject={config.entity}
         skeleton={<CardGridSkeleton />}
-        empty={<ListState variant="empty">No {config.entity} yet.</ListState>}
+        empty={
+          <ListState variant="empty">
+            {rows.length
+              ? `No ${config.entity} match your filters.`
+              : `No ${config.entity} yet.`}
+          </ListState>
+        }
         href={(card) => routes.detail(card.id)}
         menu={(card) => (
           <RowActionsMenu
