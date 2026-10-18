@@ -7,6 +7,7 @@ import {
 
 const dashboardsConfig: WorkspaceEntityCardListConfig = {
   entity: "dashboards",
+  queryParam: "dashboardQuery",
   labels: {
     deleteTitle: "Delete Dashboard",
     deleteNoun: "dashboard",
