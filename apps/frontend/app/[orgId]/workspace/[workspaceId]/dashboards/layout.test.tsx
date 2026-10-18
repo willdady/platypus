@@ -16,9 +16,6 @@ describe("DashboardsLayout", () => {
     const banner = screen.getByRole("alert");
     expect(banner).toHaveTextContent("Dashboards are deprecated");
     expect(banner).toHaveTextContent("v4.0.0");
-    for (const tool of ["listDashboards", "listWidgets", "updateWidgetData"]) {
-      expect(banner).toHaveTextContent(tool);
-    }
     expect(screen.getByText("Dashboard page")).toBeInTheDocument();
   });
 });

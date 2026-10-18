@@ -13,9 +13,7 @@ export default function DashboardsLayout({
           <AlertTitle>Dashboards are deprecated</AlertTitle>
           <AlertDescription>
             Dashboards and their data are removed in the next major release,
-            v4.0.0. Agents using the Dashboards tool set lose the{" "}
-            <code>listDashboards</code>, <code>listWidgets</code> and{" "}
-            <code>updateWidgetData</code> tools.
+            v4.0.0.
           </AlertDescription>
         </Alert>
       </div>
