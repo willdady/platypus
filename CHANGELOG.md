@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.24.0](https://github.com/willdady/platypus/compare/v3.23.0...v3.24.0) (2026-10-18)
+
+
+### Features
+
+* deprecate Dashboards ahead of their v4.0.0 removal ([#1588](https://github.com/willdady/platypus/issues/1588)) ([30ba8d4](https://github.com/willdady/platypus/commit/30ba8d47ece2b835eacfc8f0152397c06e3669d8))
+* **frontend:** search the Workspace home Boards and Dashboards lists by name ([#1589](https://github.com/willdady/platypus/issues/1589)) ([d734fa1](https://github.com/willdady/platypus/commit/d734fa1af22549ddabc8c3a2010217cbb4fd6df4))
+
+
+### Bug Fixes
+
+* **frontend:** shorten the Dashboards deprecation alert ([#1593](https://github.com/willdady/platypus/issues/1593)) ([eecf7e5](https://github.com/willdady/platypus/commit/eecf7e5fa0fe9d372ad8e206230cf92175bbf6a2))
+* **frontend:** show Send busy during Sandbox uploads and refuse a second Send ([#1583](https://github.com/willdady/platypus/issues/1583)) ([32fb567](https://github.com/willdady/platypus/commit/32fb5674383c5a2c3b4d172cc111205e5bec4cb6))
+* **frontend:** stop a long Kanban card description overlapping the sections below ([#1592](https://github.com/willdady/platypus/issues/1592)) ([3eae28f](https://github.com/willdady/platypus/commit/3eae28fddd0f926813ce8cb1bf7cdf2a90b8665f)), closes [#1591](https://github.com/willdady/platypus/issues/1591)
+* **frontend:** stop the chat scroll resetting when a second message is sent ([#1590](https://github.com/willdady/platypus/issues/1590)) ([4931602](https://github.com/willdady/platypus/commit/493160227d8a0458f4cb0e7eea5bce7cabb1766b))
+
 ## [3.23.0](https://github.com/willdady/platypus/compare/v3.22.0...v3.23.0) (2026-10-17)
 
 
