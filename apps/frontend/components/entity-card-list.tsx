@@ -143,7 +143,7 @@ export type WorkspaceEntityCardListConfig = {
   /** Collection entity as the API spells it, and the key to its routes. */
   readonly entity: "boards" | "dashboards";
   /** The URL param holding the name search: "boardQuery" / "dashboardQuery". */
-  readonly queryParam: string;
+  readonly queryParam: "boardQuery" | "dashboardQuery";
   readonly labels: {
     /** Delete confirmation title: "Delete Board" / "Delete Dashboard". */
     readonly deleteTitle: string;
@@ -193,7 +193,7 @@ export function WorkspaceEntityCardList({
   const routes = workspaceRoutes(orgId, workspaceId)[config.entity];
 
   const query = nameFilter.trim();
-  // The Command palette's own scorer, applied to the name, as Skills does.
+  // The Command palette's own scorer, applied to the name.
   const cards = [...rows]
     .sort((a, b) => a.name.localeCompare(b.name))
     .filter((card) => !query || defaultFilter(card.name, query) > 0);
