@@ -745,16 +745,14 @@ export function Chat({
                 // laying out and painting the ones off screen. `auto` in the
                 // intrinsic size remembers each one's real height once it has
                 // rendered, so scrolling back over it does not jump. The last
-                // message is always on screen and is the one still growing.
+                // message gets it too: one first given containment when the
+                // next message lands has no remembered size, so for a frame
+                // it is 160px, the transcript collapses and the scroll resets.
                 // The padding cancelled by the margin keeps focus rings at the
                 // edge outside the paint clip this sets.
                 <div
                   key={message.id}
-                  className={cn(
-                    "-m-1 flex flex-col gap-4 p-1",
-                    messageIndex < messages.length - 1 &&
-                      "[contain-intrinsic-size:auto_160px] [content-visibility:auto]",
-                  )}
+                  className="-m-1 flex flex-col gap-4 p-1 [contain-intrinsic-size:auto_160px] [content-visibility:auto]"
                 >
                   <ChatMessage
                     message={message}
