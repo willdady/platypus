@@ -97,7 +97,7 @@ Establish the range: previous release tag to the tip of `main`.
 ```bash
 git tag --sort=-v:refname | head -1        # previous release
 gh release view <prev-tag>                 # what it told self-hosters
-gh pr list --state open --search "chore(main): release" --json number,title,body
+gh pr list --state open --head release-please--branches--main--components--platypus --json number,title,body
 git log <prev-tag>..origin/main --oneline
 git diff <prev-tag>..origin/main --stat
 ```

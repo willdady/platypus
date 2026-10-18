@@ -8,7 +8,7 @@
     "build": "next build",
     "build-docker": "./scripts/build_docker.sh",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 430",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

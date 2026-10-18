@@ -15,7 +15,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "lint": "eslint"
+    "lint": "eslint --max-warnings 0"
   },
   "publishConfig": {
     "main": "dist/index.js",
