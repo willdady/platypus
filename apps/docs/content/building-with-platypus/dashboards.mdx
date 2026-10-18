@@ -7,6 +7,15 @@ import { Callout, Steps } from "nextra/components";
 
 # Dashboards
 
+<Callout type="warning">
+  **Dashboards are deprecated.** The next major release, v4.0.0, removes
+  Dashboards and their data. Agents with the **Dashboards** Tool set lose the
+  `listDashboards`, `listWidgets` and `updateWidgetData` tools, so an Agent
+  whose Instructions rely on them stops being able to do that part of its job.
+  For a dashboard you will keep, use a purpose-built tool such as Grafana or
+  Metabase.
+</Callout>
+
 A **Dashboard** displays structured data as a grid of **widgets** in your
 Workspace. The split is deliberate: _you_ own the layout and the set of widgets,
 while an **Agent** can keep each widget's **data** current. That makes a dashboard
