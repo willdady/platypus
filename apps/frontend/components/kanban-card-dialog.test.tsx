@@ -288,6 +288,17 @@ describe("KanbanCardDialog delete comment", () => {
   });
 });
 
+describe("KanbanCardDialog details scroll area", () => {
+  // jsdom has no layout, so pin the class instead of measuring overlap (#1591).
+  it("stops its children shrinking", () => {
+    renderDialog();
+
+    expect(screen.getByTestId("card-details-scroll")).toHaveClass(
+      "[&>*]:shrink-0",
+    );
+  });
+});
+
 describe("KanbanCardDialog mobile composition", () => {
   it("composes the same sections into tabs instead of the desktop split", () => {
     setViewportWidth(375);

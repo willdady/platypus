@@ -399,7 +399,12 @@ function CardDetailsPane({
           onEdit={onEdit}
         />
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-4">
+      {/* Children keep their content height: a flex item may shrink, and the
+          body's explicit min-h lets it overflow onto the sections below. */}
+      <div
+        data-testid="card-details-scroll"
+        className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-4 [&>*]:shrink-0"
+      >
         <CardBodySection
           body={body}
           isEditing={isEditing}
