@@ -96,6 +96,7 @@ describe("useSandboxUploads", () => {
 
     const first = upload(files);
     await expect(upload(files)).rejects.toThrow();
+    expect(toast.info).toHaveBeenCalledWith("Still uploading to the Sandbox");
     await expect(first).resolves.toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

@@ -379,6 +379,11 @@ export function Chat({
   // rather than `ready` — the reading the old predicate missed (issue #648).
   const runHeldElsewhere = isRunHeldElsewhere(runBelief);
   const effectiveStatus = composerTurnStatus(runBelief, errorTreatment);
+  // A Send's Sandbox uploads read as a sent turn on the composer only: the
+  // turn has not started, so a press must not reach `turn.cancel()`.
+  const composerStatus = sandboxUploads.uploading
+    ? "submitted"
+    : effectiveStatus;
 
   // Every entry point starts its turn here — the composer, Regenerate and a
   // resent edit — so all three get the same pre-turn checks and refresh.
@@ -811,7 +816,7 @@ export function Chat({
                     : selectedAgent?.inputPlaceholder ||
                       "What would you like to know?"
                 }
-                status={effectiveStatus}
+                status={composerStatus}
                 disabled={runHeldElsewhere}
                 passthroughFileTypes={resolvedModel?.passthroughFileTypes ?? []}
                 modelSelection={modelSelection}
@@ -908,7 +913,7 @@ export function Chat({
                       )}
                   </AnimatePresence>
                 }
-                submit={<PromptInputSubmit status={effectiveStatus} />}
+                submit={<PromptInputSubmit status={composerStatus} />}
               />
             ) : (
               <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">

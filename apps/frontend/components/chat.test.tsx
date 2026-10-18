@@ -6,6 +6,7 @@ import { reportPdf } from "@/test/chat-test-fixtures";
 import {
   jsonResponse,
   stubAcceptedSave,
+  stubPendingSave,
   stubRejectedSave,
 } from "@/test/test-utils";
 import type { AlternativePosition } from "@/lib/chat-alternatives";
@@ -51,6 +52,9 @@ const { harness } = vi.hoisted(() => ({
     regenerate: vi.fn(),
     stop: vi.fn(),
     toastError: vi.fn(),
+    toastInfo: vi.fn(),
+    /** The Sandbox uploads the stubbed composer sends with its message. */
+    sandboxFiles: [] as File[],
     chatMutate: vi.fn(),
     agentsMutate: vi.fn(),
     chatMessageRenders: 0,
@@ -124,7 +128,7 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => harness.auth,
 }));
 vi.mock("sonner", () => ({
-  toast: { error: harness.toastError, info: vi.fn() },
+  toast: { error: harness.toastError, info: harness.toastInfo },
 }));
 
 // The presentational tree, stubbed to the props under test. `PromptInputTextarea`
@@ -148,12 +152,23 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     onSubmit,
   }: {
     children?: React.ReactNode;
-    onSubmit: (message: { text: string; files: FileUIPart[] }) => void;
+    onSubmit: (message: {
+      text: string;
+      files: FileUIPart[];
+      sandboxFiles: File[];
+    }) => Promise<void> | void;
   }) => (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit({ text: "Hello", files: [] });
+        // The real input swallows a rejected Send and keeps the composer.
+        void Promise.resolve(
+          onSubmit({
+            text: "Hello",
+            files: [],
+            sandboxFiles: harness.sandboxFiles,
+          }),
+        ).catch(() => {});
       }}
     >
       {children}
@@ -537,6 +552,45 @@ describe("Upload to Sandbox", () => {
     );
     expect(screen.queryByText("Upload to Sandbox")).not.toBeInTheDocument();
   });
+
+  // The message goes only once its uploads land (ADR-0028), so the wait in
+  // between reads as a sent turn, and a second Send is turned away out loud.
+  it("shows Send busy while uploads run and refuses a second Send", async () => {
+    const { fetchMock, resolve } = stubPendingSave();
+    harness.sandboxFiles = [new File(["a,b"], "a.csv")];
+    renderOn();
+    const submit = screen.getByTestId("submit");
+
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(submit).toHaveAttribute("data-status", "submitted"),
+    );
+    expect(screen.getByRole("textbox")).toHaveAttribute(
+      "data-status",
+      "submitted",
+    );
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(harness.toastInfo).toHaveBeenCalled());
+    expect(harness.stop).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolve();
+    await waitFor(() => expect(harness.sendMessage).toHaveBeenCalledTimes(1));
+    expect(submit).toHaveAttribute("data-status", "ready");
+  });
+
+  it("returns Send to idle when an upload fails", async () => {
+    stubRejectedSave("Sandbox unreachable", 500);
+    harness.sandboxFiles = [new File(["a,b"], "a.csv")];
+    renderOn();
+    const submit = screen.getByTestId("submit");
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(harness.toastError).toHaveBeenCalled());
+    expect(submit).toHaveAttribute("data-status", "ready");
+    expect(harness.sendMessage).not.toHaveBeenCalled();
+  });
 });
 
 /** The search toggle's Globe control, present only when the model can search. */
@@ -587,6 +641,8 @@ beforeEach(() => {
   harness.regenerate.mockReset();
   harness.stop.mockReset();
   harness.toastError.mockReset();
+  harness.toastInfo.mockReset();
+  harness.sandboxFiles = [];
   harness.chatMutate.mockReset();
   harness.chatMutate.mockResolvedValue(undefined);
   harness.agentsMutate.mockReset();
