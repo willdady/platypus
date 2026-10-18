@@ -1,0 +1,105 @@
+---
+title: Daytona adapter
+description: Run each Workspace's Sandbox on Daytona's hosted sandboxes — enablement, the deployment-wide API key, lifecycle, and security posture.
+---
+
+import { Callout } from "nextra/components";
+
+# Daytona adapter
+
+The Daytona adapter (`backend: "daytona"`) runs each Workspace's Sandbox as a
+sandbox on [Daytona](https://www.daytona.io), a hosted sandbox service. Platypus
+creates the Daytona sandbox on the first tool call, starts it again when Daytona
+has stopped it, and deletes it when you delete the Sandbox.
+
+Like the SSH adapter, it **works in horizontally-scaled deployments**: every
+backend replica talks to the same Daytona account, so they all see the same
+sandbox. Unlike SSH, there is no host for you to run.
+
+This page is for the **Operator** who stands up the Daytona backend. For what a
+Sandbox is, its environment variables, and who can configure it, see
+[Sandbox infrastructure](/self-hosting/sandbox).
+
+## Enabling it
+
+Add `@platypus/daytona` to `PLATYPUS_PLUGINS`, set your Daytona API key in
+`PLATYPUS_PLUGIN_CONFIG_DAYTONA`, and restart the backend:
+
+```
+PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/daytona
+PLATYPUS_PLUGIN_CONFIG_DAYTONA={"credentials":{"apiKey":"dtn_..."}}
+```
+
+It ships as a core Plugin, so no package install is needed. Listing the Plugin
+without an API key stops the backend from starting, with an error naming the
+Plugin. An Org Admin then picks **Daytona** as the backend under **Workspace
+settings → Sandbox**; it has no settings of its own there.
+
+<Callout type="warning">
+  The API key is **deployment-wide**: once the Plugin is listed, any Org Admin
+  can pick Daytona, and every Workspace that does runs on your one Daytona
+  account and is billed there. There is no per-Organization switch.
+</Callout>
+
+## Deployment config
+
+Everything optional goes in the `config` block beside `credentials`, except
+`outboundProxyUrl`, which goes in `credentials` because the URL can carry the
+proxy's password:
+
+| Field              | Default           | Meaning                                                                        |
+| ------------------ | ----------------- | ------------------------------------------------------------------------------ |
+| `apiUrl`           | Daytona's cloud   | API endpoint, for a self-hosted Daytona.                                       |
+| `target`           | Account default   | Daytona region new sandboxes are created in, such as `us` or `eu`.             |
+| `snapshot`         | Daytona's default | Snapshot new sandboxes are created from. Use one with your toolchain baked in. |
+| `autoStopInterval` | `15`              | Minutes idle before Daytona stops a sandbox. `0` never stops it.               |
+| `networkBlockAll`  | `false`           | Block all network access from the sandbox.                                     |
+| `networkAllowList` | Unrestricted      | CIDR ranges the sandbox may reach, as a JSON array.                            |
+| `domainAllowList`  | Unrestricted      | Domains the sandbox may reach, as a JSON array.                                |
+| `outboundProxyUrl` | None              | HTTP(S) proxy for the sandbox's web traffic. Set in `credentials`.             |
+
+```
+PLATYPUS_PLUGIN_CONFIG_DAYTONA={"config":{"target":"eu","snapshot":"my-toolchain"},"credentials":{"apiKey":"dtn_..."}}
+```
+
+Every field except `apiUrl` applies only to sandboxes created after the change.
+An existing Sandbox keeps its region, image and network policy until you delete
+it and let the next tool call create it again.
+
+<Callout type="warning">
+  `outboundProxyUrl` on its own is routing, not a boundary: a process inside the
+  sandbox that clears its proxy variables reaches the internet directly. To
+  force web traffic through the proxy, set `domainAllowList` too.
+</Callout>
+
+`networkBlockAll`, `networkAllowList` and `domainAllowList` depend on your
+[Daytona tier](https://www.daytona.io/docs/en/network-limits/):
+
+- **Tier 1 and 2** — your Daytona organization's network restrictions apply and
+  can't be overridden per sandbox, so these fields don't loosen or tighten
+  anything. Daytona doesn't document whether it ignores them or rejects the
+  create; if sandboxes fail to create on these tiers, remove the fields.
+- **Tier 3 and 4** — sandboxes get full internet access by default, and these
+  fields replace that policy. An allowlist is strict: GitHub, npm, PyPI and
+  Daytona's other essential services are blocked unless you list them, so a
+  `domainAllowList` without `github.com` breaks `git clone` from GitHub.
+
+## Lifecycle
+
+- **Created on first use.** Each Workspace gets one Daytona sandbox named
+  `platypus-<organization id>-<workspace id>`. Agents work in `$HOME/workspace`
+  inside it.
+- **Stopped when idle, started on demand.** Daytona stops the sandbox after
+  `autoStopInterval` minutes without activity; files survive the stop, and the
+  next tool call starts it again. Expect the first call after a stop to take a
+  few seconds longer.
+- **Deleted with the Sandbox.** Deleting the Sandbox in Platypus deletes the
+  Daytona sandbox and every file in it.
+
+## Security posture
+
+The Sandbox runs on Daytona's infrastructure, not yours: commands, files, and the
+Sandbox's environment variables all reach Daytona. Network reach is whatever your
+Daytona account allows, narrowed by the network fields above; they apply to every
+Workspace alike, with no per-Sandbox override. Daytona's resource
+limits for your plan bound CPU, memory, and disk.
