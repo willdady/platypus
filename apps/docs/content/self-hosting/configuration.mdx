@@ -131,10 +131,11 @@ repeat it.
 | `@platypus/tools-platform` | Always-on | The Platypus-domain Tool sets — kanban, dashboards, triggers, memory, notifications, agent discovery/management, skill management. |
 | `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.                                           |
 | `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.sandbox.yaml` overlay.                                           |
-| `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. The one backend viable in horizontally-scaled deployments.             |
+| `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. Viable in horizontally-scaled deployments.                             |
+| `@platypus/daytona`        | Gate-able | The Daytona Sandbox backend — hosted sandboxes on your Daytona account. Viable in horizontally-scaled deployments.                 |
 
-The two always-on Plugins load unconditionally and must not be listed. The three
-gate-able ones load only when named in `PLATYPUS_PLUGINS`. All five are internal
+The two always-on Plugins load unconditionally and must not be listed. The four
+gate-able ones load only when named in `PLATYPUS_PLUGINS`. All six are internal
 backend modules — their `@platypus/*` names are logical ids, not npm packages, so
 there is nothing to install. A third-party Plugin is an npm package that does
 need installing — see [Installing Plugins](/extending/installing-plugins).
@@ -244,6 +245,7 @@ turn each `-` into `_`.
 | Manifest name                          | Variable                               |
 | -------------------------------------- | -------------------------------------- |
 | `@platypus/docker`                     | `PLATYPUS_PLUGIN_CONFIG_DOCKER`        |
+| `@platypus/daytona`                    | `PLATYPUS_PLUGIN_CONFIG_DAYTONA`       |
 | `@platypus/web-fetch`                  | `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`     |
 | `cloud-sandbox` (a third-party Plugin) | `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX` |
 
@@ -303,7 +305,7 @@ rather than copying it.
 ## Sandbox
 
 The [Sandbox](/concepts/sandboxes) (agent shell/filesystem access) is **off by
-default**. Platypus ships two reference backends, each enabled by listing its
+default**. Platypus ships three backends, each enabled by listing its
 Plugin in `PLATYPUS_PLUGINS`. Without the Plugin listed, that backend type isn't
 registered and its sandbox configuration is inert:
 
@@ -322,13 +324,22 @@ registered and its sandbox configuration is inert:
 
 - **SSH** — `@platypus/ssh`. Attaches to a pre-existing, operator-owned host over
   SSH. It takes **no deployment env vars** — the connection target (host, user,
-  key, optional host-key pin) is per-Workspace Sandbox config set in-app. It is the
-  only backend that runs in **horizontally-scaled deployments**, where Docker
-  cannot.
+  key, optional host-key pin) is per-Workspace Sandbox config set in-app. It runs
+  in **horizontally-scaled deployments**, where Docker cannot.
+
+- **Daytona** — `@platypus/daytona`. One hosted [Daytona](https://www.daytona.io)
+  sandbox per Workspace, created on first use and deleted with the Sandbox. Its
+  API key goes in `PLATYPUS_PLUGIN_CONFIG_DAYTONA` and is shared by every
+  Workspace. It also runs in horizontally-scaled deployments:
+
+  ```
+  PLATYPUS_PLUGIN_CONFIG_DAYTONA={"credentials":{"apiKey":"dtn_..."}}
+  ```
 
 See [Sandbox infrastructure](/self-hosting/sandbox) for the full security model,
 [SSH adapter](/self-hosting/sandbox/ssh) for the connection fields and host-key
-pinning, and [Docker adapter](/self-hosting/sandbox/docker) for the opt-in
+pinning, [Daytona adapter](/self-hosting/sandbox/daytona) for its deployment
+config, and [Docker adapter](/self-hosting/sandbox/docker) for the opt-in
 `compose.sandbox.yaml` overlay.
 
 ## Tool egress

@@ -21,6 +21,8 @@ import {
   raceCancellation,
   SandboxCancelledError,
   SandboxPathExistsError,
+  shQuote,
+  toShellCommand,
   type SandboxExecOptions,
   type SandboxExecResult,
   type SandboxTransport,
@@ -102,34 +104,6 @@ type Connection = {
   rootDir: string;
   sftp: SFTPWrapper | null;
 };
-
-// Single-quote a value for safe interpolation into a `/bin/sh` command line.
-// Wraps in single quotes and escapes embedded single quotes with the classic
-// `'\''` idiom. Used for the operator-supplied rootDir and for model-supplied
-// cwd/env values so neither can break out into shell syntax.
-function shQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-// A valid POSIX environment-variable name. `adminEnv`/`userEnv` are already held
-// to this by the schema, but the model-supplied `input.env` keys are not — so we
-// guard here before interpolating a key into the shell string. A key that isn't
-// a valid identifier can't be a usable env var anyway (`export 1FOO=…` errors),
-// so dropping it is both safe and correct.
-const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-// Build the `export KEY=val;` prefix for the merged env (ADR-0004). Ordered
-// ahead of any `cd` (see `exec`). Applied via
-// export statements rather than the ssh2 `env` option, since sshd's `AcceptEnv`
-// rejects arbitrary variables by default (ADR-0012). Keys are guarded to POSIX
-// identifiers (above) so they can't inject shell syntax; values are single-quoted.
-function buildEnvPrefix(env: Record<string, string> | undefined): string {
-  if (!env) return "";
-  return Object.entries(env)
-    .filter(([k]) => ENV_KEY_PATTERN.test(k))
-    .map(([k, v]) => `export ${k}=${shQuote(v)}; `)
-    .join("");
-}
 
 // ---------------------------------------------------------------------------
 // Promisified SFTP primitives. ssh2's SFTP API is callback-based; these thin
@@ -637,13 +611,7 @@ class SshSandboxTransport implements SandboxTransport {
     argv: string[],
     opts: SandboxExecOptions,
   ): Promise<SandboxExecResult> {
-    // Exports go first and the `cd` is chained straight onto the command, so a
-    // failed `cd` skips the command (non-zero exit) instead of the `;` after an
-    // export letting it run in `$HOME`.
-    const cdPrefix = opts.cwd ? `cd ${shQuote(opts.cwd)} && ` : "";
-    const command = `${buildEnvPrefix(opts.env)}${cdPrefix}${argv
-      .map(shQuote)
-      .join(" ")}`;
+    const command = toShellCommand(argv, opts);
 
     // Connecting is unbounded — a TCP dial, a handshake, the root-resolving
     // exec — and it runs before any per-command timer exists, so the abort

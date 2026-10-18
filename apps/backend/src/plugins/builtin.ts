@@ -17,6 +17,7 @@ export const BUILTIN_PLUGINS: Record<
   "@platypus/tools-platform": () => import("./tools-platform/index.ts"),
   "@platypus/docker": () => import("./docker/index.ts"),
   "@platypus/ssh": () => import("./ssh/index.ts"),
+  "@platypus/daytona": () => import("./daytona/index.ts"),
 };
 
 // The always-on core set (ADR-0013 amendment): these core plugins load

@@ -29,6 +29,7 @@
     "@ai-sdk/openai": "^4.0.74",
     "@ai-sdk/openai-compatible": "^3.0.55",
     "@aws-sdk/client-s3": "^3.1139.0",
+    "@daytonaio/sdk": "^0.225.0",
     "@hono/node-server": "^2.1.1",
     "@hono/standard-validator": "^0.2.3",
     "@mozilla/readability": "^0.6.0",

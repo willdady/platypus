@@ -54,7 +54,7 @@ For a guided walkthrough of configuring a deployment, see
 
 | Variable                        | Purpose                                                                                                                                                                                                                                                                       | Default                                                                          | Required |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------- |
-| `PLATYPUS_PLUGINS`              | Comma-separated list of the **gate-able** Plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, plus any third-party ones.                                                                                                          | _(unset ⇒ no gate-able Plugins;_ `.example.env` _ships_ `@platypus/web-fetch`_)_ | No       |
+| `PLATYPUS_PLUGINS`              | Comma-separated list of the **gate-able** Plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, `@platypus/daytona`, plus any third-party ones.                                                                                     | _(unset ⇒ no gate-able Plugins;_ `.example.env` _ships_ `@platypus/web-fetch`_)_ | No       |
 | `PLATYPUS_PLUGIN_CONFIG_<NAME>` | One Plugin's deploy-time config and credentials as a JSON object, `{ "config": {…}, "credentials": {…} }`. `<NAME>` is the Plugin's manifest name without `@platypus/`, uppercased, with `-` as `_`: `PLATYPUS_PLUGIN_CONFIG_DOCKER`, `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX`. | _(unset)_                                                                        | No       |
 | `PLATYPUS_PLUGIN_CONFIG`        | **Deprecated; removed in the next major release.** Every Plugin's config in one JSON object keyed by manifest name. Migrate by moving each key's value into that Plugin's `PLATYPUS_PLUGIN_CONFIG_<NAME>`.                                                                    | _(unset)_                                                                        | No       |
 
@@ -452,18 +452,20 @@ does it with a `PersistentVolumeClaim`. Your own value overrides the image's.
 
 ## Sandbox
 
-**Neither Sandbox backend takes any dedicated environment variable.** There is no
+**No Sandbox backend takes any dedicated environment variable.** There is no
 table in this section because there is nothing to enumerate.
 
-Both are enabled by listing the Plugin — `@platypus/docker` or `@platypus/ssh` —
-in [`PLATYPUS_PLUGINS`](#plugins). Everything else is configured elsewhere: the
-Docker network allowlist as `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG_DOCKER`,
-and the whole SSH connection surface as per-Workspace Sandbox settings an Org
+Each is enabled by listing the Plugin — `@platypus/docker`, `@platypus/ssh` or
+`@platypus/daytona` — in [`PLATYPUS_PLUGINS`](#plugins). Everything else is
+configured elsewhere: the Docker network allowlist as `config.allowedNetworks` in
+`PLATYPUS_PLUGIN_CONFIG_DOCKER`, the Daytona API key and defaults in
+`PLATYPUS_PLUGIN_CONFIG_DAYTONA`, and the whole SSH connection surface as per-Workspace Sandbox settings an Org
 Admin enters in the app. The Docker backend reaches the daemon the standard way:
 `/var/run/docker.sock`, or `DOCKER_HOST` (with `DOCKER_TLS_VERIFY` and
 `DOCKER_CERT_PATH`) when set.
 
-See [Sandbox](/self-hosting/configuration#sandbox) for how the two fit together,
+See [Sandbox](/self-hosting/configuration#sandbox) for how they fit together,
 [Sandbox infrastructure](/self-hosting/sandbox) for the security model, and the
-[Docker adapter](/self-hosting/sandbox/docker) and
-[SSH adapter](/self-hosting/sandbox/ssh) for setup.
+[Docker adapter](/self-hosting/sandbox/docker),
+[SSH adapter](/self-hosting/sandbox/ssh) and
+[Daytona adapter](/self-hosting/sandbox/daytona) for setup.
