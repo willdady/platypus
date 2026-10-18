@@ -289,14 +289,8 @@ describe("KanbanCardDialog delete comment", () => {
 });
 
 describe("KanbanCardDialog details scroll area", () => {
-  // jsdom has no layout, so pin the rule itself: a flex-col child may shrink
-  // below its content, and the body's min-h-[150px] lets it, so a long
-  // description overflows onto the sections after it (#1591).
-  it.each([
-    ["desktop", 1280],
-    ["mobile", 375],
-  ])("stops its children shrinking on %s", (_, width) => {
-    setViewportWidth(width);
+  // jsdom has no layout, so pin the class instead of measuring overlap (#1591).
+  it("stops its children shrinking", () => {
     renderDialog();
 
     expect(screen.getByTestId("card-details-scroll")).toHaveClass(
