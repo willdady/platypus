@@ -11,6 +11,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   mutate,
+  setupUser,
 } from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -221,6 +222,67 @@ describe.each(RESOURCES)(
     });
   },
 );
+
+describe("list paging", () => {
+  // Ten cards, "card-01" … "card-10".
+  const ten = Array.from({ length: 10 }, (_, i) => {
+    const name = `card-${String(i + 1).padStart(2, "0")}`;
+    return { id: name, name };
+  });
+  const shownNames = () =>
+    ten.map((c) => c.name).filter((name) => screen.queryByText(name));
+
+  it("pages Boards eight at a time beside Create board", async () => {
+    mockScopedSWR({ "/boards": ten }, { strict: true });
+    await renderList(<BoardsList orgId="org1" workspaceId="ws1" />);
+
+    expect(shownNames()).toHaveLength(8);
+    expect(
+      screen.getByRole("navigation", { name: "Boards pages" }),
+    ).toHaveTextContent("Page 1 of 2");
+    expect(screen.getByRole("link", { name: /Create board/ })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/boards/create",
+    );
+
+    await setupUser().click(screen.getByRole("button", { name: "Next page" }));
+
+    expect(window.location.search).toBe("?boardsPage=2");
+    expect(shownNames()).toEqual(["card-09", "card-10"]);
+  });
+
+  it("returns Boards to page 1 when the search changes", async () => {
+    window.history.replaceState(null, "", "?boardsPage=2");
+    mockScopedSWR({ "/boards": ten }, { strict: true });
+    await renderList(<BoardsList orgId="org1" workspaceId="ws1" />);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search boards" }), {
+      target: { value: "card" },
+    });
+
+    expect(window.location.search).toBe("?boardQuery=card");
+  });
+
+  it("draws Create board with no boards", async () => {
+    mockScopedSWR({ "/boards": [] }, { strict: true });
+    await renderList(<BoardsList orgId="org1" workspaceId="ws1" />);
+
+    expect(
+      screen.getByRole("link", { name: /Create board/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not page Dashboards, and leaves its button to the page", async () => {
+    mockScopedSWR({ "/dashboards": ten }, { strict: true });
+    await renderList(<DashboardsList orgId="org1" workspaceId="ws1" />);
+
+    expect(shownNames()).toHaveLength(10);
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /Create/ }),
+    ).not.toBeInTheDocument();
+  });
+});
 
 describe("EntityCardList slots", () => {
   const item = { id: "i1", name: "Alpha", description: "First" };

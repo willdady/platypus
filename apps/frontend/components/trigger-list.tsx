@@ -20,6 +20,13 @@ import {
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { RowActionsMenu } from "@/components/row-actions-menu";
+import {
+  ListFooter,
+  ListPagination,
+  GhostCards,
+  pageOf,
+} from "@/components/list-pagination";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DisabledBadge } from "@/components/disabled-badge";
 import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
@@ -41,6 +48,8 @@ import {
   TriangleAlert,
   CalendarClock,
   CircleCheck,
+  History,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -74,6 +83,9 @@ function describeSchedule(cronExpression: string, timezone: string): string {
 
 /** The value a Select carries for "no filter" — Radix rejects an empty one. */
 const ALL = "all";
+
+/** Triggers per page on the Workspace home. */
+const TRIGGERS_PAGE_SIZE = 6;
 
 export const TRIGGER_TYPE_LABELS: Record<TriggerType, string> = {
   cron: "Cron",
@@ -298,22 +310,48 @@ export function TriggerList({
       },
     });
 
+  // The footer sits under every state, loading and failed included, as the
+  // Create links did when the page drew them.
+  const withFooter = (content: ReactNode, pagination?: ReactNode) => (
+    <>
+      {content}
+      <ListFooter pagination={pagination}>
+        <Button variant="outline" asChild>
+          <Link href={routes.triggers.create}>
+            <Plus /> Create trigger
+          </Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={routes.triggerRuns.root}>
+            <History /> Trigger runs
+          </Link>
+        </Button>
+      </ListFooter>
+    </>
+  );
+
   if (isLoading && !triggersData) {
-    return (
+    return withFooter(
       <LoadingRegion label="Loading triggers">
         <TriggerCardsSkeleton />
-      </LoadingRegion>
+      </LoadingRegion>,
     );
   }
 
   if (error) {
-    return <ListError error={error} subject="triggers" />;
+    return withFooter(<ListError error={error} subject="triggers" />);
   }
 
   // No controls with nothing to filter, as with the Skills section above it.
   if (!allTriggers.length) {
-    return <ListState variant="empty">No triggers yet.</ListState>;
+    return withFooter(<ListState variant="empty">No triggers yet.</ListState>);
   }
+
+  // A new filter starts on page 1.
+  const setFilter = (key: string, value: string | null) => {
+    replaceSearchParam(key, value);
+    replaceSearchParam("triggersPage", null);
+  };
 
   // Shown even with nothing listed: fired One-offs may be all there is.
   const controls = (
@@ -321,7 +359,7 @@ export function TriggerList({
       <Select
         value={typeFilter}
         onValueChange={(value) =>
-          replaceSearchParam("triggerType", value === ALL ? null : value)
+          setFilter("triggerType", value === ALL ? null : value)
         }
       >
         <SelectTrigger className="w-36" aria-label="Filter by type">
@@ -341,7 +379,7 @@ export function TriggerList({
           id="show-fired-triggers"
           checked={showFired}
           onCheckedChange={(checked) =>
-            replaceSearchParam("triggerShowFired", checked ? "true" : null)
+            setFilter("triggerShowFired", checked ? "true" : null)
           }
           // Only a One-off fires, and a One-off is always Cron.
           disabled={typeFilter === "event" || typeFilter === "inbound"}
@@ -354,7 +392,7 @@ export function TriggerList({
   );
 
   if (!triggers.length) {
-    return controls;
+    return withFooter(controls);
   }
 
   const shown =
@@ -363,21 +401,28 @@ export function TriggerList({
       : triggers.filter((trigger) => trigger.type === typeFilter);
 
   if (!shown.length) {
-    return (
+    return withFooter(
       <>
         {controls}
         <ListState variant="empty">
           No {TRIGGER_TYPE_LABELS[typeFilter as TriggerType]} triggers to show.
         </ListState>
-      </>
+      </>,
     );
   }
 
-  return (
+  const page = pageOf(
+    searchParams.get("triggersPage"),
+    shown,
+    TRIGGERS_PAGE_SIZE,
+  );
+
+  return withFooter(
     <>
       {controls}
-      <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
-        {shown.map((trigger) => (
+
+      <ul className="grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4">
+        {page.items.map((trigger) => (
           <li key={trigger.id}>
             <Item variant="outline" className="h-full cursor-pointer" asChild>
               {/* The card opens the Trigger's runs; Edit is in the menu. */}
@@ -490,6 +535,7 @@ export function TriggerList({
             </Item>
           </li>
         ))}
+        <GhostCards count={page.ghosts} />
       </ul>
 
       {triggerToClone && (
@@ -514,6 +560,11 @@ export function TriggerList({
         loading={deleteFlow.deleting}
         error={deleteFlow.error}
       />
-    </>
+    </>,
+    <ListPagination
+      page={page}
+      param="triggersPage"
+      aria-label="Triggers pages"
+    />,
   );
 }

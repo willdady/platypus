@@ -17,6 +17,7 @@ import {
   toastError,
   toastInfo,
   menuItemLabels,
+  setupUser,
 } from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -447,5 +448,59 @@ describe("AgentsList menu", () => {
     await openDropdownMenu();
 
     expect(menuItemLabels()).toEqual(["Edit in org settings", "Pin", "Detach"]);
+  });
+});
+
+describe("AgentsList paging", () => {
+  const agent = (n: number, isPinned = false) =>
+    ({
+      id: `a${n}`,
+      name: `agent-${String(n).padStart(2, "0")}`,
+      description: "desc",
+      scope: "workspace",
+      isPinned,
+    }) as unknown as AgentWithScope;
+  const namesIn = (list: string) =>
+    within(screen.getByRole("list", { name: list }))
+      .getAllByRole("listitem")
+      .map((item) => within(item).getAllByText(/./)[0].textContent);
+  const pages = () =>
+    screen.queryByRole("navigation", { name: "Agents pages" });
+
+  it("draws Pinned in full and pages only the unpinned agents", async () => {
+    // Three pinned, ten unpinned: the unpinned make two pages of eight.
+    await renderAgents([
+      ...[1, 2, 3].map((n) => agent(n, true)),
+      ...Array.from({ length: 10 }, (_, i) => agent(i + 4)),
+    ]);
+
+    expect(namesIn("Pinned agents")).toHaveLength(3);
+    expect(namesIn("Agents")).toHaveLength(8);
+    expect(pages()).toHaveTextContent("Page 1 of 2");
+
+    await setupUser().click(screen.getByRole("button", { name: "Next page" }));
+
+    expect(window.location.search).toBe("?agentsPage=2");
+    expect(namesIn("Pinned agents")).toHaveLength(3);
+    expect(namesIn("Agents")).toEqual(["agent-12", "agent-13"]);
+  });
+
+  it("draws no page controls when every agent is pinned", async () => {
+    await renderAgents(
+      Array.from({ length: 10 }, (_, i) => agent(i + 1, true)),
+    );
+
+    expect(namesIn("Pinned agents")).toHaveLength(10);
+    expect(pages()).not.toBeInTheDocument();
+  });
+
+  it("draws no page controls for eight agents", async () => {
+    await renderAgents(Array.from({ length: 8 }, (_, i) => agent(i + 1)));
+
+    expect(namesIn("Agents")).toHaveLength(8);
+    expect(pages()).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Create agent/ }),
+    ).toBeInTheDocument();
   });
 });

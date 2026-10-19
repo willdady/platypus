@@ -15,6 +15,14 @@ import { ListError, ListState } from "@/components/list-state";
 import { CardGridSkeleton, LoadingRegion } from "@/components/list-skeletons";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import { SearchInput } from "@/components/search-input";
+import {
+  GhostCards,
+  ListFooter,
+  ListPagination,
+  pageOf,
+} from "@/components/list-pagination";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { writeEntity } from "@/lib/api-write";
@@ -60,6 +68,7 @@ export function EntityCardList<T extends EntityCard>({
   skeleton,
   empty,
   descriptionLines = 2,
+  ghosts = 0,
   href,
   media,
   meta,
@@ -67,6 +76,8 @@ export function EntityCardList<T extends EntityCard>({
   wrap,
 }: {
   items: readonly T[];
+  /** Empty slots after the cards, filling a short last page. */
+  ghosts?: number;
   isLoading: boolean;
   error: unknown;
   /** The plural noun loading or failing to load: "boards", "shared agents". */
@@ -141,7 +152,7 @@ export function EntityCardList<T extends EntityCard>({
   };
 
   return (
-    <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
+    <ul className="grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4">
       {items.map((item) => (
         <li key={item.id}>
           {wrap
@@ -149,6 +160,7 @@ export function EntityCardList<T extends EntityCard>({
             : renderCard(item)}
         </li>
       ))}
+      <GhostCards count={ghosts} />
     </ul>
   );
 }
@@ -167,6 +179,19 @@ export type WorkspaceEntityCardListConfig = {
     readonly deleteTail: string;
     /** The phrase the user types to confirm: "delete board" / "delete dashboard". */
     readonly confirmPhrase: string;
+  };
+  /**
+   * Pages the list and draws its footer row: Create on the left, pagination
+   * on the right. Without it, neither — Dashboards' Create sits in the page.
+   */
+  readonly paging?: {
+    /** The URL param holding the page: "boardsPage". */
+    readonly param: string;
+    readonly pageSize: number;
+    /** Names the pagination control: "Boards pages". */
+    readonly label: string;
+    /** The footer's Create link: "Create board". */
+    readonly createLabel: string;
   };
 };
 
@@ -198,10 +223,11 @@ export function WorkspaceEntityCardList({
   const [nameFilter, setNameFilterState] = useState(
     () => searchParams.get(config.queryParam) ?? "",
   );
-  // An empty search leaves its param out.
+  // An empty search leaves its param out. A new search starts on page 1.
   const setNameFilter = (value: string) => {
     setNameFilterState(value);
     replaceSearchParam(config.queryParam, value.trim() || null);
+    if (config.paging) replaceSearchParam(config.paging.param, null);
   };
 
   const routes = workspaceRoutes(orgId, workspaceId)[config.entity];
@@ -211,6 +237,10 @@ export function WorkspaceEntityCardList({
   const cards = [...rows]
     .sort((a, b) => a.name.localeCompare(b.name))
     .filter((card) => !query || defaultFilter(card.name, query) > 0);
+  const { paging } = config;
+  const page = paging
+    ? pageOf(searchParams.get(paging.param), cards, paging.pageSize)
+    : { items: cards, page: 1, pageCount: 1, ghosts: 0 };
 
   const deleteFlow = useDeleteFlow<EntityCard>({
     mutate,
@@ -240,7 +270,8 @@ export function WorkspaceEntityCardList({
         </div>
       )}
       <EntityCardList
-        items={cards}
+        items={page.items}
+        ghosts={page.ghosts}
         isLoading={isLoading}
         error={error}
         subject={config.entity}
@@ -263,6 +294,24 @@ export function WorkspaceEntityCardList({
           />
         )}
       />
+
+      {paging && (
+        <ListFooter
+          pagination={
+            <ListPagination
+              page={page}
+              param={paging.param}
+              aria-label={paging.label}
+            />
+          }
+        >
+          <Button variant="outline" asChild>
+            <Link href={routes.create}>
+              <Plus /> {paging.createLabel}
+            </Link>
+          </Button>
+        </ListFooter>
+      )}
 
       <DeleteConfirmDialog
         open={deleteFlow.open}

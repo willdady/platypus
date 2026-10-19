@@ -15,6 +15,7 @@ import {
   toastInfo,
   authState,
   menuItemLabels,
+  setupUser,
 } from "@/test/list-test-harness";
 import { openDropdownMenu, selectOption } from "@/test/test-utils";
 
@@ -526,5 +527,113 @@ describe("SkillsList list states", () => {
       screen.getByRole("status", { name: "Loading skills" }),
     ).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByText(/No skills yet/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("SkillsList paging", () => {
+  // Ten skills, "skill-01" … "skill-10": two pages of eight.
+  const tenSkills = Array.from({ length: 10 }, (_, i) => {
+    const name = `skill-${String(i + 1).padStart(2, "0")}`;
+    return { ...workspaceSkill, id: name, name };
+  });
+  const shownNames = () =>
+    tenSkills.map((s) => s.name).filter((name) => screen.queryByText(name));
+  const pages = () =>
+    screen.queryByRole("navigation", { name: "Skills pages" });
+
+  it("shows eight skills and pages to the rest, writing the page to the URL", async () => {
+    await renderSkills(tenSkills);
+
+    expect(shownNames()).toEqual(tenSkills.slice(0, 8).map((s) => s.name));
+    expect(pages()).toHaveTextContent("Page 1 of 2");
+    expect(
+      screen.getByRole("button", { name: "Previous page" }),
+    ).toBeDisabled();
+
+    await setupUser().click(screen.getByRole("button", { name: "Next page" }));
+
+    expect(shownNames()).toEqual(["skill-09", "skill-10"]);
+    expect(pages()).toHaveTextContent("Page 2 of 2");
+    expect(window.location.search).toBe("?skillsPage=2");
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+
+    await setupUser().click(
+      screen.getByRole("button", { name: "Previous page" }),
+    );
+    expect(window.location.search).toBe("");
+  });
+
+  it("reads the page back from the URL", async () => {
+    window.history.replaceState(null, "", "?skillsPage=2");
+    await renderSkills(tenSkills);
+
+    expect(shownNames()).toEqual(["skill-09", "skill-10"]);
+  });
+
+  it.each([
+    ["abc", "Page 1 of 2"],
+    ["0", "Page 1 of 2"],
+    ["-3", "Page 1 of 2"],
+    ["999", "Page 2 of 2"],
+  ])("clamps ?skillsPage=%s to a valid page", async (value, expected) => {
+    window.history.replaceState(null, "", `?skillsPage=${value}`);
+    await renderSkills(tenSkills);
+
+    expect(pages()).toHaveTextContent(expected);
+  });
+
+  it("shows the new last page when the current one empties", async () => {
+    window.history.replaceState(null, "", "?skillsPage=2");
+    const { rerender } = await renderSkills(tenSkills);
+
+    mockScopedSWR({ "/skills": tenSkills.slice(0, 9) });
+    rerender(<SkillsList orgId="org1" workspaceId="ws1" />);
+    expect(shownNames()).toEqual(["skill-09"]);
+
+    mockScopedSWR({ "/skills": tenSkills.slice(0, 8) });
+    rerender(<SkillsList orgId="org1" workspaceId="ws1" />);
+    expect(shownNames()).toEqual(tenSkills.slice(0, 8).map((s) => s.name));
+    expect(pages()).not.toBeInTheDocument();
+  });
+
+  it("returns to page 1 when a filter changes", async () => {
+    window.history.replaceState(null, "", "?skillsPage=2");
+    await renderSkills(tenSkills);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search skills" }), {
+      target: { value: "skill" },
+    });
+
+    expect(window.location.search).toBe("?skillQuery=skill");
+    expect(pages()).toHaveTextContent("Page 1 of 2");
+  });
+
+  it("hides the page controls when the filters match nothing", async () => {
+    await renderSkills(tenSkills);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search skills" }), {
+      target: { value: "zzz" },
+    });
+
+    expect(
+      screen.getByText("No skills match your filters."),
+    ).toBeInTheDocument();
+    expect(pages()).not.toBeInTheDocument();
+  });
+
+  it("draws no page controls for a list that fits on one page", async () => {
+    await renderSkills(tenSkills.slice(0, 8));
+
+    expect(pages()).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Create skill/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not page the Organization surface", async () => {
+    await renderOrgSkills(tenSkills);
+
+    expect(shownNames()).toHaveLength(10);
+    expect(pages()).not.toBeInTheDocument();
   });
 });

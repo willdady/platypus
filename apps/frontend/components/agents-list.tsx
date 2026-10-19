@@ -43,7 +43,7 @@ import {
 } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canManageSharedResource, canPinAgent } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
@@ -60,6 +60,12 @@ import {
   type Serialized,
 } from "@/lib/api-write";
 import { splitPinned } from "@/lib/pinned-agents";
+import {
+  ListFooter,
+  ListPagination,
+  GhostCards,
+  pageOf,
+} from "@/components/list-pagination";
 import {
   usePromoteShared,
   useSharedDetach,
@@ -109,6 +115,9 @@ export function AgentCardsSkeleton({ cards }: { cards?: number }) {
   );
 }
 
+/** Unpinned agents per page; the Pinned group is always drawn in full. */
+const AGENTS_PAGE_SIZE = 8;
+
 export function AgentsList({
   orgId,
   workspaceId,
@@ -120,6 +129,7 @@ export function AgentsList({
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const [agentToClone, setAgentToClone] = useState<AgentWithScope | null>(null);
+  const searchParams = useSearchParams();
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -175,6 +185,11 @@ export function AgentsList({
   // A Pinned Agent shows only in the Pinned group, above the rest.
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);
+  const page = pageOf(
+    searchParams.get("agentsPage"),
+    unpinnedAgents,
+    AGENTS_PAGE_SIZE,
+  );
 
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007), asked of the auth module instead of re-derived here.
@@ -403,7 +418,8 @@ export function AgentsList({
     );
   };
 
-  const gridClassName = "grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4";
+  const gridClassName =
+    "grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4";
 
   const actions = (
     <>
@@ -449,13 +465,26 @@ export function AgentsList({
           )}
           {unpinnedAgents.length > 0 && (
             <ul aria-label="Agents" className={gridClassName}>
-              {unpinnedAgents.map(renderCard)}
+              {page.items.map(renderCard)}
+              <GhostCards count={page.ghosts} />
             </ul>
           )}
         </>
       )}
 
-      {agents.length > 0 && <div className="flex gap-2">{actions}</div>}
+      {agents.length > 0 && (
+        <ListFooter
+          pagination={
+            <ListPagination
+              page={page}
+              param="agentsPage"
+              aria-label="Agents pages"
+            />
+          }
+        >
+          {actions}
+        </ListFooter>
+      )}
 
       <DetachSharedDialog
         detach={orgAgentDetach}
