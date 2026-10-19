@@ -357,18 +357,18 @@ describe("AgentsList list states", () => {
 });
 
 describe("AgentsList card height", () => {
-  it("reserves a three-line description box, with the full text on hover", async () => {
+  it("reserves a two-line description box, with the full text on hover", async () => {
     await renderAgents([workspaceAgent]);
 
     const description = screen.getByText("desc");
-    expect(description).toHaveClass("line-clamp-3", "min-h-[3lh]");
+    expect(description).toHaveClass("line-clamp-2", "min-h-[2lh]");
     expect(description).toHaveAttribute("title", "desc");
   });
 
   it("keeps the description box when there is no description", async () => {
     await renderAgents([{ ...workspaceAgent, description: "" }]);
 
-    expect(screen.getByRole("paragraph")).toHaveClass("min-h-[3lh]");
+    expect(screen.getByRole("paragraph")).toHaveClass("min-h-[2lh]");
   });
 
   it("counts tool sets, skills and sub-agents in singular and plural", async () => {

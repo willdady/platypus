@@ -87,7 +87,6 @@ export function AgentCardsSkeleton({ cards }: { cards?: number }) {
       cards={cards}
       media
       className="items-stretch"
-      descriptionLines={3}
       extra={
         // The tool set / skill / sub-agent counts.
         <div className="flex gap-3 mt-auto">
@@ -358,12 +357,16 @@ export function AgentsList({
           )}
           <ItemContent>
             <div className="flex min-h-badge items-center gap-2">
-              <ItemTitle>{agent.name}</ItemTitle>
+              <ItemTitle className="min-w-0">
+                <span className="truncate" title={agent.name}>
+                  {agent.name}
+                </span>
+              </ItemTitle>
               {isOrgScoped && <OrganizationBadge />}
             </div>
-            {/* Always three lines tall, so every card is one height. */}
+            {/* Always two lines tall, so every card is one height. */}
             <ItemDescription
-              className="text-xs line-clamp-3 min-h-[3lh]"
+              className="text-xs line-clamp-2 min-h-[2lh]"
               title={agent.description || undefined}
             >
               {agent.description}

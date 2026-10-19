@@ -410,7 +410,11 @@ export function SkillsList({
                   <Item variant="outline" className="h-full">
                     <ItemContent>
                       <div className="flex min-h-badge items-center gap-2">
-                        <ItemTitle>{skill.name}</ItemTitle>
+                        <ItemTitle className="min-w-0">
+                          <span className="truncate" title={skill.name}>
+                            {skill.name}
+                          </span>
+                        </ItemTitle>
                         <UserInvocableBadge skill={skill} />
                         <NeedsSandboxBadge skill={skill} />
                         <OrganizationBadge />
@@ -464,7 +468,11 @@ export function SkillsList({
                       <Link href={`${editBasePath}/${skill.id}`}>
                         <ItemContent>
                           <div className="flex min-h-badge items-center gap-2">
-                            <ItemTitle>{skill.name}</ItemTitle>
+                            <ItemTitle className="min-w-0">
+                              <span className="truncate" title={skill.name}>
+                                {skill.name}
+                              </span>
+                            </ItemTitle>
                             <UserInvocableBadge skill={skill} />
                             <NeedsSandboxBadge skill={skill} />
                           </div>

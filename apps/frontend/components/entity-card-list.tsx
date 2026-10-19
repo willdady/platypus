@@ -35,8 +35,8 @@ type EntityCard = {
  * always that many lines tall, so every card in the list is one height.
  */
 const DESCRIPTION_LINES = {
+  1: "line-clamp-1 min-h-[1lh]",
   2: "line-clamp-2 min-h-[2lh]",
-  3: "line-clamp-3 min-h-[3lh]",
 } as const;
 
 /** What `wrap` may add to a card it surrounds. */
@@ -107,7 +107,11 @@ export function EntityCardList<T extends EntityCard>({
       <>
         {media?.(item)}
         <ItemContent>
-          <ItemTitle className="min-h-badge">{item.name}</ItemTitle>
+          <ItemTitle className="min-h-badge max-w-full">
+            <span className="truncate" title={item.name}>
+              {item.name}
+            </span>
+          </ItemTitle>
           <ItemDescription
             className={cn("text-xs", DESCRIPTION_LINES[descriptionLines])}
             title={item.description || undefined}
@@ -240,7 +244,7 @@ export function WorkspaceEntityCardList({
         isLoading={isLoading}
         error={error}
         subject={config.entity}
-        skeleton={<CardGridSkeleton />}
+        skeleton={<CardGridSkeleton descriptionLines={1} />}
         empty={
           <ListState variant="empty">
             {rows.length
@@ -248,6 +252,8 @@ export function WorkspaceEntityCardList({
               : `No ${config.entity} yet.`}
           </ListState>
         }
+        // Nothing follows the description, so one line is all it reserves.
+        descriptionLines={1}
         href={(card) => routes.detail(card.id)}
         menu={(card) => (
           <RowActionsMenu

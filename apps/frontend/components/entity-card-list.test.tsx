@@ -87,6 +87,15 @@ describe.each(RESOURCES)(
       expect(screen.getByText("Revenue overview")).toBeInTheDocument();
     });
 
+    it("clamps and reserves the description to one line", async () => {
+      await renderCards([card]);
+
+      expect(screen.getByText("Revenue overview")).toHaveClass(
+        "line-clamp-1",
+        "min-h-[1lh]",
+      );
+    });
+
     it("deletes through the request module and revalidates on success", async () => {
       const fetchMock = stubAcceptedSave();
 
@@ -272,12 +281,20 @@ describe("EntityCardList slots", () => {
     expect(description).toHaveAttribute("title", "First");
   });
 
+  it("truncates the name, with the full name on hover", () => {
+    renderCards();
+
+    const name = screen.getByText("Alpha");
+    expect(name).toHaveClass("truncate");
+    expect(name).toHaveAttribute("title", "Alpha");
+  });
+
   it("clamps and reserves the description to `descriptionLines`", () => {
-    renderCards({ descriptionLines: 3 });
+    renderCards({ descriptionLines: 1 });
 
     expect(screen.getByText("First")).toHaveClass(
-      "line-clamp-3",
-      "min-h-[3lh]",
+      "line-clamp-1",
+      "min-h-[1lh]",
     );
     expect(screen.getByText("First")).not.toHaveClass("line-clamp-2");
   });
