@@ -74,7 +74,6 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
         skeleton={
           <CardGridSkeleton
             media
-            descriptionLines={3}
             extra={
               canManage && (
                 <>
@@ -96,7 +95,6 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
             description="Promote a workspace agent to the organization to share it across workspaces."
           />
         }
-        descriptionLines={3}
         media={(agent) =>
           agent.avatarUrl ? (
             <ItemMedia variant="image" className="size-12 rounded-full">

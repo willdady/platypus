@@ -100,11 +100,10 @@ export function TriggerCardsSkeleton({ cards }: { cards?: number }) {
       titleBadges={["w-12"]}
       extra={
         <>
-          {/* The agent it runs, then its type's two lines and its last run. */}
+          {/* The agent it runs, then its type's line and its last run. */}
           <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
           <div className="flex flex-col gap-1 mt-1.5">
             <SkeletonLine lineClassName="h-4" className="h-3 w-48" />
-            <SkeletonLine lineClassName="h-4" className="h-3 w-32" />
             <SkeletonLine lineClassName="h-4" className="h-3 w-28" />
           </div>
         </>
@@ -113,10 +112,7 @@ export function TriggerCardsSkeleton({ cards }: { cards?: number }) {
   );
 }
 
-/**
- * One line of a Trigger card, kept one line tall even when empty, so every
- * card in the list is the height of its tallest kind of Trigger.
- */
+/** One line of a Trigger card: one line tall, its text never wrapping. */
 function CardLine({ children }: { children?: ReactNode }) {
   return <div className="flex h-4 min-w-0 items-center gap-1">{children}</div>;
 }
@@ -136,13 +132,23 @@ function TruncatedText({
   );
 }
 
-/** A Cron Trigger's schedule, with its cron expression on hover. */
+/** The dot between two facts sharing a card line. */
+function LineSeparator() {
+  return <span aria-hidden="true">·</span>;
+}
+
+/**
+ * A Cron Trigger's schedule, with its cron expression on hover, then its
+ * next run when it has one.
+ */
 function ScheduleLine({
   cronExpression,
   timezone,
+  nextRunAt,
 }: {
   cronExpression: string;
   timezone: string;
+  nextRunAt?: string;
 }) {
   const schedule = describeSchedule(cronExpression, timezone);
   return (
@@ -157,50 +163,55 @@ function ScheduleLine({
             : `${schedule}\n${cronExpression}`
         }
       />
+      {nextRunAt && (
+        <>
+          <LineSeparator />
+          <TruncatedText text={`Next: ${nextRunAt}`} />
+        </>
+      )}
     </CardLine>
   );
 }
 
-/** An Inbound Trigger's lines: what it takes, and how its token stands. */
-function InboundLines({
+/** An Inbound Trigger's line: what it takes, and how its token stands. */
+function InboundLine({
   trigger,
 }: {
   trigger: Extract<Serialized<Trigger>, { type: "inbound" }>;
 }) {
   const inputs = trigger.config.inputs;
   const status = trigger.tokenStatus ?? "none";
+  const hasInputs = inputs.length > 0;
+  if (!hasInputs && status === "active") return null;
   return (
-    <>
-      <CardLine>
-        {inputs.length > 0 && (
-          <CountTooltip
-            icon={<Webhook className="size-3" />}
-            noun="input"
-            names={inputs.map((input) => input.name)}
-          />
-        )}
-      </CardLine>
-      <CardLine>
-        {status === "expiring" && (
-          <span className="flex items-center gap-1 text-warning-foreground">
-            <TriangleAlert className="size-3" />
-            Token expiring soon
-          </span>
-        )}
-        {(status === "none" || status === "expired") && (
-          <>
-            Token:
-            {/* Line-tall, so the badge fits its one-line box. */}
-            <Badge
-              variant={TOKEN_STATUS_VARIANTS[status]}
-              className="h-4 py-0 text-xs leading-none"
-            >
-              {TOKEN_STATUS_LABELS[status]}
-            </Badge>
-          </>
-        )}
-      </CardLine>
-    </>
+    <CardLine>
+      {hasInputs && (
+        <CountTooltip
+          icon={<Webhook className="size-3" />}
+          noun="input"
+          names={inputs.map((input) => input.name)}
+        />
+      )}
+      {hasInputs && status !== "active" && <LineSeparator />}
+      {status === "expiring" && (
+        <span className="flex min-w-0 items-center gap-1 text-warning-foreground">
+          <TriangleAlert className="size-3 shrink-0" />
+          <TruncatedText text="Token expiring soon" />
+        </span>
+      )}
+      {(status === "none" || status === "expired") && (
+        <>
+          Token:
+          {/* Line-tall, so the badge fits its one-line box. */}
+          <Badge
+            variant={TOKEN_STATUS_VARIANTS[status]}
+            className="h-4 py-0 text-xs leading-none"
+          >
+            {TOKEN_STATUS_LABELS[status]}
+          </Badge>
+        </>
+      )}
+    </CardLine>
   );
 }
 
@@ -373,7 +384,11 @@ export function TriggerList({
               <Link href={routes.triggerRuns.forTrigger(trigger.id)}>
                 <ItemContent>
                   <div className="flex min-h-badge items-center gap-2">
-                    <ItemTitle>{trigger.name}</ItemTitle>
+                    <ItemTitle className="min-w-0">
+                      <span className="truncate" title={trigger.name}>
+                        {trigger.name}
+                      </span>
+                    </ItemTitle>
                     <Badge variant="outline" className="text-xs">
                       <TriggerTypeIcon type={trigger.type} />
                       {TRIGGER_TYPE_LABELS[trigger.type] ?? trigger.type}
@@ -412,39 +427,34 @@ export function TriggerList({
                       </>
                     )}
                   </div>
-                  <div className="flex flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
+                  {/* Two lines tall, the most any Trigger draws, so every
+                      card is one height and any spare space falls last. */}
+                  <div className="flex min-h-9 flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
                     {trigger.type === "cron" ? (
-                      <>
-                        <ScheduleLine
-                          cronExpression={trigger.config.cronExpression}
-                          timezone={trigger.config.timezone}
-                        />
-                        <CardLine>
-                          {trigger.enabled && trigger.nextRunAt && (
-                            <TruncatedText
-                              text={`Next: ${formatDateTime(trigger.nextRunAt)}`}
-                            />
-                          )}
-                        </CardLine>
-                      </>
+                      <ScheduleLine
+                        cronExpression={trigger.config.cronExpression}
+                        timezone={trigger.config.timezone}
+                        nextRunAt={
+                          trigger.enabled && trigger.nextRunAt
+                            ? formatDateTime(trigger.nextRunAt)
+                            : undefined
+                        }
+                      />
                     ) : trigger.type === "inbound" ? (
-                      <InboundLines trigger={trigger} />
+                      <InboundLine trigger={trigger} />
                     ) : (
-                      <>
-                        <CardLine>
-                          <CountTooltip
-                            icon={<Zap className="size-3" />}
-                            noun="event"
-                            names={trigger.config.events}
-                          />
-                        </CardLine>
-                        <CardLine />
-                      </>
+                      <CardLine>
+                        <CountTooltip
+                          icon={<Zap className="size-3" />}
+                          noun="event"
+                          names={trigger.config.events}
+                        />
+                      </CardLine>
                     )}
                     <CardLine>
-                      {trigger.lastRunStatus && trigger.lastRunStartedAt && (
+                      <span>Last run:</span>
+                      {trigger.lastRunStatus && trigger.lastRunStartedAt ? (
                         <>
-                          <span>Last run:</span>
                           <span
                             title={formatDateTime(trigger.lastRunStartedAt)}
                           >
@@ -452,6 +462,8 @@ export function TriggerList({
                           </span>
                           <StatusIcon status={trigger.lastRunStatus} />
                         </>
+                      ) : (
+                        <span>Never</span>
                       )}
                     </CardLine>
                   </div>

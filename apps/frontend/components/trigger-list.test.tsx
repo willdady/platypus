@@ -493,6 +493,31 @@ describe("TriggerList card height", () => {
     expect(screen.getByRole("paragraph")).toHaveClass("min-h-[2lh]");
   });
 
+  it("draws a schedule, its next run and Last run in a two-line block", async () => {
+    await renderTriggers([
+      {
+        ...scheduledTrigger,
+        lastRunStatus: "success",
+        lastRunStartedAt: new Date(),
+      },
+    ]);
+
+    const block = screen.getByText((_, element) =>
+      Boolean(element?.classList.contains("min-h-9")),
+    );
+    expect(block).toHaveTextContent(
+      /^At 12:00 AM \(UTC\)·Next: formatted:2026-02-01T09:00:00\.000ZLast run:/,
+    );
+  });
+
+  it("truncates the Trigger's name, with the full name on hover", async () => {
+    await renderTriggers([cronTrigger]);
+
+    const name = screen.getByText("Nightly job");
+    expect(name).toHaveClass("truncate");
+    expect(name).toHaveAttribute("title", "Nightly job");
+  });
+
   it("truncates the agent's name, with the full name on hover", async () => {
     mockScopedSWR({ "/agents": [{ id: "agent1", name: "Agent One" }] });
     await renderTriggers([cronTrigger]);
@@ -699,12 +724,13 @@ describe("TriggerList last run", () => {
     expect(screen.getAllByTitle(`formatted:${startedAt}`)).toHaveLength(3);
   });
 
-  it("shows no last run line for a trigger that has never run", async () => {
+  it("says Never on the last run line for a trigger that has never run", async () => {
     await renderTriggers([
       { ...cronTrigger, lastRunStatus: null, lastRunStartedAt: null },
     ]);
 
-    expect(screen.queryByText("Last run:")).not.toBeInTheDocument();
+    expect(screen.getByText("Last run:")).toBeInTheDocument();
+    expect(screen.getByText("Never")).toBeInTheDocument();
   });
 
   it("keeps Fired in a fired One-off's title row and its status on the last run line", async () => {

@@ -89,9 +89,11 @@ badges. A disabled item shows a Disabled badge in its title row — the secondar
 Every card in a list is one height, whatever it holds, so a paged list keeps
 its height. Reserve line boxes rather than tuning a `min-h` on the card:
 
-- the title row is `min-h-badge`, with or without badges;
+- the title row is `min-h-badge`, with or without badges, and the name is
+  one line: `truncate`d inside a `min-w-0` `ItemTitle`, with a `title`;
 - the description always renders, clamped and reserving the same lines
-  (`line-clamp-2 min-h-[2lh]`), with `title` holding the full text;
+  (`line-clamp-2 min-h-[2lh]`; `line-clamp-1 min-h-[1lh]` on a card with
+  nothing after it, such as a Board's), with `title` holding the full text;
 - each line after it is one line tall even when empty (`h-4`), its text
   `truncate`d with a `title`; a list of names becomes a count with a tooltip
   (`CountTooltip`).

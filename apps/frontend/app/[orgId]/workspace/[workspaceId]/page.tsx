@@ -171,7 +171,7 @@ function WorkspaceSkeleton() {
         titleWidth="w-36"
         descriptionWidth="w-96"
       >
-        <CardGridSkeleton cards={2} />
+        <CardGridSkeleton cards={2} descriptionLines={1} />
         <ButtonRowSkeleton widths={["w-44"]} />
       </CollapsibleSectionSkeleton>
 
@@ -182,7 +182,7 @@ function WorkspaceSkeleton() {
         titleWidth="w-24"
         descriptionWidth="w-80"
       >
-        <CardGridSkeleton cards={2} />
+        <CardGridSkeleton cards={2} descriptionLines={1} />
         <ButtonRowSkeleton widths={["w-36"]} />
       </CollapsibleSectionSkeleton>
 
