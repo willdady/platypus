@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CloneDialog } from "@/components/clone-dialog";
 import { replaceSearchParam } from "@/lib/search-params";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import {
@@ -212,6 +213,9 @@ export function TriggerList({
 }) {
   const routes = workspaceRoutes(orgId, workspaceId);
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const [triggerToClone, setTriggerToClone] =
+    useState<Serialized<Trigger> | null>(null);
 
   // Both filters live in the URL, so they survive a refresh and Back. An
   // unknown type reads as no filter.
@@ -258,6 +262,30 @@ export function TriggerList({
     delete: (trigger, url) =>
       writeEntity(url, "triggers", scope, { id: trigger.id }),
   });
+
+  // Only the fields a create takes: no run or token state rides along. The
+  // clone starts disabled, and an Inbound clone asks for no token.
+  const createClone = (
+    original: Serialized<Trigger>,
+    name: string,
+    url: string,
+  ) =>
+    writeEntity<Trigger>(url, "triggers", scope, {
+      data: {
+        workspaceId,
+        agentId: original.agentId,
+        type: original.type,
+        name,
+        description: original.description ?? undefined,
+        instruction: original.instruction,
+        maxRunsToKeep: original.maxRunsToKeep,
+        search: original.search,
+        includeMemories: original.includeMemories,
+        config: original.config,
+        enabled: false,
+        ...(original.type === "inbound" && { issueToken: false }),
+      },
+    });
 
   if (isLoading && !triggersData) {
     return (
@@ -432,6 +460,7 @@ export function TriggerList({
                   <RowActionsMenu
                     name={trigger.name}
                     edit={{ href: routes.triggers.detail(trigger.id) }}
+                    clone={{ onSelect: () => setTriggerToClone(trigger) }}
                     toggle={
                       // A fired One-off is spent: it cannot be re-armed.
                       trigger.firedAt
@@ -450,6 +479,19 @@ export function TriggerList({
           </li>
         ))}
       </ul>
+
+      {triggerToClone && (
+        <CloneDialog
+          noun="Trigger"
+          original={triggerToClone.name}
+          onClose={() => setTriggerToClone(null)}
+          create={(name, url) => createClone(triggerToClone, name, url)}
+          onCreated={(id) => {
+            void mutate();
+            router.push(routes.triggers.detail(id));
+          }}
+        />
+      )}
 
       <DeleteConfirmDialog
         open={deleteFlow.open}

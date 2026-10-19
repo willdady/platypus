@@ -213,6 +213,40 @@ describe("Trigger Routes", () => {
       expect(body.nextRunAt).toBe(nextRun.toISOString());
     });
 
+    it("creates an Inbound Trigger with no token when the body opts out", async () => {
+      stubAuthLookups();
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]); // agent verify
+      const inboundBody = {
+        ...createBody,
+        type: "inbound",
+        enabled: false,
+        issueToken: false,
+        config: { inputs: [], tokenExpiryDays: 90 },
+      };
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          ...cronTrigger,
+          id: "trig-new",
+          type: "inbound",
+          enabled: false,
+          config: inboundBody.config,
+          tokenHash: null,
+        },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify(inboundBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).not.toHaveProperty("token");
+      expect(body.tokenStatus).toBe("none");
+      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      expect(values).not.toHaveProperty("tokenHash");
+    });
+
     it("creates an event trigger with a full filters shape (columnId, changedFields) and returns 201", async () => {
       stubAuthLookups();
       mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]); // agent verify
