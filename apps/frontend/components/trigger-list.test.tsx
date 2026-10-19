@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { Trigger } from "@platypus/schemas";
 import {
   authMock,
@@ -11,11 +17,12 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   mutate,
+  push,
   toastError,
   menuItemLabels,
 } from "@/test/list-test-harness";
 import userEvent from "@testing-library/user-event";
-import { openDropdownMenu, selectOption } from "@/test/test-utils";
+import { openDropdownMenu, selectOption, setupUser } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -87,6 +94,149 @@ describe("TriggerList delete", () => {
     expect(mutate).not.toHaveBeenCalled();
     // The dialog stays open on a refused delete, letting the user retry.
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+});
+
+describe("TriggerList clone", () => {
+  // Run and token state a stored Trigger carries, none of which a clone may.
+  const runState = {
+    workspaceId: "ws1",
+    description: null,
+    instruction: "Do it",
+    maxRunsToKeep: 10,
+    search: false,
+    includeMemories: true,
+    lastRunAt: "2026-02-01T08:00:00.000Z",
+    nextRunAt: "2026-02-02T08:00:00.000Z",
+    lastRunStatus: "success",
+    lastRunStartedAt: "2026-02-01T08:00:00.000Z",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const inboundTrigger = {
+    ...cronTrigger,
+    ...runState,
+    id: "t2",
+    name: "Ready for AI",
+    type: "inbound",
+    config: { inputs: [], tokenExpiryDays: 90 },
+    tokenStatus: "active",
+    tokenCreatedAt: "2026-01-01T00:00:00.000Z",
+    tokenExpiresAt: "2026-04-01T00:00:00.000Z",
+    lastUsedAt: "2026-02-01T08:00:00.000Z",
+    lastRejectedAt: null,
+  } as unknown as Trigger;
+
+  const sentBody = (fetchMock: ReturnType<typeof stubAcceptedSave>): unknown =>
+    JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+
+  it("names the copy after the original", async () => {
+    await renderTriggers([cronTrigger], "Clone");
+
+    expect(screen.getByRole("dialog", { name: "Clone Trigger" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+      "Nightly job (copy)",
+    );
+  });
+
+  it("creates a disabled Cron copy without run state, then opens it", async () => {
+    const fetchMock = stubAcceptedSave({ id: "t9" }, 201);
+
+    // A fired One-off: its clone is a pending One-off, unfired.
+    await renderTriggers([
+      {
+        ...cronTrigger,
+        ...runState,
+        config: { ...cronTrigger.config, isOneOff: true },
+        firedAt: "2026-02-01T08:00:00.000Z",
+      } as unknown as Trigger,
+    ]);
+    const user = setupUser();
+    await user.click(screen.getByRole("switch", { name: "Show fired" }));
+    await openDropdownMenu();
+    await user.click(screen.getByRole("menuitem", { name: "Clone" }));
+    await confirmDialog("Clone");
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/triggers/t9"),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/workspaces/ws1/triggers",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(sentBody(fetchMock)).toEqual({
+      workspaceId: "ws1",
+      agentId: "agent1",
+      type: "cron",
+      name: "Nightly job (copy)",
+      instruction: "Do it",
+      maxRunsToKeep: 10,
+      search: false,
+      includeMemories: true,
+      config: { cronExpression: "0 0 * * *", timezone: "UTC", isOneOff: true },
+      enabled: false,
+    });
+  });
+
+  it("creates a disabled Event copy that sends no token flag", async () => {
+    const fetchMock = stubAcceptedSave({ id: "t9" }, 201);
+
+    await renderTriggers(
+      [
+        {
+          ...cronTrigger,
+          ...runState,
+          type: "event",
+          config: { events: ["card.created"] },
+        } as unknown as Trigger,
+      ],
+      "Clone",
+    );
+    await confirmDialog("Clone");
+
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(sentBody(fetchMock)).toMatchObject({
+      type: "event",
+      enabled: false,
+    });
+    expect(sentBody(fetchMock)).not.toHaveProperty("issueToken");
+  });
+
+  it("creates an Inbound copy that asks for no token", async () => {
+    const fetchMock = stubAcceptedSave({ id: "t9" }, 201);
+
+    await renderTriggers([inboundTrigger], "Clone");
+    const name = screen.getByRole("textbox", { name: "Name" });
+    fireEvent.change(name, { target: { value: "Renamed" } });
+    await confirmDialog("Clone");
+
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(sentBody(fetchMock)).toEqual({
+      workspaceId: "ws1",
+      agentId: "agent1",
+      type: "inbound",
+      name: "Renamed",
+      instruction: "Do it",
+      maxRunsToKeep: 10,
+      search: false,
+      includeMemories: true,
+      config: { inputs: [], tokenExpiryDays: 90 },
+      enabled: false,
+      issueToken: false,
+    });
+  });
+
+  it("keeps the dialog open with the backend's reason when the create fails", async () => {
+    stubRejectedSave("Too many pending one-off triggers", 400);
+
+    await renderTriggers([cronTrigger], "Clone");
+    await confirmDialog("Clone");
+
+    expect(
+      await screen.findByText("Too many pending one-off triggers"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Clone Trigger" })).toBeVisible();
+    expect(push).not.toHaveBeenCalled();
   });
 });
 
@@ -605,10 +755,10 @@ describe("TriggerList card", () => {
     );
   });
 
-  it("orders its menu Edit, Enable/Disable, then Delete, with no View runs", async () => {
+  it("orders its menu Edit, Clone, Enable/Disable, then Delete, with no View runs", async () => {
     await renderTriggers([cronTrigger]);
     await openDropdownMenu();
 
-    expect(menuItemLabels()).toEqual(["Edit", "Disable", "Delete"]);
+    expect(menuItemLabels()).toEqual(["Edit", "Clone", "Disable", "Delete"]);
   });
 });

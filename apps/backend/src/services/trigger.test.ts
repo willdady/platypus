@@ -804,6 +804,23 @@ describe("trigger module", () => {
       expect(stored.nextRunAt).toBeNull();
     });
 
+    it("issues no token when the create opts out, as a Clone does", async () => {
+      const fake = world();
+
+      const row = await createTrigger(
+        ctx,
+        { ...inboundFields(), issueToken: false },
+        { allowInbound: true },
+      );
+
+      expect(row.issuedToken).toBeUndefined();
+      const [stored] = fake.tables.trigger;
+      expect(stored.tokenHash ?? null).toBeNull();
+      expect(stored.tokenCreatedAt ?? null).toBeNull();
+      expect(stored.tokenExpiresAt ?? null).toBeNull();
+      expect(toPublicTrigger(stored as TriggerRow).tokenStatus).toBe("none");
+    });
+
     it.each([
       [
         "a record key naming an optional input",

@@ -11,16 +11,7 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { OrganizationBadge } from "@/components/resource-list";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { CloneDialog } from "@/components/clone-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
@@ -129,12 +120,7 @@ export function AgentsList({
   const { actor, ownsWorkspace } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
-  const [agentToClone, setAgentToClone] = useState<Serialized<Agent> | null>(
-    null,
-  );
-  const [cloneName, setCloneName] = useState("");
-  const [cloneError, setCloneError] = useState<string | null>(null);
+  const [agentToClone, setAgentToClone] = useState<AgentWithScope | null>(null);
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -217,13 +203,6 @@ export function AgentsList({
       .filter(Boolean) as string[];
   };
 
-  const handleCloneClick = (agent: Serialized<Agent>) => {
-    setAgentToClone(agent);
-    setCloneName(`${agent.name} (copy)`);
-    setCloneError(null);
-    setCloneDialogOpen(true);
-  };
-
   const deleteFlow = useDeleteFlow<AgentWithScope>({
     mutate,
     guidanceOnForbidden: true,
@@ -234,11 +213,11 @@ export function AgentsList({
     deleteFlow.request(agent);
   };
 
-  const handleCloneConfirm = async () => {
-    if (!agentToClone || !backendUrl) return;
-
-    setCloneError(null);
-
+  const createClone = (
+    agent: AgentWithScope,
+    cloneName: string,
+    url: string,
+  ) => {
     const {
       id,
       createdAt,
@@ -247,7 +226,7 @@ export function AgentsList({
       scope: agentScope,
       organizationId,
       ...cloneData
-    } = agentToClone as AgentWithScope;
+    } = agent;
 
     const sanitizedData = Object.fromEntries(
       Object.entries({
@@ -257,19 +236,7 @@ export function AgentsList({
       }).map(([key, value]) => [key, value === null ? undefined : value]),
     );
 
-    const outcome = await writeEntity<Agent>(backendUrl, "agents", scope, {
-      data: sanitizedData,
-    });
-
-    if (outcome.outcome === "success") {
-      void mutate();
-      setCloneDialogOpen(false);
-      setAgentToClone(null);
-      setCloneName("");
-      router.push(routes.agents.detail(outcome.data.id));
-    } else {
-      setCloneError(outcome.message);
-    }
+    return writeEntity<Agent>(url, "agents", scope, { data: sanitizedData });
   };
 
   if (isLoadingAgents || isLoadingProviders) {
@@ -349,7 +316,7 @@ export function AgentsList({
               ]
             : []),
         ]}
-        clone={{ onSelect: () => handleCloneClick(agent) }}
+        clone={{ onSelect: () => setAgentToClone(agent) }}
         remove={{ onSelect: () => handleDeleteClick(agent) }}
       />
     );
@@ -502,44 +469,18 @@ export function AgentsList({
 
       <PromoteSharedDialog promote={promote} noun="agent" />
 
-      <Dialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Clone Agent</DialogTitle>
-            <DialogDescription>
-              Enter a name for the cloned agent.
-            </DialogDescription>
-          </DialogHeader>
-          <Field>
-            <FieldLabel htmlFor="clone-agent-name">Name</FieldLabel>
-            <Input
-              id="clone-agent-name"
-              value={cloneName}
-              onChange={(e) => {
-                setCloneName(e.target.value);
-                setCloneError(null);
-              }}
-              placeholder="Agent name"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  void handleCloneConfirm();
-                }
-              }}
-            />
-          </Field>
-          {cloneError && (
-            <p role="alert" className="text-destructive text-sm">
-              {cloneError}
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCloneDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCloneConfirm}>Clone</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {agentToClone && (
+        <CloneDialog
+          noun="Agent"
+          original={agentToClone.name}
+          onClose={() => setAgentToClone(null)}
+          create={(name, url) => createClone(agentToClone, name, url)}
+          onCreated={(id) => {
+            void mutate();
+            router.push(routes.agents.detail(id));
+          }}
+        />
+      )}
 
       <DeleteConfirmDialog
         open={deleteFlow.open}

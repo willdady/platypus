@@ -99,7 +99,10 @@ export type TriggerWriteOptions = { allowInbound?: boolean };
  * The HTTP route always supplies them, already defaulted by
  * `triggerCreateSchema`'s Zod defaults.
  */
-export type TriggerCreateFields = TriggerBaseFields;
+export type TriggerCreateFields = TriggerBaseFields & {
+  /** Inbound only: `false` creates it with no token. Omitted, one is issued. */
+  issueToken?: boolean;
+};
 
 /**
  * What a create stores for a field the caller omitted — matching the `trigger`
@@ -350,9 +353,11 @@ export async function createTrigger(
   } else if (fields.type === "inbound") {
     const inbound = parseInboundConfig(fields.config);
     config = inbound;
-    const generated = generateBearerToken(INBOUND_TOKEN_PREFIX);
-    token = generated.token;
-    tokenFields = issuedTokenFields(generated.hash, inbound.tokenExpiryDays);
+    if (fields.issueToken !== false) {
+      const generated = generateBearerToken(INBOUND_TOKEN_PREFIX);
+      token = generated.token;
+      tokenFields = issuedTokenFields(generated.hash, inbound.tokenExpiryDays);
+    }
   } else {
     throw new ValidationError(
       "Invalid trigger type. Must be 'cron', 'event' or 'inbound'.",

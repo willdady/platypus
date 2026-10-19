@@ -2552,6 +2552,9 @@ export const triggerCreateSchema = z.discriminatedUnion("type", [
   triggerCreateBaseSchema.extend({
     type: z.literal("inbound"),
     config: inboundTriggerConfigSchema,
+    // `false` creates it with no token, for the Owner to issue later.
+    // Omitted, the create issues one and returns it once.
+    issueToken: z.boolean().optional(),
   }),
 ]);
 

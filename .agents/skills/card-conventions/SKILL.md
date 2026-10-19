@@ -100,10 +100,15 @@ The list's skeleton reserves the same boxes, so it lands without a jump.
 
 ## Clone
 
-Clone (Agents today) runs in the browser: take the item's fields, drop its
-identity (`id`, timestamps, `scope`), and send the ordinary create request.
+Clone (Agents and Triggers) runs in the browser: send the ordinary create request
+with only the fields the create takes, never the item's identity (`id`,
+timestamps, `scope`) or its run and token state.
 
 - The clone is named `<name> (copy)`, editable in the Clone dialog.
 - Tokens and other issued credentials stay with the original; a clone that
   needs one gets its own.
+- A cloned Trigger starts disabled, so it never fires beside its original.
+- A cloned Inbound Trigger has no token (`issueToken: false` on the create)
+  until the Owner issues one.
 - After the create, go to the clone's edit page.
+- Use `CloneDialog` (`components/clone-dialog.tsx`) for the dialog.

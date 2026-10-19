@@ -66,7 +66,7 @@ Trigger** to run once, at the first time the schedule names.
 
 A One-off Trigger is spent once it fires. It stays switched off for good: you
 cannot re-enable it or change its schedule, so its form greys out the schedule
-and **Enabled**. Every other field stays editable, and you can delete it. To run it again, create a new one.
+and **Enabled**. Every other field stays editable, and you can delete it. To run it again, [clone it](#clone-a-trigger).
 A fired One-off Trigger drops out of the Triggers list and the Workspace home
 count; switch on **Show fired** above the list to see it. **Show fired** is greyed out while the list shows only **Event** or
 **Inbound** Triggers, since only a Cron Trigger can be a One-off. It is deleted, together with its run, **7 days** after that run ends,
@@ -180,6 +180,24 @@ now**. Copy both, then click **I've copied it**, the only way to close it.
   in **Advanced**; switching it to **Simple** shows the default Daily 09:00, and
   saving then replaces your expression.
 </Callout>
+
+## Clone a Trigger
+
+**Clone** in the ⋮ menu on a Trigger's card makes a new, independent Trigger
+from it. Name the copy in the **Clone Trigger** dialog — it starts as the
+original's name with ` (copy)` — and click **Clone**. The copy's edit page opens.
+
+The copy takes the original's type, Agent, description, instruction, schedule,
+events or inputs, and settings. It takes none of the original's runs, and:
+
+- **It starts disabled**, whatever the original's state, so it never fires next
+  to the original. Change what you need, then switch on **Enabled** and save.
+- **An Inbound copy has no token.** Its card shows **No token**, and a call to
+  it is refused. Click **Issue token** on its page, and give the token to the
+  calling system.
+- **A One-off copy has not fired**, even if the original has. It counts toward
+  the Workspace's limit on One-off Triggers that have not fired yet, so the
+  Clone can be refused at that limit; the dialog says why and stays open.
 
 ## What a run does
 
