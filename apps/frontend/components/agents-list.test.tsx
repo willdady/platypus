@@ -24,6 +24,7 @@ import {
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
+import userEvent from "@testing-library/user-event";
 import { openDropdownMenu, stubPendingSave } from "@/test/test-utils";
 import { AgentsList } from "./agents-list";
 
@@ -352,6 +353,41 @@ describe("AgentsList list states", () => {
     await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText(/Failed to load/i)).toBeInTheDocument();
+  });
+});
+
+describe("AgentsList card height", () => {
+  it("reserves a three-line description box, with the full text on hover", async () => {
+    await renderAgents([workspaceAgent]);
+
+    const description = screen.getByText("desc");
+    expect(description).toHaveClass("line-clamp-3", "min-h-[3lh]");
+    expect(description).toHaveAttribute("title", "desc");
+  });
+
+  it("keeps the description box when there is no description", async () => {
+    await renderAgents([{ ...workspaceAgent, description: "" }]);
+
+    expect(screen.getByRole("paragraph")).toHaveClass("min-h-[3lh]");
+  });
+
+  it("counts tool sets, skills and sub-agents in singular and plural", async () => {
+    mockScopedSWR({
+      "/tools": [
+        { id: "t1", name: "Search" },
+        { id: "t2", name: "Files" },
+      ],
+      "/skills": [{ id: "s1", name: "Writing" }],
+    });
+    await renderAgents([
+      { ...workspaceAgent, toolSetIds: ["t1", "t2"], skillIds: ["s1"] },
+    ]);
+
+    expect(screen.getByText("2 tool sets")).toBeInTheDocument();
+    expect(screen.getByText("1 skill")).toBeInTheDocument();
+    expect(screen.getByText("0 sub-agents")).toBeInTheDocument();
+    await userEvent.hover(screen.getByText("2 tool sets"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Search");
   });
 });
 

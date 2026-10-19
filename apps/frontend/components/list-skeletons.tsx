@@ -172,7 +172,7 @@ export type CardSkeletonProps = {
   media?: boolean;
   /** Pills beside the title, one per width class. */
   titleBadges?: string[];
-  /** `text-xs` description lines under the title. */
+  /** `text-xs` description lines under the title: the loaded clamp. */
   descriptionLines?: number;
   /** Anything the card carries under the description: a count, a badge. */
   extra?: ReactNode;
@@ -191,34 +191,37 @@ export function CardGridSkeleton({
   cards = 4,
   media = false,
   titleBadges = [],
-  descriptionLines = 1,
+  descriptionLines = 2,
   extra,
   actions = <IconButtonSkeleton />,
   className,
 }: CardSkeletonProps & { cards?: number }) {
   return (
-    <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
+    <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
       {Array.from({ length: cards }, (_, i) => (
         <li key={i}>
           <Item variant="outline" className={cn("h-full", className)}>
             {media && <Skeleton className="size-12 shrink-0 rounded-full" />}
             <ItemContent>
-              <div className="flex items-center gap-2">
+              <div className="flex min-h-badge items-center gap-2">
                 <SkeletonLine className={at(TITLE_WIDTHS, i)} />
                 {titleBadges.map((width, j) => (
                   <BadgeSkeleton key={j} className={width} />
                 ))}
               </div>
-              {Array.from({ length: descriptionLines }, (_, j) => (
-                <SkeletonLine
-                  key={j}
-                  lineClassName="h-[18px]"
-                  className={cn(
-                    "h-3",
-                    j === descriptionLines - 1 ? "w-3/5" : "w-full",
-                  )}
-                />
-              ))}
+              {/* One box, as the loaded description reserves its lines. */}
+              <div>
+                {Array.from({ length: descriptionLines }, (_, j) => (
+                  <SkeletonLine
+                    key={j}
+                    lineClassName="h-4"
+                    className={cn(
+                      "h-3",
+                      j === descriptionLines - 1 ? "w-3/5" : "w-full",
+                    )}
+                  />
+                ))}
+              </div>
               {extra}
             </ItemContent>
             {actions}

@@ -58,7 +58,7 @@ import {
   ManageAttachmentsDialog,
   AttachmentCount,
   SharedWithBadge,
-  UnattachedWarning,
+  UnattachedWarningLine,
 } from "@/components/manage-sharing";
 import {
   AttachSharedAction,
@@ -114,11 +114,11 @@ function UserInvocableBadge({ skill }: { skill: SkillWithScope }) {
 // so tapping the count does not follow the card's link.
 function SkillAgentsIndicator({ agents }: { agents: Serialized<Agent>[] }) {
   return (
-    <div className="mt-1 text-xs text-muted-foreground">
+    <div className="mt-1 flex h-4 items-center text-xs text-muted-foreground">
       {agents.length > 0 ? (
         <Tooltip>
           <TooltipTrigger
-            className="flex items-center gap-1 cursor-default"
+            className="flex items-center gap-1 cursor-default whitespace-nowrap"
             onClick={(e) => e.preventDefault()}
           >
             <Bot className="size-3" />
@@ -133,12 +133,47 @@ function SkillAgentsIndicator({ agents }: { agents: Serialized<Agent>[] }) {
           </TooltipContent>
         </Tooltip>
       ) : (
-        <span className="flex items-center gap-1 cursor-default text-warning-foreground">
-          <TriangleAlert className="size-3" />
-          <strong>WARNING:</strong> Skill not associated with any agents.
+        <span
+          className="flex min-w-0 items-center gap-1 cursor-default text-warning-foreground"
+          title="WARNING: Skill not associated with any agents."
+        >
+          <TriangleAlert className="size-3 shrink-0" />
+          <span className="truncate">
+            <strong>WARNING:</strong> Skill not associated with any agents.
+          </span>
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * The skill cards as they load; the workspace home draws them too. Each line
+ * the loaded card reserves is drawn, so the list doesn't jump as it lands.
+ */
+export function SkillCardsSkeleton({
+  cards,
+  agentLine = false,
+  sharingLines = false,
+}: {
+  cards?: number;
+  /** A workspace card's agent count. */
+  agentLine?: boolean;
+  /** An Org Admin's "Shared with" badge and unattached warning. */
+  sharingLines?: boolean;
+}) {
+  return (
+    <CardGridSkeleton
+      cards={cards}
+      extra={
+        <>
+          {(agentLine || sharingLines) && (
+            <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
+          )}
+          {sharingLines && <div className="mt-1 h-4" />}
+        </>
+      }
+    />
   );
 }
 
@@ -236,17 +271,11 @@ export function SkillsList({
     workspaceId ? deleteFlow.request(skill) : deleteGuard.request(skill);
 
   if (isLoading) {
-    // A workspace card carries its agent count; an organization card, for an
-    // Org Admin, its "Shared with" badge — both one `text-xs` line.
-    const hasExtraLine = Boolean(workspaceId) || canManageOrg;
     return (
       <LoadingRegion label="Loading skills">
-        <CardGridSkeleton
-          extra={
-            hasExtraLine && (
-              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
-            )
-          }
+        <SkillCardsSkeleton
+          agentLine={Boolean(workspaceId)}
+          sharingLines={!workspaceId && canManageOrg}
         />
         <ButtonRowSkeleton
           className="mt-4"
@@ -363,7 +392,7 @@ export function SkillsList({
       ) : shown.length === 0 ? (
         <ListState variant="empty">No skills match your filters.</ListState>
       ) : (
-        <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
+        <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
           {shown.map((skill) => {
             // Org-scoped (Shared) Skills are locked inside a workspace: they can
             // only be edited from the organization settings surface.
@@ -380,13 +409,16 @@ export function SkillsList({
                 <li key={skill.id}>
                   <Item variant="outline" className="h-full">
                     <ItemContent>
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-h-badge items-center gap-2">
                         <ItemTitle>{skill.name}</ItemTitle>
                         <UserInvocableBadge skill={skill} />
                         <NeedsSandboxBadge skill={skill} />
                         <OrganizationBadge />
                       </div>
-                      <ItemDescription className="text-xs line-clamp-2">
+                      <ItemDescription
+                        className="text-xs line-clamp-2 min-h-[2lh]"
+                        title={skill.description || undefined}
+                      >
                         {skill.description}
                       </ItemDescription>
                       <SkillAgentsIndicator agents={skillAgents} />
@@ -431,12 +463,15 @@ export function SkillsList({
                     >
                       <Link href={`${editBasePath}/${skill.id}`}>
                         <ItemContent>
-                          <div className="flex items-center gap-2">
+                          <div className="flex min-h-badge items-center gap-2">
                             <ItemTitle>{skill.name}</ItemTitle>
                             <UserInvocableBadge skill={skill} />
                             <NeedsSandboxBadge skill={skill} />
                           </div>
-                          <ItemDescription className="text-xs line-clamp-2">
+                          <ItemDescription
+                            className="text-xs line-clamp-2 min-h-[2lh]"
+                            title={skill.description || undefined}
+                          >
                             {skill.description}
                           </ItemDescription>
                           {workspaceId && (
@@ -451,7 +486,9 @@ export function SkillsList({
                               />
                             </div>
                           )}
-                          {count === 0 && <UnattachedWarning />}
+                          {!workspaceId && canManageOrg && (
+                            <UnattachedWarningLine count={count} />
+                          )}
                         </ItemContent>
                         <ItemActions>
                           <RowActionsMenu

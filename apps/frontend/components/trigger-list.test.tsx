@@ -14,6 +14,7 @@ import {
   toastError,
   menuItemLabels,
 } from "@/test/list-test-harness";
+import userEvent from "@testing-library/user-event";
 import { openDropdownMenu, selectOption } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
@@ -130,7 +131,10 @@ describe("TriggerList cron schedule", () => {
   it("keeps the raw expression reachable as a tooltip", async () => {
     await renderTriggers([scheduledTrigger]);
 
-    expect(screen.getByTitle("0 0 * * *")).toBeInTheDocument();
+    expect(screen.getByText("At 12:00 AM (UTC)")).toHaveAttribute(
+      "title",
+      "At 12:00 AM (UTC)\n0 0 * * *",
+    );
   });
 
   it("falls back to the raw expression when cron cannot be parsed", async () => {
@@ -242,13 +246,33 @@ describe("TriggerList inbound triggers", () => {
       ...over,
     }) as unknown as Trigger;
 
-  it("renders an Inbound Trigger with its own badge and its inputs, not as an Event Trigger", async () => {
+  it("renders an Inbound Trigger with its own badge and its input count, not as an Event Trigger", async () => {
     await renderTriggers([inboundTrigger()]);
 
     expect(screen.getByText("Inbound")).toBeInTheDocument();
     expect(screen.queryByText("Event")).not.toBeInTheDocument();
-    expect(screen.getByText("issueKey")).toBeInTheDocument();
+    expect(screen.getByText("1 input")).toBeInTheDocument();
     expect(screen.queryByText(/Called from outside/)).not.toBeInTheDocument();
+  });
+
+  it("counts several inputs and lists them in a tooltip", async () => {
+    await renderTriggers([
+      inboundTrigger({
+        config: {
+          inputs: [
+            { name: "issueKey", required: true },
+            { name: "summary", required: false },
+          ],
+          recordKey: "issueKey",
+          tokenExpiryDays: 90,
+        },
+      }),
+    ]);
+
+    await userEvent.hover(screen.getByText("2 inputs"));
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("issueKey");
+    expect(tooltip).toHaveTextContent("summary");
   });
 
   it("draws no summary line for an input-less Trigger with a healthy token", async () => {
@@ -274,6 +298,58 @@ describe("TriggerList inbound triggers", () => {
 
     expect(screen.getByText("No token")).toBeInTheDocument();
     expect(screen.getByText("Expired")).toBeInTheDocument();
+  });
+});
+
+describe("TriggerList event triggers", () => {
+  const eventTrigger = (events: string[]) =>
+    ({
+      id: "t6",
+      name: "Card watcher",
+      type: "event",
+      enabled: true,
+      agentId: "agent1",
+      config: { events },
+    }) as unknown as Trigger;
+
+  it("counts a single event", async () => {
+    await renderTriggers([eventTrigger(["card.created"])]);
+
+    expect(screen.getByText("1 event")).toBeInTheDocument();
+  });
+
+  it("counts several events and lists them in a tooltip", async () => {
+    await renderTriggers([eventTrigger(["card.created", "card.moved"])]);
+
+    await userEvent.hover(screen.getByText("2 events"));
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("card.created");
+    expect(tooltip).toHaveTextContent("card.moved");
+  });
+});
+
+describe("TriggerList card height", () => {
+  it("reserves a two-line description box, with the full text on hover", async () => {
+    await renderTriggers([{ ...cronTrigger, description: "Runs nightly" }]);
+
+    const description = screen.getByText("Runs nightly");
+    expect(description).toHaveClass("line-clamp-2", "min-h-[2lh]");
+    expect(description).toHaveAttribute("title", "Runs nightly");
+  });
+
+  it("keeps the description box when there is no description", async () => {
+    await renderTriggers([cronTrigger]);
+
+    expect(screen.getByRole("paragraph")).toHaveClass("min-h-[2lh]");
+  });
+
+  it("truncates the agent's name, with the full name on hover", async () => {
+    mockScopedSWR({ "/agents": [{ id: "agent1", name: "Agent One" }] });
+    await renderTriggers([cronTrigger]);
+
+    const name = screen.getByText("Agent One");
+    expect(name).toHaveClass("truncate");
+    expect(name).toHaveAttribute("title", "Agent One");
   });
 });
 

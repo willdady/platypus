@@ -210,6 +210,35 @@ describe("SkillsList delete", () => {
   });
 });
 
+describe("SkillsList card height", () => {
+  it("reserves a two-line description box, with the full text on hover", async () => {
+    await renderSkills([workspaceSkill]);
+
+    const description = screen.getByText("desc");
+    expect(description).toHaveClass("line-clamp-2", "min-h-[2lh]");
+    expect(description).toHaveAttribute("title", "desc");
+  });
+
+  it("keeps the description box when there is no description", async () => {
+    await renderSkills([{ ...workspaceSkill, description: "" }]);
+
+    expect(screen.getByRole("paragraph")).toHaveClass("min-h-[2lh]");
+  });
+
+  it("truncates the no-agents warning to one line, with the full text on hover", async () => {
+    await renderSkills([workspaceSkill]);
+
+    expect(
+      screen.getByText("Skill not associated with any agents.", {
+        exact: false,
+      }),
+    ).toHaveClass("truncate");
+    expect(
+      screen.getByTitle("WARNING: Skill not associated with any agents."),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("SkillsList unattached warning", () => {
   const card = () =>
     screen.getByText(orgSkill.name).closest('[data-slot="item"]');

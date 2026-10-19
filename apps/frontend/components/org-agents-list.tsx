@@ -20,7 +20,7 @@ import {
   AttachmentCount,
   ManageAttachmentsDialog,
   SharedWithBadge,
-  UnattachedWarning,
+  UnattachedWarningLine,
 } from "@/components/manage-sharing";
 import { DeleteBlockedDialog } from "@/components/shared-resource-actions";
 import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
@@ -74,11 +74,15 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
         skeleton={
           <CardGridSkeleton
             media
-            descriptionLines={2}
+            descriptionLines={3}
             extra={
               canManage && (
-                // The "Shared with N workspaces" badge.
-                <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-32" />
+                <>
+                  {/* The "Shared with N workspaces" badge. */}
+                  <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-32" />
+                  {/* The unattached warning's reserved line. */}
+                  <div className="mt-1 h-4" />
+                </>
               )
             }
             // The row menu is an Org Admin's alone, as on the loaded card.
@@ -92,7 +96,7 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
             description="Promote a workspace agent to the organization to share it across workspaces."
           />
         }
-        descriptionClassName="line-clamp-3"
+        descriptionLines={3}
         media={(agent) =>
           agent.avatarUrl ? (
             <ItemMedia variant="image" className="size-12 rounded-full">
@@ -160,7 +164,7 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
             {(count) =>
               card({
                 className: count === 0 ? "border-warning" : undefined,
-                meta: count === 0 && <UnattachedWarning />,
+                meta: canManage && <UnattachedWarningLine count={count} />,
               })
             }
           </AttachmentCount>

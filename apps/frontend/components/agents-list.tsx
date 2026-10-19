@@ -33,11 +33,7 @@ import {
 } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RowActionsMenu, type RowAction } from "@/components/row-actions-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { CountTooltip } from "@/components/count-tooltip";
 import {
   ArrowUpFromLine,
   Bot,
@@ -100,7 +96,7 @@ export function AgentCardsSkeleton({ cards }: { cards?: number }) {
       cards={cards}
       media
       className="items-stretch"
-      descriptionLines={2}
+      descriptionLines={3}
       extra={
         // The tool set / skill / sub-agent counts.
         <div className="flex gap-3 mt-auto">
@@ -394,80 +390,34 @@ export function AgentsList({
             </ItemMedia>
           )}
           <ItemContent>
-            <div className="flex items-center gap-2">
+            <div className="flex min-h-badge items-center gap-2">
               <ItemTitle>{agent.name}</ItemTitle>
               {isOrgScoped && <OrganizationBadge />}
             </div>
-            <ItemDescription className="text-xs line-clamp-3">
+            {/* Always three lines tall, so every card is one height. */}
+            <ItemDescription
+              className="text-xs line-clamp-3 min-h-[3lh]"
+              title={agent.description || undefined}
+            >
               {agent.description}
             </ItemDescription>
-            <div className="flex gap-3 mt-auto text-xs text-muted-foreground">
-              {toolSetNames.length ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-default">
-                      <Wrench className="size-3" />
-                      {toolSetNames.length} tool set
-                      {toolSetNames.length !== 1 && "s"}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <ul className="text-left">
-                      {toolSetNames.map((name) => (
-                        <li key={name}>{name}</li>
-                      ))}
-                    </ul>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="flex items-center gap-1 cursor-default">
-                  <Wrench className="size-3" />0 tool sets
-                </span>
-              )}
-              {skillNames.length ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-default">
-                      <Sparkles className="size-3" />
-                      {skillNames.length} skill
-                      {skillNames.length !== 1 && "s"}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <ul className="text-left">
-                      {skillNames.map((name) => (
-                        <li key={name}>{name}</li>
-                      ))}
-                    </ul>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="flex items-center gap-1 cursor-default">
-                  <Sparkles className="size-3" />0 skills
-                </span>
-              )}
-              {subAgentNames.length ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-default">
-                      <Bot className="size-3" />
-                      {subAgentNames.length} sub-agent
-                      {subAgentNames.length !== 1 && "s"}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <ul className="text-left">
-                      {subAgentNames.map((name) => (
-                        <li key={name}>{name}</li>
-                      ))}
-                    </ul>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <span className="flex items-center gap-1 cursor-default">
-                  <Bot className="size-3" />0 sub-agents
-                </span>
-              )}
+            {/* One line: the counts clip rather than wrap. */}
+            <div className="flex gap-3 mt-auto overflow-hidden text-xs text-muted-foreground">
+              <CountTooltip
+                icon={<Wrench className="size-3" />}
+                noun="tool set"
+                names={toolSetNames}
+              />
+              <CountTooltip
+                icon={<Sparkles className="size-3" />}
+                noun="skill"
+                names={skillNames}
+              />
+              <CountTooltip
+                icon={<Bot className="size-3" />}
+                noun="sub-agent"
+                names={subAgentNames}
+              />
             </div>
           </ItemContent>
           <ItemActions className={agentCardActionsClassName}>
@@ -483,8 +433,7 @@ export function AgentsList({
     );
   };
 
-  const gridClassName =
-    "grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4";
+  const gridClassName = "grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4";
 
   const actions = (
     <>

@@ -1,7 +1,7 @@
 "use client";
 
 import { AgentCardsSkeleton, AgentsList } from "@/components/agents-list";
-import { SkillsList } from "@/components/skills-list";
+import { SkillCardsSkeleton, SkillsList } from "@/components/skills-list";
 import { TriggerCardsSkeleton, TriggerList } from "@/components/trigger-list";
 import { BoardsList } from "@/components/boards-list";
 import { DashboardsList } from "@/components/dashboards-list";
@@ -160,7 +160,7 @@ function WorkspaceSkeleton() {
         titleWidth="w-24"
         descriptionWidth="w-96"
       >
-        <CardGridSkeleton cards={2} descriptionLines={2} />
+        <SkillCardsSkeleton cards={2} agentLine />
         <ButtonRowSkeleton widths={["w-32"]} />
       </CollapsibleSectionSkeleton>
 
@@ -171,7 +171,7 @@ function WorkspaceSkeleton() {
         titleWidth="w-36"
         descriptionWidth="w-96"
       >
-        <CardGridSkeleton cards={2} descriptionLines={2} />
+        <CardGridSkeleton cards={2} />
         <ButtonRowSkeleton widths={["w-44"]} />
       </CollapsibleSectionSkeleton>
 
@@ -182,7 +182,7 @@ function WorkspaceSkeleton() {
         titleWidth="w-24"
         descriptionWidth="w-80"
       >
-        <CardGridSkeleton cards={2} descriptionLines={2} />
+        <CardGridSkeleton cards={2} />
         <ButtonRowSkeleton widths={["w-36"]} />
       </CollapsibleSectionSkeleton>
 

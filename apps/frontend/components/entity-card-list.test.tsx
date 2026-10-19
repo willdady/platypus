@@ -264,6 +264,32 @@ describe("EntityCardList slots", () => {
     expect(screen.getByText("First")).toBeInTheDocument();
   });
 
+  it("reserves a two-line description box, with the full text on hover", () => {
+    renderCards();
+
+    const description = screen.getByText("First");
+    expect(description).toHaveClass("line-clamp-2", "min-h-[2lh]");
+    expect(description).toHaveAttribute("title", "First");
+  });
+
+  it("clamps and reserves the description to `descriptionLines`", () => {
+    renderCards({ descriptionLines: 3 });
+
+    expect(screen.getByText("First")).toHaveClass(
+      "line-clamp-3",
+      "min-h-[3lh]",
+    );
+    expect(screen.getByText("First")).not.toHaveClass("line-clamp-2");
+  });
+
+  it("keeps the description box when there is no description", () => {
+    renderCards({ items: [{ ...item, description: "" }] });
+
+    const description = screen.getByRole("paragraph");
+    expect(description).toHaveClass("min-h-[2lh]");
+    expect(description).not.toHaveAttribute("title");
+  });
+
   it("links the card to `href`", () => {
     renderCards({ href: (i) => `/things/${i.id}` });
 
