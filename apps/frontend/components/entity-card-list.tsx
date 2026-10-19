@@ -30,6 +30,15 @@ type EntityCard = {
   readonly description?: string | null;
 };
 
+/**
+ * The description's clamp, and the matching reserved height: the box is
+ * always that many lines tall, so every card in the list is one height.
+ */
+const DESCRIPTION_LINES = {
+  2: "line-clamp-2 min-h-[2lh]",
+  3: "line-clamp-3 min-h-[3lh]",
+} as const;
+
 /** What `wrap` may add to a card it surrounds. */
 type CardExtras = {
   /** Classes on the `Item`: `border-warning`. */
@@ -50,7 +59,7 @@ export function EntityCardList<T extends EntityCard>({
   subject,
   skeleton,
   empty,
-  descriptionClassName = "line-clamp-2",
+  descriptionLines = 2,
   href,
   media,
   meta,
@@ -66,8 +75,8 @@ export function EntityCardList<T extends EntityCard>({
   skeleton: ReactNode;
   /** Drawn when there are no items: a `ListState` or an `EmptyCard`. */
   empty: ReactNode;
-  /** Classes on the description, after `text-xs`. */
-  descriptionClassName?: string;
+  /** The lines the description clamps to and reserves. */
+  descriptionLines?: keyof typeof DESCRIPTION_LINES;
   /** The card links here; without it the card is not a link. */
   href?: (item: T) => string;
   /** Leads the card: an avatar. */
@@ -98,12 +107,13 @@ export function EntityCardList<T extends EntityCard>({
       <>
         {media?.(item)}
         <ItemContent>
-          <ItemTitle>{item.name}</ItemTitle>
-          {item.description && (
-            <ItemDescription className={cn("text-xs", descriptionClassName)}>
-              {item.description}
-            </ItemDescription>
-          )}
+          <ItemTitle className="min-h-badge">{item.name}</ItemTitle>
+          <ItemDescription
+            className={cn("text-xs", DESCRIPTION_LINES[descriptionLines])}
+            title={item.description || undefined}
+          >
+            {item.description}
+          </ItemDescription>
           {meta?.(item)}
           {extras.meta}
         </ItemContent>
@@ -127,7 +137,7 @@ export function EntityCardList<T extends EntityCard>({
   };
 
   return (
-    <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
+    <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
       {items.map((item) => (
         <li key={item.id}>
           {wrap

@@ -87,12 +87,38 @@ export function AttachmentCount({
 }
 
 /** The line an org-surface card shows when attached to no Workspaces. */
-export function UnattachedWarning() {
+export function UnattachedWarning({ className }: { className?: string }) {
   return (
-    <span className="mt-1 flex items-center gap-1 cursor-default text-xs text-warning-foreground">
+    <span
+      className={cn(
+        "mt-1 flex items-center gap-1 cursor-default text-xs text-warning-foreground",
+        className,
+      )}
+    >
       <TriangleAlert className="size-3" />
       <strong>WARNING:</strong> Not attached to any workspaces.
     </span>
+  );
+}
+
+/**
+ * {@link UnattachedWarning} in a card grid: its one-line box is kept, empty,
+ * while the count is pending or non-zero, so every card is one height.
+ */
+export function UnattachedWarningLine({
+  count,
+}: {
+  count: number | undefined;
+}) {
+  return (
+    <div
+      className="mt-1 h-4 overflow-hidden whitespace-nowrap"
+      title={
+        count === 0 ? "WARNING: Not attached to any workspaces." : undefined
+      }
+    >
+      {count === 0 && <UnattachedWarning className="mt-0" />}
+    </div>
   );
 }
 

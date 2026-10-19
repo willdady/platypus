@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { replaceSearchParam } from "@/lib/search-params";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
@@ -31,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusIcon } from "@/components/trigger-run-row";
+import { CountTooltip } from "@/components/count-tooltip";
 import {
   Timer,
   Zap,
@@ -97,64 +99,107 @@ export function TriggerCardsSkeleton({ cards }: { cards?: number }) {
       titleBadges={["w-12"]}
       extra={
         <>
-          {/* The agent it runs, then its schedule or events. */}
+          {/* The agent it runs, then its type's two lines and its last run. */}
           <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
-          <SkeletonLine lineClassName="mt-1.5 h-4" className="h-3 w-48" />
+          <div className="flex flex-col gap-1 mt-1.5">
+            <SkeletonLine lineClassName="h-4" className="h-3 w-48" />
+            <SkeletonLine lineClassName="h-4" className="h-3 w-32" />
+            <SkeletonLine lineClassName="h-4" className="h-3 w-28" />
+          </div>
         </>
       }
     />
   );
 }
 
-/** An Inbound Trigger's line: what it takes, and how its token stands. */
-function InboundSummary({
+/**
+ * One line of a Trigger card, kept one line tall even when empty, so every
+ * card in the list is the height of its tallest kind of Trigger.
+ */
+function CardLine({ children }: { children?: ReactNode }) {
+  return <div className="flex h-4 min-w-0 items-center gap-1">{children}</div>;
+}
+
+/** Text that ellipsizes on one line, with the full text on hover. */
+function TruncatedText({
+  text,
+  title = text,
+}: {
+  text: string;
+  title?: string;
+}) {
+  return (
+    <span className="truncate" title={title}>
+      {text}
+    </span>
+  );
+}
+
+/** A Cron Trigger's schedule, with its cron expression on hover. */
+function ScheduleLine({
+  cronExpression,
+  timezone,
+}: {
+  cronExpression: string;
+  timezone: string;
+}) {
+  const schedule = describeSchedule(cronExpression, timezone);
+  return (
+    <CardLine>
+      <Timer className="size-3 shrink-0" />
+      <TruncatedText
+        text={schedule}
+        // Unparseable, the schedule already is the expression.
+        title={
+          schedule === cronExpression
+            ? schedule
+            : `${schedule}\n${cronExpression}`
+        }
+      />
+    </CardLine>
+  );
+}
+
+/** An Inbound Trigger's lines: what it takes, and how its token stands. */
+function InboundLines({
   trigger,
 }: {
   trigger: Extract<Serialized<Trigger>, { type: "inbound" }>;
 }) {
-  const config = trigger.config;
-  const inputs = config.inputs;
+  const inputs = trigger.config.inputs;
   const status = trigger.tokenStatus ?? "none";
-  const parts = [
-    inputs.length > 0 && (
-      <span key="inputs" className="flex items-center gap-1 flex-wrap">
-        Inputs:
-        {inputs.map((input) => (
-          <Badge
-            key={input.name}
-            variant="secondary"
-            className="text-xs font-mono"
-          >
-            {input.name}
-          </Badge>
-        ))}
-      </span>
-    ),
-    status === "expiring" && (
-      <span
-        key="token"
-        className="flex items-center gap-1 text-warning-foreground"
-      >
-        <TriangleAlert className="size-3" />
-        Token expiring soon
-      </span>
-    ),
-    (status === "none" || status === "expired") && (
-      <span key="token" className="flex items-center gap-1">
-        Token:
-        <Badge variant={TOKEN_STATUS_VARIANTS[status]} className="text-xs">
-          {TOKEN_STATUS_LABELS[status]}
-        </Badge>
-      </span>
-    ),
-  ].filter(Boolean);
-  if (parts.length === 0) return null;
-
   return (
-    <span className="flex items-center gap-1 flex-wrap">
-      <Webhook className="size-3" />
-      {parts.flatMap((part, i) => (i > 0 ? [" · ", part] : [part]))}
-    </span>
+    <>
+      <CardLine>
+        {inputs.length > 0 && (
+          <CountTooltip
+            icon={<Webhook className="size-3" />}
+            noun="input"
+            names={inputs.map((input) => input.name)}
+          />
+        )}
+      </CardLine>
+      <CardLine>
+        {status === "expiring" && (
+          <span className="flex items-center gap-1 text-warning-foreground">
+            <TriangleAlert className="size-3" />
+            Token expiring soon
+          </span>
+        )}
+        {(status === "none" || status === "expired") && (
+          <>
+            Token:
+            {/* Line-tall, so the badge fits its one-line box. */}
+            <Badge
+              variant={TOKEN_STATUS_VARIANTS[status]}
+              className="h-4 py-0 text-xs leading-none"
+            >
+              {TOKEN_STATUS_LABELS[status]}
+            </Badge>
+          </>
+        )}
+      </CardLine>
+    </>
   );
 }
 
@@ -292,14 +337,14 @@ export function TriggerList({
   return (
     <>
       {controls}
-      <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
+      <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
         {shown.map((trigger) => (
           <li key={trigger.id}>
             <Item variant="outline" className="h-full cursor-pointer" asChild>
               {/* The card opens the Trigger's runs; Edit is in the menu. */}
               <Link href={routes.triggerRuns.forTrigger(trigger.id)}>
                 <ItemContent>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-h-badge items-center gap-2">
                     <ItemTitle>{trigger.name}</ItemTitle>
                     <Badge variant="outline" className="text-xs">
                       <TriggerTypeIcon type={trigger.type} />
@@ -320,64 +365,67 @@ export function TriggerList({
                       !trigger.enabled && <DisabledBadge />
                     )}
                   </div>
-                  {trigger.description && (
-                    <ItemDescription className="text-xs">
-                      {trigger.description}
-                    </ItemDescription>
-                  )}
-                  {agentsById[trigger.agentId] && (
-                    <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-                      <AgentAvatar
-                        agent={agentsById[trigger.agentId]}
-                        className="size-4"
-                      />
-                      <span>{agentsById[trigger.agentId].name}</span>
-                    </div>
-                  )}
+                  <ItemDescription
+                    className="text-xs min-h-[2lh]"
+                    title={trigger.description || undefined}
+                  >
+                    {trigger.description}
+                  </ItemDescription>
+                  <div className="flex h-4 min-w-0 items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+                    {agentsById[trigger.agentId] && (
+                      <>
+                        <AgentAvatar
+                          agent={agentsById[trigger.agentId]}
+                          className="size-4 shrink-0"
+                        />
+                        <TruncatedText
+                          text={agentsById[trigger.agentId].name}
+                        />
+                      </>
+                    )}
+                  </div>
                   <div className="flex flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
                     {trigger.type === "cron" ? (
                       <>
-                        <span
-                          className="flex items-center gap-1"
-                          title={trigger.config.cronExpression}
-                        >
-                          <Timer className="size-3" />
-                          {describeSchedule(
-                            trigger.config.cronExpression,
-                            trigger.config.timezone,
+                        <ScheduleLine
+                          cronExpression={trigger.config.cronExpression}
+                          timezone={trigger.config.timezone}
+                        />
+                        <CardLine>
+                          {trigger.enabled && trigger.nextRunAt && (
+                            <TruncatedText
+                              text={`Next: ${formatDateTime(trigger.nextRunAt)}`}
+                            />
                           )}
-                        </span>
-                        {trigger.enabled && trigger.nextRunAt && (
-                          <span className="flex items-center gap-1">
-                            Next: {formatDateTime(trigger.nextRunAt)}
-                          </span>
-                        )}
+                        </CardLine>
                       </>
                     ) : trigger.type === "inbound" ? (
-                      <InboundSummary trigger={trigger} />
+                      <InboundLines trigger={trigger} />
                     ) : (
-                      <span className="flex items-center gap-1 flex-wrap">
-                        <Zap className="size-3" />
-                        {trigger.config.events.map((event) => (
-                          <Badge
-                            key={event}
-                            variant="secondary"
-                            className="text-xs"
+                      <>
+                        <CardLine>
+                          <CountTooltip
+                            icon={<Zap className="size-3" />}
+                            noun="event"
+                            names={trigger.config.events}
+                          />
+                        </CardLine>
+                        <CardLine />
+                      </>
+                    )}
+                    <CardLine>
+                      {trigger.lastRunStatus && trigger.lastRunStartedAt && (
+                        <>
+                          <span>Last run:</span>
+                          <span
+                            title={formatDateTime(trigger.lastRunStartedAt)}
                           >
-                            {event}
-                          </Badge>
-                        ))}
-                      </span>
-                    )}
-                    {trigger.lastRunStatus && trigger.lastRunStartedAt && (
-                      <span className="flex items-center gap-1">
-                        <span>Last run:</span>
-                        <span title={formatDateTime(trigger.lastRunStartedAt)}>
-                          {formatRelativeTime(trigger.lastRunStartedAt)}
-                        </span>
-                        <StatusIcon status={trigger.lastRunStatus} />
-                      </span>
-                    )}
+                            {formatRelativeTime(trigger.lastRunStartedAt)}
+                          </span>
+                          <StatusIcon status={trigger.lastRunStatus} />
+                        </>
+                      )}
+                    </CardLine>
                   </div>
                 </ItemContent>
                 <ItemActions className="gap-1">
