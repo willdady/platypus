@@ -19,7 +19,6 @@ import {
   Zap,
   KanbanSquare,
   LayoutDashboard,
-  History,
   AlertCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -485,11 +484,6 @@ function Workspace() {
             storageKey={SECTION_KEYS.boards}
           >
             <BoardsList orgId={orgId} workspaceId={workspaceId} />
-            <Button variant="outline" className="self-start" asChild>
-              <Link href={routes.boards.create}>
-                <Plus /> Create board
-              </Link>
-            </Button>
           </CollapsibleSection>
 
           <Separator />
@@ -505,18 +499,6 @@ function Workspace() {
             storageKey={SECTION_KEYS.triggers}
           >
             <TriggerList orgId={orgId} workspaceId={workspaceId} />
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" asChild>
-                <Link href={routes.triggers.create}>
-                  <Plus /> Create trigger
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href={routes.triggerRuns.root}>
-                  <History /> Trigger runs
-                </Link>
-              </Button>
-            </div>
           </CollapsibleSection>
         </>
       )}

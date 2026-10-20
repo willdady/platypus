@@ -5,6 +5,9 @@ import {
   type WorkspaceEntityCardListConfig,
 } from "./entity-card-list";
 
+/** Boards per page on the Workspace home. */
+const BOARDS_PAGE_SIZE = 8;
+
 const boardsConfig: WorkspaceEntityCardListConfig = {
   entity: "boards",
   queryParam: "boardQuery",
@@ -13,6 +16,12 @@ const boardsConfig: WorkspaceEntityCardListConfig = {
     deleteNoun: "board",
     deleteTail: "and all of its data.",
     confirmPhrase: "delete board",
+  },
+  paging: {
+    param: "boardsPage",
+    pageSize: BOARDS_PAGE_SIZE,
+    label: "Boards pages",
+    createLabel: "Create board",
   },
 };
 

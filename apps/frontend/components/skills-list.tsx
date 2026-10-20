@@ -31,6 +31,12 @@ import {
   LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
+import {
+  ListFooter,
+  ListPagination,
+  GhostCards,
+  pageOf,
+} from "@/components/list-pagination";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import {
   Tooltip,
@@ -92,6 +98,8 @@ type SkillWithScope = Serialized<Skill> & {
 const ALL = "all";
 /** The agent-filter value for Skills attached to no agent. */
 const UNATTACHED = "unattached";
+/** Skills per page on the Workspace home. */
+const SKILLS_PAGE_SIZE = 8;
 
 function UserInvocableBadge({ skill }: { skill: SkillWithScope }) {
   if (!skill.disableModelInvocation) return null;
@@ -199,13 +207,16 @@ export function SkillsList({
     () => (workspaceId && searchParams.get("skillQuery")) || "",
   );
 
-  // A default value leaves its param out.
+  // A default value leaves its param out. A new filter starts on page 1.
   const setNameFilter = (value: string) => {
     setNameFilterState(value);
     replaceSearchParam("skillQuery", value.trim() || null);
+    replaceSearchParam("skillsPage", null);
   };
-  const setAgentFilter = (value: string) =>
+  const setAgentFilter = (value: string) => {
     replaceSearchParam("skillAgent", value === ALL ? null : value);
+    replaceSearchParam("skillsPage", null);
+  };
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -377,6 +388,11 @@ export function SkillsList({
     </>
   );
 
+  // Paged on the Workspace home only; the Organization surface lists them all.
+  const page = workspaceId
+    ? pageOf(searchParams.get("skillsPage"), shown, SKILLS_PAGE_SIZE)
+    : { items: shown, page: 1, pageCount: 1, ghosts: 0 };
+
   return (
     <>
       {controls}
@@ -392,8 +408,8 @@ export function SkillsList({
       ) : shown.length === 0 ? (
         <ListState variant="empty">No skills match your filters.</ListState>
       ) : (
-        <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
-          {shown.map((skill) => {
+        <ul className="grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4">
+          {page.items.map((skill) => {
             // Org-scoped (Shared) Skills are locked inside a workspace: they can
             // only be edited from the organization settings surface.
             const isOrgScopedInWorkspace =
@@ -534,10 +550,24 @@ export function SkillsList({
               </li>
             );
           })}
+          <GhostCards count={page.ghosts} />
         </ul>
       )}
 
-      {!showCard && <div className="mt-4 flex gap-2">{actions}</div>}
+      {!showCard && (
+        <ListFooter
+          className="mt-4"
+          pagination={
+            <ListPagination
+              page={page}
+              param="skillsPage"
+              aria-label="Skills pages"
+            />
+          }
+        >
+          {actions}
+        </ListFooter>
+      )}
 
       {skillToManage && (
         <ManageAttachmentsDialog

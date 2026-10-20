@@ -788,3 +788,56 @@ describe("TriggerList card", () => {
     expect(menuItemLabels()).toEqual(["Edit", "Clone", "Disable", "Delete"]);
   });
 });
+
+describe("TriggerList paging", () => {
+  // Eight Cron triggers, "trigger-1" … "trigger-8": two pages of six.
+  const eight = Array.from({ length: 8 }, (_, i) => ({
+    ...cronTrigger,
+    id: `t${i + 1}`,
+    name: `trigger-${i + 1}`,
+  }));
+  const shownNames = () =>
+    eight.map((t) => t.name).filter((name) => screen.queryByText(name));
+  const pages = () =>
+    screen.queryByRole("navigation", { name: "Triggers pages" });
+
+  it("shows six triggers and pages to the rest", async () => {
+    await renderTriggers(eight);
+
+    expect(shownNames()).toHaveLength(6);
+    expect(pages()).toHaveTextContent("Page 1 of 2");
+
+    await setupUser().click(screen.getByRole("button", { name: "Next page" }));
+
+    expect(window.location.search).toBe("?triggersPage=2");
+    expect(shownNames()).toEqual(["trigger-7", "trigger-8"]);
+  });
+
+  it("returns to page 1 when the type filter changes", async () => {
+    window.history.replaceState(null, "", "?triggersPage=2");
+    await renderTriggers(eight);
+
+    await selectOption("All types", "Cron");
+
+    expect(window.location.search).toBe("?triggerType=cron");
+    expect(pages()).toHaveTextContent("Page 1 of 2");
+  });
+
+  it("draws no page controls for six triggers", async () => {
+    await renderTriggers(eight.slice(0, 6));
+
+    expect(pages()).not.toBeInTheDocument();
+  });
+
+  it("draws its Create trigger and Trigger runs links, even with no triggers", async () => {
+    await renderTriggers([]);
+
+    expect(
+      screen.getByRole("link", { name: /Create trigger/ }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/triggers/create");
+    expect(screen.getByRole("link", { name: /Trigger runs/ })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/trigger-runs",
+    );
+  });
+});
