@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.25.0](https://github.com/willdady/platypus/compare/v3.24.0...v3.25.0) (2026-10-21)
+
+
+### Features
+
+* **frontend:** clone a Trigger from its card menu ([#1596](https://github.com/willdady/platypus/issues/1596)) ([e818eca](https://github.com/willdady/platypus/commit/e818eca9c279419fd53d21b0d82b15e1a255a4ea)), closes [#1438](https://github.com/willdady/platypus/issues/1438)
+* **frontend:** give every card in a list one fixed height ([#1597](https://github.com/willdady/platypus/issues/1597)) ([186b38c](https://github.com/willdady/platypus/commit/186b38cda6ea21499c62214589e5b37011b5d82b))
+* **frontend:** page the Workspace home Agents, Skills, Boards and Triggers lists ([#1600](https://github.com/willdady/platypus/issues/1600)) ([75089aa](https://github.com/willdady/platypus/commit/75089aad43f93217b61e1d41a0a42df7b8e62b9e))
+* pick a model's native file types with toggles, with no Provider-type default ([#1602](https://github.com/willdady/platypus/issues/1602)) ([058f48d](https://github.com/willdady/platypus/commit/058f48de8da1e34ede87ffa6d142532f24c6bf2b)), closes [#1594](https://github.com/willdady/platypus/issues/1594)
+
+
+### Bug Fixes
+
+* **frontend:** keep list cards to one height, with one-line names and fewer blank lines ([#1599](https://github.com/willdady/platypus/issues/1599)) ([979ba21](https://github.com/willdady/platypus/commit/979ba218bb122b746f85519c53e72f8ad3074581))
+
 ## [3.24.0](https://github.com/willdady/platypus/compare/v3.23.0...v3.24.0) (2026-10-18)
 
 
