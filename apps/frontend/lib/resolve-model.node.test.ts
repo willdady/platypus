@@ -138,7 +138,8 @@ describe("resolveModel", () => {
     expect(resolved?.canSearch).toBe(false);
   });
 
-  it("falls back to the provider's default passthrough types when the model declares none", () => {
+  // No Provider-type default (ADR-0039).
+  it("gives a model that declares no passthrough types none, even on Anthropic", () => {
     const p = provider({
       providerType: "Anthropic" as Provider["providerType"],
       modelIds: [{ id: "claude", passthroughFileTypes: [] }],
@@ -148,10 +149,7 @@ describe("resolveModel", () => {
       agents: [],
       selection: { agentId: "", modelId: "claude", providerId: "p1" },
     });
-    expect(resolved?.passthroughFileTypes).toEqual([
-      "image/*",
-      "application/pdf",
-    ]);
+    expect(resolved?.passthroughFileTypes).toEqual([]);
   });
 
   // Issue #869: five helpers each re-normalised the provider's model list per

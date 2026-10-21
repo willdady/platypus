@@ -1,7 +1,15 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Info } from "lucide-react";
+import {
+  AudioLines,
+  ChevronsUpDown,
+  FileText,
+  ImageIcon,
+  Info,
+  Video,
+  type LucideIcon,
+} from "lucide-react";
 import {
   CONTEXT_WINDOW_MAX,
   CONTEXT_WINDOW_MIN,
@@ -18,6 +26,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   FieldError,
   FieldGroup,
@@ -36,7 +51,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ModelConfigView } from "@/lib/model-config";
+import {
+  joinNativeFileTypes,
+  NATIVE_FILE_TYPE_TOGGLES,
+  splitNativeFileTypes,
+  type ModelConfigView,
+} from "@/lib/model-config";
 import {
   CONTEXT_WINDOW_CUSTOM,
   CONTEXT_WINDOW_PRESETS,
@@ -80,6 +100,13 @@ function InfoHint({
   );
 }
 
+const NATIVE_FILE_TYPE_ICONS: Record<string, LucideIcon> = {
+  "image/*": ImageIcon,
+  "video/*": Video,
+  "audio/*": AudioLines,
+  "application/pdf": FileText,
+};
+
 function ModelField({
   htmlFor,
   label,
@@ -105,14 +132,6 @@ function ModelField({
       {error && <FieldError>{error}</FieldError>}
     </div>
   );
-}
-
-// Passthrough types are edited as a comma-separated string of media types.
-function parsePassthroughTypes(value: string): string[] {
-  return value
-    .split(",")
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
 }
 
 // Shared by the two numeric fields. An empty (or nonsense) value means "unset,
@@ -143,7 +162,6 @@ function parsePositiveNumber(value: string): number | undefined {
 export function ModelEntryDialog({
   model,
   errors,
-  fileTypesPlaceholder,
   onSubmit,
   onClose,
 }: {
@@ -151,17 +169,27 @@ export function ModelEntryDialog({
   model?: ModelConfigView;
   /** Server errors against this entry's fields, keyed by field name. */
   errors?: FormErrors;
-  fileTypesPlaceholder: string;
   onSubmit: (model: ModelConfigView) => void;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<ModelConfigView>(
     model ?? { id: "", passthroughFileTypes: [] },
   );
+  const [storedFileTypes] = useState(() =>
+    splitNativeFileTypes(draft.passthroughFileTypes),
+  );
+  const [toggledFileTypes, setToggledFileTypes] = useState(
+    storedFileTypes.toggled,
+  );
   // Held as typed: parsing on every keystroke would drop a trailing comma the
   // moment it was typed, so a second type could never be entered.
-  const [fileTypesText, setFileTypesText] = useState(
-    draft.passthroughFileTypes.join(", "),
+  const [otherFileTypesText, setOtherFileTypesText] = useState(
+    storedFileTypes.other.join(", "),
+  );
+  // Open from the start when the stored list holds anything the toggles don't
+  // cover, so no stored value is hidden.
+  const [advancedOpen, setAdvancedOpen] = useState(
+    storedFileTypes.other.length > 0,
   );
   const [fieldErrors, setFieldErrors] = useState<FormErrors>(errors ?? {});
 
@@ -192,11 +220,18 @@ export function ModelEntryDialog({
     // React bubbles synthetic events through the portal, so without this the
     // submit would reach any form the provider form is rendered in.
     e.stopPropagation();
-    // Same keys as the entry it came from, so Save with nothing changed leaves
-    // the provider form clean.
+    // Same keys as the entry it came from, and the stored order when the set
+    // of types is unchanged, so Save with nothing changed leaves the provider
+    // form clean.
+    const fileTypes = joinNativeFileTypes(toggledFileTypes, otherFileTypesText);
+    const stored = draft.passthroughFileTypes;
     const entry = {
       ...draft,
-      passthroughFileTypes: parsePassthroughTypes(fileTypesText),
+      passthroughFileTypes:
+        fileTypes.length === stored.length &&
+        fileTypes.every((t) => stored.includes(t))
+          ? stored
+          : fileTypes,
     };
     const result = modelConfigSchema.safeParse(entry);
     if (!result.success) {
@@ -341,34 +376,98 @@ export function ModelEntryDialog({
                 </div>
               </ModelField>
 
-              <ModelField
-                htmlFor="model-passthrough"
-                label="Native file types"
-                hint={
-                  <>
-                    Media types this model ingests <strong>natively</strong>,
-                    comma-separated (wildcards like <code>image/*</code>{" "}
-                    allowed). Other types are converted to text where possible,
-                    so this is a capability setting,{" "}
-                    <strong>not a security filter</strong>. Leave empty to use
-                    the provider-type default.
-                  </>
-                }
-                error={fieldErrors.passthroughFileTypes}
+              <div
+                role="group"
+                aria-labelledby="model-passthrough-label"
+                className="flex flex-col gap-2"
+                data-invalid={!!fieldErrors.passthroughFileTypes}
               >
-                <Input
-                  id="model-passthrough"
-                  placeholder={fileTypesPlaceholder}
-                  value={fileTypesText}
-                  aria-invalid={!!fieldErrors.passthroughFileTypes}
-                  onChange={(e) => {
-                    setFileTypesText(e.target.value);
-                    setFieldErrors((prev) =>
-                      retractFieldError(prev, "passthroughFileTypes"),
+                <div className="flex items-center gap-1.5">
+                  <span
+                    id="model-passthrough-label"
+                    className="text-xs text-muted-foreground"
+                  >
+                    Native file types
+                  </span>
+                  <InfoHint label="Native file types">
+                    File types this model reads <strong>natively</strong>. Other
+                    files are converted to text where possible, so this is a
+                    capability setting, <strong>not a security filter</strong>.
+                  </InfoHint>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {NATIVE_FILE_TYPE_TOGGLES.map((toggle) => {
+                    const Icon = NATIVE_FILE_TYPE_ICONS[toggle.value];
+                    return (
+                      <div
+                        key={toggle.value}
+                        className="flex items-center gap-2"
+                      >
+                        <Switch
+                          id={`model-passthrough-${toggle.label}`}
+                          checked={toggledFileTypes.includes(toggle.value)}
+                          onCheckedChange={(checked) => {
+                            setToggledFileTypes((prev) =>
+                              checked
+                                ? [...prev, toggle.value]
+                                : prev.filter((v) => v !== toggle.value),
+                            );
+                            setFieldErrors((prev) =>
+                              retractFieldError(prev, "passthroughFileTypes"),
+                            );
+                          }}
+                        />
+                        <Label
+                          htmlFor={`model-passthrough-${toggle.label}`}
+                          className="text-sm font-normal"
+                        >
+                          <Icon
+                            aria-hidden
+                            className="size-4 text-muted-foreground"
+                          />
+                          {toggle.label}
+                        </Label>
+                      </div>
                     );
-                  }}
-                />
-              </ModelField>
+                  })}
+                </div>
+                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground -ml-2 h-7 px-2 text-xs"
+                    >
+                      Advanced
+                      <ChevronsUpDown className="size-3.5" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ModelField
+                      htmlFor="model-passthrough-other"
+                      label="Other media types"
+                      hint="Further media types this model reads natively, comma-separated."
+                    >
+                      <Input
+                        id="model-passthrough-other"
+                        placeholder="e.g. application/msword"
+                        value={otherFileTypesText}
+                        aria-invalid={!!fieldErrors.passthroughFileTypes}
+                        onChange={(e) => {
+                          setOtherFileTypesText(e.target.value);
+                          setFieldErrors((prev) =>
+                            retractFieldError(prev, "passthroughFileTypes"),
+                          );
+                        }}
+                      />
+                    </ModelField>
+                  </CollapsibleContent>
+                </Collapsible>
+                {fieldErrors.passthroughFileTypes && (
+                  <FieldError>{fieldErrors.passthroughFileTypes}</FieldError>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
                 <ModelField

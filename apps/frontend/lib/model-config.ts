@@ -1,6 +1,5 @@
 import {
   classifyFile,
-  defaultPassthroughFileTypes,
   findModelEntry,
   modelLabelFor,
   modelReferenceFor,
@@ -14,13 +13,11 @@ import {
 
 /**
  * Client-side per-model file capability helpers (issue #328). The pure logic
- * (`defaultPassthroughFileTypes`, `classifyFile`) is shared with the backend
+ * (`classifyFile`) is shared with the backend
  * via @platypus/schemas so the two never drift; this
  * module adds the frontend-only view helpers over a provider's `modelIds`,
  * which may be the new per-model objects or a legacy `string[]`.
  */
-
-export { defaultPassthroughFileTypes };
 
 export type ModelConfigView = {
   id: string;
@@ -120,33 +117,60 @@ export function resolveModelId(
 }
 
 /**
- * The resolved passthrough types for one already-normalised model entry,
- * filling the provider default when the entry declares none. Config-taking so
- * a caller that has normalised the provider's list once can answer this
- * without normalising it again (issue #869).
+ * The Native file types the model dialog offers as toggles, each one exact
+ * `passthroughFileTypes` value. Anything else is an "other" media type.
  */
-export function passthroughFileTypesFor(
-  provider: Pick<Provider, "providerType" | "apiMode">,
-  model: ModelConfigView | undefined,
-): string[] {
-  const declared = model?.passthroughFileTypes ?? [];
-  return declared.length > 0
-    ? declared
-    : defaultPassthroughFileTypes({
-        providerType: provider.providerType,
-        apiMode: provider.apiMode,
-      });
+export const NATIVE_FILE_TYPE_TOGGLES = [
+  { label: "Images", value: "image/*" },
+  { label: "Video", value: "video/*" },
+  { label: "Audio", value: "audio/*" },
+  { label: "PDF", value: "application/pdf" },
+] as const;
+
+function toggleLabel(value: string) {
+  return NATIVE_FILE_TYPE_TOGGLES.find((t) => t.value === value)?.label;
 }
 
-/** The resolved passthrough types for a model, filling the provider default. */
-export function getPassthroughFileTypes(
-  provider: Pick<Provider, "modelIds" | "providerType" | "apiMode">,
-  modelId: ConcreteModelId,
+function isToggleValue(value: string) {
+  return toggleLabel(value) !== undefined;
+}
+
+/** A model's Native file types as a card shows them: toggle names, else raw. */
+export function nativeFileTypeLabels(types: string[]): string[] {
+  return types.map((t) => toggleLabel(t) ?? t);
+}
+
+/** Splits stored types into ticked toggle values and other media types. */
+export function splitNativeFileTypes(types: string[]): {
+  toggled: string[];
+  other: string[];
+} {
+  return {
+    toggled: types.filter(isToggleValue),
+    other: types.filter((t) => !isToggleValue(t)),
+  };
+}
+
+/**
+ * The stored list from ticked toggle values plus the comma-separated "other"
+ * text, in toggle order then as typed, without duplicates.
+ */
+export function joinNativeFileTypes(
+  toggled: string[],
+  otherText: string,
 ): string[] {
-  return passthroughFileTypesFor(
-    provider,
-    getModelConfigs(provider).find((m) => m.id === modelId),
-  );
+  const other = otherText
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+  return [
+    ...new Set([
+      ...NATIVE_FILE_TYPE_TOGGLES.map((t) => t.value).filter((v) =>
+        toggled.includes(v),
+      ),
+      ...other,
+    ]),
+  ];
 }
 
 /**
@@ -154,9 +178,8 @@ export function getPassthroughFileTypes(
  * declared (ADR-0018) — which is the normal state and the reason the context
  * meter has a hidden mode.
  *
- * No default to fall back to, unlike the passthrough types above: nothing can
- * discover a context window, so an undeclared one stays unknown rather than
- * being guessed at.
+ * No default to fall back to: nothing can discover a context window, so an
+ * undeclared one stays unknown rather than being guessed at.
  */
 export function getContextWindow(
   provider: Pick<Provider, "modelIds">,

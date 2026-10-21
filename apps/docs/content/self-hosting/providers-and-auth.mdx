@@ -182,14 +182,14 @@ and behind a proxy Platypus has no way to infer any of them — model names ther
 are whatever the operator chose. So each entry in `modelIds` is an object, and
 everything on it beyond the id is **declared, not guessed**:
 
-| Per-model field         | Meaning                                                                                                                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                    | The model id sent to the vendor.                                                                                                                                                                  |
-| `alias`                 | Optional stable name an Agent or Chat selects this model by, so repointing it upgrades them all at once. See [Model aliases](/concepts/providers#model-aliases).                                  |
-| `contextWindow`         | The vendor's published **total** token capacity for this model — the whole window, not a cap on the reply. 1,000–10,000,000 tokens. Empty means undeclared, which is normal.                      |
-| `passthroughFileTypes`  | The media types this model ingests **natively**. Comma-separated in the UI; wildcards like `image/*` allowed. Empty inherits the [provider-type default](#file-handling-what-each-model-accepts). |
-| `maxExtractedTextChars` | Cap on the text a single extracted document may add to a turn. Empty uses the default (50,000 characters).                                                                                        |
-| `maxOutputTokens`       | The most this model may produce in a single reply. Empty sends nothing and leaves the vendor's own default in place. See [Capping a single reply](#capping-a-single-reply).                       |
+| Per-model field         | Meaning                                                                                                                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                    | The model id sent to the vendor.                                                                                                                                             |
+| `alias`                 | Optional stable name an Agent or Chat selects this model by, so repointing it upgrades them all at once. See [Model aliases](/concepts/providers#model-aliases).             |
+| `contextWindow`         | The vendor's published **total** token capacity for this model — the whole window, not a cap on the reply. 1,000–10,000,000 tokens. Empty means undeclared, which is normal. |
+| `passthroughFileTypes`  | The media types this model ingests **natively**. Empty means none: the model receives files only as text. See [Declaring native file types](#declaring-native-file-types).   |
+| `maxExtractedTextChars` | Cap on the text a single extracted document may add to a turn. Empty uses the default (50,000 characters).                                                                   |
+| `maxOutputTokens`       | The most this model may produce in a single reply. Empty sends nothing and leaves the vendor's own default in place. See [Capping a single reply](#capping-a-single-reply).  |
 
 Every field is optional except the id, and a Provider set up before any of them
 existed keeps working with none of them set.
@@ -256,6 +256,23 @@ applies when that model runs as a Sub-Agent.
 Ask for more than the model allows and the vendor rejects the turn — Platypus
 sends the number as typed and does not check it against the model.
 
+#### Declaring native file types
+
+**Native file types** has a switch for each common type: **Images**
+(`image/*`), **Video** (`video/*`), **Audio** (`audio/*`) and **PDF**
+(`application/pdf`). Turn on the ones the model reads. For anything else, open
+**Advanced** and list more media types in **Other media types**, separated by
+commas. A wildcard covers a whole type (`image/*`) or everything (`*/*`). A
+partial one such as `application/vnd.*` matches nothing. Leave text types out:
+text files are already sent as text, and declaring them sends the raw file
+instead, which many vendors reject. Advanced opens by
+itself when a model already declares a type the switches don't cover.
+
+Nothing is assumed from the Provider type, because two models behind the same
+Provider can read different things. A model with nothing turned on receives
+files only as text: textual files are inlined, PDF and DOCX are extracted, and
+anything else, images included, is refused.
+
 ### File handling: what each model accepts
 
 Whether a model can read an attached file is a property of the
@@ -275,18 +292,6 @@ Text-vs-binary is decided from the file's real nature (extension plus a content
 sniff), never from the browser-supplied media type — that value is an
 OS-specific lottery in which `.py` arrives as `text/x-python` while `.md` arrives
 as `application/octet-stream`.
-
-An empty `passthroughFileTypes` inherits a default from the provider type:
-
-| Provider                                   | Inherited default                    |
-| ------------------------------------------ | ------------------------------------ |
-| Anthropic, Google, Bedrock                 | Images and PDF                       |
-| OpenAI on the Responses API                | Images and PDF                       |
-| OpenAI with `apiMode: "chat"` (incl. vLLM) | Images only                          |
-| OpenRouter                                 | Nothing natively — declare per model |
-
-OpenRouter fronts models whose capabilities vary per model, so no single floor
-can be right; opt each vision-capable model in with an explicit `image/*`.
 
 <Callout type="warning">
   `passthroughFileTypes` is a **capability router, not a security allow-list**.

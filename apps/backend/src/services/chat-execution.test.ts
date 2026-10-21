@@ -1340,7 +1340,7 @@ describe("chat-execution", () => {
         );
       });
 
-      it("uses the aliased model's own passthrough types, not the provider default", async () => {
+      it("uses the aliased model's own passthrough types", async () => {
         const queries = createInMemoryChatTurnQueries({
           workspaces: [baseWorkspace],
           providers: [
@@ -1358,8 +1358,7 @@ describe("chat-execution", () => {
           ],
         });
 
-        // A declared image/* survives resolution through the alias; the
-        // OpenRouter default would have been [] and rejected the image.
+        // A declared image/* survives resolution through the alias.
         await expect(
           validateTurnAttachments(
             {
@@ -2923,11 +2922,16 @@ describe("chat-execution", () => {
 });
 
 describe("validateTurnAttachments", () => {
-  // baseProvider is OpenAI apiMode:"chat" → resolves to images-only passthrough.
-  const queries = () =>
+  // gpt-4 declares images only, as the backfill gives OpenAI chat-completions.
+  const queries = (
+    provider: Pick<Provider, "providerType" | "apiMode" | "modelIds"> = {
+      ...baseProvider,
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: ["image/*"] }],
+    },
+  ) =>
     createInMemoryChatTurnQueries({
       workspaces: [baseWorkspace],
-      providers: [baseProvider],
+      providers: [{ ...baseProvider, ...provider }],
     });
 
   // `url` defaults to a bytes-free data URL: enough for the metadata-only
@@ -3024,6 +3028,32 @@ describe("validateTurnAttachments", () => {
       ),
     ).resolves.toBeUndefined();
   });
+
+  // No Provider-type default (ADR-0039): an Anthropic model that declares
+  // nothing must not receive the raw image.
+  it.each([
+    ["an empty declaration", [{ id: "gpt-4", passthroughFileTypes: [] }]],
+    ["a legacy bare-string entry", ["gpt-4"]],
+  ])(
+    "refuses an image for an Anthropic model with %s",
+    async (_label, modelIds) => {
+      await expect(
+        validateTurnAttachments(
+          {
+            request,
+            messages: [fileMessage("image/png", "a.png")],
+            orgId: "org-1",
+            workspaceId: "ws-1",
+          },
+          queries({
+            providerType: "Anthropic",
+            apiMode: "responses",
+            modelIds: modelIds as Provider["modelIds"],
+          }),
+        ),
+      ).rejects.toBeInstanceOf(FileValidationError);
+    },
+  );
 
   it("leaves an unresolvable turn to prepareChatTurn instead of judging its files", async () => {
     // The unknown Agent is prepareChatTurn's NotFoundError to raise; this gate

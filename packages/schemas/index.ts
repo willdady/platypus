@@ -1075,8 +1075,7 @@ export const providerApiModeSchema = z.enum(["chat", "responses"]);
 // allowed) the model ingests NATIVELY. It is a capability ROUTER, not a
 // security allow-list: an attached file whose type is absent is converted to
 // text where possible (extracted for PDF/DOCX, see issue #342) — it is never
-// blocked for safety. Absent / legacy rows fall back to a provider-type default
-// at resolve time on the backend. This object is the home for per-model
+// blocked for safety. Empty or absent means none (ADR-0039). This object is the home for per-model
 // metadata generally, which is why `contextWindow` lands here too.
 //
 // `maxExtractedTextChars` caps how much text a converted document may inject,
@@ -1356,7 +1355,7 @@ export type ModelConfig = z.infer<typeof modelConfigSchema>;
 // Provider `modelIds` payload schema. Accepts the new per-model objects and,
 // for backward compatibility with clients/rows predating per-model config, a
 // bare `string[]`; bare strings coerce to objects with an empty
-// `passthroughFileTypes` (defaults are applied on the backend at resolve time).
+// `passthroughFileTypes`, which ingest nothing natively (ADR-0039).
 export const modelIdsSchema = z
   .array(z.union([z.string().min(1), modelConfigSchema]))
   .min(1, "At least one model is required")
@@ -1405,41 +1404,6 @@ export const modelIdsSchema = z
 // frontend warning import the SAME logic instead of maintaining mirrored
 // copies. Provider-type strings are accepted loosely (`string`) so callers on
 // either side can pass their own provider shape.
-
-// Provider types that ingest documents (images + PDF) natively.
-const NATIVE_FILE_PROVIDER_TYPES: ReadonlySet<string> = new Set([
-  "Anthropic",
-  "Google",
-  "Bedrock",
-]);
-
-/**
- * The passthrough set a model inherits when it declares none. Native-file
- * providers, and OpenAI on the Responses API, take images and PDFs; OpenAI
- * chat-completions endpoints get the images-only floor.
- *
- * OpenRouter (and any future aggregator / unknown type) fronts heterogeneous
- * models whose capabilities vary per model — many are text-only — so a single
- * provider-type floor can't be right. It defaults to accepting nothing
- * natively: an undeclared model then rejects binaries at the gate (a clean 400
- * before persist, never a raw image forwarded to a text model that would fail
- * and brick the chat on replay). Operators opt each vision model in with an
- * explicit `image/*`; text-like files are still inlined regardless. See #328.
- */
-export const defaultPassthroughFileTypes = (provider: {
-  providerType: string;
-  apiMode?: string;
-}): string[] => {
-  if (NATIVE_FILE_PROVIDER_TYPES.has(provider.providerType)) {
-    return ["image/*", "application/pdf"];
-  }
-  if (provider.providerType === "OpenAI") {
-    return provider.apiMode !== "chat"
-      ? ["image/*", "application/pdf"]
-      : ["image/*"];
-  }
-  return [];
-};
 
 /**
  * Extensions whose bytes are plain text (source, config, data, markup). Used
@@ -1780,9 +1744,8 @@ export type Provider = z.infer<typeof providerSchema>;
  * configured — i.e. whether the AI SDK exposes a provider-native `web_search`
  * tool for this provider type and API mode.
  *
- * Lives here, beside `defaultPassthroughFileTypes`, for the same reason: the
- * backend's injection gate and the frontend's toggle visibility must agree, and
- * mirrored copies of a capability table drift. Bedrock has no native search, and
+ * Lives here because the backend's injection gate and the frontend's toggle
+ * visibility must agree, and mirrored copies of a capability table drift. Bedrock has no native search, and
  * OpenAI's lives on the Responses API only — which is why an OpenAI-compatible
  * endpoint on the chat API (vLLM, llama.cpp, LiteLLM) returns false and gains
  * search only through a Web-search backend (ADR-0014).

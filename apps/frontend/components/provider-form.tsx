@@ -61,7 +61,7 @@ import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import type { FormDraft } from "@/lib/api-write";
 import {
   getModelConfigs,
-  defaultPassthroughFileTypes,
+  nativeFileTypeLabels,
   type ModelConfigView,
 } from "@/lib/model-config";
 import { CONTEXT_WINDOW_PRESETS } from "@/lib/context-window";
@@ -83,10 +83,10 @@ function modelDetails(model: ModelConfigView): string[] {
       `Context window: ${preset?.label ?? model.contextWindow.toLocaleString()}`,
     );
   }
-  // As entered: an empty list inherits the provider-type default, which the
-  // card does not restate.
   if (model.passthroughFileTypes.length > 0) {
-    details.push(`Native file types: ${model.passthroughFileTypes.join(", ")}`);
+    details.push(
+      `Native file types: ${nativeFileTypeLabels(model.passthroughFileTypes).join(", ")}`,
+    );
   }
   if (model.maxExtractedTextChars !== undefined) {
     details.push(
@@ -565,14 +565,6 @@ function ProviderForm({
     }));
   };
 
-  // Placeholder for the native-file-types input: the provider-type default an
-  // empty field falls back to at resolve time (e.g. images-only for an OpenAI
-  // chat-completions provider, images + PDF for Anthropic/Google/Bedrock).
-  const defaultFileTypesPlaceholder = defaultPassthroughFileTypes({
-    providerType: formData.providerType,
-    apiMode: formData.apiMode,
-  }).join(", ");
-
   /**
    * Removing or renaming an alias silently rewrites every Agent and Chat that
    * referenced it back to the concrete model id, so each keeps running against
@@ -758,7 +750,6 @@ function ProviderForm({
                   model: formData.modelIds[modelDialog],
                   errors: errorsForEntry(modelDialog).fields,
                 })}
-                fileTypesPlaceholder={defaultFileTypesPlaceholder}
                 onSubmit={stageModel}
                 onClose={() => setModelDialog(null)}
               />
