@@ -6,11 +6,7 @@ import {
   type ConcreteModelId,
   type Provider,
 } from "@platypus/schemas";
-import {
-  getModelConfigs,
-  getSearchCapability,
-  passthroughFileTypesFor,
-} from "./model-config";
+import { getModelConfigs, getSearchCapability } from "./model-config";
 import type { Serialized } from "./api-write";
 
 export type ModelSelectionInput = {
@@ -38,9 +34,8 @@ export type ResolvedModel = {
  * The single entry point for "what model will this Chat turn use, and what
  * can it do?" Resolves the current selection — an Agent, or a direct
  * Provider/model pair — to one object carrying every capability a turn cares
- * about, so callers stop composing `resolveModelId` +
- * `getPassthroughFileTypes` + `getContextWindow` + … by hand at each call
- * site.
+ * about, so callers stop composing `resolveModelId` + `getContextWindow` + …
+ * by hand at each call site.
  *
  * Returns `null` whenever nothing resolves: no selection made yet, a
  * selected Agent or Provider that no longer exists, or a model reference
@@ -86,7 +81,7 @@ export function resolveModel(input: {
     concreteId,
     contextWindow: entry?.contextWindow,
     maxOutputTokens: entry?.maxOutputTokens,
-    passthroughFileTypes: passthroughFileTypesFor(provider, entry),
+    passthroughFileTypes: entry?.passthroughFileTypes ?? [],
     canSearch: getSearchCapability(provider),
   };
 }

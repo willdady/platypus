@@ -1,15 +1,8 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#1594"
+status: accepted
 ---
 
 # Native file types are declared, not inferred
-
-> State of the code today: a model entry with no Passthrough file types inherits
-> a default computed from its Provider type (Images and PDF for Anthropic,
-> Google, Bedrock and OpenAI Responses; Images for OpenAI chat-completions;
-> nothing for OpenRouter). This ADR records the decision only. It moves to
-> `accepted` in the pull request that removes the default.
 
 A model's Passthrough file types are what the Operator declares on its model
 entry, and nothing else. There is no Provider-type default: an entry with none

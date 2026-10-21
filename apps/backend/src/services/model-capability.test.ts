@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ConcreteModelId, Provider } from "@platypus/schemas";
 import {
-  defaultPassthroughFileTypes,
   resolveProviderModels,
   providerModelReferences,
   passthroughFileTypesForModel,
@@ -36,61 +35,27 @@ const provider = (over: Partial<Provider>): Provider => ({
   ...over,
 });
 
-describe("defaultPassthroughFileTypes", () => {
-  it("gives native-file providers images + PDF", () => {
-    for (const t of ["Anthropic", "Google", "Bedrock"] as const) {
-      expect(
-        defaultPassthroughFileTypes(provider({ providerType: t })),
-      ).toEqual(["image/*", "application/pdf"]);
-    }
-  });
-
-  it("gives OpenAI Responses images + PDF but chat-completions images only", () => {
-    expect(
-      defaultPassthroughFileTypes(
-        provider({ providerType: "OpenAI", apiMode: "responses" }),
-      ),
-    ).toEqual(["image/*", "application/pdf"]);
-    expect(
-      defaultPassthroughFileTypes(
-        provider({ providerType: "OpenAI", apiMode: "chat" }),
-      ),
-    ).toEqual(["image/*"]);
-  });
-
-  it("gives OpenRouter (heterogeneous aggregator) no native floor", () => {
-    // Per-model capability varies too much for a single floor; an undeclared
-    // model rejects binaries at the gate rather than forwarding an image a
-    // text-only model can't read (#328).
-    expect(
-      defaultPassthroughFileTypes(provider({ providerType: "OpenRouter" })),
-    ).toEqual([]);
-  });
-});
-
 describe("resolveProviderModels", () => {
-  it("coerces a legacy string[] to objects with provider-type defaults", () => {
+  it("coerces a legacy string[] to objects that ingest nothing natively", () => {
+    // No Provider-type default (ADR-0039): migration 0091 backfills real rows.
     const p = provider({
       providerType: "Anthropic",
       apiMode: "responses",
       modelIds: ["claude-x", "claude-y"] as unknown as Provider["modelIds"],
     });
     expect(resolveProviderModels(p)).toEqual([
-      { id: "claude-x", passthroughFileTypes: ["image/*", "application/pdf"] },
-      { id: "claude-y", passthroughFileTypes: ["image/*", "application/pdf"] },
+      { id: "claude-x", passthroughFileTypes: [] },
+      { id: "claude-y", passthroughFileTypes: [] },
     ]);
   });
 
-  it("fills the default when an object declares no passthrough types", () => {
+  it("keeps an empty declaration empty, even on Anthropic", () => {
     const p = provider({
-      providerType: "OpenAI",
-      apiMode: "chat",
-      modelIds: [{ id: "qwen", passthroughFileTypes: [] }],
+      providerType: "Anthropic",
+      apiMode: "responses",
+      modelIds: [{ id: "claude", passthroughFileTypes: [] }],
     });
-    // Empty array is treated as "declare none" → inherit the provider default.
-    expect(resolveProviderModels(p)[0].passthroughFileTypes).toEqual([
-      "image/*",
-    ]);
+    expect(resolveProviderModels(p)[0].passthroughFileTypes).toEqual([]);
   });
 
   it("preserves an explicit passthrough declaration", () => {
@@ -100,16 +65,6 @@ describe("resolveProviderModels", () => {
     expect(resolveProviderModels(p)[0].passthroughFileTypes).toEqual([
       "image/*",
     ]);
-  });
-
-  it("leaves an undeclared OpenRouter model accepting nothing natively", () => {
-    const p = provider({
-      providerType: "OpenRouter",
-      modelIds: [{ id: "llama-text", passthroughFileTypes: [] }],
-    });
-    // Empty inherits the OpenRouter floor, which is now empty — so a binary is
-    // rejected at the gate until the operator declares the model vision-capable.
-    expect(resolveProviderModels(p)[0].passthroughFileTypes).toEqual([]);
   });
 });
 
@@ -148,7 +103,7 @@ describe("providerModelReferences", () => {
 });
 
 describe("passthroughFileTypesForModel", () => {
-  it("returns the model's resolved types, defaulting when unknown", () => {
+  it("returns the model's declared types, none when unknown", () => {
     const p = provider({
       providerType: "Anthropic",
       apiMode: "responses",
@@ -157,11 +112,7 @@ describe("passthroughFileTypesForModel", () => {
     expect(passthroughFileTypesForModel(p, concrete("claude"))).toEqual([
       "image/*",
     ]);
-    // Unknown model → provider default.
-    expect(passthroughFileTypesForModel(p, concrete("ghost"))).toEqual([
-      "image/*",
-      "application/pdf",
-    ]);
+    expect(passthroughFileTypesForModel(p, concrete("ghost"))).toEqual([]);
   });
 });
 
@@ -322,7 +273,7 @@ describe("resolveModelId", () => {
     expect(resolveModelId(legacy, "alias:legacy")).toBeUndefined();
   });
 
-  it("carries the aliased model's own capabilities, not the provider default", () => {
+  it("carries the aliased model's own capabilities", () => {
     const aliased = provider({
       providerType: "OpenRouter",
       modelIds: [

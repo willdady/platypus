@@ -125,7 +125,11 @@ describe("ProviderForm model cards", () => {
       {
         id: "gpt-4o",
         alias: "flagship",
-        passthroughFileTypes: ["image/*", "application/pdf"],
+        passthroughFileTypes: [
+          "image/*",
+          "application/pdf",
+          "application/vnd.foo",
+        ],
         contextWindow: 128000,
         maxOutputTokens: 64000,
       },
@@ -136,7 +140,7 @@ describe("ProviderForm model cards", () => {
     expect(within(full).getByText("flagship")).toBeInTheDocument();
     expect(full).toHaveTextContent("Context window: 128k");
     expect(full).toHaveTextContent(
-      "Native file types: image/*, application/pdf",
+      "Native file types: Images, PDF, application/vnd.foo",
     );
     expect(full).toHaveTextContent("Max output tokens: 64,000");
     expect(full).not.toHaveTextContent("Max extracted text characters");
@@ -250,7 +254,7 @@ describe("ProviderForm model dialog", () => {
       ).toBeInTheDocument();
     }
     expect(
-      within(dialog).queryByRole("button", { name: "Advanced" }),
+      within(dialog).queryByLabelText("Other media types"),
     ).not.toBeInTheDocument();
 
     type(dialog, "Model ID", "o3");
@@ -290,9 +294,12 @@ describe("ProviderForm model dialog", () => {
     expect(
       within(dialog).getByLabelText("Context window in tokens"),
     ).toHaveValue(131072);
-    expect(within(dialog).getByLabelText("Native file types")).toHaveValue(
-      "image/*",
-    );
+    expect(
+      within(dialog).getByRole("switch", { name: "Images" }),
+    ).toBeChecked();
+    expect(
+      within(dialog).getByRole("switch", { name: "PDF" }),
+    ).not.toBeChecked();
     expect(
       within(dialog).getByLabelText("Max extracted text characters"),
     ).toHaveValue(1000);
@@ -442,30 +449,84 @@ describe("ProviderForm model dialog", () => {
     expect(modelCard("qwen")).toHaveTextContent("Context window: 131,072");
   });
 
-  it("sends each comma-separated native file type as its own entry", async () => {
+  it("stores the ticked native file types", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
 
     const dialog = openEditDialog("gpt-4o");
-    type(dialog, "Native file types", "image/png, application/pdf,");
+    fireEvent.click(within(dialog).getByRole("switch", { name: "PDF" }));
+    fireEvent.click(within(dialog).getByRole("switch", { name: "Images" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].passthroughFileTypes).toEqual([
+      "image/*",
+      "application/pdf",
+    ]);
+  });
+
+  // Values the toggles don't cover open Advanced on their own and survive an
+  // untouched open → save.
+  it("keeps other media types through an untouched Save", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: ["image/*", "image/png", "*/*"] },
+    ]);
+
+    const dialog = openEditDialog("gpt-4o");
+    expect(
+      within(dialog).getByRole("switch", { name: "Images" }),
+    ).toBeChecked();
+    expect(within(dialog).getByLabelText("Other media types")).toHaveValue(
+      "image/png, */*",
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].passthroughFileTypes).toEqual([
+      "image/*",
+      "image/png",
+      "*/*",
+    ]);
+  });
+
+  it("leaves the form clean on an untouched Save of types out of toggle order", () => {
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: ["application/pdf", "image/*"] },
+    ]);
+
+    const dialog = openEditDialog("gpt-4o");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    expect(unload()).toBe(false);
+  });
+
+  it("parses comma-separated other media types under Advanced", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    const dialog = openEditDialog("gpt-4o");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Advanced" }));
+    type(dialog, "Other media types", "image/png, , application/vnd.foo,");
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(savedModelIds(fetchMock)[0].passthroughFileTypes).toEqual([
       "image/png",
-      "application/pdf",
+      "application/vnd.foo",
     ]);
   });
 
-  // An empty list means "use the provider-type default", so a field holding
-  // nothing but separators must not store an empty-string type.
-  it("sends no native file types when the field holds only separators", async () => {
+  // An empty list means the model reads nothing natively (ADR-0039).
+  it("stores no native file types when nothing is ticked", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
 
     const dialog = openEditDialog("gpt-4o");
-    type(dialog, "Native file types", " , ,");
+    fireEvent.click(within(dialog).getByRole("switch", { name: "Images" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     save();
 

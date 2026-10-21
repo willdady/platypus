@@ -5,7 +5,9 @@ import {
   getModelOptions,
   findModelOption,
   resolveModelId,
-  getPassthroughFileTypes,
+  joinNativeFileTypes,
+  nativeFileTypeLabels,
+  splitNativeFileTypes,
   getContextWindow,
   getMaxOutputTokens,
   getSearchCapability,
@@ -119,22 +121,39 @@ describe("resolveModelId", () => {
   });
 });
 
-describe("getPassthroughFileTypes", () => {
-  it("uses an aliased model's declared types, not the provider default", () => {
-    const p = provider(
-      [{ id: "qwen-vl", passthroughFileTypes: ["image/*"], alias: "vision" }],
-      { providerType: "OpenRouter" as Provider["providerType"] },
-    );
-    const resolved = resolveModelId(p, "alias:vision")!;
-    expect(getPassthroughFileTypes(p, resolved)).toEqual(["image/*"]);
+describe("nativeFileTypeLabels", () => {
+  it("names toggle values and shows anything else raw", () => {
+    expect(
+      nativeFileTypeLabels([
+        "image/*",
+        "application/pdf",
+        "application/vnd.foo",
+      ]),
+    ).toEqual(["Images", "PDF", "application/vnd.foo"]);
+  });
+});
+
+describe("splitNativeFileTypes", () => {
+  it("separates toggle values from other media types", () => {
+    expect(splitNativeFileTypes(["image/*", "image/png", "*/*"])).toEqual({
+      toggled: ["image/*"],
+      other: ["image/png", "*/*"],
+    });
+  });
+});
+
+describe("joinNativeFileTypes", () => {
+  it("lists ticked toggles then parsed other types, without duplicates", () => {
+    expect(
+      joinNativeFileTypes(
+        ["application/pdf", "image/*"],
+        " image/png, , image/*, */*,",
+      ),
+    ).toEqual(["image/*", "application/pdf", "image/png", "*/*"]);
   });
 
-  it("falls back to the provider default when the model declares none", () => {
-    const p = provider([
-      { id: "gpt-4", passthroughFileTypes: [], alias: "flagship" },
-    ]);
-    const resolved = resolveModelId(p, "alias:flagship")!;
-    expect(getPassthroughFileTypes(p, resolved)).toEqual(["image/*"]);
+  it("is empty when nothing is ticked or typed", () => {
+    expect(joinNativeFileTypes([], " , ")).toEqual([]);
   });
 });
 
