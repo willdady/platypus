@@ -26,7 +26,7 @@ A file a User placed in the Workspace's Sandbox from the chat composer, recorded
 _Avoid_: attachment, File part.
 
 **Passthrough file type**:
-A media type the target `(Provider, model)` pair ingests **natively**, declared per model. A capability router, not a security allow-list: a File part outside the set is converted to text where possible, never blocked for safety.
+A media type the target `(Provider, model)` pair ingests **natively**, declared per model by the Operator. Never inferred from the Provider type: models behind one Provider differ, and no vendor or proxy offers a dependable way to look a model's capabilities up. A model with none declared ingests nothing natively. A capability router, not a security allow-list: a File part outside the set is converted to text where possible, never blocked for safety.
 
 **Extracted text**:
 The plain text pulled out of a binary document (PDF, DOCX) that the target model can't ingest natively, injected in place of the File part and annotated as extracted so the loss is visible. Lossy — layout, tables and images don't survive. Distinct from an inlined text file, whose bytes are already text and are sent verbatim.

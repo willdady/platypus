@@ -206,3 +206,9 @@ renders.
   bare integer carrying no output count, so the derivation is not available there
   even in principle. Two surfaces therefore show different quantities on purpose,
   and the glossary names both so the difference is not read as a bug.
+
+## Amended by ADR-0039
+
+ADR-0039 applies this ADR's principle to a model's Passthrough file types:
+declared by the Operator, never inferred from the Provider type. Nothing above is
+narrowed or withdrawn.
