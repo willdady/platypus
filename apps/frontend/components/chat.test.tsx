@@ -588,6 +588,25 @@ describe("Upload to Sandbox", () => {
     expect(submit).toHaveAttribute("data-status", "ready");
   });
 
+  // The turn has not started, so Escape has nothing to stop (issue #1604).
+  it("leaves Escape alone while uploads run", async () => {
+    const { fetchMock } = stubPendingSave();
+    harness.sandboxFiles = [new File(["a,b"], "a.csv")];
+    renderOn();
+    const submit = screen.getByTestId("submit");
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(submit).toHaveAttribute("data-status", "submitted"),
+    );
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/cancel")),
+    ).toHaveLength(0);
+    expect(harness.stop).not.toHaveBeenCalled();
+  });
+
   it("returns Send to idle when an upload fails", async () => {
     stubRejectedSave("Sandbox unreachable", 500);
     harness.sandboxFiles = [new File(["a,b"], "a.csv")];
@@ -2054,36 +2073,6 @@ describe("Escape", () => {
   it("does nothing with no turn in flight", () => {
     const fetchMock = stubAcceptedSave();
     renderChat();
-
-    pressEscape();
-
-    expect(cancelPosts(fetchMock)).toHaveLength(0);
-    expect(harness.stop).not.toHaveBeenCalled();
-  });
-
-  it("does nothing while a Send's Sandbox uploads run", async () => {
-    const { fetchMock } = stubPendingSave();
-    harness.sandboxFiles = [new File(["a,b"], "a.csv")];
-    harness.data.set("/providers", { results: [searchProvider] });
-    harness.data.set("/agents", {
-      results: [{ ...agentOn("as", "ps", "ms"), toolSetIds: ["sandbox"] }],
-    });
-    harness.data.set("/sandbox", {
-      transfer: { upload: true, download: true },
-    });
-    render(
-      <Chat
-        orgId="org1"
-        workspaceId="ws1"
-        chatId={CHAT_ID}
-        initialAgentId="as"
-      />,
-    );
-    const submit = screen.getByTestId("submit");
-    fireEvent.click(submit);
-    await waitFor(() =>
-      expect(submit).toHaveAttribute("data-status", "submitted"),
-    );
 
     pressEscape();
 
