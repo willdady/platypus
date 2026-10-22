@@ -535,7 +535,7 @@ export function TriggerList({
             </Item>
           </li>
         ))}
-        <GhostCards count={page.ghosts} />
+        <GhostCards page={page} />
       </ul>
 
       {triggerToClone && (

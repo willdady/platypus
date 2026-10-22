@@ -13,7 +13,15 @@ export type Page<T> = {
   pageCount: number;
   /** Slots a short last page is missing; 0 when there is only one page. */
   ghosts: number;
+  /**
+   * Slots completing a lone page's half-full last row in the two-column
+   * layout; drawn on wide screens only, where that row exists.
+   */
+  rowGhosts: number;
 };
+
+/** The ghost counts of a list that is not paged: none. */
+export const NO_GHOSTS = { ghosts: 0, rowGhosts: 0 } as const;
 
 /**
  * The page of `items` that `requested` (a URL param's raw value) asks for,
@@ -37,18 +45,28 @@ export function pageOf<T>(
     page,
     pageCount,
     ghosts: pageCount > 1 ? pageSize - shown.length : 0,
+    rowGhosts: pageCount > 1 ? 0 : shown.length % 2,
   };
 }
 
 /**
  * Empty, dashed slots that fill a short last page out to a full one, so the
- * footer and the sections below stay put. The grid needs `auto-rows-fr`, so a
- * row of only ghosts is as tall as a row of cards.
+ * footer and the sections below stay put, or a lone page's last row out to
+ * two. The grid needs `auto-rows-fr`, so a row of only ghosts is as tall as a
+ * row of cards.
  */
-export function GhostCards({ count }: { count: number }) {
-  return Array.from({ length: count }, (_, i) => (
+export function GhostCards({
+  page: { ghosts, rowGhosts },
+}: {
+  page: Pick<Page<unknown>, "ghosts" | "rowGhosts">;
+}) {
+  return Array.from({ length: ghosts + rowGhosts }, (_, i) => (
     // An SVG outline, not `border-dashed`: CSS cannot set a dash's spacing.
-    <li key={`ghost-${i}`} aria-hidden="true" className="relative text-border">
+    <li
+      key={`ghost-${i}`}
+      aria-hidden="true"
+      className={cn("relative text-border", i >= ghosts && "hidden lg:block")}
+    >
       <svg className="absolute inset-0 size-full overflow-visible">
         <rect
           width="100%"

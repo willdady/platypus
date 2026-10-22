@@ -35,6 +35,7 @@ import {
   ListFooter,
   ListPagination,
   GhostCards,
+  NO_GHOSTS,
   pageOf,
 } from "@/components/list-pagination";
 import { RowActionsMenu } from "@/components/row-actions-menu";
@@ -391,7 +392,7 @@ export function SkillsList({
   // Paged on the Workspace home only; the Organization surface lists them all.
   const page = workspaceId
     ? pageOf(searchParams.get("skillsPage"), shown, SKILLS_PAGE_SIZE)
-    : { items: shown, page: 1, pageCount: 1, ghosts: 0 };
+    : { items: shown, page: 1, pageCount: 1, ...NO_GHOSTS };
 
   return (
     <>
@@ -550,7 +551,7 @@ export function SkillsList({
               </li>
             );
           })}
-          <GhostCards count={page.ghosts} />
+          <GhostCards page={page} />
         </ul>
       )}
 

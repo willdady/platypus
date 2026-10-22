@@ -19,7 +19,9 @@ import {
   GhostCards,
   ListFooter,
   ListPagination,
+  NO_GHOSTS,
   pageOf,
+  type Page,
 } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -68,7 +70,7 @@ export function EntityCardList<T extends EntityCard>({
   skeleton,
   empty,
   descriptionLines = 2,
-  ghosts = 0,
+  ghosts = NO_GHOSTS,
   href,
   media,
   meta,
@@ -76,8 +78,8 @@ export function EntityCardList<T extends EntityCard>({
   wrap,
 }: {
   items: readonly T[];
-  /** Empty slots after the cards, filling a short last page. */
-  ghosts?: number;
+  /** Empty slots after the cards, filling a short last page or row. */
+  ghosts?: Pick<Page<unknown>, "ghosts" | "rowGhosts">;
   isLoading: boolean;
   error: unknown;
   /** The plural noun loading or failing to load: "boards", "shared agents". */
@@ -160,7 +162,7 @@ export function EntityCardList<T extends EntityCard>({
             : renderCard(item)}
         </li>
       ))}
-      <GhostCards count={ghosts} />
+      <GhostCards page={ghosts} />
     </ul>
   );
 }
@@ -240,7 +242,7 @@ export function WorkspaceEntityCardList({
   const { paging } = config;
   const page = paging
     ? pageOf(searchParams.get(paging.param), cards, paging.pageSize)
-    : { items: cards, page: 1, pageCount: 1, ghosts: 0 };
+    : { items: cards, page: 1, pageCount: 1, ...NO_GHOSTS };
 
   const deleteFlow = useDeleteFlow<EntityCard>({
     mutate,
@@ -271,7 +273,7 @@ export function WorkspaceEntityCardList({
       )}
       <EntityCardList
         items={page.items}
-        ghosts={page.ghosts}
+        ghosts={page}
         isLoading={isLoading}
         error={error}
         subject={config.entity}
