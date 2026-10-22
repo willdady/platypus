@@ -466,7 +466,7 @@ export function AgentsList({
           {unpinnedAgents.length > 0 && (
             <ul aria-label="Agents" className={gridClassName}>
               {page.items.map(renderCard)}
-              <GhostCards count={page.ghosts} />
+              <GhostCards page={page} />
             </ul>
           )}
         </>
