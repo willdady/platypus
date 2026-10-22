@@ -228,8 +228,16 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
       onChange={onChange}
     />
   ),
-  PromptInputSubmit: ({ status }: { status?: string }) => (
-    <button type="submit" data-testid="submit" data-status={status} />
+  PromptInputSubmit: ({
+    status,
+    ...props
+  }: React.ComponentProps<"button"> & { status?: string }) => (
+    <button
+      type="submit"
+      data-testid="submit"
+      data-status={status}
+      {...props}
+    />
   ),
 }));
 
@@ -2007,5 +2015,154 @@ describe("loading", () => {
 
     expect(loadingSkeleton()).not.toBeInTheDocument();
     expect(composer()).toBeInTheDocument();
+  });
+});
+
+/**
+ * Escape is the stop button's shortcut (issue #1604): the same `turn.cancel()`,
+ * so the server-side run stops too, not just the local stream.
+ */
+describe("Escape", () => {
+  const pressEscape = (target: Element = document.body, init = {}) =>
+    fireEvent.keyDown(target, { key: "Escape", ...init });
+
+  const cancelPosts = (fetchMock: ReturnType<typeof stubAcceptedSave>) =>
+    fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/cancel"));
+
+  it("stops a turn streaming in this tab", () => {
+    const fetchMock = stubAcceptedSave();
+    renderThrough("submitted", "streaming");
+
+    pressEscape();
+
+    expect(cancelPosts(fetchMock)).toHaveLength(1);
+    expect(harness.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops a run held elsewhere, as the stop button does", () => {
+    const fetchMock = stubAcceptedSave();
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
+    renderChat();
+    expect(screen.getByPlaceholderText("Run in progress…")).toBeDisabled();
+
+    pressEscape();
+
+    expect(cancelPosts(fetchMock)).toHaveLength(1);
+    expect(harness.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing with no turn in flight", () => {
+    const fetchMock = stubAcceptedSave();
+    renderChat();
+
+    pressEscape();
+
+    expect(cancelPosts(fetchMock)).toHaveLength(0);
+    expect(harness.stop).not.toHaveBeenCalled();
+  });
+
+  it("does nothing while a Send's Sandbox uploads run", async () => {
+    const { fetchMock } = stubPendingSave();
+    harness.sandboxFiles = [new File(["a,b"], "a.csv")];
+    harness.data.set("/providers", { results: [searchProvider] });
+    harness.data.set("/agents", {
+      results: [{ ...agentOn("as", "ps", "ms"), toolSetIds: ["sandbox"] }],
+    });
+    harness.data.set("/sandbox", {
+      transfer: { upload: true, download: true },
+    });
+    render(
+      <Chat
+        orgId="org1"
+        workspaceId="ws1"
+        chatId={CHAT_ID}
+        initialAgentId="as"
+      />,
+    );
+    const submit = screen.getByTestId("submit");
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(submit).toHaveAttribute("data-status", "submitted"),
+    );
+
+    pressEscape();
+
+    expect(cancelPosts(fetchMock)).toHaveLength(0);
+    expect(harness.stop).not.toHaveBeenCalled();
+  });
+
+  it("yields to a handler that already claimed the press", () => {
+    const fetchMock = stubAcceptedSave();
+    renderThrough("submitted", "streaming");
+    const claim = (event: KeyboardEvent) => event.preventDefault();
+    document.addEventListener("keydown", claim, { capture: true });
+
+    pressEscape();
+    document.removeEventListener("keydown", claim, { capture: true });
+
+    expect(cancelPosts(fetchMock)).toHaveLength(0);
+    expect(harness.stop).not.toHaveBeenCalled();
+  });
+
+  it.each(["dialog", "alertdialog", "menu", "listbox"])(
+    "yields to an open %s, which Escape closes",
+    (role) => {
+      const fetchMock = stubAcceptedSave();
+      renderThrough("submitted", "streaming");
+      const surface = document.createElement("div");
+      surface.setAttribute("role", role);
+      const inner = document.createElement("input");
+      surface.append(inner);
+      document.body.append(surface);
+
+      pressEscape(inner);
+      surface.remove();
+
+      expect(cancelPosts(fetchMock)).toHaveLength(0);
+      expect(harness.stop).not.toHaveBeenCalled();
+    },
+  );
+
+  it("yields to an open message editor", () => {
+    const fetchMock = stubAcceptedSave();
+    harness.turn.messages = [message("u1", "q")];
+    renderThrough("submitted", "streaming");
+    fireEvent.click(screen.getByRole("button", { name: "Edit u1" }));
+
+    pressEscape();
+
+    expect(cancelPosts(fetchMock)).toHaveLength(0);
+    expect(harness.stop).not.toHaveBeenCalled();
+  });
+
+  it("ignores a press made while composing IME input", () => {
+    const fetchMock = stubAcceptedSave();
+    renderThrough("submitted", "streaming");
+
+    pressEscape(document.body, { isComposing: true });
+
+    expect(cancelPosts(fetchMock)).toHaveLength(0);
+  });
+
+  it("sends one cancel while the key is held down", () => {
+    const fetchMock = stubAcceptedSave();
+    renderThrough("submitted", "streaming");
+
+    pressEscape();
+    pressEscape(document.body, { repeat: true });
+    pressEscape(document.body, { repeat: true });
+
+    expect(cancelPosts(fetchMock)).toHaveLength(1);
+    expect(harness.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("is named on the stop button only while a turn is in flight", () => {
+    const view = renderChat();
+    expect(screen.getByTestId("submit")).not.toHaveAccessibleName("Stop (Esc)");
+
+    harness.turn.status = "streaming";
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(screen.getByTestId("submit")).toHaveAccessibleName("Stop (Esc)");
   });
 });

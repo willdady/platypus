@@ -80,6 +80,10 @@ import { ListError } from "./list-state";
 import type { ModelSelection } from "./composer";
 import { skillsForAgent } from "@/lib/slash-commands";
 
+/** Open surfaces that close on Escape, so a press inside one is theirs. */
+const ESCAPE_OWNERS =
+  '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+
 export function Chat({
   orgId,
   workspaceId,
@@ -421,6 +425,31 @@ export function Chat({
     handleMessageEditCancel,
     handleMessageEditSubmit,
   } = useMessageEditing(messages, resendEdit);
+
+  // Escape is the stop button's shortcut, so it goes through the same
+  // `turn.cancel()`. It never does two things at once: a press another handler
+  // claimed (the slash-command picker), or one made in a surface Escape closes,
+  // or while the message editor owns Escape, is left alone. During Sandbox
+  // uploads `effectiveStatus` is not in flight, so they are left alone too.
+  const { cancel } = turn;
+  const canEscapeCancel = isTurnInFlight(effectiveStatus) && !editing;
+  useEffect(() => {
+    if (!canEscapeCancel) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.repeat ||
+        (event.target instanceof Element && event.target.closest(ESCAPE_OWNERS))
+      ) {
+        return;
+      }
+      cancel();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [canEscapeCancel, cancel]);
 
   // Hydrate chat from persisted data on load (or when chatData changes).
   // We use a ref for status so that this effect only fires when chatData
@@ -911,7 +940,21 @@ export function Chat({
                       )}
                   </AnimatePresence>
                 }
-                submit={<PromptInputSubmit status={composerStatus} />}
+                submit={
+                  <Tooltip delayDuration={1000}>
+                    <TooltipTrigger asChild>
+                      <PromptInputSubmit
+                        status={composerStatus}
+                        {...(isTurnInFlight(effectiveStatus) && {
+                          "aria-label": "Stop (Esc)",
+                        })}
+                      />
+                    </TooltipTrigger>
+                    {isTurnInFlight(effectiveStatus) && (
+                      <TooltipContent>Stop (Esc)</TooltipContent>
+                    )}
+                  </Tooltip>
+                }
               />
             ) : (
               <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">

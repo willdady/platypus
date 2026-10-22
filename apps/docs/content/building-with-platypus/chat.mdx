@@ -575,6 +575,11 @@ new tab. If your Agents, Boards or Triggers fail to load, the palette shows
 **Couldn't load agents. Retry** (or boards, or triggers) in their place; select
 it to load them again without closing the palette.
 
+While a reply is being written, press **Escape** to stop it. It does what the
+stop button does, including when the input reads **Run in progress…**. An
+Escape that closes a menu, a dialog, the model picker or the message editor
+closes only that, and leaves the reply running.
+
 ## Losing the connection mid-run
 
 A Chat turn runs on the server, not in your browser. Closing the tab, losing your
@@ -611,10 +616,10 @@ untouched.
 </Callout>
 
 <Callout type="info">
-  Pressing stop **cancels the run on the server**, not only your connection to
-  it. The Agent stops working, the tokens stop being spent, and the partial
-  reply is kept. Closing the tab does none of that — the run carries on and
-  finishes.
+  Pressing stop, or **Escape**, **cancels the run on the server**, not only your
+  connection to it. The Agent stops working, the tokens stop being spent, and
+  the partial reply is kept. Closing the tab does none of that — the run carries
+  on and finishes.
 </Callout>
 
 ## Per-Chat settings, and when they exist
