@@ -80,6 +80,10 @@ import { ListError } from "./list-state";
 import type { ModelSelection } from "./composer";
 import { skillsForAgent } from "@/lib/slash-commands";
 
+/** Open surfaces that close on Escape, so a press inside one is theirs. */
+const ESCAPE_OWNERS =
+  '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+
 export function Chat({
   orgId,
   workspaceId,
@@ -379,6 +383,7 @@ export function Chat({
   // rather than `ready` — the reading the old predicate missed (issue #648).
   const runHeldElsewhere = isRunHeldElsewhere(runBelief);
   const effectiveStatus = composerTurnStatus(runBelief, errorTreatment);
+  const turnInFlight = isTurnInFlight(effectiveStatus);
   // A Send's Sandbox uploads read as a sent turn on the composer only: the
   // turn has not started, so a press must not reach `turn.cancel()`.
   const composerStatus = sandboxUploads.uploading
@@ -421,6 +426,31 @@ export function Chat({
     handleMessageEditCancel,
     handleMessageEditSubmit,
   } = useMessageEditing(messages, resendEdit);
+
+  // Escape is the stop button's shortcut, so it goes through the same
+  // `turn.cancel()`. It never does two things at once: a press another handler
+  // claimed (the slash-command picker), or one made in a surface Escape closes,
+  // is left alone, and so is every press while the message editor is open —
+  // its Escape cancels the edit even once focus has left its textarea.
+  const { cancel } = turn;
+  const canEscapeCancel = turnInFlight && !editing;
+  useEffect(() => {
+    if (!canEscapeCancel) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.repeat ||
+        (event.target instanceof Element && event.target.closest(ESCAPE_OWNERS))
+      ) {
+        return;
+      }
+      cancel();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [canEscapeCancel, cancel]);
 
   // Hydrate chat from persisted data on load (or when chatData changes).
   // We use a ref for status so that this effect only fires when chatData
@@ -693,7 +723,7 @@ export function Chat({
   // Sandbox uploads land first; the message goes only once every one has. A
   // rejection keeps the composer's text and chips for a retry.
   const handleSubmit = async (message: PromptInputMessage) => {
-    if (isTurnInFlight(effectiveStatus)) {
+    if (turnInFlight) {
       return turn.cancel();
     }
     const sandboxFiles = message.sandboxFiles ?? [];
@@ -726,7 +756,7 @@ export function Chat({
           messages.length === 0 && "flex-none",
         )}
         data-conversation
-        aria-busy={isTurnInFlight(effectiveStatus)}
+        aria-busy={turnInFlight}
       >
         <ConversationContent>
           <div className="flex justify-center">
@@ -911,7 +941,14 @@ export function Chat({
                       )}
                   </AnimatePresence>
                 }
-                submit={<PromptInputSubmit status={composerStatus} />}
+                // Named, not tooltipped: a Radix tooltip closes on Escape and
+                // would swallow the first press meant to stop the turn.
+                submit={
+                  <PromptInputSubmit
+                    status={composerStatus}
+                    {...(turnInFlight && { "aria-label": "Stop (Esc)" })}
+                  />
+                }
               />
             ) : (
               <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
