@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.26.0](https://github.com/willdady/platypus/compare/v3.25.0...v3.26.0) (2026-10-23)
+
+
+### Features
+
+* **backend:** add Exa Web-search backend plugin ([#1650](https://github.com/willdady/platypus/issues/1650)) ([3c77be8](https://github.com/willdady/platypus/commit/3c77be83d2b632ea25fb4d59694bb9b8610f7a62))
+* **frontend:** press Escape to stop an in-flight Chat turn ([#1607](https://github.com/willdady/platypus/issues/1607)) ([fb5d4f2](https://github.com/willdady/platypus/commit/fb5d4f2dd4f5185e1229f8a22a76979cf55d55fb))
+
+
+### Bug Fixes
+
+* **backend:** answer malformed bodies with 400 and unknown paths with a JSON 404 ([#1638](https://github.com/willdady/platypus/issues/1638)) ([a94f2db](https://github.com/willdady/platypus/commit/a94f2dbe2b952187bfae124215b7aedf5591cdaf))
+* **backend:** delete an organization whose workspace agents use a shared provider ([#1635](https://github.com/willdady/platypus/issues/1635)) ([55f22fd](https://github.com/willdady/platypus/commit/55f22fd46aae77e0039924754dd174dfbda30a8d))
+* **backend:** don't offer fsDownload to Trigger runs or Sub-Agents ([#1636](https://github.com/willdady/platypus/issues/1636)) ([93bade1](https://github.com/willdady/platypus/commit/93bade144f215f094f1accaec4d5ce3f4f96f04f))
+* **backend:** emit a streaming tool's activity start on its first pull ([#1640](https://github.com/willdady/platypus/issues/1640)) ([6770609](https://github.com/willdady/platypus/commit/67706098612c6422d065f4ebf074e79d9e0ffa83))
+* **backend:** index hot queries and close notification and Kanban column write races ([#1643](https://github.com/willdady/platypus/issues/1643)) ([d15edb5](https://github.com/willdady/platypus/commit/d15edb5c980019b5acd3368188d02f68213c5585))
+* **backend:** make the last-admin guard race-free on member demote and remove ([#1637](https://github.com/willdady/platypus/issues/1637)) ([ae6c583](https://github.com/willdady/platypus/commit/ae6c583f624b23ef38d0133e8399be891e10003e))
+* **backend:** make validation failures and other 4xx bodies follow api-conventions ([#1642](https://github.com/willdady/platypus/issues/1642)) ([13ecf8a](https://github.com/willdady/platypus/commit/13ecf8afc6018b3fed472f6bb2475c653cc93b23))
+* **backend:** pin database connections to UTC ([#1641](https://github.com/willdady/platypus/issues/1641)) ([8e3295a](https://github.com/willdady/platypus/commit/8e3295a74e770929152ce83c6af07c0f389217e3))
+* **backend:** run a Provider update or delete in one transaction ([#1639](https://github.com/willdady/platypus/issues/1639)) ([d2ba908](https://github.com/willdady/platypus/commit/d2ba908b8be92c02bd84f0f7cbf66c771bf41be2))
+* **frontend:** fill a lone page's half-full last row with a ghost card ([#1605](https://github.com/willdady/platypus/issues/1605)) ([8f05860](https://github.com/willdady/platypus/commit/8f0586065d3ec821646f666a3a36f29300273d05))
+
 ## [3.25.0](https://github.com/willdady/platypus/compare/v3.24.0...v3.25.0) (2026-10-21)
 
 
