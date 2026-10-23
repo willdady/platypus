@@ -209,6 +209,11 @@ export const chat = pgTable(
     status: t.text("status").notNull().default("succeeded"),
     isPinned: t.boolean("is_pinned").notNull().default(false),
     tags: t.jsonb("tags").$type<string[]>().default([]),
+    // The Agent and Provider the Chat was last run with. No foreign key, by
+    // decision: a dangling id is how the Chat tells the user its Agent or
+    // Provider is gone. `RESTRICT` would make either undeletable once a Chat
+    // used it, and `SET NULL` would erase the id, opening the Chat silently on
+    // another model instead.
     agentId: t.text("agent_id"),
     providerId: t.text("provider_id"),
     modelId: t.text("model_id"),
@@ -278,15 +283,24 @@ export const chat = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
-    index("idx_chat_workspace_id").on(t.workspaceId),
+    // The Chat list: one Workspace's Chats, pinned first, newest first, a
+    // page at a time. Its leading column also serves every by-Workspace read.
+    // Nulls first, as a plain `DESC` sorts them, so the order matches.
+    index("idx_chat_workspace_pinned_created").on(
+      t.workspaceId,
+      t.isPinned.desc().nullsFirst(),
+      t.createdAt.desc().nullsFirst(),
+    ),
+    // Memory extraction's pick of each Workspace's most recently updated Chats.
+    index("idx_chat_workspace_updated_at").on(t.workspaceId, t.updatedAt),
+    // The recovery sweep's `running` Chats: a handful at any moment.
+    index("idx_chat_running")
+      .on(t.id)
+      .where(sql`${t.status} = 'running'`),
+    // A Provider model's alias removal rewrites that Provider's Chats.
+    index("idx_chat_provider_id").on(t.providerId),
     // A retried A2A message is found among the Chats its token started.
     index("idx_chat_a2a_token_id").on(t.a2aTokenId),
-    index("idx_chat_tags").using("gin", t.tags),
-    index("idx_chat_memory_processing").on(
-      t.memoryExtractionStatus,
-      t.lastMemoryProcessedAt,
-      t.updatedAt,
-    ),
     // NO ACTION rather than a cascade or set-null, for the leaf and the memory
     // cursor alike: a message row is never hard-deleted on its own, only with
     // its Chat, so neither can dangle.
@@ -1003,6 +1017,10 @@ export const triggerRun = pgTable(
   (t) => [
     index("idx_trigger_run_trigger_id").on(t.triggerId),
     index("idx_trigger_run_started_at").on(t.startedAt),
+    // The scheduler's every-minute checks for a Trigger's unfinished run.
+    index("idx_trigger_run_unfinished")
+      .on(t.triggerId)
+      .where(sql`${t.status} in ('pending', 'running')`),
     // The run-rate breaker's per-(Trigger, entity) count over its rolling window,
     // and the retention union that keeps that window countable. Column order
     // matches the predicate: exact Trigger, exact entity, range on time.
@@ -1053,7 +1071,10 @@ export const kanbanColumn = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
-  (t) => [index("idx_kanban_column_board_id").on(t.boardId)],
+  (t) => [
+    index("idx_kanban_column_board_id").on(t.boardId),
+    unique("unique_kanban_column_name_board").on(t.boardId, t.name),
+  ],
 );
 
 export const kanbanCard = pgTable(

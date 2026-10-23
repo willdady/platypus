@@ -222,15 +222,11 @@ describe("Notification Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
 
-      // where() is used by middleware (sync chaining) then by handler (terminal)
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockResolvedValueOnce([{ id: "notif-1" }, { id: "notif-2" }]) // handler unread query
-        .mockResolvedValueOnce([{ id: "notif-1" }, { id: "notif-2" }]); // service containment query
-
-      // Insert read records
-      mockDb.values.mockResolvedValueOnce({});
+      // One INSERT … SELECT … RETURNING marks them all read
+      mockDb.returning.mockResolvedValueOnce([
+        { notificationId: "notif-1" },
+        { notificationId: "notif-2" },
+      ]);
 
       const res = await app.request(`${baseUrl}/read-all`, {
         method: "POST",

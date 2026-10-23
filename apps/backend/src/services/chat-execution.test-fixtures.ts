@@ -183,9 +183,7 @@ export const createInMemoryChatTurnQueries = (
       return Promise.resolve(
         (fx.memories ?? [])
           .filter((m) => m.userId === userId && m.workspaceId === workspaceId)
-          .map(
-            ({ userId: _u, workspaceId: _w, ...rest }) => rest as MemorySummary,
-          ),
+          .map(({ summaryDate, summary }) => ({ summaryDate, summary })),
       );
     },
 

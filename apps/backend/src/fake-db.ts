@@ -153,14 +153,22 @@ const countMarker = (aliased?: true): CountMarker => ({
 export const sqlMarker = (
   strings: readonly string[],
   values: unknown[],
-): Marker & { getSQL: () => { query: string }; mapWith: () => unknown } =>
-  Object.assign(
+): Marker & {
+  getSQL: () => { query: string };
+  mapWith: () => unknown;
+  as: () => Marker;
+} => {
+  const marker = Object.assign(
     { op: "sql" as const, strings, values },
     {
       getSQL: () => ({ query: strings.join("?") }),
       mapWith: () => undefined,
+      // An aliased fragment reads the same as the fragment.
+      as: () => marker,
     },
   );
+  return marker;
+};
 
 const isMarker = (value: unknown): value is Marker =>
   !!value && typeof value === "object" && "op" in value;

@@ -29,7 +29,12 @@ import {
   organizationMember as organizationMemberTable,
 } from "../db/schema.ts";
 import { user } from "../db/auth-schema.ts";
-import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+  isUniqueViolation,
+} from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import { listScopedByIds } from "./scoped-resource.ts";
@@ -1795,9 +1800,12 @@ export const deleteBoard = async (
 
 // --- Columns ---
 
+const COLUMN_NAME_CLASH = "A column with this name already exists on the board";
+
 /**
- * Column names are unique per board. A read-then-write check — there is no
- * unique index to lean on — so it narrows the window rather than closing it.
+ * Column names are unique per board. The friendly fast path: the board's
+ * unique constraint is the backstop for a write that lands between this check
+ * and its own, which {@link rethrowAsColumnNameClash} turns into the same conflict.
  */
 const requireUniqueColumnName = async (
   database: Database,
@@ -1817,11 +1825,13 @@ const requireUniqueColumnName = async (
     )
     .limit(1);
 
-  if (clashes.length > 0) {
-    throw new ConflictError(
-      "A column with this name already exists on the board",
-    );
-  }
+  if (clashes.length > 0) throw new ConflictError(COLUMN_NAME_CLASH);
+};
+
+/** A column write's unique violation as the name clash it is. */
+const rethrowAsColumnNameClash = (error: unknown): never => {
+  if (isUniqueViolation(error)) throw new ConflictError(COLUMN_NAME_CLASH);
+  throw error;
 };
 
 /**
@@ -1865,7 +1875,8 @@ export const createColumn = async (
       createdAt: now,
       updatedAt: now,
     })
-    .returning();
+    .returning()
+    .catch(rethrowAsColumnNameClash);
 
   return rows[0];
 };
@@ -1890,7 +1901,8 @@ export const renameColumn = async (
     .update(kanbanColumnTable)
     .set({ name: input.name, updatedAt: new Date() })
     .where(columnInScope(database, onBoard, columnId))
-    .returning();
+    .returning()
+    .catch(rethrowAsColumnNameClash);
 
   const row = rows[0];
   if (!row) throw new NotFoundError("Column not found");

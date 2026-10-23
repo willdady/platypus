@@ -120,6 +120,10 @@ describe("generateChatMetadata", () => {
     const result = await generateChatMetadata(params);
 
     expect(result).toEqual(updated);
+    // Not the Chat's memory snapshot, which titling never reads.
+    expect(Object.keys(mockDb.select.mock.calls[0][0] as object)).not.toContain(
+      "memorySnapshot",
+    );
     // The Active path, not the Chat's Alternatives.
     expect(mockLoadActivePath).toHaveBeenCalledWith("chat-1", "leaf-1");
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
