@@ -2962,12 +2962,89 @@ describe("chat-execution", () => {
           execute: (a: unknown, o: unknown) => AsyncIterable<unknown>;
         }
       ).execute({}, {});
-      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual(["start"]);
       for await (const _ of iterable) void _;
       expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
         "start",
         "end",
       ]);
+    });
+
+    const wrapIterable = (
+      onActivity: (event: ToolActivityEvent) => void,
+      execute: () => AsyncGenerator<unknown>,
+    ) =>
+      (
+        wrapToolsWithActivity(
+          {
+            t: { execute } as unknown as Parameters<
+              typeof wrapToolsWithActivity
+            >[0]["t"],
+          },
+          onActivity,
+        ).t as {
+          execute: (a: unknown, o: unknown) => AsyncGenerator<unknown>;
+        }
+      ).execute({}, {});
+
+    // A generator's `finally` only runs once it has started, so a `start`
+    // emitted before the first pull would never be paired with an `end` if the
+    // consumer never reads it — leaving the run's stall timer held.
+    it("emits neither start nor end for an async-iterable tool that is never iterated", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      wrapIterable(onActivity, async function* () {
+        await Promise.resolve();
+        yield { part: 1 };
+      });
+      await Promise.resolve();
+      expect(onActivity).not.toHaveBeenCalled();
+    });
+
+    it("pairs start and end once when an iterated async-iterable tool is returned early", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const iterator = wrapIterable(onActivity, async function* () {
+        await Promise.resolve();
+        yield { part: 1 };
+        yield { part: 2 };
+      });
+      await iterator.next();
+      await iterator.return(undefined);
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
+        "start",
+        "end",
+      ]);
+    });
+
+    it("pairs start and end once when an iterated async-iterable tool is thrown into", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const iterator = wrapIterable(onActivity, async function* () {
+        await Promise.resolve();
+        yield { part: 1 };
+        yield { part: 2 };
+      });
+      await iterator.next();
+      await expect(iterator.throw(new Error("boom"))).rejects.toThrow("boom");
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
+        "start",
+        "end",
+      ]);
+    });
+
+    it("measures an async-iterable tool's duration from its first pull", async () => {
+      vi.useFakeTimers();
+      try {
+        const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+        const iterator = wrapIterable(onActivity, async function* () {
+          await Promise.resolve();
+          yield { part: 1 };
+        });
+        vi.advanceTimersByTime(5000);
+        await iterator.next();
+        vi.advanceTimersByTime(200);
+        await iterator.next();
+        expect(onActivity.mock.calls[1][0].durationMs).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
