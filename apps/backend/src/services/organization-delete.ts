@@ -21,13 +21,13 @@ export const deleteOrganizationRows = async (
   tx: Tx,
   orgId: string,
 ): Promise<void> => {
-  const workspaceIds = tx
+  const workspaceIdsQuery = tx
     .select({ id: workspaceTable.id })
     .from(workspaceTable)
     .where(eq(workspaceTable.organizationId, orgId));
   await tx
     .delete(triggerTable)
-    .where(inArray(triggerTable.workspaceId, workspaceIds));
+    .where(inArray(triggerTable.workspaceId, workspaceIdsQuery));
   await tx
     .delete(workspaceTable)
     .where(eq(workspaceTable.organizationId, orgId));

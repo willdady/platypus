@@ -52,4 +52,17 @@ describe("deleteOrganizationRows", () => {
     expect(await ids("agent")).toEqual(["other-a"]);
     expect(await ids("trigger")).toEqual(["t-other"]);
   });
+
+  it("deletes an Organization with no Workspaces", async () => {
+    await pg.exec(`
+      INSERT INTO "organization" ("id", "name") VALUES ('org-3', 'Empty');
+    `);
+
+    await drizzle(pg).transaction((tx) =>
+      deleteOrganizationRows(tx as unknown as Tx, "org-3"),
+    );
+
+    expect(await ids("organization")).toEqual(["org-1", "org-2"]);
+    expect(await ids("trigger")).toEqual(["t-other", "t-shared", "t-ws"]);
+  });
 });
