@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { ConcreteModelId } from "@platypus/schemas";
-import type { ProviderRow } from "./provider-write.ts";
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 
 const concrete = (id: string) => id as ConcreteModelId;
 
@@ -14,7 +14,7 @@ vi.mock("./provider.ts", () => ({ openProvider: mockOpenProvider }));
 
 import { generateEmbedding } from "./embedding.ts";
 
-const baseProvider: ProviderRow = {
+const baseProvider = makeProviderRow({
   id: "p1",
   name: "Test",
   organizationId: "org-1",
@@ -26,18 +26,7 @@ const baseProvider: ProviderRow = {
   searchSource: "native",
   taskModelId: "text-embedding-3-small",
   memoryExtractionModelId: "text-embedding-3-small",
-  region: null,
-  baseUrl: null,
-  headers: null,
-  extraBody: null,
-  organization: null,
-  project: null,
-  securityGuardrails: null,
-  embeddingModelId: null,
-  embeddingDimensions: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+});
 
 describe("generateEmbedding", () => {
   beforeEach(() => {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
 import type { ConcreteModelId } from "@platypus/schemas";
 import type { ProviderRow } from "./provider-write.ts";
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 import { openProvider } from "./provider.ts";
 import { MOVED_FILE_PLACEHOLDER } from "./tool-result-files.ts";
 
@@ -10,31 +11,22 @@ import { MOVED_FILE_PLACEHOLDER } from "./tool-result-files.ts";
  * on the request body each real SDK would send.
  */
 
-const provider = (overrides: Partial<ProviderRow>): ProviderRow => ({
-  id: "p1",
-  name: "Test",
-  organizationId: "org-1",
-  workspaceId: null,
-  providerType: "OpenAI",
-  apiMode: "responses",
-  modelIds: [{ id: "model-1", passthroughFileTypes: [] }],
-  apiKey: "sk-test",
-  region: "us-east-1",
-  searchSource: "none",
-  taskModelId: "model-1",
-  memoryExtractionModelId: "model-1",
-  baseUrl: null,
-  headers: null,
-  extraBody: null,
-  organization: null,
-  project: null,
-  securityGuardrails: null,
-  embeddingModelId: null,
-  embeddingDimensions: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  ...overrides,
-});
+const provider = (overrides: Partial<ProviderRow>): ProviderRow =>
+  makeProviderRow({
+    id: "p1",
+    name: "Test",
+    organizationId: "org-1",
+    workspaceId: null,
+    providerType: "OpenAI",
+    apiMode: "responses",
+    modelIds: [{ id: "model-1", passthroughFileTypes: [] }],
+    apiKey: "sk-test",
+    region: "us-east-1",
+    searchSource: "none",
+    taskModelId: "model-1",
+    memoryExtractionModelId: "model-1",
+    ...overrides,
+  });
 
 /** The body the model would POST for a prompt holding one tool-result file. */
 const requestBody = async (p: ProviderRow): Promise<string> => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { ConcreteModelId } from "@platypus/schemas";
 import type { ProviderRow } from "./provider-write.ts";
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 import {
   resolveProviderModels,
   providerModelReferences,
@@ -20,31 +21,20 @@ import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
  */
 const concrete = (id: string) => id as ConcreteModelId;
 
-const provider = (over: Partial<ProviderRow>): ProviderRow => ({
-  id: "p1",
-  name: "Test",
-  workspaceId: "ws-1",
-  providerType: "OpenAI",
-  apiKey: "sk",
-  apiMode: "chat",
-  searchSource: "native",
-  modelIds: [{ id: "m", passthroughFileTypes: [] }],
-  taskModelId: "m",
-  memoryExtractionModelId: "m",
-  organizationId: null,
-  region: null,
-  baseUrl: null,
-  headers: null,
-  extraBody: null,
-  organization: null,
-  project: null,
-  securityGuardrails: null,
-  embeddingModelId: null,
-  embeddingDimensions: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  ...over,
-});
+const provider = (over: Partial<ProviderRow>): ProviderRow =>
+  makeProviderRow({
+    id: "p1",
+    name: "Test",
+    workspaceId: "ws-1",
+    providerType: "OpenAI",
+    apiKey: "sk",
+    apiMode: "chat",
+    searchSource: "native",
+    modelIds: [{ id: "m", passthroughFileTypes: [] }],
+    taskModelId: "m",
+    memoryExtractionModelId: "m",
+    ...over,
+  });
 
 describe("resolveProviderModels", () => {
   it("coerces a legacy string[] to objects that ingest nothing natively", () => {

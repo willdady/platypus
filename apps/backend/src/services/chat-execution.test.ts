@@ -125,9 +125,10 @@ import type { ChatTurnQueries } from "./chat-execution.ts";
 import { formatSummariesForSystemPrompt } from "./memory-retrieval.ts";
 import { DEFAULT_DIRECT_MAX_STEPS } from "@platypus/schemas";
 import type { ProviderRow } from "./provider-write.ts";
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
-const baseProvider: ProviderRow = {
+const baseProvider = makeProviderRow({
   id: "p1",
   name: "Test",
   organizationId: "org-1",
@@ -139,18 +140,7 @@ const baseProvider: ProviderRow = {
   searchSource: "native",
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
-  region: null,
-  baseUrl: null,
-  headers: null,
-  extraBody: null,
-  organization: null,
-  project: null,
-  securityGuardrails: null,
-  embeddingModelId: null,
-  embeddingDimensions: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+});
 
 const baseAgent = {
   id: "agent-1",

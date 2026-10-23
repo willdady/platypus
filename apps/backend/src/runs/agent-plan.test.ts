@@ -17,8 +17,9 @@ import {
   DEFAULT_DIRECT_MAX_STEPS,
 } from "@platypus/schemas";
 import type { ProviderRow } from "../services/provider-write.ts";
+import { makeProviderRow } from "../services/provider-row.test-fixtures.ts";
 
-const baseProvider: ProviderRow = {
+const baseProvider = makeProviderRow({
   id: "p1",
   name: "Test",
   organizationId: "org-1",
@@ -30,18 +31,7 @@ const baseProvider: ProviderRow = {
   searchSource: "native",
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
-  region: null,
-  baseUrl: null,
-  headers: null,
-  extraBody: null,
-  organization: null,
-  project: null,
-  securityGuardrails: null,
-  embeddingModelId: null,
-  embeddingDimensions: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+});
 
 const scope = { orgId: "org-1", workspaceId: "ws-1" };
 

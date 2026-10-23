@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { ConcreteModelId } from "@platypus/schemas";
 import type { ProviderRow } from "./provider-write.ts";
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 
 /** These tests drive the SDK surface directly; the resolver is covered elsewhere. */
 const concrete = (id: string) => id as ConcreteModelId;
@@ -93,7 +94,7 @@ vi.mock("@ai-sdk/anthropic", () => ({
 
 import { openProvider } from "./provider.ts";
 
-const baseProvider: ProviderRow = {
+const baseProvider = makeProviderRow({
   id: "p1",
   name: "Test",
   organizationId: "org-1",
@@ -105,18 +106,7 @@ const baseProvider: ProviderRow = {
   searchSource: "native",
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
-  region: null,
-  baseUrl: null,
-  headers: null,
-  extraBody: null,
-  organization: null,
-  project: null,
-  securityGuardrails: null,
-  embeddingModelId: null,
-  embeddingDimensions: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+});
 
 describe("openProvider", () => {
   beforeEach(() => {

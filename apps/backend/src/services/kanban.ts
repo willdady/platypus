@@ -2026,7 +2026,7 @@ export const getBoardState = async (
 
 /** An assignee with the name and picture a person sees. */
 export type ResolvedAssignee = {
-  type: "user" | "agent";
+  type: KanbanCardAssignee["type"];
   id: string;
   name: string;
   image: string | null;
