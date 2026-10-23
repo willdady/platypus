@@ -379,11 +379,9 @@ describe("Organization Routes", () => {
       const fake = seed();
       await putStoredFiles([...inside, ...avatars]);
       vi.spyOn(
-        fake.handle as { delete: () => never },
-        "delete",
-      ).mockImplementation(() => {
-        throw new Error("db down");
-      });
+        fake.handle as { transaction: () => Promise<never> },
+        "transaction",
+      ).mockRejectedValue(new Error("db down"));
 
       const res = await app.request("/organizations/org-1", {
         method: "DELETE",

@@ -17,6 +17,7 @@ import { deleteStoredPrefix } from "../storage/utils.ts";
 import { organizationStorageKeyPrefix } from "../storage/keys.ts";
 import { deleteAvatar } from "../services/avatar.ts";
 import { destroyWorkspaceSandboxes } from "../sandbox/teardown.ts";
+import { deleteOrganizationRows } from "../services/organization-delete.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   orgScopeOf,
@@ -143,7 +144,7 @@ organization.delete(
     await Promise.all(
       workspaces.map(({ id }) => destroyWorkspaceSandboxes(id)),
     );
-    await db.delete(organizationTable).where(eq(organizationTable.id, orgId));
+    await db.transaction((tx) => deleteOrganizationRows(tx, orgId));
     await deleteStoredPrefix(organizationStorageKeyPrefix({ orgId }));
     await Promise.all(agents.map(({ avatarKey }) => deleteAvatar(avatarKey)));
     return c.json({ message: "Organization deleted" });
