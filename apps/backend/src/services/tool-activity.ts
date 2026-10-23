@@ -15,9 +15,10 @@ export type ToolActivityEvent = {
 };
 
 /**
- * Wraps each tool's `execute` so the surrounding run sees a `start` event
- * before it runs and an `end` event once it settles — on every exit path,
- * including a synchronous throw and a consumer that drains an async generator.
+ * Wraps each tool's `execute` so the surrounding run sees a `start` event as
+ * it runs and exactly one matching `end` event once it settles — on every exit
+ * path, including a synchronous throw and a consumer that drains, returns from
+ * or throws into an async generator.
  *
  * Activity events and nothing else. Result normalization (issue #321) used to
  * ride here too, which mounted a correctness guarantee on an optional
@@ -43,9 +44,9 @@ export const wrapToolsWithActivity = (
     wrapped[name] = {
       ...t,
       execute: (args: unknown, options: unknown) => {
-        const startedAt = Date.now();
-        onActivity({ phase: "start", toolName: name });
-        const finish = () => {
+        const calledAt = Date.now();
+        const start = () => onActivity({ phase: "start", toolName: name });
+        const finish = (startedAt: number) => {
           onActivity({
             phase: "end",
             toolName: name,
@@ -56,17 +57,14 @@ export const wrapToolsWithActivity = (
         try {
           result = runExecute.call(t, args, options);
         } catch (err) {
-          finish();
+          start();
+          finish(calledAt);
           throw err;
         }
-        if (
-          result != null &&
-          typeof (result as { then?: unknown }).then === "function"
-        ) {
-          return (result as Promise<unknown>).finally(finish);
-        }
-        // Async iterable / generator path (sub-agent tools). Wrap it so the
-        // "end" event fires once the consumer drains the iterator.
+        // Async iterable / generator path (sub-agent tools). A generator's
+        // `finally` only runs once it has been started, so `start` waits for
+        // the first pull too: an iterable that is never read emits neither
+        // event, and one that is read always emits both.
         if (
           result != null &&
           typeof (result as Record<symbol, unknown>)[Symbol.asyncIterator] ===
@@ -74,16 +72,25 @@ export const wrapToolsWithActivity = (
         ) {
           const inner = result as AsyncIterable<unknown>;
           return (async function* () {
+            const pulledAt = Date.now();
+            start();
             try {
               for await (const part of inner) {
                 yield part;
               }
             } finally {
-              finish();
+              finish(pulledAt);
             }
           })();
         }
-        finish();
+        start();
+        if (
+          result != null &&
+          typeof (result as { then?: unknown }).then === "function"
+        ) {
+          return (result as Promise<unknown>).finally(() => finish(calledAt));
+        }
+        finish(calledAt);
         return result;
       },
     };

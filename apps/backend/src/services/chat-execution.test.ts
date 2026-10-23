@@ -2872,14 +2872,17 @@ describe("chat-execution", () => {
   describe("wrapToolsWithActivity", () => {
     const noop = () => {};
 
-    const wrapSingle = (execute: unknown) => {
+    const wrapSingle = (
+      execute: unknown,
+      onActivity: (event: ToolActivityEvent) => void = noop,
+    ) => {
       const wrapped = wrapToolsWithActivity(
         {
           t: { execute } as unknown as Parameters<
             typeof wrapToolsWithActivity
           >[0]["t"],
         },
-        noop,
+        onActivity,
       );
       return (wrapped.t as { execute: (a: unknown, o: unknown) => unknown })
         .execute;
@@ -2923,17 +2926,10 @@ describe("chat-execution", () => {
 
     it("brackets a resolved result with start and end activity events", async () => {
       const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
-      const wrapped = wrapToolsWithActivity(
-        {
-          t: {
-            execute: () => Promise.resolve({ createdAt: new Date() }),
-          } as unknown as Parameters<typeof wrapToolsWithActivity>[0]["t"],
-        },
+      await wrapSingle(
+        () => Promise.resolve({ createdAt: new Date() }),
         onActivity,
-      );
-      await (
-        wrapped.t as { execute: (a: unknown, o: unknown) => Promise<unknown> }
-      ).execute({}, {});
+      )({}, {});
       expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
         "start",
         "end",
@@ -2946,28 +2942,92 @@ describe("chat-execution", () => {
     // for the rest of the run.
     it("emits the end event once an async-iterable tool is drained", async () => {
       const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
-      const wrapped = wrapToolsWithActivity(
-        {
-          t: {
-            execute: async function* () {
-              await Promise.resolve();
-              yield { part: 1 };
-            },
-          } as unknown as Parameters<typeof wrapToolsWithActivity>[0]["t"],
-        },
-        onActivity,
-      );
-      const iterable = (
-        wrapped.t as {
-          execute: (a: unknown, o: unknown) => AsyncIterable<unknown>;
-        }
-      ).execute({}, {});
-      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual(["start"]);
+      const iterable = wrapSingle(async function* () {
+        await Promise.resolve();
+        yield { part: 1 };
+      }, onActivity)({}, {}) as AsyncIterable<unknown>;
       for await (const _ of iterable) void _;
       expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
         "start",
         "end",
       ]);
+    });
+
+    const wrapGenerator = (
+      onActivity: (event: ToolActivityEvent) => void,
+      execute: () => AsyncGenerator<unknown>,
+    ) => wrapSingle(execute, onActivity)({}, {}) as AsyncGenerator<unknown>;
+
+    // A generator's `finally` only runs once it has started, so a `start`
+    // emitted before the first pull would never be paired with an `end` if the
+    // consumer never reads it — leaving the run's stall timer held.
+    it("emits neither start nor end for an async-iterable tool that is never iterated", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      wrapGenerator(onActivity, async function* () {
+        await Promise.resolve();
+        yield { part: 1 };
+      });
+      await Promise.resolve();
+      expect(onActivity).not.toHaveBeenCalled();
+    });
+
+    it("emits neither start nor end for an async-iterable tool returned before its first pull", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const iterator = wrapGenerator(onActivity, async function* () {
+        await Promise.resolve();
+        yield { part: 1 };
+      });
+      await iterator.return(undefined);
+      expect(onActivity).not.toHaveBeenCalled();
+    });
+
+    it("pairs start and end once when an iterated async-iterable tool is returned early", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const iterator = wrapGenerator(onActivity, async function* () {
+        await Promise.resolve();
+        yield { part: 1 };
+        yield { part: 2 };
+      });
+      await iterator.next();
+      await iterator.return(undefined);
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
+        "start",
+        "end",
+      ]);
+    });
+
+    it("pairs start and end once when an iterated async-iterable tool is thrown into", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const iterator = wrapGenerator(onActivity, async function* () {
+        await Promise.resolve();
+        yield { part: 1 };
+        yield { part: 2 };
+      });
+      await iterator.next();
+      await expect(iterator.throw(new Error("boom"))).rejects.toThrow("boom");
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
+        "start",
+        "end",
+      ]);
+    });
+
+    it("measures an async-iterable tool's duration from its first pull", async () => {
+      vi.useFakeTimers();
+      try {
+        const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+        const iterator = wrapGenerator(onActivity, async function* () {
+          await Promise.resolve();
+          yield { part: 1 };
+        });
+        vi.advanceTimersByTime(5000);
+        await iterator.next();
+        vi.advanceTimersByTime(200);
+        await iterator.next();
+        const end = onActivity.mock.calls.find(([e]) => e.phase === "end");
+        expect(end?.[0].durationMs).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
