@@ -7,7 +7,9 @@ import {
   renderList,
   resetListHarness,
   stubAcceptedSave,
+  stubRejectedSave,
   swrMock,
+  toastError,
 } from "@/test/list-test-harness";
 import { selectOption } from "@/test/test-utils";
 
@@ -80,6 +82,22 @@ beforeEach(() => {
 });
 
 describe("RemoveMemberDialog", () => {
+  it("toasts a last-admin refusal and stays open", async () => {
+    mockScopedSWR({ "/workspaces": [] }, { strict: true });
+    stubRejectedSave("Cannot remove the last organization admin", 409);
+    await renderDialog([olive, nina]);
+
+    fireEvent.click(removeButton());
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "Cannot remove the last organization admin",
+      ),
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
   it("is a plain confirmation for a member who owns no Workspaces, and never claims to delete any", async () => {
     mockScopedSWR(
       { "/workspaces": [workspace("ws-x", "Nina's", "u-new")] },

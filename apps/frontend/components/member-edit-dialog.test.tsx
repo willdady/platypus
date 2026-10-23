@@ -87,4 +87,17 @@ describe("MemberEditDialog", () => {
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
+  // A last-admin refusal is a 409 conflict, not a field error.
+  it("toasts a last-admin refusal and stays open", async () => {
+    stubRejectedSave("Cannot demote the last organization admin", 409);
+    await changeRoleToAdmin();
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "Cannot demote the last organization admin",
+      ),
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
 });
