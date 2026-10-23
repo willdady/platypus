@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
   mcpCreateSchema,
@@ -40,7 +40,7 @@ orgMcp.post(
   "/",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", mcpCreateSchema),
+  validate("json", mcpCreateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
@@ -79,7 +79,7 @@ orgMcp.put(
   "/:mcpId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", mcpUpdateSchema),
+  validate("json", mcpUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const mcpId = c.req.param("mcpId");
@@ -114,7 +114,7 @@ orgMcp.post(
   "/test",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", mcpTestSchema),
+  validate("json", mcpTestSchema),
   async (c) => {
     const data = c.req.valid("json");
     const { orgId } = orgScopeOf(c);
@@ -125,7 +125,7 @@ orgMcp.post(
 
     const result = await probeMcpConnection(data, storedMcp);
     if (!result.success) {
-      return c.json({ success: false, error: result.error }, result.status);
+      return c.json({ error: result.error }, result.status);
     }
     return c.json(result, 200);
   },

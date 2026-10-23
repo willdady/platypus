@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
@@ -34,7 +34,7 @@ organization.post(
   "/",
   requireAuth,
   requireSuperAdmin,
-  sValidator("json", organizationCreateSchema),
+  validate("json", organizationCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
     const record = await db
@@ -97,7 +97,7 @@ organization.put(
   "/:orgId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", organizationUpdateSchema),
+  validate("json", organizationUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");

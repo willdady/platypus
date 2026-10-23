@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
@@ -187,6 +187,32 @@ const findInvalidMemoryProviders = async (
   return invalid;
 };
 
+/**
+ * Why the Blueprint's Tier 2 settings can't be saved, naming each offending
+ * Provider, or `null` when they can. A setting may only point at a Provider the
+ * Blueprint also attaches (ADR-0008), so applying it never points a Workspace
+ * at an unattached Provider; and a memory Provider must expose the model its
+ * slot needs (parity with the Workspace route), so apply never stamps an
+ * unusable memory config.
+ */
+const tier2SettingsError = async (
+  data: Parameters<typeof tier2ProvidersNotAttached>[0],
+  items: BlueprintItem[],
+  orgId: string,
+): Promise<string | null> => {
+  const unattached = tier2ProvidersNotAttached(data, items);
+  if (unattached.length > 0) {
+    return `A blueprint's provider settings must reference providers the blueprint also attaches: ${unattached.join(", ")}`;
+  }
+  const invalidMemory = await findInvalidMemoryProviders(data, orgId);
+  if (invalidMemory.length > 0) {
+    return `A blueprint's memory provider setting references a provider without the required model: ${invalidMemory
+      .map((m) => `${m.field} ${m.providerId} ${m.reason}`)
+      .join("; ")}`;
+  }
+  return null;
+};
+
 /** Load the items of one or more blueprints, grouped by blueprint id. */
 const loadItemsByBlueprint = async (
   blueprintIds: string[],
@@ -214,7 +240,7 @@ orgBlueprint.post(
   "/",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", blueprintCreateSchema),
+  validate("json", blueprintCreateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const {
@@ -230,36 +256,13 @@ orgBlueprint.post(
 
     await requireSharedItems(deduped, orgId);
 
-    // Tier 2 provider settings may only reference providers the blueprint also
-    // attaches (ADR-0008) — so applying it never points a workspace at an
-    // unattached provider.
-    const unattached = tier2ProvidersNotAttached(c.req.valid("json"), deduped);
-    if (unattached.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint's provider settings must reference providers the blueprint also attaches",
-          invalidProviderIds: unattached,
-        },
-        422,
-      );
-    }
-
-    // A memory provider must expose the model its slot needs (parity with the
-    // workspace route), so apply never stamps an unusable memory config.
-    const invalidMemory = await findInvalidMemoryProviders(
+    const settingsError = await tier2SettingsError(
       c.req.valid("json"),
+      deduped,
       orgId,
     );
-    if (invalidMemory.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint's memory provider setting references a provider without the required model",
-          invalidMemoryProviders: invalidMemory,
-        },
-        422,
-      );
+    if (settingsError) {
+      return c.json({ error: settingsError }, 400);
     }
 
     const id = nanoid();
@@ -354,7 +357,7 @@ orgBlueprint.put(
   "/:blueprintId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", blueprintUpdateSchema),
+  validate("json", blueprintUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const blueprintId = c.req.param("blueprintId");
@@ -386,31 +389,13 @@ orgBlueprint.put(
 
     await requireSharedItems(deduped, orgId);
 
-    const unattached = tier2ProvidersNotAttached(c.req.valid("json"), deduped);
-    if (unattached.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint's provider settings must reference providers the blueprint also attaches",
-          invalidProviderIds: unattached,
-        },
-        422,
-      );
-    }
-
-    const invalidMemory = await findInvalidMemoryProviders(
+    const settingsError = await tier2SettingsError(
       c.req.valid("json"),
+      deduped,
       orgId,
     );
-    if (invalidMemory.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint's memory provider setting references a provider without the required model",
-          invalidMemoryProviders: invalidMemory,
-        },
-        422,
-      );
+    if (settingsError) {
+      return c.json({ error: settingsError }, 400);
     }
 
     try {
@@ -509,7 +494,7 @@ orgBlueprint.post(
   "/:blueprintId/apply",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", blueprintApplySchema),
+  validate("json", blueprintApplySchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const blueprintId = c.req.param("blueprintId");

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { z } from "zod";
 import { and, asc, desc, eq, gt } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -15,7 +15,7 @@ import {
   requireWorkspaceAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
 /**
@@ -49,32 +49,6 @@ const detailQuerySchema = z.object({
   sinceSeq: z.coerce.number().int().min(0).optional(),
 });
 
-/** Renders a validator failure as the `ValidationError` the central seam maps. */
-const rejectQuery = (result: {
-  success: boolean;
-  error?: ReadonlyArray<{ path?: ReadonlyArray<unknown>; message: string }>;
-}) => {
-  if (result.success) return;
-  throw new ValidationError(
-    `Invalid query parameters: ${(result.error ?? [])
-      .map((issue) => {
-        // Name the offending parameter — "Too big" alone leaves a caller
-        // guessing which of `limit` and `offset` it meant.
-        const path = (issue.path ?? [])
-          .map((segment) =>
-            String(
-              typeof segment === "object" && segment !== null
-                ? (segment as { key: unknown }).key
-                : segment,
-            ),
-          )
-          .join(".");
-        return path ? `${path}: ${issue.message}` : issue.message;
-      })
-      .join("; ")}`,
-  );
-};
-
 /**
  * The run as its list row reads it, joined to its Trigger for the name.
  *
@@ -107,10 +81,7 @@ triggerRun.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  // The validator's own 400 body is not the shape this API answers with, so a
-  // rejected query becomes a `ValidationError` and takes the central error seam
-  // like every other 400 (ADR-0010).
-  sValidator("query", listQuerySchema, rejectQuery),
+  validate("query", listQuerySchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const { triggerId, status, limit, offset } = c.req.valid("query");
@@ -152,7 +123,7 @@ triggerRun.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("query", detailQuerySchema, rejectQuery),
+  validate("query", detailQuerySchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const runId = c.req.param("runId");

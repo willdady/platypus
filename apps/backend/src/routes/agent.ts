@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
@@ -37,7 +37,7 @@ agent.post(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("json", agentCreateSchema),
+  validate("json", agentCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
@@ -103,7 +103,7 @@ agent.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("json", agentUpdateSchema),
+  validate("json", agentUpdateSchema),
   async (c) => {
     const agentId = c.req.param("agentId");
     const data = c.req.valid("json");

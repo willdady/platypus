@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -32,7 +32,7 @@ provider.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess("providerSelfManagement"),
-  sValidator("json", providerCreateSchema),
+  validate("json", providerCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
     const ctx = workspaceScopeOf(c);
@@ -103,7 +103,7 @@ provider.put(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess("providerSelfManagement"),
-  sValidator("json", providerUpdateSchema),
+  validate("json", providerUpdateSchema),
   async (c) => {
     const ctx = workspaceScopeOf(c);
     const providerId = c.req.param("providerId");

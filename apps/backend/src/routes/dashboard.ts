@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import {
   dashboardCreateSchema,
   dashboardUpdateSchema,
@@ -43,7 +43,7 @@ dashboard.get("/", ...secured, async (c) =>
 dashboard.post(
   "/",
   ...secured,
-  sValidator("json", dashboardCreateSchema),
+  validate("json", dashboardCreateSchema),
   async (c) => {
     const result = await createDashboard(
       db,
@@ -62,7 +62,7 @@ dashboard.get("/:dashboardId", ...secured, async (c) => {
 dashboard.put(
   "/:dashboardId",
   ...secured,
-  sValidator("json", dashboardUpdateSchema),
+  validate("json", dashboardUpdateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     return c.json(
@@ -96,7 +96,7 @@ dashboard.get("/:dashboardId/widgets", ...secured, async (c) => {
 dashboard.post(
   "/:dashboardId/widgets",
   ...secured,
-  sValidator("json", widgetCreateSchema),
+  validate("json", widgetCreateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     return c.json(
@@ -113,7 +113,7 @@ dashboard.post(
 dashboard.put(
   "/:dashboardId/widgets/:widgetId",
   ...secured,
-  sValidator("json", widgetUpdateDataSchema),
+  validate("json", widgetUpdateDataSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const body = c.req.valid("json");

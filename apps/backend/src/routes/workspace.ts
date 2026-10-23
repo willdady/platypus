@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
@@ -42,7 +42,7 @@ workspace.post(
   "/",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", workspaceCreateSchema),
+  validate("json", workspaceCreateSchema),
   async (c) => {
     const user = c.get("user")!;
     const { orgId } = orgScopeOf(c);
@@ -192,7 +192,7 @@ workspace.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("json", workspaceUpdateSchema),
+  validate("json", workspaceUpdateSchema),
   async (c) => {
     const scope = workspaceScopeOf(c);
     const { workspaceId } = scope;
@@ -301,7 +301,7 @@ workspace.post(
   requireAuth,
   requireOrgAccess(["admin"]),
   requireWorkspaceAccess,
-  sValidator("json", workspaceTransferSchema),
+  validate("json", workspaceTransferSchema),
   async (c) => {
     const { orgId, workspaceId } = workspaceScopeOf(c);
     await transferWorkspace({

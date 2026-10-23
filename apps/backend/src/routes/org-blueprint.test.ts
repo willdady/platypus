@@ -131,7 +131,7 @@ describe("Organization Blueprint Routes", () => {
       expect(json.context).toBe("Default context");
     });
 
-    it("422s when a Tier 2 provider is not attached by the blueprint", async () => {
+    it("400s, naming it, when a Tier 2 provider is not attached by the blueprint", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       // Empty items → no item query; the Tier 2 provider is not attached.
@@ -145,16 +145,16 @@ describe("Organization Blueprint Routes", () => {
         }),
         headers: { "Content-Type": "application/json" },
       });
-      expect(res.status).toBe(422);
-      expect(
-        ((await res.json()) as { invalidProviderIds: string[] })
-          .invalidProviderIds,
-      ).toEqual(["prov-x"]);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error:
+          "A blueprint's provider settings must reference providers the blueprint also attaches: prov-x",
+      });
     });
 
     // Parity with the workspace route: a memory provider must expose the model
     // its slot needs, so apply never stamps an unusable memory config.
-    it("422s when the memory embedding provider has no embedding model", async () => {
+    it("400s, naming it, when the memory embedding provider has no embedding model", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.where
@@ -177,14 +177,11 @@ describe("Organization Blueprint Routes", () => {
         }),
         headers: { "Content-Type": "application/json" },
       });
-      expect(res.status).toBe(422);
-      const json = (await res.json()) as Record<string, unknown>;
-      expect(json.invalidMemoryProviders).toEqual([
-        expect.objectContaining({
-          field: "memoryEmbeddingProviderId",
-          providerId: "prov-1",
-        }),
-      ]);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error:
+          "A blueprint's memory provider setting references a provider without the required model: memoryEmbeddingProviderId prov-1 does not have an embedding model configured",
+      });
     });
 
     it("creates when the memory embedding provider has an embedding model", async () => {
@@ -381,7 +378,7 @@ describe("Organization Blueprint Routes", () => {
       expect(res.status).toBe(409);
     });
 
-    it("422s when a Tier 2 provider is not attached by the blueprint", async () => {
+    it("400s, naming it, when a Tier 2 provider is not attached by the blueprint", async () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
@@ -396,9 +393,10 @@ describe("Organization Blueprint Routes", () => {
         }),
         headers: { "Content-Type": "application/json" },
       });
-      expect(res.status).toBe(422);
-      expect(await res.json()).toMatchObject({
-        invalidProviderIds: ["prov-1"],
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error:
+          "A blueprint's provider settings must reference providers the blueprint also attaches: prov-1",
       });
       expect(mockDb.transaction).not.toHaveBeenCalled();
     });

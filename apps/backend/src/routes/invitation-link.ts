@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
   invitation as invitationTable,
@@ -138,7 +138,7 @@ invitationLink.get("/:token", async (c) => {
  */
 invitationLink.post(
   "/:token/register",
-  sValidator("json", invitationRedemptionRegisterSchema),
+  validate("json", invitationRedemptionRegisterSchema),
   async (c) => {
     const token = c.req.param("token");
     const { name, password } = c.req.valid("json");

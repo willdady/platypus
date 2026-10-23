@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
@@ -28,7 +28,7 @@ invitation.post(
   "/",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", invitationCreateSchema),
+  validate("json", invitationCreateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");

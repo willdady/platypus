@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
 import { agentUpdateSchema } from "@platypus/schemas";
@@ -18,6 +18,7 @@ import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
 import { agentWithAvatarUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import type { Variables } from "../server.ts";
+import { NotFoundError } from "../errors.ts";
 
 // Org-scoped Agents are Shared resources (ADR-0007): a single source of truth
 // defined once at Organization scope (via Promote) and referenced by Workspaces
@@ -49,7 +50,7 @@ orgAgent.put(
   "/:agentId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", agentUpdateSchema),
+  validate("json", agentUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const agentId = c.req.param("agentId");
@@ -65,13 +66,16 @@ orgAgent.put(
       data,
     );
     if ("error" in result) {
-      return c.json(
-        {
-          error: result.error,
-          ...(result.blockers && { blockers: result.blockers }),
-        },
-        result.blockers ? 422 : 400,
-      );
+      // A reference that isn't Shared reads as not found here; the message
+      // names each one so nothing is lost by dropping the list.
+      if (result.blockers) {
+        throw new NotFoundError(
+          `${result.error}: ${result.blockers
+            .map((b) => `${b.name} (${b.type})`)
+            .join(", ")}`,
+        );
+      }
+      return c.json({ error: result.error }, 400);
     }
     return c.json(agentWithAvatarUrl(result.row, baseUrl), 200);
   },

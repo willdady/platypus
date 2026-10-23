@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import {
   orgGateAccessUpdateSchema,
   type OrgGateAccessUpdate,
@@ -36,7 +36,7 @@ export const mountGateAccess = <T>(
     "/access",
     requireAuth,
     requireOrgAccess(["admin"]),
-    sValidator("json", orgGateAccessUpdateSchema),
+    validate("json", orgGateAccessUpdateSchema),
     async (c) => {
       const { orgId } = orgScopeOf(c);
       const user = c.get("user")!;

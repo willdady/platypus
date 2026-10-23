@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import {
@@ -95,7 +95,7 @@ kanban.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", kanbanBoardCreateSchema),
+  validate("json", kanbanBoardCreateSchema),
   async (c) => {
     const board = await createBoard(
       db,
@@ -124,7 +124,7 @@ kanban.put(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", kanbanBoardUpdateSchema),
+  validate("json", kanbanBoardUpdateSchema),
   async (c) => {
     const board = await updateBoard(
       db,
@@ -172,7 +172,7 @@ kanban.put(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", kanbanColumnReorderSchema),
+  validate("json", kanbanColumnReorderSchema),
   async (c) => {
     await reorderColumns(
       db,
@@ -191,7 +191,7 @@ kanban.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", kanbanColumnCreateSchema),
+  validate("json", kanbanColumnCreateSchema),
   async (c) => {
     const column = await createColumn(
       db,
@@ -210,7 +210,7 @@ kanban.put(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", kanbanColumnUpdateSchema),
+  validate("json", kanbanColumnUpdateSchema),
   async (c) => {
     const column = await renameColumn(
       db,
@@ -250,7 +250,7 @@ kanban.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", kanbanCardCreateSchema),
+  validate("json", kanbanCardCreateSchema),
   async (c) => {
     const { card } = await createCard(db, contextOf(c), {
       ...c.req.valid("json"),
@@ -268,7 +268,7 @@ kanban.put(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", kanbanCardUpdateSchema),
+  validate("json", kanbanCardUpdateSchema),
   async (c) => {
     const { card } = await updateCard(
       db,
@@ -288,7 +288,7 @@ kanban.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", kanbanCardMoveSchema),
+  validate("json", kanbanCardMoveSchema),
   async (c) => {
     const { card } = await moveCard(db, contextOf(c), {
       cardId: c.req.param("cardId"),
@@ -369,7 +369,7 @@ kanban.post(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("json", kanbanCardCommentCreateSchema),
+  validate("json", kanbanCardCommentCreateSchema),
   async (c) => {
     const comment = await createComment(
       db,
@@ -389,7 +389,7 @@ kanban.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("json", kanbanCardCommentUpdateSchema),
+  validate("json", kanbanCardCommentUpdateSchema),
   async (c) => {
     const commentId = c.req.param("commentId");
     const existing = await requireCommentOnCard(c, commentId);

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -27,7 +27,7 @@ orgProvider.post(
   "/",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", providerCreateSchema),
+  validate("json", providerCreateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
@@ -67,7 +67,7 @@ orgProvider.put(
   "/:providerId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", providerUpdateSchema),
+  validate("json", providerUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const providerId = c.req.param("providerId");

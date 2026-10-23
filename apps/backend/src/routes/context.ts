@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
@@ -81,7 +81,7 @@ context.get("/:contextId", requireAuth, async (c) => {
 context.post(
   "/",
   requireAuth,
-  sValidator("json", contextCreateSchema),
+  validate("json", contextCreateSchema),
   async (c) => {
     const user = c.get("user")!;
     const data = c.req.valid("json");
@@ -124,7 +124,7 @@ context.post(
 context.put(
   "/:contextId",
   requireAuth,
-  sValidator("json", contextUpdateSchema),
+  validate("json", contextUpdateSchema),
   async (c) => {
     const user = c.get("user")!;
     const contextId = c.req.param("contextId");

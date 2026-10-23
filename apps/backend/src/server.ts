@@ -238,7 +238,10 @@ app.onError((error, c) => {
   const mapped = mapError(error);
   if (mapped) {
     return c.json(
-      { error: mapped.message, files: mapped.files },
+      {
+        error: mapped.message,
+        ...(mapped.files && { files: mapped.files }),
+      },
       mapped.status,
     );
   }

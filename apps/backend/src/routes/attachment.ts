@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { attachment as attachmentTable } from "../db/schema.ts";
 import { attachmentCreateSchema } from "@platypus/schemas";
@@ -43,7 +43,7 @@ attachment.post(
   requireAuth,
   requireOrgAccess(["admin"]),
   requireWorkspaceAccess,
-  sValidator("json", attachmentCreateSchema),
+  validate("json", attachmentCreateSchema),
   async (c) => {
     const { orgId, workspaceId } = workspaceScopeOf(c);
     const { resourceType, resourceId } = c.req.valid("json");
