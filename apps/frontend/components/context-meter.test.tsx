@@ -70,7 +70,8 @@ describe("ContextMeterEntrance", () => {
     const entrance = entranceFor("meter");
     // The collapsed row starts at the height of its own `-mb-3` bleed, so the
     // two cancel and it occupies nothing without pulling the toolbar upward.
-    expect(entrance).toHaveStyle({ height: "0.75rem", opacity: "0" });
+    // 0.75rem, which the computed style reports in px.
+    expect(entrance).toHaveStyle({ height: "12px", opacity: "0" });
 
     await waitFor(() =>
       expect(entrance).toHaveStyle({ height: "auto", opacity: "1" }),

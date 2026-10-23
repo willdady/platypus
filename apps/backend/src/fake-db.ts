@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { vi, type Mock } from "vitest";
 
 /**
@@ -873,9 +874,14 @@ export const createFakeDb = (
       delete: remove,
       execute,
       async transaction<T>(callback: (tx: unknown) => Promise<T>): Promise<T> {
+        const before = structuredClone(store);
         const staged = structuredClone(store);
         const result = await callback(makeHandle(staged));
+        // Only the tables it wrote: copying back the rest would undo writes
+        // made outside it while it ran.
+        // ponytail: a table both sides wrote still loses the outside write.
         for (const [name, rows] of Object.entries(staged)) {
+          if (isDeepStrictEqual(rows, before[name])) continue;
           store[name] ??= [];
           store[name].length = 0;
           store[name].push(...rows);

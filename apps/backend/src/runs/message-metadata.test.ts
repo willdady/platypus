@@ -230,7 +230,7 @@ describe("Context occupancy over a real multi-step stream", () => {
       abortSignal: controller.signal,
       // Cancelled the moment the first step lands, so the turn ends with one
       // step's reading taken and no terminal finish part.
-      onStepFinish: () => controller.abort(),
+      onStepEnd: () => controller.abort(),
     });
 
     const message = await lastSnapshot(uiStreamOf(result));
@@ -440,7 +440,7 @@ describe("Token usage over a real multi-step stream", () => {
       tools: { ping },
       stopWhen: [stepCountIs(5)],
       abortSignal: controller.signal,
-      onStepFinish: () => controller.abort(),
+      onStepEnd: () => controller.abort(),
     });
 
     const message = await lastSnapshot(
@@ -651,7 +651,7 @@ describe("Preparation and Model durations", () => {
       abortSignal: controller.signal,
       // Cancelled the moment the first step lands, so the turn ends with only
       // that step's `finish-step` reading taken and no terminal finish part.
-      onStepFinish: () => controller.abort(),
+      onStepEnd: () => controller.abort(),
     });
 
     const message = await lastSnapshot(
@@ -852,7 +852,7 @@ describe("search availability over a real stream", () => {
       tools: { ping },
       stopWhen: [stepCountIs(5)],
       abortSignal: controller.signal,
-      onStepFinish: () => controller.abort(),
+      onStepEnd: () => controller.abort(),
     });
 
     const message = await lastSnapshot(

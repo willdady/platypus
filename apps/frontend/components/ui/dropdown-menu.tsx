@@ -36,7 +36,6 @@ const DropdownMenuContext =
 function DropdownMenu({
   open: openProp,
   defaultOpen,
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- Radix types this callback prop as a method; it never reads `this`.
   onOpenChange,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {

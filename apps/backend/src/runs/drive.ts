@@ -328,7 +328,7 @@ const runStreamedDrive = (
 
   const result = streamText({
     ...modelArgs({ ...opts, plan }, noProgress),
-    onStepFinish: (step: RunStep) => {
+    onStepEnd: (step: RunStep) => {
       onStepFinish?.(step);
       run.onStep(step);
     },
@@ -629,7 +629,7 @@ export const driveOnce = async (
     const result = await withAgentCausation(opts.agentId, async () => {
       const streamed = streamText({
         ...modelArgs({ ...opts, plan }, noProgress),
-        onStepFinish: (step: RunStep) => run.onStep(step),
+        onStepEnd: (step: RunStep) => run.onStep(step),
         // The only thing that proves a long-running step is still alive —
         // same as the streamed drives (issue #552).
         onChunk: () => {
