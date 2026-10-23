@@ -231,9 +231,10 @@ const fakeGenerateResult = {
 /**
  * What the headless drive reads off a `streamText` result: the promise-valued
  * terminal fields. The UI message stream it drains comes from the mocked
- * `toUIMessageStream` (empty — these tests drive the callbacks by hand). `settleAfter`, when given, gates every field
- * on it, so a test can make the model "hang" until a signal fires and fail the
- * fields with that signal's reason.
+ * `toUIMessageStream` (empty — these tests drive the callbacks by hand).
+ * `settleAfter`, when given, gates every field on it, so a test can make the
+ * model "hang" until a signal fires and fail the fields with that signal's
+ * reason.
  */
 const streamResultOf = (
   data: {
@@ -1366,10 +1367,10 @@ const primeStreamText = () => {
   );
   mockToUIMessageStream.mockImplementation(
     (uiOpts: {
-      onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
+      onEnd: (ctx: { messages: unknown[] }) => Promise<void> | void;
       messageMetadata: (opts: { part: MetadataPart }) => unknown;
     }) => {
-      streamHarness.onFinish = uiOpts.onFinish;
+      streamHarness.onFinish = uiOpts.onEnd;
       streamHarness.messageMetadata = uiOpts.messageMetadata;
       return emptyUIStream();
     },
@@ -1871,9 +1872,9 @@ describe("AgentRunner.stream — success & interruption", () => {
     );
     mockToUIMessageStream.mockImplementationOnce(
       (uiOpts: {
-        onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
+        onEnd: (ctx: { messages: unknown[] }) => Promise<void> | void;
       }) => {
-        streamHarness.onFinish = uiOpts.onFinish;
+        streamHarness.onFinish = uiOpts.onEnd;
         return emptyUIStream();
       },
     );

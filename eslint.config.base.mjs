@@ -70,7 +70,8 @@ export function baseConfig(tsconfigRootDir) {
         "@typescript-eslint/unbound-method": "error",
 
         // A deprecated API is one the next major of its library removes. Move
-        // to the documented replacement when it lands, not during the upgrade.
+        // to its documented replacement as soon as the deprecation appears, so
+        // the major upgrade itself is not also a migration.
         "@typescript-eslint/no-deprecated": "error",
       },
     },
