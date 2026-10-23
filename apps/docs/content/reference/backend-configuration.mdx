@@ -54,7 +54,7 @@ For a guided walkthrough of configuring a deployment, see
 
 | Variable                        | Purpose                                                                                                                                                                                                                                                                       | Default                                                                          | Required |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------- |
-| `PLATYPUS_PLUGINS`              | Comma-separated list of the **gate-able** Plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, plus any third-party ones.                                                                                                          | _(unset ⇒ no gate-able Plugins;_ `.example.env` _ships_ `@platypus/web-fetch`_)_ | No       |
+| `PLATYPUS_PLUGINS`              | Comma-separated list of the **gate-able** Plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, `@platypus/exa`, plus any third-party ones.                                                                                         | _(unset ⇒ no gate-able Plugins;_ `.example.env` _ships_ `@platypus/web-fetch`_)_ | No       |
 | `PLATYPUS_PLUGIN_CONFIG_<NAME>` | One Plugin's deploy-time config and credentials as a JSON object, `{ "config": {…}, "credentials": {…} }`. `<NAME>` is the Plugin's manifest name without `@platypus/`, uppercased, with `-` as `_`: `PLATYPUS_PLUGIN_CONFIG_DOCKER`, `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX`. | _(unset)_                                                                        | No       |
 | `PLATYPUS_PLUGIN_CONFIG`        | **Deprecated; removed in the next major release.** Every Plugin's config in one JSON object keyed by manifest name. Migrate by moving each key's value into that Plugin's `PLATYPUS_PLUGIN_CONFIG_<NAME>`.                                                                    | _(unset)_                                                                        | No       |
 
@@ -391,6 +391,10 @@ default is permissive, are in
 `robots.txt` handling for the fetch tool is Plugin config, not a variable: set
 `config.ignoreRobotsTxt` in `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`
 (see [Plugins](#plugins)).
+
+The Exa Web-search backend's API key is Plugin credentials, not a variable: set
+`credentials.apiKey` in `PLATYPUS_PLUGIN_CONFIG_EXA`
+(see [Configuration → Web search](/self-hosting/configuration#web-search)).
 
 ## Storage
 
