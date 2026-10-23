@@ -34,6 +34,7 @@ import {
   attachmentCreateSchema,
   chatSubmitSchema,
   chatSchema,
+  triggerRunSchema,
   chatUpdateSchema,
   agentCreateSchema,
   agentUpdateSchema,
@@ -2064,6 +2065,22 @@ describe("sampling parameter bounds (#1144)", () => {
     expect(chatSubmitSchema.safeParse({ ...turn, topP: 1 }).success).toBe(true);
     expect(chatSubmitSchema.safeParse({ ...turn, topP: 1.5 }).success).toBe(
       false,
+    );
+  });
+});
+
+describe("unchecked payload fields (#1630)", () => {
+  // Typed for consumers but not checked: a stored Chat or Trigger run event
+  // must never fail to parse because its payload's shape moved on.
+  const payloads = [undefined, null, [], [{ id: "m1", parts: [] }], {}, "x", 1];
+
+  it.each(payloads)("chatSchema.messages accepts %j", (value) => {
+    expect(chatSchema.shape.messages.safeParse(value).success).toBe(true);
+  });
+
+  it.each(payloads)("triggerRunSchema.eventData accepts %j", (value) => {
+    expect(triggerRunSchema.shape.eventData.safeParse(value).success).toBe(
+      true,
     );
   });
 });

@@ -10,7 +10,7 @@ import {
 import { contextCreateSchema, contextUpdateSchema } from "@platypus/schemas";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { userMayUseWorkspace } from "../middleware/authorization.ts";
+import { userMayUseWorkspace, userOf } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { ConflictError, isUniqueViolation } from "../errors.ts";
 
@@ -18,7 +18,7 @@ const context = new Hono<{ Variables: Variables }>();
 
 /** List all contexts for the current user */
 context.get("/", requireAuth, async (c) => {
-  const user = c.get("user")!;
+  const user = userOf(c);
 
   const results = await db
     .select({
@@ -45,7 +45,7 @@ context.get("/", requireAuth, async (c) => {
 
 /** Get a specific context by ID */
 context.get("/:contextId", requireAuth, async (c) => {
-  const user = c.get("user")!;
+  const user = userOf(c);
   const contextId = c.req.param("contextId");
 
   const result = await db
@@ -83,7 +83,7 @@ context.post(
   requireAuth,
   validate("json", contextCreateSchema),
   async (c) => {
-    const user = c.get("user")!;
+    const user = userOf(c);
     const data = c.req.valid("json");
 
     // This route hangs off `/users/me`, so there is no Organization in its path
@@ -126,7 +126,7 @@ context.put(
   requireAuth,
   validate("json", contextUpdateSchema),
   async (c) => {
-    const user = c.get("user")!;
+    const user = userOf(c);
     const contextId = c.req.param("contextId");
     const data = c.req.valid("json");
 
@@ -151,7 +151,7 @@ context.put(
 
 /** Delete a context */
 context.delete("/:contextId", requireAuth, async (c) => {
-  const user = c.get("user")!;
+  const user = userOf(c);
   const contextId = c.req.param("contextId");
 
   const result = await db

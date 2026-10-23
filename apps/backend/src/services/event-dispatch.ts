@@ -18,6 +18,7 @@ import type {
   WebhookEventPayload,
 } from "@platypus/schemas";
 import { webhookEventEntity, webhookEventScope } from "@platypus/schemas";
+import { errorMessage } from "../utils/error-message.ts";
 
 /**
  * The debounce bucket an event with no single entity falls back to. Bulk
@@ -76,7 +77,7 @@ export function dispatchWebhookEvent(
         {
           workspaceId,
           event: payload.event,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         },
         "Webhook event dispatch failed unexpectedly",
       );
@@ -170,7 +171,7 @@ export function dispatchEvent(
           logger.error(
             {
               triggerId: trigger.id,
-              error: error instanceof Error ? error.message : String(error),
+              error: errorMessage(error),
             },
             "Skipped a malformed event trigger",
           );
@@ -257,7 +258,7 @@ export function dispatchEvent(
         {
           workspaceId,
           event,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         },
         "Event dispatch failed unexpectedly",
       );

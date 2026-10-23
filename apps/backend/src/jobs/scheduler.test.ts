@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { sql, type SQL } from "drizzle-orm";
+import { type SQL } from "drizzle-orm";
 
 /**
  * Unlike most backend tests, this file does NOT import `../test-utils.ts`:
@@ -50,7 +50,6 @@ import {
   recoverStuckChats,
   recoverStuckTriggers,
   resetTokenReminderSweep,
-  runWithLock,
   scheduleAligned,
   startScheduler,
   stuckTriggerCutoff,
@@ -128,7 +127,7 @@ type FakeClient = {
  * connection comes next, as a real pool's does.
  *
  * `held` maps a lock ID to the connection holding it. A lock still in it after
- * `runWithLock` returns is one no peer can take until pg-pool closes that
+ * the scheduler's tick returns is one no peer can take until pg-pool closes that
  * connection.
  */
 const fakePg = ({ roundTripMs = 0 }: { roundTripMs?: number } = {}) => {
@@ -469,103 +468,6 @@ describe("sweepTokenRemindersIfDue", () => {
     await expect(sweepTokenRemindersIfDue(T0)).rejects.toThrow("db down");
     await sweepTokenRemindersIfDue(T0 + 60_000);
     expect(mockSendReminders).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("runWithLock", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("skips the work when a peer holds the lock, and hands the connection back", async () => {
-    const pg = fakePg();
-    pg.held.set(42, 999);
-    const work = vi.fn();
-
-    await runWithLock(42, work);
-
-    expect(work).not.toHaveBeenCalled();
-    expect(pg.held.get(42)).toBe(999);
-    expect(pg.checkedOut).toHaveLength(1);
-    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
-  });
-
-  it("releases the lock even when the work issues its own queries", async () => {
-    const pg = fakePg();
-    const work = vi.fn(async () => {
-      // Each of these lands on some pooled connection, as the sweeps' do.
-      // An even count matters: with the pool's two idle connections taken in
-      // turn, a lock and unlock sent through the pool end up on different
-      // ones, which is the bug this pins.
-      await mockDb.execute(sql`SELECT 1`);
-      await mockDb.execute(sql`SELECT 2`);
-    });
-
-    await runWithLock(42, work);
-
-    expect(work).toHaveBeenCalledTimes(1);
-    expect(pg.held.has(42)).toBe(false);
-    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
-    expect(mockLogger.warn).not.toHaveBeenCalled();
-  });
-
-  it("lets the next tick take the lock again", async () => {
-    const pg = fakePg();
-    const work = vi.fn(async () => {
-      await mockDb.execute(sql`SELECT 1`);
-    });
-
-    await runWithLock(42, work);
-    await runWithLock(42, work);
-
-    expect(work).toHaveBeenCalledTimes(2);
-    expect(pg.held.has(42)).toBe(false);
-  });
-
-  it("releases the lock even when the work throws", async () => {
-    const pg = fakePg();
-
-    await expect(
-      runWithLock(42, () => Promise.reject(new Error("boom"))),
-    ).rejects.toThrow("boom");
-
-    expect(pg.held.has(42)).toBe(false);
-    // The unlock worked, so the connection is fit to go back to the pool.
-    expect(pg.checkedOut[0].release).toHaveBeenCalledWith(undefined);
-  });
-
-  it("discards the connection, and with it the lock, when the unlock fails", async () => {
-    const pg = fakePg();
-
-    await runWithLock(42, () => {
-      // The lock is already taken by now; only the unlock hits this.
-      const client = pg.checkedOut[0];
-      client.query = () => Promise.reject(new Error("connection reset"));
-      return Promise.resolve();
-    });
-
-    // Destroying the connection ends its session, which is what frees the
-    // lock when the unlock itself could not.
-    expect(pg.checkedOut[0].release).toHaveBeenCalledWith(expect.any(Error));
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ lockId: 42 }),
-      expect.any(String),
-    );
-  });
-
-  it("warns when the unlock reports the lock was not held", async () => {
-    const pg = fakePg();
-
-    await runWithLock(42, () => {
-      pg.held.delete(42);
-      return Promise.resolve();
-    });
-
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ lockId: 42 }),
-      expect.any(String),
-    );
-    expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
   });
 });
 

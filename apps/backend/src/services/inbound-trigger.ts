@@ -49,6 +49,7 @@ import {
   sendTokenNotice,
   touchToken,
 } from "./bearer-token.ts";
+import { isRecord } from "../utils/is-record.ts";
 
 /**
  * Inbound Triggers (ADR-0030): the backend's one ingress that is not a
@@ -279,9 +280,6 @@ export const authenticateInboundCall = async (
 export type InputValidation =
   { ok: true; inputs: Record<string, string> } | { ok: false; message: string };
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 /**
  * Validates a call's body — `{ "inputs": { "<name>": "<string>" } }` — against
  * the Trigger's declared inputs. A missing required input, an undeclared one,
@@ -294,7 +292,7 @@ export const validateInboundBody = (
   declared: InboundTriggerInput[],
 ): InputValidation => {
   if (body === undefined) body = {};
-  if (!isPlainObject(body)) {
+  if (!isRecord(body)) {
     return { ok: false, message: "The request body must be a JSON object." };
   }
   const unexpected = Object.keys(body).filter((key) => key !== "inputs");
@@ -307,7 +305,7 @@ export const validateInboundBody = (
   // Absent is a call with no inputs; present is taken as sent, so an explicit
   // `null` is refused like any other non-object rather than read as `{}`.
   const raw = Object.hasOwn(body, "inputs") ? body.inputs : {};
-  if (!isPlainObject(raw)) {
+  if (!isRecord(raw)) {
     return { ok: false, message: "'inputs' must be a JSON object." };
   }
 

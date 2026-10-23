@@ -3,10 +3,12 @@ import { Hono } from "hono";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 import type { Variables } from "../server.ts";
 import {
+  orgMembershipOf,
   orgScopeOf,
   requireOrgAccess,
   requireWorkspaceAccess,
   requireSuperAdmin,
+  userOf,
   workspaceScopeOf,
 } from "./authorization.ts";
 
@@ -278,6 +280,10 @@ describe("Authorization Middleware", () => {
       );
       app.get("/unguarded", (c) => c.json(workspaceScopeOf(c)));
       app.get("/unguarded-org", (c) => c.json(orgScopeOf(c)));
+      app.get("/organizations/:orgId/membership", requireOrgAccess(), (c) =>
+        c.json({ user: userOf(c).id, membership: orgMembershipOf(c) }),
+      );
+      app.get("/unguarded-membership", (c) => c.json(orgMembershipOf(c)));
       // Hono turns a handler throw into a 500; surface the message so the
       // wiring mistake is assertable.
       app.onError((err, c) => c.text(err.message, 500));
@@ -370,6 +376,39 @@ describe("Authorization Middleware", () => {
       const res = await app.request("/unguarded-org");
       expect(res.status).toBe(500);
       expect(await res.text()).toMatch(/requireOrgAccess/);
+    });
+
+    it("returns the user and org membership the middleware resolved", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        { organizationId: "org-1", userId: "u1", role: "member" },
+      ]);
+
+      const app = buildApp({ id: "u1", role: "user" });
+      const res = await app.request("/organizations/org-1/membership");
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        user: "u1",
+        membership: { organizationId: "org-1", userId: "u1", role: "member" },
+      });
+    });
+
+    it("throws from orgMembershipOf when the org middleware did not run", async () => {
+      const app = buildApp({ id: "u1", role: "user" });
+
+      const res = await app.request("/unguarded-membership");
+      expect(res.status).toBe(500);
+      expect(await res.text()).toMatch(/requireOrgAccess/);
+    });
+
+    it("throws from userOf when requireAuth did not run", async () => {
+      const app = new Hono<{ Variables: Variables }>();
+      app.get("/unauthenticated", (c) => c.json(userOf(c)));
+      app.onError((err, c) => c.text(err.message, 500));
+
+      const res = await app.request("/unauthenticated");
+      expect(res.status).toBe(500);
+      expect(await res.text()).toMatch(/requireAuth/);
     });
   });
 

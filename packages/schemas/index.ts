@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PlatypusUIMessage } from "./chat-ui-message.ts";
 
 const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -256,8 +257,11 @@ export const chatSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   title: z.string().min(3).max(30),
-  // The Active path, as `GET /:chatId` returns it (ADR-0026).
-  messages: z.any().optional(),
+  // The Active path, as `GET /:chatId` returns it (ADR-0026). Typed, not
+  // checked: the server writes every stored message, and the AI SDK's
+  // `validateUIMessages` owns their part shapes, so a Zod restatement would
+  // only drift from it.
+  messages: z.custom<PlatypusUIMessage[]>().optional(),
   // Every live message's place in the Chat's tree, oldest first. Returned
   // beside `messages` so a client can tell which messages have Alternatives.
   tree: z
@@ -2662,7 +2666,7 @@ export const triggerRunSchema = z.object({
   triggerId: z.string(),
   status: triggerRunStatusSchema,
   eventType: z.string().nullable().optional(),
-  eventData: z.any().nullable().optional(),
+  eventData: z.unknown().nullable().optional(),
   startedAt: z.date(),
   completedAt: z.date().nullable().optional(),
   errorMessage: z.string().nullable().optional(),

@@ -9,6 +9,7 @@ import {
 import { eq } from "drizzle-orm";
 import { auth } from "../auth.ts";
 import { requireAuth } from "../middleware/authentication.ts";
+import { userOf } from "../middleware/authorization.ts";
 import { acceptInvitationForUser } from "../services/invitation-accept.ts";
 import { NotFoundError } from "../errors.ts";
 import { acceptResultResponse } from "./invitation-accept-response.ts";
@@ -223,7 +224,7 @@ invitationLink.post(
  */
 invitationLink.post("/:token/accept", requireAuth, async (c) => {
   const token = c.req.param("token");
-  const user = c.get("user")!;
+  const user = userOf(c);
 
   const resolved = await resolveValidInvitationByToken(token);
   if (!resolved) {

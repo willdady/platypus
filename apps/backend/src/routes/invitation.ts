@@ -12,7 +12,11 @@ import {
 import { invitationCreateSchema } from "@platypus/schemas";
 import { eq, and, inArray, asc, lte } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
+import {
+  orgScopeOf,
+  requireOrgAccess,
+  userOf,
+} from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { ConflictError, NotFoundError, isUniqueViolation } from "../errors.ts";
 
@@ -32,7 +36,7 @@ invitation.post(
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
-    const user = c.get("user")!;
+    const user = userOf(c);
 
     // The invitation's email is canonical in lower case. better-auth lower-cases
     // `user.email` on sign-up, and every read matches this column with an exact

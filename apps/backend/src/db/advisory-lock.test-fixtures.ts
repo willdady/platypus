@@ -7,8 +7,9 @@ export type FakeLockClient = LockClient & {
 
 /**
  * A stand-in for a node-postgres Pool modelling what `withAdvisoryLock` turns
- * on: `pg_advisory_lock` blocks until no other connection holds the lock, and
- * only the connection holding a lock can release it.
+ * on: `pg_advisory_lock` blocks until no other connection holds the lock,
+ * `pg_try_advisory_lock` reports instead of blocking, and only the connection
+ * holding a lock can release it.
  */
 export const fakeLockPool = () => {
   const held = new Map<number, number>();
@@ -18,6 +19,13 @@ export const fakeLockPool = () => {
 
   const run = async (connection: number, text: string, values: unknown[]) => {
     const lockId = Number(values[0]);
+    if (text.includes("pg_try_advisory_lock")) {
+      const owner = held.get(lockId);
+      if (owner === undefined) held.set(lockId, connection);
+      return {
+        rows: [{ acquired: owner === undefined || owner === connection }],
+      };
+    }
     if (text.includes("pg_advisory_lock")) {
       while (held.has(lockId) && held.get(lockId) !== connection) {
         await new Promise<void>((resolve) =>

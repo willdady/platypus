@@ -29,14 +29,19 @@ async function runMigrations() {
   try {
     // Replicas starting together each run this script; the lock makes them
     // take turns, and each one after the first finds nothing left to apply.
-    await withAdvisoryLock(pool, ADVISORY_LOCK_IDS.migrations, async () => {
-      logger.info("Running migrations...");
+    await withAdvisoryLock(
+      pool,
+      ADVISORY_LOCK_IDS.migrations,
+      async () => {
+        logger.info("Running migrations...");
 
-      // Enable pgvector extension before running schema migrations
-      await db.execute("CREATE EXTENSION IF NOT EXISTS vector");
+        // Enable pgvector extension before running schema migrations
+        await db.execute("CREATE EXTENSION IF NOT EXISTS vector");
 
-      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-    });
+        await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+      },
+      { wait: true },
+    );
     logger.info("Migrations completed successfully!");
   } catch (error) {
     logger.error({ error }, "Migration failed");

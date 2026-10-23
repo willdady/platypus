@@ -243,5 +243,5 @@ export function snapshotMayLand(
 export function snapshotMessages(
   chat: Serialized<Chat> | null | undefined,
 ): PlatypusUIMessage[] | undefined {
-  return chat?.messages as PlatypusUIMessage[] | undefined;
+  return chat?.messages;
 }

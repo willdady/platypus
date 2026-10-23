@@ -20,6 +20,8 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   workspaceScopeOf,
+  orgMembershipOf,
+  userOf,
 } from "../middleware/authorization.ts";
 import {
   listOrgScopedIds,
@@ -44,7 +46,7 @@ workspace.post(
   requireOrgAccess(["admin"]),
   validate("json", workspaceCreateSchema),
   async (c) => {
-    const user = c.get("user")!;
+    const user = userOf(c);
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
@@ -141,8 +143,8 @@ workspace.post(
 /** List all workspaces */
 workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
-  const orgMembership = c.get("orgMembership")!;
-  const user = c.get("user")!;
+  const orgMembership = orgMembershipOf(c);
+  const user = userOf(c);
 
   // If admin, return all workspaces
   if (orgMembership.role === "admin") {
@@ -308,7 +310,7 @@ workspace.post(
       orgId,
       workspaceId,
       ...c.req.valid("json"),
-      transferredBy: c.get("user")!.name,
+      transferredBy: userOf(c).name,
     });
     const [record] = await db
       .select()

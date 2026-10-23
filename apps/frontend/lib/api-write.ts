@@ -1,3 +1,4 @@
+import type { PlatypusUIMessage } from "@platypus/schemas";
 import { joinUrl } from "./utils";
 import { parseValidationErrors } from "./form-errors";
 
@@ -30,9 +31,13 @@ export type Serialized<T> = T extends Date
   : // A branded primitive (`string & { __brand }`) is still the primitive.
     T extends string | number | boolean
     ? T
-    : T extends object
-      ? { [K in keyof T]: Serialized<T[K]> }
-      : T;
+    : // A UI message holds no `Date`, so is already its wire shape; and it is
+      // too deep to map.
+      T extends PlatypusUIMessage
+      ? T
+      : T extends object
+        ? { [K in keyof T]: Serialized<T[K]> }
+        : T;
 
 /**
  * The outcomes the backend's central `onError` (ADR-0010) can produce for a

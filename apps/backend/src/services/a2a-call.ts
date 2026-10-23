@@ -1,6 +1,7 @@
 import { A2A_ERROR_CODE } from "@a2a-js/sdk/errors";
 import { logger } from "../logger.ts";
 import { readPositiveInt } from "./trigger-breaker.ts";
+import { isRecord } from "../utils/is-record.ts";
 
 /**
  * What bounds and records outside calls to A2A endpoints (ADR-0032): the
@@ -212,10 +213,7 @@ export const AGENT_CARD_METHOD = "GetAgentCard";
  * only a plain name is logged.
  */
 export const rpcMethodOf = (request: unknown): string | null => {
-  const method =
-    typeof request === "object" && request !== null && !Array.isArray(request)
-      ? (request as { method?: unknown }).method
-      : undefined;
+  const method = isRecord(request) ? request.method : undefined;
   return typeof method === "string" && /^[A-Za-z]{1,64}$/.test(method)
     ? method
     : null;

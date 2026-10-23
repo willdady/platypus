@@ -73,6 +73,16 @@ export function baseConfig(tsconfigRootDir) {
         // to its documented replacement as soon as the deprecation appears, so
         // the major upgrade itself is not also a migration.
         "@typescript-eslint/no-deprecated": "error",
+
+        // A `switch` over a union with no `default` must name every member, so
+        // adding a member surfaces each switch that forgot it. A `default` still
+        // counts as exhaustive: the codebase uses it deliberately for "everything
+        // else" (e.g. `providerHasNativeSearch`), and naming every member there
+        // would add noise, not safety.
+        "@typescript-eslint/switch-exhaustiveness-check": [
+          "error",
+          { considerDefaultExhaustiveForUnions: true },
+        ],
       },
     },
 
