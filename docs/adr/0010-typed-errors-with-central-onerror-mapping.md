@@ -99,3 +99,16 @@ groups `FileRejection`s (a file-domain type) into its message, which this module
 reason to know about — but `mapError`'s return grew an optional `files` field so the one
 `app.onError` can still carry it through. The chat route's `try`/`catch` is gone; every
 `prepareChatTurn` caller now gets the same status codes.
+
+## Amendment — Hono's own `HTTPException` and unknown paths (#1614)
+
+The validator behind `sValidator` throws Hono's `HTTPException(400)` for a body that is
+not valid JSON or form data. `mapError` had no case for it, so the seam logged it as
+unhandled and answered 500. `app.onError` now answers a 4xx `HTTPException` with its
+own status and `{ error: message }`, before `mapError` runs and without logging: it is
+the framework's 4xx, not a fault. A 5xx one still falls through to the logged 500.
+An `app.notFound` gives unknown paths the same `{ error }` body.
+
+The branch ignores any custom `res` an `HTTPException` may carry. Nothing in the
+backend throws one with a response today; a middleware that needs its headers kept
+(e.g. `WWW-Authenticate`) should return its response instead.

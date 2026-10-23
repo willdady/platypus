@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   mockDb,
   mockSession,
@@ -6,6 +6,18 @@ import {
   resetMockDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
+import { logger } from "../logger.ts";
+
+// drizzle-orm wraps the driver error in a DrizzleQueryError, with the pg code
+// on its `cause`.
+const uniqueViolation = () =>
+  Object.assign(new Error("DrizzleQueryError: Failed query"), {
+    cause: {
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "unique_context"',
+    },
+  });
 
 describe("Context Routes", () => {
   beforeEach(() => {
@@ -13,6 +25,10 @@ describe("Context Routes", () => {
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
     mockDb.leftJoin.mockReturnValue(mockDb);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   const baseUrl = "/users/me/contexts";
@@ -210,8 +226,8 @@ describe("Context Routes", () => {
       mockSession({ id: userId, email: "test@example.com" });
       mockWorkspaceReachable();
 
-      // Mock unique constraint violation
-      mockDb.returning.mockRejectedValueOnce({ code: "23505" });
+      const logError = vi.spyOn(logger, "error");
+      mockDb.returning.mockRejectedValueOnce(uniqueViolation());
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -226,13 +242,14 @@ describe("Context Routes", () => {
       expect(await res.json()).toEqual({
         error: "You already have a context for this scope",
       });
+      expect(logError).not.toHaveBeenCalled();
     });
 
     // The database refuses a second global Context (null workspace) the same
     // way; see unique-context-and-org-member.test.ts.
     it("should return 409 for a second global context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-      mockDb.returning.mockRejectedValueOnce({ code: "23505" });
+      mockDb.returning.mockRejectedValueOnce(uniqueViolation());
 
       const res = await app.request(baseUrl, {
         method: "POST",

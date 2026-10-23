@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { db } from "./index.ts";
 import { auth } from "./auth.ts";
 import { requireInvitationToSignUp } from "./sign-up.ts";
@@ -223,11 +224,17 @@ app.route("/organizations/:orgId/plugins", plugins);
 app.route("/organizations/:orgId/web-backends", webBackends);
 app.route("/organizations/:orgId/sandbox-backends", sandboxBackends);
 
+app.notFound((c) => c.json({ error: "Not Found" }, 404));
+
 // Central error seam (ADR-0010): typed domain errors and Postgres unique
 // violations map to their HTTP status here, so routes throw instead of
 // hand-rolling `c.json({ error }, status)` for these cross-cutting modes.
 // Anything unmapped is an unexpected fault → 500.
 app.onError((error, c) => {
+  // Hono's own 4xx, e.g. the validator's "Malformed JSON in request body".
+  if (error instanceof HTTPException && error.status < 500) {
+    return c.json({ error: error.message }, error.status);
+  }
   const mapped = mapError(error);
   if (mapped) {
     return c.json(

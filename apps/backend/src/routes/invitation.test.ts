@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb, seedDb } from "../test-utils.ts";
 import app from "../server.ts";
+import { logger } from "../logger.ts";
 
 describe("Invitation Routes", () => {
   beforeEach(() => {
@@ -8,6 +9,10 @@ describe("Invitation Routes", () => {
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
     mockDb.innerJoin.mockReturnValue(mockDb);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   const orgId = "org-1";
@@ -176,6 +181,22 @@ describe("Invitation Routes", () => {
           "A pending invitation already exists for this user and organization",
         files: undefined,
       });
+    });
+
+    it("logs an unexpected failure once, as the 500 it answers", async () => {
+      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.returning.mockRejectedValueOnce(new Error("connection reset"));
+      const logError = vi.spyOn(logger, "error");
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({ email: "user@example.com" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(500);
+      expect(logError).toHaveBeenCalledTimes(1);
     });
 
     // #1131: only a *pending* invitation blocks another for the same address.
