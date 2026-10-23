@@ -8,11 +8,13 @@ CREATE INDEX "idx_chat_provider_id" ON "chat" USING btree ("provider_id");--> st
 CREATE INDEX "idx_trigger_run_unfinished" ON "trigger_run" USING btree ("trigger_id") WHERE "trigger_run"."status" in ('pending', 'running');--> statement-breakpoint
 -- Column names become unique per Board. Rename the duplicates already stored
 -- first: the earliest-created column keeps the name, each later one takes the
--- first free "<name> (n)" from n = 2, so no name is lost.
+-- first free "<name> (n)" from n = 2, so no name is lost. The name is shortened
+-- where the suffix would take it past the 100 characters a column name may have.
 DO $$
 DECLARE
   dup record;
   n integer;
+  candidate text;
 BEGIN
   FOR dup IN
     SELECT "id", "board_id", "name" FROM (
@@ -26,14 +28,15 @@ BEGIN
     ORDER BY "board_id", "name", "rank"
   LOOP
     n := 2;
-    WHILE EXISTS (
-      SELECT 1 FROM "kanban_column"
-      WHERE "board_id" = dup."board_id" AND "name" = dup."name" || ' (' || n || ')'
-    ) LOOP
+    LOOP
+      candidate := left(dup."name", 100 - length(' (' || n || ')')) || ' (' || n || ')';
+      EXIT WHEN NOT EXISTS (
+        SELECT 1 FROM "kanban_column"
+        WHERE "board_id" = dup."board_id" AND "name" = candidate
+      );
       n := n + 1;
     END LOOP;
-    UPDATE "kanban_column" SET "name" = dup."name" || ' (' || n || ')'
-    WHERE "id" = dup."id";
+    UPDATE "kanban_column" SET "name" = candidate WHERE "id" = dup."id";
   END LOOP;
 END $$;--> statement-breakpoint
 ALTER TABLE "kanban_column" ADD CONSTRAINT "unique_kanban_column_name_board" UNIQUE("board_id","name");

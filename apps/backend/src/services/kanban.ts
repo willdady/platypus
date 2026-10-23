@@ -1805,7 +1805,7 @@ const COLUMN_NAME_CLASH = "A column with this name already exists on the board";
 /**
  * Column names are unique per board. The friendly fast path: the board's
  * unique constraint is the backstop for a write that lands between this check
- * and its own, which {@link columnNameClash} turns into the same conflict.
+ * and its own, which {@link rethrowAsColumnNameClash} turns into the same conflict.
  */
 const requireUniqueColumnName = async (
   database: Database,
@@ -1829,7 +1829,7 @@ const requireUniqueColumnName = async (
 };
 
 /** A column write's unique violation as the name clash it is. */
-const columnNameClash = (error: unknown): never => {
+const rethrowAsColumnNameClash = (error: unknown): never => {
   if (isUniqueViolation(error)) throw new ConflictError(COLUMN_NAME_CLASH);
   throw error;
 };
@@ -1876,7 +1876,7 @@ export const createColumn = async (
       updatedAt: now,
     })
     .returning()
-    .catch(columnNameClash);
+    .catch(rethrowAsColumnNameClash);
 
   return rows[0];
 };
@@ -1902,7 +1902,7 @@ export const renameColumn = async (
     .set({ name: input.name, updatedAt: new Date() })
     .where(columnInScope(database, onBoard, columnId))
     .returning()
-    .catch(columnNameClash);
+    .catch(rethrowAsColumnNameClash);
 
   const row = rows[0];
   if (!row) throw new NotFoundError("Column not found");

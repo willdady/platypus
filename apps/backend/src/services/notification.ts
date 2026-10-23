@@ -189,6 +189,8 @@ export const markAllRead = async (
     .select(
       database
         .select({
+          // Minted per row by Postgres, as no nanoid can be bound per row
+          // here; the id is opaque, so its shape differing is harmless.
           id: sql<string>`gen_random_uuid()::text`.as("id"),
           notificationId: notificationTable.id,
           userId: sql<string>`${userId}`.as("user_id"),

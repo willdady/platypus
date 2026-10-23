@@ -11,6 +11,8 @@ import {
  * suffixing the later ones, so the constraint can be added and no name is lost.
  */
 const TAG = "0092_chat_indexes_kanban_column_name";
+/** A name at the 100-character limit a column name may have. */
+const LONG = "L".repeat(100);
 
 let pg: PGlite;
 beforeAll(async () => {
@@ -30,7 +32,9 @@ beforeAll(async () => {
       ('c-done-2', 'board-1', 'Done', 2, '2026-01-02'),
       ('c-taken', 'board-1', 'Done (2)', 4, '2026-01-04'),
       ('c-todo', 'board-1', 'To do', 5, '2026-01-05'),
-      ('c-home-done', 'board-2', 'Done', 1, '2026-01-01');
+      ('c-home-done', 'board-2', 'Done', 1, '2026-01-01'),
+      ('c-long-1', 'board-2', repeat('L', 100), 2, '2026-01-01'),
+      ('c-long-2', 'board-2', repeat('L', 100), 3, '2026-01-02');
   `);
   await applyMigration(pg, TAG);
 }, 60_000);
@@ -54,7 +58,13 @@ describe("0092 Kanban column name dedupe", () => {
       "c-taken": "Done (2)",
       "c-todo": "To do",
       "c-home-done": "Done",
+      "c-long-1": LONG,
+      "c-long-2": `${LONG.slice(0, 96)} (2)`,
     });
+  });
+
+  it("shortens a name at the length limit to make room for its suffix", async () => {
+    expect((await names())["c-long-2"]).toHaveLength(100);
   });
 
   it("then refuses a duplicate name on a Board", async () => {
