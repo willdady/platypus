@@ -37,7 +37,7 @@ mandatory decision, taken per route.
      requireAuth,
      requireOrgAccess(),
      requireWorkspaceAccess,
-     sValidator("json", agentCreateSchema),
+     validate("json", agentCreateSchema),
      async (c) => {
        const data = c.req.valid("json");
        const scope = workspaceScopeOf(c);

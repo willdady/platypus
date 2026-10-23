@@ -154,11 +154,13 @@ describe("Trigger runs routes", () => {
   // renders a list that lies about what it is filtered to.
   describe("GET / query validation", () => {
     const expectRejected = async (query: string) => {
+      const [field] = query.split("=");
       stubAuthLookups();
       const res = await app.request(`${baseUrl}?${query}`);
       expect(res.status).toBe(400);
-      const body = (await res.json()) as { error?: string };
-      expect(body.error).toMatch(/^Invalid query parameters: /);
+      const body = (await res.json()) as { error?: unknown };
+      expect(Object.keys(body)).toEqual(["error"]);
+      expect(body.error).toEqual([expect.objectContaining({ path: [field] })]);
       expect(mockDb.offset).not.toHaveBeenCalled();
     };
 
@@ -171,15 +173,6 @@ describe("Trigger runs routes", () => {
       ["an unparseable offset", "offset=later"],
     ])("rejects %s", async (_label, query) => {
       await expectRejected(query);
-    });
-
-    it("names the parameter it rejected", async () => {
-      stubAuthLookups();
-
-      const res = await app.request(`${baseUrl}?limit=101`);
-
-      const body = (await res.json()) as { error: string };
-      expect(body.error).toContain("limit");
     });
   });
 });
@@ -269,8 +262,10 @@ describe("GET /:runId", () => {
     const res = await app.request(`${baseUrl}/run-1?sinceSeq=soon`);
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/sinceSeq/);
+    const body = (await res.json()) as { error: unknown };
+    expect(body.error).toEqual([
+      expect.objectContaining({ path: ["sinceSeq"] }),
+    ]);
   });
 
   it("renders a run that predates timelines — no events, no final text", async () => {

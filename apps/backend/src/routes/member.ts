@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { organizationMember, user as userTable } from "../db/schema.ts";
 import {
@@ -96,7 +96,7 @@ member.patch(
   "/:memberId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", organizationMemberUpdateSchema),
+  validate("json", organizationMemberUpdateSchema),
   async (c) => {
     const updated = await changeMemberRole({
       orgId: orgScopeOf(c).orgId,
@@ -114,7 +114,7 @@ member.delete(
   "/:memberId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", organizationMemberRemoveSchema),
+  validate("json", organizationMemberRemoveSchema),
   async (c) => {
     const currentUser = c.get("user")!;
 

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { auth as mcpAuth } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
 import { mcp as mcpTable, mcpOauthState, workspace } from "../db/schema.ts";
@@ -20,7 +20,7 @@ const mcpOauthCallback = new Hono<{ Variables: Variables }>();
 mcpOauthCallback.post(
   "/",
   requireAuth,
-  sValidator("json", mcpOauthCallbackSchema),
+  validate("json", mcpOauthCallbackSchema),
   async (c) => {
     const { code, state } = c.req.valid("json");
 

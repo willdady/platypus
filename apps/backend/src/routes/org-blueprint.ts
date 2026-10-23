@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
@@ -25,7 +25,11 @@ import {
   orgScopedWhereIn,
   type ScopedResourceType,
 } from "../services/scoped-resource.ts";
-import { NotFoundError, isUniqueViolation } from "../errors.ts";
+import {
+  NotFoundError,
+  ValidationError,
+  isUniqueViolation,
+} from "../errors.ts";
 
 // Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
 // creates the Attachments for a chosen set of Shared resources in one step
@@ -214,7 +218,7 @@ orgBlueprint.post(
   "/",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", blueprintCreateSchema),
+  validate("json", blueprintCreateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const {
@@ -235,13 +239,8 @@ orgBlueprint.post(
     // unattached provider.
     const unattached = tier2ProvidersNotAttached(c.req.valid("json"), deduped);
     if (unattached.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint's provider settings must reference providers the blueprint also attaches",
-          invalidProviderIds: unattached,
-        },
-        422,
+      throw new ValidationError(
+        `A blueprint's provider settings must reference providers the blueprint also attaches: ${unattached.join(", ")}`,
       );
     }
 
@@ -252,13 +251,10 @@ orgBlueprint.post(
       orgId,
     );
     if (invalidMemory.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint's memory provider setting references a provider without the required model",
-          invalidMemoryProviders: invalidMemory,
-        },
-        422,
+      throw new ValidationError(
+        `A blueprint's memory provider setting references a provider without the required model: ${invalidMemory
+          .map((m) => `${m.field} ${m.providerId} ${m.reason}`)
+          .join("; ")}`,
       );
     }
 
@@ -354,7 +350,7 @@ orgBlueprint.put(
   "/:blueprintId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", blueprintUpdateSchema),
+  validate("json", blueprintUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const blueprintId = c.req.param("blueprintId");
@@ -388,13 +384,8 @@ orgBlueprint.put(
 
     const unattached = tier2ProvidersNotAttached(c.req.valid("json"), deduped);
     if (unattached.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint's provider settings must reference providers the blueprint also attaches",
-          invalidProviderIds: unattached,
-        },
-        422,
+      throw new ValidationError(
+        `A blueprint's provider settings must reference providers the blueprint also attaches: ${unattached.join(", ")}`,
       );
     }
 
@@ -403,13 +394,10 @@ orgBlueprint.put(
       orgId,
     );
     if (invalidMemory.length > 0) {
-      return c.json(
-        {
-          error:
-            "A blueprint's memory provider setting references a provider without the required model",
-          invalidMemoryProviders: invalidMemory,
-        },
-        422,
+      throw new ValidationError(
+        `A blueprint's memory provider setting references a provider without the required model: ${invalidMemory
+          .map((m) => `${m.field} ${m.providerId} ${m.reason}`)
+          .join("; ")}`,
       );
     }
 
@@ -509,7 +497,7 @@ orgBlueprint.post(
   "/:blueprintId/apply",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", blueprintApplySchema),
+  validate("json", blueprintApplySchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const blueprintId = c.req.param("blueprintId");

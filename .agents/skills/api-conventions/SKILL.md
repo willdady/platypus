@@ -21,6 +21,26 @@ make.
 A delete or action with nothing to return answers `200 { message }` — never a
 bodiless 204, and never `{ success: true }`.
 
+A failure body is `{ error }` and nothing else: no `success`, no detail fields
+beside it. Three exceptions, each because a frontend client reads the extra shape:
+
+| Failure                | Body                      | Why                                                |
+| ---------------------- | ------------------------- | -------------------------------------------------- |
+| Request validation     | 400 `{ error: Issue[] }`  | the form maps each issue's `path` onto its field   |
+| Agent promote, blocked | 422 `{ error, blockers }` | the promote dialog lists what to make Shared first |
+| `FileValidationError`  | 400 `{ error, files }`    | the write client parses the offending files        |
+
+## Validating a request
+
+Validate with `validate(target, schema)` from `src/validate.ts`, never with
+`sValidator` directly — its default failure body adds `success` and echoes the
+submitted body back as `data`.
+
+```typescript
+app.post("/", requireAuth, validate("json", boardCreateSchema), async (c) => {
+  const data = c.req.valid("json");
+```
+
 ## The error seam
 
 Five cross-cutting failures are **thrown**, not returned. A single `onError`
@@ -47,7 +67,9 @@ throw new ValidationError("Invalid user assignee");
 
 A resource referenced in the request body that isn't in this Organization, or
 isn't Shared, is a `NotFoundError` (404) naming what couldn't be used — not a
-422, and no extra detail fields beside `error`.
+422, and no extra detail fields beside `error`. A rule across the body's own
+fields (a setting pointing at a Provider the same body doesn't attach) is a
+`ValidationError` naming the offending ids.
 
 Throwing is what lets one rule serve more than one surface: the Kanban rules
 answer both the HTTP routes and the Agent tool set from a single place. Reach

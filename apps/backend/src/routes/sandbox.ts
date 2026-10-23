@@ -1,7 +1,7 @@
 import { posix } from "node:path";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { z } from "zod";
 import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 import { nanoid } from "nanoid";
@@ -109,7 +109,7 @@ sandbox.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireSandboxAdmin,
-  sValidator("json", sandboxCreateSchema),
+  validate("json", sandboxCreateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const data = c.req.valid("json");
@@ -163,7 +163,7 @@ sandbox.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("json", sandboxUpdateSchema),
+  validate("json", sandboxUpdateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const data = c.req.valid("json");
@@ -336,7 +336,7 @@ sandbox.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("query", z.object({ path: relativePathSchema })),
+  validate("query", z.object({ path: relativePathSchema })),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const { path } = c.req.valid("query");
@@ -374,7 +374,7 @@ sandbox.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator(
+  validate(
     "query",
     z.object({
       path: relativePathSchema,

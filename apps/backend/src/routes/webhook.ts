@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { webhook as webhookTable } from "../db/schema.ts";
@@ -72,7 +72,7 @@ webhook.post(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("json", webhookCreateSchema),
+  validate("json", webhookCreateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const body = c.req.valid("json" as never) as {
@@ -131,7 +131,7 @@ webhook.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator("json", webhookUpdateSchema),
+  validate("json", webhookUpdateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");

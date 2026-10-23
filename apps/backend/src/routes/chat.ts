@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { z } from "zod";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
@@ -88,7 +88,7 @@ chat.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  sValidator(
+  validate(
     "query",
     z.object({
       limit: z.string().optional(),
@@ -183,7 +183,7 @@ chat.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", chatSubmitSchema),
+  validate("json", chatSubmitSchema),
   async (c) => {
     // An interactive turn includes the Owner's Memories, unless it is in an
     // A2A Chat whose endpoint leaves them out (see `startChatTurn`).
@@ -272,7 +272,7 @@ chat.put(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", chatActiveLeafSchema),
+  validate("json", chatActiveLeafSchema),
   async (c) => {
     const chatId = c.req.param("chatId");
     const { workspaceId } = workspaceScopeOf(c);
@@ -294,7 +294,7 @@ chat.put(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", chatUpdateSchema),
+  validate("json", chatUpdateSchema),
   async (c) => {
     const chatId = c.req.param("chatId");
     const { workspaceId } = workspaceScopeOf(c);

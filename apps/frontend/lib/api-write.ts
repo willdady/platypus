@@ -36,7 +36,7 @@ export type Serialized<T> = T extends Date
 
 /**
  * The outcomes the backend's central `onError` (ADR-0010) can produce for a
- * write, plus the field-level shape `sValidator` returns for a 400 before it
+ * write, plus the field-level shape `validate` returns for a 400 before it
  * ever reaches that seam. A caller destructures `outcome` and TypeScript
  * won't let it skip a case, so the five failure modes this ticket exists to
  * stop callers from re-deriving from a raw status code can't be missed.

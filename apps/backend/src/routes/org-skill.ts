@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -31,7 +31,7 @@ orgSkill.post(
   "/",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", skillCreateSchema),
+  validate("json", skillCreateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
@@ -129,7 +129,7 @@ orgSkill.put(
   "/:skillId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", skillUpdateSchema),
+  validate("json", skillUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const skillId = c.req.param("skillId");

@@ -130,11 +130,13 @@ describe("Organization Agent Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
-      expect(res.status).toBe(422);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.blockers).toEqual([
-        { type: "provider", id: "p1", name: "WS Provider" },
-      ]);
+      // Not Shared reads as not found here (api-conventions), and the message
+      // names what couldn't be used.
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error:
+          "A shared agent may only reference other shared (organization-scoped) resources: WS Provider (provider)",
+      });
       expect(mockDb.update).not.toHaveBeenCalled();
     });
 

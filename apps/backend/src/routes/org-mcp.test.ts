@@ -363,10 +363,7 @@ describe("Organization MCP Routes", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({
-        success: false,
-        error: "MCP not found",
-      });
+      expect(await res.json()).toEqual({ error: "MCP not found" });
     });
 
     it("returns 403 for a non-admin", async () => {

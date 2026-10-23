@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -62,7 +62,7 @@ trigger.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", triggerCreateSchema),
+  validate("json", triggerCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
@@ -95,7 +95,7 @@ trigger.put(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireWorkspaceOwner,
-  sValidator("json", triggerUpdateSchema),
+  validate("json", triggerUpdateSchema),
   async (c) => {
     const triggerId = c.req.param("triggerId");
     const data = c.req.valid("json");

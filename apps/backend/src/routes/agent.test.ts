@@ -187,10 +187,9 @@ describe("Agent Routes", () => {
 
       expect(res.status).toBe(400);
       const body = (await res.json()) as {
-        success: boolean;
         error: { code: string; path: string[] }[];
       };
-      expect(body.success).toBe(false);
+      expect(Object.keys(body)).toEqual(["error"]);
       expect(Array.isArray(body.error)).toBe(true);
       expect(body.error[0].code).toBe("too_big");
       expect(body.error[0].path).toContain("description");

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
+import { validate } from "../validate.ts";
 import {
   a2aEndpointCreateSchema,
   a2aEndpointUpdateSchema,
@@ -51,7 +51,7 @@ a2aEndpoint.get("/:endpointId", ...readers, async (c) => {
 a2aEndpoint.post(
   "/",
   ...owner,
-  sValidator("json", a2aEndpointCreateSchema),
+  validate("json", a2aEndpointCreateSchema),
   async (c) => {
     const scope = workspaceScopeOf(c);
     return c.json(await createA2aEndpoint(scope, c.req.valid("json")), 201);
@@ -61,7 +61,7 @@ a2aEndpoint.post(
 a2aEndpoint.put(
   "/:endpointId",
   ...owner,
-  sValidator("json", a2aEndpointUpdateSchema),
+  validate("json", a2aEndpointUpdateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     return c.json(
@@ -84,7 +84,7 @@ a2aEndpoint.delete("/:endpointId", ...owner, async (c) => {
 a2aEndpoint.post(
   "/:endpointId/tokens",
   ...owner,
-  sValidator("json", a2aTokenCreateSchema),
+  validate("json", a2aTokenCreateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     return c.json(
