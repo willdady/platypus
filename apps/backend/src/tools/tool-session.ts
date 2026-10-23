@@ -328,7 +328,23 @@ export type ToolSessionOptions = {
    * its parent was withheld.
    */
   withheldToolSetIds?: readonly string[];
+  /**
+   * Whether a User watches this session's Agent: an interactive Chat turn.
+   * Absent means no — a Trigger run's Chat is never rendered. Gates the
+   * {@link USER_FACING_TOOL_NAMES}. A nested session is never interactive,
+   * whatever its parent: a delegate's tool calls reach the User only as its
+   * activity list, and their results go back to the parent model (#1608).
+   */
+  interactive?: boolean;
 };
+
+/**
+ * Tools whose only effect is something a User sees in the Chat, so a session
+ * no User watches is not offered them: the model would spend a turn on a button
+ * nobody can press. `fsDownload` is core's Sandbox tool, and the bare name is
+ * core's alone — a third-party or MCP tool is always namespaced.
+ */
+const USER_FACING_TOOL_NAMES = ["fsDownload"] as const;
 
 /**
  * Resolve an Agent's assigned Tool sets into a turn's tools, opening whatever
@@ -349,7 +365,7 @@ export const openToolSession = async (
   queries: ToolSessionQueries,
   options: ToolSessionOptions = {},
 ): Promise<ToolSession> => {
-  const { signal, withheldToolSetIds = [] } = options;
+  const { signal, withheldToolSetIds = [], interactive = false } = options;
   const tools: Record<string, Tool> = {};
   // Tool name -> where it came from. Read by the merge below to report the
   // names an arriving Tool set is about to take, and the reason this is a Map
@@ -813,10 +829,16 @@ export const openToolSession = async (
       await dispose();
       throw error;
     }
+    if (!interactive) {
+      for (const name of USER_FACING_TOOL_NAMES) delete tools[name];
+    }
   }
 
   const nest: ToolSession["nest"] = async (nestedAgent) => {
-    const child = await openToolSession(scope, nestedAgent, queries, options);
+    const child = await openToolSession(scope, nestedAgent, queries, {
+      ...options,
+      interactive: false,
+    });
     // A delegate can be invoked while the turn is being torn down (an abort
     // cancels the parent run, and the delegate's generator is resumed to unwind
     // it), so a session opened after `dispose` has nothing left to attach to.

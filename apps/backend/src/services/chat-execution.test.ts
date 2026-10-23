@@ -2136,6 +2136,57 @@ describe("chat-execution", () => {
     });
   });
 
+  // Issue #1608: `fsDownload` shows a User a download button, and only an
+  // interactive Chat turn has a User watching. `fsView` the model reads itself,
+  // so every run keeps it. The prompt's download line reads the same tool map
+  // (`fsDownloadAvailable`), so it follows the tool.
+  describe("fsDownload", () => {
+    const stub = { description: "x" } as never;
+    const downloadTurn = (input: { runMode?: "interactive" | "headless" }) => {
+      if (!hasToolSet("test.sandbox-1608")) {
+        registerToolSet(
+          "test.sandbox-1608",
+          composeToolSet({
+            id: "test.sandbox-1608",
+            pluginName: "test-plugin",
+            isCore: true,
+            contribution: {
+              name: "Sandbox",
+              category: "Sandbox",
+              tools: { fsDownload: stub, fsView: stub },
+            },
+            plugin: makePluginContext(),
+          }),
+        );
+      }
+      const agent = { ...baseAgent, toolSetIds: ["test.sandbox-1608"] };
+      return prepareChatTurn(
+        { ...baseInput, request: { agentId: agent.id }, ...input },
+        createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          agents: [agent],
+          providers: [baseProvider],
+        }),
+      );
+    };
+
+    it("is offered on an interactive Chat turn", async () => {
+      const turn = await downloadTurn({ runMode: "interactive" });
+
+      expect(turn.stream.tools).toHaveProperty("fsDownload");
+      expect(turn.stream.tools).toHaveProperty("fsView");
+      await turn.dispose();
+    });
+
+    it("is not offered on a Trigger run", async () => {
+      const turn = await downloadTurn({ runMode: "headless" });
+
+      expect(turn.stream.tools).not.toHaveProperty("fsDownload");
+      expect(turn.stream.tools).toHaveProperty("fsView");
+      await turn.dispose();
+    });
+  });
+
   describe("User timezone", () => {
     const originalTimezone = process.env.TIMEZONE;
     afterEach(() => {

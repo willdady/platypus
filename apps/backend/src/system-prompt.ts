@@ -70,8 +70,10 @@ export type SystemPromptStableContext = {
   memorySearchAvailable: boolean;
   /**
    * Whether this turn offers `fsDownload`. The Sandbox Tool set leaves it out
-   * when the backend has no `fsReadBytes` (ADR-0027). A property of the
-   * Workspace's Sandbox, so it holds steady like `memorySearchAvailable`.
+   * when the backend has no `fsReadBytes` (ADR-0027), and the Tool session
+   * withholds it from a run no User watches (#1608). A property of the
+   * Workspace's Sandbox and the run, so it holds steady like
+   * `memorySearchAvailable`.
    */
   fsDownloadAvailable: boolean;
   skills: Array<Pick<Skill, "name" | "description">>;

@@ -73,7 +73,8 @@ the model, unless the Agent views one itself (below).
   Sandbox](/building-with-platypus/chat#uploading-to-the-sandbox).
 - **Download**: ask the Agent for a file as a download. Its `fsDownload` tool
   puts a **Download** button in the Chat. The file always downloads, and never
-  opens in the browser.
+  opens in the browser. The Agent can offer a download only in a Chat with you,
+  not in a Trigger run or from a Sub-Agent.
 - **Viewing**: the Agent can look at an image, PDF or text file it made, with
   its `fsView` tool. The file goes to the model for that turn only and isn't
   kept in the Chat. A model that can't take images or PDFs gets a PDF's text

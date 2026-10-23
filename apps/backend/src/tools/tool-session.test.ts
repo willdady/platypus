@@ -196,6 +196,42 @@ describe("openToolSession", () => {
     );
   });
 
+  // Issue #1608: `fsDownload` only shows a User a download button, so a session
+  // with no User watching is not offered it. `fsView` the model reads itself.
+  describe("fsDownload", () => {
+    const grantDownloads = (id: string) => {
+      register(id, {
+        fsDownload: toolNamed("fsDownload"),
+        fsView: toolNamed("fsView"),
+      });
+      return grantedAgent(id);
+    };
+
+    it("is served to an interactive session", async () => {
+      const session = await openToolSession(
+        scope,
+        grantDownloads("set.download-interactive"),
+        noMcps(),
+        { interactive: true },
+      );
+
+      expect(Object.keys(session.tools).sort()).toEqual([
+        "fsDownload",
+        "fsView",
+      ]);
+    });
+
+    it("is withheld from a session no User watches", async () => {
+      const session = await openToolSession(
+        scope,
+        grantDownloads("set.download-headless"),
+        noMcps(),
+      );
+
+      expect(Object.keys(session.tools)).toEqual(["fsView"]);
+    });
+  });
+
   it("keeps serving the other Tool sets when one's factory throws", async () => {
     register("set.broken", () => {
       throw new Error("no API key");
@@ -1416,6 +1452,32 @@ describe("openToolSession", () => {
       expect(Object.keys(parent.tools)).toEqual(["other"]);
       expect(Object.keys(child.tools)).toEqual(["other"]);
     });
+
+    // Issue #1608: a delegate's tool calls reach the User only as its activity
+    // list, so it has no one to show a download to — whoever delegated.
+    it.each([
+      ["an interactive turn", true],
+      ["a Trigger run", false],
+    ])(
+      "withholds fsDownload, but not fsView, from a delegate of %s",
+      async (_, interactive) => {
+        register(`set.download-nested-${interactive}`, {
+          fsDownload: toolNamed("fsDownload"),
+          fsView: toolNamed("fsView"),
+        });
+        const parent = await openToolSession(scope, undefined, noMcps(), {
+          interactive,
+        });
+
+        const child = await parent.nest({
+          id: "sub-agent-1",
+          toolSetIds: [`set.download-nested-${interactive}`],
+        });
+
+        expect(Object.keys(child.tools)).toEqual(["fsView"]);
+        await parent.dispose();
+      },
+    );
 
     it("closes a session opened after the parent was already disposed", async () => {
       const parent = await openToolSession(
