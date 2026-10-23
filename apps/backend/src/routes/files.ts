@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { isSuperAdmin } from "../middleware/authorization.ts";
+import { isSuperAdmin, userOf } from "../middleware/authorization.ts";
 import { assertValidStorageKey, isSkillStorageKey } from "../storage/keys.ts";
 import { FILES_ROUTE_PREFIX } from "../storage/file-reference.ts";
 import {
@@ -42,7 +42,7 @@ function parseStorageKey(
  * as the browser fetches files directly from the storage URL.
  */
 files.get("/*", requireAuth, async (c) => {
-  const user = c.get("user")!;
+  const user = userOf(c);
   const db = c.get("db");
 
   // Extract the storage key from the wildcard path

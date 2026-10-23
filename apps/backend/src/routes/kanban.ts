@@ -21,6 +21,7 @@ import {
   requireWorkspaceOwner,
   isSuperAdmin,
   workspaceScopeOf,
+  userOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { NotFoundError } from "../errors.ts";
@@ -72,7 +73,7 @@ const scopeOf = (c: Context<{ Variables: Variables }>): KanbanScope => ({
 /** The scope plus the signed-in user, for the handlers that write. */
 const contextOf = (c: Context<{ Variables: Variables }>): KanbanContext => ({
   ...scopeOf(c),
-  actor: { userId: c.get("user")!.id },
+  actor: { userId: userOf(c).id },
 });
 
 // --- Board CRUD ---
@@ -394,7 +395,7 @@ kanban.put(
     const commentId = c.req.param("commentId");
     const existing = await requireCommentOnCard(c, commentId);
 
-    if (!canModerate(c) && existing.createdByUserId !== c.get("user")!.id) {
+    if (!canModerate(c) && existing.createdByUserId !== userOf(c).id) {
       return c.json({ error: "You can only edit your own comments" }, 403);
     }
 
@@ -419,7 +420,7 @@ kanban.delete(
     const commentId = c.req.param("commentId");
     const existing = await requireCommentOnCard(c, commentId);
 
-    if (!canModerate(c) && existing.createdByUserId !== c.get("user")!.id) {
+    if (!canModerate(c) && existing.createdByUserId !== userOf(c).id) {
       return c.json({ error: "You can only delete your own comments" }, 403);
     }
 

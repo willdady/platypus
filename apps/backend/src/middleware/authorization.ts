@@ -67,6 +67,38 @@ export const workspaceScopeOf = (c: Context<Env>): WorkspaceScope => {
 };
 
 /**
+ * The session user `requireAuth` authenticated for this request. Throws on the
+ * same wiring mistake {@link orgScopeOf} does — a handler reading the user
+ * without `requireAuth` in front of it — rather than answering 401.
+ */
+export const userOf = (c: Context<Env>): NonNullable<Variables["user"]> => {
+  const user = c.get("user");
+  if (!user) {
+    throw new Error(
+      "No authenticated user on this request: requireAuth must run before the handler",
+    );
+  }
+  return user;
+};
+
+/**
+ * The Organization membership {@link requireOrgAccess} resolved for this
+ * request: a member row, or the synthetic admin membership of a super admin.
+ * Throws on the same wiring mistake {@link orgScopeOf} does.
+ */
+export const orgMembershipOf = (
+  c: Context<Env>,
+): NonNullable<Variables["orgMembership"]> => {
+  const membership = c.get("orgMembership");
+  if (!membership) {
+    throw new Error(
+      "No organization membership on this request: requireOrgAccess must run before the handler",
+    );
+  }
+  return membership;
+};
+
+/**
  * Checks if a user is a super admin based on their role field.
  * Super admins have full platform-level access.
  *
@@ -114,8 +146,7 @@ const isSuperAdmin = (user: AuthUser | undefined): boolean => {
  */
 export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
   createMiddleware<Env>(async (c, next) => {
-    // requireAuth runs first, so user is always set here.
-    const user = c.get("user")!;
+    const user = userOf(c);
     const db = c.get("db");
     const parentScope = c.get("userScope") ?? userScope(user);
     const orgId = c.req.param("orgId");
@@ -240,10 +271,9 @@ export const resolveOrgMembership = async (
  * ```
  */
 export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
-  // requireAuth and requireOrgAccess run first, so user and orgMembership are set.
-  const user = c.get("user")!;
+  const user = userOf(c);
   const db = c.get("db");
-  const orgMembership = c.get("orgMembership")!;
+  const orgMembership = orgMembershipOf(c);
 
   // The Organization half is already resolved and proved; only the Workspace id
   // is still unread, and this middleware is the one place that reads it.

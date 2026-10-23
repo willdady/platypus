@@ -7,6 +7,7 @@ import {
 } from "../db/schema.ts";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
+import { userOf } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { acceptInvitationForUser } from "../services/invitation-accept.ts";
 import { acceptResultResponse } from "./invitation-accept-response.ts";
@@ -23,7 +24,7 @@ const NOT_FOUND_ERROR = "Invitation not found or already processed";
 
 /** List pending invitations for the current user */
 userInvitation.get("/", requireAuth, async (c) => {
-  const user = c.get("user")!;
+  const user = userOf(c);
   if (!user.emailVerified) {
     return c.json({ results: [] });
   }
@@ -63,7 +64,7 @@ userInvitation.get("/", requireAuth, async (c) => {
 
 /** Accept an invitation */
 userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
-  const user = c.get("user")!;
+  const user = userOf(c);
   const invitationId = c.req.param("invitationId");
   if (!user.emailVerified) {
     throw new NotFoundError(NOT_FOUND_ERROR);
@@ -76,7 +77,7 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
 
 /** Decline an invitation */
 userInvitation.post("/:invitationId/decline", requireAuth, async (c) => {
-  const user = c.get("user")!;
+  const user = userOf(c);
   const invitationId = c.req.param("invitationId");
   if (!user.emailVerified) {
     return c.json({ error: NOT_FOUND_ERROR }, 404);

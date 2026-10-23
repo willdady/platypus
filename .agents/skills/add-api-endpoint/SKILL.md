@@ -70,7 +70,9 @@ route may legitimately resolve with no Organization to scope to.
 Read the resolved scope through the scope accessors (`workspaceScopeOf`,
 `orgScopeOf`) rather than re-reading path params: the accessor hands you the
 scope the middleware already decided, so the query cannot disagree with the
-authorization.
+authorization. Likewise read the session user and Org membership through
+`userOf` and `orgMembershipOf`, never `c.get("user")!`: they throw (a 500) when
+the middleware is missing from the route.
 
 ## Database access
 

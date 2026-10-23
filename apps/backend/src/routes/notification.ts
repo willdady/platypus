@@ -5,6 +5,7 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   workspaceScopeOf,
+  userOf,
 } from "../middleware/authorization.ts";
 import {
   markRead,
@@ -29,7 +30,7 @@ notification.get(
   requireWorkspaceAccess,
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const user = c.get("user")!;
+    const user = userOf(c);
     const limit = Math.min(
       Math.max(parseInt(c.req.query("limit") || "50", 10) || 50, 1),
       100,
@@ -71,7 +72,7 @@ notification.get(
   requireWorkspaceAccess,
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const user = c.get("user")!;
+    const user = userOf(c);
 
     const result = await unreadNotificationCount(db, workspaceId, user.id);
 
@@ -87,7 +88,7 @@ notification.post(
   requireWorkspaceAccess,
   async (c) => {
     const notificationId = c.req.param("notificationId");
-    const user = c.get("user")!;
+    const user = userOf(c);
     const { orgId, workspaceId } = workspaceScopeOf(c);
 
     if (
@@ -108,7 +109,7 @@ notification.post(
   requireWorkspaceAccess,
   async (c) => {
     const { orgId, workspaceId } = workspaceScopeOf(c);
-    const user = c.get("user")!;
+    const user = userOf(c);
 
     await markAllRead(db, { orgId, workspaceId }, user.id);
 

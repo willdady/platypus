@@ -5,7 +5,11 @@ import {
   type OrgGateAccessUpdate,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
-import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
+import {
+  orgScopeOf,
+  requireOrgAccess,
+  userOf,
+} from "../middleware/authorization.ts";
 import { ValidationError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
@@ -39,7 +43,7 @@ export const mountGateAccess = <T>(
     validate("json", orgGateAccessUpdateSchema),
     async (c) => {
       const { orgId } = orgScopeOf(c);
-      const user = c.get("user")!;
+      const user = userOf(c);
       return c.json(await set(orgId, c.req.valid("json"), user.id));
     },
   );
