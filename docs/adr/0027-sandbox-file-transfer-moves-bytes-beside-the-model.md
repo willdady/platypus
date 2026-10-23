@@ -108,7 +108,7 @@ sends a Sandbox file to the model for one turn, so it can see an image or PDF it
 made. Its saved result is metadata only, and Sandbox content is still never
 written to backend storage.
 
-## Note: `fsDownload` only in interactive Chat turns (#1608)
+## Note: `fsDownload` only in interactive Chat turns after issue #1608
 
 `fsDownload` is offered only in an interactive Chat turn. A Trigger run, an A2A
 run and every Sub-Agent, at any depth, are not given it, and the System prompt's

@@ -151,6 +151,15 @@ const queriesFor = (rows: McpRow[]) => ({
 
 const noMcps = () => queriesFor([]);
 
+/** Grant a Tool set serving `fsDownload` and `fsView`, as the Sandbox's does. */
+const grantDownloads = (id: string) => {
+  register(id, {
+    fsDownload: toolNamed("fsDownload"),
+    fsView: toolNamed("fsView"),
+  });
+  return grantedAgent(id);
+};
+
 describe("openToolSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -199,14 +208,6 @@ describe("openToolSession", () => {
   // Issue #1608: `fsDownload` only shows a User a download button, so a session
   // with no User watching is not offered it. `fsView` the model reads itself.
   describe("fsDownload", () => {
-    const grantDownloads = (id: string) => {
-      register(id, {
-        fsDownload: toolNamed("fsDownload"),
-        fsView: toolNamed("fsView"),
-      });
-      return grantedAgent(id);
-    };
-
     it("is served to an interactive session", async () => {
       const session = await openToolSession(
         scope,
@@ -1461,18 +1462,14 @@ describe("openToolSession", () => {
     ])(
       "withholds fsDownload, but not fsView, from a delegate of %s",
       async (_, interactive) => {
-        register(`set.download-nested-${interactive}`, {
-          fsDownload: toolNamed("fsDownload"),
-          fsView: toolNamed("fsView"),
-        });
+        const { toolSetIds } = grantDownloads(
+          `set.download-nested-${interactive}`,
+        );
         const parent = await openToolSession(scope, undefined, noMcps(), {
           interactive,
         });
 
-        const child = await parent.nest({
-          id: "sub-agent-1",
-          toolSetIds: [`set.download-nested-${interactive}`],
-        });
+        const child = await parent.nest({ id: "sub-agent-1", toolSetIds });
 
         expect(Object.keys(child.tools)).toEqual(["fsView"]);
         await parent.dispose();
