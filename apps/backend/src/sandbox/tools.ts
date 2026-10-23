@@ -165,7 +165,12 @@ export const createFsViewTool = (
   ctx: SandboxContext,
   fileReading: () => Promise<ModelFileReading>,
 ) => {
-  const viewed = new Map<string, ModelContent>();
+  // Narrowed to the parts built here: against the full union, which still
+  // carries the deprecated `file-data`-style parts, no-deprecated flags `type`.
+  const viewed = new Map<
+    string,
+    Extract<ModelContent[number], { type: "text" | "file" }>[]
+  >();
   return tool({
     description: `Look at a file from the sandbox — an image, a PDF, or a text file — as the file itself, up to ${TRANSFER_BOUND}. Use it to check an image or document you generated. Returns the path, size and media type; the file is attached for you to see.`,
     inputSchema: z.object({

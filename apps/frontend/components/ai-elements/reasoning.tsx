@@ -49,7 +49,6 @@ export const Reasoning = memo(
     isStreaming = false,
     open,
     defaultOpen = true,
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- Radix types this callback prop as a method; it never reads `this`.
     onOpenChange,
     duration: durationProp,
     children,

@@ -12,18 +12,18 @@
     "lint": "eslint --max-warnings 0"
   },
   "dependencies": {
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "peerDependencies": {
     "ai": "^7.0.113"
   },
   "packageManager": "pnpm@10.26.1+sha512.664074abc367d2c9324fdc18037097ce0a8f126034160f709928e9e9f95d98714347044e5c3164d65bd5da6c59c6be362b107546292a8eecb7999196e5ce58fa",
   "devDependencies": {
-    "@types/node": "^26.6.2",
-    "ai": "^7.0.113",
-    "eslint": "^10.11.0",
+    "@types/node": "^26.6.5",
+    "ai": "^7.0.150",
+    "eslint": "^10.13.0",
     "typescript": "^6.0.3",
-    "vite": "^7.3.6",
-    "vitest": "^4.1.11"
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   }
 }

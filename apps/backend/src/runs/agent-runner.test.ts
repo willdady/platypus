@@ -65,7 +65,7 @@ const {
       queue: null as InstanceType<typeof AsyncQueue> | null,
       // The AI SDK callbacks the runner registers; captured so the test can
       // drive step-completion and stream-completion by hand.
-      onStepFinish: undefined as ((step: unknown) => void) | undefined,
+      onStepEnd: undefined as ((step: unknown) => void) | undefined,
       onFinish: undefined as
         ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
       // Fires once per completed tool execution; the runner folds these into
@@ -298,8 +298,8 @@ describe("finish reason instrumentation", () => {
     async (finishReason, rawFinishReason) => {
       mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
       mockStreamText.mockImplementationOnce(
-        (args: { onStepFinish: (s: unknown) => void }) => {
-          args.onStepFinish({
+        (args: { onStepEnd: (s: unknown) => void }) => {
+          args.onStepEnd({
             toolCalls: [],
             usage: { inputTokens: 1, outputTokens: 1 },
             finishReason,
@@ -322,8 +322,8 @@ describe("finish reason instrumentation", () => {
   it("warns when a step stops at the output token limit", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockImplementationOnce(
-      (args: { onStepFinish: (s: unknown) => void }) => {
-        args.onStepFinish({
+      (args: { onStepEnd: (s: unknown) => void }) => {
+        args.onStepEnd({
           toolCalls: [],
           usage: { inputTokens: 1, outputTokens: 1 },
           finishReason: "length",
@@ -419,7 +419,7 @@ describe("rejected tool input instrumentation", () => {
     runner = new AgentRunner();
     vi.clearAllMocks();
     streamHarness.queue = null;
-    streamHarness.onStepFinish = undefined;
+    streamHarness.onStepEnd = undefined;
     streamHarness.onFinish = undefined;
   });
 
@@ -440,8 +440,8 @@ describe("rejected tool input instrumentation", () => {
   const generateWithStep = async (content: unknown[]) => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockImplementationOnce(
-      (args: { onStepFinish: (s: unknown) => void }) => {
-        args.onStepFinish(stepWith(content));
+      (args: { onStepEnd: (s: unknown) => void }) => {
+        args.onStepEnd(stepWith(content));
         return streamResultOf(fakeGenerateResult);
       },
     );
@@ -504,8 +504,8 @@ describe("rejected tool input instrumentation", () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     streamHarness.queue = new streamHarness.AsyncQueue();
     mockStreamText.mockImplementation(
-      (opts: { onStepFinish: (step: unknown) => void }) => {
-        streamHarness.onStepFinish = opts.onStepFinish;
+      (opts: { onStepEnd: (step: unknown) => void }) => {
+        streamHarness.onStepEnd = opts.onStepEnd;
         return {};
       },
     );
@@ -516,7 +516,7 @@ describe("rejected tool input instrumentation", () => {
       sink: new RecordingSink(),
       options: { origin: "http://test" },
     });
-    streamHarness.onStepFinish!(
+    streamHarness.onStepEnd!(
       stepWith([
         {
           type: "tool-error",
@@ -657,12 +657,12 @@ describe("AgentRunner.generate", () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const progressed: Array<number | undefined> = [];
     mockStreamText.mockImplementationOnce(
-      ({ onStepFinish }: { onStepFinish: (s: unknown) => void }) => {
-        onStepFinish({
+      ({ onStepEnd }: { onStepEnd: (s: unknown) => void }) => {
+        onStepEnd({
           toolCalls: [],
           usage: { inputTokens: 1_000, outputTokens: 40 },
         });
-        onStepFinish({ toolCalls: [] });
+        onStepEnd({ toolCalls: [] });
         return streamResultOf({
           text: "ok",
           steps: [{ toolCalls: [] }],
@@ -801,8 +801,8 @@ describe("AgentRunner.generate", () => {
   it("still returns the answer when the sink fails to record the run", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockImplementationOnce(
-      ({ onStepFinish }: { onStepFinish: (s: unknown) => void }) => {
-        onStepFinish({ toolCalls: [], usage: {} });
+      ({ onStepEnd }: { onStepEnd: (s: unknown) => void }) => {
+        onStepEnd({ toolCalls: [], usage: {} });
         return streamResultOf(fakeGenerateResult);
       },
     );
@@ -1328,7 +1328,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
 const resetStreamHarness = (): void => {
   streamHarness.queue = null;
-  streamHarness.onStepFinish = undefined;
+  streamHarness.onStepEnd = undefined;
   streamHarness.onFinish = undefined;
   streamHarness.onToolExecutionEnd = undefined;
   streamHarness.messageMetadata = undefined;
@@ -1349,18 +1349,18 @@ const emptyUIStream = () =>
   });
 
 // Make streamText return a fake result whose UI-stream callbacks the test can
-// drive by hand: `onStepFinish` (per step), `onFinish` (completion), and
+// drive by hand: `onStepEnd` (per step), `onFinish` (completion), and
 // `messageMetadata` (per stream part).
 const primeStreamText = () => {
   mockStreamText.mockImplementation(
     (opts: {
-      onStepFinish?: (step: unknown) => void;
+      onStepEnd?: (step: unknown) => void;
       onToolExecutionEnd?: (ctx: {
         toolCall: { toolCallId: string };
         toolExecutionMs: number;
       }) => void;
     }) => {
-      streamHarness.onStepFinish = opts.onStepFinish;
+      streamHarness.onStepEnd = opts.onStepEnd;
       streamHarness.onToolExecutionEnd = opts.onToolExecutionEnd;
       return {};
     },
@@ -1599,7 +1599,7 @@ describe("AgentRunner.stream — success & interruption", () => {
     expect(res).toBe(streamHarness.responseSentinel);
 
     // A step completes -> onProgress.
-    streamHarness.onStepFinish!({
+    streamHarness.onStepEnd!({
       usage: { inputTokens: 3, outputTokens: 4 },
       toolCalls: [],
     });
@@ -1684,7 +1684,7 @@ describe("AgentRunner.stream — success & interruption", () => {
     };
     queue.push(continued);
     await tick();
-    streamHarness.onStepFinish!({ usage: {}, toolCalls: [] });
+    streamHarness.onStepEnd!({ usage: {}, toolCalls: [] });
     await tick();
 
     expect(progressMessages.at(-1)).toEqual([user, continued]);
@@ -1722,7 +1722,7 @@ describe("AgentRunner.stream — success & interruption", () => {
     const fresh = { id: "m1", role: "assistant", parts: [] };
     queue.push(fresh);
     await tick();
-    streamHarness.onStepFinish!({ usage: {}, toolCalls: [] });
+    streamHarness.onStepEnd!({ usage: {}, toolCalls: [] });
     await tick();
 
     expect(progressMessages.at(-1)).toEqual([user, fresh]);
@@ -1861,12 +1861,9 @@ describe("AgentRunner.stream — success & interruption", () => {
     streamHarness.queue = queue;
     let capturedStopWhen: unknown[] = [];
     mockStreamText.mockImplementation(
-      (opts: {
-        stopWhen: unknown[];
-        onStepFinish: (step: unknown) => void;
-      }) => {
+      (opts: { stopWhen: unknown[]; onStepEnd: (step: unknown) => void }) => {
         capturedStopWhen = opts.stopWhen;
-        streamHarness.onStepFinish = opts.onStepFinish;
+        streamHarness.onStepEnd = opts.onStepEnd;
         return {};
       },
     );
