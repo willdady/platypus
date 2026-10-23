@@ -88,7 +88,7 @@ export const userOf = (c: Context<Env>): NonNullable<Variables["user"]> => {
  */
 export const orgMembershipOf = (
   c: Context<Env>,
-): OrganizationMembership | SuperAdminOrgMembership => {
+): NonNullable<Variables["orgMembership"]> => {
   const membership = c.get("orgMembership");
   if (!membership) {
     throw new Error(
