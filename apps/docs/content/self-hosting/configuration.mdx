@@ -85,6 +85,18 @@ bundled `database` service. The database must be PostgreSQL 17 with the
 embeddings for [Memory](/concepts/memory-and-context) are stored as vectors, so
 `pgvector` is not optional. PostgreSQL 18 is not supported.
 
+The backend runs every database session in UTC, whatever time zone the database
+itself is set to, so you don't need to change the database's own setting.
+
+<Callout type="warning">
+  Older versions used the database's own time zone for some times and UTC for
+  others. If `SHOW TimeZone` on your database returns anything other than `UTC`,
+  some times recorded before you upgraded may display or sort off by that zone's
+  UTC offset. Upgrading does not rewrite them, and there is nothing to run: new
+  records are correct. The bundled `database` service runs in UTC, so a compose
+  deployment is unaffected.
+</Callout>
+
 ## Authentication
 
 Authentication is handled by [better-auth](https://www.better-auth.com/), mounted
