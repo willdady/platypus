@@ -1,7 +1,4 @@
-import {
-  experimental_createMCPClient as createMCPClient,
-  type MCPClientConfig,
-} from "@ai-sdk/mcp";
+import { createMCPClient, type MCPClientConfig } from "@ai-sdk/mcp";
 
 /**
  * Opens a client on a live MCP server with the legacy `initialize` handshake

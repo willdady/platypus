@@ -68,6 +68,10 @@ export function baseConfig(tsconfigRootDir) {
         // enforce as an error; suppress with a scoped disable where a known
         // false positive recurs.
         "@typescript-eslint/unbound-method": "error",
+
+        // A deprecated API is one the next major of its library removes. Move
+        // to the documented replacement when it lands, not during the upgrade.
+        "@typescript-eslint/no-deprecated": "error",
       },
     },
 

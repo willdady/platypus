@@ -1,5 +1,5 @@
 import {
-  experimental_createMCPClient as createMCPClient,
+  createMCPClient,
   type ListToolsResult,
   type MCPClient,
   type MCPTransport,

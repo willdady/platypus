@@ -46,12 +46,9 @@ export const imageWidgetDataSchema = z.object({
 
 export const embedWidgetDataSchema = z
   .object({
-    url: z
-      .string()
-      .url()
-      .refine((url) => url.toLowerCase().startsWith("https://"), {
-        message: "Embed URL must use HTTPS",
-      }),
+    url: z.url().refine((url) => url.toLowerCase().startsWith("https://"), {
+      message: "Embed URL must use HTTPS",
+    }),
   })
   .strict();
 

@@ -2,11 +2,15 @@ import { describe, it, expect } from "vitest";
 import {
   isToolUIPart,
   readUIMessageStream,
+  simulateReadableStream,
   stepCountIs,
   streamText,
+  toUIMessageStream,
   tool,
+  type TextStreamPart,
+  type ToolSet,
 } from "ai";
-import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
+import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
 
 import { createMessageMetadata } from "./message-metadata.ts";
@@ -162,12 +166,11 @@ const lastSnapshot = async (
 };
 
 /** The production wiring: the runner passes exactly this to the SDK. */
-const uiStreamOf = (result: {
-  toUIMessageStream: (opts: {
-    messageMetadata: ReturnType<typeof createMessageMetadata>;
-  }) => Parameters<typeof lastSnapshot>[0];
+const uiStreamOf = <TOOLS extends ToolSet>(result: {
+  stream: ReadableStream<TextStreamPart<TOOLS>>;
 }) =>
-  result.toUIMessageStream({
+  toUIMessageStream({
+    stream: result.stream,
     messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
   });
 
@@ -189,7 +192,7 @@ const runTurn = async () => {
   });
 
   const message = await lastSnapshot(uiStreamOf(result));
-  return { message, totalUsage: await result.totalUsage };
+  return { message, totalUsage: await result.usage };
 };
 
 describe("Context occupancy over a real multi-step stream", () => {
@@ -336,7 +339,8 @@ describe("tool durations over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           toolDurations,
@@ -377,7 +381,8 @@ describe("tool durations over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
       }),
     );
@@ -405,7 +410,8 @@ describe("Token usage over a real multi-step stream", () => {
 
     return {
       message: await lastSnapshot(
-        result.toUIMessageStream({
+        toUIMessageStream({
+          stream: result.stream,
           messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
         }),
       ),
@@ -438,7 +444,8 @@ describe("Token usage over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
       }),
     );
@@ -456,7 +463,8 @@ describe("Token usage over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
       }),
     );
@@ -474,7 +482,8 @@ describe("Token usage over a real multi-step stream", () => {
     });
 
     return lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
       }),
     );
@@ -572,7 +581,8 @@ describe("Preparation and Model durations", () => {
 
   it("stamps Preparation on `start`, known before the model was ever called", async () => {
     const message = await lastSnapshot(
-      answerOnly().toUIMessageStream({
+      toUIMessageStream({
+        stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           prepDurationMs: 842,
@@ -585,7 +595,8 @@ describe("Preparation and Model durations", () => {
 
   it("says nothing about Preparation when the drive never measured one", async () => {
     const message = await lastSnapshot(
-      answerOnly().toUIMessageStream({
+      toUIMessageStream({
+        stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
       }),
     );
@@ -611,7 +622,8 @@ describe("Preparation and Model durations", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           driveStartMs: 1_000,
@@ -643,7 +655,8 @@ describe("Preparation and Model durations", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           driveStartMs: 1_000,
@@ -663,7 +676,8 @@ describe("Preparation and Model durations", () => {
 
   it("says nothing about Model duration when the drive never measured a start", async () => {
     const message = await lastSnapshot(
-      answerOnly().toUIMessageStream({
+      toUIMessageStream({
+        stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
       }),
     );
@@ -690,7 +704,8 @@ describe("read-only Tool names over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           isClearableTool: (name) => name === "ping",
@@ -713,7 +728,8 @@ describe("read-only Tool names over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           isClearableTool: () => false,
@@ -737,7 +753,8 @@ describe("read-only Tool names over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           isClearableTool: () => true,
@@ -766,7 +783,8 @@ describe("search availability over a real stream", () => {
 
   it("marks the reply when the turn served no search tools", async () => {
     const message = await lastSnapshot(
-      answerOnly().toUIMessageStream({
+      toUIMessageStream({
+        stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           searchUnavailable: true,
@@ -779,7 +797,8 @@ describe("search availability over a real stream", () => {
 
   it("keeps the agent attribution on the same message", async () => {
     const message = await lastSnapshot(
-      answerOnly().toUIMessageStream({
+      toUIMessageStream({
+        stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           searchUnavailable: true,
@@ -796,7 +815,8 @@ describe("search availability over a real stream", () => {
   // relies on.
   it("says nothing about search on a turn that had it", async () => {
     const message = await lastSnapshot(
-      answerOnly().toUIMessageStream({
+      toUIMessageStream({
+        stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           searchUnavailable: false,
@@ -809,7 +829,8 @@ describe("search availability over a real stream", () => {
 
   it("marks a turn with no resolved agent, which carries no other metadata", async () => {
     const message = await lastSnapshot(
-      answerOnly().toUIMessageStream({
+      toUIMessageStream({
+        stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({ searchUnavailable: true }),
       }),
     );
@@ -835,7 +856,8 @@ describe("search availability over a real stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           searchUnavailable: true,
@@ -875,7 +897,8 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
       stopWhen: [stepCountIs(stepCeiling)],
     });
     return lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           stepCeiling,
@@ -935,7 +958,8 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           stepCeiling: 5,
@@ -968,7 +992,8 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
     });
 
     const message = await lastSnapshot(
-      result.toUIMessageStream({
+      toUIMessageStream({
+        stream: result.stream,
         messageMetadata: createMessageMetadata({
           agentId: "agent-1",
           stepCeiling: 1,

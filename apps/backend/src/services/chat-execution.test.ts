@@ -81,7 +81,7 @@ const { mockCreateMCPClient } = vi.hoisted(() => ({
   mockCreateMCPClient: vi.fn(),
 }));
 vi.mock("@ai-sdk/mcp", () => ({
-  experimental_createMCPClient: mockCreateMCPClient,
+  createMCPClient: mockCreateMCPClient,
   auth: vi.fn(),
 }));
 

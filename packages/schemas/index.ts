@@ -2024,7 +2024,7 @@ export const invitationStatusSchema = z.enum([
 
 export const invitationSchema = z.object({
   id: z.string(),
-  email: z.string().email(),
+  email: z.email(),
   organizationId: z.string(),
   // Null once the inviter's account has been deleted.
   invitedBy: z.string().nullable(),
@@ -2070,7 +2070,7 @@ export type InvitationListItem = z.infer<typeof invitationListItemSchema>;
 // look legitimate rather than like a phishing page. Never the inviter,
 // the Blueprint set, or the Workspace name.
 export const invitationLinkResolutionSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   organizationName: z.string(),
 });
 
@@ -3165,12 +3165,9 @@ export const webhookSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   name: z.string().min(1).max(100),
-  url: z
-    .string()
-    .url()
-    .refine((url) => url.startsWith("https://"), {
-      message: "Webhook URL must use HTTPS",
-    }),
+  url: z.url().refine((url) => url.startsWith("https://"), {
+    message: "Webhook URL must use HTTPS",
+  }),
   signingSecret: z.string(),
   headers: z.record(z.string(), z.string()).nullable().optional(),
   enabled: z.boolean(),
@@ -3183,12 +3180,9 @@ export type Webhook = z.infer<typeof webhookSchema>;
 
 export const webhookCreateSchema = z.object({
   name: z.string().min(1).max(100),
-  url: z
-    .string()
-    .url()
-    .refine((url) => url.startsWith("https://"), {
-      message: "Webhook URL must use HTTPS",
-    }),
+  url: z.url().refine((url) => url.startsWith("https://"), {
+    message: "Webhook URL must use HTTPS",
+  }),
   headers: z.record(z.string(), z.string()).nullable().optional(),
   enabled: z.boolean().optional(),
   events: z.array(webhookEventSchema).min(1).optional(),
@@ -3197,7 +3191,6 @@ export const webhookCreateSchema = z.object({
 export const webhookUpdateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   url: z
-    .string()
     .url()
     .refine((url) => url.startsWith("https://"), {
       message: "Webhook URL must use HTTPS",

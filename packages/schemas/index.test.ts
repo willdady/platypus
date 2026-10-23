@@ -460,6 +460,24 @@ describe("Invitation Create Schema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  // Pins what `z.string().email()` accepted before the move to `z.email()`.
+  it.each(["a.b+c@d.com", "USER@EXAMPLE.COM"])("accepts %s", (email) => {
+    expect(invitationCreateSchema.safeParse({ email }).success).toBe(true);
+  });
+
+  it.each([
+    "user@example",
+    "user@example.c",
+    "user@@example.com",
+    "a..b@example.com",
+    "user@example.com ",
+    "ü@example.com",
+    '"q"@example.com',
+    "",
+  ])("rejects %j", (email) => {
+    expect(invitationCreateSchema.safeParse({ email }).success).toBe(false);
+  });
 });
 
 describe("Agent Schema", () => {
@@ -1705,6 +1723,21 @@ describe("webhook URL", () => {
     expect(
       schema.safeParse({ ...body, url: "http://hooks.example.com/x" }).success,
     ).toBe(false);
+  });
+
+  // Pins what `z.string().url()` accepted before the move to `z.url()`.
+  it.each([
+    ["full", webhookSchema, full],
+    ["create", webhookCreateSchema, { name: "Hook" }],
+    ["update", webhookUpdateSchema, {}],
+  ] as const)("rejects a malformed URL on the %s schema", (_, schema, body) => {
+    for (const url of ["https://", "https://exa mple.com", "not a url", ""]) {
+      expect(schema.safeParse({ ...body, url }).success).toBe(false);
+    }
+    expect(
+      schema.safeParse({ ...body, url: "https://localhost:3000/p?q#h" })
+        .success,
+    ).toBe(true);
   });
 });
 

@@ -1,6 +1,7 @@
 import {
   readUIMessageStream,
   streamText,
+  toUIMessageStream,
   type InferUIMessageChunk,
   type ModelMessage,
 } from "ai";
@@ -341,7 +342,9 @@ const runStreamedDrive = (
     },
   });
 
-  const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
+  const uiStream = toUIMessageStream<typeof plan.tools, PlatypusUIMessage>({
+    stream: result.stream,
+    tools: plan.tools,
     originalMessages,
     generateMessageId,
     messageMetadata: createMessageMetadata({
@@ -639,7 +642,12 @@ export const driveOnce = async (
 
       // Drained through the UI message stream so the Run events are read off
       // the same chunks a delegate's are. Nothing else reads it.
-      for await (const chunk of streamed.toUIMessageStream<PlatypusUIMessage>({
+      for await (const chunk of toUIMessageStream<
+        typeof plan.tools,
+        PlatypusUIMessage
+      >({
+        stream: streamed.stream,
+        tools: plan.tools,
         onError: (error) => formatStreamError(error),
       })) {
         if (scope) recordUiChunk(scope, chunk);
@@ -651,7 +659,7 @@ export const driveOnce = async (
           streamed.finishReason,
           streamed.rawFinishReason,
           streamed.steps,
-          streamed.totalUsage,
+          streamed.usage,
         ]);
       return { text, finishReason, rawFinishReason, steps, totalUsage };
     });

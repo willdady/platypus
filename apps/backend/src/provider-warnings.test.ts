@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateText, stepCountIs, ToolLoopAgent, type Warning } from "ai";
-import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
+import {
+  generateText,
+  simulateReadableStream,
+  stepCountIs,
+  ToolLoopAgent,
+  type Warning,
+} from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 
 import { logger } from "./logger.ts";
 import { installProviderWarningLogger } from "./provider-warnings.ts";

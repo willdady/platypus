@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getToolOrDynamicToolName, isToolUIPart, tool, type Tool } from "ai";
+import { getToolName, isToolUIPart, tool, type Tool } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
 import { startRun } from "../runs/run-lifecycle.ts";
@@ -92,7 +92,7 @@ const activityEntries = (
         status: part.state === "done" ? "completed" : "running",
       });
     } else if (isToolUIPart(part)) {
-      const toolName = getToolOrDynamicToolName(part);
+      const toolName = getToolName(part);
       if (part.state === "output-error") {
         entries.push({
           type: "tool-call",
@@ -138,7 +138,7 @@ const finalToolResult = (
     const part = parts[i];
     if (isToolUIPart(part) && part.state === "output-available") {
       return {
-        toolName: getToolOrDynamicToolName(part),
+        toolName: getToolName(part),
         output: part.output,
       };
     }

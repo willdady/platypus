@@ -9,7 +9,7 @@ import app from "../server.ts";
 
 vi.mock("@ai-sdk/mcp", () => ({
   auth: vi.fn(),
-  experimental_createMCPClient: vi.fn().mockResolvedValue({
+  createMCPClient: vi.fn().mockResolvedValue({
     tools: vi.fn().mockResolvedValue({}),
     close: vi.fn().mockResolvedValue(undefined),
   }),
