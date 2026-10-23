@@ -12,7 +12,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { userMayUseWorkspace } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
-import { logger } from "../logger.ts";
+import { ConflictError, isUniqueViolation } from "../errors.ts";
 
 const context = new Hono<{ Variables: Variables }>();
 
@@ -112,14 +112,9 @@ context.post(
 
       return c.json(record[0], 201);
     } catch (error) {
-      // Handle unique constraint violation
-      if ((error as { code?: string }).code === "23505") {
-        return c.json(
-          { error: "You already have a context for this scope" },
-          409,
-        );
+      if (isUniqueViolation(error)) {
+        throw new ConflictError("You already have a context for this scope");
       }
-      logger.error({ error }, "Error creating context");
       throw error;
     }
   },
