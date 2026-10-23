@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db } from "../index.ts";
+import { db, type Executor } from "../index.ts";
 import {
   agent as agentTable,
   chat as chatTable,
@@ -84,8 +84,9 @@ export const orphanedAliasRepoints = (
  */
 export const currentProviderModels = async (
   providerId: string,
+  exec: Executor = db,
 ): Promise<ModelConfig[] | null> => {
-  const [row] = await db
+  const [row] = await exec
     .select({ modelIds: providerTable.modelIds })
     .from(providerTable)
     .where(eq(providerTable.id, providerId))
@@ -108,6 +109,7 @@ export const deMigrateOrphanedAliases = async (
   providerId: string,
   previous: ModelConfig[],
   next: ModelConfig[],
+  exec: Executor = db,
 ): Promise<AliasRepoint[]> => {
   const repoints = orphanedAliasRepoints(previous, next);
   const results: AliasRepoint[] = [];
@@ -115,7 +117,7 @@ export const deMigrateOrphanedAliases = async (
   for (const { alias, modelId } of repoints) {
     const reference = `${MODEL_ALIAS_PREFIX}${alias}`.toLowerCase();
 
-    const agents = await db
+    const agents = await exec
       .update(agentTable)
       .set({ modelId, updatedAt: new Date() })
       .where(
@@ -126,7 +128,7 @@ export const deMigrateOrphanedAliases = async (
       )
       .returning({ id: agentTable.id });
 
-    const chats = await db
+    const chats = await exec
       .update(chatTable)
       .set({ modelId, updatedAt: new Date() })
       .where(

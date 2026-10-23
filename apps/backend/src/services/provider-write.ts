@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { eq, type SQL } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { db, type Tx } from "../index.ts";
+import { db, type Executor } from "../index.ts";
 import {
   agent as agentTable,
   provider as providerTable,
@@ -36,20 +36,22 @@ import {
  * configs, invalidate stale embeddings (BEFORE the write), snapshot the
  * current models (BEFORE the write, for the alias diff), write the row, then
  * de-migrate any alias the save orphaned (AFTER the write) — plus create and
- * delete. Both the Workspace route (`routes/provider.ts`) and the Organization
- * route (`routes/org-provider.ts`) are thin adapters over it; they used to
- * each carry a verbatim copy of the ordering and had already drifted (#605):
- * the Workspace copy checked the Provider existed before touching embeddings,
- * the Organization copy did not, discovering a missing row only when the
- * `UPDATE` matched nothing.
+ * delete. An update or delete runs every step in one transaction, so a write
+ * that fails part-way (a duplicate name, an Agent created mid-delete) leaves
+ * embeddings and alias references as they were (#1611).
+ *
+ * Both the Workspace route (`routes/provider.ts`) and the Organization route
+ * (`routes/org-provider.ts`) are thin adapters over it; they used to each
+ * carry a verbatim copy of the ordering and had already drifted (#605): the
+ * Workspace copy checked the Provider existed before touching embeddings, the
+ * Organization copy did not, discovering a missing row only when the `UPDATE`
+ * matched nothing.
  *
  * Distinct from `services/provider.ts`, which is the vendor-SDK adapter
  * (`openProvider`) — an unrelated seam that happens to share a resource name.
  */
 
 export type ProviderRow = typeof providerTable.$inferSelect;
-
-type Executor = typeof db | Tx;
 
 /** The fields a create carries — every field but the id and its scope. */
 export type ProviderCreateFields = Omit<
@@ -128,51 +130,58 @@ export async function updateProvider(
 ): Promise<ProviderUpdateResult> {
   const data = dedupeModels(fields);
 
-  let where: SQL;
-  if (scope.kind === "workspace") {
-    // A Shared Provider is a single source of truth edited only on the
-    // Organization surface (ADR-0007); requireWorkspaceMutable throws
-    // NotFound (→404) when the Provider is not visible here, then Locked
-    // (→403) when it is org-scoped.
-    await requireWorkspaceMutable(db, "provider", providerId, scope.ctx);
-    where = workspaceScopedWhere("provider", providerId, scope.ctx.workspaceId);
-  } else {
-    // The existence check the Organization surface previously skipped
-    // (#605): requireOrgScoped throws NotFound (→404) before the write ever
-    // touches embeddings.
-    await requireOrgScoped(db, "provider", providerId, scope.orgId);
-    where = orgScopedWhere("provider", providerId, scope.orgId);
-  }
+  return db.transaction(async (tx) => {
+    let where: SQL;
+    if (scope.kind === "workspace") {
+      // A Shared Provider is a single source of truth edited only on the
+      // Organization surface (ADR-0007); requireWorkspaceMutable throws
+      // NotFound (→404) when the Provider is not visible here, then Locked
+      // (→403) when it is org-scoped.
+      await requireWorkspaceMutable(tx, "provider", providerId, scope.ctx);
+      where = workspaceScopedWhere(
+        "provider",
+        providerId,
+        scope.ctx.workspaceId,
+      );
+    } else {
+      // The existence check the Organization surface previously skipped
+      // (#605): requireOrgScoped throws NotFound (→404) before the write ever
+      // touches embeddings.
+      await requireOrgScoped(tx, "provider", providerId, scope.orgId);
+      where = orgScopedWhere("provider", providerId, scope.orgId);
+    }
 
-  // Detect and handle embedding config changes before the update.
-  await handleEmbeddingConfigChange(providerId, data);
+    // Detect and handle embedding config changes before the update.
+    await handleEmbeddingConfigChange(providerId, data, tx);
 
-  // Snapshot the models as stored, so an alias this save removes can
-  // de-migrate its references rather than dangling them (ADR-0017).
-  const previousModels = data.modelIds
-    ? await currentProviderModels(providerId)
-    : null;
+    // Snapshot the models as stored, so an alias this save removes can
+    // de-migrate its references rather than dangling them (ADR-0017).
+    const previousModels = data.modelIds
+      ? await currentProviderModels(providerId, tx)
+      : null;
 
-  // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-  // by the central onError (ADR-0010).
-  const [row] = await db
-    .update(providerTable)
-    .set({ ...data, updatedAt: new Date() })
-    .where(where)
-    .returning();
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0010).
+    const [row] = await tx
+      .update(providerTable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(where)
+      .returning();
 
-  // Runs AFTER the row is written: a failed update must not leave Agents
-  // repointed for an alias that still exists.
-  const aliasRepoints =
-    previousModels && data.modelIds
-      ? await deMigrateOrphanedAliases(
-          providerId,
-          previousModels,
-          data.modelIds,
-        )
-      : [];
+    // Runs AFTER the row is written: a failed update must not leave Agents
+    // repointed for an alias that still exists.
+    const aliasRepoints =
+      previousModels && data.modelIds
+        ? await deMigrateOrphanedAliases(
+            providerId,
+            previousModels,
+            data.modelIds,
+            tx,
+          )
+        : [];
 
-  return { row, aliasRepoints };
+    return { row, aliasRepoints };
+  });
 }
 
 /**
@@ -180,8 +189,11 @@ export async function updateProvider(
  * `agent.provider_id` is an `ON DELETE RESTRICT` foreign key, so the delete
  * would otherwise fail in Postgres with nothing the user could act on.
  */
-async function requireNoAgents(providerId: string): Promise<void> {
-  const agents = await db
+async function requireNoAgents(
+  providerId: string,
+  exec: Executor,
+): Promise<void> {
+  const agents = await exec
     .select({ name: agentTable.name })
     .from(agentTable)
     .where(eq(agentTable.providerId, providerId));
@@ -206,39 +218,47 @@ export async function deleteProvider(
   scope: ProviderScope,
   providerId: string,
 ): Promise<void> {
-  let where: SQL;
-  if (scope.kind === "workspace") {
-    await requireWorkspaceMutable(db, "provider", providerId, scope.ctx);
-    where = workspaceScopedWhere("provider", providerId, scope.ctx.workspaceId);
-  } else {
-    // A Shared resource cannot be deleted while anything still points at it —
-    // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
-    // → 409 via the central onError (ADR-0010).
-    await requireSharedDeletable(db, "provider", providerId);
-    where = orgScopedWhere("provider", providerId, scope.orgId);
-  }
-  await requireNoAgents(providerId);
+  await db.transaction(async (tx) => {
+    let where: SQL;
+    if (scope.kind === "workspace") {
+      await requireWorkspaceMutable(tx, "provider", providerId, scope.ctx);
+      where = workspaceScopedWhere(
+        "provider",
+        providerId,
+        scope.ctx.workspaceId,
+      );
+    } else {
+      // A Shared resource cannot be deleted while anything still points at
+      // it — an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws
+      // ConflictError → 409 via the central onError (ADR-0010).
+      await requireSharedDeletable(tx, "provider", providerId);
+      where = orgScopedWhere("provider", providerId, scope.orgId);
+    }
+    await requireNoAgents(providerId, tx);
 
-  // Deleting removes every model this Provider defined, so any Workspace
-  // whose memory embeddings were computed against it now points at a config
-  // that no longer resolves. Run BEFORE the delete: `nullifyEmbeddingsForProvider`
-  // finds affected Workspaces via `workspace.memoryEmbeddingProviderId`, which
-  // the FK's `ON DELETE SET NULL` would otherwise have already cleared.
-  //
-  // Alias de-migration intentionally does NOT run here. De-migration rewrites
-  // a reference to the concrete model id an alias pointed at (ADR-0017) — but
-  // a delete removes every one of this Provider's models, so there is no
-  // surviving concrete id for an orphaned alias to fall back to. That case is
-  // exactly what an update that merely drops one alias exists to handle.
-  await nullifyEmbeddingsForProvider(providerId);
+    // Deleting removes every model this Provider defined, so any Workspace
+    // whose memory embeddings were computed against it now points at a
+    // config that no longer resolves. Run BEFORE the delete:
+    // `nullifyEmbeddingsForProvider` finds affected Workspaces via
+    // `workspace.memoryEmbeddingProviderId`, which the FK's
+    // `ON DELETE SET NULL` would otherwise have already cleared.
+    //
+    // Alias de-migration intentionally does NOT run here. De-migration
+    // rewrites a reference to the concrete model id an alias pointed at
+    // (ADR-0017) — but a delete removes every one of this Provider's models,
+    // so there is no surviving concrete id for an orphaned alias to fall back
+    // to. That case is exactly what an update that merely drops one alias
+    // exists to handle.
+    await nullifyEmbeddingsForProvider(providerId, tx);
 
-  const result = await db.delete(providerTable).where(where).returning();
+    const result = await tx.delete(providerTable).where(where).returning();
 
-  // Workspace scope: requireWorkspaceMutable already established the row
-  // exists, so the delete always matches. Organization scope: requireSharedDeletable
-  // only checks referencing Attachments/Blueprints, not existence, so the
-  // delete itself is where a missing Provider 404s.
-  if (scope.kind === "organization" && result.length === 0) {
-    throw new NotFoundError("Provider not found");
-  }
+    // Workspace scope: requireWorkspaceMutable already established the row
+    // exists, so the delete always matches. Organization scope:
+    // requireSharedDeletable only checks referencing Attachments/Blueprints,
+    // not existence, so the delete itself is where a missing Provider 404s.
+    if (scope.kind === "organization" && result.length === 0) {
+      throw new NotFoundError("Provider not found");
+    }
+  });
 }
