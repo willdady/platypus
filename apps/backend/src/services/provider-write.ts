@@ -237,24 +237,26 @@ export async function deleteProvider(
     await requireNoAgents(providerId, tx);
 
     // Deleting removes every model this Provider defined, so any Workspace
-    // whose memory embeddings were computed against it now points at a config
-    // that no longer resolves. Run BEFORE the delete: `nullifyEmbeddingsForProvider`
-    // finds affected Workspaces via `workspace.memoryEmbeddingProviderId`, which
-    // the FK's `ON DELETE SET NULL` would otherwise have already cleared.
+    // whose memory embeddings were computed against it now points at a
+    // config that no longer resolves. Run BEFORE the delete:
+    // `nullifyEmbeddingsForProvider` finds affected Workspaces via
+    // `workspace.memoryEmbeddingProviderId`, which the FK's
+    // `ON DELETE SET NULL` would otherwise have already cleared.
     //
-    // Alias de-migration intentionally does NOT run here. De-migration rewrites
-    // a reference to the concrete model id an alias pointed at (ADR-0017) — but
-    // a delete removes every one of this Provider's models, so there is no
-    // surviving concrete id for an orphaned alias to fall back to. That case is
-    // exactly what an update that merely drops one alias exists to handle.
+    // Alias de-migration intentionally does NOT run here. De-migration
+    // rewrites a reference to the concrete model id an alias pointed at
+    // (ADR-0017) — but a delete removes every one of this Provider's models,
+    // so there is no surviving concrete id for an orphaned alias to fall back
+    // to. That case is exactly what an update that merely drops one alias
+    // exists to handle.
     await nullifyEmbeddingsForProvider(providerId, tx);
 
     const result = await tx.delete(providerTable).where(where).returning();
 
     // Workspace scope: requireWorkspaceMutable already established the row
-    // exists, so the delete always matches. Organization scope: requireSharedDeletable
-    // only checks referencing Attachments/Blueprints, not existence, so the
-    // delete itself is where a missing Provider 404s.
+    // exists, so the delete always matches. Organization scope:
+    // requireSharedDeletable only checks referencing Attachments/Blueprints,
+    // not existence, so the delete itself is where a missing Provider 404s.
     if (scope.kind === "organization" && result.length === 0) {
       throw new NotFoundError("Provider not found");
     }
