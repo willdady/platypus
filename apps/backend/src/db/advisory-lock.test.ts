@@ -29,6 +29,22 @@ describe.each([{ wait: true }, { wait: false }] as const)(
       expect(pg.checkedOut[0].release).toHaveBeenCalledWith(undefined);
     });
 
+    it("releases the lock even when the work issues its own queries", async () => {
+      const pg = fakePool();
+      // The work's queries land on other pooled connections, as a job's do.
+      // The unlock must still go through the connection holding the lock.
+      const work = async () => {
+        const other = await pg.pool.connect();
+        await other.query("SELECT 1");
+        other.release();
+      };
+
+      await withAdvisoryLock(pg.pool, 7, work, options);
+
+      expect(pg.held.has(7)).toBe(false);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
     it("lets the next caller take the lock again", async () => {
       const pg = fakePool();
       const work = vi.fn(() => Promise.resolve());

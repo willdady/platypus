@@ -1,5 +1,6 @@
 import type { PluginConfigContext } from "@platypuschat/plugin-sdk";
 import { errorMessage } from "../utils/error-message.ts";
+import { isRecord } from "../utils/is-record.ts";
 
 // The one registration sequence every Extension point runs (ADR-0013).
 //
@@ -141,11 +142,7 @@ export const registerContributions = <TRegistration>(
     // The two checks that run before an id is known carry the array index — on
     // a plugin contributing several entries it is the only thing an Operator
     // can use to find the offending one.
-    if (
-      typeof contribution !== "object" ||
-      contribution === null ||
-      Array.isArray(contribution)
-    ) {
+    if (!isRecord(contribution)) {
       throw new Error(
         `Plugin "${pluginName}": every ${point.noun} contribution must be an object (at index ${index}).`,
       );
