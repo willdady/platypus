@@ -26,6 +26,8 @@ import {
   toolSetPoint,
   webBackendPoint,
 } from "./extension-points.ts";
+import { errorMessage } from "../utils/error-message.ts";
+import { isRecord } from "../utils/is-record.ts";
 
 // Summary of one loaded plugin, for the boot log line and observability.
 export interface LoadedPlugin {
@@ -175,14 +177,11 @@ const parseJsonObject = (
   try {
     parsed = JSON.parse(raw);
   } catch (cause) {
-    throw new Error(
-      `${varName} is not valid JSON (${
-        cause instanceof Error ? cause.message : String(cause)
-      }).`,
-      { cause },
-    );
+    throw new Error(`${varName} is not valid JSON (${errorMessage(cause)}).`, {
+      cause,
+    });
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     throw new Error(`${varName} must be a JSON object ${expected}.`);
   }
   return parsed;
@@ -206,7 +205,7 @@ export const parsePluginConfig = (raw: string | undefined): PluginConfigMap => {
 
   const map: PluginConfigMap = {};
   for (const [pluginName, entry] of Object.entries(parsed)) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    if (!isRecord(entry)) {
       throw new Error(
         `PLATYPUS_PLUGIN_CONFIG["${pluginName}"] must be an object with optional "config" / "credentials".`,
       );
@@ -508,9 +507,7 @@ export async function loadPlugins(
       mod = isCore ? await builtins[name]() : await importPlugin(name);
     } catch (cause) {
       throw new Error(
-        `Plugin "${name}": failed to resolve (${
-          cause instanceof Error ? cause.message : String(cause)
-        }).`,
+        `Plugin "${name}": failed to resolve (${errorMessage(cause)}).`,
         { cause },
       );
     }

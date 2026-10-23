@@ -8,6 +8,7 @@ import {
 import { logger } from "../logger.ts";
 import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { openSandboxRow } from "./open-row.ts";
+import { errorMessage } from "../utils/error-message.ts";
 
 type SandboxRow = typeof sandboxTable.$inferSelect;
 
@@ -66,7 +67,7 @@ const destroyOpened = async (
         if ("error" in entry) throw entry.error;
         await entry.open.backend.destroy(entry.open.ctx);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         // Core's line about a plugin's adapter, so it binds the owning plugin
         // under the same `plugin` key the adapter's own lines carry — an
         // Operator filtering on one plugin should get both halves of the story.

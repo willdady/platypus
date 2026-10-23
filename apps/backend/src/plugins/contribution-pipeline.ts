@@ -1,4 +1,5 @@
 import type { PluginConfigContext } from "@platypuschat/plugin-sdk";
+import { errorMessage } from "../utils/error-message.ts";
 
 // The one registration sequence every Extension point runs (ADR-0013).
 //
@@ -192,9 +193,9 @@ export const registerContributions = <TRegistration>(
       // built-in, a legacy static registration) surfaces here — the registry
       // does not know which plugin asked, so attribution is added.
       throw new Error(
-        `Plugin "${pluginName}": failed to register ${point.noun} "${id}" (${
-          cause instanceof Error ? cause.message : String(cause)
-        }).`,
+        `Plugin "${pluginName}": failed to register ${point.noun} "${id}" (${errorMessage(
+          cause,
+        )}).`,
         { cause },
       );
     }

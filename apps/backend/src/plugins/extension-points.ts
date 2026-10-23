@@ -12,6 +12,7 @@ import {
   type WebBackendRegistration,
 } from "../web-backends/index.ts";
 import type { ExtensionPoint } from "./contribution-pipeline.ts";
+import { errorMessage } from "../utils/error-message.ts";
 
 // What each Extension point adds to the shared registration sequence in
 // `contribution-pipeline.ts`: the noun its errors read with, the field it takes
@@ -121,9 +122,9 @@ export const sandboxBackendPoint = (
           : contribution.configSchema;
     } catch (cause) {
       throw new Error(
-        `Plugin "${pluginName}": sandbox backend "${id}" configSchema factory threw (${
-          cause instanceof Error ? cause.message : String(cause)
-        }).`,
+        `Plugin "${pluginName}": sandbox backend "${id}" configSchema factory threw (${errorMessage(
+          cause,
+        )}).`,
         { cause },
       );
     }

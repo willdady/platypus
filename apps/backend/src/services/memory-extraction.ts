@@ -31,6 +31,7 @@ import {
 import { generateEmbedding } from "./embedding.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { loadActivePath } from "./chat-messages.ts";
+import { errorMessage } from "../utils/error-message.ts";
 
 /**
  * How much one pass may send, in tokens estimated as characters ÷ 4: half the
@@ -274,7 +275,7 @@ const processChat = async (
       temperature: 0.3,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     logger.error(
       {
         err: error,
@@ -307,7 +308,7 @@ const processChat = async (
         updatedSummary,
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       logger.error(
         { err: error, chatId: chat.id },
         `Failed to generate embedding for daily summary: ${message}`,

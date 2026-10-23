@@ -3,6 +3,7 @@ import { Inflate, strToU8, zipSync } from "fflate";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { skillBaseSchema } from "@platypus/schemas";
 import { ValidationError } from "../errors.ts";
+import { isRecord } from "../utils/is-record.ts";
 
 /**
  * The on-the-wire shape of a Skill bundle (ADR-0036): reading an uploaded zip
@@ -255,7 +256,7 @@ const parseSkillMd = (
     const where = linePos ? ` at line ${linePos[0].line + 1}` : "";
     fail(`Frontmatter is not valid YAML${where}: ${message.split("\n")[0]}`);
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     fail("Frontmatter must be a YAML mapping");
   }
 
