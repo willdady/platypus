@@ -563,10 +563,13 @@ export function Chat({
       const run: { before: PlatypusUIMessage[]; next?: string } = { before };
       switchRef.current = run;
       const put = (messageId: string) =>
-        writeAt<Pick<ChatType, "messages" | "tree">>(`${chatUrl}/active-leaf`, {
-          method: "PUT",
-          data: { messageId },
-        });
+        writeAt<Required<Pick<ChatType, "messages" | "tree">>>(
+          `${chatUrl}/active-leaf`,
+          {
+            method: "PUT",
+            data: { messageId },
+          },
+        );
       let outcome = await put(toId);
       while (run.next) {
         const messageId = run.next;
@@ -580,7 +583,7 @@ export function Chat({
 
       if (outcome.outcome === "success") {
         const { tree } = outcome.data;
-        const messages = outcome.data.messages as PlatypusUIMessage[];
+        const { messages } = outcome.data;
         setMessages(messages);
         void mutateChat(
           (current) => current && { ...current, messages, tree },
