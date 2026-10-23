@@ -30,7 +30,7 @@ vi.mock("../services/chat-execution.ts", () => ({
   drizzleChatTurnQueries: {},
 }));
 
-import { createUIMessageStreamResponse, streamText } from "ai";
+import { createUIMessageStreamResponse } from "ai";
 import { sql } from "drizzle-orm";
 import app from "../server.ts";
 import { runRegistry } from "../runs/run-registry.ts";
@@ -48,15 +48,16 @@ vi.mock("ai", async () => {
   const actual = await vi.importActual("ai");
   return {
     ...actual,
-    streamText: vi.fn().mockReturnValue({
-      toUIMessageStream: vi.fn().mockReturnValue(
+    streamText: vi.fn().mockReturnValue({}),
+    // A fresh stream per call: the drive consumes the one it is handed.
+    toUIMessageStream: vi.fn(
+      () =>
         new ReadableStream({
           start(controller) {
             controller.close();
           },
         }),
-      ),
-    }),
+    ),
     createUIMessageStreamResponse: vi
       .fn()
       .mockReturnValue(new Response("stream")),
@@ -83,7 +84,7 @@ vi.mock("@openrouter/ai-sdk-provider", () => ({
 }));
 
 vi.mock("@ai-sdk/mcp", () => ({
-  experimental_createMCPClient: vi.fn().mockResolvedValue({
+  createMCPClient: vi.fn().mockResolvedValue({
     tools: vi.fn().mockResolvedValue({}),
     close: vi.fn().mockResolvedValue(undefined),
   }),
@@ -431,20 +432,11 @@ describe("Chat Routes", () => {
     };
 
     /**
-     * The `ai` mock hands out ONE `ReadableStream` and ONE `Response`, and both
-     * are consumed on the way through the drive — so the second test to reach
-     * the drive finds them locked. A test that needs the run to get that far
-     * re-stubs both with instances of its own.
+     * The `ai` mock hands out ONE `Response`, consumed on the way through the
+     * drive — so the second test to reach the drive finds it locked. A test
+     * that needs the run to get that far re-stubs it with one of its own.
      */
     const freshStream = () => {
-      vi.mocked(streamText).mockReturnValueOnce({
-        toUIMessageStream: () =>
-          new ReadableStream({
-            start(controller) {
-              controller.close();
-            },
-          }),
-      } as unknown as ReturnType<typeof streamText>);
       vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
         new Response("stream"),
       );
@@ -1051,16 +1043,8 @@ describe("Chat Routes", () => {
       dispose: vi.fn().mockResolvedValue(undefined),
     };
 
-    /** A fresh stream per request: the `ai` mock's one instance locks. */
+    /** A fresh Response per request: the `ai` mock's one instance locks. */
     const startsTurn = () => {
-      vi.mocked(streamText).mockReturnValueOnce({
-        toUIMessageStream: () =>
-          new ReadableStream({
-            start(controller) {
-              controller.close();
-            },
-          }),
-      } as unknown as ReturnType<typeof streamText>);
       vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
         new Response("stream"),
       );

@@ -754,26 +754,26 @@ describe("DockerSandboxTransport — tar builder", () => {
 
     expect(tar.length % 512).toBe(0);
     // ustar magic at offset 257.
-    expect(tar.slice(257, 262).toString("utf8")).toBe("ustar");
+    expect(tar.subarray(257, 262).toString("utf8")).toBe("ustar");
 
     // size field at 124..136 — 11 octal digits + space.
-    const sizeField = tar.slice(124, 136).toString("utf8");
+    const sizeField = tar.subarray(124, 136).toString("utf8");
     // Octal-encoded content length, zero-padded to 11, trailing space.
     const expectedSize = content.length.toString(8).padStart(11, "0") + " ";
     expect(sizeField).toBe(expectedSize);
 
     // Entry name at offset 0..100, NUL-padded.
-    const nameBytes = tar.slice(0, 100);
+    const nameBytes = tar.subarray(0, 100);
     const nul = nameBytes.indexOf(0);
-    const name = nameBytes.slice(0, nul === -1 ? 100 : nul).toString("utf8");
+    const name = nameBytes.subarray(0, nul === -1 ? 100 : nul).toString("utf8");
     expect(name).toBe("a/b.txt");
   });
 
   it("buildSingleFileTar strips leading slashes from entry name", () => {
     const tar = buildSingleFileTar("/leading", Buffer.from("x"));
-    const nameBytes = tar.slice(0, 100);
+    const nameBytes = tar.subarray(0, 100);
     const nul = nameBytes.indexOf(0);
-    expect(nameBytes.slice(0, nul).toString("utf8")).toBe("leading");
+    expect(nameBytes.subarray(0, nul).toString("utf8")).toBe("leading");
   });
 
   it("buildSingleFileTar refuses an entry name over the 100-byte ustar field", () => {

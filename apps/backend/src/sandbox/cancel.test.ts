@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
+import { simulateReadableStream } from "ai";
+import { MockLanguageModelV3 } from "ai/test";
 import { startRun } from "../runs/run-lifecycle.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { driveDelegate } from "../runs/drive.ts";

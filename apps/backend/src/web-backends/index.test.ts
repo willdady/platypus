@@ -642,7 +642,7 @@ describe("read_url — egress guard, capping, slicing", () => {
   });
 
   it("blocks a non-http(s) requested URL, and never echoes it back", async () => {
-    // `readUrlInputSchema.url` is `z.string().url()`, which accepts
+    // `readUrlInputSchema.url` is `z.url()`, which accepts
     // `javascript:` — `new URL()` parses it. The egress guard's scheme check is
     // the only thing keeping such a URL out of `result.url`, which PR3 renders as
     // a clickable pill, so the coupling is pinned here rather than left implicit.

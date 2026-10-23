@@ -2,10 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { eq, type SQL } from "drizzle-orm";
 import { mockDb, resetMockDb, asDb, seedDb } from "../test-utils.ts";
 import { markerOperators } from "../fake-db.ts";
-import {
-  experimental_createMCPClient as createMCPClient,
-  auth as mcpAuth,
-} from "@ai-sdk/mcp";
+import { createMCPClient, auth as mcpAuth } from "@ai-sdk/mcp";
 import { mcp as mcpTable } from "../db/schema.ts";
 import type { McpRecord } from "./mcp-oauth-provider.ts";
 import { logger } from "../logger.ts";
@@ -20,7 +17,7 @@ import {
 const someWhere = eq(mcpTable.id, "mcp-1");
 
 vi.mock("@ai-sdk/mcp", () => ({
-  experimental_createMCPClient: vi.fn().mockResolvedValue({
+  createMCPClient: vi.fn().mockResolvedValue({
     tools: vi.fn().mockResolvedValue({ tool1: {} }),
     close: vi.fn().mockResolvedValue(undefined),
   }),

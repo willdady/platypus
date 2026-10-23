@@ -58,7 +58,7 @@ export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
     // reused rather than mirrored for `WEB_BACKEND_TOOL_MARKER`'s own reason.
     metadata: { [WEB_BACKEND_TOOL_MARKER]: true },
     inputSchema: z.object({
-      url: z.string().url().describe("URL to fetch"),
+      url: z.url().describe("URL to fetch"),
       max_length: z
         .number()
         .int()

@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
-import type { Tool, ToolExecutionOptions } from "ai";
+import { MockLanguageModelV3 } from "ai/test";
+import {
+  simulateReadableStream,
+  type Tool,
+  type ToolExecutionOptions,
+} from "ai";
 import { z } from "zod";
 import {
   COLLIDING_SUB_AGENT_NAME_REASON,

@@ -98,7 +98,7 @@ export const dockerSandboxConfigSchema = (plugin: PluginConfigContext) => {
     for (const n of cfg.networks) {
       if (!allowed.has(n)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["networks"],
           message: `Network '${n}' is not in the operator allowlist (@platypus/docker plugin config 'allowedNetworks')`,
         });

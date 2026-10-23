@@ -149,7 +149,7 @@ const presentableReadUrl = (resolved: unknown, requested: string): string => {
     return resolved;
   }
   if (requested.length <= MAX_URL_CHARS) return requested;
-  // Unreachable in practice: `requested` cleared `z.string().url()` and the
+  // Unreachable in practice: `requested` cleared `z.url()` and the
   // egress guard, so it parses and is http(s). Guarded anyway — this runs on the
   // success path of a tool whose whole contract is to return `{ error }` rather
   // than throw.

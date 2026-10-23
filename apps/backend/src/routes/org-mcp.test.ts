@@ -11,7 +11,7 @@ import app from "../server.ts";
 import { auth as mcpAuth } from "@ai-sdk/mcp";
 
 vi.mock("@ai-sdk/mcp", () => ({
-  experimental_createMCPClient: vi.fn().mockResolvedValue({
+  createMCPClient: vi.fn().mockResolvedValue({
     tools: vi.fn().mockResolvedValue({ tool1: {} }),
     close: vi.fn().mockResolvedValue(undefined),
   }),

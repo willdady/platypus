@@ -6,7 +6,7 @@ const { mockCreateMCPClient, mockRetrieveRecentSummaries } = vi.hoisted(() => ({
   mockRetrieveRecentSummaries: vi.fn(),
 }));
 vi.mock("@ai-sdk/mcp", () => ({
-  experimental_createMCPClient: mockCreateMCPClient,
+  createMCPClient: mockCreateMCPClient,
   auth: vi.fn(),
 }));
 // The live retrieval's own query is `memory-retrieval.test.ts`'s subject.

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { Tool } from "ai";
+import { simulateReadableStream, type Tool } from "ai";
 import type {
   LanguageModelV3FinishReason,
   LanguageModelV3StreamPart,
   LanguageModelV3Usage,
 } from "@ai-sdk/provider";
-import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
+import { MockLanguageModelV3 } from "ai/test";
 import { z } from "zod";
 import { startRun } from "./run-lifecycle.ts";
 import { runRegistry, TimeoutError } from "./run-registry.ts";

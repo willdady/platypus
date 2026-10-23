@@ -85,7 +85,7 @@ export const readUrlInputSchema = z.object({
   // bound. See the note on that constant above: a length cap here would reject
   // legitimately long presigned URLs, and it is the only place `read_url` would
   // diverge from `fetchUrl`'s input.
-  url: z.string().url().describe("URL to read"),
+  url: z.url().describe("URL to read"),
   max_length: z
     .number()
     .int()

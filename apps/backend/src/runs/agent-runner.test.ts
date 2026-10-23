@@ -15,6 +15,7 @@ const {
   mockPrepareChatTurn,
   mockValidateTurnAttachments,
   mockStreamText,
+  mockToUIMessageStream,
   streamHarness,
 } = vi.hoisted(() => {
   // A minimal, manually-driven async iterable standing in for the server-side
@@ -53,6 +54,12 @@ const {
     mockPrepareChatTurn: vi.fn(),
     mockValidateTurnAttachments: vi.fn(),
     mockStreamText: vi.fn(),
+    // The drive hands the `streamText` result's stream to this. Nothing reads
+    // what it returns: `readUIMessageStream` is mocked to the harness queue.
+    mockToUIMessageStream: vi.fn(
+      (_uiOpts: never) =>
+        new ReadableStream({ start: (controller) => controller.close() }),
+    ),
     streamHarness: {
       AsyncQueue,
       queue: null as InstanceType<typeof AsyncQueue> | null,
@@ -88,6 +95,7 @@ vi.mock("ai", async () => {
   return {
     ...actual,
     streamText: mockStreamText,
+    toUIMessageStream: mockToUIMessageStream,
     convertToModelMessages: vi.fn().mockReturnValue([]),
     createIdGenerator: vi.fn().mockReturnValue(() => "msg-1"),
     stepCountIs: vi.fn(),
@@ -217,21 +225,22 @@ const fakeTurn = (overrides?: { dispose?: () => Promise<void> }) => {
 const fakeGenerateResult = {
   text: "ok",
   steps: [],
-  totalUsage: { inputTokens: 10, outputTokens: 5 },
+  usage: { inputTokens: 10, outputTokens: 5 },
 };
 
 /**
- * What the headless drive reads off a `streamText` result: a UI message stream
- * it drains (empty here — these tests drive the callbacks by hand) and the
- * promise-valued terminal fields. `settleAfter`, when given, gates every field
- * on it, so a test can make the model "hang" until a signal fires and fail the
- * fields with that signal's reason.
+ * What the headless drive reads off a `streamText` result: the promise-valued
+ * terminal fields. The UI message stream it drains comes from the mocked
+ * `toUIMessageStream` (empty — these tests drive the callbacks by hand).
+ * `settleAfter`, when given, gates every field on it, so a test can make the
+ * model "hang" until a signal fires and fail the fields with that signal's
+ * reason.
  */
 const streamResultOf = (
   data: {
     text?: string;
     steps?: unknown[];
-    totalUsage?: unknown;
+    usage?: unknown;
     finishReason?: string;
     rawFinishReason?: string;
   },
@@ -240,10 +249,9 @@ const streamResultOf = (
   const gate = opts.settleAfter ?? Promise.resolve();
   const after = <T>(value: T) => gate.then(() => value);
   return {
-    toUIMessageStream: () => emptyUIStream(),
     text: after(data.text ?? "ok"),
     steps: after(data.steps ?? []),
-    totalUsage: after(data.totalUsage ?? {}),
+    usage: after(data.usage ?? {}),
     finishReason: after(data.finishReason ?? "stop"),
     rawFinishReason: after(data.rawFinishReason ?? "stop"),
   };
@@ -498,9 +506,7 @@ describe("rejected tool input instrumentation", () => {
     mockStreamText.mockImplementation(
       (opts: { onStepFinish: (step: unknown) => void }) => {
         streamHarness.onStepFinish = opts.onStepFinish;
-        return {
-          toUIMessageStream: () => emptyUIStream(),
-        };
+        return {};
       },
     );
 
@@ -615,7 +621,7 @@ describe("AgentRunner.generate", () => {
 
   // ADR-0018: an unattended run's only record of how full the context got is
   // the stats it hands the sink, and the two plausible-looking figures beside
-  // occupancy — `totalUsage.inputTokens` and the accumulated `stats.inputTokens`
+  // occupancy — `usage.inputTokens` and the accumulated `stats.inputTokens`
   // — are both cross-step sums.
   it("records Context occupancy from the final step, not the sum across steps", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
@@ -626,7 +632,7 @@ describe("AgentRunner.generate", () => {
           { toolCalls: [], usage: { inputTokens: 1_000, outputTokens: 40 } },
           { toolCalls: [], usage: { inputTokens: 3_500, outputTokens: 60 } },
         ],
-        totalUsage: { inputTokens: 4_500, outputTokens: 100 },
+        usage: { inputTokens: 4_500, outputTokens: 100 },
       }),
     );
 
@@ -660,7 +666,7 @@ describe("AgentRunner.generate", () => {
         return streamResultOf({
           text: "ok",
           steps: [{ toolCalls: [] }],
-          totalUsage: {},
+          usage: {},
         });
       },
     );
@@ -684,7 +690,7 @@ describe("AgentRunner.generate", () => {
       streamResultOf({
         text: "ok",
         steps: [{ toolCalls: [] }],
-        totalUsage: {},
+        usage: {},
       }),
     );
 
@@ -1356,16 +1362,17 @@ const primeStreamText = () => {
     }) => {
       streamHarness.onStepFinish = opts.onStepFinish;
       streamHarness.onToolExecutionEnd = opts.onToolExecutionEnd;
-      return {
-        toUIMessageStream: (uiOpts: {
-          onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
-          messageMetadata: (opts: { part: MetadataPart }) => unknown;
-        }) => {
-          streamHarness.onFinish = uiOpts.onFinish;
-          streamHarness.messageMetadata = uiOpts.messageMetadata;
-          return emptyUIStream();
-        },
-      };
+      return {};
+    },
+  );
+  mockToUIMessageStream.mockImplementation(
+    (uiOpts: {
+      onEnd: (ctx: { messages: unknown[] }) => Promise<void> | void;
+      messageMetadata: (opts: { part: MetadataPart }) => unknown;
+    }) => {
+      streamHarness.onFinish = uiOpts.onEnd;
+      streamHarness.messageMetadata = uiOpts.messageMetadata;
+      return emptyUIStream();
     },
   );
 };
@@ -1860,14 +1867,15 @@ describe("AgentRunner.stream — success & interruption", () => {
       }) => {
         capturedStopWhen = opts.stopWhen;
         streamHarness.onStepFinish = opts.onStepFinish;
-        return {
-          toUIMessageStream: (uiOpts: {
-            onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
-          }) => {
-            streamHarness.onFinish = uiOpts.onFinish;
-            return emptyUIStream();
-          },
-        };
+        return {};
+      },
+    );
+    mockToUIMessageStream.mockImplementationOnce(
+      (uiOpts: {
+        onEnd: (ctx: { messages: unknown[] }) => Promise<void> | void;
+      }) => {
+        streamHarness.onFinish = uiOpts.onEnd;
+        return emptyUIStream();
       },
     );
 

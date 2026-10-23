@@ -69,6 +69,11 @@ export function baseConfig(tsconfigRootDir) {
         // false positive recurs.
         "@typescript-eslint/unbound-method": "error",
 
+        // A deprecated API is one the next major of its library removes. Move
+        // to its documented replacement as soon as the deprecation appears, so
+        // the major upgrade itself is not also a migration.
+        "@typescript-eslint/no-deprecated": "error",
+
         // A `switch` over a union with no `default` must name every member, so
         // adding a member surfaces each switch that forgot it. A `default` still
         // counts as exhaustive: the codebase uses it deliberately for "everything
