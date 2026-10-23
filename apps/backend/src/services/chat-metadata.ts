@@ -71,12 +71,16 @@ const hasUserText = (messages: PlatypusUIMessage[]): boolean =>
  */
 export const generateChatMetadata = async (
   params: GenerateChatMetadataParams,
-): Promise<typeof chatTable.$inferSelect | null> => {
+): Promise<{ id: string; title: string; tags: string[] | null } | null> => {
   const { chatId, workspaceId, orgId, providerId } = params;
 
-  // Fetch chat record.
+  // Fetch chat record: only what titling reads, not its memory snapshot.
   const chatRows = await db
-    .select()
+    .select({
+      id: chatTable.id,
+      title: chatTable.title,
+      activeLeafId: chatTable.activeLeafId,
+    })
     .from(chatTable)
     .where(
       and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
@@ -213,7 +217,11 @@ export const generateChatMetadata = async (
         eq(chatTable.title, UNTITLED_CHAT_TITLE),
       ),
     )
-    .returning();
+    .returning({
+      id: chatTable.id,
+      title: chatTable.title,
+      tags: chatTable.tags,
+    });
 
   return updateResult[0] ?? null;
 };

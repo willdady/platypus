@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
@@ -173,36 +173,52 @@ export const markRead = async (
   return true;
 };
 
+/**
+ * Marks every Notification in the Workspace the user has not read as read, in
+ * one `INSERT … SELECT`: no parameter per Notification, and a read row another
+ * call wrote first is skipped rather than raised. The bulk event names only
+ * the rows this call inserted, and is not sent when it inserted none.
+ */
 export const markAllRead = async (
   database: Database,
   ctx: { orgId: string; workspaceId: string },
-  notificationIds: string[],
   userId: string,
 ) => {
-  const owned =
-    notificationIds.length === 0
-      ? []
-      : await database
-          .select({ id: notificationTable.id })
-          .from(notificationTable)
-          .where(
-            and(
-              eq(notificationTable.workspaceId, ctx.workspaceId),
-              inArray(notificationTable.id, notificationIds),
-            ),
-          );
-  if (owned.length === 0) return;
-  const ids = owned.map(({ id }) => id);
-  await database.insert(notificationReadTable).values(
-    ids.map((notificationId) => ({
-      id: nanoid(),
-      notificationId,
-      userId,
-    })),
-  );
+  const inserted = await database
+    .insert(notificationReadTable)
+    .select(
+      database
+        .select({
+          id: sql<string>`gen_random_uuid()::text`.as("id"),
+          notificationId: notificationTable.id,
+          userId: sql<string>`${userId}`.as("user_id"),
+          readAt: sql<Date>`now()`.as("read_at"),
+        })
+        .from(notificationTable)
+        .leftJoin(
+          notificationReadTable,
+          and(
+            eq(notificationReadTable.notificationId, notificationTable.id),
+            eq(notificationReadTable.userId, userId),
+          ),
+        )
+        .where(
+          and(
+            eq(notificationTable.workspaceId, ctx.workspaceId),
+            isNull(notificationReadTable.id),
+          ),
+        ),
+    )
+    .onConflictDoNothing()
+    .returning({ notificationId: notificationReadTable.notificationId });
+  if (inserted.length === 0) return;
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.read",
-    data: { notificationIds: ids, userId, bulk: true },
+    data: {
+      notificationIds: inserted.map(({ notificationId }) => notificationId),
+      userId,
+      bulk: true,
+    },
   });
 };
 
@@ -249,28 +265,6 @@ export const unreadNotificationCount = (
 ) =>
   database
     .select({ count: sql<number>`count(*)::int` })
-    .from(notificationTable)
-    .leftJoin(
-      notificationReadTable,
-      and(
-        eq(notificationReadTable.notificationId, notificationTable.id),
-        eq(notificationReadTable.userId, userId),
-      ),
-    )
-    .where(
-      and(
-        eq(notificationTable.workspaceId, workspaceId),
-        isNull(notificationReadTable.id),
-      ),
-    );
-
-export const unreadNotificationIds = (
-  database: Database,
-  workspaceId: string,
-  userId: string,
-) =>
-  database
-    .select({ id: notificationTable.id })
     .from(notificationTable)
     .leftJoin(
       notificationReadTable,

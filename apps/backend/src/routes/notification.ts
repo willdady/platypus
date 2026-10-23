@@ -13,7 +13,6 @@ import {
   listWorkspaceNotifications,
   notificationSource,
   unreadNotificationCount,
-  unreadNotificationIds,
 } from "../services/notification.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
@@ -111,17 +110,7 @@ notification.post(
     const { orgId, workspaceId } = workspaceScopeOf(c);
     const user = c.get("user")!;
 
-    // Get all unread notification IDs
-    const unread = await unreadNotificationIds(db, workspaceId, user.id);
-
-    if (unread.length > 0) {
-      await markAllRead(
-        db,
-        { orgId, workspaceId },
-        unread.map((n) => n.id),
-        user.id,
-      );
-    }
+    await markAllRead(db, { orgId, workspaceId }, user.id);
 
     return c.json({ message: "All notifications marked as read" });
   },

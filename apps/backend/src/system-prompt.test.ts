@@ -58,14 +58,8 @@ const memorySummary = (
   summary: string,
   summaryDate = "2026-04-01",
 ): MemorySummary => ({
-  id: "mem-1",
-  userId: "user-1",
-  workspaceId: "ws-1",
   summaryDate,
   summary,
-  embedding: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
 });
 
 describe("renderSystemPrompt — instructions", () => {

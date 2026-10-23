@@ -16,14 +16,8 @@ import {
 const makeSummary = (
   overrides: Partial<MemorySummary> = {},
 ): MemorySummary => ({
-  id: "s1",
-  userId: "u1",
-  workspaceId: "ws-1",
   summaryDate: "2026-04-29",
   summary: "User likes coffee.",
-  embedding: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
   ...overrides,
 });
 
@@ -43,6 +37,11 @@ describe("retrieveRecentSummaries", () => {
     );
 
     expect(result).toBe(rows);
+    // The rendered date and text only, never the embedding vector.
+    expect(mockDb.select).toHaveBeenCalledWith({
+      summaryDate: memoryDailySummaryTable.summaryDate,
+      summary: memoryDailySummaryTable.summary,
+    });
     expect(mockDb.from).toHaveBeenCalledWith(memoryDailySummaryTable);
     expect(mockDb.where).toHaveBeenCalledWith(
       and(

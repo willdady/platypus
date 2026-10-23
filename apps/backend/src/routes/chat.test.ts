@@ -41,7 +41,6 @@ import {
   retrieveRecentSummaries,
   formatSummariesForSystemPrompt,
   resolveMemoryPin,
-  type MemorySummary,
 } from "../services/memory-retrieval.ts";
 
 // Mock AI SDK
@@ -620,8 +619,8 @@ describe("Chat Routes", () => {
 
       vi.mocked(resolveMemoryPin).mockReturnValueOnce({ reuse: false });
       vi.mocked(retrieveRecentSummaries).mockResolvedValueOnce([
-        { id: "s1", summaryDate: "2026-04-29", summary: "Likes coffee." },
-      ] as MemorySummary[]);
+        { summaryDate: "2026-04-29", summary: "Likes coffee." },
+      ]);
       vi.mocked(formatSummariesForSystemPrompt).mockReturnValueOnce(
         "pinned-fresh",
       );

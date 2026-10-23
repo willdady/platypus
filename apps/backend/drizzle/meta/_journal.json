@@ -645,6 +645,13 @@
       "when": 1792575959503,
       "tag": "0091_backfill_passthrough_file_types",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1792728264684,
+      "tag": "0092_chat_indexes_kanban_column_name",
+      "breakpoints": true
     }
   ]
 }

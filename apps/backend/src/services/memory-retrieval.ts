@@ -2,7 +2,11 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../index.ts";
 import { memoryDailySummary as memoryDailySummaryTable } from "../db/schema.ts";
 
-export type MemorySummary = typeof memoryDailySummaryTable.$inferSelect;
+/** A daily summary as a prompt renders it: its date and text, never its embedding. */
+export type MemorySummary = Pick<
+  typeof memoryDailySummaryTable.$inferSelect,
+  "summaryDate" | "summary"
+>;
 
 /**
  * How many days of daily summaries the Memories fragment carries. A named
@@ -51,7 +55,10 @@ export async function retrieveRecentSummaries(
   );
 
   return db
-    .select()
+    .select({
+      summaryDate: memoryDailySummaryTable.summaryDate,
+      summary: memoryDailySummaryTable.summary,
+    })
     .from(memoryDailySummaryTable)
     .where(
       and(
