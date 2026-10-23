@@ -107,3 +107,16 @@ The rejection of byte-returning model Tools is amended by ADR-0038: `fsView`
 sends a Sandbox file to the model for one turn, so it can see an image or PDF it
 made. Its saved result is metadata only, and Sandbox content is still never
 written to backend storage.
+
+## Note: `fsDownload` only in interactive Chat turns after issue #1608
+
+`fsDownload` is offered only in an interactive Chat turn. A Trigger run, an A2A
+run and every Sub-Agent, at any depth, are not given it, and the System prompt's
+download line goes with it; `fsView` is unaffected. None of them has a User to
+show a button to: a Sub-Agent's tool calls reach the User only as its activity
+list, and its result goes back to the parent model.
+
+The "a Trigger run's Chat, say" example under _Bearer-token links with a short
+TTL_ was wrong: no Chat is ever rendered for a Trigger run. The never-expiring,
+authenticated link stands on its other reasons — no secret in a Transcript that
+can be shared or exported, and a link read later in a Chat still works.

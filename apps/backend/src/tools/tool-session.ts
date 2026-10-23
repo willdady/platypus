@@ -325,10 +325,27 @@ export type ToolSessionOptions = {
    * Tool set ids this session serves to no Agent, even one that holds them:
    * an A2A Chat with Include Memories off withholds the `memory` Tool set
    * (ADR-0032). A nested session inherits it, so a delegate cannot reach what
-   * its parent was withheld.
+   * its parent was withheld. Withholds whole Tool sets; `interactive` below
+   * withholds a single tool.
    */
   withheldToolSetIds?: readonly string[];
+  /**
+   * Whether a User watches this session's Agent: an interactive Chat turn.
+   * Absent means no — a Trigger run's Chat is never rendered. Gates the
+   * {@link DOWNLOAD_TOOL_NAME}. A nested session is never interactive,
+   * whatever its parent: a delegate's tool calls reach the User only as its
+   * activity list, and their results go back to the parent model (#1608).
+   */
+  interactive?: boolean;
 };
+
+/**
+ * Core's Sandbox tool whose only effect is a download button in the Chat, so a
+ * session no User watches is not offered it: the model would spend a turn on a
+ * button nobody can press. The bare name is core's alone — a third-party or MCP
+ * tool is always namespaced.
+ */
+const DOWNLOAD_TOOL_NAME = "fsDownload";
 
 /**
  * Resolve an Agent's assigned Tool sets into a turn's tools, opening whatever
@@ -349,7 +366,7 @@ export const openToolSession = async (
   queries: ToolSessionQueries,
   options: ToolSessionOptions = {},
 ): Promise<ToolSession> => {
-  const { signal, withheldToolSetIds = [] } = options;
+  const { signal, withheldToolSetIds = [], interactive = false } = options;
   const tools: Record<string, Tool> = {};
   // Tool name -> where it came from. Read by the merge below to report the
   // names an arriving Tool set is about to take, and the reason this is a Map
@@ -813,10 +830,14 @@ export const openToolSession = async (
       await dispose();
       throw error;
     }
+    if (!interactive) delete tools[DOWNLOAD_TOOL_NAME];
   }
 
   const nest: ToolSession["nest"] = async (nestedAgent) => {
-    const child = await openToolSession(scope, nestedAgent, queries, options);
+    const child = await openToolSession(scope, nestedAgent, queries, {
+      ...options,
+      interactive: false,
+    });
     // A delegate can be invoked while the turn is being torn down (an abort
     // cancels the parent run, and the delegate's generator is resumed to unwind
     // it), so a session opened after `dispose` has nothing left to attach to.

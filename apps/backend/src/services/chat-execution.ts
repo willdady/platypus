@@ -628,6 +628,7 @@ export const prepareChatTurn = async (
   const sessionPromise = openToolSession(scope, agent, queries, {
     signal,
     withheldToolSetIds: memoryTools ? [] : [MEMORY_TOOLSET_ID],
+    interactive: runMode === "interactive",
   });
   // From here down this function OWNS the session: `dispose` is the only
   // handle on it and it reaches the caller only on the successful return
