@@ -165,6 +165,7 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
       c.set("orgScope", orgScope(parentScope, orgId));
     }
     await next();
+    return;
   });
 
 /** Why {@link resolveOrgMembership} refused a caller. */
@@ -303,6 +304,7 @@ export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
     workspaceScope(parent, workspaceId, access.isWorkspaceOwner),
   );
   await next();
+  return;
 });
 
 /** Why {@link resolveWorkspaceAccess} refused a caller. */
@@ -465,6 +467,7 @@ export const requireWorkspaceConfigAccess = (delegationFlag?: DelegationFlag) =>
     }
 
     await next();
+    return;
   });
 
 /** The workspace columns that let an Org Admin delegate a resource to its Owner. */
@@ -616,6 +619,7 @@ export const requireSuperAdmin = createMiddleware<Env>(async (c, next) => {
   }
 
   await next();
+  return;
 });
 
 /**
@@ -658,6 +662,7 @@ export const requireWorkspaceOwner = createMiddleware<Env>(async (c, next) => {
   }
 
   await next();
+  return;
 });
 
 export { isSuperAdmin };
