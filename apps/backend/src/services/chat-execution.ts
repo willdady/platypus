@@ -50,10 +50,10 @@ import {
 } from "@platypus/schemas";
 import type {
   ConcreteModelId,
-  Provider,
   Skill,
   UnloadedToolSet,
 } from "@platypus/schemas";
+import type { ProviderRow } from "./provider-write.ts";
 import {
   getWebBackend,
   type WebBackendContext,
@@ -97,7 +97,7 @@ type WorkspaceRow = typeof workspaceTable.$inferSelect;
 type OrganizationRow = typeof organizationTable.$inferSelect;
 
 type ChatContext = {
-  provider: Provider;
+  provider: ProviderRow;
   agent?: AgentRow;
   /**
    * What the Agent or request actually stores — a concrete id or `alias:<name>`.
@@ -239,7 +239,7 @@ export type ChatTurnQueries = ToolSessionQueries & {
     id: string,
     orgId: string,
     workspaceId: string,
-  ): Promise<Provider | null>;
+  ): Promise<ProviderRow | null>;
   getSkillsByIds(
     ids: string[],
     orgId: string,
@@ -324,7 +324,7 @@ const drizzleChatTurnQueries: ChatTurnQueries = {
       orgId,
       workspaceId,
     });
-    return (found?.row as Provider | undefined) ?? null;
+    return found?.row ?? null;
   },
 
   async getSkillsByIds(ids, orgId, workspaceId) {
@@ -489,7 +489,7 @@ export type SearchResolution =
 
 export const resolveSearchMode = (
   requestedSearch: boolean | undefined,
-  provider: Pick<Provider, "providerType" | "apiMode" | "searchSource">,
+  provider: Pick<ProviderRow, "providerType" | "apiMode" | "searchSource">,
 ): SearchResolution => {
   if (!requestedSearch) return { kind: "none" };
   const source = provider.searchSource;
@@ -512,7 +512,7 @@ export const resolveSearchMode = (
 const resolveSearchTools = async (
   resolution: SearchResolution,
   opened: Pick<OpenedProvider, "searchTools">,
-  provider: Pick<Provider, "id">,
+  provider: Pick<ProviderRow, "id">,
   ctx: WithCoreRegistrar<WebBackendContext>,
 ): Promise<Record<string, Tool>> => {
   // Core's own context for the seam: `providerId` is the actionable field on

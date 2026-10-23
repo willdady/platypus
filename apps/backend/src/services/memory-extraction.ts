@@ -20,7 +20,6 @@ import {
   workspace as workspaceTable,
   provider as providerTable,
 } from "../db/schema.ts";
-import type { Provider } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { openProvider } from "./provider.ts";
@@ -198,11 +197,10 @@ const processChat = async (
 
   const existingSummary = existingSummaryRow?.summary || null;
 
-  const provider = extractionProvider as Provider;
   const modelId = pointerSettingModelId(
     extractionProvider.memoryExtractionModelId,
   );
-  const contextWindow = contextWindowForModel(provider, modelId);
+  const contextWindow = contextWindowForModel(extractionProvider, modelId);
   const budgetChars =
     (contextWindow ? contextWindow * BUDGET_SHARE : DEFAULT_BUDGET_TOKENS) *
     CHARS_PER_TOKEN;
@@ -264,7 +262,7 @@ const processChat = async (
   );
 
   // Create the model
-  const model = openProvider(provider).languageModel(modelId);
+  const model = openProvider(extractionProvider).languageModel(modelId);
 
   // Call the LLM for summary generation
   let result;
@@ -303,7 +301,7 @@ const processChat = async (
   if (embeddingProvider && embeddingProvider.embeddingModelId) {
     try {
       embedding = await generateEmbedding(
-        embeddingProvider as Provider,
+        embeddingProvider,
         pointerSettingModelId(embeddingProvider.embeddingModelId),
         updatedSummary,
       );

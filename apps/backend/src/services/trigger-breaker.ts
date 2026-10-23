@@ -7,7 +7,10 @@ import {
   announceTriggerRunsEnded,
   endedTriggerRunColumns,
 } from "./trigger-run-announce.ts";
-import type { EventTriggerEvent } from "@platypus/schemas";
+import type {
+  EventTriggerEvent,
+  EventTriggerEventPayload,
+} from "@platypus/schemas";
 
 /**
  * The run-rate breaker for Event and Inbound Triggers.
@@ -166,7 +169,7 @@ export const suppressTriggerRun = async (input: {
   maxRunsToKeep: number;
   entityId: string;
   eventType: EventTriggerEvent;
-  eventData: unknown;
+  eventData: EventTriggerEventPayload["data"];
 }): Promise<void> => {
   const now = new Date();
   const suppressed = await db

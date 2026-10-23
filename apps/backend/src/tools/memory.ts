@@ -9,7 +9,6 @@ import {
 import { generateEmbedding } from "../services/embedding.ts";
 import { resolveScoped } from "../services/scoped-resource.ts";
 import { pointerSettingModelId } from "../services/model-capability.ts";
-import type { Provider } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 
@@ -109,7 +108,7 @@ export const createMemoryTools = async (
       try {
         // Generate query embedding
         const queryEmbedding = await generateEmbedding(
-          embedding.provider as Provider,
+          embedding.provider,
           pointerSettingModelId(embedding.modelId),
           query,
         );

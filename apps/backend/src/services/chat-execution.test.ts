@@ -124,24 +124,23 @@ import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts
 import type { ChatTurnQueries } from "./chat-execution.ts";
 import { formatSummariesForSystemPrompt } from "./memory-retrieval.ts";
 import { DEFAULT_DIRECT_MAX_STEPS } from "@platypus/schemas";
-import type { Provider } from "@platypus/schemas";
+import type { ProviderRow } from "./provider-write.ts";
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
-const baseProvider = {
+const baseProvider = makeProviderRow({
   id: "p1",
   name: "Test",
   organizationId: "org-1",
   workspaceId: "ws-1",
-  providerType: "OpenAI" as const,
+  providerType: "OpenAI",
   modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
   apiKey: "sk-test",
-  apiMode: "chat" as const,
+  apiMode: "chat",
   searchSource: "native",
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
+});
 
 const baseAgent = {
   id: "agent-1",
@@ -588,7 +587,7 @@ describe("chat-execution", () => {
         ...baseProvider,
         id: "p-org",
         organizationId: "org-1",
-        workspaceId: undefined,
+        workspaceId: null,
       };
       const sharedAgent = {
         ...baseAgent,
@@ -1445,12 +1444,12 @@ describe("chat-execution", () => {
           }),
         );
 
-      // Typed as `Provider`, not `typeof googleProvider`: the fixtures set
+      // Typed as `ProviderRow`, not `typeof googleProvider`: the fixtures set
       // `searchSource` to `"native"`, so a `typeof` parameter would reject
       // `{ ...provider, searchSource: "searx" }` as re-assigning a literal
       // type and force a cast at every call.
       const turnFor = (
-        provider: Provider,
+        provider: ProviderRow,
         search: boolean | undefined = true,
         runMode: "interactive" | "headless" = "interactive",
       ) =>
@@ -1853,13 +1852,7 @@ describe("chat-execution", () => {
         ] as unknown as PlatypusUIMessage[];
 
       const turnWithProvider = async (
-        provider: Omit<typeof baseProvider, "modelIds"> & {
-          modelIds: Array<{
-            id: string;
-            passthroughFileTypes: string[];
-            maxExtractedTextChars?: number;
-          }>;
-        },
+        provider: ProviderRow,
         messages: PlatypusUIMessage[],
       ) =>
         prepareChatTurn(
@@ -3035,7 +3028,7 @@ describe("chat-execution", () => {
 describe("validateTurnAttachments", () => {
   // gpt-4 declares images only, as the backfill gives OpenAI chat-completions.
   const queries = (
-    provider: Pick<Provider, "providerType" | "apiMode" | "modelIds"> = {
+    provider: Pick<ProviderRow, "providerType" | "apiMode" | "modelIds"> = {
       ...baseProvider,
       modelIds: [{ id: "gpt-4", passthroughFileTypes: ["image/*"] }],
     },
@@ -3159,7 +3152,7 @@ describe("validateTurnAttachments", () => {
           queries({
             providerType: "Anthropic",
             apiMode: "responses",
-            modelIds: modelIds as Provider["modelIds"],
+            modelIds,
           }),
         ),
       ).rejects.toBeInstanceOf(FileValidationError);

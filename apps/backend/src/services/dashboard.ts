@@ -262,8 +262,10 @@ export const updateWidget = async (
     {
       // The parse output, not the input: it is the payload as the named type's
       // own schema resolved it, rather than as whichever union branch happened
-      // to match first.
-      data: pairing.data.data,
+      // to match first. The union is assembled by a `.map`, which erases the
+      // type-to-data pairing, so its `data` infers as `unknown`; the parse has
+      // already checked it against this type's own schema (see `asWidget`).
+      data: pairing.data.data as WidgetRow["data"],
       ...(data.title && { title: data.title }),
       updatedAt: new Date(),
     },

@@ -421,9 +421,13 @@ describe("fireTrigger", () => {
 
     it("still stamps completion and trims history when the current row is malformed", async () => {
       const snapshot = makeTrigger({ maxRunsToKeep: 1 });
-      const fake = world({ ...snapshot, config: { garbage: true } }, [
-        oldRun("old-1", 1),
-      ]);
+      const fake = world(
+        {
+          ...snapshot,
+          config: { garbage: true } as unknown as TriggerRow["config"],
+        },
+        [oldRun("old-1", 1)],
+      );
       drive("succeeded");
 
       await expect(fireTrigger(snapshot, { kind: "cron" })).resolves.toBe(

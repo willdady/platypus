@@ -9,6 +9,7 @@ import type {
   TriggerRunStats,
   TriggerRunStatus,
   EventTriggerEvent,
+  EventTriggerEventPayload,
 } from "@platypus/schemas";
 import { FlushScheduler } from "../flush-scheduler.ts";
 import {
@@ -37,7 +38,7 @@ export type TriggerSinkParams = {
    */
   entityId?: string;
   eventType?: EventTriggerEvent;
-  eventData?: unknown;
+  eventData?: EventTriggerEventPayload["data"];
   /**
    * The run's row already exists as `pending` — an Inbound Trigger call wrote
    * it before answering, so the run id it returned is real (ADR-0030). The

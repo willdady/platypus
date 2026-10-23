@@ -4,8 +4,8 @@ import {
   resolveModelReference,
   type ConcreteModelId,
   type ModelConfig,
-  type Provider,
 } from "@platypus/schemas";
+import type { ProviderRow } from "./provider-write.ts";
 
 /**
  * Per-model file capability resolution.
@@ -19,6 +19,9 @@ import {
  * `ModelConfig`s. There is no Provider-type default (ADR-0039).
  */
 
+/** All a model lookup reads of a Provider: its models, as stored. */
+type ProviderModels = Pick<ProviderRow, "modelIds">;
+
 /**
  * Normalize a provider's stored models into resolved `ModelConfig`s.
  *
@@ -26,11 +29,10 @@ import {
  * `passthroughFileTypes`, ingests nothing natively. Migration 0091 backfills
  * stored rows; dev `drizzle-kit push` skips it.
  */
-export const resolveProviderModels = (provider: Provider): ModelConfig[] => {
-  const raw = provider.modelIds as unknown as Array<
-    string | Partial<ModelConfig>
-  >;
-  return raw.map((entry) => {
+export const resolveProviderModels = (
+  provider: ProviderModels,
+): ModelConfig[] =>
+  provider.modelIds.map((entry) => {
     if (typeof entry === "string") {
       return { id: entry, passthroughFileTypes: [] };
     }
@@ -38,11 +40,9 @@ export const resolveProviderModels = (provider: Provider): ModelConfig[] => {
     // `maxExtractedTextChars`) survives resolution without touching this.
     return {
       ...entry,
-      id: entry.id ?? "",
       passthroughFileTypes: entry.passthroughFileTypes ?? [],
     };
   });
-};
 
 /**
  * The list of model REFERENCES a caller should store, preserving order — the
@@ -55,7 +55,7 @@ export const resolveProviderModels = (provider: Provider): ModelConfig[] => {
  * (ADR-0017). Anything that needs the concrete id must go through
  * `resolveModelId`, which is the only mint of `ConcreteModelId`.
  */
-export const providerModelReferences = (provider: Provider): string[] =>
+export const providerModelReferences = (provider: ProviderModels): string[] =>
   resolveProviderModels(provider).map(modelReferenceFor);
 
 /**
@@ -84,7 +84,7 @@ export const dedupeModelConfigs = (models: ModelConfig[]): ModelConfig[] => {
  * the turn, which is what a dangling concrete id has always done.
  */
 export const resolveModelId = (
-  provider: Provider,
+  provider: ProviderModels,
   reference: string,
 ): ConcreteModelId | undefined =>
   resolveModelReference(resolveProviderModels(provider), reference);
@@ -107,7 +107,7 @@ export const pointerSettingModelId = (value: string): ConcreteModelId =>
  * Provider say about this model?" is asked in exactly one place.
  */
 const modelEntry = (
-  provider: Provider,
+  provider: ProviderModels,
   modelId: ConcreteModelId,
 ): ModelConfig | undefined =>
   resolveProviderModels(provider).find((m) => m.id === modelId);
@@ -117,7 +117,7 @@ const modelEntry = (
  * found (defensive — callers should validate the model id first).
  */
 export const passthroughFileTypesForModel = (
-  provider: Provider,
+  provider: ProviderModels,
   modelId: ConcreteModelId,
 ): string[] => modelEntry(provider, modelId)?.passthroughFileTypes ?? [];
 
@@ -127,7 +127,7 @@ export const passthroughFileTypesForModel = (
  * means, so this and the schema can't drift.
  */
 export const maxExtractedTextCharsForModel = (
-  provider: Provider,
+  provider: ProviderModels,
   modelId: ConcreteModelId,
 ): number =>
   resolveExtractedTextCap(modelEntry(provider, modelId)?.maxExtractedTextChars);
@@ -144,7 +144,7 @@ export const maxExtractedTextCharsForModel = (
  * absent.
  */
 export const maxOutputTokensForModel = (
-  provider: Provider,
+  provider: ProviderModels,
   modelId: ConcreteModelId,
 ): number | undefined => modelEntry(provider, modelId)?.maxOutputTokens;
 
@@ -159,6 +159,6 @@ export const maxOutputTokensForModel = (
  * declaration lives on the model entry a Model alias carries its window with it.
  */
 export const contextWindowForModel = (
-  provider: Provider,
+  provider: ProviderModels,
   modelId: ConcreteModelId,
 ): number | undefined => modelEntry(provider, modelId)?.contextWindow;

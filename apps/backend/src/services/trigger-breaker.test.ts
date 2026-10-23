@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 import { lte, ne, notInArray } from "drizzle-orm";
 import { triggerRun as triggerRunTable } from "../db/schema.ts";
+import type { EventTriggerEventPayload } from "@platypus/schemas";
 
 import { mockLogger, mockNanoid } from "../test-setup.ts";
 
@@ -13,6 +14,9 @@ vi.mock("./trigger-run-announce.ts", async (importOriginal) => ({
 }));
 
 mockNanoid.mockReturnValue("suppressed-1");
+
+// A partial payload: these tests check it is stored as given, not its shape.
+const cardData = { id: "card-1" } as EventTriggerEventPayload["data"];
 
 import {
   retainTriggerRuns,
@@ -147,7 +151,7 @@ describe("trigger-breaker", () => {
         maxRunsToKeep: 10,
         entityId: "card-1",
         eventType: "card.updated",
-        eventData: { id: "card-1" },
+        eventData: cardData,
       });
 
       const inserted = mockDb.values.mock.calls[0][0] as Record<
@@ -176,7 +180,7 @@ describe("trigger-breaker", () => {
         maxRunsToKeep: 10,
         entityId: "card-1",
         eventType: "card.updated",
-        eventData: { id: "card-1" },
+        eventData: cardData,
       });
 
       expect(mockAnnounce).toHaveBeenCalledTimes(1);
@@ -193,7 +197,7 @@ describe("trigger-breaker", () => {
         maxRunsToKeep: 10,
         entityId: "card-1",
         eventType: "card.updated",
-        eventData: { id: "card-1" },
+        eventData: cardData,
       });
 
       // Both retention budgets were consulted — newest normal rows and newest

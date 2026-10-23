@@ -85,7 +85,7 @@ describe("orphanedAliasRepoints", () => {
   });
 
   it("tolerates a legacy string[] on either side", () => {
-    const legacy = ["gpt-4"] as unknown as ModelConfig[];
+    const legacy = ["gpt-4"];
     expect(orphanedAliasRepoints(legacy, [model("gpt-4", "flagship")])).toEqual(
       [],
     );

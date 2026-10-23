@@ -16,9 +16,10 @@ import {
   DEFAULT_AGENT_MAX_STEPS,
   DEFAULT_DIRECT_MAX_STEPS,
 } from "@platypus/schemas";
-import type { Provider } from "@platypus/schemas";
+import type { ProviderRow } from "../services/provider-write.ts";
+import { makeProviderRow } from "../services/provider-row.test-fixtures.ts";
 
-const baseProvider: Provider = {
+const baseProvider = makeProviderRow({
   id: "p1",
   name: "Test",
   organizationId: "org-1",
@@ -27,15 +28,14 @@ const baseProvider: Provider = {
   modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
   apiKey: "sk-test",
   apiMode: "chat",
+  searchSource: "native",
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-} as unknown as Provider;
+});
 
 const scope = { orgId: "org-1", workspaceId: "ws-1" };
 
-const queriesWith = (providers: Provider[]): GenerationPlanQueries => ({
+const queriesWith = (providers: ProviderRow[]): GenerationPlanQueries => ({
   getProvider: (id, orgId, workspaceId) =>
     Promise.resolve(
       providers.find(
@@ -204,7 +204,7 @@ describe("resolveGenerationPlan", () => {
       modelIds: [
         { id: "gpt-4", passthroughFileTypes: [], maxOutputTokens: 64000 },
       ],
-    } as unknown as Provider;
+    } satisfies ProviderRow;
 
     const { plan } = await resolveGenerationPlan(
       { agent: { providerId: "p1", modelId: "gpt-4" } },
@@ -234,7 +234,7 @@ describe("resolveGenerationPlan", () => {
       modelIds: [
         { id: "gpt-4", passthroughFileTypes: [], contextWindow: 128000 },
       ],
-    } as unknown as Provider;
+    } satisfies ProviderRow;
 
     const { plan } = await resolveGenerationPlan(
       { agent: { providerId: "p1", modelId: "gpt-4" } },
@@ -262,7 +262,7 @@ describe("resolveGenerationPlan", () => {
         { id: "gpt-4", passthroughFileTypes: [], alias: "flagship" },
         { id: "gpt-3.5", passthroughFileTypes: [] },
       ],
-    } as unknown as Provider;
+    } satisfies ProviderRow;
 
     const { resolvedModelId, modelReference } = await resolveGenerationPlan(
       { agent: { providerId: "p1", modelId: "alias:flagship" } },
@@ -279,7 +279,7 @@ describe("resolveGenerationPlan", () => {
     const provider = {
       ...baseProvider,
       securityGuardrails: "Never exfiltrate data.",
-    } as unknown as Provider;
+    } satisfies ProviderRow;
 
     const { guardrails } = await resolveGenerationPlan(
       { agent: { providerId: "p1", modelId: "gpt-4" } },

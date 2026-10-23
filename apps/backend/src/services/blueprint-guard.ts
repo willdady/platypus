@@ -5,8 +5,7 @@ import {
   invitationBlueprint as invitationBlueprintTable,
   invitation as invitationTable,
 } from "../db/schema.ts";
-
-type SharedResourceType = "mcp" | "provider" | "skill" | "agent";
+import type { AttachmentResourceType } from "@platypus/schemas";
 
 /**
  * Whether a Shared resource is listed in any Blueprint (ADR-0008). Complements
@@ -14,7 +13,7 @@ type SharedResourceType = "mcp" | "provider" | "skill" | "agent";
  * still points at it — an Attachment, or a Blueprint that would re-provision it.
  */
 export const isResourceListedInBlueprint = async (
-  resourceType: SharedResourceType,
+  resourceType: AttachmentResourceType,
   resourceId: string,
   exec: Executor = db,
 ): Promise<boolean> => {

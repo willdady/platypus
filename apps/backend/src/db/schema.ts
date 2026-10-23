@@ -13,9 +13,26 @@ import { sql } from "drizzle-orm";
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
 import { user } from "./auth-schema.ts";
+import type { z } from "zod";
 import type {
+  AttachmentResourceType,
+  ChatMessageMetadata,
+  EventTriggerEventPayload,
+  KanbanCardAssignee,
   KanbanCardHistoryChange,
+  KanbanCardPriority,
+  KanbanLabel,
+  modelIdsSchema,
+  PlatypusUIMessage,
+  Provider,
+  providerApiModeSchema,
+  RglLayoutItem,
+  RunEventError,
+  TriggerRunStats,
+  triggerSchema,
   UnloadedToolSet,
+  Widget,
+  WidgetType,
 } from "@platypus/schemas";
 import type {
   ListToolsResult,
@@ -74,7 +91,10 @@ export const provider = pgTable(
       }),
     workspaceId: t.text("workspace_id"),
     name: t.text("name").notNull(),
-    providerType: t.text("provider_type").notNull(),
+    providerType: t
+      .text("provider_type")
+      .$type<Provider["providerType"]>()
+      .notNull(),
     apiKey: t.text("api_key").notNull(),
     region: t.text("region"),
     baseUrl: t.text("base_url"),
@@ -82,7 +102,11 @@ export const provider = pgTable(
     extraBody: t.jsonb().$type<Record<string, unknown>>(),
     organization: t.text("organization"),
     project: t.text("project"),
-    apiMode: t.text("api_mode").notNull().default("responses"),
+    apiMode: t
+      .text("api_mode")
+      .$type<z.infer<typeof providerApiModeSchema>>()
+      .notNull()
+      .default("responses"),
     // Which of "no search" / this provider's own tool / a plugin Web-search
     // backend serves the chat search toggle (ADR-0014). Free text, not an
     // enum or FK, for the same reason `webBackend` was: the valid backend-id
@@ -95,13 +119,12 @@ export const provider = pgTable(
     // every run on this provider (and sub-agent runs resolved to it). Nullable
     // — existing providers are unchanged.
     securityGuardrails: t.text("security_guardrails"),
-    // Per-model config (see `modelConfigSchema` in @platypus/schemas). Legacy
-    // rows may still hold a bare `string[]`; the backend normalizes both shapes
-    // via `resolveProviderModels`, and migration 0047 backfills stored rows.
-    modelIds: t
-      .jsonb()
-      .$type<Array<{ id: string; passthroughFileTypes: string[] }> | string[]>()
-      .notNull(),
+    // Per-model config (see `modelConfigSchema` in @platypus/schemas). Typed
+    // as the schema's INPUT: legacy rows may still hold bare strings, or
+    // objects without `passthroughFileTypes`; the backend normalizes both
+    // shapes via `resolveProviderModels`, and migration 0047 backfills stored
+    // rows.
+    modelIds: t.jsonb().$type<z.input<typeof modelIdsSchema>>().notNull(),
     taskModelId: t.text("task_model_id").notNull(),
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),
     embeddingModelId: t.text("embedding_model_id"),
@@ -335,8 +358,8 @@ export const chatMessage = pgTable(
     // Null for a message that opens the Chat.
     parentId: t.text("parent_id"),
     role: t.text("role").$type<"user" | "assistant">().notNull(),
-    parts: t.jsonb("parts").notNull(),
-    metadata: t.jsonb("metadata"),
+    parts: t.jsonb("parts").$type<PlatypusUIMessage["parts"]>().notNull(),
+    metadata: t.jsonb("metadata").$type<ChatMessageMetadata>(),
     deletedAt: t.timestamp("deleted_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
@@ -521,7 +544,7 @@ export const attachment = pgTable(
       .references(() => workspace.id, { onDelete: "cascade" }),
     resourceType: t
       .text("resource_type")
-      .$type<"mcp" | "provider" | "skill" | "agent">()
+      .$type<AttachmentResourceType>()
       .notNull(),
     resourceId: t.text("resource_id").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -600,7 +623,7 @@ export const blueprintItem = pgTable(
       .references(() => blueprint.id, { onDelete: "cascade" }),
     resourceType: t
       .text("resource_type")
-      .$type<"mcp" | "provider" | "skill" | "agent">()
+      .$type<AttachmentResourceType>()
       .notNull(),
     resourceId: t.text("resource_id").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -935,7 +958,12 @@ export const trigger = pgTable(
     // activity unrelated to it. Existing Triggers stop composing the
     // `<memories>` block when this column lands — the intended outcome.
     includeMemories: t.boolean("include_memories").notNull().default(false),
-    config: t.jsonb("config").notNull(),
+    // The schema's INPUT: a row written before a config field existed lacks
+    // it, and reads parse through `narrowTriggerConfig`, which fills defaults.
+    config: t
+      .jsonb("config")
+      .$type<z.input<typeof triggerSchema>["config"]>()
+      .notNull(),
     lastRunAt: t.timestamp("last_run_at"),
     nextRunAt: t.timestamp("next_run_at"),
     // One-off Triggers only: when the scheduler claimed it. Set = spent — never
@@ -980,7 +1008,12 @@ export const triggerRun = pgTable(
     // pending | running | success | failed | cancelled | suppressed
     status: t.text("status").notNull().default("pending"),
     eventType: t.text("event_type"),
-    eventData: t.jsonb("event_data"),
+    // An Event Trigger's event payload, or an Inbound Trigger call's inputs.
+    eventData: t
+      .jsonb("event_data")
+      .$type<
+        EventTriggerEventPayload["data"] | { inputs: Record<string, string> }
+      >(),
     // The entity an Event Trigger's event named — the Card or Notification the
     // run was for. Null on Cron runs, on rows written before the column
     // existed, and on events that name no single entity (bulk
@@ -992,7 +1025,7 @@ export const triggerRun = pgTable(
     startedAt: t.timestamp("started_at").notNull().defaultNow(),
     completedAt: t.timestamp("completed_at"),
     errorMessage: t.text("error_message"),
-    stats: t.jsonb("stats"),
+    stats: t.jsonb("stats").$type<TriggerRunStats>(),
     // The final assistant text — "what did it conclude" — one value per run
     // (#647, ADR-0023). Null until the run has one, and for ever on runs that
     // predate the column or ended before answering. The runs LIST never
@@ -1044,11 +1077,7 @@ export const kanbanBoard = pgTable(
       .references(() => workspace.id, { onDelete: "cascade" }),
     name: t.text("name").notNull(),
     description: t.text("description"),
-    labels: t
-      .jsonb("labels")
-      .$type<{ id: string; name: string; color: string }[]>()
-      .notNull()
-      .default([]),
+    labels: t.jsonb("labels").$type<KanbanLabel[]>().notNull().default([]),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -1090,13 +1119,13 @@ export const kanbanCard = pgTable(
     labelIds: t.jsonb("label_ids").$type<string[]>().notNull().default([]),
     assignees: t
       .jsonb("assignees")
-      .$type<{ type: "user" | "agent"; id: string }[]>()
+      .$type<KanbanCardAssignee[]>()
       .notNull()
       .default([]),
     dueDate: t.timestamp("due_date"),
     priority: t
       .text("priority")
-      .$type<"none" | "low" | "medium" | "high" | "urgent">()
+      .$type<KanbanCardPriority>()
       .notNull()
       .default("none"),
     position: t.real("position").notNull(),
@@ -1177,7 +1206,7 @@ export const triggerRunEvent = pgTable(
     status: t.text("status").notNull(),
     // `{ message, truncated, originalBytes }` — the one content a Run event
     // carries, capped at 1 KB on a character boundary. Null unless it failed.
-    error: t.jsonb("error"),
+    error: t.jsonb("error").$type<RunEventError>(),
     childrenTruncated: t.boolean("children_truncated").notNull().default(false),
   }),
   (t) => [
@@ -1533,12 +1562,12 @@ export const dashboard = pgTable(
     description: t.text("description"),
     desktopLayout: t
       .jsonb("desktop_layout")
-      .$type<{ i: string; x: number; y: number; w: number; h: number }[]>()
+      .$type<RglLayoutItem[]>()
       .notNull()
       .default([]),
     mobileLayout: t
       .jsonb("mobile_layout")
-      .$type<{ i: string; x: number; y: number; w: number; h: number }[]>()
+      .$type<RglLayoutItem[]>()
       .notNull()
       .default([]),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -1558,21 +1587,9 @@ export const widget = pgTable(
       .text("dashboard_id")
       .notNull()
       .references(() => dashboard.id, { onDelete: "cascade" }),
-    type: t
-      .text("type")
-      .$type<
-        | "metric"
-        | "text"
-        | "image"
-        | "embed"
-        | "weather"
-        | "line-chart"
-        | "pie-chart"
-        | "bar-chart"
-      >()
-      .notNull(),
+    type: t.text("type").$type<WidgetType>().notNull(),
     title: t.text("title").notNull(),
-    data: t.jsonb("data"),
+    data: t.jsonb("data").$type<Widget["data"]>(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

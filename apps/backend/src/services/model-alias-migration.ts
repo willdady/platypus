@@ -5,12 +5,9 @@ import {
   chat as chatTable,
   provider as providerTable,
 } from "../db/schema.ts";
-import {
-  MODEL_ALIAS_PREFIX,
-  type AliasRepoint,
-  type ModelConfig,
-} from "@platypus/schemas";
+import { MODEL_ALIAS_PREFIX, type AliasRepoint } from "@platypus/schemas";
 import { logger } from "../logger.ts";
+import type { ProviderRow } from "./provider-write.ts";
 
 /**
  * De-migration: rewriting `alias:<name>` references back to a concrete id when
@@ -33,15 +30,17 @@ import { logger } from "../logger.ts";
 /** An orphaned alias and the concrete id its references fall back to. */
 type OrphanedAlias = Pick<AliasRepoint, "alias" | "modelId">;
 
+/** A Provider's models as stored, legacy bare strings included. */
+type StoredModels = ProviderRow["modelIds"];
+
 /** Tolerates the legacy bare-`string[]` shape on either side of the diff. */
 const aliasEntries = (
-  models: ModelConfig[],
+  models: StoredModels,
 ): Array<{ alias: string; id: string }> =>
-  (models as unknown as Array<string | Partial<ModelConfig>>).flatMap(
-    (entry) =>
-      typeof entry === "string" || !entry.alias || !entry.id
-        ? []
-        : [{ alias: entry.alias, id: entry.id }],
+  models.flatMap((entry) =>
+    typeof entry === "string" || !entry.alias || !entry.id
+      ? []
+      : [{ alias: entry.alias, id: entry.id }],
   );
 
 /**
@@ -59,16 +58,14 @@ const aliasEntries = (
  * as a deleted model's concrete references always have.
  */
 export const orphanedAliasRepoints = (
-  previous: ModelConfig[],
-  next: ModelConfig[],
+  previous: StoredModels,
+  next: StoredModels,
 ): OrphanedAlias[] => {
   const survivingNames = new Set(
     aliasEntries(next).map((entry) => entry.alias.toLowerCase()),
   );
   const survivingIds = new Set(
-    (next as unknown as Array<string | Partial<ModelConfig>>).map((entry) =>
-      typeof entry === "string" ? entry : (entry.id ?? ""),
-    ),
+    next.map((entry) => (typeof entry === "string" ? entry : entry.id)),
   );
 
   return aliasEntries(previous).flatMap(({ alias, id }) =>
@@ -85,13 +82,13 @@ export const orphanedAliasRepoints = (
 export const currentProviderModels = async (
   providerId: string,
   exec: Executor = db,
-): Promise<ModelConfig[] | null> => {
+): Promise<StoredModels | null> => {
   const [row] = await exec
     .select({ modelIds: providerTable.modelIds })
     .from(providerTable)
     .where(eq(providerTable.id, providerId))
     .limit(1);
-  return row ? (row.modelIds as unknown as ModelConfig[]) : null;
+  return row ? row.modelIds : null;
 };
 
 /**
@@ -107,8 +104,8 @@ export const currentProviderModels = async (
  */
 export const deMigrateOrphanedAliases = async (
   providerId: string,
-  previous: ModelConfig[],
-  next: ModelConfig[],
+  previous: StoredModels,
+  next: StoredModels,
   exec: Executor = db,
 ): Promise<AliasRepoint[]> => {
   const repoints = orphanedAliasRepoints(previous, next);

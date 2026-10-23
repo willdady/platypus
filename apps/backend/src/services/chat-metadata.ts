@@ -9,11 +9,7 @@ import {
 import { openProvider } from "./provider.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
-import {
-  UNTITLED_CHAT_TITLE,
-  chatSchema,
-  type Provider,
-} from "@platypus/schemas";
+import { UNTITLED_CHAT_TITLE, chatSchema } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import { logger } from "../logger.ts";
 import { loadActivePath } from "./chat-messages.ts";
@@ -133,7 +129,7 @@ export const generateChatMetadata = async (
     );
     return null;
   }
-  const provider = found.row as Provider;
+  const provider = found.row;
 
   // Fetch existing tags from all chats in the workspace so the model can reuse
   // them rather than minting near-duplicate variants.

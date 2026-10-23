@@ -5,7 +5,8 @@ import type {
   organization as organizationTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import type { Provider } from "@platypus/schemas";
+import type { ProviderRow } from "./provider-write.ts";
+import type { AttachmentResourceType } from "@platypus/schemas";
 import type { MemorySummary } from "./memory-retrieval.ts";
 
 type AgentRow = typeof agentTable.$inferSelect;
@@ -17,7 +18,7 @@ export type ChatTurnQueriesFixtures = {
   workspaces?: WorkspaceRow[];
   organizations?: OrganizationRow[];
   agents?: AgentRow[];
-  providers?: Provider[];
+  providers?: ProviderRow[];
   skills?: Array<{
     id: string;
     workspaceId?: string | null;
@@ -31,7 +32,7 @@ export type ChatTurnQueriesFixtures = {
   // org-scoped Provider/MCP/Skill resolves at Chat-turn time only where attached.
   attachments?: Array<{
     workspaceId: string;
-    resourceType: "mcp" | "provider" | "skill" | "agent";
+    resourceType: AttachmentResourceType;
     resourceId: string;
   }>;
   userContexts?: Array<{
@@ -53,7 +54,7 @@ export const createInMemoryChatTurnQueries = (
   fx: ChatTurnQueriesFixtures = {},
 ): ChatTurnQueries => {
   const isAttached = (
-    resourceType: "mcp" | "provider" | "skill" | "agent",
+    resourceType: AttachmentResourceType,
     resourceId: string,
     workspaceId: string,
   ) =>
@@ -71,7 +72,7 @@ export const createInMemoryChatTurnQueries = (
    * Workspace, so it is not Shared.
    */
   const isVisible = (
-    resourceType: "mcp" | "provider" | "skill" | "agent",
+    resourceType: AttachmentResourceType,
     row: {
       id: string;
       workspaceId?: string | null;

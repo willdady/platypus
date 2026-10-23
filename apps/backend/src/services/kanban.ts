@@ -15,6 +15,7 @@ import type {
   KanbanCardHistoryChange,
   KanbanCardHistoryRef,
   KanbanCardPriority,
+  KanbanLabel,
   EventTriggerEventPayload,
 } from "@platypus/schemas";
 import { KANBAN_CARD_HISTORY_LIMIT } from "@platypus/schemas";
@@ -1692,7 +1693,7 @@ export const removeComment = async (
 export type BoardInput = {
   name: string;
   description?: string | null;
-  labels?: { id: string; name: string; color: string }[];
+  labels?: KanbanLabel[];
 };
 
 /** The columns a new board starts with, in order. */
@@ -2025,7 +2026,7 @@ export const getBoardState = async (
 
 /** An assignee with the name and picture a person sees. */
 export type ResolvedAssignee = {
-  type: "user" | "agent";
+  type: KanbanCardAssignee["type"];
   id: string;
   name: string;
   image: string | null;
