@@ -18,8 +18,7 @@ export type ToolActivityEvent = {
  * Wraps each tool's `execute` so the surrounding run sees a `start` event as
  * it runs and exactly one matching `end` event once it settles — on every exit
  * path, including a synchronous throw and a consumer that drains, returns from
- * or throws into an async generator. An async-iterable result emits `start`
- * on its first pull, so one that is never read emits neither event.
+ * or throws into an async generator.
  *
  * Activity events and nothing else. Result normalization (issue #321) used to
  * ride here too, which mounted a correctness guarantee on an optional
@@ -45,24 +44,21 @@ export const wrapToolsWithActivity = (
     wrapped[name] = {
       ...t,
       execute: (args: unknown, options: unknown) => {
-        let startedAt = Date.now();
+        const calledAt = Date.now();
         const start = () => onActivity({ phase: "start", toolName: name });
-        const finish = () => {
+        const finish = (startedAt: number) => {
           onActivity({
             phase: "end",
             toolName: name,
             durationMs: Date.now() - startedAt,
           });
         };
-        // `start` is emitted only once the result's shape is known: an async
-        // iterable defers it to its first pull (below), the other paths emit
-        // it straight away.
         let result: unknown;
         try {
           result = runExecute.call(t, args, options);
         } catch (err) {
           start();
-          finish();
+          finish(calledAt);
           throw err;
         }
         // Async iterable / generator path (sub-agent tools). A generator's
@@ -76,14 +72,14 @@ export const wrapToolsWithActivity = (
         ) {
           const inner = result as AsyncIterable<unknown>;
           return (async function* () {
-            startedAt = Date.now();
+            const pulledAt = Date.now();
             start();
             try {
               for await (const part of inner) {
                 yield part;
               }
             } finally {
-              finish();
+              finish(pulledAt);
             }
           })();
         }
@@ -92,9 +88,9 @@ export const wrapToolsWithActivity = (
           result != null &&
           typeof (result as { then?: unknown }).then === "function"
         ) {
-          return (result as Promise<unknown>).finally(finish);
+          return (result as Promise<unknown>).finally(() => finish(calledAt));
         }
-        finish();
+        finish(calledAt);
         return result;
       },
     };
