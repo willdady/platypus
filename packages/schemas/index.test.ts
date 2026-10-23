@@ -2036,7 +2036,7 @@ describe("sampling parameter bounds (#1144)", () => {
   });
 });
 
-describe("untyped payload fields (#1630)", () => {
+describe("unchecked payload fields (#1630)", () => {
   // Typed for consumers but not checked: a stored Chat or Trigger run event
   // must never fail to parse because its payload's shape moved on.
   const payloads = [undefined, null, [], [{ id: "m1", parts: [] }], {}, "x", 1];

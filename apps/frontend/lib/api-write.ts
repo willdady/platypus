@@ -31,7 +31,8 @@ export type Serialized<T> = T extends Date
   : // A branded primitive (`string & { __brand }`) is still the primitive.
     T extends string | number | boolean
     ? T
-    : // A UI message is already its wire shape, and too deep to map.
+    : // A UI message holds no `Date`, so is already its wire shape; and it is
+      // too deep to map.
       T extends PlatypusUIMessage
       ? T
       : T extends object
