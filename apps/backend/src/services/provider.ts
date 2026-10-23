@@ -11,7 +11,8 @@ import {
   type Tool,
 } from "ai";
 import { toolResultFilesMiddleware } from "./tool-result-files.ts";
-import type { ConcreteModelId, Provider } from "@platypus/schemas";
+import type { ConcreteModelId } from "@platypus/schemas";
+import type { ProviderRow } from "./provider-write.ts";
 
 /**
  * `ConcreteModelId` rather than `string` so a raw `agent.modelId` — which may
@@ -63,7 +64,7 @@ const ATTRIBUTION_NAMES = Object.keys(OPENROUTER_ATTRIBUTION_HEADERS).map(
  * cannot attribute. The Provider's unrelated headers are untouched either way.
  */
 const withOpenRouterAttribution = (
-  headers: Record<string, string> | undefined,
+  headers: Record<string, string> | null,
 ): Record<string, string> => {
   const own = headers ?? {};
   const isAttribution = (key: string) =>
@@ -104,7 +105,7 @@ const withToolResultFilesMoved = (
 ): LanguageModel =>
   wrapLanguageModel({ model, middleware: toolResultFilesMiddleware });
 
-export const openProvider = (provider: Provider): OpenedProvider => {
+export const openProvider = (provider: ProviderRow): OpenedProvider => {
   switch (provider.providerType) {
     case "OpenAI": {
       const sdk = createOpenAI({

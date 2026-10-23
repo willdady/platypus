@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Mock } from "vitest";
-import type { ConcreteModelId, Provider } from "@platypus/schemas";
+import type { ConcreteModelId } from "@platypus/schemas";
+import type { ProviderRow } from "./provider-write.ts";
 
 /** These tests drive the SDK surface directly; the resolver is covered elsewhere. */
 const concrete = (id: string) => id as ConcreteModelId;
@@ -92,7 +93,7 @@ vi.mock("@ai-sdk/anthropic", () => ({
 
 import { openProvider } from "./provider.ts";
 
-const baseProvider: Provider = {
+const baseProvider: ProviderRow = {
   id: "p1",
   name: "Test",
   organizationId: "org-1",
@@ -104,6 +105,15 @@ const baseProvider: Provider = {
   searchSource: "native",
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
+  region: null,
+  baseUrl: null,
+  headers: null,
+  extraBody: null,
+  organization: null,
+  project: null,
+  securityGuardrails: null,
+  embeddingModelId: null,
+  embeddingDimensions: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -152,7 +162,7 @@ describe("openProvider", () => {
     openProvider({
       ...baseProvider,
       apiMode: "chat",
-      baseUrl: undefined,
+      baseUrl: null,
     }).languageModel(concrete("gpt-4"));
     expect(mockCreateOpenAICompatible.creator).toHaveBeenCalledWith(
       expect.objectContaining({ baseURL: "https://api.openai.com/v1" }),
@@ -173,7 +183,7 @@ describe("openProvider", () => {
       openProvider({
         ...baseProvider,
         providerType: "OpenRouter" as const,
-        headers,
+        headers: headers ?? null,
       }).languageModel(concrete("openai/gpt-4"));
       // The shared mock creator is typed as taking no args, so reach for the
       // recorded config through `unknown`.
@@ -287,7 +297,7 @@ describe("openProvider", () => {
   ])("does not add attribution headers for %s", (providerType, creator) => {
     openProvider({
       ...baseProvider,
-      providerType: providerType as Provider["providerType"],
+      providerType: providerType as ProviderRow["providerType"],
       apiMode: "responses",
     }).languageModel(concrete("some-model"));
     expect(creator()).toHaveBeenCalledWith(
@@ -299,7 +309,7 @@ describe("openProvider", () => {
     expect(() =>
       openProvider({
         ...baseProvider,
-        providerType: "Unknown" as Provider["providerType"],
+        providerType: "Unknown" as ProviderRow["providerType"],
       }),
     ).toThrow("Unrecognized provider type 'Unknown'");
   });

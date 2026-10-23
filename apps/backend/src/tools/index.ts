@@ -15,7 +15,6 @@ import {
   passthroughFileTypesForModel,
   resolveModelId,
 } from "../services/model-capability.ts";
-import type { Provider } from "@platypus/schemas";
 import { normalizeToolResults } from "../services/tool-result.ts";
 import { logger } from "../logger.ts";
 import {
@@ -523,7 +522,7 @@ const modelFileReading = async (
     scope,
   );
   if (!found) return none;
-  const provider = found.row as Provider;
+  const provider = found.row;
   const modelId = resolveModelId(provider, agent.row.modelId);
   if (!modelId) return none;
   return {

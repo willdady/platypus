@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { ConcreteModelId, Provider } from "@platypus/schemas";
+import type { ConcreteModelId } from "@platypus/schemas";
+import type { ProviderRow } from "./provider-write.ts";
 import {
   resolveProviderModels,
   providerModelReferences,
@@ -19,7 +20,7 @@ import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
  */
 const concrete = (id: string) => id as ConcreteModelId;
 
-const provider = (over: Partial<Provider>): Provider => ({
+const provider = (over: Partial<ProviderRow>): ProviderRow => ({
   id: "p1",
   name: "Test",
   workspaceId: "ws-1",
@@ -30,6 +31,16 @@ const provider = (over: Partial<Provider>): Provider => ({
   modelIds: [{ id: "m", passthroughFileTypes: [] }],
   taskModelId: "m",
   memoryExtractionModelId: "m",
+  organizationId: null,
+  region: null,
+  baseUrl: null,
+  headers: null,
+  extraBody: null,
+  organization: null,
+  project: null,
+  securityGuardrails: null,
+  embeddingModelId: null,
+  embeddingDimensions: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...over,
@@ -41,7 +52,7 @@ describe("resolveProviderModels", () => {
     const p = provider({
       providerType: "Anthropic",
       apiMode: "responses",
-      modelIds: ["claude-x", "claude-y"] as unknown as Provider["modelIds"],
+      modelIds: ["claude-x", "claude-y"],
     });
     expect(resolveProviderModels(p)).toEqual([
       { id: "claude-x", passthroughFileTypes: [] },
@@ -96,7 +107,7 @@ describe("providerModelReferences", () => {
 
   it("lists ids for a legacy string[], which cannot carry aliases", () => {
     const p = provider({
-      modelIds: ["a", "b"] as unknown as Provider["modelIds"],
+      modelIds: ["a", "b"],
     });
     expect(providerModelReferences(p)).toEqual(["a", "b"]);
   });
@@ -140,7 +151,7 @@ describe("maxExtractedTextCharsForModel", () => {
 
   it("survives a legacy string[] model list", () => {
     const p = provider({
-      modelIds: ["legacy"] as unknown as Provider["modelIds"],
+      modelIds: ["legacy"],
     });
     expect(maxExtractedTextCharsForModel(p, concrete("legacy"))).toBe(
       DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
@@ -171,7 +182,7 @@ describe("maxOutputTokensForModel", () => {
 
   it("survives a legacy string[] model list", () => {
     const p = provider({
-      modelIds: ["legacy"] as unknown as Provider["modelIds"],
+      modelIds: ["legacy"],
     });
     expect(maxOutputTokensForModel(p, concrete("legacy"))).toBeUndefined();
   });
@@ -199,7 +210,7 @@ describe("contextWindowForModel", () => {
 
   it("survives a legacy string[] model list", () => {
     const p = provider({
-      modelIds: ["legacy"] as unknown as Provider["modelIds"],
+      modelIds: ["legacy"],
     });
     expect(contextWindowForModel(p, concrete("legacy"))).toBeUndefined();
   });
@@ -267,7 +278,7 @@ describe("resolveModelId", () => {
 
   it("resolves against a legacy string[] model list", () => {
     const legacy = provider({
-      modelIds: ["legacy"] as unknown as Provider["modelIds"],
+      modelIds: ["legacy"],
     });
     expect(resolveModelId(legacy, "legacy")).toBe("legacy");
     expect(resolveModelId(legacy, "alias:legacy")).toBeUndefined();

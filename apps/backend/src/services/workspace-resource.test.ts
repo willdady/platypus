@@ -161,8 +161,8 @@ describe("WorkspaceResource module", () => {
         listOwned(db, "widget", { dashboardId }, null),
       ).resolves.toEqual([ROWS.widget[0]]);
       await expect(
-        updateOwned(db, "widget", ref, { data: { value: 1 } }),
-      ).resolves.toMatchObject({ data: { value: 1 } });
+        updateOwned(db, "widget", ref, { data: { value: 1, label: "Users" } }),
+      ).resolves.toMatchObject({ data: { value: 1, label: "Users" } });
       await expect(deleteOwned(db, "widget", ref)).resolves.toBe(true);
       expect(fake.tables.widget).toEqual([ROWS.widget[1]]);
     });
@@ -173,7 +173,7 @@ describe("WorkspaceResource module", () => {
         new NotFoundError("Widget not found"),
       );
       await expect(
-        updateOwned(db, "widget", ref, { data: { value: 1 } }),
+        updateOwned(db, "widget", ref, { data: { value: 1, label: "Users" } }),
       ).resolves.toBeNull();
       await expect(deleteOwned(db, "widget", ref)).resolves.toBe(false);
       expect(fake.tables.widget).toEqual(ROWS.widget);

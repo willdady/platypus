@@ -5,7 +5,7 @@ import type {
   organization as organizationTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import type { Provider } from "@platypus/schemas";
+import type { ProviderRow } from "./provider-write.ts";
 import type { MemorySummary } from "./memory-retrieval.ts";
 
 type AgentRow = typeof agentTable.$inferSelect;
@@ -17,7 +17,7 @@ export type ChatTurnQueriesFixtures = {
   workspaces?: WorkspaceRow[];
   organizations?: OrganizationRow[];
   agents?: AgentRow[];
-  providers?: Provider[];
+  providers?: ProviderRow[];
   skills?: Array<{
     id: string;
     workspaceId?: string | null;

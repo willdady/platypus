@@ -6,7 +6,6 @@ import { buildResourceUrl } from "../utils/resource-url.ts";
 import { providerModelReferences } from "../services/model-capability.ts";
 import { listScoped, resolveScoped } from "../services/scoped-resource.ts";
 import type { ScopeContext } from "../scope.ts";
-import type { Provider } from "@platypus/schemas";
 
 /**
  * Every lookup in this module resolves at the invoking Workspace's scope:
@@ -85,12 +84,11 @@ export function createAgentDiscoveryTools(
       // #328, #386). This tool is the agentic counterpart of the Agent model
       // picker, so it must offer the same choices: handing back the concrete id
       // of an aliased model would silently opt every agent created this way out
-      // of the next repoint (ADR-0017). Only `modelIds` is read, so the row is
-      // cast to satisfy the resolver's signature.
+      // of the next repoint (ADR-0017).
       return providers.map(({ row }) => ({
         id: row.id,
         name: row.name,
-        modelIds: providerModelReferences(row as unknown as Provider),
+        modelIds: providerModelReferences(row),
       }));
     },
   });

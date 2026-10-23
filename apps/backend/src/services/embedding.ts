@@ -1,13 +1,14 @@
 import { embed } from "ai";
-import type { ConcreteModelId, Provider } from "@platypus/schemas";
+import type { ConcreteModelId } from "@platypus/schemas";
 import { openProvider } from "./provider.ts";
+import type { ProviderRow } from "./provider-write.ts";
 
 /**
  * Generates an embedding vector for the given text. Throws if the Provider
  * type does not support text embeddings (e.g. Anthropic).
  */
 export const generateEmbedding = async (
-  provider: Provider,
+  provider: ProviderRow,
   embeddingModelId: ConcreteModelId,
   text: string,
 ): Promise<number[]> => {

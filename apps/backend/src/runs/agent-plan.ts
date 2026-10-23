@@ -14,7 +14,8 @@ import {
   DEFAULT_AGENT_MAX_STEPS,
   DEFAULT_DIRECT_MAX_STEPS,
 } from "@platypus/schemas";
-import type { ConcreteModelId, Provider } from "@platypus/schemas";
+import type { ConcreteModelId } from "@platypus/schemas";
+import type { ProviderRow } from "../services/provider-write.ts";
 import type { RunPlan } from "./run-plan.ts";
 import type { ScopeContext } from "../scope.ts";
 
@@ -67,7 +68,7 @@ export type GenerationPlanQueries = {
     id: string,
     orgId: string,
     workspaceId: string,
-  ): Promise<Provider | null>;
+  ): Promise<ProviderRow | null>;
 };
 
 export type GenerationPlan = {
@@ -75,7 +76,7 @@ export type GenerationPlan = {
    * those are composed differently by each caller (the full system prompt for
    * a Chat turn, Instructions + guardrails alone for a sub-Agent, ADR-0016). */
   plan: Omit<RunPlan, "system" | "tools">;
-  provider: Provider;
+  provider: ProviderRow;
   resolvedModelId: ConcreteModelId;
   /** The reference AS STORED — a concrete id, or `alias:<name>` (ADR-0017). */
   modelReference: string;

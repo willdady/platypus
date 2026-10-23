@@ -18,6 +18,10 @@ import {
   triggerRunEvent as triggerRunEventTable,
 } from "../../db/schema.ts";
 import type { ResolvedRunPlan } from "../types.ts";
+import type { EventTriggerEventPayload } from "@platypus/schemas";
+
+// A partial payload: these tests check it is stored as given, not its shape.
+const eventData = (data: object) => data as EventTriggerEventPayload["data"];
 
 /** Every `.set()` payload, paired with the table its `.update()` targeted. */
 const updates = () =>
@@ -61,7 +65,7 @@ describe("TriggerSink", () => {
         ...owner,
         triggerId: "trigger-1",
         eventType: "card.created",
-        eventData: { cardId: "c1" },
+        eventData: eventData({ cardId: "c1" }),
       });
 
       await sink.onStart({ runId: "run-1", messages: [] });
@@ -87,7 +91,7 @@ describe("TriggerSink", () => {
         triggerId: "trigger-1",
         entityId: "card-1",
         eventType: "card.updated",
-        eventData: { id: "card-1" },
+        eventData: eventData({ id: "card-1" }),
       });
 
       await sink.onStart({ runId: "run-1", messages: [] });

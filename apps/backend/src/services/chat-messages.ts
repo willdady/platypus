@@ -84,9 +84,7 @@ const pathThrough = async (
     messages: pathIds.map((id) => {
       const { metadata, ...message } = rowById.get(id)!;
       // Absent rather than null, the shape a streamed message has.
-      return (
-        metadata == null ? message : { ...message, metadata }
-      ) as PlatypusUIMessage;
+      return metadata == null ? message : { ...message, metadata };
     }),
     tree: nodes
       .filter((node) => !node.deletedAt)
