@@ -12,6 +12,7 @@ import {
   isSuperAdmin,
   orgScopeOf,
   requireOrgAccess,
+  userOf,
 } from "../middleware/authorization.ts";
 import { isBanned } from "../services/owner-membership.ts";
 import { removeMember } from "../services/member-removal.ts";
@@ -102,7 +103,7 @@ member.patch(
       orgId: orgScopeOf(c).orgId,
       memberId: c.req.param("memberId"),
       role: c.req.valid("json").role,
-      actorUserId: c.get("user")!.id,
+      actorUserId: userOf(c).id,
     });
 
     return c.json(updated);
@@ -116,7 +117,7 @@ member.delete(
   requireOrgAccess(["admin"]),
   validate("json", organizationMemberRemoveSchema),
   async (c) => {
-    const currentUser = c.get("user")!;
+    const currentUser = userOf(c);
 
     await removeMember({
       orgId: orgScopeOf(c).orgId,

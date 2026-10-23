@@ -24,6 +24,7 @@ import {
   requireOrgAccess,
   requireSuperAdmin,
   isSuperAdmin,
+  userOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
@@ -50,7 +51,7 @@ organization.post(
 
 /** List all organizations (filtered to user's memberships) */
 organization.get("/", requireAuth, async (c) => {
-  const user = c.get("user")!;
+  const user = userOf(c);
 
   // Super admins see all organizations
   if (isSuperAdmin(user)) {
