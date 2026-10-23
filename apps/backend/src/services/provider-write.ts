@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { eq, type SQL } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { db, type Tx } from "../index.ts";
+import { db, type Executor } from "../index.ts";
 import {
   agent as agentTable,
   provider as providerTable,
@@ -38,20 +38,20 @@ import {
  * de-migrate any alias the save orphaned (AFTER the write) — plus create and
  * delete. An update or delete runs every step in one transaction, so a write
  * that fails part-way (a duplicate name, an Agent created mid-delete) leaves
- * embeddings and alias references as they were (#1611). Both the Workspace route (`routes/provider.ts`) and the Organization
- * route (`routes/org-provider.ts`) are thin adapters over it; they used to
- * each carry a verbatim copy of the ordering and had already drifted (#605):
- * the Workspace copy checked the Provider existed before touching embeddings,
- * the Organization copy did not, discovering a missing row only when the
- * `UPDATE` matched nothing.
+ * embeddings and alias references as they were (#1611).
+ *
+ * Both the Workspace route (`routes/provider.ts`) and the Organization route
+ * (`routes/org-provider.ts`) are thin adapters over it; they used to each
+ * carry a verbatim copy of the ordering and had already drifted (#605): the
+ * Workspace copy checked the Provider existed before touching embeddings, the
+ * Organization copy did not, discovering a missing row only when the `UPDATE`
+ * matched nothing.
  *
  * Distinct from `services/provider.ts`, which is the vendor-SDK adapter
  * (`openProvider`) — an unrelated seam that happens to share a resource name.
  */
 
 export type ProviderRow = typeof providerTable.$inferSelect;
-
-type Executor = typeof db | Tx;
 
 /** The fields a create carries — every field but the id and its scope. */
 export type ProviderCreateFields = Omit<

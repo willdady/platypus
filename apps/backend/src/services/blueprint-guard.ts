@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { db } from "../index.ts";
+import { db, type Executor } from "../index.ts";
 import {
   blueprintItem as blueprintItemTable,
   invitationBlueprint as invitationBlueprintTable,
@@ -16,8 +16,9 @@ type SharedResourceType = "mcp" | "provider" | "skill" | "agent";
 export const isResourceListedInBlueprint = async (
   resourceType: SharedResourceType,
   resourceId: string,
+  exec: Executor = db,
 ): Promise<boolean> => {
-  const [row] = await db
+  const [row] = await exec
     .select({ id: blueprintItemTable.id })
     .from(blueprintItemTable)
     .where(

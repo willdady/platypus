@@ -65,6 +65,10 @@ beforeEach(async () => {
   `);
 });
 
+const UNIQUE_VIOLATION = "23505";
+// ON DELETE RESTRICT reports restrict_violation, not foreign_key_violation.
+const RESTRICT_VIOLATION = "23001";
+
 const embeddings = async () =>
   (
     await pg.query<{ embedding: unknown }>(
@@ -94,7 +98,7 @@ describe("updateProvider", () => {
         memoryExtractionModelId: "m",
         embeddingModelId: "embed-large",
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ cause: { code: UNIQUE_VIOLATION } });
 
     expect(await embeddings()).not.toContain(null);
     expect(await provider("p1")).toEqual([
@@ -104,11 +108,11 @@ describe("updateProvider", () => {
 });
 
 describe("deleteProvider", () => {
-  it("keeps embeddings and the Provider row when the delete fails on an Agent created after the in-use check", async () => {
-    // Stands in for an Agent created concurrently: it lands once the
-    // embeddings are nullified, so the delete trips the agent.provider_id
-    // ON DELETE RESTRICT key after the in-use check has already passed.
-    await pg.exec(`
+  // Stands in for an Agent created concurrently: it lands once the embeddings
+  // are nullified, so the delete trips the agent.provider_id ON DELETE
+  // RESTRICT key after the in-use check has already passed.
+  const raceAnAgentIn = () =>
+    pg.exec(`
       CREATE OR REPLACE FUNCTION race_agent() RETURNS trigger AS $$
       BEGIN
         INSERT INTO "agent" ("id", "workspace_id", "provider_id", "name", "description", "model_id")
@@ -119,7 +123,27 @@ describe("deleteProvider", () => {
         FOR EACH STATEMENT EXECUTE FUNCTION race_agent();
     `);
 
-    await expect(deleteProvider(workspaceScope, "p1")).rejects.toThrow();
+  it("keeps embeddings and the Provider row when the delete fails on an Agent created after the in-use check", async () => {
+    await raceAnAgentIn();
+
+    await expect(deleteProvider(workspaceScope, "p1")).rejects.toMatchObject({
+      cause: { code: RESTRICT_VIOLATION },
+    });
+
+    expect(await embeddings()).not.toContain(null);
+    expect(await provider("p1")).toHaveLength(1);
+  });
+
+  it("keeps embeddings and a Shared Provider row when an Organization-scope delete fails the same way", async () => {
+    await pg.exec(`
+      UPDATE "provider" SET "organization_id" = 'org-1', "workspace_id" = NULL
+        WHERE "id" = 'p1';
+    `);
+    await raceAnAgentIn();
+
+    await expect(
+      deleteProvider({ kind: "organization", orgId: "org-1" }, "p1"),
+    ).rejects.toMatchObject({ cause: { code: RESTRICT_VIOLATION } });
 
     expect(await embeddings()).not.toContain(null);
     expect(await provider("p1")).toHaveLength(1);

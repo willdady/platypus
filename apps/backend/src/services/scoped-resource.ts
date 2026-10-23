@@ -110,7 +110,10 @@ export const labelOf = (type: ScopedResourceType): string =>
 /** The noun for mid-sentence messages ("agent", "skill", "mcp", "provider"). */
 export const nounOf = (type: ScopedResourceType): string => REGISTRY[type].noun;
 
-/** The Drizzle handle every read here takes — `db`, or a transaction a write runs in. */
+/**
+ * The Drizzle handle every read here takes: `db`, or the transaction a write
+ * runs in.
+ */
 export type Database = typeof db | Tx;
 
 /**
@@ -553,7 +556,7 @@ export const requireSharedDeletable = async (
     );
   }
 
-  if (await isResourceListedInBlueprint(type, id)) {
+  if (await isResourceListedInBlueprint(type, id, database)) {
     throw new ConflictError(
       `Cannot delete: this ${REGISTRY[type].noun} is listed in one or more blueprints. Remove it from them first.`,
     );

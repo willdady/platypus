@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, type Tx } from "../index.ts";
+import { db, type Executor } from "../index.ts";
 import {
   agent as agentTable,
   chat as chatTable,
@@ -84,7 +84,7 @@ export const orphanedAliasRepoints = (
  */
 export const currentProviderModels = async (
   providerId: string,
-  exec: typeof db | Tx = db,
+  exec: Executor = db,
 ): Promise<ModelConfig[] | null> => {
   const [row] = await exec
     .select({ modelIds: providerTable.modelIds })
@@ -109,7 +109,7 @@ export const deMigrateOrphanedAliases = async (
   providerId: string,
   previous: ModelConfig[],
   next: ModelConfig[],
-  exec: typeof db | Tx = db,
+  exec: Executor = db,
 ): Promise<AliasRepoint[]> => {
   const repoints = orphanedAliasRepoints(previous, next);
   const results: AliasRepoint[] = [];
