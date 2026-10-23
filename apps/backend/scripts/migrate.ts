@@ -6,6 +6,7 @@ import {
   ADVISORY_LOCK_IDS,
   withAdvisoryLock,
 } from "../src/db/advisory-lock.ts";
+import { databaseConfig } from "../src/db/connection-config.ts";
 import { logger } from "../src/logger.ts";
 
 const { Pool } = pg;
@@ -15,9 +16,7 @@ const { Pool } = pg;
 const MIGRATIONS_FOLDER = fileURLToPath(new URL("../drizzle", import.meta.url));
 
 async function runMigrations() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-  });
+  const pool = new Pool(databaseConfig(process.env.DATABASE_URL));
 
   // An idle client dropped mid-migration (e.g. the one holding the lock) would
   // otherwise crash the process with an unhandled 'error' event.

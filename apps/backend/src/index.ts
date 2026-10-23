@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
+import { databaseConfig } from "./db/connection-config.ts";
 
-const db = drizzle(process.env.DATABASE_URL!);
+const db = drizzle({ connection: databaseConfig(process.env.DATABASE_URL) });
 
 /** A transaction `db.transaction` hands its callback. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
