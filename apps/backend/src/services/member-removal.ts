@@ -15,7 +15,7 @@ import {
   finishTransfer,
   type TransferAftermath,
 } from "./workspace-transfer.ts";
-import { findChangeTarget, requireAdminRemains } from "./member-role.ts";
+import { findLossTarget, requireAdminRemains } from "./last-admin-guard.ts";
 
 const ownedWorkspaces = (
   database: typeof db | Tx,
@@ -71,13 +71,13 @@ export const removeMember = async ({
   workspaces: MemberWorkspaceDecision[];
   transferredBy: string;
 }): Promise<void> => {
-  const change = {
+  const request = {
     orgId,
     memberId,
     actorUserId,
-    change: "remove" as const,
+    loss: "remove" as const,
   };
-  const member = await findChangeTarget(db, change);
+  const member = await findLossTarget(db, request);
   requireEachOwnedDecided(
     await ownedWorkspaces(db, orgId, member.userId),
     workspaces,
@@ -96,7 +96,7 @@ export const removeMember = async ({
   const transfers = await db.transaction(async (tx) => {
     // First, so the Organization lock comes before the member-row and
     // Workspace locks below.
-    await requireAdminRemains(tx, change);
+    await requireAdminRemains(tx, request);
     // Workspace creation holds this row while it adds one for the member, so
     // with it locked the owned set cannot grow before the removal commits.
     await tx

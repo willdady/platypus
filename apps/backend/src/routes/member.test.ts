@@ -130,7 +130,7 @@ describe("Member Routes", () => {
 
       const res = await app.request(`${baseUrl}/m1`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { user: unknown };
       expect(body).toMatchObject({
         id: "m1",
         isSuperAdmin: true,
