@@ -232,7 +232,7 @@ app.notFound((c) => c.json({ error: "Not Found" }, 404));
 // Anything unmapped is an unexpected fault → 500.
 app.onError((error, c) => {
   // Hono's own 4xx, e.g. the validator's "Malformed JSON in request body".
-  if (error instanceof HTTPException) {
+  if (error instanceof HTTPException && error.status < 500) {
     return c.json({ error: error.message }, error.status);
   }
   const mapped = mapError(error);

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb, seedDb } from "../test-utils.ts";
 import app from "../server.ts";
 import { logger } from "../logger.ts";
@@ -9,6 +9,10 @@ describe("Invitation Routes", () => {
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
     mockDb.innerJoin.mockReturnValue(mockDb);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   const orgId = "org-1";

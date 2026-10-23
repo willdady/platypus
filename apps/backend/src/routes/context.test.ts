@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   mockDb,
   mockSession,
@@ -25,6 +25,10 @@ describe("Context Routes", () => {
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
     mockDb.leftJoin.mockReturnValue(mockDb);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   const baseUrl = "/users/me/contexts";

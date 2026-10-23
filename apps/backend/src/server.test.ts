@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockSession, resetMockDb } from "./test-utils.ts";
 import app from "./server.ts";
 import { logger } from "./logger.ts";
@@ -9,10 +9,15 @@ describe("app error responses", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("answers a malformed JSON body with 400 and an error, without logging", async () => {
     mockSession({ id: "user-1", email: "test@example.com" });
     const logError = vi.spyOn(logger, "error");
 
+    // Any route behind sValidator("json") would do; Contexts needs only a session.
     const res = await app.request("/users/me/contexts", {
       method: "POST",
       body: "{not json",
