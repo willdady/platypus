@@ -144,9 +144,10 @@ repeat it.
 | `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.                                           |
 | `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.sandbox.yaml` overlay.                                           |
 | `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. The one backend viable in horizontally-scaled deployments.             |
+| `@platypus/exa`            | Gate-able | The Exa Web-search backend — search and page reading through Exa's hosted API. Needs an Exa API key.                               |
 
-The two always-on Plugins load unconditionally and must not be listed. The three
-gate-able ones load only when named in `PLATYPUS_PLUGINS`. All five are internal
+The two always-on Plugins load unconditionally and must not be listed. The four
+gate-able ones load only when named in `PLATYPUS_PLUGINS`. All six are internal
 backend modules — their `@platypus/*` names are logical ids, not npm packages, so
 there is nothing to install. A third-party Plugin is an npm package that does
 need installing — see [Installing Plugins](/extending/installing-plugins).
@@ -257,6 +258,7 @@ turn each `-` into `_`.
 | -------------------------------------- | -------------------------------------- |
 | `@platypus/docker`                     | `PLATYPUS_PLUGIN_CONFIG_DOCKER`        |
 | `@platypus/web-fetch`                  | `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`     |
+| `@platypus/exa`                        | `PLATYPUS_PLUGIN_CONFIG_EXA`           |
 | `cloud-sandbox` (a third-party Plugin) | `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX` |
 
 A third-party Plugin's manifest name is the name its line in the boot log and
@@ -342,6 +344,26 @@ See [Sandbox infrastructure](/self-hosting/sandbox) for the full security model,
 [SSH adapter](/self-hosting/sandbox/ssh) for the connection fields and host-key
 pinning, and [Docker adapter](/self-hosting/sandbox/docker) for the opt-in
 `compose.sandbox.yaml` overlay.
+
+## Web search
+
+A Provider without built-in search can still offer the Chat **Search** toggle
+through a [Web-search backend](/concepts/providers#web-search). Platypus ships
+one:
+
+- **Exa** — `@platypus/exa`. Searches and reads pages through
+  [Exa](https://exa.ai)'s hosted API, so queries and the URLs the model reads
+  are sent to Exa and billed to your Exa account. List it in `PLATYPUS_PLUGINS`
+  and give it your API key:
+
+  ```
+  PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/exa
+  PLATYPUS_PLUGIN_CONFIG_EXA={"credentials":{"apiKey":"your-exa-api-key"}}
+  ```
+
+  Without the key, boot aborts with an error naming the Plugin. Once it loads,
+  pick **Exa** in a Provider's **Web search** field. Exa fetches pages from its
+  own servers, not from your deployment.
 
 ## Tool egress
 
