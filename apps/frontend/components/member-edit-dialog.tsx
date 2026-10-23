@@ -49,8 +49,10 @@ export function MemberEditDialog({
         method: "PATCH",
         data,
       }),
-    // No field here renders a server error, so a rejection is toasted.
+    // No field here renders a server error, so a rejection is toasted; a
+    // last-admin refusal is a conflict with no field to key it to.
     onInvalid: (_fieldErrors, message) => toast.error(message),
+    conflictField: null,
     successMessage: "Member role updated",
     onSuccess,
   });

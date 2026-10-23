@@ -11,7 +11,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import type { MemberWorkspaceDecision } from "@platypus/schemas";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
-import { ValidationError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 
 /**
  * Remove from Org (ADR-0035) against an in-process Postgres built from the
@@ -83,7 +83,8 @@ const members = async () =>
 const remove = (workspaces: MemberWorkspaceDecision[]) =>
   removeMember({
     orgId: "org-1",
-    member: { id: "m-old", userId: "u-old" },
+    memberId: "m-old",
+    actorUserId: "admin",
     workspaces,
     transferredBy: "Ada",
   });
@@ -212,5 +213,83 @@ describe("removeMember", () => {
 
     expect(await members()).toEqual(allMembers);
     expect(deleteStoredPrefix).not.toHaveBeenCalled();
+  });
+
+  it("refuses to remove yourself", async () => {
+    await expect(
+      removeMember({
+        orgId: "org-1",
+        memberId: "m-admin",
+        actorUserId: "admin",
+        workspaces: [],
+        transferredBy: "Ada",
+      }),
+    ).rejects.toThrow(
+      new ValidationError("You cannot remove yourself from the organization"),
+    );
+    expect(await members()).toEqual(allMembers);
+  });
+
+  it("answers not found to a member of another Organization", async () => {
+    await expect(
+      removeMember({
+        orgId: "org-1",
+        memberId: "m-out",
+        actorUserId: "admin",
+        workspaces: [],
+        transferredBy: "Ada",
+      }),
+    ).rejects.toThrow(NotFoundError);
+    expect(await members()).toEqual(allMembers);
+  });
+
+  it("refuses to remove the last admin", async () => {
+    await expect(
+      removeMember({
+        orgId: "org-1",
+        memberId: "m-admin",
+        actorUserId: "super",
+        workspaces: [],
+        transferredBy: "Super",
+      }),
+    ).rejects.toThrow(
+      new ConflictError("Cannot remove the last organization admin"),
+    );
+    expect(await members()).toEqual(allMembers);
+  });
+
+  // PGlite runs the two transactions one after the other, so this pins that
+  // the guard and the delete share a transaction (a count taken outside it
+  // lets both removals pass); it cannot prove the `organization` row lock
+  // that serialises them in Postgres.
+  it("leaves one admin when two admins remove each other at once", async () => {
+    await pg.exec(
+      `UPDATE "organization_member" SET "role" = 'admin' WHERE "id" = 'm-new'`,
+    );
+
+    const results = await Promise.allSettled([
+      removeMember({
+        orgId: "org-1",
+        memberId: "m-new",
+        actorUserId: "admin",
+        workspaces: [],
+        transferredBy: "Ada",
+      }),
+      removeMember({
+        orgId: "org-1",
+        memberId: "m-admin",
+        actorUserId: "u-new",
+        workspaces: [],
+        transferredBy: "Nina",
+      }),
+    ]);
+
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBeInstanceOf(ConflictError);
+    expect(
+      await rows(`SELECT "id" FROM "organization_member"
+        WHERE "organization_id" = 'org-1' AND "role" = 'admin'`),
+    ).toHaveLength(1);
   });
 });

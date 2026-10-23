@@ -15,6 +15,7 @@ import {
   finishTransfer,
   type TransferAftermath,
 } from "./workspace-transfer.ts";
+import { findLossTarget, requireAdminRemains } from "./last-admin-guard.ts";
 
 const ownedWorkspaces = (
   database: typeof db | Tx,
@@ -51,20 +52,32 @@ const requireEachOwnedDecided = (
  * Remove from Org (ADR-0035). Every Workspace the member owns in the
  * Organization is transferred or deleted, as `workspaces` decides, and the
  * membership goes with them in one transaction: if any decision is refused,
- * nothing changes and the member stays. Throws `ValidationError` unless
- * `workspaces` decides each owned Workspace exactly once.
+ * nothing changes and the member stays. The last-admin guard
+ * ({@link requireAdminRemains}) runs in that transaction too. Throws
+ * `NotFoundError` unless the member is in the Organization, `ValidationError`
+ * when it is the caller or unless `workspaces` decides each owned Workspace
+ * exactly once, and `ConflictError` when it is the last admin.
  */
 export const removeMember = async ({
   orgId,
-  member,
+  memberId,
+  actorUserId,
   workspaces,
   transferredBy,
 }: {
   orgId: string;
-  member: { id: string; userId: string };
+  memberId: string;
+  actorUserId: string;
   workspaces: MemberWorkspaceDecision[];
   transferredBy: string;
 }): Promise<void> => {
+  const request = {
+    orgId,
+    memberId,
+    actorUserId,
+    loss: "remove" as const,
+  };
+  const member = await findLossTarget(db, request);
   requireEachOwnedDecided(
     await ownedWorkspaces(db, orgId, member.userId),
     workspaces,
@@ -81,6 +94,9 @@ export const removeMember = async ({
   );
 
   const transfers = await db.transaction(async (tx) => {
+    // First, so the Organization lock comes before the member-row and
+    // Workspace locks below.
+    await requireAdminRemains(tx, request);
     // Workspace creation holds this row while it adds one for the member, so
     // with it locked the owned set cannot grow before the removal commits.
     await tx

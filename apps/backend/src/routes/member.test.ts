@@ -116,17 +116,29 @@ describe("Member Routes", () => {
       expect(await res.json()).toEqual({ error: "Member not found" });
     });
 
-    it("returns the member with its super-admin flag", async () => {
+    it("returns the member with its super-admin and banned flags", async () => {
       mockSession({ id: "admin-1", role: "user" });
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
         .mockResolvedValueOnce([
-          { id: "m1", userId: "u1", user: { id: "u1", role: "admin" } },
+          {
+            id: "m1",
+            userId: "u1",
+            user: { id: "u1", role: "admin", banned: true, banExpires: null },
+          },
         ]);
 
       const res = await app.request(`${baseUrl}/m1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toMatchObject({ id: "m1", isSuperAdmin: true });
+      const body = (await res.json()) as { user: unknown };
+      expect(body).toMatchObject({
+        id: "m1",
+        isSuperAdmin: true,
+        isBanned: true,
+      });
+      // The list and single responses share one shape: the ban fields fold
+      // into `isBanned`.
+      expect(body.user).toEqual({ id: "u1", role: "admin" });
     });
   });
 
@@ -187,7 +199,7 @@ describe("Member Routes", () => {
 
       const res = await send("PATCH", "m1", { role: "member" });
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         error: "Cannot demote the last organization admin",
       });
@@ -293,7 +305,7 @@ describe("Member Routes", () => {
 
       const res = await send("DELETE", "m1");
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         error: "Cannot remove the last organization admin",
       });
