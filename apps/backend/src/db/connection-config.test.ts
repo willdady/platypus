@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
@@ -6,7 +6,7 @@ import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { databaseConfig } from "./connection-config.ts";
 
 /**
- * Every connection the backend opens runs in UTC, whatever the database's own
+ * The app's and the migration runner's connections run in UTC, whatever the database's own
  * default, so `defaultNow()` and a JS-written `Date` store the same instant
  * (#1615).
  */
@@ -17,6 +17,7 @@ const stamp = pgTable("stamp", {
 
 let pg: PGlite | undefined;
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await pg?.close();
   pg = undefined;
 });
@@ -62,19 +63,19 @@ describe("databaseConfig", () => {
   it("keeps the pin when the URL carries its own options", async () => {
     const { pg } = await connect(
       "Australia/Sydney",
-      "postgres://u:p@db:5432/platypus?options=-c%20search_path%3Dpublic",
+      "postgres://u:p@db:5432/platypus?options=-c%20search_path%3Dpg_catalog",
     );
 
-    const { rows } = await pg.query<{ TimeZone: string }>("SHOW TimeZone");
-    expect(rows[0].TimeZone).toBe("UTC");
-    expect(
-      databaseConfig(
-        "postgres://u:p@db:5432/platypus?options=-c%20search_path%3Dpublic",
-      ).options,
-    ).toContain("-c search_path=public");
+    const timeZone = await pg.query<{ TimeZone: string }>("SHOW TimeZone");
+    expect(timeZone.rows[0].TimeZone).toBe("UTC");
+    const searchPath = await pg.query<{ search_path: string }>(
+      "SHOW search_path",
+    );
+    expect(searchPath.rows[0].search_path).toBe("pg_catalog");
   });
 
   it("leaves the connection to node-postgres' PG* defaults without a URL", () => {
+    vi.stubEnv("PGOPTIONS", undefined);
     expect(databaseConfig(undefined)).toEqual({ options: "-c TimeZone=UTC" });
   });
 
