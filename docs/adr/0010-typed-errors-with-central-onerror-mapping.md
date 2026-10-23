@@ -106,8 +106,8 @@ The validator behind `sValidator` throws Hono's `HTTPException(400)` for a body 
 not valid JSON or form data. `mapError` had no case for it, so the seam logged it as
 unhandled and answered 500. `app.onError` now answers a 4xx `HTTPException` with its
 own status and `{ error: message }`, before `mapError` runs and without logging: it is
-the framework's 4xx, not a fault. A 5xx one still falls through to the logged 500. An `app.notFound` gives unknown paths the same
-`{ error }` body.
+the framework's 4xx, not a fault. A 5xx one still falls through to the logged 500.
+An `app.notFound` gives unknown paths the same `{ error }` body.
 
 The branch ignores any custom `res` an `HTTPException` may carry. Nothing in the
 backend throws one with a response today; a middleware that needs its headers kept
