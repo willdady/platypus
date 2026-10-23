@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { logger } from "../logger.ts";
 import { checkEgress } from "../utils/egress-guard.ts";
+import { errorMessage } from "../utils/error-message.ts";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000];
@@ -98,7 +99,7 @@ export async function postWithRetries(params: {
         {
           url,
           attempt: attempt + 1,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         },
         `${label} delivery attempt failed`,
       );

@@ -22,6 +22,7 @@ import {
   type SandboxTransport,
 } from "../../sandbox/transport.ts";
 import type { SandboxBackend, SandboxContext } from "../../sandbox/types.ts";
+import { errorMessage } from "../../utils/error-message.ts";
 
 const IMAGE = "debian:stable-slim";
 const LABEL_SANDBOX = "platypus.sandbox";
@@ -315,7 +316,7 @@ async function readExitCode(exec: Exec): Promise<number> {
     try {
       info = await exec.inspect();
     } catch (cause) {
-      const detail = cause instanceof Error ? cause.message : String(cause);
+      const detail = errorMessage(cause);
       throw new Error(`could not read the command's exit status: ${detail}`, {
         cause,
       });

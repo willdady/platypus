@@ -36,7 +36,7 @@ import {
   type TriggerRow,
 } from "../services/trigger.ts";
 import { logger } from "../logger.ts";
-import { ADVISORY_LOCK_IDS } from "../db/advisory-lock.ts";
+import { ADVISORY_LOCK_IDS, withAdvisoryLock } from "../db/advisory-lock.ts";
 import {
   chatRunStale,
   runHeartbeatCutoff,
@@ -57,84 +57,6 @@ const MAX_CONCURRENT_TRIGGERS = parseInt(
   process.env.SCHEDULE_MAX_CONCURRENT ||
     String(DEFAULT_SCHEDULE_MAX_CONCURRENT),
 );
-
-/**
- * Attempts to acquire an advisory lock and runs the given function if successful.
- * This ensures only one backend instance runs the scheduled work at a time.
- *
- * `lockId` is load bearing across deploys — see `ADVISORY_LOCK_IDS`. Each
- * background job passes its own, so jobs contend only with their own peers.
- *
- * An advisory lock belongs to the connection that took it, and `db` is a pool,
- * so the lock and its unlock go through one connection checked out for the
- * whole tick. Sent through `db` they could land on different connections: the
- * unlock would then release nothing, and the lock would stay held by an idle
- * pooled connection, skipping every peer's ticks until pg-pool closed it.
- * `fn`'s own queries still go through the pool; only the lock needs the
- * dedicated connection.
- */
-export async function runWithLock(
-  lockId: number,
-  fn: () => Promise<void>,
-): Promise<void> {
-  const client = await db.$client.connect();
-  // Handed to `release`: an error destroys the connection instead of returning
-  // it to the pool, ending its session and with it any lock it still holds.
-  // Set only when a lock query itself fails, leaving the session in a state we
-  // cannot vouch for; `fn` failing says nothing about the connection.
-  let broken: Error | undefined;
-
-  try {
-    let acquired: boolean | undefined;
-    try {
-      const lockResult = await client.query<{ acquired: boolean }>(
-        "SELECT pg_try_advisory_lock($1) as acquired",
-        [lockId],
-      );
-      acquired = lockResult.rows[0]?.acquired;
-    } catch (error) {
-      broken = toError(error);
-      throw error;
-    }
-
-    if (!acquired) {
-      logger.debug(
-        { lockId },
-        "Another backend instance holds this job's lock, skipping this tick",
-      );
-      return;
-    }
-
-    try {
-      await fn();
-    } finally {
-      try {
-        const unlockResult = await client.query<{ released: boolean }>(
-          "SELECT pg_advisory_unlock($1) as released",
-          [lockId],
-        );
-        if (!unlockResult.rows[0]?.released) {
-          logger.warn(
-            { lockId },
-            "Unlock found no job lock held by this connection",
-          );
-        }
-      } catch (error) {
-        broken = toError(error);
-        logger.error(
-          { error, lockId },
-          "Failed to release a job lock, discarding its connection",
-        );
-      }
-    }
-  } finally {
-    client.release(broken);
-  }
-}
-
-function toError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
-}
 
 /**
  * Schedules a function to run at wall-clock-aligned intervals.
@@ -605,30 +527,35 @@ export function startScheduler(): void {
   // grab the lock does it. Each sweep is wrapped independently so one failing
   // doesn't skip the others.
   scheduleAligned("trigger-scheduler", SCHEDULER_INTERVAL_MS, async () => {
-    await runWithLock(ADVISORY_LOCK_IDS.scheduler, async () => {
-      try {
-        await recoverStuckTriggers();
-      } catch (error) {
-        logger.error({ error }, "Trigger recovery sweep failed");
-      }
-      try {
-        await reapFiredOneOffTriggers();
-      } catch (error) {
-        logger.error({ error }, "One-off Trigger reap failed");
-      }
-      try {
-        await recoverStuckChats();
-      } catch (error) {
-        logger.error({ error }, "Chat recovery sweep failed");
-      }
-      // Never throws; after the Chat sweep, so a Task it just failed is seen.
-      await sweepMissedEnds();
-      try {
-        await sweepTokenRemindersIfDue();
-      } catch (error) {
-        logger.error({ error }, "Token expiry reminders failed");
-      }
-      await processDueTriggers();
-    });
+    await withAdvisoryLock(
+      db.$client,
+      ADVISORY_LOCK_IDS.scheduler,
+      async () => {
+        try {
+          await recoverStuckTriggers();
+        } catch (error) {
+          logger.error({ error }, "Trigger recovery sweep failed");
+        }
+        try {
+          await reapFiredOneOffTriggers();
+        } catch (error) {
+          logger.error({ error }, "One-off Trigger reap failed");
+        }
+        try {
+          await recoverStuckChats();
+        } catch (error) {
+          logger.error({ error }, "Chat recovery sweep failed");
+        }
+        // Never throws; after the Chat sweep, so a Task it just failed is seen.
+        await sweepMissedEnds();
+        try {
+          await sweepTokenRemindersIfDue();
+        } catch (error) {
+          logger.error({ error }, "Token expiry reminders failed");
+        }
+        await processDueTriggers();
+      },
+      { wait: false },
+    );
   });
 }

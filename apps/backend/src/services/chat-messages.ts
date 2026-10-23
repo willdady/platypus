@@ -5,6 +5,7 @@ import { db } from "../index.ts";
 import { chat, chatMessage } from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { PlatypusUIMessage } from "../types.ts";
+import { errorMessage } from "../utils/error-message.ts";
 
 /**
  * A Chat's messages as the rows the server owns (ADR-0026): a tree through
@@ -182,9 +183,7 @@ export const resolveTurn = async ({
       dataSchemas: { "sandbox-upload": sandboxUploadSchema },
     });
   } catch (error) {
-    throw new ValidationError(
-      error instanceof Error ? error.message : String(error),
-    );
+    throw new ValidationError(errorMessage(error));
   }
 
   const { parentId } = request;

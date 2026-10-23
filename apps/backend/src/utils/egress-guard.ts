@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
+import { errorMessage } from "./error-message.ts";
 
 /**
  * Core's egress guard for **model-supplied** URLs (ADR-0014).
@@ -211,9 +212,7 @@ export const checkEgress = async (
     } catch (error) {
       return {
         allowed: false,
-        reason: `'${hostname}' could not be resolved (${
-          error instanceof Error ? error.message : String(error)
-        })`,
+        reason: `'${hostname}' could not be resolved (${errorMessage(error)})`,
       };
     }
   }

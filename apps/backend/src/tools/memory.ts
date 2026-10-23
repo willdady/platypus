@@ -11,6 +11,7 @@ import { resolveScoped } from "../services/scoped-resource.ts";
 import { pointerSettingModelId } from "../services/model-capability.ts";
 import type { Provider } from "@platypus/schemas";
 import { logger } from "../logger.ts";
+import { errorMessage } from "../utils/error-message.ts";
 
 /**
  * The Workspace's embedding Provider with its embedding model, or null when
@@ -83,7 +84,7 @@ export const createMemoryTools = async (
         };
       } catch (error) {
         logger.error({ error }, "memoryGet tool failed");
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         return { error: `Memory get failed: ${message}` };
       }
     },
@@ -142,7 +143,7 @@ export const createMemoryTools = async (
         };
       } catch (error) {
         logger.error({ error }, "memorySearch tool failed");
-        const message = error instanceof Error ? error.message : String(error);
+        const message = errorMessage(error);
         return { error: `Memory search failed: ${message}` };
       }
     },

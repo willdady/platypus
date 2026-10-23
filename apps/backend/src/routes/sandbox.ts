@@ -34,6 +34,7 @@ import {
   sandboxCreateError,
   sandboxSchemaError,
 } from "../sandbox/validate.ts";
+import { errorMessage } from "../utils/error-message.ts";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;
 
@@ -215,7 +216,7 @@ sandbox.put(
       try {
         await destroySandboxRow(current);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         logger.warn(
           {
             workspaceId,
@@ -286,7 +287,7 @@ sandbox.delete(
       try {
         await destroySandboxRow(existing);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessage(err);
         logger.warn(
           {
             workspaceId,

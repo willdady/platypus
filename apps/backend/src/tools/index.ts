@@ -39,6 +39,7 @@ import {
   DeadlineExceededError,
   withDeadline,
 } from "../utils/abort-race.ts";
+import { isRecord } from "../utils/is-record.ts";
 
 /**
  * How long one Tool set's factory, or one MCP server's connect-and-list, may
@@ -422,11 +423,7 @@ export const composeToolSet = (
     // The TS type makes `tools` a map or a factory returning one; a third-party
     // *JS* plugin can return anything, and `Object.assign(turn, "oops")` spreads
     // a string's indices into the turn's tool map rather than failing.
-    if (
-      typeof resolved !== "object" ||
-      resolved === null ||
-      Array.isArray(resolved)
-    ) {
+    if (!isRecord(resolved)) {
       logger.warn(
         { plugin: pluginName, toolSet: id },
         "Tool set resolved to no tool map; serving none of its tools this turn",

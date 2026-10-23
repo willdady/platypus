@@ -194,8 +194,11 @@ export const seedFirstBootExclusively = (
   lockPool: LockPool,
   deps: SeedDeps,
 ): Promise<SeedResult> =>
-  withAdvisoryLock(lockPool, ADVISORY_LOCK_IDS.seed, () =>
-    seedFirstBoot(database, deps),
+  withAdvisoryLock(
+    lockPool,
+    ADVISORY_LOCK_IDS.seed,
+    () => seedFirstBoot(database, deps),
+    { wait: true },
   );
 
 /**

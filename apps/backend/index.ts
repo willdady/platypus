@@ -23,6 +23,7 @@ import { installProviderWarningLogger } from "./src/provider-warnings.ts";
 import { validateTriggerBreakerConfig } from "./src/services/trigger-breaker.ts";
 import { validateInboundTriggerSettings } from "./src/services/inbound-trigger.ts";
 import { validateA2aSettings } from "./src/services/a2a-call.ts";
+import { errorMessage } from "./src/utils/error-message.ts";
 
 const DEFAULT_PORT = 4001;
 const PORT = process.env.PORT || String(DEFAULT_PORT);
@@ -85,9 +86,7 @@ const main = async () => {
     // the one thing the Operator has to work from (#369).
     logger.fatal(
       { err: error },
-      `Startup failed, not starting the HTTP server: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `Startup failed, not starting the HTTP server: ${errorMessage(error)}`,
     );
     process.exit(1);
   }
