@@ -6,7 +6,7 @@ import {
   provider as providerTable,
   attachment as attachmentTable,
 } from "../db/schema.ts";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import type { ScopeContext } from "../scope.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 import { isResourceListedInBlueprint } from "./blueprint-guard.ts";
@@ -110,8 +110,8 @@ export const labelOf = (type: ScopedResourceType): string =>
 /** The noun for mid-sentence messages ("agent", "skill", "mcp", "provider"). */
 export const nounOf = (type: ScopedResourceType): string => REGISTRY[type].noun;
 
-/** The Drizzle handle every read here takes, so a caller can declare one too. */
-export type Database = typeof db;
+/** The Drizzle handle every read here takes — `db`, or a transaction a write runs in. */
+export type Database = typeof db | Tx;
 
 /**
  * `and()` is typed to tolerate `undefined` operands and so widens to

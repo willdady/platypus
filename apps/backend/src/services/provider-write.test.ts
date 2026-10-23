@@ -46,6 +46,10 @@ const baseFields = (): ProviderCreateFields => ({
 
 const updateFields = (): ProviderUpdateFields => baseFields();
 
+// The handle `db.transaction` hands its callback: forwards to the chainable
+// mock but is not `db` itself, so a helper handed `db` instead fails the match.
+const tx = new Proxy(mockDb, {});
+
 describe("provider-write module", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,6 +58,7 @@ describe("provider-write module", () => {
     vi.mocked(nullifyEmbeddingsForProvider).mockResolvedValue(undefined);
     vi.mocked(currentProviderModels).mockResolvedValue(null);
     vi.mocked(deMigrateOrphanedAliases).mockResolvedValue([]);
+    mockDb.transaction.mockImplementation((cb) => cb(tx));
   });
 
   describe("createProvider", () => {
@@ -120,10 +125,12 @@ describe("provider-write module", () => {
       );
 
       expect(result).toEqual({ row: updated, aliasRepoints: [] });
-      expect(handleEmbeddingConfigChange).toHaveBeenCalledWith("p1", {
-        ...updateFields(),
-        name: "Renamed",
-      });
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+      expect(handleEmbeddingConfigChange).toHaveBeenCalledWith(
+        "p1",
+        { ...updateFields(), name: "Renamed" },
+        tx,
+      );
       expect(mockDb.where).toHaveBeenLastCalledWith(
         workspaceScopedWhere("provider", "p1", "ws-1"),
       );
@@ -178,6 +185,7 @@ describe("provider-write module", () => {
       expect(handleEmbeddingConfigChange).toHaveBeenCalledWith(
         "p1",
         updateFields(),
+        tx,
       );
       expect(mockDb.where).toHaveBeenLastCalledWith(
         orgScopedWhere("provider", "p1", "org-1"),
@@ -219,11 +227,12 @@ describe("provider-write module", () => {
         { ...updateFields(), modelIds: nextModels },
       );
 
-      expect(currentProviderModels).toHaveBeenCalledWith("p1");
+      expect(currentProviderModels).toHaveBeenCalledWith("p1", tx);
       expect(deMigrateOrphanedAliases).toHaveBeenCalledWith(
         "p1",
         previousModels,
         nextModels,
+        tx,
       );
       expect(result.aliasRepoints).toEqual([
         { alias: "flagship", modelId: "gpt-4", agents: 2, chats: 1 },
@@ -238,7 +247,8 @@ describe("provider-write module", () => {
 
       await deleteProvider({ kind: "workspace", ctx: workspaceCtx }, "p1");
 
-      expect(nullifyEmbeddingsForProvider).toHaveBeenCalledWith("p1");
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+      expect(nullifyEmbeddingsForProvider).toHaveBeenCalledWith("p1", tx);
       expect(deMigrateOrphanedAliases).not.toHaveBeenCalled();
       expect(mockDb.where).toHaveBeenLastCalledWith(
         workspaceScopedWhere("provider", "p1", "ws-1"),
@@ -307,7 +317,7 @@ describe("provider-write module", () => {
 
       await deleteProvider({ kind: "organization", orgId: "org-1" }, "p1");
 
-      expect(nullifyEmbeddingsForProvider).toHaveBeenCalledWith("p1");
+      expect(nullifyEmbeddingsForProvider).toHaveBeenCalledWith("p1", tx);
       expect(mockDb.where).toHaveBeenLastCalledWith(
         orgScopedWhere("provider", "p1", "org-1"),
       );

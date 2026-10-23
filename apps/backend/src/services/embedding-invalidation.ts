@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { db } from "../index.ts";
+import { db, type Tx } from "../index.ts";
 import { provider as providerTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import type { ProviderUpdateData } from "@platypus/schemas";
@@ -11,8 +11,9 @@ import type { ProviderUpdateData } from "@platypus/schemas";
  */
 export async function nullifyEmbeddingsForProvider(
   providerId: string,
+  exec: typeof db | Tx = db,
 ): Promise<void> {
-  const result = await db.execute(sql`
+  const result = await exec.execute(sql`
     UPDATE memory_daily_summary
     SET embedding = NULL, updated_at = NOW()
     WHERE workspace_id IN (
@@ -36,6 +37,7 @@ export async function nullifyEmbeddingsForProvider(
 export async function handleEmbeddingConfigChange(
   providerId: string,
   data: ProviderUpdateData,
+  exec: typeof db | Tx = db,
 ): Promise<void> {
   if (
     data.embeddingModelId === undefined &&
@@ -44,7 +46,7 @@ export async function handleEmbeddingConfigChange(
     return;
   }
 
-  const [existing] = await db
+  const [existing] = await exec
     .select({
       embeddingModelId: providerTable.embeddingModelId,
       embeddingDimensions: providerTable.embeddingDimensions,
@@ -62,6 +64,6 @@ export async function handleEmbeddingConfigChange(
       data.embeddingDimensions !== existing.embeddingDimensions);
 
   if (changed) {
-    await nullifyEmbeddingsForProvider(providerId);
+    await nullifyEmbeddingsForProvider(providerId, exec);
   }
 }
