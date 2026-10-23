@@ -16,6 +16,6 @@ export const validate = <
   target: Target,
   schema: Schema,
 ) =>
-  sValidator(target, schema, (result, c) => {
-    if (!result.success) return c.json({ error: result.error }, 400);
-  });
+  sValidator(target, schema, (result, c) =>
+    result.success ? undefined : c.json({ error: result.error }, 400),
+  );

@@ -68,6 +68,16 @@ export function baseConfig(tsconfigRootDir) {
         // enforce as an error; suppress with a scoped disable where a known
         // false positive recurs.
         "@typescript-eslint/unbound-method": "error",
+
+        // A `switch` over a union with no `default` must name every member, so
+        // adding a member surfaces each switch that forgot it. A `default` still
+        // counts as exhaustive: the codebase uses it deliberately for "everything
+        // else" (e.g. `providerHasNativeSearch`), and naming every member there
+        // would add noise, not safety.
+        "@typescript-eslint/switch-exhaustiveness-check": [
+          "error",
+          { considerDefaultExhaustiveForUnions: true },
+        ],
       },
     },
 

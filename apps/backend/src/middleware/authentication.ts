@@ -52,4 +52,5 @@ export const requireAuth = createMiddleware(async (c, next) => {
   c.set("session", session.session);
   c.set("userScope", userScope(session.user));
   await next();
+  return;
 });
