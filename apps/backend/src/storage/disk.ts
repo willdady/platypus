@@ -4,6 +4,7 @@ import type { StorageBackend } from "./types.ts";
 import { logger } from "../logger.ts";
 import { ValidationError } from "../errors.ts";
 import { assertValidStoragePrefix } from "./keys.ts";
+import { env } from "../env.ts";
 
 /**
  * Disk-based storage backend that stores files on the local filesystem.
@@ -16,9 +17,7 @@ export class DiskStorage implements StorageBackend {
   /**
    * @param basePath - Directory where files will be stored (default: "./data/files")
    */
-  constructor(
-    basePath: string = process.env.STORAGE_DISK_PATH || "./data/files",
-  ) {
+  constructor(basePath: string = env().STORAGE_DISK_PATH) {
     this.basePath = path.resolve(basePath);
   }
 

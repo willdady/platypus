@@ -46,8 +46,7 @@ import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 import { mapError } from "./errors.ts";
 import type { UserScope, OrgScope, WorkspaceScope } from "./scope.ts";
-
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
+import { env } from "./env.ts";
 
 /**
  * Organization membership type inferred from the database schema.
@@ -120,7 +119,7 @@ const app = new Hono<{ Variables: Variables }>();
 app.use(
   "/*",
   cors({
-    origin: ALLOWED_ORIGINS,
+    origin: env().ALLOWED_ORIGINS,
     credentials: true, // Important for cookies
   }),
 );

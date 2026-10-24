@@ -22,6 +22,7 @@ import { currentTurnId, isA2aChat } from "./a2a-task-state.ts";
 import { endTurnIn, turnEnded } from "./a2a-task-lifecycle.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 import { withRunSource } from "../event-causation.ts";
+import { env } from "../env.ts";
 
 /**
  * Starts one Chat turn and returns its streaming response — the one path every
@@ -200,7 +201,7 @@ export const startChatTurn = async (params: {
         // No request signal is taken: chat runs continue server-side
         // regardless of the client connection, and are cancelled by run id.
         origin,
-        frontendUrl: process.env.FRONTEND_URL,
+        frontendUrl: env().FRONTEND_URL,
         timeouts: chatTimeouts(),
       },
     }),

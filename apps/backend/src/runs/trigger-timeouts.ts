@@ -1,3 +1,5 @@
+import { env } from "../env.ts";
+
 /**
  * The bounds an unattended Trigger run is given.
  *
@@ -16,18 +18,12 @@
  * same value — an instance configured with a shorter one computes an earlier
  * cutoff and could fail a run a peer is still driving.
  */
-const DEFAULT_TRIGGER_PER_STEP_TIMEOUT_MS = 10 * 60 * 1000;
-const DEFAULT_TRIGGER_PER_RUN_TIMEOUT_MS = 60 * 60 * 1000;
-
 /** The configured wall-clock ceiling for a whole Trigger run. */
 export const triggerPerRunTimeoutMs = (): number =>
-  Number(process.env.TRIGGER_PER_RUN_TIMEOUT_MS) ||
-  DEFAULT_TRIGGER_PER_RUN_TIMEOUT_MS;
+  env().TRIGGER_PER_RUN_TIMEOUT_MS;
 
 /** The per-step and per-run bounds handed to the run registry for a Trigger run. */
 export const triggerTimeouts = () => ({
-  perStepTimeoutMs:
-    Number(process.env.TRIGGER_PER_STEP_TIMEOUT_MS) ||
-    DEFAULT_TRIGGER_PER_STEP_TIMEOUT_MS,
+  perStepTimeoutMs: env().TRIGGER_PER_STEP_TIMEOUT_MS,
   perRunTimeoutMs: triggerPerRunTimeoutMs(),
 });

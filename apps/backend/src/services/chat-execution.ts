@@ -89,6 +89,7 @@ import {
 } from "../runs/agent-plan.ts";
 import type { RunPlan } from "../runs/run-plan.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
+import { env } from "../env.ts";
 
 // --- Types ---
 
@@ -614,7 +615,7 @@ export const prepareChatTurn = async (
     userId: user.id,
     frontendUrl,
     // Tools always need a zone to work in; the prompt states only the profile's.
-    timezone: profileTimezone ?? (process.env.TIMEZONE || "UTC"),
+    timezone: profileTimezone ?? env().TIMEZONE,
   };
   // Started before the `Promise.all` rather than inside it because the delegates
   // built alongside it nest their own sessions into this one — they take the

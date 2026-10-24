@@ -342,13 +342,13 @@ const rowCovers = (row: string, name: string): boolean => {
  * numeric default the page quotes is one the backend chooses itself.
  */
 const BACKEND_DEFAULT_SOURCES: Record<string, string> = {
-  PORT: "apps/backend/index.ts",
-  INVITATION_EXPIRY_DAYS: "apps/backend/src/routes/invitation.ts",
-  MEMORY_EXTRACTION_INTERVAL_MS: "apps/backend/src/jobs/memory-scheduler.ts",
-  SCHEDULE_SCHEDULER_INTERVAL_MS: "apps/backend/src/jobs/scheduler.ts",
-  SCHEDULE_MAX_CONCURRENT: "apps/backend/src/jobs/scheduler.ts",
-  TRIGGER_PER_STEP_TIMEOUT_MS: "apps/backend/src/runs/trigger-timeouts.ts",
-  TRIGGER_PER_RUN_TIMEOUT_MS: "apps/backend/src/runs/trigger-timeouts.ts",
+  PORT: "apps/backend/src/env.ts",
+  INVITATION_EXPIRY_DAYS: "apps/backend/src/env.ts",
+  MEMORY_EXTRACTION_INTERVAL_MS: "apps/backend/src/env.ts",
+  SCHEDULE_SCHEDULER_INTERVAL_MS: "apps/backend/src/env.ts",
+  SCHEDULE_MAX_CONCURRENT: "apps/backend/src/env.ts",
+  TRIGGER_PER_STEP_TIMEOUT_MS: "apps/backend/src/env.ts",
+  TRIGGER_PER_RUN_TIMEOUT_MS: "apps/backend/src/env.ts",
   TRIGGER_BREAKER_MAX_RUNS: "apps/backend/src/services/trigger-breaker.ts",
   TRIGGER_BREAKER_WINDOW_SECONDS:
     "apps/backend/src/services/trigger-breaker.ts",
@@ -361,8 +361,8 @@ const BACKEND_DEFAULT_SOURCES: Record<string, string> = {
   A2A_MAX_CONCURRENT_RUNS: "apps/backend/src/services/a2a-call.ts",
   A2A_MAX_CONCURRENT_STREAMS: "apps/backend/src/services/a2a-call.ts",
   A2A_MAX_BODY_BYTES: "apps/backend/src/services/a2a-call.ts",
-  CHAT_PER_STEP_TIMEOUT_MS: "apps/backend/src/runs/chat-timeouts.ts",
-  CHAT_PER_RUN_TIMEOUT_MS: "apps/backend/src/runs/chat-timeouts.ts",
+  CHAT_PER_STEP_TIMEOUT_MS: "apps/backend/src/env.ts",
+  CHAT_PER_RUN_TIMEOUT_MS: "apps/backend/src/env.ts",
 };
 
 /**

@@ -18,6 +18,12 @@ For a guided walkthrough of configuring a deployment, see
   backend container.
 </Callout>
 
+The backend checks these values when it starts. A value this page doesn't allow
+— a number that isn't one, a `0` where a count or a timeout must be at least 1,
+a boolean other than `true`, `false`, `1` or `0`, an unrecognised choice, or a
+required variable left unset — stops it before it serves anything, and the log
+names the variable at fault. An empty value counts as unset.
+
 <Callout type="warning">
   The shipped `compose.yaml` sets `PORT`, `DATABASE_URL`, `NODE_OPTIONS` and
   `BETTER_AUTH_URL` (from `BACKEND_URL`) for the backend itself, and those take
@@ -74,7 +80,7 @@ The manifest side is in
 | `BETTER_AUTH_URL`               | Public base URL of the backend, used by better-auth. Falls back to `http://localhost:4001`, which only works for local dev — a real deployment must set this explicitly or auth redirects and callbacks break silently.                                                                                                                                                                                                                                                                                                                                            | `http://localhost:4001`                                    | No       |
 | `AUTH_COOKIE_DOMAIN`            | Parent domain session cookies are issued for, so a frontend and backend on two subdomains of one parent domain (e.g. `app.example.com` and `api.example.com`) can authenticate server-rendered requests. A bare domain (`example.com`), not a URL or a leading-dot form. Unset keeps cookies host-only, which is correct for a single-host deployment. On a topology this cannot cover the backend logs an error at startup and runs with server-rendered requests unauthenticated — see [supported topologies](/self-hosting/configuration#supported-topologies). | _(unset)_                                                  | No       |
 | `INVITATION_EXPIRY_DAYS`        | Days a Workspace/Org invitation remains valid.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `7`                                                        | No       |
-| `REQUIRE_INVITATION_TO_SIGN_UP` | `true` closes public sign-up: the sign-in page stops offering **Sign up**, the sign-up page says that sign-up is by invitation, and an account can only be created by redeeming an invitation link. Sign-in, password changes, administrative password resets and first-boot seeding are unaffected. Anything other than `true` or `1` leaves sign-up open. See [Users & access](/self-hosting/users-and-access#who-can-create-an-account).                                                                                                                        | `false`                                                    | No       |
+| `REQUIRE_INVITATION_TO_SIGN_UP` | `true` closes public sign-up: the sign-in page stops offering **Sign up**, the sign-up page says that sign-up is by invitation, and an account can only be created by redeeming an invitation link. Sign-in, password changes, administrative password resets and first-boot seeding are unaffected. `false` or `0` leaves sign-up open. See [Users & access](/self-hosting/users-and-access#who-can-create-an-account).                                                                                                                                           | `false`                                                    | No       |
 
 <Callout type="warning">
   Nothing enforces the 32-character minimum: a shorter `BETTER_AUTH_SECRET` is
@@ -108,11 +114,11 @@ for the seeding rule and the recovery path.
 
 ## Background workers
 
-| Variable                         | Purpose                                                                                                                                | Default              | Required |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------- |
-| `MEMORY_EXTRACTION_INTERVAL_MS`  | How often the memory-extraction worker runs, in milliseconds.                                                                          | `300000` (5 minutes) | No       |
-| `SCHEDULE_SCHEDULER_INTERVAL_MS` | How often the scheduler runs, in milliseconds. Each pass starts due Triggers and recovers runs and Chats abandoned by a crash.         | `60000` (1 minute)   | No       |
-| `SCHEDULE_MAX_CONCURRENT`        | Maximum scheduled (Cron) Trigger runs in flight at once, across all backend instances. Event and Inbound Trigger runs are not counted. | `5`                  | No       |
+| Variable                         | Purpose                                                                                                                                                          | Default              | Required |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | -------- |
+| `MEMORY_EXTRACTION_INTERVAL_MS`  | How often the memory-extraction worker runs, in milliseconds.                                                                                                    | `300000` (5 minutes) | No       |
+| `SCHEDULE_SCHEDULER_INTERVAL_MS` | How often the scheduler runs, in milliseconds. Each pass starts due Triggers and recovers runs and Chats abandoned by a crash.                                   | `60000` (1 minute)   | No       |
+| `SCHEDULE_MAX_CONCURRENT`        | Maximum scheduled (Cron) Trigger runs in flight at once, across all backend instances. Event and Inbound Trigger runs are not counted. `0` pauses Cron Triggers. | `5`                  | No       |
 
 ## Triggers
 

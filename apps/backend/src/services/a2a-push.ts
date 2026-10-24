@@ -23,6 +23,7 @@ import {
 } from "./a2a-task-state.ts";
 import { postWithRetries } from "./webhook-delivery.ts";
 import { taskIsLive } from "./a2a-liveness.ts";
+import { env } from "../env.ts";
 
 /**
  * A2A push notifications (ADR-0032): when a Task ends — `completed`, `failed`
@@ -80,10 +81,7 @@ const credentialHeaders = (config: PushConfigRow): Record<string, string> => ({
 });
 
 /** Whether the Operator lets A2A pushes reach private networks. */
-const privateNetworksAllowed = () =>
-  ["true", "1"].includes(
-    process.env.A2A_PUSH_ALLOW_PRIVATE_NETWORKS?.trim().toLowerCase() ?? "",
-  );
+const privateNetworksAllowed = () => env().A2A_PUSH_ALLOW_PRIVATE_NETWORKS;
 
 /**
  * How many pushes this instance sends at once, retries included. More wait

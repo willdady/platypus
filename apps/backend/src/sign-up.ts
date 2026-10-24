@@ -1,3 +1,5 @@
+import { env } from "./env.ts";
+
 /**
  * `REQUIRE_INVITATION_TO_SIGN_UP` (#550, ADR-0019): whether an account may
  * only come into existence by redeeming an Invitation link.
@@ -9,10 +11,7 @@
  * and Workspace access are untouched by it.
  *
  * Default off, so an upgrading deployment's admission posture is unchanged
- * until the Operator opts in. Parsed like the codebase's other boolean
- * variables: trimmed, case-insensitive, and only `true` / `1` turn it on.
+ * until the Operator opts in.
  */
-export const requireInvitationToSignUp = (): boolean => {
-  const raw = process.env.REQUIRE_INVITATION_TO_SIGN_UP?.trim().toLowerCase();
-  return raw === "true" || raw === "1";
-};
+export const requireInvitationToSignUp = (): boolean =>
+  env().REQUIRE_INVITATION_TO_SIGN_UP;

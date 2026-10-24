@@ -1,3 +1,5 @@
+import { env } from "../env.ts";
+
 /**
  * The bounds an interactive Chat run is given.
  *
@@ -20,18 +22,11 @@
  * same value — an instance configured with a shorter one computes an earlier
  * cutoff and could fail a turn a peer is still running.
  */
-const DEFAULT_CHAT_PER_STEP_TIMEOUT_MS = 2 * 60 * 1000;
-const DEFAULT_CHAT_PER_RUN_TIMEOUT_MS = 30 * 60 * 1000;
-
 /** The configured wall-clock ceiling for a whole Chat turn. */
-export const chatPerRunTimeoutMs = (): number =>
-  Number(process.env.CHAT_PER_RUN_TIMEOUT_MS) ||
-  DEFAULT_CHAT_PER_RUN_TIMEOUT_MS;
+export const chatPerRunTimeoutMs = (): number => env().CHAT_PER_RUN_TIMEOUT_MS;
 
 /** The per-step and per-run bounds handed to the run registry for a Chat turn. */
 export const chatTimeouts = () => ({
-  perStepTimeoutMs:
-    Number(process.env.CHAT_PER_STEP_TIMEOUT_MS) ||
-    DEFAULT_CHAT_PER_STEP_TIMEOUT_MS,
+  perStepTimeoutMs: env().CHAT_PER_STEP_TIMEOUT_MS,
   perRunTimeoutMs: chatPerRunTimeoutMs(),
 });

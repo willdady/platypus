@@ -22,6 +22,7 @@ describe("Storage index", () => {
   afterEach(() => {
     resetStorage();
     delete process.env.STORAGE_BACKEND;
+    vi.unstubAllEnvs();
   });
 
   describe("getStorage", () => {
@@ -29,11 +30,14 @@ describe("Storage index", () => {
       ["unset", undefined, DiskStorage],
       ["'disk'", "disk", DiskStorage],
       ["'s3'", "s3", S3Storage],
-      ["an unknown value", "invalid", DiskStorage],
     ])(
       "picks the backend for STORAGE_BACKEND %s",
       (_label, backend, expected) => {
-        if (backend !== undefined) process.env.STORAGE_BACKEND = backend;
+        if (backend !== undefined) vi.stubEnv("STORAGE_BACKEND", backend);
+        // Required by `env.ts` whenever the backend is s3.
+        vi.stubEnv("STORAGE_S3_BUCKET", "bucket");
+        vi.stubEnv("STORAGE_S3_ACCESS_KEY_ID", "key");
+        vi.stubEnv("STORAGE_S3_SECRET_ACCESS_KEY", "secret");
         expect(getStorage()).toBeInstanceOf(expected);
       },
     );

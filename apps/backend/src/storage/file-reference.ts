@@ -1,4 +1,5 @@
 import { isValidStorageKey } from "./keys.ts";
+import { env } from "../env.ts";
 
 /**
  * The one module that knows what a File part's URL looks like (issue #839).
@@ -61,8 +62,7 @@ export const isUnresolvedReference = (url: string): boolean =>
   url === "" || url.startsWith(STORAGE_URL_SCHEME);
 
 /** `STORAGE_PUBLIC_URL` without its trailing slashes, or undefined when unset. */
-const publicBaseUrl = (): string | undefined =>
-  process.env.STORAGE_PUBLIC_URL?.replace(/\/+$/, "") || undefined;
+const publicBaseUrl = (): string | undefined => env().STORAGE_PUBLIC_URL;
 
 /**
  * The URL a reader is served for `key`: the public base when one is configured

@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import { errorMessage } from "./error-message.ts";
+import { env } from "../env.ts";
 
 /**
  * Core's egress guard for **model-supplied** URLs (ADR-0014).
@@ -140,10 +141,8 @@ const blockReasonFor = (
   );
 };
 
-const privateNetworksAllowedByEnv = (): boolean => {
-  const raw = process.env.EGRESS_ALLOW_PRIVATE_NETWORKS?.trim().toLowerCase();
-  return raw !== "false" && raw !== "0";
-};
+const privateNetworksAllowedByEnv = (): boolean =>
+  env().EGRESS_ALLOW_PRIVATE_NETWORKS;
 
 const resolveHostname = async (hostname: string): Promise<string[]> => {
   const records = await lookup(hostname, { all: true });
