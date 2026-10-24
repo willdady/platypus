@@ -277,19 +277,6 @@ describe("Chat Routes", () => {
       return app.request(`${baseUrl}?${query}`);
     };
 
-    it("clamps negative limit and offset", async () => {
-      const res = await listChats("limit=-1&offset=-1");
-      expect(res.status).toBe(200);
-      expect(mockDb.limit).toHaveBeenLastCalledWith(1);
-      expect(mockDb.offset).toHaveBeenLastCalledWith(0);
-    });
-
-    it("clamps limit to 100", async () => {
-      const res = await listChats("limit=500");
-      expect(res.status).toBe(200);
-      expect(mockDb.limit).toHaveBeenLastCalledWith(100);
-    });
-
     it("escapes LIKE wildcards in the search term", async () => {
       const res = await listChats(
         `search=${encodeURIComponent("100%_done\\now")}`,
@@ -302,6 +289,24 @@ describe("Chat Routes", () => {
         .mock.calls.filter(([, ...values]) => values.includes(pattern));
       expect(withPattern).toHaveLength(2);
     });
+
+    it("defaults to the first 100 chats", async () => {
+      const res = await listChats("");
+      expect(res.status).toBe(200);
+      expect(mockDb.limit).toHaveBeenLastCalledWith(100);
+      expect(mockDb.offset).toHaveBeenLastCalledWith(0);
+    });
+
+    it.each(["limit=0", "limit=101", "limit=abc", "limit=1.5", "offset=-1"])(
+      "rejects %s with a 400",
+      async (query) => {
+        const res = await listChats(query);
+        expect(res.status).toBe(400);
+        const body = (await res.json()) as { error?: unknown };
+        expect(Object.keys(body)).toEqual(["error"]);
+        expect(mockDb.offset).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe("A2A Chats", () => {

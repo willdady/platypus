@@ -1,5 +1,6 @@
 import { sValidator } from "@hono/standard-validator";
 import type { ValidationTargets } from "hono";
+import { z } from "zod";
 
 type StandardSchema = Parameters<typeof sValidator>[1];
 
@@ -19,3 +20,14 @@ export const validate = <
   sValidator(target, schema, (result, c) =>
     result.success ? undefined : c.json({ error: result.error }, 400),
   );
+
+/**
+ * `limit`/`offset` for a list the backend pages. An unreadable or out-of-range
+ * value is a 400, never clamped or replaced; only an omitted one takes the
+ * default. Extend it with the list's own filters.
+ */
+export const paginationQuerySchema = (defaultLimit: number) =>
+  z.object({
+    limit: z.coerce.number().int().min(1).max(100).default(defaultLimit),
+    offset: z.coerce.number().int().min(0).default(0),
+  });
