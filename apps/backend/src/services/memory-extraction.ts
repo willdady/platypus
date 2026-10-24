@@ -491,8 +491,15 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
 /**
  * Processes a batch of chats for memory extraction.
  * This is the main entry point called by the memory scheduler.
+ *
+ * `signal` is the scheduler's stop handle's signal: when it aborts (a graceful
+ * shutdown), the batch stops before its next Chat. The Chat being processed
+ * when the signal fires still finishes — aborting mid-write would leave its
+ * `memoryExtractionStatus` half-way between `processing` and a terminal state.
  */
-export const processMemoryExtractionBatch = async (): Promise<void> => {
+export const processMemoryExtractionBatch = async (
+  signal?: AbortSignal,
+): Promise<void> => {
   logger.info("Starting memory extraction batch");
 
   try {
@@ -512,6 +519,15 @@ export const processMemoryExtractionBatch = async (): Promise<void> => {
       extractionProvider,
       embeddingProvider,
     } of chatsToProcess) {
+      // The drain wants the pool and the process gone; a batch already running
+      // is the one thing that does not need to finish. Leave the chats it
+      // never reached to the next worker, and the one in flight to itself.
+      if (signal?.aborted) {
+        logger.info(
+          "Memory extraction batch stopped for shutdown, before the next chat",
+        );
+        return;
+      }
       // Taken per Chat, just before its Active path is read: the pass is a
       // snapshot of that moment, not of the scan, which may be minutes earlier
       // by the time a Chat late in the batch is reached.

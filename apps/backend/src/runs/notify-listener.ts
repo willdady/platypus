@@ -13,6 +13,13 @@ const RECONNECT_MS = 5_000;
 
 const handlers = new Map<string, (payload: string) => void>();
 
+/** The one running connection; held so the stop handle can release it. */
+let client: PoolClient | undefined;
+/** The pending reconnect, cancelled by the stop handle. */
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+/** `true` once the stop handle ran; the listener then stays down. */
+let stopped = false;
+
 /**
  * Hands every notification on `channel` to `handler`. Registered when its
  * module loads, before {@link startNotificationListener} LISTENs.
@@ -39,23 +46,46 @@ export const notify = async (
  * ponytail: reconnects only on a connection `error`; a silently half-open
  * socket stays deaf until something else notices. Add a periodic heartbeat
  * query if that bites.
+ *
+ * Returns a stop handle for a graceful shutdown: it releases the LISTEN
+ * client back to the pool — without that, `pool.end()` waits on the one
+ * connection this listener holds for ever — and cancels a pending reconnect.
  */
-export const startNotificationListener = (): void => {
+export const startNotificationListener = (): (() => void) => {
+  stopped = false;
   void listen();
+  return () => {
+    stopped = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+    const held = client;
+    client = undefined;
+    // Already errored (released by `reconnect`); releasing again is safe.
+    held?.release();
+  };
 };
 
 const listen = async (): Promise<void> => {
-  let client: PoolClient | undefined;
+  if (stopped) return;
+  // A reconnect scheduled while a later one won raced — only one listen loop.
   let lost = false;
   const reconnect = (err: unknown) => {
-    if (lost) return;
+    if (lost || stopped) return;
     lost = true;
     logger.error({ err }, "Notification listener lost its connection");
     client?.release(err instanceof Error ? err : true);
-    setTimeout(() => void listen(), RECONNECT_MS);
+    client = undefined;
+    reconnectTimer = setTimeout(() => void listen(), RECONNECT_MS);
   };
   try {
     client = await db.$client.connect();
+    // Stopped while the connect was in flight: hand the client straight back,
+    // so the shutdown drain's `pool.end()` is not held open by it.
+    if (stopped) {
+      client.release();
+      client = undefined;
+      return;
+    }
     client.on("error", reconnect);
     client.on("notification", ({ channel, payload }) => {
       if (!payload) return;

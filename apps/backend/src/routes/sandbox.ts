@@ -5,7 +5,7 @@ import { validate } from "../validate.ts";
 import { z } from "zod";
 import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 import { db } from "../index.ts";
-import { sandbox as sandboxTable } from "../db/schema.ts";
+import type { sandbox as sandboxTable } from "../db/schema.ts";
 import { sandboxCreateSchema, sandboxUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {

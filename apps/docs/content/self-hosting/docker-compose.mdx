@@ -366,6 +366,16 @@ docker compose ps
 docker compose logs -f backend
 ```
 
+`GET /health` is **liveness**: it answers `ok` as long as the process is up,
+without asking the database, so an orchestrator can restart a pod that is alive
+but stuck. `GET /ready` is **readiness**: it answers `200` only when the backend
+could actually serve a request — a `SELECT 1` against Postgres answered within
+two seconds and the process is not shutting down. Once a stop signal has
+started the shutdown drain, `/ready` answers `503` (new runs are refused), while
+`/health` keeps answering `ok`; a load balancer should route traffic by
+`/ready`, and remove the instance the moment it turns `503`, so in-flight work
+finishes instead of arriving at a drain.
+
 A backend stuck in `starting`/`unhealthy` is almost always a database connection
 or a missing required env var — check `docker compose logs backend`. A backend
 that **exited** rather than gone unhealthy is a startup failure: a seed that

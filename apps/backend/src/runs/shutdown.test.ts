@@ -5,7 +5,12 @@ vi.mock("../storage/utils.ts", () => ({
   extractFiles: vi.fn((messages: unknown[]) => Promise.resolve(messages)),
 }));
 
-import { drainRuns, installShutdownHandlers } from "./shutdown.ts";
+import { logger } from "../logger.ts";
+import {
+  drainRuns,
+  installCrashHandlers,
+  installShutdownHandlers,
+} from "./shutdown.ts";
 import { startRun } from "./run-lifecycle.ts";
 import { runRegistry } from "./run-registry.ts";
 import { ChatSink } from "./sinks/chat-sink.ts";
@@ -43,6 +48,10 @@ const startChatRun = async () => {
 };
 
 describe("drainRuns", () => {
+  beforeEach(() => {
+    runRegistry.resetStopStateForTests();
+  });
+
   afterEach(() => {
     for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
     vi.useRealTimers();
@@ -88,10 +97,15 @@ describe("installShutdownHandlers", () => {
 
   beforeEach(() => {
     resetMockDb();
+    // A drain's stopping gate is terminal in production; reopen it between
+    // tests so the next one can register runs again.
+    runRegistry.resetStopStateForTests();
   });
 
   afterEach(() => {
     uninstall();
+    for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
+    vi.useRealTimers();
   });
 
   it.each(["SIGTERM", "SIGINT"] as const)(
@@ -130,5 +144,171 @@ describe("installShutdownHandlers", () => {
 
     expect(stopAccepting).toHaveBeenCalledTimes(1);
     expect(exit).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops background work, drains runs, then closes server and pool in order", async () => {
+    const ended: RunStatus[] = [];
+    for (const runId of ["run-a", "run-b"]) {
+      startRun({
+        runId,
+        onTerminate: async ({ status }) => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          ended.push(status);
+        },
+      });
+    }
+
+    const order: string[] = [];
+    const exit = vi.fn((code: number) => order.push(`exit ${code}`));
+    uninstall = installShutdownHandlers({
+      // The scheduler ticks, notification listener and A2A cancel watcher.
+      stopBackground: () => order.push("stop background"),
+      // The HTTP listener.
+      stopAccepting: () => order.push("stop accepting"),
+      // Idle keep-alive + SSE connections, so `close` is not held by them.
+      closeIdleConnections: () => order.push("close idle connections"),
+      // Awaiting the HTTP server's in-flight requests.
+      close: () => {
+        order.push("close");
+        return Promise.resolve();
+      },
+      // The Postgres pool, last: everything that needs the db has ended.
+      endPool: () => {
+        order.push("end pool");
+        return Promise.resolve();
+      },
+      exit,
+      timeoutMs: 2_000,
+    });
+
+    process.emit("SIGTERM", "SIGTERM");
+    await vi.waitFor(() => expect(exit).toHaveBeenCalled());
+
+    expect(order).toEqual([
+      "stop background",
+      "stop accepting",
+      "close idle connections",
+      "close",
+      "end pool",
+      "exit 0",
+    ]);
+    // The runs were ended as cancelled before anything was closed.
+    expect(ended).toEqual(["cancelled", "cancelled"]);
+  });
+
+  it("refuses new runs once the drain has started (503, not a new run)", async () => {
+    startRun({
+      runId: "held",
+      onTerminate: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      },
+    });
+    const exit = vi.fn();
+    uninstall = installShutdownHandlers({ exit, timeoutMs: 2_000 });
+
+    process.emit("SIGTERM", "SIGTERM");
+    // A registration racing the drain — a cron tick already in flight — is
+    // refused rather than started and then killed by the exit.
+    expect(() => startRun({ runId: "late", onTerminate: () => {} })).toThrow(
+      "Server is shutting down",
+    );
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalled());
+    expect(exit).toHaveBeenCalledWith(0);
+    expect(runRegistry.has("late")).toBe(false);
+    expect(runRegistry.has("held")).toBe(false);
+  });
+
+  it("exits 1 when the drain times out on a run that never ends", async () => {
+    vi.useFakeTimers();
+    startRun({ runId: "stuck", onTerminate: () => new Promise(() => {}) });
+    const exit = vi.fn();
+    const endPool = vi.fn(() => Promise.resolve());
+    uninstall = installShutdownHandlers({ exit, endPool, timeoutMs: 8_000 });
+
+    process.emit("SIGTERM", "SIGTERM");
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    expect(exit).toHaveBeenCalledWith(1);
+    // The budget was spent waiting for the run; the pool is not reached.
+    expect(endPool).not.toHaveBeenCalled();
+    runRegistry.unregister("stuck");
+  });
+
+  it("still ends the pool when the drain is stopped by a timeout, if budget remains", async () => {
+    vi.useFakeTimers();
+    const close = vi.fn(
+      () => new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+    );
+    const endPool = vi.fn(() => Promise.resolve());
+    const exit = vi.fn();
+    uninstall = installShutdownHandlers({
+      close,
+      endPool,
+      exit,
+      timeoutMs: 4_000,
+    });
+
+    process.emit("SIGTERM", "SIGTERM");
+    // Nothing held: whenIdle resolves at once. `close` spends 2s, leaving
+    // enough for `endPool` inside the same 4s budget.
+    await vi.advanceTimersByTimeAsync(4_000);
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(endPool).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(0);
+  });
+});
+
+describe("installCrashHandlers", () => {
+  let uninstall = () => {};
+
+  beforeEach(() => {
+    runRegistry.resetStopStateForTests();
+  });
+
+  afterEach(() => {
+    uninstall();
+    for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
+    vi.useRealTimers();
+  });
+
+  it("logs a rejection fatal, drains the held runs, and exits 1", async () => {
+    const ended: RunStatus[] = [];
+    for (const runId of ["crash-a"]) {
+      startRun({
+        runId,
+        onTerminate: async ({ status }) => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          ended.push(status);
+        },
+      });
+    }
+    const exit = vi.fn();
+    const fatal = vi.spyOn(logger, "fatal").mockImplementation(() => undefined);
+    uninstall = installCrashHandlers({ exit, timeoutMs: 1_000 });
+
+    process.emit("unhandledRejection", new Error("boom"));
+    await vi.waitFor(() => expect(exit).toHaveBeenCalled());
+
+    expect(fatal).toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(ended).toEqual(["cancelled"]);
+    fatal.mockRestore();
+  });
+
+  it("ignores a second crash while the first one drains", async () => {
+    vi.useFakeTimers();
+    startRun({ runId: "stuck", onTerminate: () => new Promise(() => {}) });
+    const exit = vi.fn();
+    uninstall = installCrashHandlers({ exit, timeoutMs: 8_000 });
+
+    process.emit("uncaughtException", new Error("boom1"));
+    process.emit("uncaughtException", new Error("boom2"));
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(1);
+    runRegistry.unregister("stuck");
   });
 });

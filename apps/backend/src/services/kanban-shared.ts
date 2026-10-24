@@ -1,5 +1,5 @@
 import { and, eq, max } from "drizzle-orm";
-import { db } from "../index.ts";
+import type { db } from "../index.ts";
 import {
   kanbanBoard as kanbanBoardTable,
   kanbanColumn as kanbanColumnTable,

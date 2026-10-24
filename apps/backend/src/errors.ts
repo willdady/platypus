@@ -55,6 +55,17 @@ export class ConflictError extends Error {
   }
 }
 
+/**
+ * The server is draining for shutdown and will not take new work — a run
+ * claimed after the stop signal. → 503
+ */
+export class ServiceUnavailableError extends Error {
+  constructor(message = "Server is shutting down") {
+    super(message);
+    this.name = "ServiceUnavailableError";
+  }
+}
+
 /** The configured backend does not implement what was asked of it. → 501 */
 export class UnsupportedError extends Error {
   constructor(message: string) {
@@ -132,6 +143,8 @@ export const mapError = (
     return { status: 403, message: error.message };
   if (error instanceof ConflictError)
     return { status: 409, message: error.message };
+  if (error instanceof ServiceUnavailableError)
+    return { status: 503, message: error.message };
   if (error instanceof ValidationError)
     return { status: 400, message: error.message };
   if (error instanceof UnsupportedError)

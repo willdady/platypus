@@ -343,6 +343,7 @@ const rowCovers = (row: string, name: string): boolean => {
  */
 const BACKEND_DEFAULT_SOURCES: Record<string, string> = {
   PORT: "apps/backend/src/env.ts",
+  DATABASE_POOL_MAX: "apps/backend/src/env.ts",
   INVITATION_EXPIRY_DAYS: "apps/backend/src/env.ts",
   MEMORY_EXTRACTION_INTERVAL_MS: "apps/backend/src/env.ts",
   SCHEDULE_SCHEDULER_INTERVAL_MS: "apps/backend/src/env.ts",
@@ -2011,6 +2012,13 @@ const BACKEND_CONSTANTS = [
     phrase: (count: number) => `${NUMBER_WORDS[count] ?? count} times`,
     files: ["building-with-platypus/triggers.mdx"],
     cost: "A reader debugging a _Failed_ run looks for the wrong number of repeats.",
+  },
+  {
+    source: "apps/backend/src/ready.ts",
+    name: "DB_PING_TIMEOUT_MS",
+    phrase: (ms: number) => `${NUMBER_WORDS[ms / 1_000] ?? ms / 1_000} seconds`,
+    files: ["self-hosting/docker-compose.mdx"],
+    cost: "A load balancer is configured to wait for a readiness answer that never comes if the page's patience differs from the backend's.",
   },
   {
     source: "apps/backend/src/jobs/scheduler.ts",

@@ -6,7 +6,7 @@ import {
   DEFAULT_PER_RUN_TIMEOUT_MS,
   describeTimeout,
 } from "./run-registry.ts";
-import { ConflictError } from "../errors.ts";
+import { ConflictError, ServiceUnavailableError } from "../errors.ts";
 
 describe("RunRegistry", () => {
   let registry: RunRegistry;
@@ -62,6 +62,37 @@ describe("RunRegistry", () => {
 
     expect(handle.signal.aborted).toBe(false);
     expect(registry.cancel("dup-3")).toBe(true);
+  });
+
+  describe("stopping", () => {
+    it("rejects new runs with a ServiceUnavailableError once stopping has begun", () => {
+      registry.beginStop();
+
+      expect(() => registry.register("late-run")).toThrow(
+        ServiceUnavailableError,
+      );
+      expect(registry.heldRuns()).toEqual([]);
+    });
+
+    it("still cancels and unregisters held runs while stopping", () => {
+      const handle = registry.register("held");
+      registry.beginStop();
+
+      expect(registry.cancel("held")).toBe(true);
+      expect(handle.signal.aborted).toBe(true);
+      registry.unregister("held");
+      expect(registry.heldRuns()).toEqual([]);
+      // A run that finishes after the stop signal frees its id as usual; the
+      // gate stays closed for anything that tries to claim a new one.
+      expect(() => registry.register("held")).toThrow(ServiceUnavailableError);
+    });
+
+    it("beginStop is idempotent", () => {
+      registry.beginStop();
+      registry.beginStop();
+
+      expect(() => registry.register("run-1")).toThrow(ServiceUnavailableError);
+    });
   });
 
   describe("a cancel decided at a moment", () => {
