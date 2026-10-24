@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.27.0](https://github.com/willdady/platypus/compare/v3.26.0...v3.27.0) (2026-10-24)
+
+
+### Features
+
+* **backend:** add the Tool gate Extension point ([#1680](https://github.com/willdady/platypus/issues/1680)) ([47188ab](https://github.com/willdady/platypus/commit/47188abc06a1024b2f5e1a23804cf1fe66d49663))
+* **backend:** harden process lifecycle — database pool, shutdown, crash handling and readiness ([#1677](https://github.com/willdady/platypus/issues/1677)) ([affed1e](https://github.com/willdady/platypus/commit/affed1e8a900b991881f0ced7a517c7fd26d3d65))
+* **frontend:** link each Skill to its GitHub directory on install ([#1684](https://github.com/willdady/platypus/issues/1684)) ([3b77a7a](https://github.com/willdady/platypus/commit/3b77a7acffc2ea3da0d637011734608cd43d183f))
+* **frontend:** show offered files as a tray under the finished reply ([#1679](https://github.com/willdady/platypus/issues/1679)) ([60e5c4c](https://github.com/willdady/platypus/commit/60e5c4c6067a669697324a2fbffbb0a964eb75dc))
+* install Skills from GitHub behind an Org import gate ([#1681](https://github.com/willdady/platypus/issues/1681)) ([d74920d](https://github.com/willdady/platypus/commit/d74920d0881ec124f8678afdc81bdc4edf0f535b))
+
+
+### Bug Fixes
+
+* **backend:** bind an MCP OAuth sign-in to the user who started it ([659dfde](https://github.com/willdady/platypus/commit/659dfde234fdfe7a2c7807a076f278a64c38bc34))
+* **backend:** delete Workspace Providers with their Organization or User ([#1678](https://github.com/willdady/platypus/issues/1678)) ([da89a26](https://github.com/willdady/platypus/commit/da89a26d6872172aaf7c552fdebeb24201dd18b6))
+* **backend:** validate environment variables at boot ([#1668](https://github.com/willdady/platypus/issues/1668)) ([986bc30](https://github.com/willdady/platypus/commit/986bc30a8ac37746de910b1fc89fa10fb2374cf9))
+* **backend:** validate Org attachment POST body with a schema ([#1661](https://github.com/willdady/platypus/issues/1661)) ([a87ccae](https://github.com/willdady/platypus/commit/a87ccae42d93d902a84bf56205e63ee7f9b312b4))
+* **frontend:** hide ghost cards below the lg breakpoint ([#1665](https://github.com/willdady/platypus/issues/1665)) ([5e8bb0c](https://github.com/willdady/platypus/commit/5e8bb0c16eca66bd3a70365ffbcd2a4e8a6c6653))
+* **frontend:** render the Skill GitHub install pages ([#1683](https://github.com/willdady/platypus/issues/1683)) ([e0447f7](https://github.com/willdady/platypus/commit/e0447f7b677937a9984b0afc7a3e7cf256c2fd4b))
+
 ## [3.26.0](https://github.com/willdady/platypus/compare/v3.25.0...v3.26.0) (2026-10-23)
 
 
