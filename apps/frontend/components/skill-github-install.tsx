@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleCheck,
   CircleX,
+  ExternalLink,
   SquareTerminal,
   TriangleAlert,
 } from "lucide-react";
@@ -45,8 +46,13 @@ function CandidateRow({
   checked,
   onCheckedChange,
   full,
+  repo,
+  commitSha,
 }: {
   skill: SkillGithubCandidate;
+  /** `owner/repo`, for the link to the Skill's directory. */
+  repo: string;
+  commitSha: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   /** The most one install takes are already picked. */
@@ -76,9 +82,15 @@ function CandidateRow({
               </Badge>
             )}
           </span>
-          <span className="block font-mono text-xs text-muted-foreground">
+          <a
+            href={githubTreeUrl(repo, commitSha, skill.skillPath)}
+            target="_blank"
+            rel="noreferrer"
+            className="mb-1.5 flex w-fit items-center gap-1 font-mono text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
             {skill.skillPath || "(repository root)"}
-          </span>
+            <ExternalLink className="size-3" />
+          </a>
           {skill.description && (
             <span className="block text-sm text-muted-foreground">
               {skill.description}
@@ -328,6 +340,8 @@ export function SkillGithubInstall({
                   <CandidateRow
                     key={skill.skillPath}
                     skill={skill}
+                    repo={repo}
+                    commitSha={preview.commitSha}
                     checked={selected.has(skill.skillPath)}
                     full={selected.size >= SKILL_GITHUB_INSTALL_MAX}
                     onCheckedChange={(checked) => {
