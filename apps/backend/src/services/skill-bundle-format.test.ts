@@ -5,6 +5,7 @@ import {
   bundleHash,
   buildSkillZip,
   parseSkillZip,
+  validateSkillBundle,
 } from "./skill-bundle-format.ts";
 
 const PDF_SKILL_MD = `---
@@ -307,5 +308,56 @@ describe("buildSkillZip", () => {
     const bundle = parseSkillZip(zipSync({ "SKILL.md": minimal() }));
     const edited = { ...bundle, fields: { ...bundle.fields, body: "Other" } };
     expect(bundleHash(edited)).not.toBe(bundleHash(bundle));
+  });
+});
+
+describe("validateSkillBundle", () => {
+  const entry = (path: string, bytes: Uint8Array, isSymlink = false) => ({
+    path,
+    bytes,
+    isSymlink,
+  });
+
+  it("reads a bundle from a list of entries", () => {
+    const bundle = validateSkillBundle([
+      entry("SKILL.md", minimal()),
+      entry("scripts/run.sh", strToU8("#!/bin/sh\necho hi")),
+    ]);
+    expect(bundle.fields.name).toBe("demo");
+    expect(bundle.files.map((f) => [f.path, f.size])).toEqual([
+      ["scripts/run.sh", 17],
+    ]);
+  });
+
+  it.each([
+    [
+      "a symlink",
+      [entry("SKILL.md", minimal()), entry("link", strToU8("../x"), true)],
+      "Skill contains a symlink: link",
+    ],
+    [
+      "more than 500 files",
+      [
+        entry("SKILL.md", minimal()),
+        ...Array.from({ length: 500 }, (_, i) => entry(`f${i}`, strToU8("x"))),
+      ],
+      "Skill has more than 500 files",
+    ],
+    [
+      "more than 25 MiB",
+      [
+        entry("SKILL.md", minimal()),
+        entry("big.bin", new Uint8Array(25 * 1024 * 1024)),
+      ],
+      "Skill unpacks to more than 25 MiB",
+    ],
+    [
+      "malformed YAML",
+      [entry("SKILL.md", skillMd("name: demo\ndescription: a: b"))],
+      /Frontmatter is not valid YAML at line 3/,
+    ],
+  ])("rejects %s, naming the rule", (_label, entries, message) => {
+    expect(() => validateSkillBundle(entries)).toThrow(ValidationError);
+    expect(() => validateSkillBundle(entries)).toThrow(message);
   });
 });

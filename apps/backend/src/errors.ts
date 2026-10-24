@@ -66,6 +66,18 @@ export class ServiceUnavailableError extends Error {
   }
 }
 
+/**
+ * A system outside Platypus refused the request because its rate limit is
+ * spent — GitHub, for a Skill install (ADR-0037). The message says when it
+ * resets. → 429
+ */
+export class RateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RateLimitError";
+  }
+}
+
 /** The configured backend does not implement what was asked of it. → 501 */
 export class UnsupportedError extends Error {
   constructor(message: string) {
@@ -151,6 +163,8 @@ export const mapError = (
     return { status: 501, message: error.message };
   if (error instanceof UpstreamError)
     return { status: 502, message: error.message };
+  if (error instanceof RateLimitError)
+    return { status: 429, message: error.message };
   if (error instanceof FileValidationError)
     return { status: 400, message: error.message, files: error.files };
   if (isUniqueViolation(error))

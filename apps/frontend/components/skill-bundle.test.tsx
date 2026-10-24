@@ -53,9 +53,30 @@ function renderCard(
   );
 }
 
+/** The reads the card makes, the Skill import gate open unless overridden. */
+function mockReads(
+  reads: Record<string, { data: unknown }> = {},
+  gate = { skillImportGate: "all", skillImportAllowed: false },
+) {
+  mockScopedSWR(
+    {
+      "/sandbox": { data: null },
+      // Matched by substring, first wins: the Workspace URL holds the Organization's.
+      "/workspaces/ws1": {
+        data: { id: "ws1", skillImportAllowed: gate.skillImportAllowed },
+      },
+      "/organizations/org1": {
+        data: { id: "org1", skillImportGate: gate.skillImportGate },
+      },
+      ...reads,
+    },
+    { strict: true },
+  );
+}
+
 beforeEach(() => {
   resetListHarness();
-  mockScopedSWR({ "/sandbox": { data: null } }, { strict: true });
+  mockReads();
 });
 
 describe("SkillBundleCard", () => {
@@ -70,10 +91,7 @@ describe("SkillBundleCard", () => {
   });
 
   it("warns when the Sandbox can't take this Skill's binary files", () => {
-    mockScopedSWR(
-      { "/sandbox": { data: { transfer: { upload: false } } } },
-      { strict: true },
-    );
+    mockReads({ "/sandbox": { data: { transfer: { upload: false } } } });
     renderCard(skill({ needsSandbox: true, files: [file("logo.png", false)] }));
     expect(screen.getByText(WARNING)).toBeInTheDocument();
   });
@@ -82,7 +100,7 @@ describe("SkillBundleCard", () => {
     ["the Sandbox takes binary files", { upload: true }, false],
     ["the Skill has only text files", { upload: false }, true],
   ])("doesn't warn when %s", (_label, transfer, textOnly) => {
-    mockScopedSWR({ "/sandbox": { data: { transfer } } }, { strict: true });
+    mockReads({ "/sandbox": { data: { transfer } } });
     renderCard(skill({ files: [file("logo.png", textOnly)] }));
     expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
   });
@@ -90,5 +108,54 @@ describe("SkillBundleCard", () => {
   it("doesn't warn when the Workspace has no Sandbox", () => {
     renderCard(skill({ files: [file("logo.png", false)] }));
     expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["all", false, true],
+    ["selected", true, true],
+    ["selected", false, false],
+    ["off", true, false],
+  ])(
+    "under the %s gate, with the Workspace allowed %s, offers Replace bundle: %s",
+    (skillImportGate, skillImportAllowed, offered) => {
+      mockReads({}, { skillImportGate, skillImportAllowed });
+      renderCard(skill({}));
+      expect(
+        screen.queryByRole("button", { name: /Replace bundle/ }) !== null,
+      ).toBe(offered);
+    },
+  );
+
+  it("always offers Replace bundle at Organization scope", () => {
+    mockReads({}, { skillImportGate: "off", skillImportAllowed: false });
+    render(
+      <SkillBundleCard
+        scope={{ orgId: "org1" }}
+        skill={skill({})}
+        onReplaced={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /Replace bundle/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("says where a Skill installed from GitHub came from", () => {
+    renderCard(
+      skill({
+        sourceType: "github",
+        source: "anthropics/skills",
+        skillPath: "skills/pdf",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+      }),
+    );
+    expect(
+      screen.getByRole("link", {
+        name: "anthropics/skills/skills/pdf @ 0123456",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://github.com/anthropics/skills/tree/0123456789abcdef0123456789abcdef01234567/skills/pdf",
+    );
   });
 });

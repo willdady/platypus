@@ -14,14 +14,14 @@ import { NotFoundError } from "../errors.ts";
 import { logger } from "../logger.ts";
 
 /**
- * An Organization gate on a way in from outside: off, every Workspace, or the
- * Workspaces whose own switch is on. Inbound Triggers (ADR-0030) and A2A
- * endpoints (ADR-0032) each have one, in the same shape and stored side by
- * side, so the reading and saving live here once.
+ * An Organization gate: off, every Workspace, or the Workspaces whose own
+ * switch is on. Inbound Triggers (ADR-0030), A2A endpoints (ADR-0032) and
+ * Skill imports (ADR-0037) each have one, in the same shape and stored side
+ * by side, so the reading and saving live here once.
  */
 type GateKind = {
-  gate: "inboundTriggerGate" | "a2aGate";
-  allowed: "inboundTriggersAllowed" | "a2aAllowed";
+  gate: "inboundTriggerGate" | "a2aGate" | "skillImportGate";
+  allowed: "inboundTriggersAllowed" | "a2aAllowed" | "skillImportAllowed";
   /** How many resources the gate admits each Workspace holds, if any. */
   resourceCounts: (
     orgId: string,

@@ -1978,6 +1978,20 @@ const BACKEND_CONSTANTS = [
     cost: "A reader attaching a large PDF is refused at a size the page never warned of.",
   },
   {
+    source: "apps/backend/src/services/skill-github.ts",
+    name: "GITHUB_ARCHIVE_MAX_BYTES",
+    phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
+    files: ["building-with-platypus/skills.mdx"],
+    cost: "A reader installing from a large repository is refused at a size the page never warned of.",
+  },
+  {
+    source: "packages/schemas/index.ts",
+    name: "SKILL_GITHUB_INSTALL_MAX",
+    phrase: (count: number) => `up to **${count}** at a time`,
+    files: ["building-with-platypus/skills.mdx"],
+    cost: "A reader ticking more Skills than the page allows is refused the whole install.",
+  },
+  {
     source: "apps/backend/src/sandbox/index.ts",
     name: "MAX_SHELL_OUTPUT_BYTES",
     phrase: (bytes: number) => `**${bytes.toLocaleString("en-US")} bytes**`,

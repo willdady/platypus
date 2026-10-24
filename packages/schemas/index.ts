@@ -84,6 +84,10 @@ export const organizationSchema = z.object({
   // Inbound Trigger gate and separate from it; `selected` defers to each
   // Workspace's `a2aAllowed`. Settable only by an Org Admin.
   a2aGate: orgGateSchema.optional(),
+  // Which Workspaces may import Skill bundles — zip import, Replace bundle and
+  // GitHub install (ADR-0037). `all` by default; `selected` defers to each
+  // Workspace's `skillImportAllowed`. Settable only by an Org Admin.
+  skillImportGate: orgGateSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -177,6 +181,10 @@ export const workspaceSchema = z.object({
   // Organization's A2A gate is `selected` (ADR-0032). Set only on the
   // Organization's A2A endpoints screen.
   a2aAllowed: z.boolean().optional(),
+  // Whether this Workspace may import Skill bundles while the Organization's
+  // Skill import gate is `selected` (ADR-0037). Set only on the Organization's
+  // Skills screen.
+  skillImportAllowed: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -689,6 +697,17 @@ export const skillBaseSchema = z.object({
   needsSandbox: z.boolean().default(false),
   // Present on a single Skill's read, absent from lists.
   files: z.array(skillFileSchema).optional(),
+  // Where a Skill installed from GitHub came from (ADR-0037): `source` is
+  // `<owner>/<repo>`, `ref` as entered (null for the default branch),
+  // `skillPath` the Skill's directory (`""` for the repo root), `commitSha`
+  // what was installed and `installedHash` the bundle hash it had then. Null
+  // for a Skill made by hand or from a zip. Read-only.
+  sourceType: z.enum(["github"]).nullable().optional(),
+  source: z.string().nullable().optional(),
+  ref: z.string().nullable().optional(),
+  skillPath: z.string().nullable().optional(),
+  commitSha: z.string().nullable().optional(),
+  installedHash: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -733,6 +752,129 @@ export const skillUpdateSchema = skillBaseSchema
     disableModelInvocation: z.boolean().optional(),
     agentIds: z.array(z.string()).optional(),
   });
+
+// Skill install from GitHub (ADR-0037)
+
+/** The most Skills one install request may name. */
+export const SKILL_GITHUB_INSTALL_MAX = 50;
+
+// GitHub's own name rules: an owner is 1-39 letters, digits and single inner
+// hyphens; a repo name is letters, digits, `.`, `_` and `-`, never `.` or `..`.
+const githubOwnerSchema = z
+  .string()
+  .regex(
+    /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/,
+    "Not a valid GitHub owner",
+  );
+const githubRepoSchema = z
+  .string()
+  .regex(/^(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/, "Not a valid GitHub repository");
+
+// A path segment that can't climb out (`..`), and no control characters or
+// backslashes. A ref also refuses what git refuses in a ref name.
+const hasDotDotSegment = (value: string) => value.split("/").includes("..");
+const githubRefSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  // eslint-disable-next-line no-control-regex -- refusing them is the point
+  .regex(/^(?!\/)[^\x00-\x20\x7f~^:?*[\\]+$/, "Not a valid Git ref")
+  .refine((ref) => !ref.includes(".."), "Not a valid Git ref");
+const githubPathSchema = z
+  .string()
+  .max(1024)
+  // eslint-disable-next-line no-control-regex -- refusing them is the point
+  .regex(/^(?!\/)[^\x00-\x1f\x7f\\]*$/, "Not a valid repository path")
+  .refine((path) => !hasDotDotSegment(path), "Not a valid repository path");
+
+/**
+ * Where on GitHub to look for Skills: an owner, a repo, the ref as entered
+ * (null for the default branch) and a path within it (`""` for the root).
+ * Validated before any request leaves the backend.
+ */
+export const githubSkillSourceSchema = z.object({
+  owner: githubOwnerSchema,
+  repo: githubRepoSchema,
+  ref: githubRefSchema.nullable(),
+  path: githubPathSchema,
+});
+
+export type GithubSkillSource = z.infer<typeof githubSkillSourceSchema>;
+
+/** A preview request: a GitHub URL or `<owner>/<repo>[/<path>][@<ref>]`. */
+export const skillGithubPreviewRequestSchema = z.object({
+  source: z.string().trim().min(1).max(2048),
+});
+
+/**
+ * One Skill a preview found: a directory holding a `SKILL.md`. `error` names
+ * the rule it breaks, and `name`, `description` and `body` are null when it
+ * couldn't be read. `taken` is true when the scope already has a Skill of
+ * that name.
+ */
+export const skillGithubCandidateSchema = z.object({
+  skillPath: z.string(),
+  name: z.string().nullable(),
+  description: z.string().nullable(),
+  body: z.string().nullable(),
+  files: z.array(z.object({ path: z.string(), size: z.number() })),
+  needsSandbox: z.boolean(),
+  error: z.string().nullable(),
+  taken: z.boolean(),
+});
+
+export type SkillGithubCandidate = z.infer<typeof skillGithubCandidateSchema>;
+
+/** What a preview found, at the commit its ref resolved to. */
+export const skillGithubPreviewSchema = githubSkillSourceSchema.extend({
+  commitSha: z.string(),
+  skills: z.array(skillGithubCandidateSchema),
+});
+
+export type SkillGithubPreview = z.infer<typeof skillGithubPreviewSchema>;
+
+/**
+ * An install: the Skills to take from a preview, fetched at the commit the
+ * preview resolved, never the ref, so they are exactly what was reviewed.
+ */
+export const skillGithubInstallRequestSchema = githubSkillSourceSchema
+  .omit({ path: true })
+  .extend({
+    commitSha: z.string().regex(/^[0-9a-f]{40}$/, "Not a commit SHA"),
+    skillPaths: z
+      .array(githubPathSchema)
+      .min(1)
+      .max(SKILL_GITHUB_INSTALL_MAX)
+      .refine(
+        (paths) => new Set(paths).size === paths.length,
+        "Skill paths must be unique",
+      ),
+  });
+
+export type SkillGithubInstallRequest = z.infer<
+  typeof skillGithubInstallRequestSchema
+>;
+
+/**
+ * How each Skill in an install went: `201` installed, or the status and
+ * `error` it failed with — `400` a rule it breaks, `404` no Skill at that
+ * path, `409` its name is taken. One failing never undoes another.
+ */
+export const skillGithubInstallResultSchema = z.object({
+  results: z.array(
+    z.object({
+      skillPath: z.string(),
+      status: z.number().int(),
+      skillId: z.string().optional(),
+      name: z.string().optional(),
+      error: z.string().optional(),
+    }),
+  ),
+});
+
+export type SkillGithubInstallResult = z.infer<
+  typeof skillGithubInstallResultSchema
+>;
 
 // Tool
 

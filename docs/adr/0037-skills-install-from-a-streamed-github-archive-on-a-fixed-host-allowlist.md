@@ -1,14 +1,8 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#1386"
+status: accepted
 ---
 
 # Skills install from a streamed GitHub archive on a fixed host allowlist
-
-> State of the code today: a Skill bundle can only be created or replaced from an
-> uploaded zip, nothing fetches Skills from GitHub, and no Org gate restricts
-> importing. This ADR records the decision only. It moves to `accepted` in the
-> pull request that builds the install.
 
 Installing Skills from GitHub resolves the ref to a commit SHA through the REST API, then streams that commit's zip archive from codeload and decompresses only the entries under the selected Skill paths, in memory. Every preview, install and update check costs one REST request and one download, whatever the number of Skills or files. Only `api.github.com` and `codeload.github.com` are contacted. Users supply an owner, repo, ref and path, never a URL, so no user-chosen host reaches `fetch` and the egress guard (ADR-0014) isn't involved. Importing third-party bundles at Workspace scope sits behind an Org gate (`off | selected | all`, as in ADR-0030 and ADR-0032) that defaults to `all`. Skills are composition (ADR-0006), and their scripts only run in a Sandbox, which only an Org Admin configures.
 

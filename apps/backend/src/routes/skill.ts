@@ -1,8 +1,14 @@
 import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
-import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
+import {
+  skillCreateSchema,
+  skillGithubInstallRequestSchema,
+  skillGithubPreviewRequestSchema,
+  skillUpdateSchema,
+} from "@platypus/schemas";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -20,11 +26,37 @@ import {
   SKILL_FILE_CONTENT_TYPE,
   skillFilesForApi,
 } from "../services/skill-bundle.ts";
+import {
+  installGithubSkills,
+  previewGithubSkills,
+} from "../services/skill-github.ts";
+import { skillImportAllowed } from "../services/skill-import-gate.ts";
 import { promoteScoped } from "../services/promote.ts";
 import { attachment, skillZipBodyLimit } from "./skill-download.ts";
 import type { Variables } from "../server.ts";
 
 const skill = new Hono<{ Variables: Variables }>();
+
+/**
+ * Refuses a bundle import — zip import, Replace bundle, GitHub preview or
+ * install — where the Organization's Skill import gate shuts this Workspace
+ * out (ADR-0037). Runs after `requireWorkspaceAccess`.
+ */
+const requireSkillImport = createMiddleware<{ Variables: Variables }>(
+  async (c, next) => {
+    if (!(await skillImportAllowed(workspaceScopeOf(c).workspaceId))) {
+      return c.json(
+        {
+          error:
+            "Your Organization doesn't allow importing Skills into this Workspace",
+        },
+        403,
+      );
+    }
+    await next();
+    return;
+  },
+);
 
 /** List skills visible in this workspace (workspace-scoped + attached org-scoped) */
 skill.get(
@@ -82,6 +114,7 @@ skill.post(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireSkillImport,
   skillZipBodyLimit,
   async (c) => {
     // Always a new Skill: a name already taken here is a 409 via the central
@@ -101,6 +134,7 @@ skill.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireSkillImport,
   skillZipBodyLimit,
   async (c) => {
     // A Shared Skill is locked here like any edit (ADR-0007).
@@ -112,6 +146,40 @@ skill.put(
     );
     return c.json(row, 200);
   },
+);
+
+/** Every Skill a GitHub source holds, at the commit its ref resolves to (editor+) */
+skill.post(
+  "/github/preview",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireSkillImport,
+  validate("json", skillGithubPreviewRequestSchema),
+  async (c) =>
+    c.json(
+      await previewGithubSkills(
+        { kind: "workspace", ctx: workspaceScopeOf(c) },
+        c.req.valid("json").source,
+      ),
+    ),
+);
+
+/** Install previewed Skills as workspace-scoped Skills, each on its own (editor+) */
+skill.post(
+  "/github/install",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireSkillImport,
+  validate("json", skillGithubInstallRequestSchema),
+  async (c) =>
+    c.json(
+      await installGithubSkills(
+        { kind: "workspace", ctx: workspaceScopeOf(c) },
+        c.req.valid("json"),
+      ),
+    ),
 );
 
 /** Export a visible Skill as a zip */

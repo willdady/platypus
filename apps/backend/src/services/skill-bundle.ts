@@ -14,6 +14,7 @@ import {
   bundleNeedsSandbox,
   buildSkillZip,
   parseSkillZip,
+  type ParsedSkillBundle,
   type SkillBundleFields,
   type SkillBundleFile,
 } from "./skill-bundle-format.ts";
@@ -172,6 +173,24 @@ const storeFiles = async (
   }
 };
 
+/** Where a Skill installed from GitHub came from (ADR-0037). */
+export type GithubInstallOrigin = {
+  source: string;
+  ref: string | null;
+  skillPath: string;
+  commitSha: string;
+};
+
+/** The source-record columns of a Skill not installed from anywhere. */
+const NO_SOURCE = {
+  sourceType: null,
+  source: null,
+  ref: null,
+  skillPath: null,
+  commitSha: null,
+  installedHash: null,
+};
+
 /**
  * Creates a new Skill from an uploaded zip. Everything is validated before
  * anything is written (a `ValidationError` names the rule), and a name already
@@ -182,7 +201,19 @@ export async function importSkillBundle(
   scope: SkillScope,
   zip: Uint8Array,
 ): Promise<SkillRow> {
-  const bundle = parseSkillZip(zip);
+  return createSkillFromBundle(scope, parseSkillZip(zip));
+}
+
+/**
+ * Creates a new Skill from a validated bundle, all-or-nothing, recording
+ * where it came from when it was installed from GitHub.
+ */
+export async function createSkillFromBundle(
+  scope: SkillScope,
+  bundle: ParsedSkillBundle,
+  github?: GithubInstallOrigin,
+): Promise<SkillRow> {
+  const hash = bundleHash(bundle);
   const id = nanoid();
   const { prefix, rows } = await storeFiles(orgIdOf(scope), id, bundle.files);
   try {
@@ -193,9 +224,14 @@ export async function importSkillBundle(
           id,
           ...bundle.fields,
           frontmatter: bundle.frontmatter,
-          bundleHash: bundleHash(bundle),
+          bundleHash: hash,
           needsSandbox: bundleNeedsSandbox(bundle.files),
           ...scopeColumnsOf(scope),
+          ...(github && {
+            sourceType: "github",
+            ...github,
+            installedHash: hash,
+          }),
         })
         .returning();
       if (rows.length > 0) await tx.insert(skillFileTable).values(rows);
@@ -220,7 +256,8 @@ const uploadPrefixesOf = (rows: { storageKey: string }[]) =>
  * and files — from an uploaded zip. The new files go under a new upload prefix
  * and the rows swap in one transaction; only then is the old prefix deleted. A
  * failed swap deletes the new prefix instead, leaving the old bundle intact. At
- * Workspace scope a Shared Skill is locked (ADR-0007), as for any edit.
+ * Workspace scope a Shared Skill is locked (ADR-0007), as for any edit. The
+ * zip didn't come from GitHub, so the source record is cleared.
  */
 export async function replaceSkillBundle(
   scope: SkillScope,
@@ -248,6 +285,7 @@ export async function replaceSkillBundle(
           frontmatter: bundle.frontmatter,
           bundleHash: bundleHash(bundle),
           needsSandbox: bundleNeedsSandbox(bundle.files),
+          ...NO_SOURCE,
           updatedAt: new Date(),
         })
         .where(where)

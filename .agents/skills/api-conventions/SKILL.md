@@ -43,7 +43,7 @@ app.post("/", requireAuth, validate("json", boardCreateSchema), async (c) => {
 
 ## The error seam
 
-Six cross-cutting failures are **thrown**, not returned. A single `onError`
+Seven cross-cutting failures are **thrown**, not returned. A single `onError`
 seam maps each to its status and emits the same `{ error }` body, so a domain
 rule states its message once instead of once per caller:
 
@@ -55,6 +55,7 @@ rule states its message once instead of once per caller:
 | `ConflictError`    | 409     |
 | `UnsupportedError` | 501     |
 | `UpstreamError`    | 502     |
+| `RateLimitError`   | 429     |
 
 A Postgres unique violation also maps to 409 — detect it through the shared
 helper rather than re-reading the driver's error shape. So does a foreign-key

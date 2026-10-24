@@ -181,6 +181,7 @@ const baseWorkspace = {
   mcpSelfManagement: false,
   inboundTriggersAllowed: false,
   a2aAllowed: false,
+  skillImportAllowed: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

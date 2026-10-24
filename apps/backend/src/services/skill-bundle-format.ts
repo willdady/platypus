@@ -92,19 +92,29 @@ export const isTextContent = (bytes: Uint8Array): boolean => {
 export const sha256Hex = (data: Uint8Array | string): string =>
   crypto.createHash("sha256").update(data).digest("hex");
 
-type ZipEntry = {
+/**
+ * One entry as a zip's central directory lists it, its bytes still
+ * compressed. The central directory is the only place a zip records that an
+ * entry is a symlink, so entries are read from it, never from the local
+ * headers alone.
+ */
+export type ZipRecord = {
   name: string;
   isDirectory: boolean;
-  data: Uint8Array;
+  isSymlink: boolean;
+  encrypted: boolean;
+  method: number;
+  raw: Uint8Array;
 };
 
 /**
- * Reads every entry's bytes out of a zip, counting the bytes actually inflated
- * against the unpacked cap. The sizes a zip declares are never trusted: input is
- * fed to the inflater in small chunks, so even a maximal-ratio entry overshoots
- * the cap by at most about a megabyte before it is refused.
+ * Lists a zip's entries from its central directory, refusing more than
+ * `maxEntries` before reading any. Nothing is decompressed here.
  */
-const readZipEntries = (zip: Uint8Array): ZipEntry[] => {
+export const listZipRecords = (
+  zip: Uint8Array,
+  maxEntries = Infinity,
+): ZipRecord[] => {
   const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
   const u16 = (at: number) => view.getUint16(at, true);
   const u32 = (at: number) => view.getUint32(at, true);
@@ -123,12 +133,11 @@ const readZipEntries = (zip: Uint8Array): ZipEntry[] => {
   if (count === 0xffff || offset === 0xffffffff) {
     fail("ZIP64 archives are not supported");
   }
-  if (count > SKILL_BUNDLE_MAX_ENTRIES) {
-    fail(`Zip has more than ${SKILL_BUNDLE_MAX_ENTRIES} entries`);
+  if (count > maxEntries) {
+    fail(`Zip has more than ${maxEntries} entries`);
   }
 
-  let unpacked = 0;
-  const entries: ZipEntry[] = [];
+  const records: ZipRecord[] = [];
   for (let n = 0; n < count; n++) {
     if (offset + 46 > zip.length || u32(offset) !== 0x02014b50) {
       fail("File is not a valid zip archive");
@@ -150,13 +159,6 @@ const readZipEntries = (zip: Uint8Array): ZipEntry[] => {
     } catch {
       name = fail("Zip entry name is not valid UTF-8");
     }
-    if ((mode & 0o170000) === 0o120000) {
-      fail(`Zip contains a symlink: ${name}`);
-    }
-    if (flags & 1) fail(`Zip entry is encrypted: ${name}`);
-    if (method !== 0 && method !== 8) {
-      fail(`Zip entry uses an unsupported compression method: ${name}`);
-    }
 
     if (localOffset + 30 > zip.length || u32(localOffset) !== 0x04034b50) {
       fail("File is not a valid zip archive");
@@ -166,40 +168,74 @@ const readZipEntries = (zip: Uint8Array): ZipEntry[] => {
     if (start + compressedSize > zip.length) {
       fail("File is not a valid zip archive");
     }
-    const raw = zip.subarray(start, start + compressedSize);
+    records.push({
+      name,
+      isDirectory: name.endsWith("/"),
+      isSymlink: (mode & 0o170000) === 0o120000,
+      encrypted: (flags & 1) === 1,
+      method,
+      raw: zip.subarray(start, start + compressedSize),
+    });
+  }
+  return records;
+};
 
-    const chunks: Uint8Array[] = [];
-    const take = (chunk: Uint8Array) => {
-      unpacked += chunk.length;
-      if (unpacked > SKILL_BUNDLE_MAX_UNPACKED_BYTES) {
-        fail(
-          `Zip unpacks to more than ${SKILL_BUNDLE_MAX_UNPACKED_BYTES / MiB} MiB`,
-        );
+/**
+ * Decompresses one entry, counting the bytes actually inflated against
+ * `budget`, shared across the entries of one bundle; `overflow` is the
+ * message when it runs out. The sizes a zip declares are never trusted: input
+ * is fed to the inflater in small chunks, so even a maximal-ratio entry
+ * overshoots the cap by at most about a megabyte before it is refused.
+ */
+export const inflateZipRecord = (
+  record: ZipRecord,
+  budget: { left: number },
+  overflow: string,
+): Uint8Array => {
+  if (record.encrypted) fail(`Zip entry is encrypted: ${record.name}`);
+  if (record.method !== 0 && record.method !== 8) {
+    fail(`Zip entry uses an unsupported compression method: ${record.name}`);
+  }
+  const { raw } = record;
+  const chunks: Uint8Array[] = [];
+  const take = (chunk: Uint8Array) => {
+    budget.left -= chunk.length;
+    if (budget.left < 0) fail(overflow);
+    chunks.push(chunk);
+  };
+  if (record.method === 0) {
+    take(raw);
+  } else {
+    const inflater = new Inflate((chunk) => take(chunk));
+    try {
+      for (let at = 0; at < raw.length; at += 1024) {
+        inflater.push(raw.subarray(at, at + 1024), at + 1024 >= raw.length);
       }
-      chunks.push(chunk);
-    };
-    if (method === 0) {
-      take(raw);
-    } else {
-      const inflater = new Inflate((chunk) => take(chunk));
-      try {
-        for (let at = 0; at < raw.length; at += 1024) {
-          inflater.push(raw.subarray(at, at + 1024), at + 1024 >= raw.length);
-        }
-        if (raw.length === 0) inflater.push(new Uint8Array(0), true);
-      } catch (error) {
-        if (error instanceof ValidationError) throw error;
-        fail(`Zip entry is corrupt: ${name}`);
-      }
+      if (raw.length === 0) inflater.push(new Uint8Array(0), true);
+    } catch (error) {
+      if (error instanceof ValidationError) throw error;
+      fail(`Zip entry is corrupt: ${record.name}`);
     }
-    const data = new Uint8Array(chunks.reduce((sum, c) => sum + c.length, 0));
-    let at = 0;
-    for (const chunk of chunks) {
-      data.set(chunk, at);
-      at += chunk.length;
-    }
+  }
+  const data = new Uint8Array(chunks.reduce((sum, c) => sum + c.length, 0));
+  let at = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, at);
+    at += chunk.length;
+  }
+  return data;
+};
 
-    entries.push({ name, isDirectory: name.endsWith("/"), data });
+/** Reads every entry's bytes out of an uploaded zip, against the bundle caps. */
+const readZipEntries = (zip: Uint8Array): SkillBundleEntry[] => {
+  const budget = { left: SKILL_BUNDLE_MAX_UNPACKED_BYTES };
+  const overflow = `Zip unpacks to more than ${SKILL_BUNDLE_MAX_UNPACKED_BYTES / MiB} MiB`;
+  const entries: SkillBundleEntry[] = [];
+  for (const record of listZipRecords(zip, SKILL_BUNDLE_MAX_ENTRIES)) {
+    if (record.isSymlink) fail(`Zip contains a symlink: ${record.name}`);
+    const bytes = inflateZipRecord(record, budget, overflow);
+    if (record.isDirectory) normaliseBundlePath(record.name);
+    else entries.push({ path: record.name, bytes, isSymlink: false });
   }
   return entries;
 };
@@ -295,25 +331,46 @@ const parseSkillMd = (
 const isIgnored = (path: string) =>
   path.split("/")[0] === "__MACOSX" || path.split("/").at(-1) === ".DS_Store";
 
+/** One file of a bundle as it arrives, before any rule is checked. */
+export type SkillBundleEntry = {
+  path: string;
+  bytes: Uint8Array;
+  isSymlink: boolean;
+};
+
 /**
- * Parses and validates an uploaded Skill zip. Every rule is checked before the
+ * Validates a bundle's files, whatever they arrived in — an uploaded zip, or
+ * a Skill's directory in a GitHub archive. Every rule is checked before the
  * caller writes anything, and any violation throws a `ValidationError` (400)
  * naming the rule — nothing is truncated, coerced or repaired, beyond trimming
- * the whitespace around the `SKILL.md` body.
+ * the whitespace around the `SKILL.md` body. `SKILL.md` sits at the root, or
+ * inside exactly one top-level directory that is stripped; the directory's
+ * name is ignored, the frontmatter names the Skill.
  */
-export const parseSkillZip = (zip: Uint8Array): ParsedSkillBundle => {
+export const validateSkillBundle = (
+  entries: SkillBundleEntry[],
+): ParsedSkillBundle => {
   const seen = new Set<string>();
   const files: { path: string; data: Uint8Array }[] = [];
-  for (const entry of readZipEntries(zip)) {
-    const path = normaliseBundlePath(entry.name);
-    if (entry.isDirectory || path === "" || isIgnored(path)) continue;
+  let unpacked = 0;
+  for (const entry of entries) {
+    const path = normaliseBundlePath(entry.path);
+    if (path === "" || isIgnored(path)) continue;
+    if (entry.isSymlink) fail(`Skill contains a symlink: ${path}`);
     if (seen.has(path)) fail(`Zip contains a duplicate path: ${path}`);
     seen.add(path);
-    files.push({ path, data: entry.data });
+    unpacked += entry.bytes.length;
+    files.push({ path, data: entry.bytes });
+  }
+  if (files.length > SKILL_BUNDLE_MAX_ENTRIES) {
+    fail(`Skill has more than ${SKILL_BUNDLE_MAX_ENTRIES} files`);
+  }
+  if (unpacked > SKILL_BUNDLE_MAX_UNPACKED_BYTES) {
+    fail(
+      `Skill unpacks to more than ${SKILL_BUNDLE_MAX_UNPACKED_BYTES / MiB} MiB`,
+    );
   }
 
-  // SKILL.md sits at the root, or inside exactly one top-level directory that
-  // is stripped. The directory's name is ignored; the frontmatter names the Skill.
   let root = "";
   if (!seen.has("SKILL.md")) {
     const tops = new Set(files.map((f) => f.path.split("/")[0]));
@@ -346,6 +403,10 @@ export const parseSkillZip = (zip: Uint8Array): ParsedSkillBundle => {
 
   return { ...parseSkillMd(skillMd!), files: bundled };
 };
+
+/** Parses and validates an uploaded Skill zip. See `validateSkillBundle`. */
+export const parseSkillZip = (zip: Uint8Array): ParsedSkillBundle =>
+  validateSkillBundle(readZipEntries(zip));
 
 /** JSON with object keys sorted, so a jsonb round-trip cannot change a hash. */
 const canonicalJson = (value: unknown): string => {
