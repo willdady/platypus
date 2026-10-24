@@ -8,6 +8,8 @@ import {
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import { isScopedResourceType } from "../services/scoped-resource.ts";
+import { orgAttachmentCreateSchema } from "@platypus/schemas";
+import { validate } from "../validate.ts";
 import { attachResource, detachResource } from "../services/attachment.ts";
 import type { Variables } from "../server.ts";
 
@@ -63,26 +65,27 @@ orgAttachment.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
 });
 
 /** Attach an org-scoped Shared resource to a workspace (admin only) */
-orgAttachment.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
-  const { orgId } = orgScopeOf(c);
-  const body = (await c.req.json().catch(() => ({}))) as {
-    resourceType?: string;
-    resourceId?: string;
-    workspaceId?: string;
-  };
-  const { resourceType, resourceId, workspaceId } = body;
+orgAttachment.post(
+  "/",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  validate("json", orgAttachmentCreateSchema),
+  async (c) => {
+    const { orgId } = orgScopeOf(c);
+    const { resourceType, resourceId, workspaceId } = c.req.valid("json");
 
-  // Every rule — well-formed resourceType, the target workspace belonging to
-  // this organization, the resource being a Shared one of it (ADR-0007), and
-  // already-attached → 409 — lives in the Attachment module, which also owns
-  // the order they fail in.
-  const record = await attachResource({ kind: "organization" }, orgId, {
-    resourceType,
-    resourceId,
-    workspaceId,
-  });
-  return c.json(record, 201);
-});
+    // Every rule — well-formed resourceType, the target workspace belonging to
+    // this organization, the resource being a Shared one of it (ADR-0007), and
+    // already-attached → 409 — lives in the Attachment module, which also owns
+    // the order they fail in.
+    const record = await attachResource({ kind: "organization" }, orgId, {
+      resourceType,
+      resourceId,
+      workspaceId,
+    });
+    return c.json(record, 201);
+  },
+);
 
 /** Detach an org-scoped Shared resource from a workspace (admin only) */
 orgAttachment.delete(

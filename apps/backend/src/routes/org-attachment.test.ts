@@ -252,6 +252,37 @@ describe("Organization Attachment (central sharing) Routes", () => {
       expect(res.status).toBe(409);
     });
 
+    it.each([
+      ["a non-string resourceId", { ...body, resourceId: {} }],
+      ["a non-string workspaceId", { ...body, workspaceId: [] }],
+      ["a missing workspaceId", { ...body, workspaceId: undefined }],
+      ["an invalid resourceType", { ...body, resourceType: "blueprint" }],
+    ])("400s %s", async (_, payload) => {
+      mockSession();
+      const fake = seed({
+        organization_member: membership("admin"),
+        workspace: workspaces,
+        agent: [sharedAgent],
+        attachment: [],
+      });
+
+      const res = await post(payload);
+      expect(res.status).toBe(400);
+      expect(fake.tables.attachment).toHaveLength(0);
+    });
+
+    it("400s a non-JSON body", async () => {
+      mockSession();
+      seed({ organization_member: membership("admin") });
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: "not json",
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
+
     it("returns 403 for a non-admin", async () => {
       mockSession();
       seed({ organization_member: membership("member") });
