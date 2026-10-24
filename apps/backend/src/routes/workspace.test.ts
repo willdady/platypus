@@ -449,7 +449,7 @@ describe("Workspace Routes", () => {
     // through the Scoped resource authority, scoped to this Workspace, so a
     // Provider not visible here — e.g. one owned by another Organization —
     // resolves to null and is rejected, never stamped. Asserting the delegation
-    // (not just the 404) is what pins the fix: the vulnerable code did a bare id
+    // (not just the 400) is what pins the fix: the vulnerable code did a bare id
     // lookup and never called resolveScoped.
     it("rejects a memory provider not visible in the workspace", async () => {
       mockSession({ id: "user-1", role: "user" });
@@ -468,9 +468,10 @@ describe("Workspace Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
-        error: "Memory extraction provider not found",
+        error:
+          "Invalid memory provider settings: memoryExtractionProviderId provider-other-org not found",
       });
       expect(resolveScopedMock).toHaveBeenCalledWith(
         expect.anything(),
@@ -538,12 +539,12 @@ describe("Workspace Routes", () => {
       [
         "extraction",
         "memoryExtractionProviderId",
-        "Selected provider does not have a memory extraction model configured",
+        "Invalid memory provider settings: memoryExtractionProviderId provider-1 does not have a memory extraction model configured",
       ],
       [
         "embedding",
         "memoryEmbeddingProviderId",
-        "Selected provider does not have an embedding model configured",
+        "Invalid memory provider settings: memoryEmbeddingProviderId provider-1 does not have an embedding model configured",
       ],
     ])(
       "rejects a memory %s provider without the needed model",
@@ -565,9 +566,10 @@ describe("Workspace Routes", () => {
         memoryEmbeddingProviderId: "provider-other-org",
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
-        error: "Memory embedding provider not found",
+        error:
+          "Invalid memory provider settings: memoryEmbeddingProviderId provider-other-org not found",
       });
       expect(resolveScopedMock).toHaveBeenCalledWith(
         expect.anything(),

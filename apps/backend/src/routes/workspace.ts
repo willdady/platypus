@@ -23,10 +23,7 @@ import {
   orgMembershipOf,
   userOf,
 } from "../middleware/authorization.ts";
-import {
-  listOrgScopedIds,
-  resolveScoped,
-} from "../services/scoped-resource.ts";
+import { listOrgScopedIds } from "../services/scoped-resource.ts";
 import { createProvider } from "../services/provider-write.ts";
 import { sandboxCreateError } from "../sandbox/validate.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
@@ -36,6 +33,7 @@ import {
   prepareWorkspaceCleanup,
 } from "../services/workspace-delete.ts";
 import { transferWorkspace } from "../services/workspace-transfer.ts";
+import { requireMemoryProviderCapable } from "../services/memory-provider-validation.ts";
 
 const workspace = new Hono<{ Variables: Variables }>();
 
@@ -213,57 +211,11 @@ workspace.put(
       delete data.inboundTriggersAllowed;
     }
 
-    // Resolve memory pointer-settings through the Scoped resource authority
-    // (ADR-0007): a Provider is settable only if it is visible in this
-    // Workspace — its own, or an Organization-scoped one Attached to it. A bare
+    // A memory Provider must be visible in this Workspace (ADR-0007) — a bare
     // id lookup would let an owner stamp any Organization's Provider onto their
     // Workspace, which the memory-extraction job and memorySearch then use with
-    // that Provider's credentials.
-    if (data.memoryExtractionProviderId) {
-      const resolved = await resolveScoped(
-        db,
-        "provider",
-        data.memoryExtractionProviderId,
-        scope,
-      );
-
-      if (!resolved) {
-        return c.json({ error: "Memory extraction provider not found" }, 404);
-      }
-
-      if (!resolved.row.memoryExtractionModelId) {
-        return c.json(
-          {
-            error:
-              "Selected provider does not have a memory extraction model configured",
-          },
-          400,
-        );
-      }
-    }
-
-    if (data.memoryEmbeddingProviderId) {
-      const resolved = await resolveScoped(
-        db,
-        "provider",
-        data.memoryEmbeddingProviderId,
-        scope,
-      );
-
-      if (!resolved) {
-        return c.json({ error: "Memory embedding provider not found" }, 404);
-      }
-
-      if (!resolved.row.embeddingModelId) {
-        return c.json(
-          {
-            error:
-              "Selected provider does not have an embedding model configured",
-          },
-          400,
-        );
-      }
-    }
+    // that Provider's credentials — and expose the model its slot needs.
+    await requireMemoryProviderCapable(data, scope);
 
     const record = await db
       .update(workspaceTable)
