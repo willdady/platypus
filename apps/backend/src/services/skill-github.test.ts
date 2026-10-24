@@ -116,10 +116,12 @@ beforeEach(async () => {
   repoAt(SHA, REPO);
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: string | URL, init?: RequestInit) => {
+    vi.fn((input: string | URL, init?: RequestInit) => {
       const url = String(input);
       calls.push({ url, headers: new Headers(init?.headers) });
-      return routes.get(url)?.() ?? new Response("Not Found", { status: 404 });
+      return Promise.resolve(
+        routes.get(url)?.() ?? new Response("Not Found", { status: 404 }),
+      );
     }),
   );
   await pg.exec(`
@@ -388,7 +390,7 @@ describe("installGithubSkills", () => {
       {
         skillPath: "skills/broken",
         status: 400,
-        error: expect.stringMatching(/not valid YAML/),
+        error: expect.stringMatching(/not valid YAML/) as unknown,
       },
       {
         skillPath: "skills/nope",

@@ -214,7 +214,7 @@ describe("the GitHub routes", () => {
     expect(previewGithubSkills).toHaveBeenCalledWith(
       {
         kind: "workspace",
-        ctx: expect.objectContaining({ orgId, workspaceId }),
+        ctx: expect.objectContaining({ orgId, workspaceId }) as unknown,
       },
       "acme/skills",
     );
