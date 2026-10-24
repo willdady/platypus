@@ -10,7 +10,8 @@ import {
 import app from "../server.ts";
 import { deleteAvatar, storeAvatar } from "../services/avatar.ts";
 
-vi.mock("../services/avatar.ts", () => ({
+vi.mock("../services/avatar.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/avatar.ts")>()),
   storeAvatar: vi.fn(),
   deleteAvatar: vi.fn(),
 }));
@@ -704,6 +705,39 @@ describe("Agent Routes", () => {
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({ error: "Invalid file type" });
       expect(keyOf(fake, "agent-1")).toBe("old");
+    });
+
+    it("404s when the agent is deleted mid-request", async () => {
+      mockSession();
+      const fake = world();
+      vi.mocked(storeAvatar).mockImplementationOnce(() => {
+        fake.tables.agent = fake.tables.agent.filter((a) => a.id !== "agent-1");
+        return Promise.resolve({ ok: true, key: "new" });
+      });
+
+      const res = await upload("agent-1");
+
+      expect(res.status).toBe(404);
+    });
+
+    it("rejects a body over the limit before reading it", async () => {
+      mockSession();
+      world();
+      const form = new FormData();
+      form.append(
+        "file",
+        new File([new Uint8Array(6 * 1024 * 1024)], "a.png", {
+          type: "image/png",
+        }),
+      );
+
+      const res = await app.request(`${baseUrl}/agent-1/avatar`, {
+        method: "POST",
+        body: form,
+      });
+
+      expect(res.status).toBe(400);
+      expect(storeAvatar).not.toHaveBeenCalled();
     });
 
     it.each([

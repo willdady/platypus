@@ -1,20 +1,20 @@
 import { Hono } from "hono";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
-import { agent as agentTable } from "../db/schema.ts";
 import { agentUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import {
   updateAgent as updateAgentRow,
   deleteAgent as deleteAgentRow,
+  setAgentAvatar,
+  clearAgentAvatar,
 } from "../services/agent.ts";
 import {
   listOrgScoped,
-  orgScopedWhere,
   requireOrgScoped,
 } from "../services/scoped-resource.ts";
-import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
+import { avatarBodyLimit } from "./avatar-body-limit.ts";
 import { agentWithAvatarUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import type { Variables } from "../server.ts";
@@ -86,25 +86,15 @@ orgAgent.post(
   "/:agentId/avatar",
   requireAuth,
   requireOrgAccess(["admin"]),
+  avatarBodyLimit,
   async (c) => {
-    const { orgId } = orgScopeOf(c);
-    const agentId = c.req.param("agentId");
-    const baseUrl = getOrigin(c);
-
-    const existing = await requireOrgScoped(db, "agent", agentId, orgId);
-
     const body = await c.req.parseBody();
-    const result = await storeAvatar(body["file"], agentId, existing.avatarKey);
-    if (!result.ok) {
-      return c.json({ error: result.error }, 400);
-    }
-
-    const record = await db
-      .update(agentTable)
-      .set({ avatarKey: result.key, updatedAt: new Date() })
-      .where(orgScopedWhere("agent", agentId, orgId))
-      .returning();
-    return c.json(agentWithAvatarUrl(record[0], baseUrl));
+    const row = await setAgentAvatar(
+      { kind: "organization", orgId: orgScopeOf(c).orgId },
+      c.req.param("agentId"),
+      body["file"],
+    );
+    return c.json(agentWithAvatarUrl(row, getOrigin(c)));
   },
 );
 
@@ -114,20 +104,11 @@ orgAgent.delete(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const { orgId } = orgScopeOf(c);
-    const agentId = c.req.param("agentId");
-    const baseUrl = getOrigin(c);
-
-    const existing = await requireOrgScoped(db, "agent", agentId, orgId);
-
-    await deleteAvatar(existing.avatarKey);
-
-    const record = await db
-      .update(agentTable)
-      .set({ avatarKey: null, updatedAt: new Date() })
-      .where(orgScopedWhere("agent", agentId, orgId))
-      .returning();
-    return c.json(agentWithAvatarUrl(record[0], baseUrl));
+    const row = await clearAgentAvatar(
+      { kind: "organization", orgId: orgScopeOf(c).orgId },
+      c.req.param("agentId"),
+    );
+    return c.json(agentWithAvatarUrl(row, getOrigin(c)));
   },
 );
 

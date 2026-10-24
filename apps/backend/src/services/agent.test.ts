@@ -22,11 +22,30 @@ vi.mock("../storage/index.ts", () => ({
   getStorage: () => ({ delete: storageDelete }),
 }));
 
-import { createAgent, updateAgent, deleteAgent } from "./agent.ts";
+// storeAvatar's image processing is avatar.ts's own concern; deleteAvatar
+// stays real so its cleanup is seen through storageDelete.
+vi.mock("./avatar.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./avatar.ts")>()),
+  storeAvatar: vi.fn(),
+}));
+
+import {
+  createAgent,
+  updateAgent,
+  deleteAgent,
+  setAgentAvatar,
+  clearAgentAvatar,
+} from "./agent.ts";
+import { storeAvatar } from "./avatar.ts";
 import { validateSubAgentAssignment } from "./sub-agent-validation.ts";
 import { findNonSharedReferences } from "./agent-scope-validation.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
-import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
+import {
+  ConflictError,
+  LockedError,
+  NotFoundError,
+  ValidationError,
+} from "../errors.ts";
 
 const ctx = { orgId: "org-1", workspaceId: "ws-1" };
 const workspaceScope = { kind: "workspace" as const, ctx };
@@ -434,6 +453,136 @@ describe("agent module", () => {
         await expect(deleteAgent(orgScope, id)).rejects.toThrow(NotFoundError);
         expect(fake.tables.agent).toHaveLength(5);
         expect(scrubDeletedAgentReference).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe("setAgentAvatar", () => {
+    it.each([
+      ["workspace", workspaceScope, "a1", "agents/a1/avatar.webp"],
+      ["organization", orgScope, "loose", "agents/loose/avatar.webp"],
+    ] as const)(
+      "stores the upload and persists its key (%s scope)",
+      async (_label, scope, id, previousKey) => {
+        const fake = world();
+        const file = new File(["x"], "a.png", { type: "image/png" });
+        vi.mocked(storeAvatar).mockResolvedValueOnce({ ok: true, key: "new" });
+
+        const result = await setAgentAvatar(scope, id, file);
+
+        expect(storeAvatar).toHaveBeenCalledWith(file, id, previousKey);
+        expect(result).toMatchObject({ id, avatarKey: "new" });
+        expect(find(fake, id)?.avatarKey).toBe("new");
+      },
+    );
+
+    it("throws ValidationError for a rejected upload, leaving the key", async () => {
+      const fake = world();
+      vi.mocked(storeAvatar).mockResolvedValueOnce({
+        ok: false,
+        error: "Invalid file type",
+      });
+
+      await expect(setAgentAvatar(workspaceScope, "a1", null)).rejects.toThrow(
+        new ValidationError("Invalid file type"),
+      );
+      expect(find(fake, "a1")?.avatarKey).toBe("agents/a1/avatar.webp");
+    });
+
+    it.each([
+      [
+        "an attached Shared agent at workspace scope",
+        workspaceScope,
+        "shared",
+        LockedError,
+      ],
+      ["another Workspace's agent", workspaceScope, "other", NotFoundError],
+      [
+        "a Workspace agent at organization scope",
+        orgScope,
+        "a1",
+        NotFoundError,
+      ],
+      ["another organization's agent", orgScope, "foreign", NotFoundError],
+    ] as const)("rejects %s", async (_label, scope, id, error) => {
+      world();
+
+      await expect(setAgentAvatar(scope, id, null)).rejects.toThrow(error);
+      expect(storeAvatar).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["workspace", workspaceScope, "a1"],
+      ["organization", orgScope, "loose"],
+    ] as const)(
+      "throws NotFoundError and removes the stored avatar when the agent is deleted mid-request (%s scope)",
+      async (_label, scope, id) => {
+        const fake = world();
+        vi.mocked(storeAvatar).mockImplementationOnce(() => {
+          fake.tables.agent = fake.tables.agent.filter((a) => a.id !== id);
+          return Promise.resolve({ ok: true, key: "new" });
+        });
+
+        await expect(setAgentAvatar(scope, id, null)).rejects.toThrow(
+          NotFoundError,
+        );
+        expect(storageDelete).toHaveBeenCalledWith("new");
+      },
+    );
+  });
+
+  describe("clearAgentAvatar", () => {
+    it.each([
+      ["workspace", workspaceScope, "a1", "agents/a1/avatar.webp"],
+      ["organization", orgScope, "loose", "agents/loose/avatar.webp"],
+    ] as const)(
+      "removes the stored avatar and clears the key (%s scope)",
+      async (_label, scope, id, previousKey) => {
+        const fake = world();
+
+        const row = await clearAgentAvatar(scope, id);
+
+        expect(storageDelete).toHaveBeenCalledWith(previousKey);
+        expect(row).toMatchObject({ id, avatarKey: null });
+        expect(find(fake, id)?.avatarKey).toBeNull();
+      },
+    );
+
+    it.each([
+      [
+        "an attached Shared agent at workspace scope",
+        workspaceScope,
+        "shared",
+        LockedError,
+      ],
+      [
+        "a Workspace agent at organization scope",
+        orgScope,
+        "a1",
+        NotFoundError,
+      ],
+    ] as const)("rejects %s", async (_label, scope, id, error) => {
+      world();
+
+      await expect(clearAgentAvatar(scope, id)).rejects.toThrow(error);
+      expect(storageDelete).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["workspace", workspaceScope, "a1"],
+      ["organization", orgScope, "loose"],
+    ] as const)(
+      "throws NotFoundError when the agent is deleted mid-request (%s scope)",
+      async (_label, scope, id) => {
+        const fake = world();
+        storageDelete.mockImplementationOnce(() => {
+          fake.tables.agent = fake.tables.agent.filter((a) => a.id !== id);
+          return Promise.resolve();
+        });
+
+        await expect(clearAgentAvatar(scope, id)).rejects.toThrow(
+          NotFoundError,
+        );
       },
     );
   });

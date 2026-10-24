@@ -14,7 +14,7 @@ import {
   type ReferenceBlocker,
 } from "./agent-scope-validation.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
-import { NotFoundError } from "../errors.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
 import {
   inUseConflict,
   orgScopedWhere,
@@ -23,7 +23,7 @@ import {
   requireWorkspaceMutable,
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
-import { deleteAvatar } from "./avatar.ts";
+import { deleteAvatar, storeAvatar } from "./avatar.ts";
 
 /**
  * The Agent write model: dedupe, sub-agent validation, and the
@@ -271,4 +271,83 @@ export async function deleteAgent(
   // Best-effort, and only once the delete has committed: a storage miss must
   // not fail it, and a refused delete must not lose the avatar.
   await deleteAvatar(result[0].avatarKey);
+}
+
+/**
+ * Resolves an Agent for an avatar write at the given scope, under the same
+ * visibility and lock rules as {@link updateAgent}, with the predicate the
+ * write targets.
+ */
+async function requireAvatarTarget(
+  scope: AgentScope,
+  agentId: string,
+): Promise<{ row: AgentRow; where: SQL }> {
+  if (scope.kind === "workspace") {
+    const { row } = await requireWorkspaceMutable(
+      db,
+      "agent",
+      agentId,
+      scope.ctx,
+    );
+    return {
+      row,
+      where: workspaceScopedWhere("agent", agentId, scope.ctx.workspaceId),
+    };
+  }
+  return {
+    row: await requireOrgScoped(db, "agent", agentId, scope.orgId),
+    where: orgScopedWhere("agent", agentId, scope.orgId),
+  };
+}
+
+/** Persists `avatarKey`, throwing `NotFoundError` if the Agent is gone. */
+async function writeAvatarKey(
+  where: SQL,
+  avatarKey: string | null,
+): Promise<AgentRow> {
+  const [row] = await db
+    .update(agentTable)
+    .set({ avatarKey, updatedAt: new Date() })
+    .where(where)
+    .returning();
+  if (!row) throw new NotFoundError("Agent not found");
+  return row;
+}
+
+/**
+ * Validates and stores an uploaded avatar, then persists its key on the
+ * Agent. Throws as {@link updateAgent} does when the Agent is not visible or
+ * locked at this scope, and `NotFoundError` when it is deleted mid-request
+ * (the just-stored avatar is removed first). Throws `ValidationError` for a
+ * rejected upload.
+ *
+ * @param file - The raw value pulled from `parseBody()` — validated by `storeAvatar`.
+ */
+export async function setAgentAvatar(
+  scope: AgentScope,
+  agentId: string,
+  file: unknown,
+): Promise<AgentRow> {
+  const { row, where } = await requireAvatarTarget(scope, agentId);
+  const stored = await storeAvatar(file, agentId, row.avatarKey);
+  if (!stored.ok) throw new ValidationError(stored.error);
+  try {
+    return await writeAvatarKey(where, stored.key);
+  } catch (err) {
+    await deleteAvatar(stored.key);
+    throw err;
+  }
+}
+
+/**
+ * Removes an Agent's avatar from storage and clears its key. Throws as
+ * {@link setAgentAvatar} does.
+ */
+export async function clearAgentAvatar(
+  scope: AgentScope,
+  agentId: string,
+): Promise<AgentRow> {
+  const { row, where } = await requireAvatarTarget(scope, agentId);
+  await deleteAvatar(row.avatarKey);
+  return writeAvatarKey(where, null);
 }
