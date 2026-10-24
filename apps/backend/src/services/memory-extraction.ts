@@ -73,10 +73,12 @@ const buildSummaryPrompt = (
   contextText: string,
   newText: string,
 ): string => {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty summary gets the placeholder too
+  const summary = existingSummary || "No summary yet.";
   return `You are a memory consolidation assistant. You maintain a daily summary of what is known about the user from their conversations.
 
 <existing-summary>
-${existingSummary || "No summary yet."}
+${summary}
 </existing-summary>
 
 <context>

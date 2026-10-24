@@ -386,7 +386,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   }
 
   state(): string {
-    if (!this._generatedState) this._generatedState = nanoid();
+    this._generatedState ??= nanoid();
     return this._generatedState;
   }
 
@@ -397,7 +397,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     await db.insert(mcpOauthState).values({
       id: state,
       mcpId: this.mcpRecord.id,
-      codeVerifier: this._pendingCodeVerifier || "",
+      codeVerifier: this._pendingCodeVerifier ?? "",
       redirectUri: this.callbackUrl,
       expiresAt,
     });

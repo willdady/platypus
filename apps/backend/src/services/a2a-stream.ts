@@ -116,7 +116,9 @@ async function* followTask(
     const read =
       event?.kind === "status"
         ? { ...seen, status: event.status }
-        : (event?.kind === "end" && event.task) || (await readTaskAfresh(task));
+        : event?.kind === "end" && event.task
+          ? event.task
+          : await readTaskAfresh(task);
     if (isTerminal(read)) {
       for (const artifact of read.artifacts) {
         yield artifactEvent(read, artifact, { append: false, lastChunk: true });

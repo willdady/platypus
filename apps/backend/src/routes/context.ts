@@ -105,6 +105,7 @@ context.post(
         .values({
           id: nanoid(),
           userId: user.id,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty id is stored as null, not ""
           workspaceId: data.workspaceId || null,
           content: data.content,
         })

@@ -317,7 +317,9 @@ const waitForTask = async (
     }
     if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
     const read =
-      (event?.kind === "end" && event.task) || (await readTaskAfresh(task));
+      event?.kind === "end" && event.task
+        ? event.task
+        : await readTaskAfresh(task);
     if (isTerminal(read)) return read;
   }
   if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
@@ -574,6 +576,7 @@ export const startA2aTurn = async (
 ): Promise<StartedTurn> => {
   const key = JSON.stringify([
     caller.token.id,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
     params.message?.contextId || null,
     params.message?.messageId ?? null,
   ]);

@@ -239,6 +239,7 @@ export const createSubAgentDelegate = (
   // drop guardrails for instruction-less sub-agents, breaking the
   // non-suppressible guarantee.
   const baseInstructions =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
     instructions ||
     `You are a specialized sub-agent named "${name}". Complete the task you are given thoroughly and accurately.`;
   const securityBlock = renderSecurityGuardrails(guardrails);
@@ -705,13 +706,15 @@ export const createDelegateTools = async <
       // Memoized so a delegate called twice in one turn resolves them once.
       let toolsPromise: Promise<LoadedSubAgentTools> | undefined;
       const loadTools = () =>
-        (toolsPromise ??= loadToolsFn(subAgent.id, subAgent.toolSetIds || []));
+        (toolsPromise ??= loadToolsFn(subAgent.id, subAgent.toolSetIds ?? []));
 
       delegates.push(
         createSubAgentDelegate({
           id: subAgent.id,
           name: subAgent.name,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
           description: subAgent.description || undefined,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
           instructions: subAgent.instructions || undefined,
           loadTools,
           plan,

@@ -97,7 +97,9 @@ export class S3Storage implements StorageBackend {
 
       // Get content type from response or metadata
       const contentType =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
         response.ContentType ||
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
         response.Metadata?.["content-type"] ||
         "application/octet-stream";
 

@@ -85,6 +85,12 @@ export function baseConfig(tsconfigRootDir) {
           { disallowTypeAnnotations: false },
         ],
 
+        // `||` falls back on every falsy value, so `""`, `0` and `false` are
+        // silently replaced. `??` falls back only on null/undefined. Where the
+        // falsy fallback is intended, keep `||` behind a scoped disable with a
+        // reason.
+        "@typescript-eslint/prefer-nullish-coalescing": "error",
+
         // A `switch` over a union with no `default` must name every member, so
         // adding a member surfaces each switch that forgot it. A `default` still
         // counts as exhaustive: the codebase uses it deliberately for "everything

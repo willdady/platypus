@@ -135,6 +135,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
             // to chat mode arrives here with it empty/undefined — `||` (not `??`)
             // also catches the empty-string case the form can produce. Without
             // this the compatible client would target an empty URL and fail.
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- see above
             baseURL: provider.baseUrl || "https://api.openai.com/v1",
             apiKey: provider.apiKey ?? undefined,
             headers: provider.headers ?? undefined,
