@@ -1,5 +1,6 @@
 import type {
   PlatypusPlugin,
+  PluginConfigContext,
   ToolGateCall,
   ToolGateContribution,
   ToolGateVerdict,
@@ -55,19 +56,23 @@ const openDecisionModel = (
   config: DecisionGateConfig,
   { apiKey }: DecisionGateCredentials,
 ): Experimental_DecisionModel => {
+  // Only `gateway` may leave `model` out; the schema refuses it elsewhere.
+  const model = config.model ?? DEFAULT_GATEWAY_MODEL;
   switch (config.provider) {
     case "gateway":
-      return createGateway({ apiKey }).decisionModel(
-        config.model ?? DEFAULT_GATEWAY_MODEL,
-      );
+      return createGateway({ apiKey }).decisionModel(model);
     case "anthropic":
-      return createAnthropic({ apiKey }).decisionModel(config.model!);
+      return createAnthropic({ apiKey }).decisionModel(model);
     case "openai":
-      return createOpenAI({ apiKey }).decisionModel(config.model!);
+      return createOpenAI({ apiKey }).decisionModel(model);
     case "google":
-      return createGoogleGenerativeAI({ apiKey }).decisionModel(config.model!);
+      return createGoogleGenerativeAI({ apiKey }).decisionModel(model);
   }
 };
+
+// One model per plugin block, opened on the first call: the block is fixed
+// for the life of the process, and a gate sits on every tool call.
+const models = new WeakMap<PluginConfigContext, Experimental_DecisionModel>();
 
 /** Ask `model` whether `call` is destructive, and map its answer to a Verdict. */
 export const judgeToolCall = async (
@@ -109,16 +114,18 @@ export const judgeToolCall = async (
 const decisionModelGate: ToolGateContribution = {
   id: "decision-model",
   name: "Decision model",
-  evaluate: (call, plugin, { signal }) =>
-    judgeToolCall(
-      openDecisionModel(
-        plugin.config as DecisionGateConfig,
+  evaluate: (call, plugin, { signal }) => {
+    const config = plugin.config as DecisionGateConfig;
+    let model = models.get(plugin);
+    if (!model) {
+      model = openDecisionModel(
+        config,
         plugin.credentials as DecisionGateCredentials,
-      ),
-      call,
-      plugin.config as DecisionGateConfig,
-      signal,
-    ),
+      );
+      models.set(plugin, model);
+    }
+    return judgeToolCall(model, call, config, signal);
+  },
 };
 
 export const plugin: PlatypusPlugin = {

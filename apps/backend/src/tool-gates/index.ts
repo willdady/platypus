@@ -132,11 +132,11 @@ type ApprovalRequest = {
 export const toolGateOptions = (
   scope: ToolGateScope | undefined,
   signal: AbortSignal,
-  gates: readonly ToolGateRegistration[] = getToolGates(),
 ): {
   toolApproval?: (request: ApprovalRequest) => Promise<ToolApprovalStatus>;
-} =>
-  gates.length === 0
+} => {
+  const gates = getToolGates();
+  return gates.length === 0
     ? {}
     : {
         toolApproval: async ({ toolCall, tools }) => {
@@ -180,3 +180,4 @@ export const toolGateOptions = (
             : { type: "denied", reason: decision.reason };
         },
       };
+};

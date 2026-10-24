@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { simulateReadableStream } from "ai";
+import { dynamicTool, simulateReadableStream } from "ai";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
 import { z } from "zod";
@@ -254,6 +254,58 @@ describe("a Tool gate's deny", () => {
 
     expect(outcome[0]?.status).toBe("failed");
     expect(outcome[0]?.error?.message).toMatch(/^no_progress:/);
+  });
+});
+
+describe("an MCP tool", () => {
+  // MCP tools enter a run as dynamic tools, under their namespaced name.
+  it("is gated like any other", async () => {
+    gate("no-wipe", () => ({ verdict: "deny" }));
+    let executed = false;
+    let index = 0;
+    const model = new MockLanguageModelV3({
+      doStream: () =>
+        Promise.resolve({
+          stream: simulateReadableStream({
+            chunks:
+              index++ === 0
+                ? step(
+                    [
+                      {
+                        type: "tool-call",
+                        toolCallId: "tc1",
+                        toolName: "files__wipe",
+                        input: "{}",
+                      },
+                    ],
+                    "tool-calls",
+                  )
+                : answerStep,
+          }),
+        }),
+    });
+    const { run } = startRecordedRun();
+
+    await driveOnce({
+      plan: {
+        model,
+        maxSteps: 4,
+        gateScope: SCOPE,
+        tools: {
+          files__wipe: dynamicTool({
+            inputSchema: z.object({}),
+            execute: () => {
+              executed = true;
+              return Promise.resolve("wiped");
+            },
+          }),
+        },
+      },
+      prompt: "go",
+      run,
+    });
+
+    expect(executed).toBe(false);
   });
 });
 

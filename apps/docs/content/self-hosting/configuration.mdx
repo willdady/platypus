@@ -412,16 +412,9 @@ the same reason.
 </Callout>
 
 **Asking a person is not available yet.** A call a gate wants approved is
-stopped, in Chats as well as in unattended runs, so `askThreshold` behaves as a
-second, lower `denyThreshold` for now. An unattended run that keeps retrying a
-stopped call is halted the way any run repeating the same call is.
-
-**Tools the Provider runs itself are not gated.** A Provider's built-in web
-search, for one, runs on the Provider's side and never reaches Platypus, so no
-gate sees it.
-
-Each gate adds its own wait to every tool call. Gates do not remember earlier
-answers, so the same call made twice is judged twice.
+stopped too, so `askThreshold` behaves as a second, lower `denyThreshold` for
+now. What gates can and cannot see, and how they combine, is in [Tool
+gates](/extending/tool-gates).
 
 ## Tool egress
 

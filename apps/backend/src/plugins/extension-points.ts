@@ -35,6 +35,31 @@ import { errorMessage } from "../utils/error-message.ts";
 // object.
 
 /**
+ * Refuses a contribution's static `timeoutMs` at boot when it is not a
+ * positive, finite number within `max` — with attribution, rather than clamped
+ * at call time, where an Operator would never see it.
+ */
+const assertTimeoutMs = (
+  timeoutMs: unknown,
+  max: number,
+  what: string,
+): void => {
+  if (
+    timeoutMs !== undefined &&
+    (typeof timeoutMs !== "number" ||
+      !Number.isFinite(timeoutMs) ||
+      timeoutMs <= 0 ||
+      timeoutMs > max)
+  ) {
+    throw new Error(
+      `${what} declares timeoutMs ${JSON.stringify(
+        timeoutMs,
+      )}, which must be a positive number no greater than ${max}.`,
+    );
+  }
+};
+
+/**
  * The Tool-set point (ADR-0013). Registers core's *composed* registration — core
  * owns everything between the contribution's factory and the model — rather than
  * the raw `{ name, category, description, tools }`.
@@ -211,24 +236,11 @@ export const webBackendPoint = (
       );
     }
 
-    // `timeoutMs` is static on the contribution, so an over-ceiling value is
-    // knowable now — refused with attribution rather than silently clamped at
-    // turn time, where an Operator would never see it.
-    if (contribution.timeoutMs !== undefined) {
-      const { timeoutMs } = contribution;
-      if (
-        typeof timeoutMs !== "number" ||
-        !Number.isFinite(timeoutMs) ||
-        timeoutMs <= 0 ||
-        timeoutMs > MAX_WEB_TIMEOUT_MS
-      ) {
-        throw new Error(
-          `Plugin "${pluginName}": web backend "${id}" declares timeoutMs ${String(
-            timeoutMs,
-          )}, which must be a positive number no greater than ${MAX_WEB_TIMEOUT_MS}.`,
-        );
-      }
-    }
+    assertTimeoutMs(
+      contribution.timeoutMs,
+      MAX_WEB_TIMEOUT_MS,
+      `Plugin "${pluginName}": web backend "${id}"`,
+    );
 
     // Core wraps the executors here, binding the same shared plugin config that
     // every other contribution factory receives. What lands in the registry is
@@ -261,22 +273,11 @@ export const toolGatePoint = (
         `Plugin "${pluginName}": tool gate "${rawId}" must provide an "evaluate" function.`,
       );
     }
-    // Static on the contribution, so refused here with attribution rather
-    // than clamped at call time — the Web-search backend's rule.
-    const { timeoutMs } = contribution;
-    if (
-      timeoutMs !== undefined &&
-      (typeof timeoutMs !== "number" ||
-        !Number.isFinite(timeoutMs) ||
-        timeoutMs <= 0 ||
-        timeoutMs > MAX_TOOL_GATE_TIMEOUT_MS)
-    ) {
-      throw new Error(
-        `Plugin "${pluginName}": tool gate "${rawId}" declares timeoutMs ${JSON.stringify(
-          timeoutMs,
-        )}, which must be a positive number no greater than ${MAX_TOOL_GATE_TIMEOUT_MS}.`,
-      );
-    }
+    assertTimeoutMs(
+      contribution.timeoutMs,
+      MAX_TOOL_GATE_TIMEOUT_MS,
+      `Plugin "${pluginName}": tool gate "${rawId}"`,
+    );
   },
   prepare: (raw, { id, plugin }) => {
     const contribution = raw as unknown as ToolGateContribution;

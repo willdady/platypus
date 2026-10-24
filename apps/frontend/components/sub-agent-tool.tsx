@@ -15,6 +15,7 @@ import {
 import { Shimmer } from "./ai-elements/shimmer";
 import { Tool, ToolContent, ToolHeader } from "./ai-elements/tool";
 import { toolCallDurationMs } from "@/lib/tool-duration";
+import { toolErrorText } from "@/lib/message-parts";
 import { useMemo } from "react";
 
 /**
@@ -166,9 +167,7 @@ export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
   const input = toolPart.input as { task?: string };
   const output = toolPart.output as SubAgentActivity | string | null;
   const denied = toolPart.state === "output-denied";
-  // A Tool gate's denial (ADR-0033) carries its reason on the approval.
-  const errorText =
-    toolPart.errorText ?? (denied ? toolPart.approval?.reason : undefined);
+  const errorText = toolErrorText(toolPart);
   const subAgentName = subAgentNameOf(toolPart);
   const isRunning =
     toolPart.state === "input-streaming" ||

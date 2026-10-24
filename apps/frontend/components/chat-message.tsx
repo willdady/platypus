@@ -47,6 +47,7 @@ import {
   isImageAttachment,
   messageSandboxUploads,
   messageText,
+  toolErrorText,
 } from "@/lib/message-parts";
 import {
   BotIcon,
@@ -215,19 +216,6 @@ function toolCallName(part: MessageToolPart | DynamicToolUIPart): string {
   if (isDynamicToolPart(part)) return part.toolName;
   const web = normalizedWebTool(part);
   return web ? webToolTitle(web.kind) : humanizeToolType(part.type);
-}
-
-/**
- * What a call's card shows as its error: the tool's own, or the reason a Tool
- * gate gave for denying it (ADR-0033), which names the gate.
- */
-function toolErrorText(
-  part: MessageToolPart | DynamicToolUIPart,
-): string | undefined {
-  return (
-    part.errorText ??
-    (part.state === "output-denied" ? part.approval?.reason : undefined)
-  );
 }
 
 /** Whether a call's own row shows it as failed. */

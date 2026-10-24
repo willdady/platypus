@@ -64,3 +64,18 @@ export function messageSandboxUploads(
     .filter((part) => part.type === "data-sandbox-upload")
     .map((part) => part.data as SandboxUpload);
 }
+
+/**
+ * What a tool call's card shows as its error: the tool's own, or the reason a
+ * Tool gate gave for denying it, which names the gate.
+ */
+export function toolErrorText(part: {
+  state: string;
+  errorText?: string;
+  approval?: { reason?: string };
+}): string | undefined {
+  return (
+    part.errorText ??
+    (part.state === "output-denied" ? part.approval?.reason : undefined)
+  );
+}
