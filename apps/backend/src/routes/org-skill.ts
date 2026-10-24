@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
-import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
+import {
+  skillCreateSchema,
+  skillGithubInstallRequestSchema,
+  skillGithubPreviewRequestSchema,
+  skillUpdateSchema,
+} from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import {
@@ -17,7 +22,16 @@ import {
   SKILL_FILE_CONTENT_TYPE,
   skillFilesForApi,
 } from "../services/skill-bundle.ts";
+import {
+  installGithubSkills,
+  previewGithubSkills,
+} from "../services/skill-github.ts";
+import {
+  getSkillImportAccess,
+  setSkillImportAccess,
+} from "../services/skill-import-gate.ts";
 import { attachment, skillZipBodyLimit } from "./skill-download.ts";
+import { mountGateAccess } from "./org-gate-access.ts";
 import type { Variables } from "../server.ts";
 
 // Org-scoped Skills are Shared resources (ADR-0007): a single source of truth
@@ -75,6 +89,36 @@ orgSkill.post(
     );
     return c.json(row, 201);
   },
+);
+
+/** Every Skill a GitHub source holds, at the commit its ref resolves to (admin only) */
+orgSkill.post(
+  "/github/preview",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  validate("json", skillGithubPreviewRequestSchema),
+  async (c) =>
+    c.json(
+      await previewGithubSkills(
+        { kind: "organization", orgId: orgScopeOf(c).orgId },
+        c.req.valid("json").source,
+      ),
+    ),
+);
+
+/** Install previewed Skills as Shared Skills, each on its own (admin only) */
+orgSkill.post(
+  "/github/install",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  validate("json", skillGithubInstallRequestSchema),
+  async (c) =>
+    c.json(
+      await installGithubSkills(
+        { kind: "organization", orgId: orgScopeOf(c).orgId },
+        c.req.valid("json"),
+      ),
+    ),
 );
 
 /** Replace an org-scoped Skill's whole bundle from a zip (admin only) */
@@ -167,4 +211,11 @@ orgSkill.delete(
   },
 );
 
-export { orgSkill };
+/**
+ * The Organization's Skill import gate (ADR-0037): which Workspaces may import
+ * Skill bundles. Org Admin only.
+ */
+const orgSkillImport = new Hono<{ Variables: Variables }>();
+mountGateAccess(orgSkillImport, getSkillImportAccess, setSkillImportAccess);
+
+export { orgSkill, orgSkillImport };

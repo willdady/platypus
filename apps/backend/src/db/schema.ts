@@ -71,6 +71,10 @@ export const organization = pgTable("organization", (t) => ({
   // Which Workspaces may have A2A endpoints (ADR-0032), in the same shape as
   // the Inbound Trigger gate and separate from it. Checked on every call.
   a2aGate: t.text("a2a_gate").notNull().default("off"),
+  // Which Workspaces may import Skill bundles — zip import, Replace bundle and
+  // GitHub install (ADR-0037). "all" by default, so zip import keeps working;
+  // Organization-scope imports are never gated.
+  skillImportGate: t.text("skill_import_gate").notNull().default("all"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));
@@ -199,6 +203,12 @@ export const workspace = pgTable(
     // Whether this Workspace's A2A endpoints are reachable while the
     // Organization's A2A gate is "selected" (ADR-0032). Org Admin-only.
     a2aAllowed: t.boolean("a2a_allowed").notNull().default(false),
+    // Whether this Workspace may import Skill bundles while the
+    // Organization's Skill import gate is "selected" (ADR-0037). Org Admin-only.
+    skillImportAllowed: t
+      .boolean("skill_import_allowed")
+      .notNull()
+      .default(false),
 
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
@@ -840,6 +850,18 @@ export const skill = pgTable(
     // `scripts/`, a text file starting with `#!`, or a binary file. Decided by
     // content at import, never by extension.
     needsSandbox: t.boolean("needs_sandbox").notNull().default(false),
+    // Where a Skill installed from GitHub came from (ADR-0037), so it can be
+    // checked for updates: `sourceType` "github", `source` "<owner>/<repo>",
+    // `ref` as entered (null for the default branch), `skillPath` ("" for the
+    // repo root), the `commitSha` installed and the `bundleHash` it had then.
+    // All null for a Skill made by hand or from a zip; Replace bundle clears
+    // them, edits through the form keep them.
+    sourceType: t.text("source_type"),
+    source: t.text("source"),
+    ref: t.text("ref"),
+    skillPath: t.text("skill_path"),
+    commitSha: t.text("commit_sha"),
+    installedHash: t.text("installed_hash"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

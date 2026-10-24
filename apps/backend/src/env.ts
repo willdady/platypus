@@ -90,6 +90,8 @@ const envSchema = z
     STORAGE_S3_ENDPOINT: z.url().optional(),
     STORAGE_S3_ACCESS_KEY_ID: z.string().optional(),
     STORAGE_S3_SECRET_ACCESS_KEY: z.string().optional(),
+    // Sent to api.github.com only, when installing Skills (ADR-0037).
+    GITHUB_TOKEN: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_BACKEND !== "s3") return;
