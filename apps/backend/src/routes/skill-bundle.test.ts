@@ -26,6 +26,7 @@ beforeEach(() => {
     deletePrefix: vi.fn(),
   });
   seedDb({
+    organization: [{ id: orgId, name: "Acme", skillImportGate: "all" }],
     organization_member: [
       { id: "m1", userId: "user-1", organizationId: orgId, role: "admin" },
     ],

@@ -197,10 +197,12 @@ const NO_SOURCE = {
  * taken in the scope surfaces as a unique violation (→409, ADR-0010) with the
  * stored files removed again.
  */
-export const importSkillBundle = (
+export async function importSkillBundle(
   scope: SkillScope,
   zip: Uint8Array,
-): Promise<SkillRow> => createSkillFromBundle(scope, parseSkillZip(zip));
+): Promise<SkillRow> {
+  return createSkillFromBundle(scope, parseSkillZip(zip));
+}
 
 /**
  * Creates a new Skill from a validated bundle, all-or-nothing, recording

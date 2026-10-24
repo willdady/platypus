@@ -96,7 +96,6 @@ export function orgRoutes(orgId: string) {
       createMcp: `${settings}/mcp/create`,
       mcpDetail: (mcpId: string) => `${settings}/mcp/${mcpId}`,
       skills: `${settings}/skills`,
-      installSkills: `${settings}/skills/install`,
       skillDetail: (skillId: string) => `${settings}/skills/${skillId}`,
       agents: `${settings}/agents`,
       agentDetail: (agentId: string) => `${settings}/agents/${agentId}`,
@@ -131,7 +130,6 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
     skills: {
       root: `${root}/skills`,
       create: `${root}/skills/create`,
-      install: `${root}/skills/install`,
     },
     boards: {
       root: `${root}/boards`,
