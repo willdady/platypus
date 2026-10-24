@@ -1429,7 +1429,7 @@ describe("loadPlugins — plugin logger injection", () => {
           category: "Test",
           tools: (_ctx, plugin) => {
             seen.toolSet = plugin;
-            plugin?.logger?.info({ point: "toolSet" }, "resolving tools");
+            plugin.logger.info({ point: "toolSet" }, "resolving tools");
             return {};
           },
         },
@@ -1442,7 +1442,7 @@ describe("loadPlugins — plugin logger injection", () => {
           credentialsSchema: z.object({}),
           create: (_config, _credentials, plugin) => {
             seen.sandbox = plugin;
-            plugin?.logger?.info({ point: "sandbox" }, "creating adapter");
+            plugin.logger.info({ point: "sandbox" }, "creating adapter");
             return {} as unknown as SandboxBackend;
           },
         },
@@ -1453,7 +1453,7 @@ describe("loadPlugins — plugin logger injection", () => {
           name: "Web",
           createExecutors: (_ctx, plugin) => {
             seen.web = plugin;
-            plugin?.logger?.info({ point: "web" }, "building executors");
+            plugin.logger.info({ point: "web" }, "building executors");
             return { web_search: () => ({ query: "q", results: [] }) };
           },
         },

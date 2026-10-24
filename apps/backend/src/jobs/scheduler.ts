@@ -86,6 +86,7 @@ export function scheduleAligned(
         } catch (error) {
           logger.error({ error, job: name }, "Scheduled job failed");
         }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set by the returned stop callback during the await, which TS narrowing does not track
         if (!stopped) scheduleNext();
       })();
     }, delay);

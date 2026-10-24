@@ -113,7 +113,7 @@ export const applyBlueprintsToWorkspace = async (
     if (!bp) continue;
     for (const field of TIER2_FIELDS) {
       const value = bp[field];
-      if (value !== null && value !== undefined) {
+      if (value !== null) {
         merged[field] = value;
       }
     }

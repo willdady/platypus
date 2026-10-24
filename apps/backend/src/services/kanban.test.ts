@@ -846,7 +846,7 @@ describe("kanban module", () => {
     const entries = () =>
       db.values.mock.calls
         .map((call) => call[0] as Record<string, unknown>)
-        .filter((value) => value && "kind" in value);
+        .filter((value) => "kind" in value);
 
     it("records one entry naming every field that moved, not one per field", async () => {
       db.limit

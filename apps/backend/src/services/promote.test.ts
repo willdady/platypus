@@ -40,13 +40,11 @@ describe("promoteScoped module", () => {
     });
 
     expect(outcome.ok).toBe(true);
-    if (outcome.ok) {
-      expect(outcome.row).toEqual({
-        id: "s1",
-        organizationId: "org-1",
-        workspaceId: null,
-      });
-    }
+    expect(outcome.row).toEqual({
+      id: "s1",
+      organizationId: "org-1",
+      workspaceId: null,
+    });
     expect(mockDb.transaction).toHaveBeenCalledTimes(1);
     expect(mockDb.set).toHaveBeenCalledWith({
       organizationId: "org-1",

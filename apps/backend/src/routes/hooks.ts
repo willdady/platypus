@@ -125,8 +125,7 @@ const capBody: MiddlewareHandler = (c, next) =>
   })(c, next);
 
 hooks.post("/triggers/:triggerId", capBody, async (c) => {
-  // Always present: the path names it. `capBody` widens the context type.
-  const triggerId = c.req.param("triggerId") ?? "";
+  const triggerId = c.req.param("triggerId");
   try {
     return await fire(c, triggerId);
   } catch (error) {

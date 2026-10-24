@@ -491,6 +491,7 @@ export const openToolSession = async (
       return {
         kind: "tools",
         tools: built,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
         ...(factoryFailed
           ? {
               unloaded: {

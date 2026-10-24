@@ -165,10 +165,10 @@ describe("composeWebBackend — tool construction", () => {
       read_url: () => ({ content: "", url: "https://example.com/" }),
     });
 
-    expect(tools.web_search?.metadata).toEqual({
+    expect(tools.web_search.metadata).toEqual({
       [WEB_BACKEND_TOOL_MARKER]: true,
     });
-    expect(tools.read_url?.metadata).toEqual({
+    expect(tools.read_url.metadata).toEqual({
       [WEB_BACKEND_TOOL_MARKER]: true,
     });
   });
@@ -1220,7 +1220,7 @@ describe("the closer a backend registers", () => {
         { web_search: () => ({ query: "q", results: [] }) },
         {
           createExecutors: (ctx) => {
-            ctx.registerCloser?.(close);
+            ctx.registerCloser(close);
             return { web_search: () => ({ query: "q", results: [] }) };
           },
         },
@@ -1245,7 +1245,7 @@ describe("the closer a backend registers", () => {
         {},
         {
           createExecutors: (ctx) => {
-            ctx.registerCloser?.(() => {
+            ctx.registerCloser(() => {
               throw new Error("pool already gone");
             });
             return { web_search: () => ({ query: "q", results: [] }) };

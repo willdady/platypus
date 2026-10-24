@@ -374,8 +374,7 @@ const capBody: MiddlewareHandler = (c, next) =>
  */
 a2a.on("POST", ["/:endpointId", "/:endpointId/"], capBody, (c) => {
   const log: A2aCallLogEntry = {
-    // Always present: the path names it. `capBody` widens the context type.
-    endpointId: c.req.param("endpointId") ?? "",
+    endpointId: c.req.param("endpointId"),
     outcome: "rejected",
   };
   return withCallLog(log, () => answerRpc(c, log));
@@ -421,7 +420,7 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
   // Aborted when the client hangs up: on the request, or by canceling the
   // stream it was answered with.
   const hangUp = new AbortController();
-  c.req.raw.signal?.addEventListener("abort", () => hangUp.abort(), {
+  c.req.raw.signal.addEventListener("abort", () => hangUp.abort(), {
     once: true,
   });
   const transport = new JsonRpcTransportHandler(

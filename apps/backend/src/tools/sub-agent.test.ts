@@ -232,7 +232,10 @@ const streamArgs = (call = 0) =>
 const systemOf = (args: ReturnType<typeof streamArgs>): string => {
   const instructions = args.instructions;
   if (instructions === undefined) return "";
-  const message = Array.isArray(instructions) ? instructions[0] : instructions;
+  // `at(0)`: may be empty, which `[0]` hides under the test tsconfig.
+  const message = Array.isArray(instructions)
+    ? instructions.at(0)
+    : instructions;
   return message?.content ?? "";
 };
 

@@ -21,7 +21,7 @@ export const createSandboxBackend = (
     );
   }
 
-  const configResult = registration.configSchema.safeParse(row.config ?? {});
+  const configResult = registration.configSchema.safeParse(row.config);
   if (!configResult.success) {
     throw new Error(
       `Sandbox config failed adapter validation: ${configResult.error.message}`,
@@ -29,7 +29,7 @@ export const createSandboxBackend = (
   }
 
   const credentialsResult = registration.credentialsSchema.safeParse(
-    row.credentials ?? {},
+    row.credentials,
   );
   if (!credentialsResult.success) {
     throw new Error(

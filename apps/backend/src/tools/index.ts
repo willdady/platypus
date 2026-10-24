@@ -573,9 +573,7 @@ registerToolSet(
           return {};
         }
 
-        const configResult = registration.configSchema.safeParse(
-          row.config ?? {},
-        );
+        const configResult = registration.configSchema.safeParse(row.config);
         if (!configResult.success) {
           logger.warn(
             {
@@ -590,7 +588,7 @@ registerToolSet(
         }
 
         const credentialsResult = registration.credentialsSchema.safeParse(
-          row.credentials ?? {},
+          row.credentials,
         );
         if (!credentialsResult.success) {
           logger.warn(
@@ -618,8 +616,8 @@ registerToolSet(
         // createSandboxTools (workspace wins), giving the full precedence order
         // adminEnv ▸ userEnv ▸ input.env.
         const workspaceEnv = {
-          ...(row.userEnv ?? {}),
-          ...(row.adminEnv ?? {}),
+          ...row.userEnv,
+          ...row.adminEnv,
         };
         return createSandboxTools(
           backend,

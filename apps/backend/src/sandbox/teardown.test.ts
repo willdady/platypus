@@ -148,19 +148,6 @@ describe("destroySandboxRow", () => {
     expect(destroy).not.toHaveBeenCalled();
   });
 
-  it("validates a null config and credentials as empty objects", async () => {
-    registerBackend({
-      configSchema: z.object({}).strict(),
-      credentialsSchema: z.object({}).strict(),
-    });
-
-    await destroySandboxRow(
-      makeRow({ config: null as never, credentials: null as never }),
-    );
-
-    expect(create).toHaveBeenCalledWith({}, {});
-  });
-
   it("propagates the adapter's destroy() rejection", async () => {
     registerBackend();
     destroy.mockRejectedValueOnce(new Error("API returned 500"));
@@ -220,23 +207,6 @@ describe("destroyWorkspaceSandboxes", () => {
 
     expect(mockDb.values).toHaveBeenCalledWith(
       expect.objectContaining({ error: "socket hang up" }),
-    );
-  });
-
-  it("records an empty config when the row has none", async () => {
-    registerBackend({
-      configSchema: z.object({}).strict(),
-      credentialsSchema: z.object({}).strict(),
-    });
-    destroy.mockRejectedValueOnce(new Error("nope"));
-    mockDb.where.mockResolvedValueOnce([
-      makeRow({ config: null as never, credentials: null as never }),
-    ]);
-
-    await destroyWorkspaceSandboxes(workspaceId);
-
-    expect(mockDb.values).toHaveBeenCalledWith(
-      expect.objectContaining({ config: {} }),
     );
   });
 
