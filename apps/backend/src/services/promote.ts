@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { attachment as attachmentTable } from "../db/schema.ts";
-import { db } from "../index.ts";
+import type { db } from "../index.ts";
 import { NotFoundError } from "../errors.ts";
 import {
   tableOf,

@@ -1,8 +1,8 @@
 import { openProvider, type OpenedProvider } from "./provider.ts";
 import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
+import type { agent as agentTable } from "../db/schema.ts";
 import {
-  agent as agentTable,
   context as contextTable,
   mcp as mcpTable,
   organization as organizationTable,

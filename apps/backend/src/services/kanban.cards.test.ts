@@ -5,7 +5,7 @@ vi.mock("./event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
 }));
 
-import { db } from "../index.ts";
+import type { db } from "../index.ts";
 import { NotFoundError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import { bulkUpdateCards, deleteCards } from "./kanban-card.ts";

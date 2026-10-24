@@ -74,6 +74,17 @@ export function baseConfig(tsconfigRootDir) {
         // the major upgrade itself is not also a migration.
         "@typescript-eslint/no-deprecated": "error",
 
+        // Node's strip-only TS mode drops an `import type` statement entirely;
+        // any other import loads its module at runtime even when every name in
+        // it is used only as a type. Marking type-only imports says which is
+        // which (auto-fixable). `typeof import("…")` annotations stay allowed:
+        // they are Vitest's idiom for typing `importOriginal` /
+        // `vi.importActual` in mock factories.
+        "@typescript-eslint/consistent-type-imports": [
+          "error",
+          { disallowTypeAnnotations: false },
+        ],
+
         // A `switch` over a union with no `default` must name every member, so
         // adding a member surfaces each switch that forgot it. A `default` still
         // counts as exhaustive: the codebase uses it deliberately for "everything

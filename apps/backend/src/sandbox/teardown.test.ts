@@ -12,10 +12,8 @@ import { clearSandboxBackends, registerSandboxBackend } from "./index.ts";
 import type { SandboxBackend } from "./types.ts";
 import { setLoadedPlugins } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
-import {
-  sandbox as sandboxTable,
-  sandboxTeardownFailure as sandboxTeardownFailureTable,
-} from "../db/schema.ts";
+import type { sandbox as sandboxTable } from "../db/schema.ts";
+import { sandboxTeardownFailure as sandboxTeardownFailureTable } from "../db/schema.ts";
 
 type SandboxRow = typeof sandboxTable.$inferSelect;
 

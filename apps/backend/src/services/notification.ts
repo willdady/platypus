@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { db } from "../index.ts";
+import type { db } from "../index.ts";
 import {
   agent as agentTable,
   notification as notificationTable,

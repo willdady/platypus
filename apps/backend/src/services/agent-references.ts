@@ -1,4 +1,4 @@
-import { db } from "../index.ts";
+import type { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
 import { sql } from "drizzle-orm";
 

@@ -3,7 +3,7 @@ import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { skill as skillTable, agent as agentTable } from "../db/schema.ts";
-import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
+import type { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import type { ScopeContext } from "../scope.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 import { skillStorageKeyPrefix } from "../storage/keys.ts";
