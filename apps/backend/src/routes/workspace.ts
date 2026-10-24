@@ -6,7 +6,6 @@ import {
   workspace as workspaceTable,
   organizationMember,
   attachment as attachmentTable,
-  sandbox as sandboxTable,
 } from "../db/schema.ts";
 import {
   workspaceCreateSchema,
@@ -25,6 +24,7 @@ import {
 } from "../middleware/authorization.ts";
 import { listOrgScopedIds } from "../services/scoped-resource.ts";
 import { createProvider } from "../services/provider-write.ts";
+import { createSandbox } from "../services/sandbox-write.ts";
 import { sandboxCreateError } from "../sandbox/validate.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import type { Variables } from "../server.ts";
@@ -72,6 +72,7 @@ workspace.post(
         "Org-scoped resource not found in this organization",
       );
     }
+    // createSandbox checks again, but only once the Workspace row is written.
     if (sandbox) {
       const sandboxError = sandboxCreateError(sandbox);
       if (sandboxError) return c.json({ error: sandboxError }, 400);
@@ -128,9 +129,7 @@ workspace.post(
         );
       }
       if (sandbox) {
-        await tx
-          .insert(sandboxTable)
-          .values({ id: nanoid(), ...sandbox, workspaceId: row.id });
+        await createSandbox(row.id, sandbox, tx);
       }
       return row;
     });

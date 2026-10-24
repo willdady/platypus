@@ -68,7 +68,6 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // existing-row check
 
       mockDb.returning.mockResolvedValueOnce([
         {
@@ -125,7 +124,9 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "existing-sbx" }]);
+      // The unique index on workspaceId rejects the insert — also what a
+      // concurrent duplicate POST that passed every check hits.
+      mockDb.returning.mockRejectedValueOnce({ code: "23505" });
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -134,6 +135,8 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(409);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.error).toBe("Sandbox already configured for this workspace");
     });
   });
 
@@ -261,7 +264,7 @@ describe("Sandbox Routes", () => {
       expect(body.name).toBe("Renamed");
     });
 
-    it("returns 500 when changing backend and the previous adapter's destroy() fails", async () => {
+    it("returns 502 when changing backend and the previous adapter's destroy() fails", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
@@ -289,9 +292,10 @@ describe("Sandbox Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(502);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/force=true/);
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
 
     it("skips destroy() and switches backend when ?force=true", async () => {
@@ -524,14 +528,14 @@ describe("Sandbox Routes", () => {
       warn.mockRestore();
     });
 
-    it("returns 500 when destroy() fails and preserves the row", async () => {
+    it("returns 502 when destroy() fails and preserves the row", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
       // Existence check returns a row whose backend is not registered →
-      // destroySandboxRow throws → 500.
+      // destroySandboxRow throws → 502.
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -543,10 +547,11 @@ describe("Sandbox Routes", () => {
       ]);
 
       const res = await app.request(baseUrl, { method: "DELETE" });
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(502);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/no-such-backend/);
       expect(body.error).toMatch(/force=true/);
+      expect(mockDb.delete).not.toHaveBeenCalled();
     });
 
     it("returns 404 when no sandbox is configured", async () => {

@@ -350,7 +350,7 @@ describe("SandboxSettings save", () => {
   it("offers a forced switch when tearing down the previous sandbox fails", async () => {
     const fetchMock = stubSaveSequence(
       {
-        status: 500,
+        status: 502,
         body: { error: "Teardown failed, retry with force=true" },
       },
       { status: 200, body: {} },
@@ -396,7 +396,7 @@ describe("SandboxSettings delete", () => {
   it("offers a forced delete when destroying the sandbox fails", async () => {
     const fetchMock = stubSaveSequence(
       {
-        status: 500,
+        status: 502,
         body: { error: "Destroy failed, retry with force=true" },
       },
       { status: 200, body: {} },

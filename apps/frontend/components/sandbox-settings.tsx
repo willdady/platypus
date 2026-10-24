@@ -140,7 +140,7 @@ const DELETED_MESSAGE = "Sandbox deleted";
 function isForceRetry(outcome: WriteOutcome<unknown>): boolean {
   return (
     outcome.outcome === "error" &&
-    outcome.httpStatus === 500 &&
+    outcome.httpStatus === 502 &&
     outcome.message.includes("force=true")
   );
 }
