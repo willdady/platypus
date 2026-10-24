@@ -10,10 +10,11 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
-import type {
-  SkillGithubCandidate,
-  SkillGithubInstallResult,
-  SkillGithubPreview,
+import {
+  SKILL_GITHUB_INSTALL_MAX,
+  type SkillGithubCandidate,
+  type SkillGithubInstallResult,
+  type SkillGithubPreview,
 } from "@platypus/schemas";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -43,10 +44,13 @@ function CandidateRow({
   skill,
   checked,
   onCheckedChange,
+  full,
 }: {
   skill: SkillGithubCandidate;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  /** The most one install takes are already picked. */
+  full: boolean;
 }) {
   const reason = unselectableReason(skill);
   const id = `skill-${skill.skillPath || "root"}`;
@@ -59,7 +63,7 @@ function CandidateRow({
           type="checkbox"
           className="mt-1 size-4"
           checked={checked}
-          disabled={reason !== null}
+          disabled={reason !== null || (full && !checked)}
           onChange={(event) => onCheckedChange(event.target.checked)}
         />
         <label htmlFor={id} className="min-w-0 flex-1">
@@ -243,6 +247,8 @@ export function SkillGithubInstall({
   const pickable = preview?.skills.filter(
     (skill) => unselectableReason(skill) === null,
   );
+  // One install takes at most this many.
+  const selectAll = pickable?.slice(0, SKILL_GITHUB_INSTALL_MAX) ?? [];
   const needsSandbox = preview?.skills.some(
     (skill) => selected.has(skill.skillPath) && skill.needsSandbox,
   );
@@ -273,7 +279,7 @@ export function SkillGithubInstall({
         </Field>
         <div>
           <Button type="submit" disabled={busy || source.trim() === ""}>
-            {busy && !preview ? "Looking..." : "Find skills"}
+            {busy && !preview ? "Finding..." : "Find skills"}
           </Button>
         </div>
       </form>
@@ -302,15 +308,17 @@ export function SkillGithubInstall({
                     size="sm"
                     onClick={() =>
                       setSelected(
-                        selected.size === pickable.length
+                        selected.size === selectAll.length
                           ? new Set()
-                          : new Set(pickable.map((skill) => skill.skillPath)),
+                          : new Set(selectAll.map((skill) => skill.skillPath)),
                       )
                     }
                   >
-                    {selected.size === pickable.length
+                    {selected.size === selectAll.length
                       ? "Clear selection"
-                      : "Select all"}
+                      : pickable.length > SKILL_GITHUB_INSTALL_MAX
+                        ? `Select first ${SKILL_GITHUB_INSTALL_MAX}`
+                        : "Select all"}
                   </Button>
                 </div>
               )}
@@ -320,6 +328,7 @@ export function SkillGithubInstall({
                     key={skill.skillPath}
                     skill={skill}
                     checked={selected.has(skill.skillPath)}
+                    full={selected.size >= SKILL_GITHUB_INSTALL_MAX}
                     onCheckedChange={(checked) => {
                       const next = new Set(selected);
                       if (checked) next.add(skill.skillPath);

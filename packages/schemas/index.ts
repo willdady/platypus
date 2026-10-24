@@ -837,20 +837,19 @@ export type SkillGithubPreview = z.infer<typeof skillGithubPreviewSchema>;
  * An install: the Skills to take from a preview, fetched at the commit the
  * preview resolved, never the ref, so they are exactly what was reviewed.
  */
-export const skillGithubInstallRequestSchema = z.object({
-  owner: githubOwnerSchema,
-  repo: githubRepoSchema,
-  ref: githubRefSchema.nullable(),
-  commitSha: z.string().regex(/^[0-9a-f]{40}$/, "Not a commit SHA"),
-  skillPaths: z
-    .array(githubPathSchema)
-    .min(1)
-    .max(SKILL_GITHUB_INSTALL_MAX)
-    .refine(
-      (paths) => new Set(paths).size === paths.length,
-      "Skill paths must be unique",
-    ),
-});
+export const skillGithubInstallRequestSchema = githubSkillSourceSchema
+  .omit({ path: true })
+  .extend({
+    commitSha: z.string().regex(/^[0-9a-f]{40}$/, "Not a commit SHA"),
+    skillPaths: z
+      .array(githubPathSchema)
+      .min(1)
+      .max(SKILL_GITHUB_INSTALL_MAX)
+      .refine(
+        (paths) => new Set(paths).size === paths.length,
+        "Skill paths must be unique",
+      ),
+  });
 
 export type SkillGithubInstallRequest = z.infer<
   typeof skillGithubInstallRequestSchema

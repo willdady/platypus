@@ -174,7 +174,7 @@ const storeFiles = async (
 };
 
 /** Where a Skill installed from GitHub came from (ADR-0037). */
-export type SkillGithubSource = {
+export type GithubInstallOrigin = {
   source: string;
   ref: string | null;
   skillPath: string;
@@ -211,7 +211,7 @@ export async function importSkillBundle(
 export async function createSkillFromBundle(
   scope: SkillScope,
   bundle: ParsedSkillBundle,
-  github?: SkillGithubSource,
+  github?: GithubInstallOrigin,
 ): Promise<SkillRow> {
   const hash = bundleHash(bundle);
   const id = nanoid();

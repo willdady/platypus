@@ -55,10 +55,13 @@ const PREVIEW: SkillGithubPreview = {
   ],
 };
 
+/** What a test changes about the preview the fake GitHub answers. */
+let PREVIEW_OVERRIDE: Partial<SkillGithubPreview>;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   resetListHarness();
+  PREVIEW_OVERRIDE = {};
   mockScopedSWR(
     {
       "/workspaces/ws1": { data: { id: "ws1", skillImportAllowed: false } },
@@ -70,7 +73,7 @@ beforeEach(() => {
     Promise.resolve(
       Response.json(
         url.endsWith("/preview")
-          ? PREVIEW
+          ? { ...PREVIEW, ...PREVIEW_OVERRIDE }
           : {
               results: [
                 {
@@ -146,6 +149,18 @@ describe("SkillGithubInstall", () => {
         "/skills/s1",
       ),
     );
+  });
+
+  it("picks no more Skills than one install takes", async () => {
+    PREVIEW_OVERRIDE.skills = Array.from({ length: 51 }, (_, i) =>
+      candidate(`skills/s${i}`),
+    );
+    await renderInstall();
+    fireEvent.click(screen.getByRole("button", { name: "Select first 50" }));
+    expect(
+      screen.getByRole("button", { name: "Install 50 skills" }),
+    ).toBeEnabled();
+    expect(screen.getAllByRole("checkbox")[50]).toBeDisabled();
   });
 
   it("explains instead when the Organization's gate shuts this Workspace out", () => {
