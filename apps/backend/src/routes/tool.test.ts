@@ -52,6 +52,7 @@ describe("Tool Routes", () => {
             toolSetIds: ["math"],
             sandboxBackendIds: [],
             webBackendIds: [],
+            toolGateIds: [],
           },
         ],
         { toolSets: new Map([["math", "@platypus/tools-basic"]]) },

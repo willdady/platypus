@@ -17,6 +17,15 @@ import { workspaceScope, orgScope, type WorkspaceScope } from "../scope.ts";
 import type { RunStatus } from "./types.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
+/** A delegate's Tool gate scope (ADR-0033): its own session's, unattended. */
+const GATE_SCOPE = {
+  orgId: "org-1",
+  workspaceId: "ws-1",
+  attended: false,
+  toolSetIds: new Map<string, string>(),
+  readOnlyHints: new Map<string, "read-only" | "writes">(),
+};
+
 /**
  * A parent turn and the delegate tool it advertises, composed the way
  * `prepareChatTurn` composes them.
@@ -140,6 +149,7 @@ describe("a delegated run inside a parent run", () => {
             },
           },
           readOnlyToolNames: new Set(),
+          gateScope: GATE_SCOPE,
         }),
       parentRun: { runId: "parent", scope: parentScope },
     });
@@ -205,7 +215,11 @@ describe("a delegated run inside a parent run", () => {
         maxSteps: DEFAULT_AGENT_MAX_STEPS,
       },
       loadTools: () =>
-        Promise.resolve({ tools: {}, readOnlyToolNames: new Set() }),
+        Promise.resolve({
+          tools: {},
+          readOnlyToolNames: new Set(),
+          gateScope: GATE_SCOPE,
+        }),
       parentRun: { runId: "parent", scope: parentScope },
     });
 
@@ -297,6 +311,7 @@ describe("a delegated run's Run events", () => {
             },
           },
           readOnlyToolNames: new Set(),
+          gateScope: GATE_SCOPE,
         }),
       parentRun: { runId: "parent", scope: parentScope },
     });

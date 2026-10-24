@@ -48,6 +48,7 @@ describe("Sandbox backend catalog routes", () => {
               toolSetIds: [],
               sandboxBackendIds: [ANNOTATED_BACKEND],
               webBackendIds: [],
+              toolGateIds: [],
             },
           ],
           { sandboxBackends: new Map([[ANNOTATED_BACKEND, "@platypus/test"]]) },

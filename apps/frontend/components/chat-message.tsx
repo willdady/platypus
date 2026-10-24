@@ -47,6 +47,7 @@ import {
   isImageAttachment,
   messageSandboxUploads,
   messageText,
+  toolErrorText,
 } from "@/lib/message-parts";
 import {
   BotIcon,
@@ -225,7 +226,10 @@ function toolCallErrored(part: MessagePart): boolean {
   if (isWebToolPart(part)) {
     return !!(part.errorText ?? normalizedWebTool(part)?.error);
   }
-  return isToolUIPart(part) && part.state === "output-error";
+  return (
+    isToolUIPart(part) &&
+    (part.state === "output-error" || part.state === "output-denied")
+  );
 }
 
 function isImageFilePart(part: MessagePart): part is FileUIPart {
@@ -441,7 +445,10 @@ export const ChatMessage = memo(function ChatMessage({
         />
         <ToolContent>
           <ToolInput input={toolPart.input} />
-          <ToolOutput output={toolPart.output} errorText={toolPart.errorText} />
+          <ToolOutput
+            output={toolPart.output}
+            errorText={toolErrorText(toolPart)}
+          />
         </ToolContent>
       </Tool>
     )),
@@ -490,7 +497,7 @@ export const ChatMessage = memo(function ChatMessage({
             <ToolInput input={toolPart.input} />
             <ToolOutput
               output={toolPart.output}
-              errorText={toolPart.errorText}
+              errorText={toolErrorText(toolPart)}
             />
           </ToolContent>
         </Tool>

@@ -18,6 +18,7 @@ export const BUILTIN_PLUGINS: Record<
   "@platypus/docker": () => import("./docker/index.ts"),
   "@platypus/ssh": () => import("./ssh/index.ts"),
   "@platypus/exa": () => import("./exa/index.ts"),
+  "@platypus/decision-gate": () => import("./decision-gate/index.ts"),
 };
 
 // The always-on core set (ADR-0013 amendment): these core plugins load

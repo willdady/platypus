@@ -11,6 +11,7 @@ import {
   DEFAULT_CLEARING_POLICY,
 } from "./tool-result-clearing.ts";
 import { stepOccupancy } from "./run-stats.ts";
+import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
 
 /**
  * Prompt caching — one mechanism is not enough (ADR-0020 Notes, issue #682).
@@ -93,6 +94,12 @@ export type RunPlan = {
    * (a headless Trigger run), which clears only the core allowlist.
    */
   readOnlyToolNames?: ReadonlySet<string>;
+  /**
+   * What this run's Tool gates are told about where a call is made (ADR-0033),
+   * from the Tool session that resolved its tools. With a gate enabled, a plan
+   * without one runs no tool calls.
+   */
+  gateScope?: ToolGateScope;
 };
 
 /** The generation settings, minus any the plan never set. */
@@ -201,6 +208,8 @@ export const buildModelInvocation = (
     // as it grows, which only this per-step seam can track.
     return { messages: withBedrockCachePoint(cleared) };
   },
+  // The Tool gate (ADR-0033): absent entirely when no gate is enabled.
+  ...toolGateOptions(plan.gateScope, options.abortSignal),
   ...declaredSettings(plan),
 });
 

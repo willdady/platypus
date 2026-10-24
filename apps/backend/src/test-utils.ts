@@ -407,6 +407,7 @@ export const loadedPluginsFixture = (
     toolSets: new Map(),
     sandboxBackends: new Map(),
     webBackends: new Map(),
+    toolGates: new Map(),
     ...owners,
   },
 });

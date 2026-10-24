@@ -148,7 +148,7 @@ An **MCP** server's own declaration that one of its tools does not change anythi
 _Avoid_: read-only flag, safe tool, tool safety (all three claim a verification nobody performed), annotation (that names the protocol's whole carrier, of which this is one field).
 
 **Tool gate**:
-An Extension point whose Contributions see a tool call before it runs and return a **Verdict** on it (ADR-0033, not yet built). A gate only gates: it never changes a call's arguments or its result. Gates apply deployment-wide to every tool call the backend executes, in every Chat turn, Trigger run, A2A call and Sub-Agent run. A tool the Provider executes itself never reaches a gate. A gate that throws or times out has said `ask`, never `allow`.
+An Extension point whose Contributions see a tool call before it runs and return a **Verdict** on it (ADR-0033). A gate only gates: it never changes a call's arguments or its result. Gates apply deployment-wide to every tool call the backend executes, in every Chat turn, Trigger run, A2A call and Sub-Agent run. A tool the Provider executes itself never reaches a gate. A gate that throws or times out has said `ask`, never `allow`.
 _Avoid_: tool-call middleware (middleware can also transform; a gate cannot), guardrail (that names the Provider's system-prompt text), approval (that names the User's answer to an `ask`).
 
 **Verdict**:
@@ -238,11 +238,11 @@ A distributable bundle — one package, one version, one config namespace, one e
 _Avoid_: extension (reserve for Extension point), add-on, module.
 
 **Extension point**:
-A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The Extension points are Sandbox backends, Tool sets and Web-search backends (ADR-0014); the first two shipped with the Plugin system, the third followed it. A fourth, **Tool gates**, is decided but not yet built (ADR-0033).
+A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The Extension points are Sandbox backends, Tool sets, Web-search backends (ADR-0014) and **Tool gates** (ADR-0033); the first two shipped with the Plugin system, the other two followed it.
 _Avoid_: hook, slot.
 
 **Contribution**:
-A single filling of one Extension point by one Plugin — one Sandbox backend, one Tool set, or one Web-search backend. Each Contribution has a globally unique id: a core Plugin's ids stand alone; a third-party Plugin's ids are qualified by the Plugin name. A Plugin may make several Contributions.
+A single filling of one Extension point by one Plugin — one Sandbox backend, one Tool set, one Web-search backend, or one Tool gate. Each Contribution has a globally unique id: a core Plugin's ids stand alone; a third-party Plugin's ids are qualified by the Plugin name. A Plugin may make several Contributions.
 _Avoid_: registration, extension.
 
 **Plugin config**:

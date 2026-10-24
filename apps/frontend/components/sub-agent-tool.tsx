@@ -15,6 +15,7 @@ import {
 import { Shimmer } from "./ai-elements/shimmer";
 import { Tool, ToolContent, ToolHeader } from "./ai-elements/tool";
 import { toolCallDurationMs } from "@/lib/tool-duration";
+import { toolErrorText } from "@/lib/message-parts";
 import { useMemo } from "react";
 
 /**
@@ -165,7 +166,8 @@ type SubAgentToolProps = {
 export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
   const input = toolPart.input as { task?: string };
   const output = toolPart.output as SubAgentActivity | string | null;
-  const errorText = toolPart.errorText;
+  const denied = toolPart.state === "output-denied";
+  const errorText = toolErrorText(toolPart);
   const subAgentName = subAgentNameOf(toolPart);
   const isRunning =
     toolPart.state === "input-streaming" ||
@@ -194,13 +196,15 @@ export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
     errorText != null ||
     (activity ? activity.text != null : !isRunning && output != null);
 
-  const effectiveState: ToolUIPart["state"] = errorText
-    ? "output-error"
-    : isComplete
-      ? "output-available"
-      : isRunning || activity
-        ? "input-available"
-        : toolPart.state;
+  const effectiveState: ToolUIPart["state"] = denied
+    ? "output-denied"
+    : errorText
+      ? "output-error"
+      : isComplete
+        ? "output-available"
+        : isRunning || activity
+          ? "input-available"
+          : toolPart.state;
 
   // The shared shell draws the row; `type` picks the Sub-Agent icon, and
   // `title` names the delegate rather than the tool. Its open state is the

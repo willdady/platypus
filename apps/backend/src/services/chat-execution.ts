@@ -827,6 +827,9 @@ export const prepareChatTurn = async (
         // a delegate's — a Sub-Agent's plan carries its own nested session's
         // hints (`createSubAgentDelegate`), resolved under its own rule.
         readOnlyToolNames: session.readOnlyToolNames,
+        // The Tool gate's view of this turn (ADR-0033). Like the hints above,
+        // the session's own: a delegate's run carries its nested session's.
+        gateScope: session.gateScope,
         ...(initialOccupancy !== undefined ? { initialOccupancy } : {}),
       },
       resolved: {
@@ -1107,6 +1110,7 @@ const loadSubAgents = async (
       return {
         tools: nested.tools,
         readOnlyToolNames: nested.readOnlyToolNames,
+        gateScope: nested.gateScope,
       };
     },
     run,

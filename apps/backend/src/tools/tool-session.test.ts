@@ -1131,6 +1131,63 @@ describe("openToolSession", () => {
     });
   });
 
+  describe("Tool gate scope (ADR-0033)", () => {
+    it("tells a gate each tool's origin and declared hint, and that a User is watching", async () => {
+      register("set.gate-scope", { plain: toolNamed("plain") });
+      connected(
+        {
+          readTool: toolNamed("readTool"),
+          writeTool: toolNamed("writeTool"),
+          plainTool: toolNamed("plainTool"),
+        },
+        { readTool: true, writeTool: false },
+      );
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.gate-scope", "mcp-1"),
+        queriesFor([mcpRow()]),
+        { interactive: true },
+      );
+
+      expect(session.gateScope).toEqual({
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        attended: true,
+        toolSetIds: new Map([
+          ["plain", "set.gate-scope"],
+          ["test_mcp__readTool", "mcp-1"],
+          ["test_mcp__writeTool", "mcp-1"],
+          ["test_mcp__plainTool", "mcp-1"],
+        ]),
+        readOnlyHints: new Map([
+          ["test_mcp__readTool", "read-only"],
+          ["test_mcp__writeTool", "writes"],
+        ]),
+      });
+    });
+
+    it("marks a delegate's session unattended under its own Agent, even from an attended turn", async () => {
+      const parent = await openToolSession(scope, grantedAgent(), noMcps(), {
+        interactive: true,
+      });
+      const child = await parent.nest({ id: "sub-agent-1", toolSetIds: [] });
+
+      expect(child.gateScope).toMatchObject({
+        agentId: "sub-agent-1",
+        attended: false,
+      });
+    });
+
+    it("is unattended when no User is watching", async () => {
+      const session = await openToolSession(scope, undefined, noMcps());
+
+      expect(session.gateScope.attended).toBe(false);
+      expect(session.gateScope.agentId).toBeUndefined();
+    });
+  });
+
   describe("registered closers", () => {
     /** A Tool set whose factory registers `close`, guarded as an author's would be. */
     // Third-party, because closer attribution is what these tests read: the

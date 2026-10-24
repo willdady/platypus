@@ -81,7 +81,34 @@ type StopConditionStep = {
     input: unknown;
     output: unknown;
   }>;
+  content?: ReadonlyArray<{
+    type: string;
+    approved?: boolean;
+    reason?: string;
+    toolCall?: { toolName: string; input: unknown };
+  }>;
 };
+
+/**
+ * Every outcome a step's tool calls came back with: the results, and each call
+ * a Tool gate denied (ADR-0033), whose outcome is the denial's reason. A run
+ * that retries a denied call gets the same refusal back, which is no progress
+ * like any other repeat.
+ */
+const outcomesOf = (step: StopConditionStep) => [
+  ...(step.toolResults ?? []),
+  ...(step.content ?? []).flatMap((part) =>
+    part.type === "tool-approval-response" && !part.approved && part.toolCall
+      ? [
+          {
+            toolName: part.toolCall.toolName,
+            input: part.toolCall.input,
+            output: { denied: part.reason ?? null },
+          },
+        ]
+      : [],
+  ),
+];
 
 export type NoProgressDetector = {
   /** Stop condition to append to `stopWhen` for unattended runs. */
@@ -119,7 +146,7 @@ export const createNoProgressDetector = (
     if (trip) return true;
     const counts = new Map<string, NoProgressTrip>();
     for (const step of steps) {
-      for (const result of step.toolResults ?? []) {
+      for (const result of outcomesOf(step)) {
         const sig = signatureFor(result.toolName, result.input, result.output);
         const entry = counts.get(sig) ?? {
           toolName: result.toolName,

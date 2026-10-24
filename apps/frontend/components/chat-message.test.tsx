@@ -1324,6 +1324,35 @@ describe("ChatMessage dynamic tool renderer", () => {
 
     expect(screen.getByText("Running")).toBeInTheDocument();
   });
+
+  // ADR-0033: a Tool gate's denial shows which gate stopped the call, and why.
+  it("shows a call a Tool gate denied, with the gate's reason", () => {
+    renderMessage({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "db__drop_table",
+          toolCallId: "c1",
+          state: "output-denied",
+          input: { table: "users" },
+          approval: {
+            id: "a1",
+            approved: false,
+            reason: 'Blocked by the "No DROP" Tool gate: Drops a table.',
+          },
+        } as unknown as MessagePart,
+      ],
+    });
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^db__drop_table/ }));
+
+    expect(screen.getByText("Denied")).toBeInTheDocument();
+    expect(
+      screen.getByText('Blocked by the "No DROP" Tool gate: Drops a table.'),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("ChatMessage Tool call groups", () => {

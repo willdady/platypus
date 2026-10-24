@@ -18,6 +18,7 @@ import type {
   SubAgentActivityEntry,
 } from "@platypus/schemas";
 import { DELEGATE_TOOL_NAME } from "./turn-tool-names.ts";
+import type { ToolGateScope } from "../tool-gates/index.ts";
 
 /**
  * What loading a delegate's tools resolves to: its Tools, plus which of them
@@ -27,6 +28,8 @@ import { DELEGATE_TOOL_NAME } from "./turn-tool-names.ts";
 export type LoadedSubAgentTools = {
   tools: Record<string, Tool>;
   readOnlyToolNames: ReadonlySet<string>;
+  /** The Tool gate's view of the delegate's calls (ADR-0033), never attended. */
+  gateScope: ToolGateScope;
 };
 
 /**
@@ -335,7 +338,7 @@ export const createSubAgentDelegate = (
           // Inside the try: opening this delegate's own tools can fail the
           // same way its stream can, and it reaches the parent as a tool error
           // either way rather than an unattributed throw.
-          const { tools, readOnlyToolNames } = await loadTools();
+          const { tools, readOnlyToolNames, gateScope } = await loadTools();
           const drive = driveDelegate({
             // A Sub-Agent invocation receives Instructions plus guardrails and
             // nothing else — no workspace context, no memories, no user
@@ -356,6 +359,9 @@ export const createSubAgentDelegate = (
               // resolves hints by the same rule its parent's does, but is a
               // distinct session with its own MCP connections.
               readOnlyToolNames,
+              // Its own session's too, so its inner tools are gated as its
+              // own calls — unattended, whoever delegated (ADR-0033).
+              gateScope,
             },
             prompt: task,
             run,

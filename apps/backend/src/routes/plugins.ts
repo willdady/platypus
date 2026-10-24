@@ -25,6 +25,7 @@ plugins.get("/", requireAuth, requireOrgAccess(["admin"]), (c) => {
       toolSets: p.toolSetIds,
       sandboxBackends: p.sandboxBackendIds,
       webBackends: p.webBackendIds,
+      toolGates: p.toolGateIds,
     },
   }));
   return c.json({ results });

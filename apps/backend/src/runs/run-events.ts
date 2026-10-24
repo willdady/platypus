@@ -103,6 +103,11 @@ export class RunEventRecorder {
   private pendingInsert = new Set<string>();
   /** Ids already inserted whose state changed since. */
   private pendingUpdate = new Set<string>();
+  /**
+   * Tool approval id → the key of the tool call it was raised for. A denial
+   * (ADR-0033) names only its approval, and its reason belongs on the call.
+   */
+  private readonly approvalToolKeys = new Map<string, string>();
   private truncated = false;
   private failedCalls = 0;
   private listener?: () => void;
@@ -184,6 +189,25 @@ export class RunEventRecorder {
     this.pendingInsert.add(id);
     this.listener?.();
     return id;
+  }
+
+  /** Notes which tool call an approval was raised for. */
+  noteApproval(approvalId: string, key: string): void {
+    this.approvalToolKeys.set(approvalId, key);
+  }
+
+  /**
+   * Closes the tool call a denied approval was raised for, carrying the
+   * denial's reason. An unknown approval is ignored.
+   */
+  closeDenied(approvalId: string, reason: string | undefined): void {
+    const key = this.approvalToolKeys.get(approvalId);
+    if (key) {
+      this.closeKeyed(key, {
+        status: "cancelled",
+        ...(reason !== undefined ? { error: reason } : {}),
+      });
+    }
   }
 
   /** Closes an open event. A second close, or a close of an unknown id, is a no-op. */
@@ -425,6 +449,14 @@ export const recordUiChunk = (
         status: "error",
         error: chunk.errorText,
       });
+      return;
+    case "tool-approval-request":
+      recorder.noteApproval(chunk.approvalId, toolKey(scope, chunk.toolCallId));
+      return;
+    case "tool-approval-response":
+      // A Tool gate's deny, recorded with its reason. An allow never reaches
+      // here: core lets an allowed call through with no approval at all.
+      if (!chunk.approved) recorder.closeDenied(chunk.approvalId, chunk.reason);
       return;
     case "tool-output-denied":
       recorder.closeKeyed(toolKey(scope, chunk.toolCallId), {

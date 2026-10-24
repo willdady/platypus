@@ -40,6 +40,16 @@ vi.mock("ai", async () => {
 });
 
 import { logger } from "../logger.ts";
+import { clearToolGates, registerToolGate } from "../tool-gates/index.ts";
+
+/** A delegate's Tool gate scope (ADR-0033): its own session's, unattended. */
+const GATE_SCOPE = {
+  orgId: "org-1",
+  workspaceId: "ws-1",
+  attended: false,
+  toolSetIds: new Map<string, string>(),
+  readOnlyHints: new Map<string, "read-only" | "writes">(),
+};
 
 // --- Model harness -----------------------------------------------------------
 
@@ -113,7 +123,11 @@ const parentScope: WorkspaceScope = workspaceScope(
  */
 const toolsOf =
   (tools: Record<string, Tool>) => (): Promise<LoadedSubAgentTools> =>
-    Promise.resolve({ tools, readOnlyToolNames: new Set() });
+    Promise.resolve({
+      tools,
+      readOnlyToolNames: new Set(),
+      gateScope: GATE_SCOPE,
+    });
 
 const baseOptions = {
   id: "agent-1",
@@ -340,6 +354,38 @@ describe("createSubAgentDelegate", () => {
       // The log the user watches shows the tool call running before its result.
       expect(yielded[0].entries).toEqual([
         { type: "tool-call", toolName: "webFetch", status: "running" },
+      ]);
+    });
+
+    it("stops a delegate's own tool call when a Tool gate denies it", async () => {
+      const seen: unknown[] = [];
+      registerToolGate({
+        id: "no-fetch",
+        name: "No fetch",
+        timeoutMs: 1_000,
+        evaluate: (call) => {
+          seen.push(call);
+          return { verdict: "deny" };
+        },
+      });
+      const execute = vi.fn(() => Promise.resolve("result"));
+      try {
+        await delegate({
+          model: modelOf(
+            step(toolCall("tc1", "webFetch", "{}"), { unified: "tool-calls" }),
+            step(text("t1", "Could not fetch.")),
+          ),
+          loadTools: toolsOf({
+            webFetch: { inputSchema: z.object({}), execute },
+          }),
+        });
+      } finally {
+        clearToolGates();
+      }
+
+      expect(execute).not.toHaveBeenCalled();
+      expect(seen).toEqual([
+        expect.objectContaining({ toolName: "webFetch", attended: false }),
       ]);
     });
 
@@ -965,9 +1011,11 @@ describe("createSubAgentDelegate", () => {
   // (#321 one level down), which is why this wrapper no longer touches them.
   describe("sub-agent tools", () => {
     it("opens its tools on invocation, not when the delegate is built", async () => {
-      const loadTools = vi
-        .fn()
-        .mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() });
+      const loadTools = vi.fn().mockResolvedValue({
+        tools: {},
+        readOnlyToolNames: new Set(),
+        gateScope: GATE_SCOPE,
+      });
       const tool = delegateToolFor(buildOptions({ loadTools }));
       expect(loadTools).not.toHaveBeenCalled();
 
@@ -1158,9 +1206,11 @@ describe("createDelegateTools", () => {
     ];
 
     const resolvePlan = workingPlan();
-    const loadToolsFn = vi
-      .fn()
-      .mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() });
+    const loadToolsFn = vi.fn().mockResolvedValue({
+      tools: {},
+      readOnlyToolNames: new Set(),
+      gateScope: GATE_SCOPE,
+    });
 
     const result = await createDelegateTools(
       subAgents,
@@ -1205,7 +1255,11 @@ describe("createDelegateTools", () => {
     const { tools } = await createDelegateTools(
       [{ id: "sa-1", name: "Research" }],
       resolvePlan,
-      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
+      vi.fn().mockResolvedValue({
+        tools: {},
+        readOnlyToolNames: new Set(),
+        gateScope: GATE_SCOPE,
+      }),
     );
     await runTool(tools, "Research");
 
@@ -1230,7 +1284,11 @@ describe("createDelegateTools", () => {
     const result = await createDelegateTools(
       subAgents,
       resolvePlan,
-      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
+      vi.fn().mockResolvedValue({
+        tools: {},
+        readOnlyToolNames: new Set(),
+        gateScope: GATE_SCOPE,
+      }),
     );
 
     // Advertised: only the one that resolved.
@@ -1261,7 +1319,11 @@ describe("createDelegateTools", () => {
     const result = await createDelegateTools(
       subAgents,
       resolvePlan,
-      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
+      vi.fn().mockResolvedValue({
+        tools: {},
+        readOnlyToolNames: new Set(),
+        gateScope: GATE_SCOPE,
+      }),
     );
 
     expect(result.catalogue).toEqual([
@@ -1300,7 +1362,11 @@ describe("createDelegateTools", () => {
     const result = await createDelegateTools(
       [{ id: "sa-1", name: "Working" }],
       workingPlan(),
-      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
+      vi.fn().mockResolvedValue({
+        tools: {},
+        readOnlyToolNames: new Set(),
+        gateScope: GATE_SCOPE,
+      }),
       undefined,
       [{ id: "sub-gone", reason: "not available in this workspace" }],
     );
@@ -1324,7 +1390,11 @@ describe("createDelegateTools", () => {
     const { tools } = await createDelegateTools(
       [{ id: "sa-1", name: "Guarded", instructions: "You are guarded." }],
       resolvePlan,
-      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
+      vi.fn().mockResolvedValue({
+        tools: {},
+        readOnlyToolNames: new Set(),
+        gateScope: GATE_SCOPE,
+      }),
     );
     await runTool(tools, "Guarded");
 

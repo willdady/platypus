@@ -101,6 +101,7 @@ whole deploy-time block rather than the `config` half alone, so read
   execution backends for the Platypus Sandbox (e.g. the built-in Docker and SSH
   backends).
 - **Web-search backends** (`contributes.webBackends`) — see below.
+- **Tool gates** (`contributes.toolGates`) — see below.
 
 Plugins may also declare deploy-time, Operator-owned `configSchema` /
 `credentialsSchema`, supplied via the plugin's own `PLATYPUS_PLUGIN_CONFIG_<NAME>`
@@ -225,6 +226,43 @@ a `tsconfig.json` with `"lib": ["esnext"]` and no `@types/node` reports `Cannot
 find name 'AbortSignal'`. Add `@types/node` — you are running on Node — or `"dom"`
 to `lib`. A one-argument executor written before the signal existed still
 compiles and still works.
+
+## Tool gates
+
+A Tool gate sees every tool call the backend runs, before it runs, and returns a
+Verdict: `allow`, `ask` or `deny`, with an optional `reason`. A gate only gates; it
+cannot change a call's arguments or its result. An enabled gate applies to every
+tool call in the deployment, MCP tools included. Tools the Provider runs itself
+(native web search) never reach the backend and are not gated.
+
+Core fails closed. A gate that throws or outruns its `timeoutMs` counts as `ask`.
+With several gates the most restrictive Verdict wins. `ask` stops the call too,
+until core can put the question to the User; a denied call returns the reason to
+the model as a tool error and the run continues.
+
+```ts
+export const plugin: PlatypusPlugin = {
+  name: "acme-gates",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    toolGates: [
+      {
+        id: "no-drop", // registers as `acme-gates.no-drop`
+        name: "No DROP",
+        // Optional; core defaults to 10_000 and refuses more than 30_000 at boot.
+        timeoutMs: 2_000,
+        // call: toolName, toolDescription, args, toolSetId, orgId, workspaceId,
+        // agentId, attended, readOnlyHint ("read-only" | "writes" | "undeclared").
+        evaluate: (call, plugin, { signal }) =>
+          JSON.stringify(call.args).includes("DROP TABLE")
+            ? { verdict: "deny", reason: "Drops a table." }
+            : { verdict: "allow" },
+      },
+    ],
+  },
+};
+```
 
 ## Documentation
 

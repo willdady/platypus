@@ -11,6 +11,7 @@ import {
   type SandboxBackend,
   type SandboxBackendContribution,
   type SandboxCallOptions,
+  type ToolGateContribution,
   type ToolSetContribution,
   type WebBackendContribution,
 } from "./index.ts";
@@ -448,5 +449,38 @@ describe("@platypuschat/plugin-sdk", () => {
     };
 
     expect(contribution.timeoutMs).toBeUndefined();
+  });
+
+  it("accepts a tool-gate contribution returning a Verdict", async () => {
+    const contribution: ToolGateContribution = {
+      id: "no-drop",
+      name: "No DROP",
+      timeoutMs: 1_000,
+      evaluate: (call) =>
+        JSON.stringify(call.args).includes("DROP")
+          ? { verdict: "deny", reason: "Drops a table." }
+          : { verdict: "allow" },
+    };
+    const plugin: PlatypusPlugin = {
+      name: "acme",
+      version: "0.1.0",
+      apiVersion: PLUGIN_API_VERSION,
+      contributes: { toolGates: [contribution] },
+    };
+    expect(plugin.contributes.toolGates).toHaveLength(1);
+
+    const verdict = await contribution.evaluate(
+      {
+        toolName: "sql",
+        args: { query: "DROP TABLE users" },
+        orgId: "o",
+        workspaceId: "w",
+        attended: false,
+        readOnlyHint: "undeclared",
+      },
+      { config: undefined, credentials: undefined, logger: silentLogger() },
+      { signal: new AbortController().signal },
+    );
+    expect(verdict).toEqual({ verdict: "deny", reason: "Drops a table." });
   });
 });

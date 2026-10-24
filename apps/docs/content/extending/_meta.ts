@@ -9,6 +9,7 @@ const meta = {
   "tool-sets": "Tool sets",
   "sandbox-backends": "Sandbox backends",
   "web-search-backends": "Web-search backends",
+  "tool-gates": "Tool gates",
   "plugin-api-and-config": "Plugin API & config",
 };
 
