@@ -479,12 +479,12 @@ describe("Workspace Routes", () => {
       [
         "extraction",
         "memoryExtractionProviderId",
-        "Memory extraction provider not found",
+        "Invalid memory provider settings: memoryExtractionProviderId provider-other-org not found",
       ],
       [
         "embedding",
         "memoryEmbeddingProviderId",
-        "Memory embedding provider not found",
+        "Invalid memory provider settings: memoryEmbeddingProviderId provider-other-org not found",
       ],
     ])(
       "rejects a memory %s provider of another organization",
@@ -494,7 +494,7 @@ describe("Workspace Routes", () => {
 
         const res = await put({ [field]: "provider-other-org" });
 
-        expect(res.status).toBe(404);
+        expect(res.status).toBe(400);
         expect(await res.json()).toEqual({ error });
         expect(fake.tables.workspace[0]).toEqual(ws1());
       },
@@ -504,12 +504,12 @@ describe("Workspace Routes", () => {
       [
         "extraction",
         "memoryExtractionProviderId",
-        "Selected provider does not have a memory extraction model configured",
+        "Invalid memory provider settings: memoryExtractionProviderId provider-1 does not have a memory extraction model configured",
       ],
       [
         "embedding",
         "memoryEmbeddingProviderId",
-        "Selected provider does not have an embedding model configured",
+        "Invalid memory provider settings: memoryEmbeddingProviderId provider-1 does not have an embedding model configured",
       ],
     ])(
       "rejects a memory %s provider without the needed model",
@@ -524,6 +524,25 @@ describe("Workspace Routes", () => {
         expect(fake.tables.workspace[0]).toEqual(ws1());
       },
     );
+
+    it("names both memory providers when both are invalid", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({
+        rows: { provider: [ownProvider(), otherOrgProvider] },
+      });
+
+      const res = await put({
+        memoryExtractionProviderId: "provider-1",
+        memoryEmbeddingProviderId: "provider-other-org",
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error:
+          "Invalid memory provider settings: memoryExtractionProviderId provider-1 does not have a memory extraction model configured; memoryEmbeddingProviderId provider-other-org not found",
+      });
+      expect(fake.tables.workspace[0]).toEqual(ws1());
+    });
 
     it.each([
       [

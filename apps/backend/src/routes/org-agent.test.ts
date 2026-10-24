@@ -9,7 +9,8 @@ import {
 import app from "../server.ts";
 import { deleteAvatar, storeAvatar } from "../services/avatar.ts";
 
-vi.mock("../services/avatar.ts", () => ({
+vi.mock("../services/avatar.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/avatar.ts")>()),
   storeAvatar: vi.fn(),
   deleteAvatar: vi.fn(),
 }));
@@ -297,7 +298,7 @@ describe("Organization Agent Routes", () => {
   describe("avatar routes", () => {
     it("POST avatar rejects a body over the limit before reading it", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      fake = world();
       const form = new FormData();
       form.append(
         "file",
