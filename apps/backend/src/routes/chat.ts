@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { validate } from "../validate.ts";
+import { paginationQuerySchema, validate } from "../validate.ts";
 import { z } from "zod";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
@@ -90,21 +90,11 @@ chat.get(
   requireWorkspaceAccess,
   validate(
     "query",
-    z.object({
-      limit: z.string().optional(),
-      offset: z.string().optional(),
-      search: z.string().optional(),
-    }),
+    paginationQuerySchema(100).extend({ search: z.string().optional() }),
   ),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const { limit: limitStr, offset: offsetStr, search } = c.req.valid("query");
-
-    const limit = Math.min(
-      Math.max(parseInt(limitStr ?? "100") || 100, 1),
-      100,
-    );
-    const offset = Math.max(parseInt(offsetStr ?? "0") || 0, 0);
+    const { limit, offset, search } = c.req.valid("query");
 
     // Build search filter using ILIKE on title and tags. `\` is Postgres's
     // default LIKE escape, so escaping `%`, `_` and `\` matches them literally.

@@ -169,6 +169,7 @@ describe("Trigger runs routes", () => {
       ["an unparseable limit", "limit=lots"],
       ["a limit above the cap", "limit=101"],
       ["a limit below one", "limit=0"],
+      ["a fractional limit", "limit=1.5"],
       ["a negative offset", "offset=-1"],
       ["an unparseable offset", "offset=later"],
     ])("rejects %s", async (_label, query) => {

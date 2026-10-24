@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { validate } from "../validate.ts";
+import { paginationQuerySchema, validate } from "../validate.ts";
 import { z } from "zod";
 import { and, asc, desc, eq, gt } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -30,14 +30,11 @@ const triggerRun = new Hono<{ Variables: Variables }>();
  * The listing's query parameters. A value the schema rejects — a status the
  * domain does not have, an unreadable or out-of-range page — fails the request
  * rather than falling back to a default or dropping the filter, either of which
- * would render a list that lies about what it is filtered to. Absent is
- * different from invalid: an omitted `limit`/`offset` takes the default below.
+ * would render a list that lies about what it is filtered to.
  */
-const listQuerySchema = z.object({
+const listQuerySchema = paginationQuerySchema(50).extend({
   triggerId: z.string().min(1).optional(),
   status: triggerRunStatusSchema.optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
 });
 
 /**

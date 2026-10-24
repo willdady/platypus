@@ -116,6 +116,37 @@ describe("Notification Routes", () => {
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.results).toHaveLength(0);
     });
+
+    it("defaults to the first 50 notifications", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.offset.mockResolvedValueOnce([]);
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      expect(mockDb.limit).toHaveBeenLastCalledWith(50);
+      expect(mockDb.offset).toHaveBeenLastCalledWith(0);
+    });
+
+    it.each(["limit=0", "limit=101", "limit=abc", "limit=1.5", "offset=-1"])(
+      "rejects %s with a 400",
+      async (query) => {
+        mockSession();
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([
+          { ownerId: "user-1", organizationId: "org-1" },
+        ]); // requireWorkspaceAccess
+
+        const res = await app.request(`${baseUrl}?${query}`);
+        expect(res.status).toBe(400);
+        const body = (await res.json()) as { error?: unknown };
+        expect(Object.keys(body)).toEqual(["error"]);
+        expect(mockDb.offset).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe("GET /unread-count", () => {
