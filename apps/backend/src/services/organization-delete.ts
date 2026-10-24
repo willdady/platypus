@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, or } from "drizzle-orm";
 import type { Tx } from "../index.ts";
 import {
   agent as agentTable,
@@ -12,10 +12,10 @@ import {
  * `agent.provider_id` and `trigger.agent_id` are `ON DELETE RESTRICT`, and
  * Postgres checks each against the end of the cascade that deletes the
  * referenced row, not the end of the whole delete. So a single delete of the
- * Organization fails whenever its Provider cascade runs before the cascade
- * that takes the Agents still using it (issue #1609). Deleting Triggers, then
- * Workspaces (and their Agents), then Org Agents, leaves nothing for the
- * Organization's cascade to trip over.
+ * Organization fails whenever a Provider cascade (the Organization's, or a
+ * Workspace's) runs before the cascade that takes the Agents still using it
+ * (issues #1609, #1610). Deleting Triggers, then every Agent, leaves nothing
+ * for the Organization's cascade to trip over.
  */
 export const deleteOrganizationRows = async (
   tx: Tx,
@@ -29,8 +29,12 @@ export const deleteOrganizationRows = async (
     .delete(triggerTable)
     .where(inArray(triggerTable.workspaceId, workspaceIdsQuery));
   await tx
-    .delete(workspaceTable)
-    .where(eq(workspaceTable.organizationId, orgId));
-  await tx.delete(agentTable).where(eq(agentTable.organizationId, orgId));
+    .delete(agentTable)
+    .where(
+      or(
+        eq(agentTable.organizationId, orgId),
+        inArray(agentTable.workspaceId, workspaceIdsQuery),
+      ),
+    );
   await tx.delete(organizationTable).where(eq(organizationTable.id, orgId));
 };

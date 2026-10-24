@@ -23,9 +23,12 @@ beforeEach(async () => {
     INSERT INTO "provider" ("id", "organization_id", "name", "provider_type", "api_key", "task_model_id", "memory_extraction_model_id", "modelIds")
       VALUES ('shared-p', 'org-1', 'P', 'openai', 'k', 'm', 'm', '[]'),
              ('other-p', 'org-2', 'P', 'openai', 'k', 'm', 'm', '[]');
+    INSERT INTO "provider" ("id", "workspace_id", "name", "provider_type", "api_key", "task_model_id", "memory_extraction_model_id", "modelIds")
+      VALUES ('ws-p', 'ws-1', 'P', 'openai', 'k', 'm', 'm', '[]');
     INSERT INTO "agent" ("id", "organization_id", "workspace_id", "provider_id", "name", "description", "model_id")
       VALUES ('shared-a', 'org-1', NULL, 'shared-p', 'Shared', 'Helps', 'm'),
              ('ws-a', NULL, 'ws-1', 'shared-p', 'Local', 'Helps', 'm'),
+             ('ws-a2', NULL, 'ws-1', 'ws-p', 'Own', 'Helps', 'm'),
              ('other-a', NULL, 'ws-2', 'other-p', 'Other', 'Helps', 'm');
     INSERT INTO "trigger" ("id", "workspace_id", "agent_id", "type", "name", "instruction", "config")
       VALUES ('t-ws', 'ws-1', 'ws-a', 'cron', 'Nightly', 'Go', '{}'),
@@ -41,7 +44,7 @@ const ids = async (table: string) =>
   ).rows.map((r) => r.id);
 
 describe("deleteOrganizationRows", () => {
-  it("deletes an Organization whose Workspace Agent and Org Agent, each with a Trigger, use a Shared Provider", async () => {
+  it("deletes an Organization whose Workspace Agent and Org Agent, each with a Trigger, use a Shared Provider, and its Workspace Providers", async () => {
     await drizzle(pg).transaction((tx) =>
       deleteOrganizationRows(tx as unknown as Tx, "org-1"),
     );
