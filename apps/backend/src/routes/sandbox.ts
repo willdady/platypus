@@ -4,7 +4,6 @@ import { bodyLimit } from "hono/body-limit";
 import { validate } from "../validate.ts";
 import { z } from "zod";
 import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
-import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { sandbox as sandboxTable } from "../db/schema.ts";
 import { sandboxCreateSchema, sandboxUpdateSchema } from "@platypus/schemas";
@@ -15,27 +14,17 @@ import {
   requireWorkspaceConfigAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import { requireOwned } from "../services/workspace-resource.ts";
 import {
-  deleteOwned,
-  requireOwned,
-  resolveOwned,
-  updateOwned,
-} from "../services/workspace-resource.ts";
+  createSandbox,
+  deleteSandbox,
+  updateSandbox,
+} from "../services/sandbox-write.ts";
 import type { Variables } from "../server.ts";
-import { destroySandboxRow } from "../sandbox/teardown.ts";
 import { createSandboxBackend, openSandboxRow } from "../sandbox/open-row.ts";
 import { relativePathSchema } from "../sandbox/types.ts";
 import { findEntry, TRANSFER_BOUND } from "../sandbox/find-entry.ts";
 import { NotFoundError, UnsupportedError } from "../errors.ts";
-import { getSandboxBackendPlugin } from "../plugins/registry.ts";
-import { logger } from "../logger.ts";
-import {
-  envCollisionError,
-  sandboxCreateError,
-  sandboxSchemaError,
-} from "../sandbox/validate.ts";
-import { errorMessage } from "../utils/error-message.ts";
-
 type SandboxRecord = typeof sandboxTable.$inferSelect;
 
 // Sandboxes are admin-only and never delegatable to the workspace owner
@@ -113,52 +102,17 @@ sandbox.post(
   validate("json", sandboxCreateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const data = c.req.valid("json");
-
-    const createError = sandboxCreateError(data);
-    if (createError) return c.json({ error: createError }, 400);
-
-    const existing = await resolveOwned(db, "sandbox", { workspaceId });
-    if (existing) {
-      return c.json(
-        { error: "Sandbox already configured for this workspace" },
-        409,
-      );
-    }
-
-    const record = await db
-      .insert(sandboxTable)
-      .values({
-        id: nanoid(),
-        ...data,
-        workspaceId,
-      })
-      .returning();
+    // The body's workspaceId is overridden by the route's.
+    const record = await createSandbox(workspaceId, c.req.valid("json"));
     // POST is admin-only (requireSandboxAdmin), so always full response.
-    return c.json(sanitizeSandboxResponse(record[0], true), 201);
+    return c.json(sanitizeSandboxResponse(record, true), 201);
   },
 );
 
-// Update the workspace's sandbox. Field-level authorization (ADR-0006):
-//
-//   - Org admins may change every field. `name`/`backend` are required and
-//     always overwritten; `config`/`credentials`/`adminEnv`/`userEnv` are
-//     optional and preserved when omitted (Drizzle treats undefined as "skip
-//     column"), which is necessary because GET strips credentials so the
-//     frontend can't re-send them.
-//   - A non-admin Workspace Owner may change only `name` and `userEnv`. Every
-//     reach/execution/credential field (`backend`, `config`, `credentials`,
-//     `adminEnv`) is ignored, even if present in the body — the owner's client
-//     does not surface them, and silently ignoring avoids false rejections
-//     from echoed-but-unchanged values.
-//
-// `userEnv` may never override an admin-managed key (checked against the
-// authoritative stored `adminEnv`).
-//
-// Changing `backend` (admin only) is treated as destroy-then-update per
-// ADR-0001: the previous adapter's destroy() fires inline against the old row
-// before the new backend is written. Pass ?force=true to skip the destroy and
-// switch anyway (external resources may leak; logged as a warning).
+// Update the workspace's sandbox. Field-level authorization (ADR-0006) lives in
+// updateSandbox. Changing `backend` (admin only) destroys the previous
+// adapter's resources first (ADR-0001); pass ?force=true to skip that and
+// switch anyway.
 sandbox.put(
   "/",
   requireAuth,
@@ -167,110 +121,19 @@ sandbox.put(
   validate("json", sandboxUpdateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const data = c.req.valid("json");
-    const force = c.req.query("force") === "true";
     const isAdmin = c.get("orgMembership")?.role === "admin";
-
-    const current = await requireOwned(db, "sandbox", { workspaceId });
-
-    // Non-admin owner: restrict to name + userEnv, no backend/config changes.
-    if (!isAdmin) {
-      const envError = envCollisionError(current.adminEnv, data.userEnv);
-      if (envError) return c.json({ error: envError }, 400);
-      const record = await updateOwned(
-        db,
-        "sandbox",
-        { workspaceId },
-        {
-          name: data.name,
-          ...(data.userEnv !== undefined ? { userEnv: data.userEnv } : {}),
-          updatedAt: new Date(),
-        },
-      );
-      // Non-admin owner — redact adminEnv values in the response.
-      return c.json(sanitizeSandboxResponse(record!, false));
-    }
-
-    // Admin: full update.
-    const configError = sandboxSchemaError(data.backend, "config", data.config);
-    if (configError) return c.json({ error: configError }, 400);
-    // Validate credentials only when present — GET strips them, so an edit that
-    // leaves the field untouched preserves the stored value (Drizzle skips
-    // undefined columns) and must not be rejected for being absent.
-    if (data.credentials !== undefined) {
-      const credentialsError = sandboxSchemaError(
-        data.backend,
-        "credentials",
-        data.credentials,
-      );
-      if (credentialsError) return c.json({ error: credentialsError }, 400);
-    }
-    const envError = envCollisionError(
-      data.adminEnv ?? current.adminEnv,
-      data.userEnv ?? current.userEnv,
-    );
-    if (envError) return c.json({ error: envError }, 400);
-
-    const backendChanging = current.backend !== data.backend;
-    if (backendChanging && !force) {
-      try {
-        await destroySandboxRow(current);
-      } catch (err) {
-        const message = errorMessage(err);
-        logger.warn(
-          {
-            workspaceId,
-            sandboxId: current.id,
-            backend: current.backend,
-            plugin: getSandboxBackendPlugin(current.backend) ?? null,
-            err,
-          },
-          "Sandbox backend change blocked: previous adapter's destroy() failed",
-        );
-        return c.json(
-          {
-            error: `Failed to destroy previous sandbox: ${message}. Pass ?force=true to switch backend anyway (external resources may leak).`,
-          },
-          500,
-        );
-      }
-    } else if (backendChanging && force) {
-      logger.warn(
-        {
-          workspaceId,
-          sandboxId: current.id,
-          // `backend`/`plugin` co-refer on every line here, and on this one they
-          // name the adapter that was skipped — the one whose external resources
-          // may now be leaked, and so the one an Operator filtering by plugin is
-          // looking for. The incoming backend has leaked nothing, which is why it
-          // is `replacedBy` rather than the `newBackend` half of an old/new pair:
-          // a symmetric pair invites `plugin` to be read as spanning both.
-          backend: current.backend,
-          plugin: getSandboxBackendPlugin(current.backend) ?? null,
-          replacedBy: data.backend,
-        },
-        "Sandbox backend force-changed; previous adapter's destroy() was skipped — external resources may leak",
-      );
-    }
-
-    const record = await updateOwned(
-      db,
-      "sandbox",
-      { workspaceId },
-      {
-        ...data,
-        updatedAt: new Date(),
-      },
-    );
-    // Reached only on the admin branch above.
-    return c.json(sanitizeSandboxResponse(record!, true));
+    const record = await updateSandbox(workspaceId, c.req.valid("json"), {
+      isAdmin,
+      force: c.req.query("force") === "true",
+    });
+    // A non-admin owner gets adminEnv values redacted.
+    return c.json(sanitizeSandboxResponse(record, isAdmin));
   },
 );
 
 // Delete the workspace's sandbox. Sync, fail-loud per ADR-0001: the adapter's
 // destroy() runs inline and the row is only removed on success. Pass
-// `?force=true` to skip destroy() and remove the row anyway — external
-// resources may leak; logged as a warning.
+// `?force=true` to skip destroy() and remove the row anyway.
 sandbox.delete(
   "/",
   requireAuth,
@@ -279,45 +142,9 @@ sandbox.delete(
   requireSandboxAdmin,
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const force = c.req.query("force") === "true";
-
-    const existing = await requireOwned(db, "sandbox", { workspaceId });
-
-    if (!force) {
-      try {
-        await destroySandboxRow(existing);
-      } catch (err) {
-        const message = errorMessage(err);
-        logger.warn(
-          {
-            workspaceId,
-            sandboxId: existing.id,
-            backend: existing.backend,
-            plugin: getSandboxBackendPlugin(existing.backend) ?? null,
-            err,
-          },
-          "Sandbox destroy() failed; row preserved so the user can retry",
-        );
-        return c.json(
-          {
-            error: `Failed to destroy sandbox: ${message}. Pass ?force=true to delete the row anyway (external resources may leak).`,
-          },
-          500,
-        );
-      }
-    } else {
-      logger.warn(
-        {
-          workspaceId,
-          sandboxId: existing.id,
-          backend: existing.backend,
-          plugin: getSandboxBackendPlugin(existing.backend) ?? null,
-        },
-        "Sandbox row force-deleted; adapter destroy() was skipped — external resources may leak",
-      );
-    }
-
-    await deleteOwned(db, "sandbox", { workspaceId });
+    await deleteSandbox(workspaceId, {
+      force: c.req.query("force") === "true",
+    });
     return c.json({ message: "Sandbox deleted" });
   },
 );

@@ -234,6 +234,7 @@ describe("Workspace Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ userId: "admin-1" }]); // owner is a member
       mockDb.returning.mockResolvedValueOnce([{ id: "ws-1", name: "Ready" }]);
       mockDb.returning.mockResolvedValueOnce([{ id: "p-1" }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "sbx-1" }]);
 
       const res = await post({
         name: "Ready",

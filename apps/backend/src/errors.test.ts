@@ -3,6 +3,7 @@ import {
   NotFoundError,
   LockedError,
   ConflictError,
+  UpstreamError,
   ValidationError,
   isUniqueViolation,
   mapError,
@@ -31,6 +32,13 @@ describe("central error mapping (app.onError)", () => {
     expect(mapError(new ValidationError("Invalid label ID"))).toEqual({
       status: 400,
       message: "Invalid label ID",
+    });
+  });
+
+  it("maps UpstreamError → 502", () => {
+    expect(mapError(new UpstreamError("destroy failed"))).toEqual({
+      status: 502,
+      message: "destroy failed",
     });
   });
 

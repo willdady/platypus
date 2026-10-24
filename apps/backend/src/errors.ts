@@ -2,7 +2,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { FileValidationError } from "./services/file-gate.ts";
 
 /**
- * Typed domain errors raised by services and route handlers for the three
+ * Typed domain errors raised by services and route handlers for the
  * cross-cutting failure modes, mapped to HTTP status in a single Hono
  * `app.onError` (ADR-0010): a resource that does not exist, an
  * Organization-scoped (Shared) resource locked against Workspace-surface
@@ -60,6 +60,18 @@ export class UnsupportedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "UnsupportedError";
+  }
+}
+
+/**
+ * A system outside Platypus failed what was asked of it — e.g. a Sandbox
+ * adapter's `destroy()` rejected. The message may carry the upstream error.
+ * → 502
+ */
+export class UpstreamError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UpstreamError";
   }
 }
 
@@ -124,6 +136,8 @@ export const mapError = (
     return { status: 400, message: error.message };
   if (error instanceof UnsupportedError)
     return { status: 501, message: error.message };
+  if (error instanceof UpstreamError)
+    return { status: 502, message: error.message };
   if (error instanceof FileValidationError)
     return { status: 400, message: error.message, files: error.files };
   if (isUniqueViolation(error))

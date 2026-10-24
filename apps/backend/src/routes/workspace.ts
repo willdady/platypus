@@ -6,7 +6,6 @@ import {
   workspace as workspaceTable,
   organizationMember,
   attachment as attachmentTable,
-  sandbox as sandboxTable,
 } from "../db/schema.ts";
 import {
   workspaceCreateSchema,
@@ -28,6 +27,7 @@ import {
   resolveScoped,
 } from "../services/scoped-resource.ts";
 import { createProvider } from "../services/provider-write.ts";
+import { createSandbox } from "../services/sandbox-write.ts";
 import { sandboxCreateError } from "../sandbox/validate.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import type { Variables } from "../server.ts";
@@ -130,9 +130,7 @@ workspace.post(
         );
       }
       if (sandbox) {
-        await tx
-          .insert(sandboxTable)
-          .values({ id: nanoid(), ...sandbox, workspaceId: row.id });
+        await createSandbox(row.id, sandbox, tx);
       }
       return row;
     });
