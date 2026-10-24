@@ -71,7 +71,7 @@ export type AttachmentTarget = {
  * Throws `NotFoundError` when `workspaceId` is not a Workspace of `orgId` —
  * the workspace-in-org rule.
  */
-const requireWorkspaceInOrg = async (
+export const requireWorkspaceInOrg = async (
   orgId: string,
   workspaceId: string,
 ): Promise<void> => {

@@ -70,7 +70,11 @@ describe("Blueprint service", () => {
         orgId,
         fields({ taskModelProviderId: "shared-provider" }),
       ),
-    ).rejects.toThrow(ValidationError);
+    ).rejects.toThrow(
+      new ValidationError(
+        "A blueprint's provider settings must reference providers the blueprint also attaches: shared-provider",
+      ),
+    );
     expect(fake.tables.blueprint).toHaveLength(1);
   });
 

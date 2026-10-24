@@ -5,7 +5,6 @@ import { db, type Tx } from "../index.ts";
 import {
   blueprint as blueprintTable,
   blueprintItem as blueprintItemTable,
-  workspace as workspaceTable,
 } from "../db/schema.ts";
 import type { blueprintCreateSchema, BlueprintItem } from "@platypus/schemas";
 import {
@@ -14,7 +13,11 @@ import {
   ValidationError,
   isUniqueViolation,
 } from "../errors.ts";
-import { applyBlueprintsToWorkspace } from "./blueprint-apply.ts";
+import {
+  applyBlueprintsToWorkspace,
+  type ApplyBlueprintsResult,
+} from "./blueprint-apply.ts";
+import { requireWorkspaceInOrg } from "./attachment.ts";
 import { isBlueprintReferencedByLiveInvitation } from "./blueprint-guard.ts";
 import { requireMemoryProviderCapable } from "./memory-provider-validation.ts";
 import {
@@ -23,7 +26,7 @@ import {
 } from "./scoped-resource.ts";
 
 /**
- * The Blueprint write model behind `routes/org-blueprint.ts`. A Blueprint is a
+ * The Blueprint module behind `routes/org-blueprint.ts`. A Blueprint is a
  * named, Organization-scoped macro that, applied to a Workspace, creates the
  * Attachments for a chosen set of Shared resources in one step (ADR-0008). It
  * is a snapshot, not a living binding: applying stamps Attachments at that
@@ -34,7 +37,10 @@ import {
 
 export type BlueprintRow = typeof blueprintTable.$inferSelect;
 
-/** The fields a create or update carries — both replace the form wholesale. */
+/**
+ * The fields a create or update carries — both replace the form wholesale, and
+ * `blueprintUpdateSchema` is the same pick as `blueprintCreateSchema`.
+ */
 export type BlueprintFields = z.infer<typeof blueprintCreateSchema>;
 
 export type BlueprintWithItems = BlueprintRow & { items: BlueprintItem[] };
@@ -140,8 +146,9 @@ const columnsOf = (fields: BlueprintFields) => ({
 });
 
 /**
- * Runs a Blueprint write in a transaction, writing `items` as its item set and
- * mapping a duplicate name to `ConflictError`.
+ * Runs a Blueprint write in a transaction: `writeRow` writes the Blueprint row
+ * (and, on update, clears its old items), then `items` is inserted as its item
+ * set. A duplicate name maps to `ConflictError`.
  */
 const writeBlueprint = async (
   blueprintId: string,
@@ -311,19 +318,9 @@ export const applyBlueprint = async (
   blueprintId: string,
   orgId: string,
   workspaceId: string,
-) => {
+): Promise<ApplyBlueprintsResult> => {
   await requireBlueprint(blueprintId, orgId);
-  const [ws] = await db
-    .select({ id: workspaceTable.id })
-    .from(workspaceTable)
-    .where(
-      and(
-        eq(workspaceTable.id, workspaceId),
-        eq(workspaceTable.organizationId, orgId),
-      ),
-    )
-    .limit(1);
-  if (!ws) throw new NotFoundError("Workspace not found in this organization");
+  await requireWorkspaceInOrg(orgId, workspaceId);
   return db.transaction((tx) =>
     applyBlueprintsToWorkspace(tx, workspaceId, [blueprintId]),
   );
