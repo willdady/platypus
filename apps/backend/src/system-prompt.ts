@@ -130,6 +130,7 @@ type Fragment = (ctx: SystemPromptStableContext) => string | null;
 
 const instructionsFragment: Fragment = (ctx) => {
   const instructions = ctx.agent?.instructions ?? ctx.fallbackInstructions;
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- blank instructions fall back to the default
   return instructions?.trim() || "You are a helpful AI assistant.";
 };
 
@@ -219,6 +220,7 @@ const subAgentsFragment: Fragment = (ctx) => {
   if (ctx.subAgents.length) {
     const lines = ctx.subAgents.map(
       (sa) =>
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
         `- **${sa.name}**: ${sa.description || "No description provided"}`,
     );
     // The catalogue is the model's only route to a valid target — the
@@ -234,14 +236,16 @@ Each task description MUST be entirely self-contained — sub-agents cannot see 
   }
 
   if (unavailable.length) {
-    const lines = unavailable.map((sa) =>
+    const lines = unavailable.map((sa) => {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
+      const reason = sa.reason || "failed to load";
       // Listed by whichever identifier it has — a nameless entry never resolved
       // far enough to have a name. Either way it is the identifier the
       // delegation tool refuses it under, where that tool exists at all.
-      sa.name
-        ? `- **${sa.name}**: ${sa.reason || "failed to load"}`
-        : `- Sub-agent \`${sa.id}\`: ${sa.reason || "failed to load"}`,
-    );
+      return sa.name
+        ? `- **${sa.name}**: ${reason}`
+        : `- Sub-agent \`${sa.id}\`: ${reason}`;
+    });
     // With nothing left to delegate to there is no delegation tool this turn,
     // so promising a refusal would describe a tool the model was never given.
     const consequence = ctx.subAgents.length

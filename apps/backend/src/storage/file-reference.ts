@@ -62,6 +62,7 @@ export const isUnresolvedReference = (url: string): boolean =>
 
 /** `STORAGE_PUBLIC_URL` without its trailing slashes, or undefined when unset. */
 const publicBaseUrl = (): string | undefined =>
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty URL counts as unset
   process.env.STORAGE_PUBLIC_URL?.replace(/\/+$/, "") || undefined;
 
 /**

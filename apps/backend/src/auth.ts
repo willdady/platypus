@@ -62,7 +62,7 @@ export const auth = betterAuth({
     // tab, so it is exempt; the credential paths keep the default limits.
     customRules: { "/get-session": false },
   },
-  trustedOrigins: process.env.ALLOWED_ORIGINS?.split(",") || [],
+  trustedOrigins: process.env.ALLOWED_ORIGINS?.split(",") ?? [],
   ...crossSubdomainCookieConfig(authCookieDomain),
   plugins: authPlugins,
 });

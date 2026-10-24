@@ -17,6 +17,7 @@ export class DiskStorage implements StorageBackend {
    * @param basePath - Directory where files will be stored (default: "./data/files")
    */
   constructor(
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
     basePath: string = process.env.STORAGE_DISK_PATH || "./data/files",
   ) {
     this.basePath = path.resolve(basePath);

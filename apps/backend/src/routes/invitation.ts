@@ -24,6 +24,7 @@ const invitation = new Hono<{ Variables: Variables }>();
 
 const DEFAULT_INVITATION_EXPIRY_DAYS = 7;
 const INVITATION_EXPIRY_DAYS = parseInt(
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
   process.env.INVITATION_EXPIRY_DAYS || String(DEFAULT_INVITATION_EXPIRY_DAYS),
 );
 

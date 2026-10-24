@@ -21,6 +21,7 @@ const transport = pino.transport({
 
 export const logger = pino(
   {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
     level: process.env.LOG_LEVEL || "info",
     serializers: errorSerializers,
   },

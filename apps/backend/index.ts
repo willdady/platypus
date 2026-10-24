@@ -26,6 +26,7 @@ import { validateA2aSettings } from "./src/services/a2a-call.ts";
 import { errorMessage } from "./src/utils/error-message.ts";
 
 const DEFAULT_PORT = 4001;
+// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
 const PORT = process.env.PORT || String(DEFAULT_PORT);
 
 /**

@@ -6,6 +6,7 @@ import { scheduleAligned } from "./scheduler.ts";
 
 const DEFAULT_MEMORY_EXTRACTION_INTERVAL_MS = 5 * 60 * 1000;
 const MEMORY_EXTRACTION_INTERVAL_MS = parseInt(
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
   process.env.MEMORY_EXTRACTION_INTERVAL_MS ||
     String(DEFAULT_MEMORY_EXTRACTION_INTERVAL_MS),
 );

@@ -21,6 +21,7 @@ export class S3Storage implements StorageBackend {
 
   constructor() {
     const bucket = process.env.STORAGE_S3_BUCKET;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
     const region = process.env.STORAGE_S3_REGION || "us-east-1";
     const endpoint = process.env.STORAGE_S3_ENDPOINT;
     const accessKeyId = process.env.STORAGE_S3_ACCESS_KEY_ID;
@@ -94,7 +95,9 @@ export class S3Storage implements StorageBackend {
 
       // Get content type from response or metadata
       const contentType =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
         response.ContentType ||
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
         response.Metadata?.["content-type"] ||
         "application/octet-stream";
 

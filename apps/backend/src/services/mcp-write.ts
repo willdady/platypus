@@ -122,6 +122,7 @@ const oauthResetPatch = (existing: McpRow, fields: McpUpdateFields) => {
   // The form sends "" for no client ID, which the row may hold as null.
   const clientIdChanged =
     fields.oauthClientId !== undefined &&
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- treats an empty client id the same as none
     (fields.oauthClientId || null) !== (existing.oauthClientId || null);
   if (!clientIdChanged) return {};
   return {

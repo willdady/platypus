@@ -46,6 +46,7 @@ import { sweepMissedEnds, turnEnded } from "../services/a2a-task-lifecycle.ts";
 
 const DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS = 60 * 1000;
 const SCHEDULER_INTERVAL_MS = parseInt(
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
   process.env.SCHEDULE_SCHEDULER_INTERVAL_MS ||
     String(DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS),
 );
@@ -54,6 +55,7 @@ const SCHEDULER_INTERVAL_MS = parseInt(
 // the database. Event Trigger runs are not counted.
 const DEFAULT_SCHEDULE_MAX_CONCURRENT = 5;
 const MAX_CONCURRENT_TRIGGERS = parseInt(
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
   process.env.SCHEDULE_MAX_CONCURRENT ||
     String(DEFAULT_SCHEDULE_MAX_CONCURRENT),
 );

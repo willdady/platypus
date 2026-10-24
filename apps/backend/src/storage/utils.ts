@@ -90,6 +90,7 @@ function generateStorageKey(
   extension: string,
 ): string {
   const hash8 = contentHash.slice(0, 8);
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
   const messageId = context.messageId || "unknown";
   const key = `${chatStorageKeyPrefix(context)}${messageId}/${partIndex}-${hash8}.${extension}`;
   assertValidStorageKey(key);

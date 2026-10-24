@@ -32,10 +32,10 @@ notification.get(
     const { workspaceId } = workspaceScopeOf(c);
     const user = userOf(c);
     const limit = Math.min(
-      Math.max(parseInt(c.req.query("limit") || "50", 10) || 50, 1),
+      Math.max(parseInt(c.req.query("limit") ?? "50", 10) || 50, 1),
       100,
     );
-    const offset = Math.max(parseInt(c.req.query("offset") || "0", 10) || 0, 0);
+    const offset = Math.max(parseInt(c.req.query("offset") ?? "0", 10) || 0, 0);
     const baseUrl = getOrigin(c);
 
     const results = await listWorkspaceNotifications(

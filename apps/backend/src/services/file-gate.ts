@@ -135,6 +135,7 @@ export const assertFilePartsSupported = async (
     if (!Array.isArray(message.parts)) continue;
     for (const part of message.parts) {
       if (!isFilePart(part)) continue;
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty filename is labelled too
       const label = part.filename || "attachment";
       const outcome = classifyFilePart(part, passthroughFileTypes);
 
@@ -177,7 +178,11 @@ const fence = (content: string): string => {
 const annotateInlinedText = (
   filename: string | undefined,
   content: string,
-): string => `[file: ${filename || "attachment"}]\n\n${fence(content)}`;
+): string => {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty filename is labelled too
+  const label = filename || "attachment";
+  return `[file: ${label}]\n\n${fence(content)}`;
+};
 
 /**
  * Wrap text pulled out of a binary document. Annotated distinctly from an
@@ -194,6 +199,7 @@ const annotateExtractedText = (
   const notice = extracted.truncated
     ? `\n\n[extracted text truncated: first ${extracted.text.length} of ${extracted.totalChars} characters]`
     : "";
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty filename is labelled too
   return `[extracted text from ${filename || "attachment"}]\n\n${fence(
     extracted.text,
   )}${notice}`;
@@ -217,6 +223,7 @@ const omittedFilePlaceholder = (
   // status is a type error here instead of a silently missing placeholder.
   reason: "unavailable" | FileRejectionReason,
 ) => {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty filename is labelled too
   const label = filename || "attachment";
   const text = {
     unavailable: `[file unavailable: ${label}]`,

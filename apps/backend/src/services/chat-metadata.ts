@@ -103,6 +103,7 @@ export const generateChatMetadata = async (
   if (!workspace) return null;
 
   // Use the workspace task-model provider if set, otherwise the supplied one.
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
   const effectiveProviderId = workspace.taskModelProviderId || providerId;
 
   // Resolved through the Scoped-resource authority, as every other resource a

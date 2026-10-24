@@ -13,8 +13,10 @@ const DEFAULT_FRONTEND_URL = "http://localhost:3001";
 
 /** `BETTER_AUTH_URL` — the backend origin the browser talks to. */
 export const backendBaseUrl = (): string =>
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
   process.env.BETTER_AUTH_URL || DEFAULT_BACKEND_URL;
 
 /** `FRONTEND_URL` — the origin the browser loads the app from. */
 export const frontendBaseUrl = (): string =>
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
   process.env.FRONTEND_URL || DEFAULT_FRONTEND_URL;

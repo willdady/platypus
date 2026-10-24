@@ -614,6 +614,7 @@ export const prepareChatTurn = async (
     userId: user.id,
     frontendUrl,
     // Tools always need a zone to work in; the prompt states only the profile's.
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty env var counts as unset
     timezone: profileTimezone ?? (process.env.TIMEZONE || "UTC"),
   };
   // Started before the `Promise.all` rather than inside it because the delegates
