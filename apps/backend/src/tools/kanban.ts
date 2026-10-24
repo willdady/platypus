@@ -6,26 +6,27 @@ import {
   bulkUpdateCards,
   copyCard,
   createCard,
-  createComment,
   deleteCards,
-  getBoardState,
   getCard,
-  listBoards,
-  listCardHistory,
-  listComments,
   moveCard,
+  updateCard,
+} from "../services/kanban-card.ts";
+import { listCardHistory } from "../services/kanban-card-history.ts";
+import { getBoardState, listBoards } from "../services/kanban-board.ts";
+import {
+  createComment,
+  listComments,
   removeComment,
   requireComment,
   resolveCommentNames,
-  updateCard,
   updateCommentBody,
-  type KanbanContext,
-} from "../services/kanban.ts";
+} from "../services/kanban-comment.ts";
+import type { KanbanContext } from "../services/kanban-shared.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 import { createListAgentsTool } from "./agent-discovery.ts";
 
 /**
- * The Agent-facing surface over the Kanban module (`services/kanban.ts`): each
+ * The Agent-facing surface over the Kanban modules (`services/kanban-*`): each
  * Tool parses its input, calls the module, and shapes the result. The board's
  * rules — what a label may be, who may be assigned, where a card lands, what
  * event fires — belong to the module and are shared with the HTTP routes, so

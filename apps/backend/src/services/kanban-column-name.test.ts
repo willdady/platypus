@@ -22,7 +22,7 @@ vi.mock("./event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
 // Two inserts in flight need two ids.
 mockNanoid.mockImplementation(() => crypto.randomUUID());
 
-const { createColumn, renameColumn } = await import("./kanban.ts");
+const { createColumn, renameColumn } = await import("./kanban-column.ts");
 
 let pg: PGlite;
 let database: ReturnType<typeof drizzle>;

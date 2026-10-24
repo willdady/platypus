@@ -37,7 +37,7 @@ import { NotFoundError } from "../errors.ts";
  *
  * - the flat resources are scoped by `workspaceId`;
  * - a Widget is nested one level down, carrying a `dashboardId` instead
- *   (mirroring `services/kanban.ts`'s `withinScope` for Card/Column under
+ *   (mirroring `services/kanban-shared.ts`'s `withinScope` for Card/Column under
  *   Board): the caller establishes the Dashboard is in this Workspace once
  *   (`requireOwned` with type `"dashboard"`), then every Widget lookup scopes
  *   to that id;
