@@ -527,6 +527,11 @@ export const mcpOauthState = pgTable(
       .text("mcp_id")
       .notNull()
       .references(() => mcp.id, { onDelete: "cascade" }),
+    // The user who started this sign-in; only they may complete it. Null when
+    // the state was minted outside a user request, which no one can complete.
+    userId: t
+      .text("user_id")
+      .references(() => user.id, { onDelete: "cascade" }),
     codeVerifier: t.text("code_verifier").notNull(),
     // The authorization server this sign-in started against; its callback is
     // checked against this one, not against a sign-in started later.
@@ -537,7 +542,10 @@ export const mcpOauthState = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     expiresAt: t.timestamp("expires_at").notNull(),
   }),
-  (t) => [index("idx_mcp_oauth_state_mcp_id").on(t.mcpId)],
+  (t) => [
+    index("idx_mcp_oauth_state_mcp_id").on(t.mcpId),
+    index("idx_mcp_oauth_state_user_id").on(t.userId),
+  ],
 );
 
 // Attachment — the explicit reference that makes an Organization-scoped Shared

@@ -666,6 +666,13 @@
       "when": 1792830554106,
       "tag": "0094_skill_github_install",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1792839445233,
+      "tag": "0095_mcp_oauth_state_user",
+      "breakpoints": true
     }
   ]
 }

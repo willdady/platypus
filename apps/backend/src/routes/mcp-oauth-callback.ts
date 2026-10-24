@@ -6,6 +6,7 @@ import { mcp as mcpTable, mcpOauthState, workspace } from "../db/schema.ts";
 import { mcpOauthCallbackSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
+import { userOf } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import {
@@ -33,6 +34,13 @@ mcpOauthCallback.post(
 
     if (!stateRecord) {
       return c.json({ error: "Invalid or expired OAuth state" }, 400);
+    }
+
+    // Only the user who started the sign-in may complete it. Otherwise any
+    // signed-in user lured through the provider's consent screen would bind
+    // their third-party account to the starter's MCP.
+    if (stateRecord.userId !== userOf(c).id) {
+      return c.json({ error: "OAuth state belongs to another user" }, 403);
     }
 
     // Check expiry
@@ -84,9 +92,6 @@ mcpOauthCallback.post(
         fetchFn: oauthFetchFn,
       });
 
-      // Clean up the state record
-      await db.delete(mcpOauthState).where(eq(mcpOauthState.id, state));
-
       if (result === "AUTHORIZED") {
         return c.json({
           orgId: redirectOrgId,
@@ -97,10 +102,14 @@ mcpOauthCallback.post(
 
       return c.json({ error: "Unexpected OAuth result" }, 500);
     } catch (error) {
+      // The library's message can name the authorization server's internals;
+      // it goes to the log, not the browser.
       logger.error({ error }, "OAuth callback error");
-      const errorMessage =
-        error instanceof Error ? error.message : "OAuth token exchange failed";
-      return c.json({ error: errorMessage }, 500);
+      return c.json({ error: "OAuth token exchange failed" }, 500);
+    } finally {
+      // A state is single-use whatever the exchange's outcome. The provider
+      // reads the row during the exchange, so it is removed after, not before.
+      await db.delete(mcpOauthState).where(eq(mcpOauthState.id, state));
     }
   },
 );

@@ -182,7 +182,7 @@ describe("mcp-oauth-provider", () => {
       });
 
     const provider = (fields: Record<string, unknown> = {}) =>
-      new DatabaseOAuthClientProvider(mcpRecord(fields), CALLBACK);
+      new DatabaseOAuthClientProvider(mcpRecord(fields), CALLBACK, "user-1");
 
     const row = (fake: ReturnType<typeof world>, table: string, id: string) =>
       fake.tables[table].find((r) => r.id === id);
@@ -627,6 +627,7 @@ describe("mcp-oauth-provider", () => {
         expect(row(fake, "mcp_oauth_state", "state-123")).toEqual({
           id: "state-123",
           mcpId: "mcp-1",
+          userId: "user-1",
           codeVerifier: "verifier-early",
           redirectUri: CALLBACK,
           expiresAt: expect.any(Date) as unknown,

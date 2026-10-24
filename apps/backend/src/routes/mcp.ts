@@ -11,6 +11,7 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess,
+  userOf,
   workspaceCredentialsVisible,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
@@ -204,6 +205,7 @@ mcp.post(
     const result = await authorizeMcpOAuth(db, mcpRecord, {
       force,
       clearTokensWhere: workspaceScopedWhere("mcp", mcpId, scope.workspaceId),
+      userId: userOf(c).id,
     });
 
     if (result.kind === "error") {

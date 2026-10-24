@@ -249,7 +249,7 @@ describe("mcp-connection", () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "None" },
-        { force: false, clearTokensWhere: someWhere },
+        { force: false, clearTokensWhere: someWhere, userId: "user-1" },
       );
       expect(result).toEqual({
         kind: "error",
@@ -262,7 +262,7 @@ describe("mcp-connection", () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth", url: null },
-        { force: false, clearTokensWhere: someWhere },
+        { force: false, clearTokensWhere: someWhere, userId: "user-1" },
       );
       expect(result).toEqual({
         kind: "error",
@@ -286,7 +286,7 @@ describe("mcp-connection", () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },
-        { force: true, clearTokensWhere: someWhere },
+        { force: true, clearTokensWhere: someWhere, userId: "user-1" },
       );
 
       expect(mockDb.set).toHaveBeenCalledWith(
@@ -305,7 +305,7 @@ describe("mcp-connection", () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },
-        { force: true, clearTokensWhere: someWhere },
+        { force: true, clearTokensWhere: someWhere, userId: "user-1" },
       );
 
       expect(result).toEqual({
@@ -353,6 +353,7 @@ describe("mcp-connection", () => {
             mcpTable.id,
             "mcp-1",
           ) as unknown as SQL,
+          userId: "user-1",
         },
       );
 
@@ -373,7 +374,7 @@ describe("mcp-connection", () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },
-        { force: false, clearTokensWhere: someWhere },
+        { force: false, clearTokensWhere: someWhere, userId: "user-1" },
       );
 
       expect(mockDb.update).not.toHaveBeenCalled();
@@ -386,7 +387,7 @@ describe("mcp-connection", () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },
-        { force: false, clearTokensWhere: someWhere },
+        { force: false, clearTokensWhere: someWhere, userId: "user-1" },
       );
 
       expect(result).toEqual({
@@ -402,7 +403,7 @@ describe("mcp-connection", () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },
-        { force: false, clearTokensWhere: someWhere },
+        { force: false, clearTokensWhere: someWhere, userId: "user-1" },
       );
 
       expect(result).toEqual({
@@ -417,7 +418,7 @@ describe("mcp-connection", () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
         { ...baseMcp, authType: "OAuth" },
-        { force: false, clearTokensWhere: someWhere },
+        { force: false, clearTokensWhere: someWhere, userId: "user-1" },
       );
 
       expect(result).toEqual({

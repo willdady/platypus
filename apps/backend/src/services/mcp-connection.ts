@@ -226,7 +226,7 @@ export const clearOAuthTokens = async (
 export const authorizeMcpOAuth = async (
   database: Database,
   mcpRecord: McpRecord,
-  opts: { force: boolean; clearTokensWhere: SQL },
+  opts: { force: boolean; clearTokensWhere: SQL; userId: string },
 ): Promise<McpOAuthAuthorizeResult> => {
   if (mcpRecord.authType !== "OAuth") {
     return {
@@ -258,7 +258,11 @@ export const authorizeMcpOAuth = async (
 
   try {
     const callbackUrl = buildOAuthCallbackUrl();
-    const provider = new DatabaseOAuthClientProvider(record, callbackUrl);
+    const provider = new DatabaseOAuthClientProvider(
+      record,
+      callbackUrl,
+      opts.userId,
+    );
 
     const result = await mcpAuth(provider, {
       serverUrl,

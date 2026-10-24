@@ -72,7 +72,12 @@ describe("MCP OAuth Callback Route", () => {
     mockSession();
     const expiredDate = new Date(Date.now() - 60000); // 1 minute ago
     mockDb.limit.mockResolvedValueOnce([
-      { id: "state-123", mcpId: "mcp-1", expiresAt: expiredDate },
+      {
+        id: "state-123",
+        mcpId: "mcp-1",
+        userId: "user-1",
+        expiresAt: expiredDate,
+      },
     ]);
 
     const res = await app.request(baseUrl, {
@@ -92,7 +97,12 @@ describe("MCP OAuth Callback Route", () => {
     const futureDate = new Date(Date.now() + 600000);
     mockDb.limit
       .mockResolvedValueOnce([
-        { id: "state-123", mcpId: "mcp-1", expiresAt: futureDate },
+        {
+          id: "state-123",
+          mcpId: "mcp-1",
+          userId: "user-1",
+          expiresAt: futureDate,
+        },
       ]) // state lookup
       .mockResolvedValueOnce([]); // mcp lookup - not found
 
@@ -111,7 +121,12 @@ describe("MCP OAuth Callback Route", () => {
     const futureDate = new Date(Date.now() + 600000);
     mockDb.limit
       .mockResolvedValueOnce([
-        { id: "state-123", mcpId: "mcp-1", expiresAt: futureDate },
+        {
+          id: "state-123",
+          mcpId: "mcp-1",
+          userId: "user-1",
+          expiresAt: futureDate,
+        },
       ]) // state lookup
       .mockResolvedValueOnce([{ id: "mcp-1", url: null, workspaceId: "ws-1" }]); // mcp lookup - no URL
 
@@ -132,7 +147,12 @@ describe("MCP OAuth Callback Route", () => {
     const futureDate = new Date(Date.now() + 600000);
     mockDb.limit
       .mockResolvedValueOnce([
-        { id: "state-123", mcpId: "mcp-1", expiresAt: futureDate },
+        {
+          id: "state-123",
+          mcpId: "mcp-1",
+          userId: "user-1",
+          expiresAt: futureDate,
+        },
       ]) // state lookup
       .mockResolvedValueOnce([
         { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
@@ -154,7 +174,12 @@ describe("MCP OAuth Callback Route", () => {
     const futureDate = new Date(Date.now() + 600000);
     mockDb.limit
       .mockResolvedValueOnce([
-        { id: "state-123", mcpId: "mcp-1", expiresAt: futureDate },
+        {
+          id: "state-123",
+          mcpId: "mcp-1",
+          userId: "user-1",
+          expiresAt: futureDate,
+        },
       ]) // state lookup
       .mockResolvedValueOnce([
         { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
@@ -182,7 +207,12 @@ describe("MCP OAuth Callback Route", () => {
     const futureDate = new Date(Date.now() + 600000);
     mockDb.limit
       .mockResolvedValueOnce([
-        { id: "state-123", mcpId: "mcp-1", expiresAt: futureDate },
+        {
+          id: "state-123",
+          mcpId: "mcp-1",
+          userId: "user-1",
+          expiresAt: futureDate,
+        },
       ])
       .mockResolvedValueOnce([
         { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
@@ -207,7 +237,12 @@ describe("MCP OAuth Callback Route", () => {
     const futureDate = new Date(Date.now() + 600000);
     mockDb.limit
       .mockResolvedValueOnce([
-        { id: "state-123", mcpId: "mcp-1", expiresAt: futureDate },
+        {
+          id: "state-123",
+          mcpId: "mcp-1",
+          userId: "user-1",
+          expiresAt: futureDate,
+        },
       ])
       .mockResolvedValueOnce([
         { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
@@ -226,7 +261,52 @@ describe("MCP OAuth Callback Route", () => {
 
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({
-      error: "Token exchange failed",
+      error: "OAuth token exchange failed",
     });
+    // Single-use: a failed exchange consumes the state too.
+    expect(mockDb.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("should return 403 when another user completes the state", async () => {
+    mockSession({ id: "user-2", email: "other@example.com", role: "user" });
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "state-123",
+        mcpId: "mcp-1",
+        userId: "user-1",
+        expiresAt: new Date(Date.now() + 600000),
+      },
+    ]);
+
+    const res = await app.request(baseUrl, {
+      method: "POST",
+      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(res.status).toBe(403);
+    expect(mcpAuth).not.toHaveBeenCalled();
+    expect(mockDb.delete).not.toHaveBeenCalled();
+  });
+
+  it("should return 403 for a state minted outside a user request", async () => {
+    mockSession();
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "state-123",
+        mcpId: "mcp-1",
+        userId: null,
+        expiresAt: new Date(Date.now() + 600000),
+      },
+    ]);
+
+    const res = await app.request(baseUrl, {
+      method: "POST",
+      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(res.status).toBe(403);
+    expect(mcpAuth).not.toHaveBeenCalled();
   });
 });

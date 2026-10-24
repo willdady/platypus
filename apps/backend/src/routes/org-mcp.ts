@@ -11,6 +11,7 @@ import {
   orgCredentialsVisible,
   orgScopeOf,
   requireOrgAccess,
+  userOf,
 } from "../middleware/authorization.ts";
 import {
   listOrgScoped,
@@ -146,6 +147,7 @@ orgMcp.post(
     const result = await authorizeMcpOAuth(db, mcpRecord, {
       force,
       clearTokensWhere: orgScopedWhere("mcp", mcpId, orgId),
+      userId: userOf(c).id,
     });
 
     if (result.kind === "error") {

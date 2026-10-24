@@ -106,11 +106,14 @@ export const oauthFetchFn: typeof fetch = async (input, init) => {
 export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   private mcpRecord: McpRecord;
   private callbackUrl: string;
+  private userId: string | undefined;
   private pendingAuthUrl: URL | undefined;
 
-  constructor(mcpRecord: McpRecord, callbackUrl: string) {
+  /** `userId` is the user starting a sign-in; the callback admits only them. */
+  constructor(mcpRecord: McpRecord, callbackUrl: string, userId?: string) {
     this.mcpRecord = mcpRecord;
     this.callbackUrl = callbackUrl;
+    this.userId = userId;
   }
 
   get redirectUrl(): string | URL {
@@ -398,6 +401,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     await db.insert(mcpOauthState).values({
       id: state,
       mcpId: this.mcpRecord.id,
+      userId: this.userId ?? null,
       codeVerifier: this._pendingCodeVerifier ?? "",
       redirectUri: this.callbackUrl,
       expiresAt,
