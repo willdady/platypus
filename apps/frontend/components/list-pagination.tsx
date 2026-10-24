@@ -11,7 +11,10 @@ export type Page<T> = {
   items: readonly T[];
   page: number;
   pageCount: number;
-  /** Slots a short last page is missing; 0 when there is only one page. */
+  /**
+   * Slots a short last page is missing in the two-column layout; 0 when
+   * there is only one page. Drawn on wide screens only.
+   */
   ghosts: number;
   /**
    * Slots completing a lone page's half-full last row in the two-column
@@ -52,8 +55,9 @@ export function pageOf<T>(
 /**
  * Empty, dashed slots that fill a short last page out to a full one, so the
  * footer and the sections below stay put, or a lone page's last row out to
- * two. The grid needs `auto-rows-fr`, so a row of only ghosts is as tall as a
- * row of cards.
+ * two. They are for the two-column layout, so they show on wide screens only:
+ * a single column would end in a stack of empty cards. The grid needs
+ * `auto-rows-fr`, so a row of only ghosts is as tall as a row of cards.
  */
 export function GhostCards({
   page: { ghosts, rowGhosts },
@@ -65,7 +69,7 @@ export function GhostCards({
     <li
       key={`ghost-${i}`}
       aria-hidden="true"
-      className={cn("relative text-border", i >= ghosts && "hidden lg:block")}
+      className="relative hidden text-border lg:block"
     >
       <svg className="absolute inset-0 size-full overflow-visible">
         <rect
