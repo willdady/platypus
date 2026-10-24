@@ -74,6 +74,7 @@ workspace.post(
         "Org-scoped resource not found in this organization",
       );
     }
+    // createSandbox checks again, but only once the Workspace row is written.
     if (sandbox) {
       const sandboxError = sandboxCreateError(sandbox);
       if (sandboxError) return c.json({ error: sandboxError }, 400);

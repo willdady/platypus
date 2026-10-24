@@ -148,7 +148,7 @@ export async function updateSandbox(
 
   if (!options.isAdmin) {
     throwIfInvalid(envCollisionError(current.adminEnv, fields.userEnv));
-    return written(
+    return requireWritten(
       await updateOwned(
         db,
         "sandbox",
@@ -191,7 +191,7 @@ export async function updateSandbox(
     );
   }
 
-  return written(
+  return requireWritten(
     await updateOwned(
       db,
       "sandbox",
@@ -202,7 +202,7 @@ export async function updateSandbox(
 }
 
 // A concurrent delete can land between the read and the UPDATE.
-const written = (row: SandboxRow | null): SandboxRow => {
+const requireWritten = (row: SandboxRow | null): SandboxRow => {
   if (!row) throw new NotFoundError("Sandbox not found");
   return row;
 };

@@ -112,3 +112,11 @@ An `app.notFound` gives unknown paths the same `{ error }` body.
 The branch ignores any custom `res` an `HTTPException` may carry. Nothing in the
 backend throws one with a response today; a middleware that needs its headers kept
 (e.g. `WWW-Authenticate`) should return its response instead.
+
+## Amendment — `UpstreamError` → 502 (#1656)
+
+A Sandbox adapter's `destroy()` failing on a user-initiated delete or `backend` change used
+to answer an inline 500, indistinguishable from a Platypus bug. That code moved into one
+write service (`services/sandbox-write.ts`), which throws `UpstreamError` for it; `onError`
+maps it to 502. Its message may carry the upstream error, since the caller needs it to
+decide whether to force.
