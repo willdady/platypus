@@ -1,14 +1,24 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#1156"
+status: accepted
 ---
 
 # A Tool gate decides whether a tool call runs, and fails closed
 
-> State of the code today: no Tool gate Extension point, Verdict type or
-> reference gate Plugin exists. A tool call goes straight from the model to the
-> tool's `execute`. This ADR records the decision only. It moves to `accepted`
-> in the pull request that builds the point.
+> **In the code.** The point is `toolGates` on the Plugin manifest, registered
+> through the shared contribution pipeline like the other three
+> (`toolGatePoint` in `plugins/extension-points.ts`). `tool-gates/index.ts`
+> holds the registry and `toolGateOptions`, which `buildModelInvocation` spreads
+> into every Drive's `streamText` call as `toolApproval` — and leaves out
+> entirely when no gate is enabled. Each Tool session builds the gate's view of
+> its calls (`ToolSession.gateScope`: Tool set ids, the MCP hint in all three
+> states, and `attended`, true only for an interactive top-level session); a
+> Sub-Agent's run carries its own nested session's. A denial reaches the model
+> as the SDK's `execution-denied` tool result with the gate's reason, the Chat
+> part as `output-denied` with the reason on its approval, and the Run timeline
+> as a cancelled tool-call event carrying the reason; the no-progress detector
+> counts a repeated denial like a repeated result. The reference gate is the
+> built-in `@platypus/decision-gate`, which calls `experimental_decide` (the
+> SDK's current name for `experimental_evaluate`).
 
 Platypus adds a fourth Extension point (ADR-0013), the **Tool gate**. A gate sees a tool call before it executes and returns a **Verdict**: `allow`, `ask` or `deny`, with an optional reason. A gate only gates. It never changes a call's arguments or its result. The motivating case is fast decision models (Jev and equivalents) asked "is this tool call destructive?", but a gate can equally be a plain rule list, and core cannot tell the two apart: it sees only the Verdict.
 

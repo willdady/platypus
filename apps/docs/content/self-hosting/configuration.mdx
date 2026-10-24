@@ -137,17 +137,18 @@ Plugins come in two tiers:
 **The core Plugins.** This page owns the list; other pages link here rather than
 repeat it.
 
-| Plugin                     | Tier      | Contributes                                                                                                                        |
-| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time, identifiers.                                                                      |
-| `@platypus/tools-platform` | Always-on | The Platypus-domain Tool sets — kanban, dashboards, triggers, memory, notifications, agent discovery/management, skill management. |
-| `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.                                           |
-| `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.sandbox.yaml` overlay.                                           |
-| `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. The one backend viable in horizontally-scaled deployments.             |
-| `@platypus/exa`            | Gate-able | The Exa Web-search backend — search and page reading through Exa's hosted API. Needs an Exa API key.                               |
+| Plugin                     | Tier      | Contributes                                                                                                                                    |
+| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time, identifiers.                                                                                  |
+| `@platypus/tools-platform` | Always-on | The Platypus-domain Tool sets — kanban, dashboards, triggers, memory, notifications, agent discovery/management, skill management.             |
+| `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.                                                       |
+| `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.sandbox.yaml` overlay.                                                       |
+| `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. The one backend viable in horizontally-scaled deployments.                         |
+| `@platypus/exa`            | Gate-able | The Exa Web-search backend — search and page reading through Exa's hosted API. Needs an Exa API key.                                           |
+| `@platypus/decision-gate`  | Gate-able | The decision-model Tool gate — asks a decision model whether each tool call is destructive, and stops it if so. See [Tool gates](#tool-gates). |
 
-The two always-on Plugins load unconditionally and must not be listed. The four
-gate-able ones load only when named in `PLATYPUS_PLUGINS`. All six are internal
+The two always-on Plugins load unconditionally and must not be listed. The five
+gate-able ones load only when named in `PLATYPUS_PLUGINS`. All seven are internal
 backend modules — their `@platypus/*` names are logical ids, not npm packages, so
 there is nothing to install. A third-party Plugin is an npm package that does
 need installing — see [Installing Plugins](/extending/installing-plugins).
@@ -228,8 +229,8 @@ for how a manifest's `contributes` block fills Extension points.
 An **Org Admin** can confirm what's actually loaded from the app:
 **Organization settings → Plugins** lists every Plugin loaded at boot, its
 version, its origin (**Core** or **Third-party**), and the contributions it
-registered — the Tool sets, Sandbox backends and Web-search backends it
-provides. That last part ties a contribution back to the Plugin it came from.
+registered — the Tool sets, Sandbox backends, Web-search backends and Tool gates
+it provides. That last part ties a contribution back to the Plugin it came from.
 
 The view is **strictly read-only**: there is no enable / disable / install
 control, because enablement is the deploy-time `PLATYPUS_PLUGINS` list above — a
@@ -364,6 +365,63 @@ one:
   Without the key, boot aborts with an error naming the Plugin. Once it loads,
   pick **Exa** in a Provider's **Web search** field. Exa fetches pages from its
   own servers, not from your deployment.
+
+## Tool gates
+
+A **Tool gate** sees every tool call before it runs and decides whether it may:
+allow it, stop it, or ask for a person to approve it. An enabled gate applies to
+every Organization on the deployment, in Chats, Trigger runs, A2A calls and
+Sub-Agent runs, and to MCP tools as well as built-in ones. No Workspace Owner can
+turn it off for their Agents.
+
+Platypus ships one, off by default:
+
+- **Decision model** — `@platypus/decision-gate`. Asks a decision model one
+  question about each call — is it destructive or irreversible? — and stops the
+  call when the model's confidence reaches your threshold. List it in
+  `PLATYPUS_PLUGINS` and give it a model, a key and its thresholds:
+
+  ```
+  PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/decision-gate
+  PLATYPUS_PLUGIN_CONFIG_DECISION_GATE={"config":{"provider":"gateway","denyThreshold":0.9,"askThreshold":0.6},"credentials":{"apiKey":"your-gateway-api-key"}}
+  ```
+
+  | Field           | Required            | Meaning                                                                                              |
+  | --------------- | ------------------- | ---------------------------------------------------------------------------------------------------- |
+  | `provider`      | No                  | `gateway` (the default), `anthropic`, `openai` or `google`.                                          |
+  | `model`         | Except on `gateway` | The decision model's id. On `gateway` it defaults to `typesafe-ai/jev`.                              |
+  | `denyThreshold` | Yes                 | From 0 to 1. A call the model rates at least this likely to be destructive is stopped.               |
+  | `askThreshold`  | No                  | From 0 to 1, no higher than `denyThreshold`. A call rated between the two needs a person's approval. |
+  | `apiKey`        | Yes, in credentials | The key for that provider.                                                                           |
+
+  Without the key or a `denyThreshold`, boot aborts with an error naming the
+  Plugin. Every tool call's arguments are sent to the provider you chose.
+
+When a gate stops a call, the tool never runs. The Agent is told the call was
+blocked, by which gate and why, and carries on — it can try something else or
+explain itself. In a Chat the tool's card shows **Denied** with the gate's
+reason; in a Trigger run the call shows on the Run timeline as cancelled, with
+the same reason.
+
+<Callout type="warning">
+  **A gate fails closed.** A gate that errors or takes longer than its own time
+  limit stops the call, as if it had said no. An outage of the model behind
+  `@platypus/decision-gate` is therefore an outage of every tool call on the
+  deployment until it recovers, or until you remove the Plugin from
+  `PLATYPUS_PLUGINS` and restart.
+</Callout>
+
+**Asking a person is not available yet.** A call a gate wants approved is
+stopped, in Chats as well as in unattended runs, so `askThreshold` behaves as a
+second, lower `denyThreshold` for now. An unattended run that keeps retrying a
+stopped call is halted the way any run repeating the same call is.
+
+**Tools the Provider runs itself are not gated.** A Provider's built-in web
+search, for one, runs on the Provider's side and never reaches Platypus, so no
+gate sees it.
+
+Each gate adds its own wait to every tool call. Gates do not remember earlier
+answers, so the same call made twice is judged twice.
 
 ## Tool egress
 

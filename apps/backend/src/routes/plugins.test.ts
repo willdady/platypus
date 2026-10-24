@@ -18,6 +18,7 @@ const LOADED: LoadedPlugin[] = [
     toolSetIds: ["math-conversions", "time"],
     sandboxBackendIds: [],
     webBackendIds: [],
+    toolGateIds: [],
   },
   {
     name: "acme-sandbox",
@@ -26,6 +27,7 @@ const LOADED: LoadedPlugin[] = [
     toolSetIds: ["acme-sandbox.management"],
     sandboxBackendIds: ["acme-sandbox.sandbox"],
     webBackendIds: ["acme-sandbox.search"],
+    toolGateIds: ["acme-sandbox.no-drop"],
   },
 ];
 
@@ -56,6 +58,7 @@ describe("Plugins Routes", () => {
             toolSets: string[];
             sandboxBackends: string[];
             webBackends: string[];
+            toolGates: string[];
           };
         }>;
       };
@@ -69,6 +72,7 @@ describe("Plugins Routes", () => {
             toolSets: ["math-conversions", "time"],
             sandboxBackends: [],
             webBackends: [],
+            toolGates: [],
           },
         },
         {
@@ -79,6 +83,7 @@ describe("Plugins Routes", () => {
             toolSets: ["acme-sandbox.management"],
             sandboxBackends: ["acme-sandbox.sandbox"],
             webBackends: ["acme-sandbox.search"],
+            toolGates: ["acme-sandbox.no-drop"],
           },
         },
       ]);

@@ -27,6 +27,7 @@ const NO_OWNERS: ContributionOwners = {
   toolSets: new Map(),
   sandboxBackends: new Map(),
   webBackends: new Map(),
+  toolGates: new Map(),
 };
 
 let loadedPlugins: readonly LoadedPlugin[] = [];

@@ -22,6 +22,7 @@ import {
   withDeadline,
 } from "../utils/abort-race.ts";
 import { runCloser, type Closer, type CoreCloserRegistrar } from "./closers.ts";
+import type { ToolGateScope } from "../tool-gates/index.ts";
 import {
   getToolSet,
   reportToolNameCollisions,
@@ -283,6 +284,12 @@ export type ToolSession = {
    */
   readOnlyToolNames: ReadonlySet<string>;
   /**
+   * What a Tool gate is told about a call this session's Agent makes
+   * (ADR-0033): where each tool came from, what it declared, and whether a
+   * User is watching — which only an interactive, top-level session is.
+   */
+  gateScope: ToolGateScope;
+  /**
    * The Agent's granted Tool sets and MCPs that served this session no tools
    * through a fault, and why (#1184), in `toolSetIds` order. A factory that
    * served none on purpose is not listed, nor is an MCP served from its
@@ -375,6 +382,8 @@ export const openToolSession = async (
   // Every name, among `tools`, whose MCP declared `readOnlyHint` (#626). Only
   // ever added to from the MCP case of `merge` below.
   const readOnlyToolNames = new Set<string>();
+  // Every MCP-declared hint, both ways, for the Tool gate (ADR-0033).
+  const readOnlyHints = new Map<string, "read-only" | "writes">();
   const unloadedToolSets: UnloadedToolSet[] = [];
   const closers: Array<() => Promise<void>> = [];
   // Registered closers, by identity, and scoped to **this session** — so the
@@ -450,6 +459,7 @@ export const openToolSession = async (
         tools: Record<string, Tool>;
         owner: ToolOwner;
         readOnlyNames: readonly string[];
+        writeNames: readonly string[];
       };
 
   /**
@@ -672,11 +682,8 @@ export const openToolSession = async (
     // the tri-state this reduces to a boolean at: a string `"false"`, a `1`,
     // or any other non-boolean reads as undeclared exactly like an absent one
     // (ADR-0021), never coerced.
-    const readOnlyHintByRawName = new Map<string, boolean>(
-      definitions.tools.map((def) => [
-        def.name,
-        def.annotations?.readOnlyHint === true,
-      ]),
+    const readOnlyHintByRawName = new Map<string, unknown>(
+      definitions.tools.map((def) => [def.name, def.annotations?.readOnlyHint]),
     );
 
     // Every MCP-sourced tool enters the turn under `<slug>__<toolName>`,
@@ -688,6 +695,7 @@ export const openToolSession = async (
     // `github__pull`.
     const namespaced: Record<string, Tool> = {};
     const readOnlyNames: string[] = [];
+    const writeNames: string[] = [];
     for (const [rawName, tool] of Object.entries(mcpTools)) {
       const namespacedName = namespaceMcpToolName(mcp.slug, rawName);
       if (!TOOL_NAME_PATTERN.test(namespacedName)) {
@@ -707,9 +715,9 @@ export const openToolSession = async (
       // rest of core will ever see this Tool under (#626) — so a Transcript
       // predating #467's namespacing degrades safely: an unrecognised name
       // reads as undeclared rather than being matched by accident.
-      if (readOnlyHintByRawName.get(rawName)) {
-        readOnlyNames.push(namespacedName);
-      }
+      const hint = readOnlyHintByRawName.get(rawName);
+      if (hint === true) readOnlyNames.push(namespacedName);
+      if (hint === false) writeNames.push(namespacedName);
     }
 
     return {
@@ -718,6 +726,7 @@ export const openToolSession = async (
       tools: normalizeToolResults(namespaced),
       owner: { toolSetId, plugin: null, mcpSlug: mcp.slug },
       readOnlyNames,
+      writeNames,
     };
   };
 
@@ -772,6 +781,10 @@ export const openToolSession = async (
         claim(resolution.tools, resolution.owner);
         for (const name of resolution.readOnlyNames) {
           readOnlyToolNames.add(name);
+          readOnlyHints.set(name, "read-only");
+        }
+        for (const name of resolution.writeNames) {
+          readOnlyHints.set(name, "writes");
         }
         return;
       }
@@ -860,6 +873,16 @@ export const openToolSession = async (
   return {
     tools,
     readOnlyToolNames,
+    gateScope: {
+      orgId: scope.orgId,
+      workspaceId: scope.workspaceId,
+      ...(agent ? { agentId: agent.id } : {}),
+      attended: interactive,
+      toolSetIds: new Map(
+        [...owners].map(([name, owner]) => [name, owner.toolSetId]),
+      ),
+      readOnlyHints,
+    },
     unloadedToolSets,
     nest,
     registerCloser,

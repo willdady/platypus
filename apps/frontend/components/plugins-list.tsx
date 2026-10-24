@@ -1,6 +1,6 @@
 "use client";
 
-import { Blocks, Container, Globe, Wrench } from "lucide-react";
+import { Blocks, Container, Globe, ShieldCheck, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Mirrors the read-only `GET /organizations/:orgId/plugins` payload (ADR-0013).
 // Contributions are the ids the plugin registered — tool sets, sandbox
-// backends, and web backends all tie back to their originating plugin here.
+// backends, web backends and tool gates all tie back to their originating plugin here.
 type InstalledPlugin = {
   name: string;
   version: string;
@@ -25,6 +25,7 @@ type InstalledPlugin = {
     toolSets: string[];
     sandboxBackends: string[];
     webBackends: string[];
+    toolGates: string[];
   };
 };
 
@@ -103,6 +104,7 @@ function PluginsList({
         const toolSets = plugin.contributions.toolSets ?? [];
         const sandboxBackends = plugin.contributions.sandboxBackends ?? [];
         const webBackends = plugin.contributions.webBackends ?? [];
+        const toolGates = plugin.contributions.toolGates ?? [];
 
         return (
           <li key={plugin.name} className="mb-2">
@@ -122,7 +124,8 @@ function PluginsList({
                 </ItemTitle>
                 {toolSets.length === 0 &&
                 sandboxBackends.length === 0 &&
-                webBackends.length === 0 ? (
+                webBackends.length === 0 &&
+                toolGates.length === 0 ? (
                   <ItemDescription>No contributions.</ItemDescription>
                 ) : (
                   <div className="flex flex-col gap-2 mt-1">
@@ -164,6 +167,22 @@ function PluginsList({
                           <Globe className="size-3" /> Web backends
                         </span>
                         {webBackends.map((id) => (
+                          <Badge
+                            key={id}
+                            variant="outline"
+                            className="font-mono font-normal"
+                          >
+                            {id}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {toolGates.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mr-1">
+                          <ShieldCheck className="size-3" /> Tool gates
+                        </span>
+                        {toolGates.map((id) => (
                           <Badge
                             key={id}
                             variant="outline"

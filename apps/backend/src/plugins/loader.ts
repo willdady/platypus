@@ -18,11 +18,16 @@ import {
   type WebBackendRegistration,
 } from "../web-backends/index.ts";
 import {
+  registerToolGate,
+  type ToolGateRegistration,
+} from "../tool-gates/index.ts";
+import {
   registerContributions,
   type ExtensionPoint,
 } from "./contribution-pipeline.ts";
 import {
   sandboxBackendPoint,
+  toolGatePoint,
   toolSetPoint,
   webBackendPoint,
 } from "./extension-points.ts";
@@ -37,6 +42,7 @@ export interface LoadedPlugin {
   toolSetIds: string[];
   sandboxBackendIds: string[];
   webBackendIds: string[];
+  toolGateIds: string[];
   /**
    * The plugin's boot-resolved, Operator-owned deploy-time **config** (never
    * credentials), or `undefined` when the manifest declares no `configSchema`.
@@ -61,6 +67,7 @@ export interface ContributionOwners {
   toolSets: ReadonlyMap<string, string>;
   sandboxBackends: ReadonlyMap<string, string>;
   webBackends: ReadonlyMap<string, string>;
+  toolGates: ReadonlyMap<string, string>;
 }
 
 /** Everything one successful load produced, for the boot log and the registry. */
@@ -77,7 +84,8 @@ type PluginModule = { plugin?: unknown };
 // the point itself, and the owner map it accumulates across plugins.
 interface LoaderExtensionPoint {
   contributions: (manifest: PlatypusPlugin) => readonly unknown[] | undefined;
-  reportAs: "toolSetIds" | "sandboxBackendIds" | "webBackendIds";
+  reportAs:
+    "toolSetIds" | "sandboxBackendIds" | "webBackendIds" | "toolGateIds";
   point: ExtensionPoint;
   owners: Map<string, string>;
 }
@@ -144,6 +152,11 @@ export interface LoadPluginsOptions {
    * core-owned (ADR-0014). Defaults to core `registerWebBackend`.
    */
   registerWeb?: (registration: WebBackendRegistration) => void;
+  /**
+   * Registers one Tool gate, its timeout resolved and `evaluate` bound to the
+   * plugin's config block (ADR-0033). Defaults to core `registerToolGate`.
+   */
+  registerGate?: (registration: ToolGateRegistration) => void;
   /**
    * Deploy-time plugin config/credentials keyed by plugin name, standing in for
    * the combined `PLATYPUS_PLUGIN_CONFIG` (see {@link parsePluginConfig}).
@@ -369,6 +382,14 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
       `Plugin "${name}": "contributes.webBackends" must be an array.`,
     );
   }
+  if (
+    contributes.toolGates !== undefined &&
+    !Array.isArray(contributes.toolGates)
+  ) {
+    throw new Error(
+      `Plugin "${name}": "contributes.toolGates" must be an array.`,
+    );
+  }
   return p as PlatypusPlugin;
 };
 
@@ -438,6 +459,7 @@ export async function loadPlugins(
   const register = opts.register ?? registerToolSet;
   const registerSandbox = opts.registerSandbox ?? registerSandboxBackend;
   const registerWeb = opts.registerWeb ?? registerWebBackend;
+  const registerGate = opts.registerGate ?? registerToolGate;
   const combinedRaw = process.env.PLATYPUS_PLUGIN_CONFIG;
   if (combinedRaw?.trim()) {
     logger.warn(
@@ -453,6 +475,7 @@ export async function loadPlugins(
   const toolSetOwners = new Map<string, string>();
   const sandboxOwners = new Map<string, string>();
   const webOwners = new Map<string, string>();
+  const gateOwners = new Map<string, string>();
 
   // Manifest name -> the package specifier that declared it. Keyed against the
   // specifier rather than the manifest, because a duplicate is only actionable
@@ -488,6 +511,12 @@ export async function loadPlugins(
       reportAs: "webBackendIds",
       point: webBackendPoint(registerWeb),
       owners: webOwners,
+    },
+    {
+      contributions: (m) => m.contributes.toolGates,
+      reportAs: "toolGateIds",
+      point: toolGatePoint(registerGate),
+      owners: gateOwners,
     },
   ];
 
@@ -604,6 +633,7 @@ export async function loadPlugins(
       toolSetIds: [],
       sandboxBackendIds: [],
       webBackendIds: [],
+      toolGateIds: [],
     };
     for (const entry of points) {
       registeredIds[entry.reportAs] = registerContributions({
@@ -655,6 +685,7 @@ export async function loadPlugins(
       toolSets: toolSetOwners,
       sandboxBackends: sandboxOwners,
       webBackends: webOwners,
+      toolGates: gateOwners,
     },
   };
 }

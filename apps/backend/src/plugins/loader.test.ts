@@ -8,6 +8,7 @@ import {
   type PluginConfigContext,
   type SandboxBackend,
   type SandboxBackendContribution,
+  type ToolGateContribution,
   type ToolSetContribution,
   type WebBackendContribution,
 } from "@platypuschat/plugin-sdk";
@@ -17,6 +18,11 @@ import {
   type WebBackendRegistration,
 } from "../web-backends/index.ts";
 import type { SandboxBackendRegistration } from "../sandbox/index.ts";
+import {
+  DEFAULT_TOOL_GATE_TIMEOUT_MS,
+  MAX_TOOL_GATE_TIMEOUT_MS,
+  type ToolGateRegistration,
+} from "../tool-gates/index.ts";
 import {
   loadPlugins,
   parsePluginConfig,
@@ -267,6 +273,7 @@ describe("loadPlugins", () => {
         toolSetIds: ["math-conversions", "time"],
         sandboxBackendIds: [],
         webBackendIds: [],
+        toolGateIds: [],
       },
     ]);
   });
@@ -564,6 +571,7 @@ describe("loadPlugins — sandbox backends", () => {
         toolSetIds: [],
         sandboxBackendIds: ["docker"],
         webBackendIds: [],
+        toolGateIds: [],
       },
     ]);
   });
@@ -996,6 +1004,133 @@ describe("loadPlugins — web-search backends", () => {
         credentials: { apiKey: "sk-test" },
         logger: A_LOGGER_MATCHER,
       },
+    );
+  });
+});
+
+const gateManifest = (
+  name: string,
+  toolGates: ToolGateContribution[],
+): PlatypusPlugin => ({
+  name,
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: { toolGates },
+});
+
+const toolGate = (id: string): ToolGateContribution => ({
+  id,
+  name: id,
+  evaluate: () => ({ verdict: "allow" }),
+});
+
+const loadGates = (
+  plugins: Record<string, PlatypusPlugin>,
+  pluginConfig?: PluginConfigMap,
+) => {
+  const calls: ToolGateRegistration[] = [];
+  const result = loadPlugins({
+    pluginNames: Object.keys(plugins),
+    builtinPlugins: {},
+    importPlugin: (name) => Promise.resolve({ plugin: plugins[name] }),
+    register: () => {},
+    registerGate: (registration) => calls.push(registration),
+    pluginConfig,
+  });
+  return { result, calls };
+};
+
+describe("loadPlugins — tool gates", () => {
+  it("registers a tool-gate contribution under its namespaced id and reports it", async () => {
+    const { result, calls } = loadGates({
+      acme: gateManifest("acme", [toolGate("no-drop")]),
+    });
+    const { plugins: loaded } = await result;
+
+    expect(calls.map((c) => c.id)).toEqual(["acme.no-drop"]);
+    expect(calls[0].timeoutMs).toBe(DEFAULT_TOOL_GATE_TIMEOUT_MS);
+    expect(loaded[0].toolGateIds).toEqual(["acme.no-drop"]);
+  });
+
+  it("aborts (fail-loud) when two plugins' gates collide", async () => {
+    const { result } = loadGates({
+      "@acme/one": gateManifest("acme", [toolGate("g")]),
+      "@acme/two": gateManifest("acme", [toolGate("g")]),
+    });
+    await expect(result).rejects.toThrow(/acme/);
+  });
+
+  it("aborts (fail-loud) when toolGates is not an array", async () => {
+    const { result } = loadGates({
+      bad: {
+        ...gateManifest("bad", []),
+        contributes: { toolGates: {} },
+      } as unknown as PlatypusPlugin,
+    });
+    await expect(result).rejects.toThrow(/bad.*toolGates.*array/s);
+  });
+
+  it("aborts (fail-loud) when a contribution has no evaluate function", async () => {
+    const { result } = loadGates({
+      acme: gateManifest("acme", [
+        { id: "g", name: "G" } as unknown as ToolGateContribution,
+      ]),
+    });
+    await expect(result).rejects.toThrow(/acme.*"g".*evaluate/s);
+  });
+
+  it("refuses an over-ceiling timeoutMs at boot rather than clamping it", async () => {
+    const { result } = loadGates({
+      acme: gateManifest("acme", [
+        { ...toolGate("g"), timeoutMs: MAX_TOOL_GATE_TIMEOUT_MS + 1 },
+      ]),
+    });
+    await expect(result).rejects.toThrow(
+      new RegExp(`acme.*"g".*timeoutMs.*${MAX_TOOL_GATE_TIMEOUT_MS}`, "s"),
+    );
+  });
+
+  it("accepts a timeoutMs at the ceiling", async () => {
+    const { result, calls } = loadGates({
+      acme: gateManifest("acme", [
+        { ...toolGate("g"), timeoutMs: MAX_TOOL_GATE_TIMEOUT_MS },
+      ]),
+    });
+    await result;
+    expect(calls[0].timeoutMs).toBe(MAX_TOOL_GATE_TIMEOUT_MS);
+  });
+
+  it("injects the shared plugin config block into evaluate", async () => {
+    const evaluate = vi.fn(() => ({ verdict: "allow" as const }));
+    const { result, calls } = loadGates(
+      {
+        acme: {
+          ...gateManifest("acme", [{ id: "g", name: "G", evaluate }]),
+          credentialsSchema: z.object({ apiKey: z.string() }),
+        },
+      },
+      { acme: { credentials: { apiKey: "sk-test" } } },
+    );
+    await result;
+    const call = {
+      toolName: "t",
+      args: {},
+      orgId: "o",
+      workspaceId: "w",
+      attended: false,
+      readOnlyHint: "undeclared" as const,
+    };
+    const options = { signal: new AbortController().signal };
+    await calls[0].evaluate(call, options);
+
+    expect(evaluate).toHaveBeenCalledWith(
+      call,
+      {
+        config: undefined,
+        credentials: { apiKey: "sk-test" },
+        logger: A_LOGGER_MATCHER,
+      },
+      options,
     );
   });
 });

@@ -657,6 +657,100 @@ export interface WebBackendContribution {
 }
 
 /**
+ * What a tool's own declaration says about whether it writes (ADR-0021): it
+ * declared itself read-only, it declared that it writes, or it declared
+ * nothing. Only an MCP server can declare either today, through its tools'
+ * `readOnlyHint` annotation. An undeclared tool is treated as one that writes.
+ */
+export type ReadOnlyHint = "read-only" | "writes" | "undeclared";
+
+/**
+ * One tool call as a Tool gate sees it, before it runs. Nothing else reaches a
+ * gate: no credentials and no message history.
+ */
+export interface ToolGateCall {
+  /** The name the tool is called under in this run, namespacing included. */
+  toolName: string;
+  /** The description the model was given for the tool, if it has one. */
+  toolDescription?: string;
+  /** The arguments the model called the tool with. */
+  args: unknown;
+  /**
+   * The Tool set or MCP server the tool came from. Absent for the tools core
+   * adds to every run itself, such as Sub-Agent delegation.
+   */
+  toolSetId?: string;
+  orgId: string;
+  workspaceId: string;
+  /** The Agent making the call. Absent for a Chat with no Agent. */
+  agentId?: string;
+  /**
+   * Whether a User is watching this run: true only for a top-level Chat turn.
+   * A Trigger run, an A2A call and every Sub-Agent run are unattended. Core
+   * already turns `ask` into `deny` where no one can be asked, so a gate reads
+   * this only if it wants to judge the two cases differently.
+   */
+  attended: boolean;
+  readOnlyHint: ReadOnlyHint;
+}
+
+/**
+ * A Tool gate's answer (ADR-0033). `allow` lets the call run. `deny` stops it,
+ * and no one can override that. `ask` means a person may decide; until core
+ * can put the question to the User it is treated as `deny` everywhere.
+ *
+ * `reason` is shown to the model, on the Chat's tool card and on the Run
+ * timeline when the call is stopped. Write it for all three.
+ */
+export interface ToolGateVerdict {
+  verdict: "allow" | "ask" | "deny";
+  reason?: string;
+}
+
+/** The per-call options core passes {@link ToolGateContribution.evaluate}. */
+export interface ToolGateOptions {
+  /**
+   * Fires when core stops waiting: the gate's own {@link
+   * ToolGateContribution.timeoutMs} passed, or the run was stopped.
+   */
+  signal: AbortSignal;
+}
+
+/**
+ * A Tool gate contribution (ADR-0033): sees every tool call the backend runs,
+ * before it runs, and decides whether it may. A gate only gates. It cannot
+ * change a call's arguments or its result.
+ *
+ * An enabled gate applies to every tool call in every Organization, MCP tools
+ * included. Tools the Provider runs itself, such as native web search, never
+ * reach the backend and are not gated.
+ *
+ * Core fails closed. A gate that throws, or doesn't answer within its timeout,
+ * counts as `ask`, which stops the call. With several gates the most
+ * restrictive answer wins: `deny` over `ask` over `allow`.
+ */
+export interface ToolGateContribution {
+  id: string;
+  name: string;
+  /**
+   * How long core waits for {@link evaluate}. Core defaults to 10000 when
+   * absent and refuses at boot anything above its ceiling of 30000. Every
+   * enabled gate adds this much latency to a tool call at worst.
+   */
+  timeoutMs?: number;
+  /**
+   * Judge one tool call. `plugin` is the deploy-time
+   * {@link PluginConfigContext} shared across every one of the plugin's
+   * contributions.
+   */
+  evaluate(
+    call: ToolGateCall,
+    plugin: PluginConfigContext,
+    options: ToolGateOptions,
+  ): ToolGateVerdict | Promise<ToolGateVerdict>;
+}
+
+/**
  * The `contributes` block: keyed by Extension-point type (core-owned, fixed).
  * Adding an Extension point (e.g. a messaging gateway) is a purely additive,
  * minor API bump — a new optional key here.
@@ -665,6 +759,7 @@ export interface PluginContributions {
   toolSets?: ToolSetContribution[];
   sandboxBackends?: SandboxBackendContribution[];
   webBackends?: WebBackendContribution[];
+  toolGates?: ToolGateContribution[];
 }
 
 /**

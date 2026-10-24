@@ -24,17 +24,18 @@ deploy time; it exports a manifest whose `contributes` block fills one or more
 | Ship tools that are part of the product for everyone on the deployment     | **[Tool set](/extending/tool-sets)** contribution                     | One install, one switch on the Agent form, available to every Workspace                                  |
 | Run an Agent's shell and filesystem tools somewhere new — Modal, E2B, a VM | **[Sandbox backend](/extending/sandbox-backends)** contribution       | Core owns the five tools; you supply the environment they run in                                         |
 | Serve the Chat **Search** toggle from your own search service              | **[Web-search backend](/extending/web-search-backends)** contribution | Core owns the tools and the toggle; you supply the calls to your upstream                                |
+| Stop risky tool calls before they run, on every Agent in the deployment    | **[Tool gate](/extending/tool-gates)** contribution                   | Core asks your gate about every call, from every source, and enforces the answer                         |
 
 If you are integrating an external service for your own use, you almost always
 want an MCP server. Reach for a Plugin when the capability should ship _with_
 the deployment rather than be configured in it.
 
 <Callout type="info">
-  Sandbox backends, Tool sets and a Web-search backend already ship as core
-  Plugins — `@platypus/tools-basic`, `@platypus/tools-platform`,
-  `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh` and
-  `@platypus/exa`. Yours loads through the same manifest path. The inventory an
-  Operator controls is in [Configuration →
+  Sandbox backends, Tool sets, a Web-search backend and a Tool gate already ship
+  as core Plugins — `@platypus/tools-basic`, `@platypus/tools-platform`,
+  `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, `@platypus/exa`
+  and `@platypus/decision-gate`. Yours loads through the same manifest path. The
+  inventory an Operator controls is in [Configuration →
   Plugins](/self-hosting/configuration#plugins).
 </Callout>
 
@@ -46,8 +47,9 @@ find out whether it worked rather than guessing.
 
 Then the page for the Extension point you're filling —
 **[Tool sets](/extending/tool-sets)**,
-**[Sandbox backends](/extending/sandbox-backends)** or
-**[Web-search backends](/extending/web-search-backends)** — and
+**[Sandbox backends](/extending/sandbox-backends)**,
+**[Web-search backends](/extending/web-search-backends)** or
+**[Tool gates](/extending/tool-gates)** — and
 **[Plugin API & config](/extending/plugin-api-and-config)** for the version
 window, the append-only rule, and deploy-time config and credentials.
 

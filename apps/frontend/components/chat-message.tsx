@@ -217,6 +217,19 @@ function toolCallName(part: MessageToolPart | DynamicToolUIPart): string {
   return web ? webToolTitle(web.kind) : humanizeToolType(part.type);
 }
 
+/**
+ * What a call's card shows as its error: the tool's own, or the reason a Tool
+ * gate gave for denying it (ADR-0033), which names the gate.
+ */
+function toolErrorText(
+  part: MessageToolPart | DynamicToolUIPart,
+): string | undefined {
+  return (
+    part.errorText ??
+    (part.state === "output-denied" ? part.approval?.reason : undefined)
+  );
+}
+
 /** Whether a call's own row shows it as failed. */
 function toolCallErrored(part: MessagePart): boolean {
   if (isLoadSkillPart(part) || isReadSkillFilePart(part)) {
@@ -225,7 +238,10 @@ function toolCallErrored(part: MessagePart): boolean {
   if (isWebToolPart(part)) {
     return !!(part.errorText ?? normalizedWebTool(part)?.error);
   }
-  return isToolUIPart(part) && part.state === "output-error";
+  return (
+    isToolUIPart(part) &&
+    (part.state === "output-error" || part.state === "output-denied")
+  );
 }
 
 function isImageFilePart(part: MessagePart): part is FileUIPart {
@@ -441,7 +457,10 @@ export const ChatMessage = memo(function ChatMessage({
         />
         <ToolContent>
           <ToolInput input={toolPart.input} />
-          <ToolOutput output={toolPart.output} errorText={toolPart.errorText} />
+          <ToolOutput
+            output={toolPart.output}
+            errorText={toolErrorText(toolPart)}
+          />
         </ToolContent>
       </Tool>
     )),
@@ -490,7 +509,7 @@ export const ChatMessage = memo(function ChatMessage({
             <ToolInput input={toolPart.input} />
             <ToolOutput
               output={toolPart.output}
-              errorText={toolPart.errorText}
+              errorText={toolErrorText(toolPart)}
             />
           </ToolContent>
         </Tool>
