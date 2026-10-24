@@ -391,11 +391,9 @@ export const agent = pgTable(
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-    workspaceId: t
-      .text("workspace_id")
-      .references((): AnyPgColumn => workspace.id, {
-        onDelete: "cascade",
-      }),
+    workspaceId: t.text("workspace_id").references(() => workspace.id, {
+      onDelete: "cascade",
+    }),
     providerId: t
       .text("provider_id")
       .notNull()
@@ -446,11 +444,9 @@ export const mcp = pgTable(
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-    workspaceId: t
-      .text("workspace_id")
-      .references((): AnyPgColumn => workspace.id, {
-        onDelete: "cascade",
-      }),
+    workspaceId: t.text("workspace_id").references(() => workspace.id, {
+      onDelete: "cascade",
+    }),
     name: t.text("name").notNull(),
     // Derived from `name` via `slugifyMcpName` (issue #467): the namespace
     // prefix an MCP's tools carry into a turn's tool map, so a collision with a
@@ -818,11 +814,9 @@ export const skill = pgTable(
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-    workspaceId: t
-      .text("workspace_id")
-      .references((): AnyPgColumn => workspace.id, {
-        onDelete: "cascade",
-      }),
+    workspaceId: t.text("workspace_id").references(() => workspace.id, {
+      onDelete: "cascade",
+    }),
     name: t.text("name").notNull(),
     description: t.text("description").notNull(),
     body: t.text("body").notNull(),
