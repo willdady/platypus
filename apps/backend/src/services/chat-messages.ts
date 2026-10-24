@@ -83,7 +83,9 @@ const pathThrough = async (
 
   return {
     messages: pathIds.map((id) => {
-      const { metadata, ...message } = rowById.get(id)!;
+      const row = rowById.get(id);
+      if (!row) throw new Error(`Message '${id}' on the path was not read`);
+      const { metadata, ...message } = row;
       // Absent rather than null, the shape a streamed message has.
       return metadata == null ? message : { ...message, metadata };
     }),
@@ -216,8 +218,9 @@ export const switchActivePath = async (
 
   const childrenOf = Map.groupBy(nodes, (node) => node.parentId);
   let leaf = target;
-  for (const under = [target]; under.length;) {
-    for (const node of childrenOf.get(under.pop()!.id) ?? []) {
+  const under = [target];
+  for (let parent = under.pop(); parent; parent = under.pop()) {
+    for (const node of childrenOf.get(parent.id) ?? []) {
       under.push(node);
       if (!node.deletedAt && node.createdAt >= leaf.createdAt) leaf = node;
     }

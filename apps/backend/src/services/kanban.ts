@@ -1362,6 +1362,11 @@ export const bulkUpdateCards = async (
   await requireValidAssignees(database, input.assignees, ctx);
 
   const outcomes = new Map<string, BulkUpdateOutcome>();
+  const outcomeOf = (id: string): BulkUpdateOutcome => {
+    const outcome = outcomes.get(id);
+    if (!outcome) throw new Error(`Card '${id}' has no outcome`);
+    return outcome;
+  };
   const cards: CardRef[] = [];
   for (const cardId of input.cardIds) {
     try {
@@ -1379,7 +1384,7 @@ export const bulkUpdateCards = async (
     }
   }
 
-  if (cards.length === 0) return input.cardIds.map((id) => outcomes.get(id)!);
+  if (cards.length === 0) return input.cardIds.map(outcomeOf);
 
   // Additive and subtractive label edits build on what each card already
   // holds, so those rows are read before the write.
@@ -1479,7 +1484,7 @@ export const bulkUpdateCards = async (
     dispatchCardWrite(ctx, row, card.boardId, card.columnId, changedFields);
   }
 
-  return input.cardIds.map((id) => outcomes.get(id)!);
+  return input.cardIds.map(outcomeOf);
 };
 
 /** The label list a bulk edit asks for, before it is checked against the board. */
@@ -1489,8 +1494,9 @@ const resolveBulkLabels = (
 ): string[] => {
   if (edit.labelIds !== undefined) return edit.labelIds;
   let next = [...new Set([...current, ...(edit.addLabelIds ?? [])])];
-  if (edit.removeLabelIds) {
-    next = next.filter((id) => !edit.removeLabelIds!.includes(id));
+  const { removeLabelIds } = edit;
+  if (removeLabelIds) {
+    next = next.filter((id) => !removeLabelIds.includes(id));
   }
   return next;
 };

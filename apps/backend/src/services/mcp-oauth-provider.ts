@@ -45,6 +45,7 @@ export const buildOAuthCallbackUrl = () => {
  * OAuth / Bearer / None auth types.
  */
 export const buildMcpTransportConfig = (mcp: McpRecord) => {
+  if (!mcp.url) throw new Error(`MCP server '${mcp.name}' has no URL`);
   const config: {
     type: "http";
     url: string;
@@ -52,7 +53,7 @@ export const buildMcpTransportConfig = (mcp: McpRecord) => {
     authProvider?: DatabaseOAuthClientProvider;
   } = {
     type: "http",
-    url: mcp.url!,
+    url: mcp.url,
   };
 
   const customHeaders = mcp.headers ?? {};

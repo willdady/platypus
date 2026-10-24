@@ -181,8 +181,11 @@ export const createFsViewTool = (
     execute: ({ path }, options) =>
       underSignal(options, async ({ signal }) => {
         await transferableFileSize(backend, ctx, path, signal, "viewing");
+        if (!backend.fsReadBytes) {
+          throw new Error("This sandbox cannot read files as bytes");
+        }
         const [bytes, reading] = await Promise.all([
-          backend.fsReadBytes!(
+          backend.fsReadBytes(
             ctx,
             { path, maxBytes: SANDBOX_TRANSFER_MAX_BYTES },
             { signal },

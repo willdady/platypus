@@ -9,7 +9,12 @@ import {
   UnsupportedOperationError,
 } from "@a2a-js/sdk/errors";
 import { startA2aTurn, takeFollowerSlot, type A2aCaller } from "./a2a-task.ts";
-import { findA2aTask, isTerminal, type TaskRow } from "./a2a-task-state.ts";
+import {
+  findA2aTask,
+  isTerminal,
+  statusOf,
+  type TaskRow,
+} from "./a2a-task-state.ts";
 import { readTask, readTaskAfresh } from "./a2a-task-lifecycle.ts";
 import {
   a2aFallbackPollMs,
@@ -84,7 +89,7 @@ async function* followTask(
   seen: Task,
   events: A2aTaskSubscription,
 ): AsyncGenerator<StreamResponse> {
-  let state = seen.status!.state;
+  let state = statusOf(seen).state;
   // How much of the reply this stream has sent; `null` once it missed some.
   let sent = events.replyFrom;
   if (events.catchUp && sent !== null) {
@@ -126,8 +131,9 @@ async function* followTask(
       yield statusEvent(read);
       return;
     }
-    if (read.status!.state !== state) yield statusEvent(read);
-    state = read.status!.state;
+    const { state: readState } = statusOf(read);
+    if (readState !== state) yield statusEvent(read);
+    state = readState;
   }
 }
 

@@ -55,7 +55,8 @@ export type ParsedSkillBundle = {
   files: SkillBundleFile[];
 };
 
-const fail = (message: string): never => {
+// Annotated on the binding so a `fail(…)` call narrows like a `throw`.
+const fail: (message: string) => never = (message) => {
   throw new ValidationError(message);
 };
 
@@ -285,7 +286,7 @@ const parseSkillMd = (
         : `Frontmatter \`${Object.entries(MAPPED_KEYS).find(([, column]) => column === field)?.[0] ?? field}\``;
     fail(`${label} is invalid: ${issue.message}`);
   }
-  const fields = result.data!;
+  const fields = result.data;
   return {
     fields: { ...fields, argumentHint: fields.argumentHint ?? null },
     frontmatter,
@@ -344,7 +345,8 @@ export const parseSkillZip = (zip: Uint8Array): ParsedSkillBundle => {
     });
   }
 
-  return { ...parseSkillMd(skillMd!), files: bundled };
+  if (!skillMd) fail("Zip has no SKILL.md");
+  return { ...parseSkillMd(skillMd), files: bundled };
 };
 
 /** JSON with object keys sorted, so a jsonb round-trip cannot change a hash. */

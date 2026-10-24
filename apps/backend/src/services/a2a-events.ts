@@ -6,6 +6,7 @@ import { notify, onNotification } from "../runs/notify-listener.ts";
 import { firstOutputLatch } from "../runs/first-output.ts";
 import {
   isTerminal,
+  statusOf,
   TERMINAL_TASK_STATES,
   type TaskRow,
 } from "./a2a-task-state.ts";
@@ -243,7 +244,10 @@ export class A2aTaskEventBus {
     return {
       publish: (event) => {
         if (!log.producing) return;
-        const sequenced = { ...event, seq: log.nextSeq!++ };
+        if (log.nextSeq === undefined) {
+          throw new Error(`Task '${taskId}' log lost its sequence`);
+        }
+        const sequenced = { ...event, seq: log.nextSeq++ };
         this.deliver(taskId, log, sequenced);
         const wire = event.kind === "end" ? { kind: "end" } : event;
         const payload = JSON.stringify({
@@ -420,10 +424,11 @@ const produce = async (
       ) {
         readAt = Date.now();
         const read = await readTaskAfresh(task);
-        if (read.status!.state !== state) {
-          state = read.status!.state;
+        const status = statusOf(read);
+        if (status.state !== state) {
+          state = status.state;
           if (!TERMINAL_TASK_STATES.has(state)) {
-            publisher.publish({ kind: "status", status: read.status! });
+            publisher.publish({ kind: "status", status });
           }
         }
       }
