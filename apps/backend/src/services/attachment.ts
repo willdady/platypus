@@ -56,15 +56,13 @@ export type AttachmentRow = typeof attachmentTable.$inferSelect;
 export type AttachmentScope = { kind: "workspace" } | { kind: "organization" };
 
 /**
- * The resource an attach or detach names. `resourceType` is untrusted input
- * from a body or a path on both surfaces, so it is validated rather than cast;
- * the Organization attach surface reads the whole triple from an unvalidated
- * body, so every field arrives possibly absent.
+ * The resource an attach or detach names. Detach reads `resourceType` from a
+ * path, so it is validated rather than cast; ids may still arrive empty.
  */
 export type AttachmentTarget = {
-  resourceType: string | undefined;
-  resourceId: string | undefined;
-  workspaceId: string | undefined;
+  resourceType: string;
+  resourceId: string;
+  workspaceId: string;
 };
 
 /**

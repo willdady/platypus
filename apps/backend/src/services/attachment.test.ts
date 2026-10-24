@@ -79,10 +79,10 @@ describe("attachment module", () => {
     });
 
     it.each(["resourceId", "workspaceId"])(
-      "throws ValidationError when %s is missing, before any query",
+      "throws ValidationError when %s is empty, before any query",
       async (field) => {
         await expect(
-          fn(ORGANIZATION, "org-1", target({ [field]: undefined })),
+          fn(ORGANIZATION, "org-1", target({ [field]: "" })),
         ).rejects.toThrow(
           new ValidationError("resourceId and workspaceId are required"),
         );

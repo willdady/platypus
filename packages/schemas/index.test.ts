@@ -32,6 +32,7 @@ import {
   attachmentSchema,
   nextTurnOccupancy,
   attachmentCreateSchema,
+  orgAttachmentCreateSchema,
   chatSubmitSchema,
   chatSchema,
   triggerRunSchema,
@@ -161,6 +162,18 @@ describe("Attachment Schema", () => {
   it("create schema rejects a missing resourceId", () => {
     const result = attachmentCreateSchema.safeParse({ resourceType: "mcp" });
     expect(result.success).toBe(false);
+  });
+
+  it("org create schema requires a string workspaceId", () => {
+    const base = { resourceType: "mcp", resourceId: "res-1" };
+    expect(
+      orgAttachmentCreateSchema.safeParse({ ...base, workspaceId: "ws-1" })
+        .success,
+    ).toBe(true);
+    expect(orgAttachmentCreateSchema.safeParse(base).success).toBe(false);
+    expect(
+      orgAttachmentCreateSchema.safeParse({ ...base, workspaceId: [] }).success,
+    ).toBe(false);
   });
 });
 

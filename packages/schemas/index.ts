@@ -995,6 +995,11 @@ export const attachmentCreateSchema = attachmentBaseSchema.pick({
   resourceId: true,
 });
 
+// The Org surface names the target Workspace in the body rather than the path.
+export const orgAttachmentCreateSchema = attachmentCreateSchema.extend({
+  workspaceId: z.string(),
+});
+
 // Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
 // creates the Attachments for a chosen set of Shared resources in one step
 // (ADR-0008). It is a snapshot, not a living binding: applying stamps
