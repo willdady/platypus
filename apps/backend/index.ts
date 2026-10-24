@@ -1,3 +1,5 @@
+// First: validates the environment before any module below reads it.
+import { failStartup } from "./src/boot-env.ts";
 import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
 import { db } from "./src/index.ts";
@@ -23,10 +25,9 @@ import { installProviderWarningLogger } from "./src/provider-warnings.ts";
 import { validateTriggerBreakerConfig } from "./src/services/trigger-breaker.ts";
 import { validateInboundTriggerSettings } from "./src/services/inbound-trigger.ts";
 import { validateA2aSettings } from "./src/services/a2a-call.ts";
-import { errorMessage } from "./src/utils/error-message.ts";
+import { env } from "./src/env.ts";
 
-const DEFAULT_PORT = 4001;
-const PORT = process.env.PORT || String(DEFAULT_PORT);
+const { PORT } = env();
 
 /**
  * The production admin-User creator handed to the seed: the better-auth admin
@@ -82,13 +83,7 @@ const main = async () => {
     // try so the fatal line names the plugin and the reason.
     loadedPlugins = await loadPlugins();
   } catch (error) {
-    // The message goes in the log line, not just the serialised error: it is
-    // the one thing the Operator has to work from (#369).
-    logger.fatal(
-      { err: error },
-      `Startup failed, not starting the HTTP server: ${errorMessage(error)}`,
-    );
-    process.exit(1);
+    failStartup(error);
   }
 
   // Enumerate each loaded plugin — version, origin, and the contributions it
@@ -113,7 +108,7 @@ const main = async () => {
 
   const server = serve({
     fetch: app.fetch,
-    port: parseInt(PORT),
+    port: PORT,
   });
   // A deploy or `docker stop` ends this process's runs as cancelled before it
   // exits, so their Chats are free at once rather than once their heartbeat

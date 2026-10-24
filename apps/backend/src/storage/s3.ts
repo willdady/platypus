@@ -10,6 +10,7 @@ import type { StorageBackend } from "./types.ts";
 import { assertValidStoragePrefix } from "./keys.ts";
 import { servedFileHeaders } from "./response-headers.ts";
 import { logger } from "../logger.ts";
+import { env } from "../env.ts";
 
 /**
  * S3-compatible storage backend.
@@ -20,11 +21,13 @@ export class S3Storage implements StorageBackend {
   private bucket: string;
 
   constructor() {
-    const bucket = process.env.STORAGE_S3_BUCKET;
-    const region = process.env.STORAGE_S3_REGION || "us-east-1";
-    const endpoint = process.env.STORAGE_S3_ENDPOINT;
-    const accessKeyId = process.env.STORAGE_S3_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.STORAGE_S3_SECRET_ACCESS_KEY;
+    const {
+      STORAGE_S3_BUCKET: bucket,
+      STORAGE_S3_REGION: region,
+      STORAGE_S3_ENDPOINT: endpoint,
+      STORAGE_S3_ACCESS_KEY_ID: accessKeyId,
+      STORAGE_S3_SECRET_ACCESS_KEY: secretAccessKey,
+    } = env();
 
     if (!bucket) {
       throw new Error(

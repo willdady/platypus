@@ -10,6 +10,7 @@ import {
   crossSubdomainCookieConfig,
   resolveAuthCookieDomain,
 } from "./auth-cookie-domain.ts";
+import { env } from "./env.ts";
 
 // Reported at module load, before the HTTP server listens: a backend and
 // frontend on unrelated hosts cannot authenticate server-side requests, and
@@ -62,7 +63,7 @@ export const auth = betterAuth({
     // tab, so it is exempt; the credential paths keep the default limits.
     customRules: { "/get-session": false },
   },
-  trustedOrigins: process.env.ALLOWED_ORIGINS?.split(",") || [],
+  trustedOrigins: env().ALLOWED_ORIGINS,
   ...crossSubdomainCookieConfig(authCookieDomain),
   plugins: authPlugins,
 });

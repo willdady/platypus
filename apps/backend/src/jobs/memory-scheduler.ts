@@ -3,14 +3,10 @@ import { logger } from "../logger.ts";
 import { db } from "../index.ts";
 import { ADVISORY_LOCK_IDS, withAdvisoryLock } from "../db/advisory-lock.ts";
 import { scheduleAligned } from "./scheduler.ts";
-
-const DEFAULT_MEMORY_EXTRACTION_INTERVAL_MS = 5 * 60 * 1000;
-const MEMORY_EXTRACTION_INTERVAL_MS = parseInt(
-  process.env.MEMORY_EXTRACTION_INTERVAL_MS ||
-    String(DEFAULT_MEMORY_EXTRACTION_INTERVAL_MS),
-);
+import { env } from "../env.ts";
 
 export function startMemoryScheduler() {
+  const { MEMORY_EXTRACTION_INTERVAL_MS } = env();
   logger.info(
     `Starting memory extraction scheduler (interval: ${MEMORY_EXTRACTION_INTERVAL_MS}ms, wall-clock aligned)`,
   );

@@ -50,6 +50,27 @@ Dashboard and its widgets, and Agents lose the **Dashboards** Tool set. Move
 anything you want to keep before you upgrade; see
 [Dashboards](/building-with-platypus/dashboards).
 
+## Coming from 3.26
+
+The backend now checks its environment variables when it starts, and stops on a
+value it can't use instead of quietly replacing it. A setting that booted before
+can now stop the backend, so after upgrading, check that it came up; if it
+didn't, its log names the variables to fix. The values most likely to catch an
+existing deployment:
+
+- A `STORAGE_BACKEND` other than `disk` or `s3`. It used to fall back to disk.
+- A boolean such as `yes`, `no`, `on` or `off`. Only `true`, `false`, `1` and
+  `0` are accepted; `EGRESS_ALLOW_PRIVATE_NETWORKS=no` used to _allow_ private
+  networks.
+- A timeout or interval of `0`, or one that isn't a whole number. A Chat or
+  Trigger timeout used to fall back to its default.
+- A `TIMEZONE` that isn't an IANA timezone name.
+- `STORAGE_BACKEND=s3` without the bucket and both keys. This used to fail only
+  when a file was first stored.
+
+See [Backend configuration](/reference/backend-configuration) for what each
+variable accepts.
+
 ## Coming from 3.4
 
 The Embed widget added in 3.4.0 was stored under the type name `iframe`. From

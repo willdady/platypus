@@ -19,13 +19,9 @@ import {
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { ConflictError, NotFoundError, isUniqueViolation } from "../errors.ts";
+import { env } from "../env.ts";
 
 const invitation = new Hono<{ Variables: Variables }>();
-
-const DEFAULT_INVITATION_EXPIRY_DAYS = 7;
-const INVITATION_EXPIRY_DAYS = parseInt(
-  process.env.INVITATION_EXPIRY_DAYS || String(DEFAULT_INVITATION_EXPIRY_DAYS),
-);
 
 /** Create a new invitation (org admin only) */
 invitation.post(
@@ -92,7 +88,7 @@ invitation.post(
     }
 
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS);
+    expiresAt.setDate(expiresAt.getDate() + env().INVITATION_EXPIRY_DAYS);
 
     const invitationId = nanoid();
     // The redemption token (#549, ADR-0019): URL-safe, minted with the same

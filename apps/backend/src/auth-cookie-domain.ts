@@ -20,6 +20,7 @@
 
 import { logger } from "./logger.ts";
 import { backendBaseUrl, frontendBaseUrl } from "./base-urls.ts";
+import { env } from "./env.ts";
 
 export type AuthTopologyResult =
   | { valid: true; cookieDomain: string | undefined }
@@ -174,8 +175,7 @@ export const checkAuthTopology = (
  * sent to either of them, which is a worse failure than the host-only default.
  */
 export const resolveAuthCookieDomain = (): string | undefined => {
-  const raw = process.env.AUTH_COOKIE_DOMAIN;
-  const cookieDomain = raw?.trim() ? raw.trim() : undefined;
+  const cookieDomain = env().AUTH_COOKIE_DOMAIN;
 
   const result = checkAuthTopology(
     backendBaseUrl(),

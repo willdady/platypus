@@ -87,11 +87,6 @@ export async function callOkTool<TOOL extends Tool>(
   >;
 }
 
-// Set environment variables for tests
-process.env.ALLOWED_ORIGINS = "http://localhost:3000";
-process.env.DATABASE_URL = "postgres://localhost:5432/test";
-process.env.STORAGE_BACKEND = "disk";
-
 /**
  * The chainable Drizzle query-builder methods exposed by the mock. Every method
  * is a vitest `Mock` that returns the same mock instance, so a full chain like

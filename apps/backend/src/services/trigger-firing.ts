@@ -42,6 +42,7 @@ import type {
   InboundTriggerInput,
   EventTriggerEventPayload,
 } from "@platypus/schemas";
+import { env } from "../env.ts";
 
 /**
  * Trigger firing: the one place a Trigger row becomes a run.
@@ -360,7 +361,7 @@ const runTrigger = async (
         input,
         sink,
         options: {
-          frontendUrl: process.env.FRONTEND_URL,
+          frontendUrl: env().FRONTEND_URL,
           timeouts: triggerTimeouts(),
         },
       }),

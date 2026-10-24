@@ -1,3 +1,5 @@
+import { env } from "./env.ts";
+
 /**
  * The browser-facing base URLs, resolved from the environment with the
  * development defaults.
@@ -13,8 +15,8 @@ const DEFAULT_FRONTEND_URL = "http://localhost:3001";
 
 /** `BETTER_AUTH_URL` — the backend origin the browser talks to. */
 export const backendBaseUrl = (): string =>
-  process.env.BETTER_AUTH_URL || DEFAULT_BACKEND_URL;
+  env().BETTER_AUTH_URL ?? DEFAULT_BACKEND_URL;
 
 /** `FRONTEND_URL` — the origin the browser loads the app from. */
 export const frontendBaseUrl = (): string =>
-  process.env.FRONTEND_URL || DEFAULT_FRONTEND_URL;
+  env().FRONTEND_URL ?? DEFAULT_FRONTEND_URL;

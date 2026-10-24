@@ -43,20 +43,7 @@ import {
 } from "../runs/chat-run-heartbeat.ts";
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
 import { sweepMissedEnds, turnEnded } from "../services/a2a-task-lifecycle.ts";
-
-const DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS = 60 * 1000;
-const SCHEDULER_INTERVAL_MS = parseInt(
-  process.env.SCHEDULE_SCHEDULER_INTERVAL_MS ||
-    String(DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS),
-);
-
-// Maximum Cron Trigger runs in flight at once, across every instance sharing
-// the database. Event Trigger runs are not counted.
-const DEFAULT_SCHEDULE_MAX_CONCURRENT = 5;
-const MAX_CONCURRENT_TRIGGERS = parseInt(
-  process.env.SCHEDULE_MAX_CONCURRENT ||
-    String(DEFAULT_SCHEDULE_MAX_CONCURRENT),
-);
+import { env } from "../env.ts";
 
 /**
  * Schedules a function to run at wall-clock-aligned intervals.
@@ -147,7 +134,9 @@ export async function processDueTriggers(): Promise<void> {
     .where(
       and(eq(triggerRunTable.status, "running"), eq(triggerTable.type, "cron")),
     );
-  let slots = MAX_CONCURRENT_TRIGGERS - running;
+  // Maximum Cron Trigger runs in flight at once, across every instance sharing
+  // the database. Event Trigger runs are not counted.
+  let slots = env().SCHEDULE_MAX_CONCURRENT - running;
 
   const isDue = and(
     eq(triggerTable.type, "cron"),
@@ -515,8 +504,9 @@ export function resetTokenReminderSweep(): void {
  * This should be called after the database is initialized.
  */
 export function startScheduler(): void {
+  const intervalMs = env().SCHEDULE_SCHEDULER_INTERVAL_MS;
   logger.info(
-    `Starting scheduler (interval: ${SCHEDULER_INTERVAL_MS}ms, wall-clock aligned)`,
+    `Starting scheduler (interval: ${intervalMs}ms, wall-clock aligned)`,
   );
 
   // Schedule at wall-clock-aligned intervals with advisory lock. Both recovery
@@ -526,7 +516,7 @@ export function startScheduler(): void {
   // multiple booting instances can't all sweep concurrently — the first to
   // grab the lock does it. Each sweep is wrapped independently so one failing
   // doesn't skip the others.
-  scheduleAligned("trigger-scheduler", SCHEDULER_INTERVAL_MS, async () => {
+  scheduleAligned("trigger-scheduler", intervalMs, async () => {
     await withAdvisoryLock(
       db.$client,
       ADVISORY_LOCK_IDS.scheduler,
