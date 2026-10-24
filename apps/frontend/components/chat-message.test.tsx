@@ -757,11 +757,14 @@ describe("ChatMessage generic tool renderer exclusion", () => {
     ).toBe(false);
   });
 
-  // A failed fsDownload has no file to offer, so it renders as a normal tool
-  // error rather than as a download card.
+  // A failed, denied or held fsDownload has no file to offer, so it renders
+  // as a normal tool call rather than in the tray.
   it.each([
+    ["input-available", false],
     ["output-available", false],
     ["output-error", true],
+    ["output-denied", true],
+    ["approval-requested", true],
   ])("treats an fsDownload part in %s as generic: %s", (state, generic) => {
     expect(
       isGenericToolPart({
@@ -1502,6 +1505,10 @@ describe("ChatMessage offered files", () => {
       input: { path },
       output: state === "output-available" ? { path, size: 10 } : undefined,
       errorText: state === "output-error" ? "File not found" : undefined,
+      approval:
+        state === "output-denied"
+          ? { id: "a1", approved: false, reason: "Blocked by a Tool gate" }
+          : undefined,
     }) as unknown as MessagePart;
 
   const call = (id: string, toolName: string) =>
@@ -1577,5 +1584,15 @@ describe("ChatMessage offered files", () => {
     expect(
       screen.getByRole("button", { name: /^1 tool call:.*with errors/ }),
     ).toBeVisible();
+  });
+
+  // ADR-0033: a Tool gate's denial is shown where the call happened.
+  it("renders a denied offer inline, not in the tray", () => {
+    renderMessage(message([offer("c1", "secret.txt", "output-denied")]));
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^Fs Download/i }));
+
+    expect(tray()).not.toBeInTheDocument();
+    expect(screen.getByText("Blocked by a Tool gate")).toBeInTheDocument();
   });
 });

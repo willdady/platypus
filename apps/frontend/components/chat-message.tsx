@@ -151,13 +151,19 @@ function isSubAgentToolPart(part: MessagePart): part is MessageToolPart {
   );
 }
 
-// An offered file shows in the tray under the finished reply, not in place. A
-// failed download has nothing to offer, so it falls through to the generic
-// renderer as an ordinary tool error.
+// An offered file shows in the tray under the finished reply, not in place, so
+// a call on its way to an offer draws nothing here. A failed, denied or held
+// download has nothing to offer, so it falls through to the generic renderer
+// like any other tool call.
+const OFFER_STATES = new Set([
+  "input-streaming",
+  "input-available",
+  "output-available",
+]);
 function isOfferedFilePart(
   part: MessagePart,
-): part is Exclude<PartOfType<"tool-fsDownload">, { state: "output-error" }> {
-  return part.type === "tool-fsDownload" && part.state !== "output-error";
+): part is PartOfType<"tool-fsDownload"> {
+  return part.type === "tool-fsDownload" && OFFER_STATES.has(part.state);
 }
 
 function isWebToolPart(part: MessagePart): part is MessageToolPart {
