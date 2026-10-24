@@ -5,11 +5,10 @@ import { getStorage } from "../storage/index.ts";
 /**
  * Agent avatar handling — validation, resizing, and storage — in one place.
  *
- * The Workspace and Organization Agent surfaces upload and clear avatars
- * identically; only the row lookup and the scope column on the persisting
- * update differ, and those stay in the route. The image rules (allowed types,
- * size/dimension limits, the resize target) and the storage key scheme live
- * here so they cannot drift apart.
+ * Persisting the key on the Agent row is `setAgentAvatar`/`clearAgentAvatar`
+ * in the Agent service, shared by the Workspace and Organization surfaces.
+ * The image rules (allowed types, size/dimension limits, the resize target)
+ * and the storage key scheme live here so they cannot drift apart.
  */
 
 const ALLOWED_AVATAR_TYPES = [
@@ -18,14 +17,14 @@ const ALLOWED_AVATAR_TYPES = [
   "image/webp",
   "image/gif",
 ];
-const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+export const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+export const AVATAR_TOO_LARGE = "File too large (max 5MB)";
 const MIN_AVATAR_DIMENSION = 64;
 const AVATAR_SIZE = 512;
 
 /**
  * Outcome of {@link storeAvatar}. A rejected upload carries a human-readable
- * message the route returns as a 400 — validation 4xx stay inline at the route
- * rather than going through the central `onError` (ADR-0010).
+ * message, which `setAgentAvatar` throws as a `ValidationError` (400).
  */
 export type StoreAvatarResult =
   { ok: true; key: string } | { ok: false; error: string };
@@ -37,7 +36,7 @@ export type StoreAvatarResult =
  * The returned key is keyed by the Agent's globally-unique id and is
  * independent of scope, so it never goes stale when a Workspace Agent is
  * Promoted to the Organization (ADR-0007). The caller persists the key on the
- * Agent row with its own scope-specific update.
+ * Agent row.
  *
  * @param file - The raw value pulled from `parseBody()` — validated here.
  * @param agentId - The Agent the avatar belongs to (used in the storage key).
@@ -55,7 +54,7 @@ export async function storeAvatar(
     return { ok: false, error: "Invalid file type" };
   }
   if (file.size > MAX_AVATAR_SIZE) {
-    return { ok: false, error: "File too large (max 5MB)" };
+    return { ok: false, error: AVATAR_TOO_LARGE };
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());

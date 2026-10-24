@@ -6,7 +6,8 @@ import { orgScopedWhere } from "../services/scoped-resource.ts";
 import app from "../server.ts";
 import { deleteAvatar, storeAvatar } from "../services/avatar.ts";
 
-vi.mock("../services/avatar.ts", () => ({
+vi.mock("../services/avatar.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/avatar.ts")>()),
   storeAvatar: vi.fn(),
   deleteAvatar: vi.fn(),
 }));
@@ -267,6 +268,26 @@ describe("Organization Agent Routes", () => {
   });
 
   describe("avatar routes", () => {
+    it("POST avatar rejects a body over the limit before reading it", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      const form = new FormData();
+      form.append(
+        "file",
+        new File([new Uint8Array(6 * 1024 * 1024)], "a.png", {
+          type: "image/png",
+        }),
+      );
+
+      const res = await app.request(`${baseUrl}/agent-1/avatar`, {
+        method: "POST",
+        body: form,
+      });
+
+      expect(res.status).toBe(400);
+      expect(storeAvatar).not.toHaveBeenCalled();
+    });
+
     it("POST avatar returns 403 for a non-admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess

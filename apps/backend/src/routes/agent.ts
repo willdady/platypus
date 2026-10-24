@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
-import { agent as agentTable } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -16,16 +15,13 @@ import {
   createAgent as createAgentRow,
   updateAgent as updateAgentRow,
   deleteAgent as deleteAgentRow,
+  setAgentAvatar,
+  clearAgentAvatar,
 } from "../services/agent.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
 import { promoteScoped } from "../services/promote.ts";
-import {
-  listScoped,
-  requireScoped,
-  requireWorkspaceMutable,
-  workspaceScopedWhere,
-} from "../services/scoped-resource.ts";
-import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
+import { listScoped, requireScoped } from "../services/scoped-resource.ts";
+import { avatarBodyLimit } from "./avatar-body-limit.ts";
 import { agentWithAvatarUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 
@@ -157,31 +153,15 @@ agent.post(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  avatarBodyLimit,
   async (c) => {
-    const agentId = c.req.param("agentId");
-    const scope = workspaceScopeOf(c);
-    const baseUrl = getOrigin(c);
-
-    // Shared agents are managed only on the Organization surface (ADR-0007).
-    const found = await requireWorkspaceMutable(db, "agent", agentId, scope);
-
     const body = await c.req.parseBody();
-    const result = await storeAvatar(
+    const row = await setAgentAvatar(
+      { kind: "workspace", ctx: workspaceScopeOf(c) },
+      c.req.param("agentId"),
       body["file"],
-      agentId,
-      found.row.avatarKey,
     );
-    if (!result.ok) {
-      return c.json({ error: result.error }, 400);
-    }
-
-    const record = await db
-      .update(agentTable)
-      .set({ avatarKey: result.key, updatedAt: new Date() })
-      .where(workspaceScopedWhere("agent", agentId, scope.workspaceId))
-      .returning();
-
-    return c.json(agentWithAvatarUrl(record[0], baseUrl));
+    return c.json(agentWithAvatarUrl(row, getOrigin(c)));
   },
 );
 
@@ -192,22 +172,11 @@ agent.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const agentId = c.req.param("agentId");
-    const scope = workspaceScopeOf(c);
-    const baseUrl = getOrigin(c);
-
-    // Shared agents are managed only on the Organization surface (ADR-0007).
-    const found = await requireWorkspaceMutable(db, "agent", agentId, scope);
-
-    await deleteAvatar(found.row.avatarKey);
-
-    const record = await db
-      .update(agentTable)
-      .set({ avatarKey: null, updatedAt: new Date() })
-      .where(workspaceScopedWhere("agent", agentId, scope.workspaceId))
-      .returning();
-
-    return c.json(agentWithAvatarUrl(record[0], baseUrl));
+    const row = await clearAgentAvatar(
+      { kind: "workspace", ctx: workspaceScopeOf(c) },
+      c.req.param("agentId"),
+    );
+    return c.json(agentWithAvatarUrl(row, getOrigin(c)));
   },
 );
 
