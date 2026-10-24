@@ -121,7 +121,7 @@ export async function createAgent(
       data.subAgentIds,
     );
     if (!validation.valid) {
-      return { error: validation.error! };
+      return { error: validation.error };
     }
   }
 
@@ -164,7 +164,7 @@ export async function updateAgent(
         data.subAgentIds,
       );
       if (!validation.valid) {
-        return { error: validation.error! };
+        return { error: validation.error };
       }
     }
 
@@ -187,8 +187,11 @@ export async function updateAgent(
   // the Workspace surface's Tool adapter, which allows a partial update), so
   // it is always present here despite `AgentUpdateFields` widening it to
   // optional for that other caller.
+  if (data.providerId === undefined) {
+    throw new Error("A Shared Agent update must carry providerId");
+  }
   const blockers = await findNonSharedReferences(scope.orgId, {
-    providerId: data.providerId!,
+    providerId: data.providerId,
     skillIds: data.skillIds,
     subAgentIds: data.subAgentIds,
     toolSetIds: data.toolSetIds,

@@ -192,7 +192,11 @@ const REGISTRY: Record<WorkspaceResourceType, RegistryEntry> = {
  * `DELETE`. Asserting once here keeps that shape out of the predicates'
  * return types, so no caller can be handed it.
  */
-const allOf = (...conditions: (SQL | undefined)[]): SQL => and(...conditions)!;
+const allOf = (...conditions: (SQL | undefined)[]): SQL => {
+  const all = and(...conditions);
+  if (!all) throw new Error("allOf composed no condition");
+  return all;
+};
 
 /**
  * The scope-half of every predicate here: this scope column equals this

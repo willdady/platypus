@@ -123,7 +123,11 @@ export type Database = Executor;
  * `DELETE` on the Organization surface. Asserting once here keeps that shape out
  * of the predicates' return types, so no caller can be handed it.
  */
-const allOf = (...conditions: (SQL | undefined)[]): SQL => and(...conditions)!;
+const allOf = (...conditions: (SQL | undefined)[]): SQL => {
+  const all = and(...conditions);
+  if (!all) throw new Error("allOf composed no condition");
+  return all;
+};
 
 /**
  * {@link isSharedRow} as SQL: at this Organization, and at no Workspace. The one

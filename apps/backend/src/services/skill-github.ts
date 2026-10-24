@@ -48,7 +48,8 @@ const API_HOST = "api.github.com";
 const ALLOWED_HOSTS = new Set([API_HOST, "codeload.github.com"]);
 const MAX_REDIRECTS = 5;
 
-const fail = (message: string): never => {
+// Annotated, not inferred, so a bare `fail(...)` call narrows like a `throw`.
+const fail: (message: string) => never = (message) => {
   throw new ValidationError(message);
 };
 
@@ -82,7 +83,7 @@ export const parseGithubSource = (input: string): GithubSkillSource => {
       fail("Only https://github.com URLs are supported");
     }
     try {
-      segments = url!.pathname
+      segments = url.pathname
         .split("/")
         .filter(Boolean)
         .map(decodeURIComponent);
@@ -114,7 +115,7 @@ export const parseGithubSource = (input: string): GithubSkillSource => {
     path: rest.join("/").replace(/\/+$/, ""),
   });
   if (!parsed.success) fail(parsed.error.issues[0].message);
-  return parsed.data!;
+  return parsed.data;
 };
 
 const resetMessage = (response: Response): string => {

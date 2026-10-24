@@ -408,13 +408,12 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
   // the Provider and Attachment reads if that count grows large.
   const workspaceMap = new Map<string, Omit<ChatToProcess, "chat">>();
   for (const workspace of workspacesWithExtraction) {
+    const providerId = workspace.memoryExtractionProviderId;
+    if (!providerId) {
+      throw new Error(`Workspace '${workspace.id}' has no extraction Provider`);
+    }
     const ctx = { orgId: workspace.organizationId, workspaceId: workspace.id };
-    const extraction = await resolveScoped(
-      db,
-      "provider",
-      workspace.memoryExtractionProviderId!,
-      ctx,
-    );
+    const extraction = await resolveScoped(db, "provider", providerId, ctx);
     if (!extraction) {
       logger.warn(
         {
