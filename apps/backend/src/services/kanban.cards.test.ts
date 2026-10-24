@@ -8,12 +8,8 @@ vi.mock("./event-dispatch.ts", () => ({
 import { db } from "../index.ts";
 import { NotFoundError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
-import {
-  bulkUpdateCards,
-  deleteCards,
-  requireCard,
-  type KanbanContext,
-} from "./kanban.ts";
+import { bulkUpdateCards, deleteCards } from "./kanban-card.ts";
+import { requireCard, type KanbanContext } from "./kanban-shared.ts";
 
 type Database = typeof db;
 

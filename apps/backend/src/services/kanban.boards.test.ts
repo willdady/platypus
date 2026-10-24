@@ -9,17 +9,19 @@ import { db } from "../index.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   createBoard,
-  createColumn,
   deleteBoard,
-  deleteColumn,
   getBoardState,
   listBoards,
-  renameColumn,
-  reorderColumns,
   resolveBoardState,
   updateBoard,
-  type KanbanScope,
-} from "./kanban.ts";
+} from "./kanban-board.ts";
+import {
+  createColumn,
+  deleteColumn,
+  renameColumn,
+  reorderColumns,
+} from "./kanban-column.ts";
+import type { KanbanScope } from "./kanban-shared.ts";
 
 type Database = typeof db;
 

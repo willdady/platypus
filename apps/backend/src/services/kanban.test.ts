@@ -29,9 +29,8 @@ import {
   requireKnownLabelIds,
   requireValidAssignees,
   updateCard,
-  type CardRow,
-  type KanbanContext,
-} from "./kanban.ts";
+} from "./kanban-card.ts";
+import type { CardRow, KanbanContext } from "./kanban-shared.ts";
 
 /**
  * The dispatch a card write should have made: the event paired with its

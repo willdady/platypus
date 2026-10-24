@@ -27,33 +27,41 @@ import type { Variables } from "../server.ts";
 import { NotFoundError } from "../errors.ts";
 import {
   createBoard,
-  createCard,
-  createColumn,
-  createComment,
   deleteBoard,
-  deleteCard,
-  deleteColumn,
   getBoardState,
   listBoards,
-  listCardHistory,
-  listComments,
+  resolveBoardState,
+  updateBoard,
+} from "../services/kanban-board.ts";
+import {
+  createCard,
+  deleteCard,
   moveCard,
-  removeComment,
+  updateCard,
+} from "../services/kanban-card.ts";
+import { listCardHistory } from "../services/kanban-card-history.ts";
+import {
+  createColumn,
+  deleteColumn,
   renameColumn,
   reorderColumns,
-  requireBoard,
+} from "../services/kanban-column.ts";
+import {
+  createComment,
+  listComments,
+  removeComment,
   requireComment,
-  resolveBoardState,
   resolveCommentNames,
-  updateBoard,
-  updateCard,
   updateCommentBody,
+} from "../services/kanban-comment.ts";
+import {
+  requireBoard,
   type KanbanContext,
   type KanbanScope,
-} from "../services/kanban.ts";
+} from "../services/kanban-shared.ts";
 
 /**
- * The human-facing surface over the Kanban module (`services/kanban.ts`): each
+ * The human-facing surface over the Kanban modules (`services/kanban-*`): each
  * handler authorizes the request, calls the module, and returns its result.
  * The board's rules live in the module and are shared with the Agent Tool set,
  * and its typed failures are mapped to a status by `app.onError` (ADR-0010).
