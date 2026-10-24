@@ -136,6 +136,7 @@ describe("trigger module", () => {
       ).rejects.toThrow(
         new ValidationError("Agent not found in this workspace"),
       );
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.trigger ?? []).toHaveLength(0);
     });
 
@@ -783,6 +784,7 @@ describe("trigger module", () => {
       await expect(createTrigger(ctx, inboundFields())).rejects.toThrow(
         ValidationError,
       );
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.trigger ?? []).toEqual([]);
     });
 
@@ -846,6 +848,7 @@ describe("trigger module", () => {
           { allowInbound: true },
         ),
       ).rejects.toThrow(ValidationError);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.trigger ?? []).toEqual([]);
     });
 

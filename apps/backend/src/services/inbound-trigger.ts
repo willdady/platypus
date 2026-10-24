@@ -499,6 +499,7 @@ export const acceptInboundCall = async (
       }),
     );
   } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
     if (holdsSlot) releaseRunSlot();
     throw error;
   }

@@ -304,7 +304,7 @@ describe("@platypuschat/plugin-sdk", () => {
       timeoutMs: 5_000,
       createExecutors: (ctx, plugin) => {
         expect(ctx.workspaceId).toBe("w");
-        expect(plugin?.credentials).toEqual({ apiKey: "k" });
+        expect(plugin.credentials).toEqual({ apiKey: "k" });
         return {
           web_search: ({ query }) => ({
             query,

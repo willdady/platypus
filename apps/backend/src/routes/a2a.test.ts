@@ -245,6 +245,7 @@ afterEach(async () => {
   );
   // A run's events read its Task until they see its end. Left reading, they
   // would read the next test's Task of the same Chat and message.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
   const producing = (tables.a2a_task ?? []).map(({ id }) =>
     a2aTaskEvents.subscribe(id as string),
   );
@@ -686,7 +687,8 @@ type RpcTask = {
   id: string;
   contextId: string;
   status: RpcStatus;
-  artifacts: { parts: { text: string; mediaType?: string }[] }[];
+  /** Left out of the wire form when empty. */
+  artifacts?: { parts: { text: string; mediaType?: string }[] }[];
   metadata?: Record<string, unknown>;
 };
 type RpcBody = {
@@ -1097,7 +1099,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
 
     const task = res.body.result.task;
     expect(task.status.state).toBe("TASK_STATE_COMPLETED");
-    expect(task.artifacts[0].parts).toEqual([
+    expect(task.artifacts![0].parts).toEqual([
       { text: "Hello from Helper", mediaType: "text/plain" },
     ]);
     const [chat] = rows("chat");
@@ -1370,7 +1372,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
     });
     const got = await rpc("GetTask", { id: task.id });
-    expect(got.body.result.artifacts[0].parts[0].text).toBe(
+    expect(got.body.result.artifacts![0].parts[0].text).toBe(
       "Hello from Helper",
     );
   });
@@ -1446,6 +1448,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
 
       await vi.advanceTimersByTimeAsync(29_000);
       expect(answered).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
       while (!answered) await vi.advanceTimersByTimeAsync(500);
       const { body } = await sending;
 
@@ -1516,7 +1519,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
 
     expect(second.body.result.task.contextId).toBe(contextId);
     expect(second.body.result.task.id).not.toBe(first.body.result.task.id);
-    expect(second.body.result.task.artifacts[0].parts[0].text).toBe(
+    expect(second.body.result.task.artifacts![0].parts[0].text).toBe(
       "Second answer",
     );
     expect(rows("chat_message").find((m) => m.id === "msg-b")).toMatchObject({
@@ -1771,7 +1774,8 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
         },
       }),
     });
-    const body = (await res.json()) as RpcBody;
+    // A response carries a result or an error, not both.
+    const body = (await res.json()) as Partial<RpcBody>;
 
     expect(body.id).toBe(7);
     expect(body.error?.code).toBe(code);
@@ -1904,8 +1908,8 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   });
 
   /** The Task a send answers with, whether as itself or as busy with it. */
-  const answeredTask = (res: { body: RpcBody }) =>
-    res.body.result?.task?.id ?? res.body.error?.data[0].metadata?.taskId;
+  const answeredTask = (res: { body: Partial<RpcBody> }) =>
+    res.body.result?.task.id ?? res.body.error?.data[0].metadata?.taskId;
 
   it("starts one conversation for a first message sent twice at once", async () => {
     seedConversation();
@@ -2353,7 +2357,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       expect(read.metadata).toEqual({ stopReason: "max_steps" });
       expect(read.status.message).toMatchObject({ role: "ROLE_AGENT" });
       expect(read.status.message!.parts[0].text).toMatch(/step limit/);
-      expect(read.artifacts[0].parts[0].text).toBe("Hello from Helper");
+      expect(read.artifacts![0].parts[0].text).toBe("Hello from Helper");
     });
 
     it("says a reply stopped at the model's output limit is cut short, still completed", async () => {
@@ -2643,7 +2647,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
     ).tasks;
 
     expect(without.artifacts).toBeUndefined();
-    expect(withThem.artifacts[0].parts[0].text).toBe("Reply a");
+    expect(withThem.artifacts![0].parts[0].text).toBe("Reply a");
   });
 
   it("carries each cut-short Task's stop reason, with or without artifacts", async () => {
@@ -3023,7 +3027,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     expect(rows("a2a_task")[0]).toMatchObject({ state: "completed" });
     const got = await rpc("GetTask", { id: task.id });
     expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
-    expect(got.body.result.artifacts[0].parts[0].text).toBe(
+    expect(got.body.result.artifacts![0].parts[0].text).toBe(
       "Hello from Helper",
     );
   });
@@ -3165,7 +3169,10 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
 
     expect(
       answers
-        .map(({ body }) => body.result?.status.state ?? body.error.code)
+        .map(
+          ({ body }: { body: Partial<RpcBody> }) =>
+            body.result?.status.state ?? body.error?.code,
+        )
         .sort(),
     ).toEqual([-32002, "TASK_STATE_CANCELED"]);
     expect(cancelRun).toHaveBeenCalledTimes(1);
@@ -3343,7 +3350,9 @@ describe("POST /a2a/:endpointId — push notifications", () => {
       contextId: task.contextId,
       status: { state: "TASK_STATE_COMPLETED" },
     });
-    expect(call.body.task.artifacts[0].parts[0].text).toBe("Hello from Helper");
+    expect(call.body.task.artifacts![0].parts[0].text).toBe(
+      "Hello from Helper",
+    );
     // No message content leaks into what the server signs or logs: only the
     // client's own config is stored.
     expect(rows("a2a_push_config")).toEqual([
@@ -3679,7 +3688,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
         id: "task-1",
         status: { state: "TASK_STATE_COMPLETED" },
       });
-      expect(pushed()[0].body.task.artifacts[0].parts[0].text).toBe(
+      expect(pushed()[0].body.task.artifacts![0].parts[0].text).toBe(
         "On its way",
       );
     });
@@ -4113,7 +4122,7 @@ describe("POST /a2a/:endpointId — the load cap", () => {
       send({ messageId: "msg-c", contextId }, { returnImmediately: true }),
     ]);
 
-    const [won, lost] = b.body.result ? [b, c] : [c, b];
+    const [won, lost] = "result" in b.body ? [b, c] : [c, b];
     // The Task it names is not pinned: the mock db has no transaction
     // isolation, so the loser reads the leaf before the winner's claim moves it.
     expect(won.body.result.task.id).toBeDefined();

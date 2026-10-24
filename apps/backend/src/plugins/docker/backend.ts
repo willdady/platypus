@@ -470,7 +470,9 @@ async function runExec(
   }
   if (timer) clearTimeout(timer);
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
   if (cancelled || timedOut) await killIfUnfinished();
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
   if (cancelled) throw new SandboxCancelledError();
 
   // Drain the pass-throughs.
@@ -478,6 +480,7 @@ async function runExec(
   stderrPass.end();
 
   let exitCode = 124;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
   if (!timedOut) {
     try {
       exitCode = await readExitCode(exec);
@@ -526,8 +529,8 @@ class DockerSandboxTransport implements SandboxTransport {
     this.inflight = new Map();
     // Normalise defensively: the registry passes schema-parsed config (arrays
     // present), but tolerate a bare object too.
-    this.networks = config?.networks ?? [];
-    this.extraHosts = config?.extraHosts ?? [];
+    this.networks = config.networks ?? [];
+    this.extraHosts = config.extraHosts ?? [];
     this.logger = logger;
   }
 

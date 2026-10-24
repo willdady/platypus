@@ -151,6 +151,7 @@ const submitSink = (overrides: Partial<ChatSinkParams> = {}) =>
   });
 
 const rowOf = (fake: ReturnType<typeof seedDb>, table: string, id: string) =>
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
   fake.tables[table]?.find((row) => row.id === id);
 
 /** Runs a submit turn to its end: start, resolve, finish with `final`. */
@@ -246,6 +247,7 @@ describe("ChatSink", () => {
           messages: [u1],
         }),
       ).rejects.toThrow(ConflictError);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.chat_message ?? []).toHaveLength(0);
     });
 
@@ -264,6 +266,7 @@ describe("ChatSink", () => {
         }),
       ).rejects.toThrow(ConflictError);
       expect(fake.tables.chat).toHaveLength(0);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.chat_message ?? []).toHaveLength(0);
     });
 

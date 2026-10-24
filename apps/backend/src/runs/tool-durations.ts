@@ -50,6 +50,7 @@ export const applyToolDurations = (
         },
       };
     });
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
     return patched ? { ...message, parts } : message;
   });
 };

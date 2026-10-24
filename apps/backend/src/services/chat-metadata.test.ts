@@ -42,8 +42,8 @@ const userMessage: PlatypusUIMessage = {
 const stubReads = (opts: {
   chat:
     (Record<string, unknown> & { messages?: PlatypusUIMessage[] }) | undefined;
-  workspace?: Record<string, unknown> | undefined;
-  provider?: Record<string, unknown> | undefined;
+  workspace?: Record<string, unknown> | null | undefined;
+  provider?: Record<string, unknown> | null | undefined;
   existingTags?: string[];
 }) => {
   const { messages = [], ...chat } = opts.chat ?? {};
@@ -182,7 +182,7 @@ describe("generateChatMetadata", () => {
   it("returns null when the workspace does not exist", async () => {
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
-      workspace: null as never,
+      workspace: null,
     });
 
     await expect(generateChatMetadata(params)).resolves.toBeNull();

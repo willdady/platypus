@@ -2087,7 +2087,7 @@ export const resolveBoardState = async (
     if (card.lastEditedByUserId) userIds.add(card.lastEditedByUserId);
     if (card.createdByAgentId) agentIds.add(card.createdByAgentId);
     if (card.lastEditedByAgentId) agentIds.add(card.lastEditedByAgentId);
-    for (const assignee of card.assignees ?? []) {
+    for (const assignee of card.assignees) {
       (assignee.type === "user" ? userIds : agentIds).add(assignee.id);
     }
   }
@@ -2153,7 +2153,7 @@ export const resolveBoardState = async (
     dueDate: isoOrNull(card.dueDate),
     createdByName: nameOf(card.createdByUserId, card.createdByAgentId),
     lastEditedByName: nameOf(card.lastEditedByUserId, card.lastEditedByAgentId),
-    resolvedAssignees: (card.assignees ?? [])
+    resolvedAssignees: card.assignees
       .map(resolveAssignee)
       .filter((assignee) => assignee !== null),
     commentCount: commentCountOf.get(card.id) ?? 0,

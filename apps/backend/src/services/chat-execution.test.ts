@@ -1593,7 +1593,7 @@ describe("chat-execution", () => {
               backend: "searx",
               name: "SearXNG",
               createExecutors: (ctx) => {
-                ctx.registerCloser?.(close);
+                ctx.registerCloser(close);
                 return { web_search: () => ({ query: "q", results: [] }) };
               },
             },
@@ -1818,8 +1818,8 @@ describe("chat-execution", () => {
 
           expect(unavailable.searchUnavailable).toBe(true);
           expect(unavailable.stream.system).toBe(neverAsked.stream.system);
-          expect(Object.keys(unavailable.stream.tools ?? {})).toEqual(
-            Object.keys(neverAsked.stream.tools ?? {}),
+          expect(Object.keys(unavailable.stream.tools)).toEqual(
+            Object.keys(neverAsked.stream.tools),
           );
           expect(unavailable.stream.tools).not.toHaveProperty("web_search");
           expect(unavailable.stream.tools).not.toHaveProperty("read_url");
@@ -2021,7 +2021,7 @@ describe("chat-execution", () => {
         }),
       );
 
-      expect(Object.keys(turn.stream.tools ?? {})).not.toContain(toolSetId);
+      expect(Object.keys(turn.stream.tools)).not.toContain(toolSetId);
     });
 
     // Issue #1059: the Memory Tool set leaves memorySearch out when the
@@ -2696,7 +2696,7 @@ describe("chat-execution", () => {
             backend: "searx",
             name: "SearXNG",
             createExecutors: (ctx) => {
-              ctx.registerCloser?.(close);
+              ctx.registerCloser(close);
               return { web_search: () => ({ query: "q", results: [] }) };
             },
           },

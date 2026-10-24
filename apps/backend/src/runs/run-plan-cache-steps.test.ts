@@ -35,12 +35,12 @@ const invocation = () =>
 
 /** How many messages carry a Bedrock cache point. */
 const cachePointCount = (messages: ModelMessage[]): number =>
-  messages.filter((m) => m.providerOptions?.amazonBedrock?.cachePoint).length;
+  messages.filter((m) => m.providerOptions?.amazonBedrock.cachePoint).length;
 
 /** Index of the messages carrying a cache point. */
 const cachePointIndexes = (messages: ModelMessage[]): number[] =>
   messages.flatMap((m, i) =>
-    m.providerOptions?.amazonBedrock?.cachePoint ? [i] : [],
+    m.providerOptions?.amazonBedrock.cachePoint ? [i] : [],
   );
 
 /** Exactly what `ai` does between steps. */
@@ -91,9 +91,7 @@ describe("Bedrock cache point across steps", () => {
 
     // The point that was on index 0 is gone; only the new tail carries one.
     expect(cachePointIndexes(second)).toEqual([second.length - 1]);
-    expect(
-      second[0].providerOptions?.amazonBedrock?.cachePoint,
-    ).toBeUndefined();
+    expect(second[0].providerOptions?.amazonBedrock.cachePoint).toBeUndefined();
   });
 
   it("leaves a message's other providerOptions intact when stripping", () => {

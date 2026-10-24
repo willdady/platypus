@@ -5,6 +5,7 @@ import pino from "pino";
 import { z } from "zod";
 import { errorSerializers, serializeLoggedError } from "./log-serializers.ts";
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JSON.stringify returns undefined for a function or symbol, though typed string
 const sizeOf = (value: unknown) => JSON.stringify(value)?.length ?? 0;
 
 /**

@@ -191,7 +191,7 @@ describe("User Invitation Routes", () => {
       const insertedValues = mockDb.values.mock.calls.map(
         (c) => c[0] as Record<string, unknown>,
       );
-      const provisioned = insertedValues.find((v) => v?.name);
+      const provisioned = insertedValues.find((v) => v.name);
       expect(provisioned).toMatchObject({
         organizationId: "org-1",
         ownerId: "u1",
@@ -241,7 +241,7 @@ describe("User Invitation Routes", () => {
       const insertedValues = mockDb.values.mock.calls.map(
         (c) => c[0] as Record<string, unknown>,
       );
-      const provisioned = insertedValues.find((v) => v?.name);
+      const provisioned = insertedValues.find((v) => v.name);
       expect(provisioned).toMatchObject({
         ownerId: "u1",
         name: "Jane's Workspace",
@@ -281,7 +281,7 @@ describe("User Invitation Routes", () => {
       const insertedValues = mockDb.values.mock.calls.map(
         (c) => c[0] as Record<string, unknown>,
       );
-      const provisioned = insertedValues.find((v) => v?.name);
+      const provisioned = insertedValues.find((v) => v.name);
       expect(provisioned).toMatchObject({ name: "James' Workspace" });
     });
 
@@ -320,8 +320,7 @@ describe("User Invitation Routes", () => {
         (c) => c[0] as Record<string, unknown>,
       );
       const provisioned = insertedValues.find(
-        (v): v is { name: string } =>
-          typeof v === "object" && v !== null && "name" in v,
+        (v): v is { name: string } => typeof v === "object" && "name" in v,
       );
       expect(provisioned?.name.length).toBeLessThanOrEqual(30);
       expect(provisioned?.name.endsWith(" Workspace")).toBe(true);
@@ -414,7 +413,7 @@ describe("User Invitation Routes", () => {
       // null slot it leaves does not clobber bp-1's earlier context.
       const tier2Set = mockDb.set.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
-        .find((v) => v?.taskModelProviderId !== undefined);
+        .find((v) => v.taskModelProviderId !== undefined);
       expect(tier2Set).toMatchObject({
         taskModelProviderId: "prov-B",
         context: "ctx-1",
@@ -584,7 +583,7 @@ describe("User Invitation Routes", () => {
 
       const row = mockDb.values.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
-        .find((v) => v && "organizationId" in v && "email" in v);
+        .find((v) => "organizationId" in v && "email" in v);
       expect(row).toBeDefined();
       return row!.email as string;
     };
@@ -632,7 +631,7 @@ describe("User Invitation Routes", () => {
 
       const provisioned = mockDb.values.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
-        .find((v) => v?.name);
+        .find((v) => v.name);
       expect(await acceptRes.json()).toEqual({
         message: "Invitation accepted",
         organizationId: "org-1",
