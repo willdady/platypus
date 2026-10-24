@@ -1,161 +1,29 @@
 import { Hono } from "hono";
 import { validate } from "../validate.ts";
-import { nanoid } from "nanoid";
-import { db } from "../index.ts";
-import {
-  blueprint as blueprintTable,
-  blueprintItem as blueprintItemTable,
-  workspace as workspaceTable,
-} from "../db/schema.ts";
 import {
   blueprintCreateSchema,
   blueprintUpdateSchema,
   blueprintApplySchema,
-  type BlueprintItem,
 } from "@platypus/schemas";
-import { and, eq, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
-import { applyBlueprintsToWorkspace } from "../services/blueprint-apply.ts";
-import { requireMemoryProviderCapable } from "../services/memory-provider-validation.ts";
-import { isBlueprintReferencedByLiveInvitation } from "../services/blueprint-guard.ts";
 import {
-  listOrgScopedIds,
-  type ScopedResourceType,
-} from "../services/scoped-resource.ts";
-import { NotFoundError, isUniqueViolation } from "../errors.ts";
+  applyBlueprint,
+  createBlueprint,
+  deleteBlueprint,
+  getBlueprint,
+  listBlueprints,
+  updateBlueprint,
+} from "../services/blueprint.ts";
 
-// Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
-// creates the Attachments for a chosen set of Shared resources in one step
-// (ADR-0008). It is a snapshot, not a living binding: applying stamps
-// Attachments at that moment; later edits never disturb already-provisioned
-// Workspaces. A Blueprint may only list org-scoped (Shared) resources, and all
-// management — and applying — is Org-Admin-only.
+/**
+ * The Organization surface over the Blueprint module (`services/blueprint.ts`,
+ * ADR-0008). All management — and applying — is Org-Admin-only; each handler
+ * authorizes, calls the module and returns its result, and the module's typed
+ * failures are mapped to a status by `app.onError` (ADR-0010).
+ */
 const orgBlueprint = new Hono<{ Variables: Variables }>();
-
-const NAME_CONFLICT = {
-  error: "A blueprint with this name already exists in this organization",
-} as const;
-
-/** Drop duplicate items (same resourceType + resourceId). */
-const dedupeItems = (items: BlueprintItem[]): BlueprintItem[] => {
-  const seen = new Set<string>();
-  const out: BlueprintItem[] = [];
-  for (const item of items) {
-    const key = `${item.resourceType}:${item.resourceId}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      out.push(item);
-    }
-  }
-  return out;
-};
-
-/**
- * Throws `NotFoundError` naming every item that does NOT resolve to an
- * org-scoped resource in this organization. A Blueprint may only list Shared
- * resources (ADR-0008), so any workspace-private or foreign-org reference is a
- * blocker.
- */
-const requireSharedItems = async (
-  items: BlueprintItem[],
-  orgId: string,
-): Promise<void> => {
-  const byType = new Map<ScopedResourceType, string[]>();
-  for (const item of items) {
-    const ids = byType.get(item.resourceType) ?? [];
-    ids.push(item.resourceId);
-    byType.set(item.resourceType, ids);
-  }
-
-  const invalid: string[] = [];
-  for (const [resourceType, ids] of byType) {
-    const found = await listOrgScopedIds(db, resourceType, ids, orgId);
-    for (const id of ids) {
-      if (!found.has(id)) invalid.push(`${resourceType} ${id}`);
-    }
-  }
-  if (invalid.length > 0) {
-    throw new NotFoundError(
-      `Shared resources not found in this organization: ${invalid.join(", ")}`,
-    );
-  }
-};
-
-/** The non-null Tier 2 provider references carried by a create/update body. */
-const tier2ProviderIds = (data: {
-  taskModelProviderId?: string | null;
-  memoryExtractionProviderId?: string | null;
-  memoryEmbeddingProviderId?: string | null;
-}): string[] =>
-  [
-    data.taskModelProviderId,
-    data.memoryExtractionProviderId,
-    data.memoryEmbeddingProviderId,
-  ].filter((id): id is string => Boolean(id));
-
-/**
- * Returns the Tier 2 provider references that the Blueprint does NOT also
- * attach. A Tier 2 pointer-setting only makes sense for a provider the
- * Blueprint provisions — applying it both attaches the provider and points the
- * Workspace at it, so a pointer to an unattached provider would leave the
- * Workspace referencing something it can't see. Because Tier 1 items are
- * already validated org-scoped, "is an attached provider item" also implies
- * org-scoped (ADR-0008).
- */
-const tier2ProvidersNotAttached = (
-  data: {
-    taskModelProviderId?: string | null;
-    memoryExtractionProviderId?: string | null;
-    memoryEmbeddingProviderId?: string | null;
-  },
-  items: BlueprintItem[],
-): string[] => {
-  const attached = new Set(
-    items.filter((i) => i.resourceType === "provider").map((i) => i.resourceId),
-  );
-  return tier2ProviderIds(data).filter((id) => !attached.has(id));
-};
-
-/**
- * Why the Blueprint's Tier 2 settings can't be saved, naming each offending
- * Provider, or `null` when they can. A setting may only point at a Provider the
- * Blueprint also attaches (ADR-0008), so applying it never points a Workspace
- * at an unattached Provider.
- */
-const tier2SettingsError = (
-  data: Parameters<typeof tier2ProvidersNotAttached>[0],
-  items: BlueprintItem[],
-): string | null => {
-  const unattached = tier2ProvidersNotAttached(data, items);
-  if (unattached.length > 0) {
-    return `A blueprint's provider settings must reference providers the blueprint also attaches: ${unattached.join(", ")}`;
-  }
-  return null;
-};
-
-/** Load the items of one or more blueprints, grouped by blueprint id. */
-const loadItemsByBlueprint = async (
-  blueprintIds: string[],
-): Promise<Map<string, BlueprintItem[]>> => {
-  const grouped = new Map<string, BlueprintItem[]>();
-  if (blueprintIds.length === 0) return grouped;
-  const rows = await db
-    .select({
-      blueprintId: blueprintItemTable.blueprintId,
-      resourceType: blueprintItemTable.resourceType,
-      resourceId: blueprintItemTable.resourceId,
-    })
-    .from(blueprintItemTable)
-    .where(inArray(blueprintItemTable.blueprintId, blueprintIds));
-  for (const row of rows) {
-    const items = grouped.get(row.blueprintId) ?? [];
-    items.push({ resourceType: row.resourceType, resourceId: row.resourceId });
-    grouped.set(row.blueprintId, items);
-  }
-  return grouped;
-};
 
 /** Create a Blueprint (admin only) */
 orgBlueprint.post(
@@ -165,83 +33,14 @@ orgBlueprint.post(
   validate("json", blueprintCreateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    const {
-      name,
-      description,
-      items,
-      taskModelProviderId,
-      memoryExtractionProviderId,
-      memoryEmbeddingProviderId,
-      context,
-    } = c.req.valid("json");
-    const deduped = dedupeItems(items);
-
-    await requireSharedItems(deduped, orgId);
-
-    const settingsError = tier2SettingsError(c.req.valid("json"), deduped);
-    if (settingsError) {
-      return c.json({ error: settingsError }, 400);
-    }
-    // A memory Provider must expose the model its slot needs, so apply never
-    // stamps an unusable memory config.
-    await requireMemoryProviderCapable(c.req.valid("json"), { orgId });
-
-    const id = nanoid();
-    try {
-      await db.transaction(async (tx) => {
-        await tx.insert(blueprintTable).values({
-          id,
-          organizationId: orgId,
-          name,
-          description: description ?? null,
-          taskModelProviderId: taskModelProviderId ?? null,
-          memoryExtractionProviderId: memoryExtractionProviderId ?? null,
-          memoryEmbeddingProviderId: memoryEmbeddingProviderId ?? null,
-          context: context ?? null,
-        });
-        if (deduped.length > 0) {
-          await tx.insert(blueprintItemTable).values(
-            deduped.map((item) => ({
-              id: nanoid(),
-              blueprintId: id,
-              resourceType: item.resourceType,
-              resourceId: item.resourceId,
-            })),
-          );
-        }
-      });
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
-    }
-
-    const [record] = await db
-      .select()
-      .from(blueprintTable)
-      .where(eq(blueprintTable.id, id))
-      .limit(1);
-    return c.json({ ...record, items: deduped }, 201);
+    return c.json(await createBlueprint(orgId, c.req.valid("json")), 201);
   },
 );
 
 /** List Blueprints, each with its items (admin only) */
 orgBlueprint.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   const { orgId } = orgScopeOf(c);
-  const blueprints = await db
-    .select()
-    .from(blueprintTable)
-    .where(eq(blueprintTable.organizationId, orgId));
-
-  const itemsByBlueprint = await loadItemsByBlueprint(
-    blueprints.map((b) => b.id),
-  );
-  const results = blueprints.map((b) => ({
-    ...b,
-    items: itemsByBlueprint.get(b.id) ?? [],
-  }));
-  return c.json({ results });
+  return c.json({ results: await listBlueprints(orgId) });
 });
 
 /** Get a Blueprint by ID, with its items (admin only) */
@@ -251,25 +50,7 @@ orgBlueprint.get(
   requireOrgAccess(["admin"]),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    const blueprintId = c.req.param("blueprintId");
-    const [record] = await db
-      .select()
-      .from(blueprintTable)
-      .where(
-        and(
-          eq(blueprintTable.id, blueprintId),
-          eq(blueprintTable.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-    if (!record) {
-      return c.json({ error: "Blueprint not found" }, 404);
-    }
-    const itemsByBlueprint = await loadItemsByBlueprint([blueprintId]);
-    return c.json({
-      ...record,
-      items: itemsByBlueprint.get(blueprintId) ?? [],
-    });
+    return c.json(await getBlueprint(c.req.param("blueprintId"), orgId));
   },
 );
 
@@ -281,86 +62,12 @@ orgBlueprint.put(
   validate("json", blueprintUpdateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    const blueprintId = c.req.param("blueprintId");
-    const {
-      name,
-      description,
-      items,
-      taskModelProviderId,
-      memoryExtractionProviderId,
-      memoryEmbeddingProviderId,
-      context,
-    } = c.req.valid("json");
-    const deduped = dedupeItems(items);
-
-    // The blueprint must exist in this org before we touch its items.
-    const [existing] = await db
-      .select({ id: blueprintTable.id })
-      .from(blueprintTable)
-      .where(
-        and(
-          eq(blueprintTable.id, blueprintId),
-          eq(blueprintTable.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-    if (!existing) {
-      return c.json({ error: "Blueprint not found" }, 404);
-    }
-
-    await requireSharedItems(deduped, orgId);
-
-    const settingsError = tier2SettingsError(c.req.valid("json"), deduped);
-    if (settingsError) {
-      return c.json({ error: settingsError }, 400);
-    }
-    // A memory Provider must expose the model its slot needs, so apply never
-    // stamps an unusable memory config.
-    await requireMemoryProviderCapable(c.req.valid("json"), { orgId });
-
-    try {
-      await db.transaction(async (tx) => {
-        await tx
-          .update(blueprintTable)
-          .set({
-            name,
-            description: description ?? null,
-            taskModelProviderId: taskModelProviderId ?? null,
-            memoryExtractionProviderId: memoryExtractionProviderId ?? null,
-            memoryEmbeddingProviderId: memoryEmbeddingProviderId ?? null,
-            context: context ?? null,
-            updatedAt: new Date(),
-          })
-          .where(eq(blueprintTable.id, blueprintId));
-        // Snapshot semantics: replacing the item set never touches already
-        // provisioned Workspaces — those Attachments stand on their own.
-        await tx
-          .delete(blueprintItemTable)
-          .where(eq(blueprintItemTable.blueprintId, blueprintId));
-        if (deduped.length > 0) {
-          await tx.insert(blueprintItemTable).values(
-            deduped.map((item) => ({
-              id: nanoid(),
-              blueprintId,
-              resourceType: item.resourceType,
-              resourceId: item.resourceId,
-            })),
-          );
-        }
-      });
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
-    }
-
-    const [record] = await db
-      .select()
-      .from(blueprintTable)
-      .where(eq(blueprintTable.id, blueprintId))
-      .limit(1);
-    return c.json({ ...record, items: deduped }, 200);
+    const record = await updateBlueprint(
+      c.req.param("blueprintId"),
+      orgId,
+      c.req.valid("json"),
+    );
+    return c.json(record, 200);
   },
 );
 
@@ -371,33 +78,7 @@ orgBlueprint.delete(
   requireOrgAccess(["admin"]),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    const blueprintId = c.req.param("blueprintId");
-
-    // A Blueprint cannot be deleted while a live pending invitation references
-    // it (ADR-0009) — accept-time provisioning would otherwise dereference a
-    // missing Blueprint. A lazily-expired invite does not block.
-    if (await isBlueprintReferencedByLiveInvitation(blueprintId)) {
-      return c.json(
-        {
-          error:
-            "Cannot delete: this blueprint is referenced by one or more pending invitations. Delete those invitations first.",
-        },
-        409,
-      );
-    }
-
-    const result = await db
-      .delete(blueprintTable)
-      .where(
-        and(
-          eq(blueprintTable.id, blueprintId),
-          eq(blueprintTable.organizationId, orgId),
-        ),
-      )
-      .returning();
-    if (result.length === 0) {
-      return c.json({ error: "Blueprint not found" }, 404);
-    }
+    await deleteBlueprint(c.req.param("blueprintId"), orgId);
     return c.json({ message: "Blueprint deleted" });
   },
 );
@@ -417,43 +98,12 @@ orgBlueprint.post(
   validate("json", blueprintApplySchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    const blueprintId = c.req.param("blueprintId");
     const { workspaceId } = c.req.valid("json");
-
-    const [record] = await db
-      .select({ id: blueprintTable.id })
-      .from(blueprintTable)
-      .where(
-        and(
-          eq(blueprintTable.id, blueprintId),
-          eq(blueprintTable.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-    if (!record) {
-      return c.json({ error: "Blueprint not found" }, 404);
-    }
-
-    // The target workspace must belong to this organization.
-    const [ws] = await db
-      .select({ id: workspaceTable.id })
-      .from(workspaceTable)
-      .where(
-        and(
-          eq(workspaceTable.id, workspaceId),
-          eq(workspaceTable.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-    if (!ws) {
-      return c.json({ error: "Workspace not found in this organization" }, 404);
-    }
-
-    // Tier 1 Attachments + Tier 2 settings commit together.
-    const result = await db.transaction((tx) =>
-      applyBlueprintsToWorkspace(tx, workspaceId, [blueprintId]),
+    const result = await applyBlueprint(
+      c.req.param("blueprintId"),
+      orgId,
+      workspaceId,
     );
-
     return c.json({ workspaceId, ...result }, 200);
   },
 );
