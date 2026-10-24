@@ -3,6 +3,7 @@ import {
   NotFoundError,
   LockedError,
   ConflictError,
+  ServiceUnavailableError,
   UpstreamError,
   ValidationError,
   isUniqueViolation,
@@ -26,6 +27,15 @@ describe("central error mapping (app.onError)", () => {
   it("maps ConflictError → 409", () => {
     const mapped = mapError(new ConflictError());
     expect(mapped?.status).toBe(409);
+  });
+
+  it("maps ServiceUnavailableError → 503", () => {
+    // The stopping gate's rejection: a run claimed after the stop signal is
+    // answered 503 so an HTTP caller retries another instance.
+    expect(mapError(new ServiceUnavailableError())).toEqual({
+      status: 503,
+      message: "Server is shutting down",
+    });
   });
 
   it("maps ValidationError → 400", () => {

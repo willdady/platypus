@@ -528,6 +528,34 @@ describe("scheduleAligned", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(job).toHaveBeenCalledTimes(2);
   });
+
+  it("stops the schedule when its stop handle is called", async () => {
+    const job = vi.fn(takesTime);
+
+    const stop = scheduleAligned("test", 60_000, job);
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(job).toHaveBeenCalledTimes(1);
+
+    stop();
+    // The pending boundary tick is cleared, and no later one is scheduled.
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(job).toHaveBeenCalledTimes(1);
+  });
+
+  it("a tick already running when stopped is not rescheduled", async () => {
+    const job = vi.fn(async () => {
+      await takesTime();
+    });
+
+    const stop = scheduleAligned("test", 60_000, job);
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(job).toHaveBeenCalledTimes(1);
+
+    // Stop while the job is still running; it finishes but schedules nothing.
+    stop();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(job).toHaveBeenCalledTimes(1);
+  });
 });
 
 /**

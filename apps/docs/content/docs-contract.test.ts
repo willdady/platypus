@@ -2014,6 +2014,13 @@ const BACKEND_CONSTANTS = [
     cost: "A reader debugging a _Failed_ run looks for the wrong number of repeats.",
   },
   {
+    source: "apps/backend/src/ready.ts",
+    name: "DB_PING_TIMEOUT_MS",
+    phrase: (ms: number) => `${NUMBER_WORDS[ms / 1_000] ?? ms / 1_000} seconds`,
+    files: ["self-hosting/docker-compose.mdx"],
+    cost: "A load balancer is configured to wait for a readiness answer that never comes if the page's patience differs from the backend's.",
+  },
+  {
     source: "apps/backend/src/jobs/scheduler.ts",
     name: "RECOVERY_STALE_BUFFER_MS",
     phrase: (ms: number) =>

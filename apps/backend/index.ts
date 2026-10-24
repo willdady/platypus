@@ -2,7 +2,7 @@
 import { failStartup } from "./src/boot-env.ts";
 import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
-import { db } from "./src/index.ts";
+import { db, pool } from "./src/index.ts";
 import { sql } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
@@ -17,7 +17,10 @@ import { startNotificationListener } from "./src/runs/notify-listener.ts";
 // Register the channels the listener LISTENs on.
 import "./src/runs/run-cancel.ts";
 import "./src/services/a2a-events.ts";
-import { installShutdownHandlers } from "./src/runs/shutdown.ts";
+import {
+  installShutdownHandlers,
+  installCrashHandlers,
+} from "./src/runs/shutdown.ts";
 import { watchForCanceledA2aRuns } from "./src/services/a2a-cancel.ts";
 import { loadPlugins, type LoadPluginsResult } from "./src/plugins/loader.ts";
 import { setLoadedPlugins } from "./src/plugins/registry.ts";
@@ -110,19 +113,43 @@ const main = async () => {
     fetch: app.fetch,
     port: PORT,
   });
+  // `serve` returns a union of Node server types; ours is the plain HTTP one.
+  const httpServer = server as import("node:http").Server;
+
   // A deploy or `docker stop` ends this process's runs as cancelled before it
   // exits, so their Chats are free at once rather than once their heartbeat
-  // goes stale (#1297).
-  installShutdownHandlers({ stopAccepting: () => server.close() });
+  // goes stale (#1297). The drain: no new work (the registry's stopping gate
+  // answers new runs 503; the scheduler timers and listeners below are stopped;
+  // the HTTP listener stops taking requests; idle keep-alive/SSE connections
+  // are dropped), the held runs write their ends, the server's in-flight
+  // requests are awaited, and the pool is ended last — all inside the drain
+  // budget, with a non-zero exit when the budget runs out (#1616).
+  installShutdownHandlers({
+    stopBackground: () => {
+      stopMemoryScheduler();
+      stopScheduler();
+      stopNotificationListener();
+      stopA2aWatcher();
+    },
+    stopAccepting: () => httpServer.close(),
+    closeIdleConnections: () => httpServer.closeIdleConnections(),
+    close: () =>
+      new Promise<void>((resolve) => httpServer.close(() => resolve())),
+    endPool: () => pool.end(),
+  });
+  // A stray rejection in a plugin timer must not die through Node's stderr
+  // path: log it fatal, cancel the held runs, and exit 1 after a short drain.
+  installCrashHandlers();
 
-  // Start background jobs (safe for horizontal scaling)
-  startMemoryScheduler();
-  startScheduler();
+  // Start background jobs (safe for horizontal scaling). Each returns a stop
+  // handle so the shutdown above can clear its timer / listener.
+  const stopMemoryScheduler = startMemoryScheduler();
+  const stopScheduler = startScheduler();
   // A cancel received by another instance reaches the runs held here, and an
   // A2A Task's events reach the streams following it here.
-  startNotificationListener();
+  const stopNotificationListener = startNotificationListener();
   // An A2A cancel that missed the run held here, as while listening resumed.
-  watchForCanceledA2aRuns();
+  const stopA2aWatcher = watchForCanceledA2aRuns();
 };
 
 const exponentialBackoff = async <T>(

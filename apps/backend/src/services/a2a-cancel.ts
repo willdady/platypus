@@ -147,14 +147,15 @@ export const stopCanceledA2aRuns = async (): Promise<void> => {
 
 /**
  * Sweeps for canceled Tasks' runs, and revoked clients' runs, every few
- * seconds, for as long as the process runs.
+ * seconds, for as long as the process runs. Returns a stop handle that clears
+ * the interval, for a graceful shutdown.
  *
  * ponytail: a run's start and a cancel's moment come from different
  * instances' clocks. A regenerate of a canceled turn started within the skew
  * between them could be stopped too.
  */
-export const watchForCanceledA2aRuns = (): void => {
-  setInterval(() => {
+export const watchForCanceledA2aRuns = (): (() => void) => {
+  const timer = setInterval(() => {
     stopCanceledA2aRuns().catch((error: unknown) =>
       logger.error({ error }, "Sweeping canceled A2A runs failed"),
     );
@@ -162,4 +163,5 @@ export const watchForCanceledA2aRuns = (): void => {
       logger.error({ error }, "Sweeping revoked A2A runs failed"),
     );
   }, SWEEP_MS).unref();
+  return () => clearInterval(timer);
 };

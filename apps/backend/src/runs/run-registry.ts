@@ -1,4 +1,4 @@
-import { ConflictError } from "../errors.ts";
+import { ConflictError, ServiceUnavailableError } from "../errors.ts";
 import type { RunId } from "./types.ts";
 
 /**
@@ -139,6 +139,33 @@ export class RunRegistry {
   private readonly entries = new Map<RunId, Entry>();
   /** Waiting on {@link RunRegistry.whenIdle}; called when the last run goes. */
   private readonly idleWaiters = new Set<() => void>();
+  /** Set once the process is draining for shutdown; `register` rejects after. */
+  private stopRequested = false;
+
+  /**
+   * Closes the gate: from here on `register` rejects with a
+   * `ServiceUnavailableError`, so a request that reaches the process during
+   * the drain is answered 503 (ADR-0010's central handler) instead of being
+   * written to the database and then killed by the exit. Idempotent; the
+   * drain and the crash handler may both call it.
+   */
+  beginStop(): void {
+    this.stopRequested = true;
+  }
+
+  /** True once {@link RunRegistry.beginStop} was called — the /ready probe's gate. */
+  get stopping(): boolean {
+    return this.stopRequested;
+  }
+
+  /**
+   * Test seam: reopen the gate as if no shutdown had happened, so one test
+   * process can exercise a drain and then register runs again. Shutdown is
+   * terminal in production; nothing there calls this.
+   */
+  resetStopStateForTests(): void {
+    this.stopRequested = false;
+  }
 
   /**
    * Claims `runId` and returns its handle.
@@ -152,6 +179,13 @@ export class RunRegistry {
    * run's messages on its way to failing (issue #648).
    */
   register(runId: RunId, options: RegisterOptions = {}): RunHandle {
+    if (this.stopping) {
+      // The process is draining: a run started now would be killed by the
+      // imminent exit having written nothing. Typed `ServiceUnavailableError`
+      // so the central error handler answers 503 (ADR-0010) — an HTTP caller
+      // should retry against another instance, not believe its run started.
+      throw new ServiceUnavailableError("Server is shutting down");
+    }
     const existing = this.entries.get(runId);
     if (existing) {
       throw new ConflictError(`A run is already in progress for '${runId}'`);

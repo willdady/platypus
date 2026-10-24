@@ -56,30 +56,47 @@ import { env } from "../env.ts";
  * This is critical for horizontal scaling: all backend instances align
  * to the same schedule, so the advisory lock contention is predictable
  * and only one instance wins each cycle.
+ *
+ * Returns a stop handle: clears the pending timer and prevents the next
+ * alignment, so a shutdown can stop the scheduler without waiting for a
+ * tick that may be minutes away. A tick already running when the handle is
+ * called still finishes (its work may be mid-write), but it never schedules
+ * another.
  */
 export function scheduleAligned(
   name: string,
   intervalMs: number,
   fn: () => Promise<void>,
-): void {
+): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+
   function scheduleNext() {
     const now = Date.now();
     const nextTick = (Math.floor(now / intervalMs) + 1) * intervalMs;
     const delay = nextTick - now;
 
-    setTimeout(() => {
+    timer = setTimeout(() => {
+      timer = undefined;
       void (async () => {
+        if (stopped) return;
         try {
           await fn();
         } catch (error) {
           logger.error({ error, job: name }, "Scheduled job failed");
         }
-        scheduleNext();
+        if (!stopped) scheduleNext();
       })();
     }, delay);
   }
 
   scheduleNext();
+
+  return () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+  };
 }
 
 /**
@@ -502,8 +519,9 @@ export function resetTokenReminderSweep(): void {
 /**
  * Starts the background scheduler.
  * This should be called after the database is initialized.
+ * Returns a stop handle that clears the tick, for a graceful shutdown.
  */
-export function startScheduler(): void {
+export function startScheduler(): () => void {
   const intervalMs = env().SCHEDULE_SCHEDULER_INTERVAL_MS;
   logger.info(
     `Starting scheduler (interval: ${intervalMs}ms, wall-clock aligned)`,
@@ -516,7 +534,7 @@ export function startScheduler(): void {
   // multiple booting instances can't all sweep concurrently — the first to
   // grab the lock does it. Each sweep is wrapped independently so one failing
   // doesn't skip the others.
-  scheduleAligned("trigger-scheduler", intervalMs, async () => {
+  return scheduleAligned("trigger-scheduler", intervalMs, async () => {
     await withAdvisoryLock(
       db.$client,
       ADVISORY_LOCK_IDS.scheduler,

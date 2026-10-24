@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { dbError, mockDb, mockSession, resetMockDb } from "./test-utils.ts";
 import app from "./server.ts";
 import { logger } from "./logger.ts";
+import { runRegistry } from "./runs/run-registry.ts";
 
 describe("app error responses", () => {
   beforeEach(() => {
@@ -74,5 +75,62 @@ describe("app error responses", () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Not Found" });
+  });
+});
+
+describe("health and readiness", () => {
+  beforeEach(() => {
+    resetMockDb();
+    // A drain's stopping gate is terminal in production; a test that stops
+    // the registry must not leave the next one refusing runs.
+    runRegistry.resetStopStateForTests();
+  });
+
+  afterEach(() => {
+    runRegistry.resetStopStateForTests();
+    vi.restoreAllMocks();
+  });
+
+  it("answers /health ok without asking the database", async () => {
+    const res = await app.request("/health");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: "ok" });
+  });
+
+  it("answers /ready 200 when the database answers SELECT 1", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ "?column?": 1 }] });
+    Object.assign(mockDb, { $client: { query } });
+
+    const res = await app.request("/ready");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: "ready" });
+    expect(query).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "SELECT 1", query_timeout: 2_000 }),
+    );
+  });
+
+  it("answers /ready 503 when the database does not answer", async () => {
+    Object.assign(mockDb, {
+      $client: { query: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) },
+    });
+
+    const res = await app.request("/ready");
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "Database unavailable" });
+  });
+
+  it("answers /ready 503 once shutdown has started, without a db call", async () => {
+    runRegistry.beginStop();
+    const query = vi.fn();
+    Object.assign(mockDb, { $client: { query } });
+
+    const res = await app.request("/ready");
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "Server is shutting down" });
+    expect(query).not.toHaveBeenCalled();
   });
 });

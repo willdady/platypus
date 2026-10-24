@@ -44,7 +44,9 @@ import { a2aEndpoint } from "./routes/a2a-endpoint.ts";
 import { orgA2a } from "./routes/org-a2a.ts";
 import type { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
+import { pingDatabase } from "./ready.ts";
 import { mapError } from "./errors.ts";
+import { runRegistry } from "./runs/run-registry.ts";
 import type { UserScope, OrgScope, WorkspaceScope } from "./scope.ts";
 import { env } from "./env.ts";
 
@@ -128,15 +130,20 @@ app.use("*", async (c, next) => {
   const start = Date.now();
   await next();
   const ms = Date.now() - start;
-  logger.info(
-    {
-      method: c.req.method,
-      path: c.req.path,
-      status: c.res.status,
-      duration: `${ms}ms`,
-    },
-    "Request processed",
-  );
+  const fields = {
+    method: c.req.method,
+    path: c.req.path,
+    status: c.res.status,
+    duration: `${ms}ms`,
+  };
+  // `/health` is polled by the image's health check every 30s — at `info` it
+  // would be half the log. It says nothing a probe run says; `debug` keeps it
+  // for the moment it is actually asked about.
+  if (c.req.path === "/health") {
+    logger.debug(fields, "Request processed");
+  } else {
+    logger.info(fields, "Request processed");
+  }
 });
 
 // Auth routes - must be before the db middleware
@@ -149,7 +156,27 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// Liveness only: `ok` says the process is up and serving, nothing about the
+// database a probe that walks away from a dead pool would not learn from the
+// orchestrator's restart. `/ready` is the one that asks the database.
 app.get("/health", (c) => c.json({ status: "ok" }));
+// Readiness: the backend answers traffic only when it could actually serve a
+// request — Postgres answered within the probe's patience, and the process is
+// not draining for shutdown (once the drain starts, new runs are refused, so
+// a load balancer should stop sending them here). `/health` stays up while
+// `/ready` is 503, so an orchestrator replacing this pod doesn't also tear
+// down its liveness.
+app.get("/ready", async (c) => {
+  // 503 answers carry the `error` key like every other failure (ADR-0010);
+  // an orchestrator reads the status line, a human reads the body.
+  if (runRegistry.stopping) {
+    return c.json({ error: "Server is shutting down" }, 503);
+  }
+  const ready = await pingDatabase(db.$client);
+  return ready
+    ? c.json({ status: "ready" })
+    : c.json({ error: "Database unavailable" }, 503);
+});
 // Whether public sign-up is open. Unauthenticated (#550, ADR-0019): the one
 // authority the frontend reads to decide whether to offer Sign up, so a second
 // frontend-side variable that could disagree with the backend never exists. It
