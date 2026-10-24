@@ -22,6 +22,7 @@ const { mockLogger, mockNanoid } = vi.hoisted(() => {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
+      fatal: vi.fn(),
       child: vi.fn(() => child),
     },
     // A deterministic 21-character id, matching real `nanoid()`'s default

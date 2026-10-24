@@ -11,6 +11,7 @@ export const generateEmbedding = async (
   provider: ProviderRow,
   embeddingModelId: ConcreteModelId,
   text: string,
+  abortSignal?: AbortSignal,
 ): Promise<number[]> => {
   const opened = openProvider(provider);
   if (!opened.embeddingModel) {
@@ -21,6 +22,7 @@ export const generateEmbedding = async (
   const { embedding } = await embed({
     model: opened.embeddingModel(embeddingModelId),
     value: text,
+    abortSignal,
   });
   return embedding;
 };

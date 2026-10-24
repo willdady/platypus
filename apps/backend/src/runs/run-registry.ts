@@ -1,4 +1,4 @@
-import { ConflictError } from "../errors.ts";
+import { ConflictError, ServiceUnavailableError } from "../errors.ts";
 import type { RunId } from "./types.ts";
 
 /**
@@ -139,6 +139,12 @@ export class RunRegistry {
   private readonly entries = new Map<RunId, Entry>();
   /** Waiting on {@link RunRegistry.whenIdle}; called when the last run goes. */
   private readonly idleWaiters = new Set<() => void>();
+  /**
+   * Set when the process starts shutting down: from then on
+   * {@link RunRegistry.register} refuses every run, so nothing starts that
+   * the exit would cut off.
+   */
+  stopping = false;
 
   /**
    * Claims `runId` and returns its handle.
@@ -150,8 +156,16 @@ export class RunRegistry {
    * claim can be made the first thing a run does: registering before anything
    * is persisted is what stops a duplicate submission overwriting the live
    * run's messages on its way to failing (issue #648).
+   *
+   * While {@link RunRegistry.stopping}, every claim is refused with a
+   * `ServiceUnavailableError` (503).
    */
   register(runId: RunId, options: RegisterOptions = {}): RunHandle {
+    if (this.stopping) {
+      throw new ServiceUnavailableError(
+        "The server is shutting down; try again shortly",
+      );
+    }
     const existing = this.entries.get(runId);
     if (existing) {
       throw new ConflictError(`A run is already in progress for '${runId}'`);

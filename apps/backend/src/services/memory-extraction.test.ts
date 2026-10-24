@@ -327,6 +327,7 @@ describe("processMemoryExtractionBatch", () => {
       expect.objectContaining({ id: "p-embed" }),
       "text-embedding-3-small",
       "Updated summary",
+      undefined,
     );
     expect(mockDb.values).toHaveBeenCalledWith(
       expect.objectContaining({ embedding: [0.1, 0.2, 0.3] }),

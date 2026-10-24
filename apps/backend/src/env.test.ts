@@ -35,6 +35,12 @@ describe("parseEnv", () => {
     ).toBe(0);
   });
 
+  it("refuses a database pool too small for the connections held for good", () => {
+    expect(() => parseEnv({ ...valid, DATABASE_POOL_MAX: "3" })).toThrow(
+      /DATABASE_POOL_MAX/,
+    );
+  });
+
   it("names every invalid variable at once", () => {
     expect(() =>
       parseEnv({ PORT: "abc", STORAGE_BACKEND: "nfs", TIMEZONE: "Mars/Base" }),

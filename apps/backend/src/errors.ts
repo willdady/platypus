@@ -63,6 +63,14 @@ export class UnsupportedError extends Error {
   }
 }
 
+/** This process is shutting down and takes no new work. → 503 */
+export class ServiceUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ServiceUnavailableError";
+  }
+}
+
 /**
  * Detects a Postgres unique-constraint violation (SQLSTATE `23505`) across the
  * driver shapes we see — the code can surface on the error itself or on its
@@ -124,6 +132,8 @@ export const mapError = (
     return { status: 400, message: error.message };
   if (error instanceof UnsupportedError)
     return { status: 501, message: error.message };
+  if (error instanceof ServiceUnavailableError)
+    return { status: 503, message: error.message };
   if (error instanceof FileValidationError)
     return { status: 400, message: error.message, files: error.files };
   if (isUniqueViolation(error))

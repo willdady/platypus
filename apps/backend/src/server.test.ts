@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "./test-utils.ts";
 import app from "./server.ts";
 import { logger } from "./logger.ts";
+import { runRegistry } from "./runs/run-registry.ts";
 
 describe("app error responses", () => {
   beforeEach(() => {
@@ -76,5 +77,45 @@ describe("app error responses", () => {
 
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Not Found" });
+  });
+});
+
+describe("GET /ready", () => {
+  const query = vi.fn();
+
+  beforeEach(() => {
+    query.mockReset();
+    Object.assign(mockDb, { $client: { query } });
+  });
+
+  afterEach(() => {
+    runRegistry.stopping = false;
+  });
+
+  it("answers 200 while the database answers", async () => {
+    query.mockResolvedValue({ rows: [{ "?column?": 1 }] });
+
+    const res = await app.request("/ready");
+
+    expect(res.status).toBe(200);
+    expect(query).toHaveBeenCalledWith("SELECT 1");
+  });
+
+  it("answers 503 while the database is unreachable", async () => {
+    query.mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+    const res = await app.request("/ready");
+
+    expect(res.status).toBe(503);
+    expect(Object.keys((await res.json()) as object)).toEqual(["error"]);
+  });
+
+  it("answers 503 once shutdown has started, without asking the database", async () => {
+    runRegistry.stopping = true;
+
+    const res = await app.request("/ready");
+
+    expect(res.status).toBe(503);
+    expect(query).not.toHaveBeenCalled();
   });
 });

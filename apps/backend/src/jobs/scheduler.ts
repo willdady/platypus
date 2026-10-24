@@ -42,6 +42,7 @@ import {
   runHeartbeatCutoff,
 } from "../runs/chat-run-heartbeat.ts";
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
+import { runRegistry } from "../runs/run-registry.ts";
 import { sweepMissedEnds, turnEnded } from "../services/a2a-task-lifecycle.ts";
 import { env } from "../env.ts";
 
@@ -56,18 +57,25 @@ import { env } from "../env.ts";
  * This is critical for horizontal scaling: all backend instances align
  * to the same schedule, so the advisory lock contention is predictable
  * and only one instance wins each cycle.
+ *
+ * Returns a stop handle: no tick starts after it is called, though one
+ * already running finishes.
  */
 export function scheduleAligned(
   name: string,
   intervalMs: number,
   fn: () => Promise<void>,
-): void {
+): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
   function scheduleNext() {
+    if (stopped) return;
     const now = Date.now();
     const nextTick = (Math.floor(now / intervalMs) + 1) * intervalMs;
     const delay = nextTick - now;
 
-    setTimeout(() => {
+    timer = setTimeout(() => {
       void (async () => {
         try {
           await fn();
@@ -80,6 +88,10 @@ export function scheduleAligned(
   }
 
   scheduleNext();
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+  };
 }
 
 /**
@@ -150,6 +162,9 @@ export async function processDueTriggers(): Promise<void> {
     .orderBy(asc(triggerTable.nextRunAt));
 
   for (const job of due) {
+    // Shutdown began mid-tick: a claim now would advance (or, for a One-off,
+    // spend) a firing whose run the registry then refuses.
+    if (runRegistry.stopping) break;
     const config = cronConfigOrNull(job);
     if (!config) continue;
     // A one-off needs no next slot to be claimed, only to be skipped.
@@ -501,9 +516,10 @@ export function resetTokenReminderSweep(): void {
 
 /**
  * Starts the background scheduler.
- * This should be called after the database is initialized.
+ * This should be called after the database is initialized. Returns its stop
+ * handle.
  */
-export function startScheduler(): void {
+export function startScheduler(): () => void {
   const intervalMs = env().SCHEDULE_SCHEDULER_INTERVAL_MS;
   logger.info(
     `Starting scheduler (interval: ${intervalMs}ms, wall-clock aligned)`,
@@ -516,7 +532,7 @@ export function startScheduler(): void {
   // multiple booting instances can't all sweep concurrently — the first to
   // grab the lock does it. Each sweep is wrapped independently so one failing
   // doesn't skip the others.
-  scheduleAligned("trigger-scheduler", intervalMs, async () => {
+  return scheduleAligned("trigger-scheduler", intervalMs, async () => {
     await withAdvisoryLock(
       db.$client,
       ADVISORY_LOCK_IDS.scheduler,

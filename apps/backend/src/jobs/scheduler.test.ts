@@ -61,6 +61,7 @@ import {
   triggerRun as triggerRunTable,
   triggerRunEvent as triggerRunEventTable,
 } from "../db/schema.ts";
+import { runRegistry } from "../runs/run-registry.ts";
 
 const dialect = new PgDialect();
 
@@ -528,6 +529,22 @@ describe("scheduleAligned", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(job).toHaveBeenCalledTimes(2);
   });
+
+  it("starts no tick once stopped, even one stopped mid-run", async () => {
+    let finished = 0;
+    const job = vi.fn(async () => {
+      await takesTime();
+      finished++;
+    });
+
+    const stop = scheduleAligned("test", 60_000, job);
+    await vi.advanceTimersByTimeAsync(40_000);
+    stop();
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+    expect(job).toHaveBeenCalledTimes(1);
+    expect(finished).toBe(1);
+  });
 });
 
 /**
@@ -651,6 +668,26 @@ describe("startScheduler", () => {
     expect(mockFireTrigger).toHaveBeenCalledTimes(1);
     expect(pg.held.size).toBe(0);
     expect(pg.checkedOut[0].release).toHaveBeenCalledTimes(1);
+  });
+
+  // #1616: a tick already running when shutdown starts must not claim (and
+  // so advance, or for a One-off spend) a firing the registry will refuse.
+  it("claims no due Trigger once shutdown has started", async () => {
+    const claims: unknown[] = [];
+    weeklyDueOnce((q) => {
+      if (q.op === "update" && q.table === triggerTable) claims.push(q);
+    });
+    runRegistry.stopping = true;
+
+    try {
+      startScheduler();
+      await vi.advanceTimersByTimeAsync(1_050);
+    } finally {
+      runRegistry.stopping = false;
+    }
+
+    expect(claims).toEqual([]);
+    expect(mockFireTrigger).not.toHaveBeenCalled();
   });
 
   it("still sweeps Chats and fires due Triggers when the Trigger sweep fails", async () => {

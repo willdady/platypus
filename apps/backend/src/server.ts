@@ -47,6 +47,11 @@ import { logger } from "./logger.ts";
 import { mapError } from "./errors.ts";
 import type { UserScope, OrgScope, WorkspaceScope } from "./scope.ts";
 import { env } from "./env.ts";
+import { runRegistry } from "./runs/run-registry.ts";
+import { withDeadline } from "./utils/abort-race.ts";
+
+/** How long `/ready` waits on the database before calling it unreachable. */
+const READY_TIMEOUT_MS = 2_000;
 
 /**
  * Organization membership type inferred from the database schema.
@@ -128,7 +133,9 @@ app.use("*", async (c, next) => {
   const start = Date.now();
   await next();
   const ms = Date.now() - start;
-  logger.info(
+  // The probes are polled every few seconds; at info they drown the log.
+  const probe = c.req.path === "/health" || c.req.path === "/ready";
+  logger[probe ? "debug" : "info"](
     {
       method: c.req.method,
       path: c.req.path,
@@ -149,7 +156,23 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// Liveness: the process is up. Never touches the database, so a database
+// outage does not get a healthy process restarted.
 app.get("/health", (c) => c.json({ status: "ok" }));
+// Readiness: this process can serve, as it cannot once shutdown has started or
+// while the database is unreachable.
+app.get("/ready", async (c) => {
+  if (runRegistry.stopping) {
+    return c.json({ error: "The server is shutting down" }, 503);
+  }
+  try {
+    await withDeadline(() => db.$client.query("SELECT 1"), READY_TIMEOUT_MS);
+  } catch (err) {
+    logger.warn({ err }, "Readiness check could not reach the database");
+    return c.json({ error: "The database is unreachable" }, 503);
+  }
+  return c.json({ status: "ok" });
+});
 // Whether public sign-up is open. Unauthenticated (#550, ADR-0019): the one
 // authority the frontend reads to decide whether to offer Sign up, so a second
 // frontend-side variable that could disagree with the backend never exists. It

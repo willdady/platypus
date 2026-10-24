@@ -359,6 +359,24 @@ settings after you first sign in.
 
 The backend image's health check polls its `GET /health` endpoint, the frontend
 image's polls its home page, and the database health check runs `pg_isready`.
+
+The backend answers two probes:
+
+| Endpoint      | Answers `200` while                                                           | Use it for                                                |
+| ------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `GET /health` | the process is running. It never touches the database.                        | Liveness: restart the container when this fails.          |
+| `GET /ready`  | the backend can reach the database and is not shutting down. Otherwise `503`. | Readiness: send traffic to the instance only while `200`. |
+
+<Callout type="warning">
+  Pointing a liveness probe at `/ready` is the trap: a database outage then
+  restarts every backend at once, which fixes nothing.
+</Callout>
+
+On `docker stop` (or any `SIGTERM`), the backend stops taking new work, cancels
+the runs in progress so their Chats and Trigger runs are marked ended, and exits
+before Docker's stop timeout would kill it. A non-zero exit code means some work did
+not finish in time.
+
 Inspect status with:
 
 ```bash

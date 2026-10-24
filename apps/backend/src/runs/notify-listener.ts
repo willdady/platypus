@@ -34,37 +34,55 @@ export const notify = async (
 
 /**
  * Holds one connection LISTENing on every registered channel, reconnecting
- * when it drops.
+ * when it drops. Returns a stop handle that closes the connection and stops
+ * reconnecting.
  *
  * ponytail: reconnects only on a connection `error`; a silently half-open
  * socket stays deaf until something else notices. Add a periodic heartbeat
  * query if that bites.
  */
-export const startNotificationListener = (): void => {
-  void listen();
-};
-
-const listen = async (): Promise<void> => {
+export const startNotificationListener = (): (() => void) => {
+  let stopped = false;
   let client: PoolClient | undefined;
-  let lost = false;
-  const reconnect = (err: unknown) => {
-    if (lost) return;
-    lost = true;
-    logger.error({ err }, "Notification listener lost its connection");
-    client?.release(err instanceof Error ? err : true);
-    setTimeout(() => void listen(), RECONNECT_MS);
-  };
-  try {
-    client = await db.$client.connect();
-    client.on("error", reconnect);
-    client.on("notification", ({ channel, payload }) => {
-      if (!payload) return;
-      handlers.get(channel)?.(payload);
-    });
-    for (const channel of handlers.keys()) {
-      await client.query(`LISTEN ${channel}`);
+  let retry: ReturnType<typeof setTimeout> | undefined;
+
+  const listen = async (): Promise<void> => {
+    let lost = false;
+    const reconnect = (err: unknown) => {
+      if (lost || stopped) return;
+      lost = true;
+      logger.error({ err }, "Notification listener lost its connection");
+      client?.release(err instanceof Error ? err : true);
+      client = undefined;
+      retry = setTimeout(() => void listen(), RECONNECT_MS);
+    };
+    try {
+      const connected = await db.$client.connect();
+      // Stopped while connecting: nothing will release it otherwise.
+      if (stopped) {
+        connected.release(true);
+        return;
+      }
+      client = connected;
+      client.on("error", reconnect);
+      client.on("notification", ({ channel, payload }) => {
+        if (!payload) return;
+        handlers.get(channel)?.(payload);
+      });
+      for (const channel of handlers.keys()) {
+        await client.query(`LISTEN ${channel}`);
+      }
+    } catch (err) {
+      reconnect(err);
     }
-  } catch (err) {
-    reconnect(err);
-  }
+  };
+
+  void listen();
+  return () => {
+    stopped = true;
+    clearTimeout(retry);
+    // Destroyed, not returned: a pooled connection would keep LISTENing.
+    client?.release(true);
+    client = undefined;
+  };
 };

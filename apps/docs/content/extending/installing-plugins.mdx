@@ -104,7 +104,7 @@ RUN test ! -e /app/apps/node_modules && \
 - **The entrypoint, command and `/data` handling** all come from the base image
   unchanged, and so does the health check, which polls the backend's
   `GET /health`. Kubernetes ignores image health checks, so there write your own
-  probe against that endpoint.
+  probes: liveness against `GET /health`, readiness against `GET /ready`.
 
 ### Build and boot it
 

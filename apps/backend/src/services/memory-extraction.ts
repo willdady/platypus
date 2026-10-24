@@ -155,6 +155,7 @@ const processChat = async (
   extractionProvider: typeof providerTable.$inferSelect,
   embeddingProvider: typeof providerTable.$inferSelect | null,
   readAt: Date,
+  signal?: AbortSignal,
 ): Promise<void> => {
   // The Active path only: an Alternative the User has moved away from is not
   // something they said.
@@ -271,8 +272,12 @@ const processChat = async (
       model,
       prompt: summaryPrompt,
       temperature: 0.3,
+      abortSignal: signal,
     });
   } catch (error) {
+    // Stopped by shutdown, not failed: left `processing`, the next batch
+    // picks the Chat up again.
+    if (signal?.aborted) return;
     const message = errorMessage(error);
     logger.error(
       {
@@ -304,8 +309,11 @@ const processChat = async (
         embeddingProvider,
         pointerSettingModelId(embeddingProvider.embeddingModelId),
         updatedSummary,
+        signal,
       );
     } catch (error) {
+      // As for the summary: left `processing` for the next batch.
+      if (signal?.aborted) return;
       const message = errorMessage(error);
       logger.error(
         { err: error, chatId: chat.id },
@@ -490,9 +498,12 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
 
 /**
  * Processes a batch of chats for memory extraction.
- * This is the main entry point called by the memory scheduler.
+ * This is the main entry point called by the memory scheduler. `signal`
+ * aborting stops the batch at the Chat it is on.
  */
-export const processMemoryExtractionBatch = async (): Promise<void> => {
+export const processMemoryExtractionBatch = async (
+  signal?: AbortSignal,
+): Promise<void> => {
   logger.info("Starting memory extraction batch");
 
   try {
@@ -512,6 +523,7 @@ export const processMemoryExtractionBatch = async (): Promise<void> => {
       extractionProvider,
       embeddingProvider,
     } of chatsToProcess) {
+      if (signal?.aborted) break;
       // Taken per Chat, just before its Active path is read: the pass is a
       // snapshot of that moment, not of the scan, which may be minutes earlier
       // by the time a Chat late in the batch is reached.
@@ -527,6 +539,7 @@ export const processMemoryExtractionBatch = async (): Promise<void> => {
           extractionProvider,
           embeddingProvider,
           readAt,
+          signal,
         );
       } catch (error) {
         logger.error(

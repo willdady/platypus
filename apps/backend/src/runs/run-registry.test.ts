@@ -6,7 +6,7 @@ import {
   DEFAULT_PER_RUN_TIMEOUT_MS,
   describeTimeout,
 } from "./run-registry.ts";
-import { ConflictError } from "../errors.ts";
+import { ConflictError, ServiceUnavailableError, mapError } from "../errors.ts";
 
 describe("RunRegistry", () => {
   let registry: RunRegistry;
@@ -62,6 +62,24 @@ describe("RunRegistry", () => {
 
     expect(handle.signal.aborted).toBe(false);
     expect(registry.cancel("dup-3")).toBe(true);
+  });
+
+  // #1616: a run started during shutdown is one the exit would cut off.
+  it("refuses every run once stopping, as a 503, and keeps the runs it holds", () => {
+    const held = registry.register("held");
+    registry.stopping = true;
+
+    let refused: unknown;
+    try {
+      registry.register("late");
+    } catch (error) {
+      refused = error;
+    }
+
+    expect(refused).toBeInstanceOf(ServiceUnavailableError);
+    expect(mapError(refused)?.status).toBe(503);
+    expect(registry.has("late")).toBe(false);
+    expect(held.signal.aborted).toBe(false);
   });
 
   describe("a cancel decided at a moment", () => {

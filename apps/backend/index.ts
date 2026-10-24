@@ -1,5 +1,6 @@
 // First: validates the environment before any module below reads it.
 import { failStartup } from "./src/boot-env.ts";
+import type { Server } from "node:http";
 import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
 import { db } from "./src/index.ts";
@@ -106,23 +107,32 @@ const main = async () => {
   setLoadedPlugins(loadedPlugins);
   logger.info(`Loaded ${loadedPlugins.plugins.length} plugin(s)`);
 
+  // Background jobs first: the shutdown handlers stop them.
+  const stopMemoryScheduler = startMemoryScheduler();
+  const stopScheduler = startScheduler();
+  // A cancel received by another instance reaches the runs held here, and an
+  // A2A Task's events reach the streams following it here.
+  const stopNotificationListener = startNotificationListener();
+  // An A2A cancel that missed the run held here, as while listening resumed.
+  const stopA2aCancelWatch = watchForCanceledA2aRuns();
+
   const server = serve({
     fetch: app.fetch,
     port: PORT,
+  }) as Server;
+  // A deploy or `docker stop` stops new work, ends this process's runs as
+  // cancelled and closes its connections before it exits, so their Chats are
+  // free at once rather than once their heartbeat goes stale (#1297, #1616).
+  installShutdownHandlers({
+    stopBackground: () => {
+      stopMemoryScheduler();
+      stopScheduler();
+      stopNotificationListener();
+      stopA2aCancelWatch();
+    },
+    server,
+    closePool: () => db.$client.end(),
   });
-  // A deploy or `docker stop` ends this process's runs as cancelled before it
-  // exits, so their Chats are free at once rather than once their heartbeat
-  // goes stale (#1297).
-  installShutdownHandlers({ stopAccepting: () => server.close() });
-
-  // Start background jobs (safe for horizontal scaling)
-  startMemoryScheduler();
-  startScheduler();
-  // A cancel received by another instance reaches the runs held here, and an
-  // A2A Task's events reach the streams following it here.
-  startNotificationListener();
-  // An A2A cancel that missed the run held here, as while listening resumed.
-  watchForCanceledA2aRuns();
 };
 
 const exponentialBackoff = async <T>(

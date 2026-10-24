@@ -17,6 +17,7 @@ import { timezoneSchema } from "@platypus/schemas";
 
 // Named so the docs contract can pin the documented defaults.
 const DEFAULT_PORT = 4001;
+const DEFAULT_DATABASE_POOL_MAX = 10;
 const DEFAULT_INVITATION_EXPIRY_DAYS = 7;
 const DEFAULT_MEMORY_EXTRACTION_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS = 60 * 1000;
@@ -49,6 +50,13 @@ const envSchema = z
     ALLOWED_ORIGINS: z.string({ error: "is required" }).pipe(commaList),
     // Unset falls back to the standard `PG*` variables (`databaseConfig`).
     DATABASE_URL: z.string().optional(),
+    // At least 4: the notification listener and the two schedulers' locks
+    // each hold one for good or for a tick, and a tick's queries need another.
+    DATABASE_POOL_MAX: z.coerce
+      .number()
+      .int()
+      .min(4)
+      .default(DEFAULT_DATABASE_POOL_MAX),
     // Their development defaults live in `base-urls.ts`.
     BETTER_AUTH_URL: z.url().optional(),
     FRONTEND_URL: z.url().optional(),
