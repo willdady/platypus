@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { z } from "zod";
-import { callTool, mockDb, resetMockDb, seedDb } from "../test-utils.ts";
+import {
+  callTool,
+  dbError,
+  mockDb,
+  resetMockDb,
+  seedDb,
+} from "../test-utils.ts";
 
 // The embedding call is the tool's one outbound dependency; mocking it keeps
 // these tests off a real provider. Its own behaviour is the embedding
@@ -232,11 +238,17 @@ describe("createMemoryTools", () => {
     });
 
     it("returns an error and logs when the search query fails", async () => {
-      mockDb.execute.mockRejectedValueOnce(new Error("relation is missing"));
+      mockDb.execute.mockRejectedValueOnce(
+        dbError("42P01", "relation is missing"),
+      );
 
       expect(
         await callTool(tools.memorySearch, { query: "x", limit: 5 }),
-      ).toEqual({ error: "Memory search failed: relation is missing" });
+      ).toEqual({
+        error: expect.stringMatching(
+          /^Memory search failed: Failed query/,
+        ) as string,
+      });
       expect(logger.error).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.any(Error) as unknown }),
         "memorySearch tool failed",
@@ -295,10 +307,12 @@ describe("createMemoryTools", () => {
     it("returns an error and logs when the lookup throws", async () => {
       mockEmbeddingConfig(null);
       tools = await createTools();
-      mockDb.limit.mockRejectedValueOnce(new Error("connection reset"));
+      mockDb.limit.mockRejectedValueOnce(dbError("08006", "connection reset"));
 
       expect(await callTool(tools.memoryGet, { date: "2026-08-01" })).toEqual({
-        error: "Memory get failed: connection reset",
+        error: expect.stringMatching(
+          /^Memory get failed: Failed query/,
+        ) as string,
       });
       expect(logger.error).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.any(Error) as unknown }),

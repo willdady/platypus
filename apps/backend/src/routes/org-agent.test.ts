@@ -1,135 +1,167 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// test-utils installs the drizzle-orm mock, whose operators return comparable
-// markers — so a route's `WHERE` can be asserted against `orgScopedWhere`.
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
-import { orgScopedWhere } from "../services/scoped-resource.ts";
+import {
+  mockSession,
+  resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Store,
+} from "../test-utils.ts";
 import app from "../server.ts";
 import { deleteAvatar, storeAvatar } from "../services/avatar.ts";
 
-vi.mock("../services/avatar.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../services/avatar.ts")>()),
+vi.mock("../services/avatar.ts", () => ({
   storeAvatar: vi.fn(),
   deleteAvatar: vi.fn(),
 }));
 
+/**
+ * Fixture rows, not stubbed query results: `seedDb()` evaluates the `WHERE`
+ * each query builds, so a lookup or write that dropped the Shared predicate —
+ * `organizationId` plus `workspaceId IS NULL` (ADR-0007) — reaches a row it
+ * should not and the test fails.
+ */
 describe("Organization Agent Routes", () => {
+  let fake: FakeDb;
+
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
   });
 
   const orgId = "org-1";
   const baseUrl = `/organizations/${orgId}/agents`;
 
+  /** An Agent row; Shared in `org-1` unless overridden. */
+  const agentRow = (id: string, over: Store[string][number] = {}) => ({
+    id,
+    name: id,
+    description: "An agent",
+    providerId: "p1",
+    modelId: "m1",
+    organizationId: orgId,
+    workspaceId: null,
+    avatarKey: null,
+    subAgentIds: [],
+    ...over,
+  });
+
+  /**
+   * The caller (`user-1`) is a member of `org-1` at `role`. `agent-1` is a
+   * Shared Agent of `org-1`; `ws-agent` belongs to `ws-1` while also carrying
+   * `org-1`; `foreign` is Shared in `org-2`. `p1` is a Shared Provider and
+   * `ws-p` a Workspace-private one.
+   */
+  const world = (
+    options: { role?: "admin" | "member"; rows?: Store } = {},
+  ): FakeDb => {
+    const { role = "admin", rows = {} } = options;
+    return seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: orgId, role },
+      ],
+      agent: [
+        agentRow("agent-1", { name: "Shared Agent", avatarKey: "old" }),
+        agentRow("ws-agent", { workspaceId: "ws-1" }),
+        agentRow("foreign", { organizationId: "org-2" }),
+      ],
+      provider: [
+        {
+          id: "p1",
+          name: "Shared Provider",
+          organizationId: orgId,
+          workspaceId: null,
+        },
+        {
+          id: "ws-p",
+          name: "WS Provider",
+          organizationId: null,
+          workspaceId: "ws-1",
+        },
+      ],
+      ...rows,
+    });
+  };
+
+  const find = (id: string) => fake.tables.agent.find((a) => a.id === id);
+
   describe("GET /", () => {
-    it("lists org agents for any member", async () => {
+    it("lists only this Organization's Shared agents, for any member", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      const agents = [{ id: "agent-1", name: "Shared Agent" }];
-      mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce(agents);
+      fake = world({ role: "member" });
 
       const res = await app.request(baseUrl);
+
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: agents });
+      // Guards `sharedWhere`: `ws-agent` carries org-1 but sits in a Workspace,
+      // and `foreign` is another Organization's.
+      expect(await res.json()).toEqual({
+        results: [
+          expect.objectContaining({ id: "agent-1", name: "Shared Agent" }),
+        ],
+      });
     });
   });
 
   describe("GET /:agentId", () => {
     it("returns an org agent", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      const agent = {
-        id: "agent-1",
-        name: "Shared Agent",
-        organizationId: orgId,
-      };
-      mockDb.limit.mockResolvedValueOnce([agent]);
+      fake = world({ role: "member" });
 
       const res = await app.request(`${baseUrl}/agent-1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(agent);
+      expect(await res.json()).toEqual(
+        expect.objectContaining({ id: "agent-1", organizationId: orgId }),
+      );
     });
 
-    it("returns 404 if not found", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([]);
+    it.each(["missing", "foreign", "ws-agent"])(
+      "returns 404 for %s, which is not a Shared agent here",
+      async (id) => {
+        // Guards `orgScopedWhere`'s organizationId and workspaceId columns.
+        mockSession();
+        fake = world({ role: "member" });
 
-      const res = await app.request(`${baseUrl}/missing`);
-      expect(res.status).toBe(404);
-    });
+        const res = await app.request(`${baseUrl}/${id}`);
+        expect(res.status).toBe(404);
+      },
+    );
   });
 
   describe("PUT /:agentId", () => {
-    it("updates an org agent if org admin and references stay shared", async () => {
-      mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([
-          { id: "agent-1", organizationId: orgId, workspaceId: null },
-        ]); // requireOrgScoped
-
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireOrgScoped
-        .mockResolvedValueOnce([
-          { id: "p1", name: "Shared Provider", organizationId: orgId },
-        ]); // provider validation → org-scoped
-
-      const updated = {
-        id: "agent-1",
-        name: "Renamed",
-        organizationId: orgId,
-      };
-      mockDb.returning.mockResolvedValueOnce([updated]);
-
-      const res = await app.request(`${baseUrl}/agent-1`, {
+    const put = (id: string, over: Record<string, unknown> = {}) =>
+      app.request(`${baseUrl}/${id}`, {
         method: "PUT",
         body: JSON.stringify({
           name: "Renamed",
           description: "A shared agent",
           providerId: "p1",
           modelId: "m1",
+          ...over,
         }),
         headers: { "Content-Type": "application/json" },
       });
 
+    it("updates an org agent if org admin and references stay shared", async () => {
+      mockSession();
+      fake = world();
+
+      const res = await put("agent-1");
+
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(updated);
-      // The write matches the Shared predicate, not `organizationId` alone: a
-      // row carrying both scope columns belongs to its Workspace and must not
-      // be editable from the Organization surface (ADR-0007).
-      expect(mockDb.where).toHaveBeenLastCalledWith(
-        orgScopedWhere("agent", "agent-1", orgId),
+      expect(await res.json()).toEqual(
+        expect.objectContaining({ id: "agent-1", name: "Renamed" }),
       );
+      expect(find("agent-1")).toMatchObject({
+        name: "Renamed",
+        description: "A shared agent",
+      });
     });
 
     it("blocks an update that references a workspace-private resource", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([
-          { id: "agent-1", organizationId: orgId, workspaceId: null },
-        ]); // requireOrgScoped
+      fake = world();
 
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireOrgScoped
-        .mockResolvedValueOnce([
-          { id: "p1", name: "WS Provider", organizationId: null },
-        ]); // provider validation → workspace-private, blocker
-
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Renamed",
-          description: "A shared agent",
-          providerId: "p1",
-          modelId: "m1",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await put("agent-1", { providerId: "ws-p" });
 
       // Not Shared reads as not found here (api-conventions), and the message
       // names what couldn't be used.
@@ -138,132 +170,127 @@ describe("Organization Agent Routes", () => {
         error:
           "A shared agent may only reference other shared (organization-scoped) resources: WS Provider (provider)",
       });
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(find("agent-1")).toMatchObject({ name: "Shared Agent" });
     });
 
-    it("returns 404 when the agent is not visible here", async () => {
-      mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // requireOrgScoped: not found
+    it.each(["missing", "foreign", "ws-agent"])(
+      "returns 404 and writes nothing for %s, which is not visible here",
+      async (id) => {
+        // A row carrying both scope columns belongs to its Workspace and must
+        // not be editable from the Organization surface (ADR-0007).
+        mockSession();
+        fake = world();
 
-      mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess
+        const res = await put(id);
 
-      const res = await app.request(`${baseUrl}/missing`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Renamed",
-          description: "A shared agent",
-          providerId: "p1",
-          modelId: "m1",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-
-      expect(res.status).toBe(404);
-    });
+        expect(res.status).toBe(404);
+        expect(fake.tables.agent.map((a) => a.name)).not.toContain("Renamed");
+      },
+    );
 
     it("rejects a self-assigned sub-agent", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([
-          { id: "agent-1", organizationId: orgId, workspaceId: null },
-        ]); // requireOrgScoped
+      fake = world();
 
-      mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess
-
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Renamed",
-          description: "A shared agent",
-          providerId: "p1",
-          modelId: "m1",
-          subAgentIds: ["agent-1"],
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await put("agent-1", { subAgentIds: ["agent-1"] });
 
       expect(res.status).toBe(400);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(find("agent-1")).toMatchObject({ name: "Shared Agent" });
     });
 
     it("returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      fake = world({ role: "member" });
 
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Renamed",
-          description: "A shared agent",
-          providerId: "p1",
-          modelId: "m1",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await put("agent-1");
 
       expect(res.status).toBe(403);
+      expect(find("agent-1")).toMatchObject({ name: "Shared Agent" });
     });
   });
 
   describe("DELETE /:agentId", () => {
-    it("deletes an org agent if org admin and not attached", async () => {
-      mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]) // attachment guard: none
-        .mockResolvedValueOnce([]); // blueprint guard: none
-      mockDb.returning.mockResolvedValueOnce([{ id: "agent-1" }]);
+    const del = (id: string) =>
+      app.request(`${baseUrl}/${id}`, { method: "DELETE" });
 
-      const res = await app.request(`${baseUrl}/agent-1`, { method: "DELETE" });
+    it("deletes an unattached org agent, scrubs references and removes its avatar", async () => {
+      mockSession();
+      fake = world({
+        rows: {
+          agent: [
+            agentRow("agent-1", { avatarKey: "agents/agent-1/avatar-x.webp" }),
+            agentRow("parent", { subAgentIds: ["agent-1", "other"] }),
+          ],
+        },
+      });
+
+      const res = await del("agent-1");
+
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Agent deleted" });
-    });
-
-    it("removes the deleted agent's avatar from storage", async () => {
-      mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]) // attachment guard: none
-        .mockResolvedValueOnce([]); // blueprint guard: none
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "agent-1", avatarKey: "agents/agent-1/avatar-x.webp" },
-      ]);
-
-      const res = await app.request(`${baseUrl}/agent-1`, { method: "DELETE" });
-      expect(res.status).toBe(200);
+      expect(find("agent-1")).toBeUndefined();
+      expect(find("parent")?.subAgentIds).toEqual(["other"]);
       expect(deleteAvatar).toHaveBeenCalledWith("agents/agent-1/avatar-x.webp");
     });
 
+    it.each(["foreign", "ws-agent"])(
+      "returns 404 and keeps %s, which is not a Shared agent here",
+      async (id) => {
+        // Guards `orgScopedWhere` on the DELETE: the attachment/blueprint
+        // guards do not check existence, so the write's own predicate is all
+        // that keeps another scope's row.
+        mockSession();
+        fake = world();
+
+        const res = await del(id);
+
+        expect(res.status).toBe(404);
+        expect(find(id)).toBeDefined();
+      },
+    );
+
     it("returns 409 when the agent is attached to a workspace", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attachment guard: attached
+      fake = world({
+        rows: {
+          attachment: [
+            {
+              id: "att-1",
+              workspaceId: "ws-1",
+              resourceType: "agent",
+              resourceId: "agent-1",
+            },
+          ],
+        },
+      });
 
-      const res = await app.request(`${baseUrl}/agent-1`, { method: "DELETE" });
+      const res = await del("agent-1");
       expect(res.status).toBe(409);
+      expect(find("agent-1")).toBeDefined();
     });
 
     it("returns 409 when the agent is listed in a blueprint", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]) // attachment guard: none
-        .mockResolvedValueOnce([{ id: "bpi-1" }]); // blueprint guard: listed
+      fake = world({
+        rows: {
+          blueprint_item: [
+            { id: "bpi-1", resourceType: "agent", resourceId: "agent-1" },
+          ],
+        },
+      });
 
-      const res = await app.request(`${baseUrl}/agent-1`, { method: "DELETE" });
+      const res = await del("agent-1");
       expect(res.status).toBe(409);
+      expect(find("agent-1")).toBeDefined();
     });
 
     it("returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      fake = world({ role: "member" });
 
-      const res = await app.request(`${baseUrl}/agent-1`, { method: "DELETE" });
+      const res = await del("agent-1");
       expect(res.status).toBe(403);
+      expect(find("agent-1")).toBeDefined();
     });
   });
 
@@ -288,9 +315,18 @@ describe("Organization Agent Routes", () => {
       expect(storeAvatar).not.toHaveBeenCalled();
     });
 
+    const upload = (id = "agent-1") => {
+      const form = new FormData();
+      form.append("file", new File(["x"], "a.png", { type: "image/png" }));
+      return app.request(`${baseUrl}/${id}/avatar`, {
+        method: "POST",
+        body: form,
+      });
+    };
+
     it("POST avatar returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      fake = world({ role: "member" });
 
       const res = await app.request(`${baseUrl}/agent-1/avatar`, {
         method: "POST",
@@ -298,24 +334,10 @@ describe("Organization Agent Routes", () => {
       expect(res.status).toBe(403);
     });
 
-    const upload = () => {
-      const form = new FormData();
-      form.append("file", new File(["x"], "a.png", { type: "image/png" }));
-      return app.request(`${baseUrl}/agent-1/avatar`, {
-        method: "POST",
-        body: form,
-      });
-    };
-
     it("POST avatar stores the upload and persists its key on the Shared agent", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "agent-1", avatarKey: "old" }]); // agent lookup
-      vi.mocked(storeAvatar).mockResolvedValueOnce({ ok: true, key: "new" });
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "agent-1", avatarKey: "new" },
-      ]);
+      fake = world();
+      vi.mocked(storeAvatar).mockResolvedValue({ ok: true, key: "new" });
 
       const res = await upload();
 
@@ -325,21 +347,13 @@ describe("Organization Agent Routes", () => {
         "agent-1",
         "old",
       );
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ avatarKey: "new" }),
-      );
-      // The write matches the Shared predicate (ADR-0007), as PUT does.
-      expect(mockDb.where).toHaveBeenLastCalledWith(
-        orgScopedWhere("agent", "agent-1", orgId),
-      );
+      expect(find("agent-1")?.avatarKey).toBe("new");
     });
 
     it("POST avatar returns 400 when the upload is rejected", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "agent-1", avatarKey: null }]); // agent lookup
-      vi.mocked(storeAvatar).mockResolvedValueOnce({
+      fake = world();
+      vi.mocked(storeAvatar).mockResolvedValue({
         ok: false,
         error: "Invalid file type",
       });
@@ -348,46 +362,44 @@ describe("Organization Agent Routes", () => {
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({ error: "Invalid file type" });
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(find("agent-1")?.avatarKey).toBe("old");
     });
 
-    it("POST avatar 404s when the org agent does not exist", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([]); // agent lookup → none
+    it.each(["missing", "ws-agent"])(
+      "POST avatar 404s for %s, which is not a Shared agent here",
+      async (id) => {
+        mockSession();
+        fake = world();
 
-      const res = await app.request(`${baseUrl}/agent-1/avatar`, {
-        method: "POST",
-      });
-      expect(res.status).toBe(404);
-    });
+        const res = await upload(id);
+
+        expect(res.status).toBe(404);
+        expect(storeAvatar).not.toHaveBeenCalled();
+      },
+    );
 
     it("DELETE avatar clears the avatar for an org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ avatarKey: null }]); // agent lookup
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "agent-1", avatarKey: null },
-      ]);
+      fake = world();
 
       const res = await app.request(`${baseUrl}/agent-1/avatar`, {
         method: "DELETE",
       });
+
       expect(res.status).toBe(200);
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ avatarKey: null }),
-      );
+      expect(deleteAvatar).toHaveBeenCalledWith("old");
+      expect(find("agent-1")?.avatarKey).toBeNull();
     });
 
     it("DELETE avatar 404s when the org agent does not exist", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([]); // agent lookup → none
+      fake = world();
 
-      const res = await app.request(`${baseUrl}/agent-1/avatar`, {
+      const res = await app.request(`${baseUrl}/missing/avatar`, {
         method: "DELETE",
       });
       expect(res.status).toBe(404);
+      expect(deleteAvatar).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
 import {
+  dbError,
   loadedPluginsFixture,
   mockDb,
   resetMockDb,
@@ -303,7 +304,9 @@ describe("destroyWorkspaceSandboxes", () => {
     registerBackend();
     destroy.mockRejectedValueOnce(new Error("boom"));
     mockDb.where.mockResolvedValueOnce([makeRow()]);
-    mockDb.values.mockRejectedValueOnce(new Error("ledger table is gone"));
+    mockDb.values.mockRejectedValueOnce(
+      dbError("42P01", "ledger table is gone"),
+    );
 
     await expect(
       destroyWorkspaceSandboxes(workspaceId),

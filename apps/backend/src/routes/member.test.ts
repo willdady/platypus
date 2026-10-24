@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  mockDb,
   mockSession,
   resetMockDb,
   seedDb,
@@ -25,6 +24,30 @@ describe("Member Routes", () => {
     organizationId = orgId,
   ): Row => ({ id, userId, organizationId, role });
 
+  const user = (id: string, extra: Row = {}): Row => ({
+    id,
+    name: id,
+    email: `${id}@ex.com`,
+    image: null,
+    role: "user",
+    banned: false,
+    banExpires: null,
+    ...extra,
+  });
+
+  // `u2` is a banned super admin, for the flags the GETs derive.
+  const users = [
+    user("admin-1"),
+    user("u-other"),
+    user("u1"),
+    user("u2", {
+      name: "User 2",
+      email: "u2@ex.com",
+      role: "admin",
+      banned: true,
+    }),
+  ];
+
   /**
    * The caller (`admin-1`) is an admin of `org-1`; `extra` adds the members a
    * test acts on. Another org's admin (`m-other`) is always present so a route
@@ -32,6 +55,7 @@ describe("Member Routes", () => {
    */
   const world = (extra: Row[] = []): FakeDb =>
     seedDb({
+      user: users,
       organization_member: [
         membership("m-self", "admin-1", "admin"),
         membership("m-other", "u-other", "admin", "org-2"),
@@ -53,43 +77,22 @@ describe("Member Routes", () => {
 
   describe("GET /", () => {
     it("should list organization members", async () => {
-      // The list projects a nested `user` object, which the seeded fake cannot
-      // compute, so this one stays on the chainable mock.
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-
-      const mockMembers = [
-        {
-          id: "m1",
-          userId: "u1",
-          user: { id: "u1", name: "User 1", email: "u1@ex.com", role: "user" },
-        },
-        {
-          id: "m2",
-          userId: "u2",
-          user: {
-            id: "u2",
-            name: "User 2",
-            email: "u2@ex.com",
-            role: "admin",
-            banned: true,
-            banExpires: null,
-          },
-        },
-      ];
-
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce(mockMembers); // list members
+      mockSession({ id: "admin-1", role: "user" });
+      world([
+        membership("m1", "u1", "member"),
+        membership("m2", "u2", "member"),
+      ]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       const json = (await res.json()) as {
         results: { id: string; isSuperAdmin: boolean; isBanned: boolean }[];
       };
+      // Guards the list's `organizationId` filter: `m-other` is org-2's.
       expect(
         json.results.map((m) => [m.id, m.isSuperAdmin, m.isBanned]),
       ).toEqual([
+        ["m-self", false, false],
         ["m1", false, false],
         ["m2", true, true],
       ]);
@@ -106,10 +109,9 @@ describe("Member Routes", () => {
 
   describe("GET /:memberId", () => {
     it("returns 404 when the member is not in this organization", async () => {
+      // Guards the lookup's `organizationId` filter: `m-other` exists, in org-2.
       mockSession({ id: "admin-1", role: "user" });
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // member lookup
+      world();
 
       const res = await app.request(`${baseUrl}/m-other`);
       expect(res.status).toBe(404);
@@ -118,27 +120,25 @@ describe("Member Routes", () => {
 
     it("returns the member with its super-admin and banned flags", async () => {
       mockSession({ id: "admin-1", role: "user" });
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([
-          {
-            id: "m1",
-            userId: "u1",
-            user: { id: "u1", role: "admin", banned: true, banExpires: null },
-          },
-        ]);
+      world([membership("m2", "u2", "member")]);
 
-      const res = await app.request(`${baseUrl}/m1`);
+      const res = await app.request(`${baseUrl}/m2`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { user: unknown };
       expect(body).toMatchObject({
-        id: "m1",
+        id: "m2",
         isSuperAdmin: true,
         isBanned: true,
       });
       // The list and single responses share one shape: the ban fields fold
       // into `isBanned`.
-      expect(body.user).toEqual({ id: "u1", role: "admin" });
+      expect(body.user).toEqual({
+        id: "u2",
+        name: "User 2",
+        email: "u2@ex.com",
+        image: null,
+        role: "admin",
+      });
     });
   });
 

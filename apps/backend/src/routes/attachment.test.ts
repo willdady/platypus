@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { dbError, mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("Attachment Routes", () => {
@@ -99,13 +99,10 @@ describe("Attachment Routes", () => {
       mockAdminAccess();
       mockDb.limit.mockResolvedValueOnce([{ id: "mcp-1" }]); // org-scope lookup
 
-      const err = Object.assign(new Error("DrizzleQueryError"), {
-        cause: {
-          code: "23505",
-          message:
-            'duplicate key value violates unique constraint "unique_attachment"',
-        },
-      });
+      const err = dbError(
+        "23505",
+        'duplicate key value violates unique constraint "unique_attachment"',
+      );
       mockDb.returning.mockRejectedValueOnce(err);
 
       const res = await app.request(baseUrl, {

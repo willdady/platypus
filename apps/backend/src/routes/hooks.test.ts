@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mockDb, resetMockDb, seedDb, type Row } from "../test-utils.ts";
+import {
+  dbError,
+  mockDb,
+  resetMockDb,
+  seedDb,
+  type Row,
+} from "../test-utils.ts";
 import { mockLogger, mockNanoid } from "../test-setup.ts";
 
 vi.mock("../services/trigger-firing.ts", () => ({
@@ -295,7 +301,7 @@ describe("/hooks/triggers", () => {
     it("still writes the 413's log line when the Trigger lookup fails", async () => {
       process.env.INBOUND_TRIGGER_MAX_BODY_BYTES = "64";
       mockDb.limit.mockImplementationOnce(() => {
-        throw new Error("database unreachable");
+        throw dbError("08006", "database unreachable");
       });
 
       const res = await fire("trig-1", {
@@ -312,7 +318,10 @@ describe("/hooks/triggers", () => {
         }),
       ]);
       expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({ error: "database unreachable" }),
+        // A real driver failure reads as Drizzle's wrapper, not the pg message.
+        expect.objectContaining({
+          error: expect.stringContaining("Failed query") as string,
+        }),
         "Failed to look up the inbound trigger an oversized call named",
       );
     });

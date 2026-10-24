@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { dbError, mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 
 // The bundle hash and file list are exercised against a real Postgres in
@@ -68,13 +68,10 @@ describe("Organization Skill Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
 
-      const err = Object.assign(new Error("DrizzleQueryError"), {
-        cause: {
-          code: "23505",
-          message:
-            'duplicate key value violates unique constraint "unique_skill_name_org"',
-        },
-      });
+      const err = dbError(
+        "23505",
+        'duplicate key value violates unique constraint "unique_skill_name_org"',
+      );
       mockDb.returning.mockRejectedValueOnce(err);
 
       const res = await app.request(baseUrl, {

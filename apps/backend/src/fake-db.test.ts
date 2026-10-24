@@ -245,6 +245,17 @@ describe("the seeded fake beside the chainable mock", () => {
     ]);
   });
 
+  it("records the strength of a lock a select takes", async () => {
+    const seeded = seedDb(rows);
+    seeded.queries.length = 0;
+
+    await db.select().from(workspaceTable).for("share");
+
+    expect(seeded.queries).toEqual([
+      { kind: "select", table: "workspace", lock: "share" },
+    ]);
+  });
+
   it("keeps the first row in order of each key from `selectDistinctOn`", async () => {
     seedDb({
       workspace: [
@@ -266,5 +277,28 @@ describe("the seeded fake beside the chainable mock", () => {
       { org: "org-1", name: "New" },
       { org: "org-2", name: "Only" },
     ]);
+  });
+
+  it("scrubs an id out of only the jsonb arrays that contain it", async () => {
+    const seeded = seedDb({
+      agent: [
+        { id: "a1", subAgentIds: ["gone", "kept"] },
+        { id: "a2", subAgentIds: ["kept"], updatedAt: "untouched" },
+      ],
+    });
+    const { scrubDeletedAgentReference } =
+      await import("./services/agent-references.ts");
+
+    await scrubDeletedAgentReference(db, "subAgentIds", "gone");
+
+    const [a1, a2] = seeded.tables.agent;
+    expect(a1.subAgentIds).toEqual(["kept"]);
+    expect(a1.updatedAt).toBeInstanceOf(Date);
+    // Not matched, so not written at all.
+    expect(a2).toEqual({
+      id: "a2",
+      subAgentIds: ["kept"],
+      updatedAt: "untouched",
+    });
   });
 });

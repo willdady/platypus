@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb, seedDb } from "../test-utils.ts";
+import {
+  dbError,
+  mockDb,
+  mockSession,
+  resetMockDb,
+  seedDb,
+} from "../test-utils.ts";
 import app from "../server.ts";
 import { logger } from "../logger.ts";
 
@@ -164,10 +170,12 @@ describe("Invitation Routes", () => {
     it("409s with the central error envelope on a duplicate org+email invitation", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.returning.mockRejectedValueOnce({
-        code: "23505",
-        constraint: "unique_invitation_org_email",
-      });
+      mockDb.returning.mockRejectedValueOnce(
+        dbError(
+          "23505",
+          'duplicate key value violates unique constraint "unique_invitation_org_email"',
+        ),
+      );
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -186,7 +194,9 @@ describe("Invitation Routes", () => {
     it("logs an unexpected failure once, as the 500 it answers", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.returning.mockRejectedValueOnce(new Error("connection reset"));
+      mockDb.returning.mockRejectedValueOnce(
+        dbError("08006", "connection reset"),
+      );
       const logError = vi.spyOn(logger, "error");
 
       const res = await app.request(baseUrl, {

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  mockDb,
   mockSession,
   mockNoSession,
   resetMockDb,
   seedDb,
   type FakeDb,
+  type Store,
 } from "../test-utils.ts";
 import app from "../server.ts";
 import { deleteAvatar, storeAvatar } from "../services/avatar.ts";
@@ -16,174 +16,168 @@ vi.mock("../services/avatar.ts", async (importOriginal) => ({
   deleteAvatar: vi.fn(),
 }));
 
+/**
+ * These tests state fixture rows rather than stubbing queries in call order:
+ * `seedDb()` installs the in-memory fake from `fake-db.ts`, which evaluates
+ * the `WHERE` each query builds, so a lookup that dropped its Workspace scope
+ * reads `ws-2`'s Agent and the test fails.
+ */
 describe("Agent Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
   });
 
   const orgId = "org-1";
   const workspaceId = "ws-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/agents`;
 
+  /** This Workspace's own Agent. */
+  const workspaceAgent = (over: Store[string][number] = {}) => ({
+    id: "agent-1",
+    name: "Agent 1",
+    workspaceId,
+    organizationId: null,
+    providerId: "p1",
+    modelId: "m1",
+    skillIds: [],
+    subAgentIds: [],
+    toolSetIds: [],
+    ...over,
+  });
+
+  /** A Shared Agent of this Organization — org-scoped, at no Workspace. */
+  const sharedAgent = (over: Store[string][number] = {}) =>
+    workspaceAgent({
+      id: "shared-1",
+      name: "Shared",
+      workspaceId: null,
+      organizationId: orgId,
+      ...over,
+    });
+
+  /** An Agent private to `ws-2`, another Workspace of the same Organization. */
+  const otherWorkspaceAgent = () =>
+    workspaceAgent({ id: "agent-2", name: "Elsewhere", workspaceId: "ws-2" });
+
+  const attachedHere = (resourceId: string) => ({
+    id: `att-${resourceId}`,
+    workspaceId,
+    resourceType: "agent",
+    resourceId,
+  });
+
   /**
-   * Stubs the two terminal `where`s of the sub-agent visibility lookup: the
-   * workspace-scoped agents, then the org-scoped ones inner-joined to this
-   * workspace's attachments. `precedingWheres` covers the chainable `where`s the
-   * route makes first — org membership and workspace access on a POST, plus the
-   * agent lookup on a PUT.
+   * The caller (`user-1`) is a member of `org-1` at `role`; `owner` owns
+   * `ws-1` and `ws-2`.
    */
-  const stubSubAgentVisibility = ({
-    precedingWheres,
-    workspaceRows = [],
-    attachedOrgRows = [],
+  const world = ({
+    role = "member",
+    owner = "user-1",
+    rows = {},
   }: {
-    precedingWheres: number;
-    workspaceRows?: unknown[];
-    attachedOrgRows?: unknown[];
-  }) => {
-    for (let i = 0; i < precedingWheres; i++) {
-      mockDb.where.mockReturnValueOnce(mockDb);
-    }
-    mockDb.where
-      .mockResolvedValueOnce(workspaceRows)
-      .mockResolvedValueOnce(attachedOrgRows);
-  };
+    role?: "admin" | "member";
+    owner?: string;
+    rows?: Store;
+  } = {}): FakeDb =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: orgId, role },
+      ],
+      workspace: [
+        { id: workspaceId, organizationId: orgId, ownerId: owner },
+        { id: "ws-2", organizationId: orgId, ownerId: owner },
+      ],
+      ...rows,
+    });
+
+  const agentOf = (fake: FakeDb, id: string) =>
+    fake.tables.agent.find((a) => a.id === id);
+
+  const send = (method: "POST" | "PUT", url: string, payload: unknown) =>
+    app.request(url, {
+      method,
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" },
+    });
 
   describe("POST /", () => {
+    const createBody = {
+      name: "New Agent",
+      description: "A test agent",
+      providerId: "p1",
+      modelId: "m1",
+    };
+
     it("should return 401 if not authenticated", async () => {
       mockNoSession();
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          name: "New Agent",
-          providerId: "p1",
-          modelId: "m1",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await send("POST", baseUrl, createBody);
       expect(res.status).toBe(401);
     });
 
     it("should return 403 if user has no workspace access", async () => {
       mockSession();
-      // requireOrgAccess: returns membership
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess: workspace not owned by user
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "other-user", organizationId: "org-1" },
-      ]);
+      const fake = world({ owner: "other-user" });
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          name: "New Agent",
-          providerId: "p1",
-          modelId: "m1",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await send("POST", baseUrl, createBody);
       expect(res.status).toBe(403);
+      expect(fake.tables.agent ?? []).toEqual([]);
     });
 
-    it("should create agent if user is editor", async () => {
+    it("should create a workspace-scoped agent, ignoring any scope in the body", async () => {
       mockSession();
-      // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      const fake = world();
 
-      const mockAgent = { id: "agent-1", name: "New Agent", workspaceId };
-      mockDb.returning.mockResolvedValueOnce([mockAgent]);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          name: "New Agent",
-          description: "A test agent",
-          providerId: "p1",
-          modelId: "m1",
-          workspaceId,
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await send("POST", baseUrl, {
+        ...createBody,
+        workspaceId: "ws-2",
+        organizationId: orgId,
       });
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockAgent);
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({ workspaceId, organizationId: null }),
+      const body = (await res.json()) as { id: string };
+      expect(body).toEqual(
+        expect.objectContaining({ name: "New Agent", workspaceId }),
       );
+      expect(fake.tables.agent).toEqual([
+        expect.objectContaining({
+          id: body.id,
+          workspaceId,
+          organizationId: null,
+        }),
+      ]);
     });
 
     it("creates an agent that references an attached Shared agent as a sub-agent", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      stubSubAgentVisibility({
-        precedingWheres: 2,
-        attachedOrgRows: [
-          {
-            agent: {
-              id: "shared-sub",
-              organizationId: orgId,
-              workspaceId: null,
-            },
-            attachment: { id: "att-1" },
-          },
-        ],
+      const fake = world({
+        rows: {
+          agent: [sharedAgent()],
+          attachment: [attachedHere("shared-1")],
+        },
       });
 
-      const mockAgent = {
-        id: "agent-1",
-        name: "Parent",
-        workspaceId,
-        subAgentIds: ["shared-sub"],
-      };
-      mockDb.returning.mockResolvedValueOnce([mockAgent]);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          name: "Parent",
-          description: "A parent agent",
-          providerId: "p1",
-          modelId: "m1",
-          subAgentIds: ["shared-sub"],
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await send("POST", baseUrl, {
+        ...createBody,
+        subAgentIds: ["shared-1"],
       });
 
       expect(res.status).toBe(201);
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({ subAgentIds: ["shared-sub"] }),
+      expect(fake.tables.agent).toContainEqual(
+        expect.objectContaining({
+          name: "New Agent",
+          subAgentIds: ["shared-1"],
+        }),
       );
     });
 
     it("should return 400 if description is too long", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      world();
 
-      const longDescription = "a".repeat(129);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          name: "New Agent",
-          providerId: "p1",
-          modelId: "m1",
-          workspaceId,
-          description: longDescription,
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await send("POST", baseUrl, {
+        ...createBody,
+        description: "a".repeat(129),
       });
 
       expect(res.status).toBe(400);
@@ -195,28 +189,15 @@ describe("Agent Routes", () => {
       expect(body.error[0].code).toBe("too_big");
       expect(body.error[0].path).toContain("description");
     });
+
     it.each([
       [1, 201],
       [1.5, 400],
     ])("creating with topP %s returns %s", async (topP, status) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "agent-1" }]);
+      world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          name: "New Agent",
-          description: "A test agent",
-          providerId: "p1",
-          modelId: "m1",
-          topP,
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await send("POST", baseUrl, { ...createBody, topP });
 
       expect(res.status).toBe(status);
     });
@@ -224,32 +205,20 @@ describe("Agent Routes", () => {
 
   describe("GET /", () => {
     it("should list workspace and attached org agents tagged with scope", async () => {
+      // Drop the Workspace filter from `listScoped` and `ws-2`'s Agent is
+      // listed; drop the Attachment join and the unattached Shared one is.
       mockSession();
-      seedDb({
-        organization_member: [
-          { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
-        ],
-        workspace: [
-          { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
-        ],
-        agent: [
-          { id: "agent-1", workspaceId, organizationId: null, name: "Agent 1" },
-          {
-            id: "org-agent-1",
-            workspaceId: null,
-            organizationId: orgId,
-            name: "Shared Agent",
-          },
-        ],
-        attachment: [
-          {
-            id: "att-1",
-            workspaceId,
-            resourceType: "agent",
-            resourceId: "org-agent-1",
-          },
-        ],
-        workspace_agent_pin: [{ workspaceId, agentId: "org-agent-1" }],
+      world({
+        rows: {
+          agent: [
+            workspaceAgent(),
+            sharedAgent(),
+            sharedAgent({ id: "shared-2", name: "Unattached" }),
+            otherWorkspaceAgent(),
+          ],
+          attachment: [attachedHere("shared-1")],
+          workspace_agent_pin: [{ workspaceId, agentId: "shared-1" }],
+        },
       });
 
       const res = await app.request(baseUrl);
@@ -264,7 +233,7 @@ describe("Agent Routes", () => {
             isPinned: false,
           }),
           expect.objectContaining({
-            id: "org-agent-1",
+            id: "shared-1",
             scope: "organization",
             isPinned: true,
           }),
@@ -274,107 +243,96 @@ describe("Agent Routes", () => {
   });
 
   describe("GET /:agentId", () => {
-    it("should return 404 if agent not found", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent lookup → none
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const res = await app.request(`${baseUrl}/agent-1`);
-      expect(res.status).toBe(404);
-    });
+    const rows = {
+      agent: [
+        workspaceAgent(),
+        sharedAgent(),
+        sharedAgent({ id: "shared-2", name: "Unattached" }),
+        otherWorkspaceAgent(),
+      ],
+      attachment: [attachedHere("shared-1")],
+    };
 
     it("should return a workspace agent tagged scope workspace", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent lookup → workspace-scoped agent
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "agent-1", name: "Agent 1", workspaceId },
-      ]);
+      world({ rows });
 
       const res = await app.request(`${baseUrl}/agent-1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        id: "agent-1",
-        name: "Agent 1",
-        workspaceId,
-        scope: "workspace",
-      });
+      expect(await res.json()).toEqual(
+        expect.objectContaining({
+          id: "agent-1",
+          name: "Agent 1",
+          workspaceId,
+          scope: "workspace",
+        }),
+      );
     });
 
     it("should return an attached org agent tagged scope organization", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent lookup → org-scoped agent
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "org-agent-1", name: "Shared", organizationId: orgId },
-      ]);
-      // attachment check → attached here
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+      world({ rows });
 
-      const res = await app.request(`${baseUrl}/org-agent-1`);
+      const res = await app.request(`${baseUrl}/shared-1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        id: "org-agent-1",
-        name: "Shared",
-        organizationId: orgId,
-        scope: "organization",
-      });
+      expect(await res.json()).toEqual(
+        expect.objectContaining({
+          id: "shared-1",
+          name: "Shared",
+          organizationId: orgId,
+          scope: "organization",
+        }),
+      );
     });
 
-    it("should 404 an org agent that is not attached here", async () => {
+    // `agent-2` exists, but in `ws-2`: only the lookup's Workspace filter
+    // keeps it out, and only the Attachment check keeps `shared-2` out.
+    it.each([
+      ["a missing agent", "nope"],
+      ["an org agent that is not attached here", "shared-2"],
+      ["another workspace's agent", "agent-2"],
+    ])("should 404 %s", async (_label, id) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent lookup → org-scoped agent
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "org-agent-1", name: "Shared", organizationId: orgId },
-      ]);
-      // attachment check → not attached
-      mockDb.limit.mockResolvedValueOnce([]);
+      world({ rows });
 
-      const res = await app.request(`${baseUrl}/org-agent-1`);
+      const res = await app.request(`${baseUrl}/${id}`);
       expect(res.status).toBe(404);
     });
   });
 
   describe("PUT /:agentId", () => {
+    const updateBody = {
+      name: "Updated Agent",
+      description: "An updated agent",
+      providerId: "p1",
+      modelId: "m1",
+    };
+
+    const put = (id: string, payload: unknown = updateBody) =>
+      send("PUT", `${baseUrl}/${id}`, payload);
+
+    const rows = (agents: Store[string] = []) => ({
+      agent: [
+        workspaceAgent(),
+        sharedAgent(),
+        otherWorkspaceAgent(),
+        ...agents,
+      ],
+      attachment: [attachedHere("shared-1")],
+    });
+
     it("should update a workspace agent if user is editor", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent → workspace-scoped agent
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      const fake = world({ rows: rows() });
 
-      const mockAgent = { id: "agent-1", name: "Updated Agent" };
-      mockDb.returning.mockResolvedValueOnce([mockAgent]);
-
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Updated Agent",
-          description: "An updated agent",
-          providerId: "p1",
-          modelId: "m1",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await put("agent-1");
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockAgent);
+      expect(await res.json()).toEqual(
+        expect.objectContaining({ id: "agent-1", name: "Updated Agent" }),
+      );
+      expect(agentOf(fake, "agent-1")).toMatchObject({ name: "Updated Agent" });
+      expect(agentOf(fake, "agent-2")).toMatchObject({ name: "Elsewhere" });
     });
 
     it.each([
@@ -382,250 +340,140 @@ describe("Agent Routes", () => {
       [1.5, 400],
     ])("updating with topP %s returns %s", async (topP, status) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent → workspace-scoped agent
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "agent-1" }]);
+      world({ rows: rows() });
 
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Updated Agent",
-          description: "An updated agent",
-          providerId: "p1",
-          modelId: "m1",
-          topP,
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await put("agent-1", { ...updateBody, topP });
 
       expect(res.status).toBe(status);
     });
 
     it("persists a cleared temperature as null instead of keeping the old value (#263)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent → workspace-scoped agent
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
-
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "agent-1", name: "Updated Agent", temperature: null },
-      ]);
-
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Updated Agent",
-          description: "An updated agent",
-          providerId: "p1",
-          modelId: "m1",
-          temperature: null,
-        }),
-        headers: { "Content-Type": "application/json" },
+      const fake = world({
+        rows: { agent: [workspaceAgent({ temperature: 0.7 })] },
       });
 
+      const res = await put("agent-1", { ...updateBody, temperature: null });
+
       expect(res.status).toBe(200);
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ temperature: null }),
-      );
+      expect(agentOf(fake, "agent-1")?.temperature).toBeNull();
     });
 
     it("accepts an attached Shared agent as a sub-agent, so a Promoted sub-Agent keeps its parent savable", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent → workspace-scoped agent
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      const fake = world({ rows: rows() });
 
-      stubSubAgentVisibility({
-        precedingWheres: 3,
-        attachedOrgRows: [
-          {
-            agent: {
-              id: "shared-sub",
-              organizationId: orgId,
-              workspaceId: null,
-            },
-            attachment: { id: "att-1" },
-          },
-        ],
-      });
-
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "agent-1", name: "Parent", subAgentIds: ["shared-sub"] },
-      ]);
-
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Parent",
-          description: "A parent agent",
-          providerId: "p1",
-          modelId: "m1",
-          subAgentIds: ["shared-sub"],
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await put("agent-1", {
+        ...updateBody,
+        subAgentIds: ["shared-1"],
       });
 
       expect(res.status).toBe(200);
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ subAgentIds: ["shared-sub"] }),
-      );
+      expect(agentOf(fake, "agent-1")?.subAgentIds).toEqual(["shared-1"]);
     });
 
-    it("rejects a sub-agent that is not visible in this workspace at either scope", async () => {
+    // `agent-2` exists in `ws-2`, and `shared-2` is Shared but unattached:
+    // the sub-agent lookup's Workspace filter and Attachment join reject them.
+    it.each([
+      ["another workspace's agent", "agent-2"],
+      ["an unattached Shared agent", "shared-2"],
+    ])(
+      "rejects a sub-agent that is not visible in this workspace: %s",
+      async (_label, subId) => {
+        mockSession();
+        const fake = world({
+          rows: rows([sharedAgent({ id: "shared-2", name: "Unattached" })]),
+        });
+
+        const res = await put("agent-1", {
+          ...updateBody,
+          subAgentIds: [subId],
+        });
+
+        expect(res.status).toBe(400);
+        expect(await res.json()).toEqual({
+          error: "One or more sub-agents are not available in this workspace",
+        });
+        expect(agentOf(fake, "agent-1")).toMatchObject({
+          name: "Agent 1",
+          subAgentIds: [],
+        });
+      },
+    );
+
+    // Shared agents are edited only on the Organization surface (ADR-0007),
+    // even by an Org Admin.
+    it.each(["member", "admin"] as const)(
+      "should lock an attached shared agent for a %s",
+      async (role) => {
+        mockSession();
+        const fake = world({ role, rows: rows() });
+
+        const res = await put("shared-1");
+
+        expect(res.status).toBe(403);
+        expect(agentOf(fake, "shared-1")).toMatchObject({ name: "Shared" });
+      },
+    );
+
+    it("should 404 another workspace's agent and leave it unchanged", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent → workspace-scoped agent
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      const fake = world({ rows: rows() });
 
-      // Neither scope yields the referenced agent.
-      stubSubAgentVisibility({ precedingWheres: 3 });
+      const res = await put("agent-2");
 
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Parent",
-          description: "A parent agent",
-          providerId: "p1",
-          modelId: "m1",
-          subAgentIds: ["someone-elses-agent"],
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error: "One or more sub-agents are not available in this workspace",
-      });
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it("should lock a shared agent for a workspace owner (non-admin)", async () => {
-      mockSession();
-      // requireOrgAccess → member
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent → org-scoped agent
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "org-agent-1", name: "Shared", organizationId: orgId },
-      ]);
-      // attachment check → attached here
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
-
-      const res = await app.request(`${baseUrl}/org-agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Hacked",
-          description: "nope",
-          providerId: "p1",
-          modelId: "m1",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-      expect(res.status).toBe(403);
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it("locks a shared agent in the workspace even for an org admin (edit on org surface)", async () => {
-      mockSession();
-      // requireOrgAccess → admin
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // findVisibleAgent → org-scoped agent
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "org-agent-1", name: "Shared", organizationId: orgId },
-      ]);
-      // attachment check → attached here
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
-
-      const res = await app.request(`${baseUrl}/org-agent-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Renamed",
-          description: "An updated shared agent",
-          providerId: "p1",
-          modelId: "m1",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-      // Shared agents are edited only on the Organization surface (ADR-0007).
-      expect(res.status).toBe(403);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(res.status).toBe(404);
+      expect(agentOf(fake, "agent-2")).toMatchObject({ name: "Elsewhere" });
     });
   });
 
   describe("DELETE /:agentId", () => {
-    it("should delete a workspace agent if user is workspace owner", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // Avatar lookup (agent has no avatar) — also confirms workspace row exists
-      mockDb.limit.mockResolvedValueOnce([{ avatarKey: null, workspaceId }]);
-      // The delete matches the row
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "agent-1", avatarKey: null },
-      ]);
+    const rows = {
+      agent: [
+        workspaceAgent({ avatarKey: "avatar-1" }),
+        sharedAgent(),
+        sharedAgent({ id: "shared-2", name: "Unattached" }),
+        // Another Workspace's Agent, holding `agent-1` as a sub-agent.
+        workspaceAgent({
+          id: "agent-2",
+          name: "Elsewhere",
+          workspaceId: "ws-2",
+          subAgentIds: ["agent-1", "shared-1"],
+        }),
+      ],
+      attachment: [attachedHere("shared-1")],
+    };
 
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "DELETE",
-      });
+    const remove = (id: string) =>
+      app.request(`${baseUrl}/${id}`, { method: "DELETE" });
+
+    it("should delete a workspace agent, its avatar, and references to it", async () => {
+      mockSession();
+      const fake = world({ rows });
+
+      const res = await remove("agent-1");
+
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Agent deleted" });
+      expect(agentOf(fake, "agent-1")).toBeUndefined();
+      expect(agentOf(fake, "agent-2")?.subAgentIds).toEqual(["shared-1"]);
+      expect(deleteAvatar).toHaveBeenCalledWith("avatar-1");
     });
 
-    it("should 404 when deleting a shared agent not attached here", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // resolveScoped lookup → none visible here → 404
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const res = await app.request(`${baseUrl}/org-agent-1`, {
-        method: "DELETE",
-      });
-      expect(res.status).toBe(404);
-      expect(mockDb.delete).not.toHaveBeenCalled();
-    });
-
-    it("should 403 (locked) when deleting an attached shared agent", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // resolveScoped lookup → org-scoped agent
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "org-agent-1", name: "Shared", organizationId: orgId },
-      ]);
-      // attachment check → attached here, so it is visible but locked
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
-
-      const res = await app.request(`${baseUrl}/org-agent-1`, {
-        method: "DELETE",
-      });
+    it.each([
+      ["a shared agent not attached here", "shared-2", 404],
       // Shared agents are deleted only on the Organization surface (ADR-0007).
-      expect(res.status).toBe(403);
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      ["an attached shared agent (locked)", "shared-1", 403],
+      ["another workspace's agent", "agent-2", 404],
+    ])("refuses %s", async (_label, id, status) => {
+      mockSession();
+      const fake = world({ role: "admin", rows });
+
+      const res = await remove(id);
+
+      expect(res.status).toBe(status);
+      expect(fake.tables.agent).toHaveLength(4);
+      expect(deleteAvatar).not.toHaveBeenCalled();
     });
   });
 
@@ -635,33 +483,20 @@ describe("Agent Routes", () => {
      * attached here (visible, but locked on this surface); `agent-2` belongs to
      * another Workspace of the same org.
      */
-    const world = (): FakeDb =>
-      seedDb({
-        organization_member: [
-          { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
-        ],
-        workspace: [
-          { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
-          { id: "ws-2", organizationId: orgId, ownerId: "user-1" },
-        ],
-        agent: [
-          {
-            id: "agent-1",
-            workspaceId,
-            organizationId: null,
-            avatarKey: "old",
-          },
-          { id: "agent-2", workspaceId: "ws-2", organizationId: null },
-          { id: "shared-1", workspaceId: null, organizationId: orgId },
-        ],
-        attachment: [
-          {
-            id: "att-1",
-            workspaceId,
-            resourceType: "agent",
-            resourceId: "shared-1",
-          },
-        ],
+    const avatarWorld = (): FakeDb =>
+      world({
+        rows: {
+          agent: [
+            workspaceAgent({ avatarKey: "old" }),
+            workspaceAgent({
+              id: "agent-2",
+              workspaceId: "ws-2",
+              avatarKey: "theirs",
+            }),
+            sharedAgent(),
+          ],
+          attachment: [attachedHere("shared-1")],
+        },
       });
 
     const upload = (agentId: string) => {
@@ -673,13 +508,12 @@ describe("Agent Routes", () => {
       });
     };
 
-    const keyOf = (fake: FakeDb, id: string) =>
-      fake.tables.agent.find((a) => a.id === id)?.avatarKey;
+    const keyOf = (fake: FakeDb, id: string) => agentOf(fake, id)?.avatarKey;
 
     it("stores the upload and persists its key on the agent", async () => {
       mockSession();
-      const fake = world();
-      vi.mocked(storeAvatar).mockResolvedValueOnce({ ok: true, key: "new" });
+      const fake = avatarWorld();
+      vi.mocked(storeAvatar).mockResolvedValue({ ok: true, key: "new" });
 
       const res = await upload("agent-1");
 
@@ -690,12 +524,15 @@ describe("Agent Routes", () => {
         "old",
       );
       expect(keyOf(fake, "agent-1")).toBe("new");
+      // The avatar write's `workspaceScopedWhere` keeps every other row out.
+      expect(keyOf(fake, "agent-2")).toBe("theirs");
+      expect(keyOf(fake, "shared-1")).toBeUndefined();
     });
 
     it("returns 400 with the rejection when the upload is invalid", async () => {
       mockSession();
-      const fake = world();
-      vi.mocked(storeAvatar).mockResolvedValueOnce({
+      const fake = avatarWorld();
+      vi.mocked(storeAvatar).mockResolvedValue({
         ok: false,
         error: "Invalid file type",
       });
@@ -745,7 +582,7 @@ describe("Agent Routes", () => {
       ["404s another workspace's agent", "agent-2", 404],
     ])("POST %s", async (_label, id, status) => {
       mockSession();
-      world();
+      avatarWorld();
 
       const res = await upload(id);
 
@@ -755,7 +592,7 @@ describe("Agent Routes", () => {
 
     it("DELETE removes the stored avatar and clears the key", async () => {
       mockSession();
-      const fake = world();
+      const fake = avatarWorld();
 
       const res = await app.request(`${baseUrl}/agent-1/avatar`, {
         method: "DELETE",
@@ -764,6 +601,7 @@ describe("Agent Routes", () => {
       expect(res.status).toBe(200);
       expect(deleteAvatar).toHaveBeenCalledWith("old");
       expect(keyOf(fake, "agent-1")).toBeNull();
+      expect(keyOf(fake, "agent-2")).toBe("theirs");
     });
 
     it.each([
@@ -771,7 +609,7 @@ describe("Agent Routes", () => {
       ["404s another workspace's agent", "agent-2", 404],
     ])("DELETE %s", async (_label, id, status) => {
       mockSession();
-      world();
+      avatarWorld();
 
       const res = await app.request(`${baseUrl}/${id}/avatar`, {
         method: "DELETE",
@@ -788,7 +626,7 @@ describe("Agent Routes", () => {
      * attached here and in `ws-2`; `shared-2` is a Shared Agent attached
      * nowhere; `agent-2` belongs to `ws-2`. `owner` owns both Workspaces.
      */
-    const world = ({
+    const pinWorld = ({
       owner = "user-1",
       role = "member",
       pins = [],
@@ -797,55 +635,22 @@ describe("Agent Routes", () => {
       role?: "admin" | "member";
       pins?: { workspaceId: string; agentId: string }[];
     } = {}): FakeDb =>
-      seedDb({
-        organization_member: [
-          { id: "m1", userId: "user-1", organizationId: orgId, role },
-        ],
-        workspace: [
-          { id: workspaceId, organizationId: orgId, ownerId: owner },
-          { id: "ws-2", organizationId: orgId, ownerId: owner },
-        ],
-        agent: [
-          {
-            id: "agent-1",
-            workspaceId,
-            organizationId: null,
-            name: "Mine",
-          },
-          {
-            id: "agent-2",
-            workspaceId: "ws-2",
-            organizationId: null,
-            name: "Elsewhere",
-          },
-          {
-            id: "shared-1",
-            workspaceId: null,
-            organizationId: orgId,
-            name: "Shared",
-          },
-          {
-            id: "shared-2",
-            workspaceId: null,
-            organizationId: orgId,
-            name: "Unattached",
-          },
-        ],
-        attachment: [
-          {
-            id: "att-1",
-            workspaceId,
-            resourceType: "agent",
-            resourceId: "shared-1",
-          },
-          {
-            id: "att-2",
-            workspaceId: "ws-2",
-            resourceType: "agent",
-            resourceId: "shared-1",
-          },
-        ],
-        workspace_agent_pin: pins,
+      world({
+        owner,
+        role,
+        rows: {
+          agent: [
+            workspaceAgent({ name: "Mine" }),
+            otherWorkspaceAgent(),
+            sharedAgent(),
+            sharedAgent({ id: "shared-2", name: "Unattached" }),
+          ],
+          attachment: [
+            attachedHere("shared-1"),
+            { ...attachedHere("shared-1"), id: "att-2", workspaceId: "ws-2" },
+          ],
+          workspace_agent_pin: pins,
+        },
       });
 
     const pin = (agentId: string, method: "PUT" | "DELETE", ws = workspaceId) =>
@@ -872,7 +677,7 @@ describe("Agent Routes", () => {
       ["an attached Shared Agent", "shared-1"],
     ])("the Owner pins and unpins %s", async (_label, id) => {
       mockSession();
-      const fake = world();
+      const fake = pinWorld();
 
       expect((await pin(id, "PUT")).status).toBe(200);
       expect(pinned(fake)).toEqual([[workspaceId, id]]);
@@ -885,14 +690,14 @@ describe("Agent Routes", () => {
 
     it("lists every visible Agent unpinned when nothing is pinned", async () => {
       mockSession();
-      world();
+      pinWorld();
 
       expect(await listed()).toEqual({ "agent-1": false, "shared-1": false });
     });
 
     it("pins and unpins idempotently", async () => {
       mockSession();
-      const fake = world();
+      const fake = pinWorld();
 
       expect((await pin("agent-1", "PUT")).status).toBe(200);
       expect((await pin("agent-1", "PUT")).status).toBe(200);
@@ -905,7 +710,7 @@ describe("Agent Routes", () => {
 
     it("pins a Shared Agent in this Workspace only", async () => {
       mockSession();
-      world();
+      pinWorld();
 
       await pin("shared-1", "PUT");
 
@@ -919,7 +724,7 @@ describe("Agent Routes", () => {
       ["a missing Agent", "nope"],
     ])("404s pinning %s", async (_label, id) => {
       mockSession();
-      const fake = world();
+      const fake = pinWorld();
 
       expect((await pin(id, "PUT")).status).toBe(404);
       expect(pinned(fake)).toEqual([]);
@@ -930,7 +735,7 @@ describe("Agent Routes", () => {
       "refuses %s from a non-Owner",
       async (method) => {
         mockSession();
-        const fake = world({
+        const fake = pinWorld({
           owner: "someone-else",
           role: "admin",
           pins: [{ workspaceId, agentId: "agent-1" }],
@@ -943,113 +748,101 @@ describe("Agent Routes", () => {
   });
 
   describe("POST /:agentId/promote", () => {
-    const promoteUrl = `${baseUrl}/agent-1/promote`;
+    const promote = (id = "agent-1") =>
+      app.request(`${baseUrl}/${id}/promote`, { method: "POST" });
+
+    /** A Shared Provider `p1`, and a Skill `s1` private to this Workspace. */
+    const references = {
+      provider: [
+        {
+          id: "p1",
+          name: "Shared Provider",
+          organizationId: orgId,
+          workspaceId: null,
+        },
+      ],
+      skill: [
+        { id: "s1", name: "ws-skill", organizationId: null, workspaceId },
+      ],
+    };
 
     it("returns 403 if not org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      const fake = world({ rows: { agent: [workspaceAgent()] } });
 
-      const res = await app.request(promoteUrl, { method: "POST" });
+      const res = await promote();
       expect(res.status).toBe(403);
+      expect(agentOf(fake, "agent-1")).toMatchObject({ workspaceId });
     });
 
-    it("returns 404 if the workspace agent does not exist", async () => {
+    // `agent-2` exists, but in `ws-2`: the promote lookup's Workspace filter
+    // is all that keeps it from being re-scoped from here.
+    it.each([
+      ["does not exist", "nope"],
+      ["belongs to another workspace", "agent-2"],
+    ])("returns 404 if the agent %s", async (_label, id) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // agent lookup → not found
-      mockDb.limit.mockResolvedValueOnce([]);
+      const fake = world({
+        role: "admin",
+        rows: { ...references, agent: [otherWorkspaceAgent()] },
+      });
 
-      const res = await app.request(promoteUrl, { method: "POST" });
+      const res = await promote(id);
       expect(res.status).toBe(404);
+      expect(agentOf(fake, "agent-2")).toMatchObject({
+        workspaceId: "ws-2",
+        organizationId: null,
+      });
     });
 
     it("blocks promotion and lists workspace-private references (no-cascade)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // agent lookup: org-scoped provider, but a workspace-private skill
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "agent-1",
-          providerId: "p1",
-          workspaceId,
-          skillIds: ["s1"],
-          subAgentIds: [],
-          toolSetIds: [],
-        },
-      ]);
+      const fake = world({
+        role: "admin",
+        rows: { ...references, agent: [workspaceAgent({ skillIds: ["s1"] })] },
+      });
 
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockReturnValueOnce(mockDb) // agent lookup
-        .mockResolvedValueOnce([
-          { id: "p1", name: "Shared Provider", organizationId: orgId },
-        ]) // provider validation → org-scoped, OK
-        .mockResolvedValueOnce([
-          { id: "s1", name: "ws-skill", organizationId: null },
-        ]); // skills validation → workspace-private, blocker
-
-      const res = await app.request(promoteUrl, { method: "POST" });
+      const res = await promote();
       expect(res.status).toBe(422);
       const body = (await res.json()) as { blockers: unknown[] };
       expect(body.blockers).toEqual([
         { type: "skill", id: "s1", name: "ws-skill" },
       ]);
-      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(agentOf(fake, "agent-1")).toMatchObject({
+        workspaceId,
+        organizationId: null,
+      });
+      expect(fake.tables.attachment ?? []).toEqual([]);
     });
 
     it("re-scopes the agent to org and auto-attaches the origin workspace", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // agent lookup: only an org-scoped provider reference
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "agent-1",
-          providerId: "p1",
-          workspaceId,
-          skillIds: [],
-          subAgentIds: [],
-          toolSetIds: [],
-        },
-      ]);
+      const fake = world({
+        role: "admin",
+        rows: { ...references, agent: [workspaceAgent()] },
+      });
 
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockReturnValueOnce(mockDb) // agent lookup
-        .mockResolvedValueOnce([
-          { id: "p1", name: "Shared Provider", organizationId: orgId },
-        ]); // provider validation → org-scoped, OK
-
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "agent-1", organizationId: orgId, workspaceId: null },
-      ]);
-
-      const res = await app.request(promoteUrl, { method: "POST" });
+      const res = await promote();
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        id: "agent-1",
+      expect(await res.json()).toEqual(
+        expect.objectContaining({
+          id: "agent-1",
+          organizationId: orgId,
+          workspaceId: null,
+          scope: "organization",
+        }),
+      );
+      expect(agentOf(fake, "agent-1")).toMatchObject({
         organizationId: orgId,
         workspaceId: null,
-        scope: "organization",
       });
-      expect(mockDb.values).toHaveBeenCalledWith(
+      expect(fake.tables.attachment).toEqual([
         expect.objectContaining({
           workspaceId,
           resourceType: "agent",
           resourceId: "agent-1",
         }),
-      );
-      expect(mockDb.onConflictDoNothing).toHaveBeenCalled();
+      ]);
     });
   });
 });

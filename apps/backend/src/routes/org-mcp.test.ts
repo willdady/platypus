@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  mockDb,
   mockSession,
   resetMockDb,
   seedDb,
   type FakeDb,
   type Row,
+  type Store,
 } from "../test-utils.ts";
 import app from "../server.ts";
 import { auth as mcpAuth } from "@ai-sdk/mcp";
@@ -22,7 +22,6 @@ describe("Organization MCP Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
   });
 
   const orgId = "org-1";
@@ -64,22 +63,38 @@ describe("Organization MCP Routes", () => {
    * Shared MCP sit two it must never reach from this surface: another
    * Organization's Shared MCP, and a Workspace-scoped MCP of its own org.
    */
-  const world = (role: "admin" | "member" = "admin"): FakeDb =>
-    seedDb({
-      organization_member: [
-        { id: "m1", userId: "user-1", organizationId: orgId, role },
-      ],
-      workspace: [{ id: "ws-1", organizationId: orgId, ownerId: "user-1" }],
-      mcp: [
-        sharedMcp(),
-        sharedMcp({ id: "mcp-other-org", organizationId: "org-2" }),
-        sharedMcp({
-          id: "mcp-ws",
-          organizationId: null,
-          workspaceId: "ws-1",
-        }),
-      ],
-    });
+  const world = (
+    role: "admin" | "member" = "admin",
+    rows: Store = {},
+  ): FakeDb =>
+    seedDb(
+      {
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role },
+        ],
+        workspace: [{ id: "ws-1", organizationId: orgId, ownerId: "user-1" }],
+        mcp: [
+          sharedMcp(),
+          sharedMcp({ id: "mcp-other-org", organizationId: "org-2" }),
+          sharedMcp({
+            id: "mcp-ws",
+            organizationId: null,
+            workspaceId: "ws-1",
+          }),
+        ],
+        ...rows,
+      },
+      { unique: { mcp: [uniqueNameOrg] } },
+    );
+
+  const uniqueNameOrg = {
+    name: "unique_mcp_name_org",
+    columns: ["organizationId", "name"],
+    where: (row: Row) => row.organizationId != null,
+  };
+
+  const idsOf = (fake: FakeDb) => fake.tables.mcp.map((m) => m.id);
+  const namesOf = (fake: FakeDb) => fake.tables.mcp.map((m) => m.name);
 
   const tokensOf = (fake: FakeDb, id: string) => {
     const row = fake.tables.mcp.find((m) => m.id === id)!;
@@ -89,49 +104,51 @@ describe("Organization MCP Routes", () => {
   describe("POST /", () => {
     it("creates an org MCP if org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
+      const fake = world("admin");
 
-      const mockMcp = {
-        id: "mcp-1",
-        name: "Org MCP",
-        organizationId: orgId,
-        authType: "None",
-      };
-      mockDb.returning.mockResolvedValueOnce([mockMcp]);
-
-      const res = await app.request(baseUrl, json("POST", createBody));
+      const res = await app.request(
+        baseUrl,
+        json("POST", { ...createBody, name: "New MCP" }),
+      );
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockMcp);
+      expect(await res.json()).toMatchObject({
+        name: "New MCP",
+        organizationId: orgId,
+        workspaceId: null,
+        authType: "None",
+      });
+      expect(fake.tables.mcp).toHaveLength(4);
     });
 
     it("returns 403 if not org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      const fake = world("member");
 
       const res = await app.request(baseUrl, json("POST", createBody));
 
       expect(res.status).toBe(403);
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.tables.mcp).toHaveLength(3);
     });
 
     it("returns 409 if an MCP name already exists in the org", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
-
-      const drizzleError = Object.assign(
-        new Error("DrizzleQueryError: Failed query"),
+      // The slug check passes (the existing row carries another slug), so the
+      // database is what refuses the duplicate `(organizationId, name)` pair.
+      const fake = seedDb(
         {
-          cause: {
-            code: "23505",
-            message:
-              'duplicate key value violates unique constraint "unique_mcp_name_org"',
-          },
+          organization_member: [
+            {
+              id: "m1",
+              userId: "user-1",
+              organizationId: orgId,
+              role: "admin",
+            },
+          ],
+          mcp: [sharedMcp({ slug: "legacy_slug" })],
         },
+        { unique: { mcp: [uniqueNameOrg] } },
       );
-      mockDb.returning.mockRejectedValueOnce(drizzleError);
 
       const res = await app.request(baseUrl, json("POST", createBody));
 
@@ -140,6 +157,7 @@ describe("Organization MCP Routes", () => {
       expect(await res.json()).toEqual({
         error: "A resource with that name already exists",
       });
+      expect(fake.tables.mcp).toHaveLength(1);
     });
   });
 
@@ -219,19 +237,13 @@ describe("Organization MCP Routes", () => {
   describe("PUT /:mcpId", () => {
     const updateBody = {
       name: "Renamed MCP",
-      url: "http://mcp.com",
+      url: "http://mcp.example.com",
       authType: "None",
     };
 
     it("updates an org MCP if org admin", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([sharedMcp({ url: "http://mcp.com" })]) // requireOrgScoped
-        .mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
-      mockDb.returning.mockResolvedValueOnce([
-        sharedMcp({ name: "Renamed MCP", url: "http://mcp.com" }),
-      ]);
+      const fake = world("admin");
 
       const res = await app.request(
         `${baseUrl}/mcp-1`,
@@ -242,26 +254,31 @@ describe("Organization MCP Routes", () => {
       const body = (await res.json()) as Row;
       expect(body).toMatchObject({ id: "mcp-1", name: "Renamed MCP" });
       expect(body).not.toHaveProperty("oauthAccessToken");
+      expect(namesOf(fake)).toEqual(["Renamed MCP", "Org MCP", "Org MCP"]);
     });
 
-    it("returns 404 when the MCP is not a Shared MCP of this org", async () => {
+    // Guards requireOrgScoped's `organizationId = orgId` filter, and the
+    // UPDATE's orgScopedWhere behind it.
+    it.each([
+      ["another organization's Shared MCP", "mcp-other-org"],
+      ["a Workspace-scoped MCP", "mcp-ws"],
+    ])("returns 404 for %s, leaving it untouched", async (_label, id) => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // requireOrgScoped: not found
+      const fake = world("admin");
 
       const res = await app.request(
-        `${baseUrl}/mcp-other-org`,
+        `${baseUrl}/${id}`,
         json("PUT", updateBody),
       );
 
       expect(res.status).toBe(404);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(namesOf(fake)).toEqual(["Org MCP", "Org MCP", "Org MCP"]);
+      expect(fake.queries.some((q) => q.kind === "update")).toBe(false);
     });
 
     it("returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      const fake = world("member");
 
       const res = await app.request(
         `${baseUrl}/mcp-1`,
@@ -269,54 +286,87 @@ describe("Organization MCP Routes", () => {
       );
 
       expect(res.status).toBe(403);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(fake.queries.some((q) => q.kind === "update")).toBe(false);
     });
   });
 
   describe("DELETE /:mcpId", () => {
-    it("deletes an org MCP if org admin and not attached", async () => {
-      mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]) // attachment guard: none
-        .mockResolvedValueOnce([]); // blueprint guard: none
-      mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
+    const remove = (id = "mcp-1") =>
+      app.request(`${baseUrl}/${id}`, { method: "DELETE" });
 
-      const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
+    it("deletes an org MCP if org admin and not attached, scrubbing it from Agents", async () => {
+      mockSession();
+      const fake = world("admin", {
+        agent: [{ id: "agent-1", toolSetIds: ["mcp-1", "mcp-ws"] }],
+      });
+
+      const res = await remove();
+
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "MCP deleted" });
+      expect(idsOf(fake)).toEqual(["mcp-other-org", "mcp-ws"]);
+      expect(fake.tables.agent[0].toolSetIds).toEqual(["mcp-ws"]);
+    });
+
+    it.each([
+      ["another organization's Shared MCP", "mcp-other-org"],
+      ["a Workspace-scoped MCP", "mcp-ws"],
+    ])("returns 404 for %s, leaving it in place", async (_label, id) => {
+      mockSession();
+      const fake = world("admin");
+
+      const res = await remove(id);
+
+      expect(res.status).toBe(404);
+      expect(idsOf(fake)).toEqual(["mcp-1", "mcp-other-org", "mcp-ws"]);
     });
 
     it("returns 409 when the MCP is attached to a workspace", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attachment guard: attached
+      const fake = world("admin", {
+        attachment: [
+          {
+            id: "att-1",
+            workspaceId: "ws-1",
+            resourceType: "mcp",
+            resourceId: "mcp-1",
+          },
+        ],
+      });
 
-      const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
+      const res = await remove();
+
       expect(res.status).toBe(409);
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(idsOf(fake)).toContain("mcp-1");
     });
 
     it("returns 409 when the MCP is listed in a blueprint", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]) // attachment guard: none
-        .mockResolvedValueOnce([{ id: "bpi-1" }]); // blueprint guard: listed
+      const fake = world("admin", {
+        blueprint_item: [
+          {
+            id: "bpi-1",
+            blueprintId: "bp-1",
+            resourceType: "mcp",
+            resourceId: "mcp-1",
+          },
+        ],
+      });
 
-      const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
+      const res = await remove();
+
       expect(res.status).toBe(409);
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(idsOf(fake)).toContain("mcp-1");
     });
 
     it("returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      const fake = world("member");
 
-      const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
+      const res = await remove();
+
       expect(res.status).toBe(403);
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(idsOf(fake)).toContain("mcp-1");
     });
   });
 
