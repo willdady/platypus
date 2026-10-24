@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, getTableName, isNull, lt, or } from "drizzle-orm";
 import type { BearerTokenStatus } from "@platypus/schemas";
 import { db } from "../index.ts";
-import {
+import type {
   a2aToken as a2aTokenTable,
   trigger as triggerTable,
 } from "../db/schema.ts";

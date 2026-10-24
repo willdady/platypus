@@ -13,12 +13,12 @@ import {
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
+import type { provider as providerTable } from "../db/schema.ts";
 import {
   a2aEndpoint as a2aEndpointTable,
   chat as chatTable,
   memoryDailySummary as memoryDailySummaryTable,
   workspace as workspaceTable,
-  provider as providerTable,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";

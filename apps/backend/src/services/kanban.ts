@@ -19,7 +19,7 @@ import type {
   EventTriggerEventPayload,
 } from "@platypus/schemas";
 import { KANBAN_CARD_HISTORY_LIMIT } from "@platypus/schemas";
-import { db } from "../index.ts";
+import type { db } from "../index.ts";
 import {
   kanbanBoard as kanbanBoardTable,
   kanbanColumn as kanbanColumnTable,

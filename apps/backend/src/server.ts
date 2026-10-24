@@ -42,7 +42,7 @@ import { orgInboundTrigger } from "./routes/org-inbound-trigger.ts";
 import { a2a } from "./routes/a2a.ts";
 import { a2aEndpoint } from "./routes/a2a-endpoint.ts";
 import { orgA2a } from "./routes/org-a2a.ts";
-import { organizationMember } from "./db/schema.ts";
+import type { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 import { mapError } from "./errors.ts";
 import type { UserScope, OrgScope, WorkspaceScope } from "./scope.ts";

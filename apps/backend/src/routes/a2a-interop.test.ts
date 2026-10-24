@@ -8,6 +8,7 @@ import {
   JsonRpcTransportFactory,
   type Client,
 } from "@a2a-js/sdk/client";
+import type { StreamResponse } from "@a2a-js/sdk";
 import {
   CancelTaskRequest,
   DeleteTaskPushNotificationConfigRequest,
@@ -16,7 +17,6 @@ import {
   ListTaskPushNotificationConfigsRequest,
   ListTasksRequest,
   SendMessageRequest,
-  StreamResponse,
   SubscribeToTaskRequest,
   TaskPushNotificationConfig,
   TaskState,

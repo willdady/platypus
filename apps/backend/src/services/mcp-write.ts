@@ -4,7 +4,7 @@ import type { SQL } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
-import { mcpCreateSchema, mcpUpdateSchema } from "@platypus/schemas";
+import type { mcpCreateSchema, mcpUpdateSchema } from "@platypus/schemas";
 import type { ScopeContext } from "../scope.ts";
 import { NotFoundError } from "../errors.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";

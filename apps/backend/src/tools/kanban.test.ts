@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { z } from "zod";
+import type { z } from "zod";
 import {
   callOkTool,
   callTool,
