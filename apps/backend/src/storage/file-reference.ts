@@ -138,9 +138,10 @@ export const decodeDataUrl = (
   url: string,
 ): { mediaType: string; bytes: Uint8Array } | null => {
   const match = url.match(/^data:([^;,]*)(;base64)?,([\s\S]*)$/);
-  if (!match) return null;
+  const body = match?.[3];
+  if (!match || body === undefined) return null;
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty media type gets the default too
   const mediaType = match[1] || "application/octet-stream";
-  const body = match[3];
   const bytes = match[2]
     ? new Uint8Array(Buffer.from(body, "base64"))
     : new Uint8Array(Buffer.from(decodeURIComponent(body), "utf8"));

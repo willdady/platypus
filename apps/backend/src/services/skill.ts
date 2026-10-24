@@ -24,6 +24,7 @@ import {
   scopeColumnsOf,
   writableSkillWhere,
 } from "./skill-bundle.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The Skill write model: create/update/delete that both route surfaces adapt
@@ -140,19 +141,21 @@ export async function createSkill(
 ): Promise<SkillRow> {
   const { agentIds, ...data } = fields;
 
-  const [row] = await db
-    .insert(skillTable)
-    .values({
-      id: nanoid(),
-      ...data,
-      bundleHash: bundleHash({
-        fields: fieldsOf(data),
-        frontmatter: {},
-        files: [],
-      }),
-      ...scopeColumnsOf(scope),
-    })
-    .returning();
+  const row = oneRow(
+    await db
+      .insert(skillTable)
+      .values({
+        id: nanoid(),
+        ...data,
+        bundleHash: bundleHash({
+          fields: fieldsOf(data),
+          frontmatter: {},
+          files: [],
+        }),
+        ...scopeColumnsOf(scope),
+      })
+      .returning(),
+  );
 
   if (scope.kind === "workspace" && agentIds) {
     await assignToAgents(scope.ctx.workspaceId, row.id, agentIds);
@@ -189,9 +192,9 @@ export async function updateSkill(
   });
 
   // The pre-checks above prove the row exists, but a concurrent delete can still
-  // win the race between the check and the UPDATE; the Organization surface
-  // reports that as the 404 it always did, rather than an empty 200.
-  if (scope.kind === "organization" && !row) {
+  // win the race between the check and the UPDATE; that is a 404, not an empty
+  // 200.
+  if (!row) {
     throw new NotFoundError("Skill not found");
   }
 
@@ -231,26 +234,28 @@ export async function upsertSkill(
 
   const now = new Date();
   return db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(skillTable)
-      .values({
-        id: nanoid(),
-        workspaceId: ctx.workspaceId,
-        name: fields.name,
-        description: fields.description,
-        body: fields.body,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [skillTable.workspaceId, skillTable.name],
-        set: {
+    const row = oneRow(
+      await tx
+        .insert(skillTable)
+        .values({
+          id: nanoid(),
+          workspaceId: ctx.workspaceId,
+          name: fields.name,
           description: fields.description,
           body: fields.body,
+          createdAt: now,
           updatedAt: now,
-        },
-      })
-      .returning();
+        })
+        .onConflictDoUpdate({
+          target: [skillTable.workspaceId, skillTable.name],
+          set: {
+            description: fields.description,
+            body: fields.body,
+            updatedAt: now,
+          },
+        })
+        .returning(),
+    );
     return rehashSkill(tx, row);
   });
 }

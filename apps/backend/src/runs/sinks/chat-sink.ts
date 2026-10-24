@@ -240,7 +240,7 @@ export class ChatSink implements RunSink {
       () => void this.beat(),
       RUN_HEARTBEAT_INTERVAL_MS,
     );
-    this.heartbeat.unref?.();
+    this.heartbeat.unref();
   }
 
   /** One heartbeat. A missed one is logged; the next interval tries again. */
@@ -428,6 +428,7 @@ export class ChatSink implements RunSink {
       workspaceId,
       chatId: this.runId,
     });
+    if (!stored) throw new Error("extractFiles returned no message");
     return stored;
   }
 

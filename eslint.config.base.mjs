@@ -85,6 +85,22 @@ export function baseConfig(tsconfigRootDir) {
           { disallowTypeAnnotations: false },
         ],
 
+        // `||` falls back on every falsy value, so `""`, `0` and `false` are
+        // silently replaced. `??` falls back only on null/undefined. Where the
+        // falsy fallback is intended, keep `||` behind a scoped disable with a
+        // reason.
+        "@typescript-eslint/prefer-nullish-coalescing": "error",
+
+        // `x!` tells the compiler a value is present without checking. When it
+        // isn't, the failure surfaces far from the cause. Narrow, guard, or
+        // throw instead. Off for tests (below), where a fixture's shape is known.
+        "@typescript-eslint/no-non-null-assertion": "error",
+
+        // A condition the types say is always truthy (or always falsy) is
+        // either a dead branch or a type that is too narrow. Delete the branch,
+        // or widen the type to what the value really is.
+        "@typescript-eslint/no-unnecessary-condition": "error",
+
         // A `switch` over a union with no `default` must name every member, so
         // adding a member surfaces each switch that forgot it. A `default` still
         // counts as exhaustive: the codebase uses it deliberately for "everything
@@ -114,6 +130,7 @@ export function baseConfig(tsconfigRootDir) {
       rules: {
         "@typescript-eslint/only-throw-error": "off",
         "@typescript-eslint/prefer-promise-reject-errors": "off",
+        "@typescript-eslint/no-non-null-assertion": "off",
       },
     },
   ]);

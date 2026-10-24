@@ -27,6 +27,7 @@ import {
   requireOwned,
   updateOwned,
 } from "./workspace-resource.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The Sandbox write model: create, update and delete for the one Sandbox a
@@ -68,10 +69,12 @@ export async function createSandbox(
 ): Promise<SandboxRow> {
   throwIfInvalid(sandboxCreateError(fields));
   try {
-    const [row] = await exec
-      .insert(sandboxTable)
-      .values({ id: nanoid(), ...fields, workspaceId })
-      .returning();
+    const row = oneRow(
+      await exec
+        .insert(sandboxTable)
+        .values({ id: nanoid(), ...fields, workspaceId })
+        .returning(),
+    );
     return row;
   } catch (error) {
     if (isUniqueViolation(error)) {

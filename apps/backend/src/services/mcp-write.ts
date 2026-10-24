@@ -20,6 +20,7 @@ import {
   requireWorkspaceMutable,
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The MCP write model: create/update/delete that both route surfaces adapt
@@ -74,17 +75,19 @@ export async function createMcp(
   const slug = deriveMcpSlug(fields.name);
   await assertMcpSlugAvailable(slug, { orgId });
 
-  const [row] = await db
-    .insert(mcpTable)
-    .values({
-      id: nanoid(),
-      ...fields,
-      slug,
-      ...(scope.kind === "workspace"
-        ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
-        : { organizationId: scope.orgId, workspaceId: null }),
-    })
-    .returning();
+  const row = oneRow(
+    await db
+      .insert(mcpTable)
+      .values({
+        id: nanoid(),
+        ...fields,
+        slug,
+        ...(scope.kind === "workspace"
+          ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
+          : { organizationId: scope.orgId, workspaceId: null }),
+      })
+      .returning(),
+  );
   return row;
 }
 
@@ -122,6 +125,7 @@ const oauthResetPatch = (existing: McpRow, fields: McpUpdateFields) => {
   // The form sends "" for no client ID, which the row may hold as null.
   const clientIdChanged =
     fields.oauthClientId !== undefined &&
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- treats an empty client id the same as none
     (fields.oauthClientId || null) !== (existing.oauthClientId || null);
   if (!clientIdChanged) return {};
   return {

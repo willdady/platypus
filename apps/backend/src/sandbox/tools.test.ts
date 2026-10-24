@@ -19,6 +19,7 @@ function callExecute(
   // explicit "the SDK handed us none" case.
   abortSignal: AbortSignal | null = new AbortController().signal,
 ): Promise<unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a tool the backend does not offer is absent
   const fn = tools[name]?.execute as TypedExecute | undefined;
   if (!fn) throw new Error(`tool "${name}" has no execute function`);
   return Promise.resolve(

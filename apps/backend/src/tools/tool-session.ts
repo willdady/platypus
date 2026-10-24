@@ -223,7 +223,13 @@ const lazyMcpTools = async (
           options: ToolExecutionOptions<unknown>,
         ) => {
           live ??= connectLive();
-          return (await live)[name].execute!(args, options) as unknown;
+          const execute = (await live)[name]?.execute;
+          if (!execute) {
+            throw new Error(
+              `MCP server '${mcpName}' no longer offers '${name}'`,
+            );
+          }
+          return execute(args, options) as unknown;
         },
       },
     ]),
@@ -485,6 +491,7 @@ export const openToolSession = async (
       return {
         kind: "tools",
         tools: built,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
         ...(factoryFailed
           ? {
               unloaded: {

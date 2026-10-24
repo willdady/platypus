@@ -367,7 +367,7 @@ class SshSandboxTransport implements SandboxTransport {
     const client = new Client();
     const connectConfig: ConnectConfig = {
       host,
-      port: port ?? DEFAULT_SSH_PORT,
+      port,
       username: user,
       privateKey,
       ...(passphrase ? { passphrase } : {}),
@@ -393,7 +393,7 @@ class SshSandboxTransport implements SandboxTransport {
         if (hostKeyMismatch) {
           reject(
             new Error(
-              `SSH sandbox: host-key verification failed for ${host}:${port ?? DEFAULT_SSH_PORT} — the presented host key does not match the pinned \`hostKey\`. Refusing to connect.`,
+              `SSH sandbox: host-key verification failed for ${host}:${port} — the presented host key does not match the pinned \`hostKey\`. Refusing to connect.`,
               { cause: err },
             ),
           );
@@ -408,7 +408,7 @@ class SshSandboxTransport implements SandboxTransport {
         // the process. A dead client is dropped so the next call reconnects.
         client.on("error", (err: Error) => {
           this.logger.warn(
-            { host, port: port ?? DEFAULT_SSH_PORT, err },
+            { host, port, err },
             "SSH sandbox connection error; dropping the connection",
           );
           this.dropConnection(client);
@@ -460,7 +460,7 @@ class SshSandboxTransport implements SandboxTransport {
     this.idleTimer = setTimeout(() => {
       this.closeConnection();
     }, IDLE_TIMEOUT_MS);
-    this.idleTimer.unref?.();
+    this.idleTimer.unref();
   }
 
   // Run `fn` on the connection as one unit of in-flight work: the idle reaper
@@ -588,7 +588,7 @@ class SshSandboxTransport implements SandboxTransport {
             // ignore — resolve on the close event regardless
           }
         }, timeoutMs);
-        timer.unref?.();
+        timer.unref();
 
         channel.on("data", (chunk: Buffer) => stdoutSink.push(chunk));
         channel.stderr.on("data", (chunk: Buffer) => stderrSink.push(chunk));

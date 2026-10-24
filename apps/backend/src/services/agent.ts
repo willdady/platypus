@@ -24,6 +24,7 @@ import {
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
 import { deleteAvatar, storeAvatar } from "./avatar.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The Agent write model: dedupe, sub-agent validation, and the
@@ -121,19 +122,21 @@ export async function createAgent(
       data.subAgentIds,
     );
     if (!validation.valid) {
-      return { error: validation.error! };
+      return { error: validation.error };
     }
   }
 
-  const [row] = await db
-    .insert(agentTable)
-    .values({
-      id,
-      ...data,
-      workspaceId: ctx.workspaceId,
-      organizationId: null,
-    })
-    .returning();
+  const row = oneRow(
+    await db
+      .insert(agentTable)
+      .values({
+        id,
+        ...data,
+        workspaceId: ctx.workspaceId,
+        organizationId: null,
+      })
+      .returning(),
+  );
   return { row };
 }
 
@@ -164,7 +167,7 @@ export async function updateAgent(
         data.subAgentIds,
       );
       if (!validation.valid) {
-        return { error: validation.error! };
+        return { error: validation.error };
       }
     }
 
@@ -173,6 +176,7 @@ export async function updateAgent(
       .set({ ...data, updatedAt: new Date() })
       .where(workspaceScopedWhere("agent", agentId, scope.ctx.workspaceId))
       .returning();
+    if (!row) throw new NotFoundError("Agent not found");
     return { row };
   }
 
@@ -187,8 +191,11 @@ export async function updateAgent(
   // the Workspace surface's Tool adapter, which allows a partial update), so
   // it is always present here despite `AgentUpdateFields` widening it to
   // optional for that other caller.
+  if (data.providerId === undefined) {
+    throw new Error("A Shared Agent update must carry providerId");
+  }
   const blockers = await findNonSharedReferences(scope.orgId, {
-    providerId: data.providerId!,
+    providerId: data.providerId,
     skillIds: data.skillIds,
     subAgentIds: data.subAgentIds,
     toolSetIds: data.toolSetIds,
@@ -206,6 +213,7 @@ export async function updateAgent(
     .set({ ...data, updatedAt: new Date() })
     .where(orgScopedWhere("agent", agentId, scope.orgId))
     .returning();
+  if (!row) throw new NotFoundError("Agent not found");
   return { row };
 }
 
@@ -264,13 +272,14 @@ export async function deleteAgent(
   // exists. Organization scope: requireSharedDeletable only checks
   // referencing Attachments/Blueprints, not existence, so the delete itself is
   // where a missing Agent 404s.
-  if (result.length === 0) {
+  const [deleted] = result;
+  if (!deleted) {
     throw new NotFoundError("Agent not found");
   }
 
   // Best-effort, and only once the delete has committed: a storage miss must
   // not fail it, and a refused delete must not lose the avatar.
-  await deleteAvatar(result[0].avatarKey);
+  await deleteAvatar(deleted.avatarKey);
 }
 
 /**

@@ -9,7 +9,12 @@ import {
   UnsupportedOperationError,
 } from "@a2a-js/sdk/errors";
 import { startA2aTurn, takeFollowerSlot, type A2aCaller } from "./a2a-task.ts";
-import { findA2aTask, isTerminal, type TaskRow } from "./a2a-task-state.ts";
+import {
+  findA2aTask,
+  isTerminal,
+  requireStatus,
+  type TaskRow,
+} from "./a2a-task-state.ts";
 import { readTask, readTaskAfresh } from "./a2a-task-lifecycle.ts";
 import {
   a2aFallbackPollMs,
@@ -84,7 +89,7 @@ async function* followTask(
   seen: Task,
   events: A2aTaskSubscription,
 ): AsyncGenerator<StreamResponse> {
-  let state = seen.status!.state;
+  let state = requireStatus(seen).state;
   // How much of the reply this stream has sent; `null` once it missed some.
   let sent = events.replyFrom;
   if (events.catchUp && sent !== null) {
@@ -116,7 +121,9 @@ async function* followTask(
     const read =
       event?.kind === "status"
         ? { ...seen, status: event.status }
-        : (event?.kind === "end" && event.task) || (await readTaskAfresh(task));
+        : event?.kind === "end" && event.task
+          ? event.task
+          : await readTaskAfresh(task);
     if (isTerminal(read)) {
       for (const artifact of read.artifacts) {
         yield artifactEvent(read, artifact, { append: false, lastChunk: true });
@@ -124,8 +131,9 @@ async function* followTask(
       yield statusEvent(read);
       return;
     }
-    if (read.status!.state !== state) yield statusEvent(read);
-    state = read.status!.state;
+    const { state: readState } = requireStatus(read);
+    if (readState !== state) yield statusEvent(read);
+    state = readState;
   }
 }
 

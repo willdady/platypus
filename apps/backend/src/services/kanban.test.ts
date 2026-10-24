@@ -10,7 +10,7 @@ vi.mock("./event-dispatch.ts", () => ({
 // predicate assertions below would have nothing to read.
 import { eq } from "drizzle-orm";
 import { kanbanCard as kanbanCardTable } from "../db/schema.ts";
-import { ConflictError, ValidationError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import {
   KANBAN_CARD_HISTORY_LIMIT,
@@ -20,6 +20,7 @@ import {
   applyBodyDiff,
   bulkUpdateCards,
   changedCardFields,
+  copyCard,
   createCard,
   keepKnownLabelIds,
   moveCard,
@@ -30,6 +31,7 @@ import {
   requireValidAssignees,
   updateCard,
 } from "./kanban-card.ts";
+import { updateCommentBody, type CommentRow } from "./kanban-comment.ts";
 import type { CardRow, KanbanContext } from "./kanban-shared.ts";
 
 /**
@@ -844,7 +846,7 @@ describe("kanban module", () => {
     const entries = () =>
       db.values.mock.calls
         .map((call) => call[0] as Record<string, unknown>)
-        .filter((value) => value && "kind" in value);
+        .filter((value) => "kind" in value);
 
     it("records one entry naming every field that moved, not one per field", async () => {
       db.limit
@@ -1102,6 +1104,23 @@ describe("kanban module", () => {
       );
     });
 
+    it("throws NotFoundError when a card is deleted before its write", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([{ id: "card-1", priority: "low" }]); // card-1's row before this write
+      db.returning.mockResolvedValueOnce([]); // gone by the UPDATE
+
+      await expect(
+        bulkUpdateCards(asDb(db), ctx, {
+          cardIds: ["card-1"],
+          priority: "high",
+        }),
+      ).rejects.toThrow(new NotFoundError("Card not found"));
+      expect(dispatchEvent).not.toHaveBeenCalled();
+    });
+
     it("refuses the whole batch when the assignee cannot work here", async () => {
       db.where.mockResolvedValueOnce([]); // org member — none
       db.where.mockResolvedValueOnce([]); // super admin — none
@@ -1170,6 +1189,36 @@ describe("kanban module", () => {
         "ws-1",
         dispatched("card.updated", { id: "card-2", changedFields: [] }),
       );
+    });
+  });
+
+  describe("copyCard", () => {
+    it("throws NotFoundError when the source card is deleted before it is read", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]) // requireColumn
+        .mockResolvedValueOnce([]); // the source row, gone
+
+      await expect(
+        copyCard(asDb(db), ctx, { cardId: "card-1", columnId: "col-1" }),
+      ).rejects.toThrow(new NotFoundError("Card not found"));
+      expect(db.insert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("updateCommentBody", () => {
+    it("throws NotFoundError when the comment is deleted before the write", async () => {
+      db.returning.mockResolvedValueOnce([]);
+
+      await expect(
+        updateCommentBody(
+          asDb(db),
+          { id: "comment-1" } as CommentRow,
+          "Edited",
+        ),
+      ).rejects.toThrow(new NotFoundError("Comment not found"));
     });
   });
 });

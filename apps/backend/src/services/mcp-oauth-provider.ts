@@ -45,6 +45,7 @@ export const buildOAuthCallbackUrl = () => {
  * OAuth / Bearer / None auth types.
  */
 export const buildMcpTransportConfig = (mcp: McpRecord) => {
+  if (!mcp.url) throw new Error(`MCP server '${mcp.name}' has no URL`);
   const config: {
     type: "http";
     url: string;
@@ -52,7 +53,7 @@ export const buildMcpTransportConfig = (mcp: McpRecord) => {
     authProvider?: DatabaseOAuthClientProvider;
   } = {
     type: "http",
-    url: mcp.url!,
+    url: mcp.url,
   };
 
   const customHeaders = mcp.headers ?? {};
@@ -386,7 +387,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   }
 
   state(): string {
-    if (!this._generatedState) this._generatedState = nanoid();
+    this._generatedState ??= nanoid();
     return this._generatedState;
   }
 
@@ -397,7 +398,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     await db.insert(mcpOauthState).values({
       id: state,
       mcpId: this.mcpRecord.id,
-      codeVerifier: this._pendingCodeVerifier || "",
+      codeVerifier: this._pendingCodeVerifier ?? "",
       redirectUri: this.callbackUrl,
       expiresAt,
     });

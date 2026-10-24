@@ -304,7 +304,7 @@ const runTrigger = async (
 
   const input: RunInput = {
     runId,
-    request: { agentId, search: trigger.search ?? undefined },
+    request: { agentId, search: trigger.search },
     messages,
     // A headless run carries no Chat identity and so no pin: when it composes
     // Memories at all it renders the current block, anchored to the moment this

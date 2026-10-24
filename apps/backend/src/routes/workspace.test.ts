@@ -289,6 +289,7 @@ describe("Workspace Routes", () => {
       expect(res.status).toBe(500);
       expect(fake.tables.workspace).toHaveLength(2);
       expect(fake.tables.provider).toHaveLength(2);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.attachment ?? []).toEqual([]);
     });
 

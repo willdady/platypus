@@ -123,7 +123,11 @@ export type Database = Executor;
  * `DELETE` on the Organization surface. Asserting once here keeps that shape out
  * of the predicates' return types, so no caller can be handed it.
  */
-const allOf = (...conditions: (SQL | undefined)[]): SQL => and(...conditions)!;
+const allOf = (...conditions: (SQL | undefined)[]): SQL => {
+  const all = and(...conditions);
+  if (!all) throw new Error("allOf composed no condition");
+  return all;
+};
 
 /**
  * {@link isSharedRow} as SQL: at this Organization, and at no Workspace. The one
@@ -366,7 +370,7 @@ export const listScoped = async <T extends ScopedResourceType>(
   // resource type for every dual-scope table (`agent`, `skill`, `mcp`,
   // `provider`). The key is dynamic over the union table, so bridge through
   // `unknown` to recover the per-resource row shape.
-  const orgRows = (attachedRows as unknown as Record<string, RowOf[T]>[]).map(
+  const orgRows = (attachedRows as unknown as Record<T, RowOf[T]>[]).map(
     (r) => r[type],
   );
 

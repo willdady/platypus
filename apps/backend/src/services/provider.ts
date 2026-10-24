@@ -110,7 +110,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
     case "OpenAI": {
       const sdk = createOpenAI({
         baseURL: provider.baseUrl ?? undefined,
-        apiKey: provider.apiKey ?? undefined,
+        apiKey: provider.apiKey,
         headers: provider.headers ?? undefined,
         organization: provider.organization ?? undefined,
         project: provider.project ?? undefined,
@@ -135,8 +135,9 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
             // to chat mode arrives here with it empty/undefined — `||` (not `??`)
             // also catches the empty-string case the form can produce. Without
             // this the compatible client would target an empty URL and fail.
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- see above
             baseURL: provider.baseUrl || "https://api.openai.com/v1",
-            apiKey: provider.apiKey ?? undefined,
+            apiKey: provider.apiKey,
             headers: provider.headers ?? undefined,
             // Request `stream_options.include_usage` so streamed responses carry
             // token usage. Without it the compatible provider omits stream_options
@@ -160,7 +161,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
     case "OpenRouter": {
       const sdk = createOpenRouter({
         baseURL: provider.baseUrl ?? undefined,
-        apiKey: provider.apiKey ?? undefined,
+        apiKey: provider.apiKey,
         headers: withOpenRouterAttribution(provider.headers),
         extraBody: provider.extraBody ?? undefined,
       });
@@ -174,7 +175,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
       const sdk = createAmazonBedrock({
         baseURL: provider.baseUrl ?? undefined,
         region: provider.region ?? undefined,
-        apiKey: provider.apiKey ?? undefined,
+        apiKey: provider.apiKey,
         headers: provider.headers ?? undefined,
       });
       return {
@@ -185,7 +186,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
     case "Google": {
       const sdk = createGoogleGenerativeAI({
         baseURL: provider.baseUrl ?? undefined,
-        apiKey: provider.apiKey ?? undefined,
+        apiKey: provider.apiKey,
         headers: provider.headers ?? undefined,
       });
       return {
@@ -197,7 +198,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
     case "Anthropic": {
       const sdk = createAnthropic({
         baseURL: provider.baseUrl ?? undefined,
-        apiKey: provider.apiKey ?? undefined,
+        apiKey: provider.apiKey,
         headers: provider.headers ?? undefined,
       });
       return {

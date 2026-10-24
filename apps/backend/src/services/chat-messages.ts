@@ -83,7 +83,9 @@ const pathThrough = async (
 
   return {
     messages: pathIds.map((id) => {
-      const { metadata, ...message } = rowById.get(id)!;
+      const row = rowById.get(id);
+      if (!row) throw new Error(`Message '${id}' on the path was not read`);
+      const { metadata, ...message } = row;
       // Absent rather than null, the shape a streamed message has.
       return metadata == null ? message : { ...message, metadata };
     }),
@@ -174,7 +176,7 @@ export const resolveTurn = async ({
   // The message is the one thing a client still writes into the Transcript, so
   // it is a trust boundary: the schema has already held it to a user message of
   // text and files, and this holds each part to the shape the SDK converts.
-  let message: PlatypusUIMessage;
+  let message: PlatypusUIMessage | undefined;
   try {
     [message] = await validateUIMessages<PlatypusUIMessage>({
       messages: [request.message],
@@ -183,6 +185,7 @@ export const resolveTurn = async ({
   } catch (error) {
     throw new ValidationError(errorMessage(error));
   }
+  if (!message) throw new Error("validateUIMessages returned no message");
 
   const { parentId } = request;
   if (parentId !== null && !(owned && (await findMessage(chatId, parentId)))) {
@@ -216,8 +219,9 @@ export const switchActivePath = async (
 
   const childrenOf = Map.groupBy(nodes, (node) => node.parentId);
   let leaf = target;
-  for (const under = [target]; under.length;) {
-    for (const node of childrenOf.get(under.pop()!.id) ?? []) {
+  const under = [target];
+  for (let parent = under.pop(); parent; parent = under.pop()) {
+    for (const node of childrenOf.get(parent.id) ?? []) {
       under.push(node);
       if (!node.deletedAt && node.createdAt >= leaf.createdAt) leaf = node;
     }

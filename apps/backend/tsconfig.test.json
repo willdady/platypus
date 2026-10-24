@@ -1,0 +1,18 @@
+{
+  // Tests, their fixtures and helpers, and the Vitest config. The production
+  // tsconfig excludes them and enables `noUncheckedIndexedAccess`; tests index
+  // fixtures they built themselves, so it stays off here (#1632).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "**/*.test.ts",
+    "**/*.test-fixtures.ts",
+    "src/test-utils.ts",
+    "src/fake-db.ts",
+    "src/test-setup.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": ["node_modules", "drizzle"]
+}

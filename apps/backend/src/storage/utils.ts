@@ -90,6 +90,7 @@ function generateStorageKey(
   extension: string,
 ): string {
   const hash8 = contentHash.slice(0, 8);
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
   const messageId = context.messageId || "unknown";
   const key = `${chatStorageKeyPrefix(context)}${messageId}/${partIndex}-${hash8}.${extension}`;
   assertValidStorageKey(key);
@@ -121,6 +122,7 @@ export async function extractFiles(
 
   const processedMessages = await Promise.all(
     messages.map(async (message, messageIndex) => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- stored jsonb is typed, not validated; an older row may lack parts
       if (!message.parts || !Array.isArray(message.parts)) {
         return message;
       }
@@ -193,6 +195,7 @@ export function rewriteStorageUrls(
   baseUrl: string,
 ): PlatypusUIMessage[] {
   return messages.map((message) => {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- stored jsonb is typed, not validated; an older row may lack parts
     if (!message.parts || !Array.isArray(message.parts)) {
       return message;
     }
@@ -252,6 +255,7 @@ export async function inlineFileUrls(
 
   return Promise.all(
     messages.map(async (message) => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- stored jsonb is typed, not validated; an older row may lack parts
       if (!message.parts || !Array.isArray(message.parts)) {
         return message;
       }

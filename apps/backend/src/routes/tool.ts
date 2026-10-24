@@ -35,6 +35,7 @@ tool.get(
       tools: Object.entries(toolSet.staticTools ?? {}).map(
         ([toolId, tool]) => ({
           id: toolId,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
           description: tool.description || "No description",
         }),
       ),

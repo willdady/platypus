@@ -115,6 +115,9 @@ type ScopeOf = {
 type OwnedRef<T extends WorkspaceResourceType> = ScopeOf[T] &
   (T extends "sandbox" ? { id?: undefined } : { id: string });
 
+/** The key a caller's ref passes its scope value under. */
+type ScopeParam = "workspaceId" | "dashboardId";
+
 type RegistryEntry = {
   /** The Drizzle table backing this resource type. */
   table: WorkspaceTable;
@@ -137,7 +140,7 @@ type RegistryEntry = {
    * and the name (`param`) of the key the caller passes that value under, so
    * the predicates read it straight off the caller's ref object.
    */
-  scope: { column: AnyPgColumn; param: "workspaceId" | "dashboardId" };
+  scope: { column: AnyPgColumn; param: ScopeParam };
 };
 
 const REGISTRY: Record<WorkspaceResourceType, RegistryEntry> = {
@@ -192,7 +195,11 @@ const REGISTRY: Record<WorkspaceResourceType, RegistryEntry> = {
  * `DELETE`. Asserting once here keeps that shape out of the predicates'
  * return types, so no caller can be handed it.
  */
-const allOf = (...conditions: (SQL | undefined)[]): SQL => and(...conditions)!;
+const allOf = (...conditions: (SQL | undefined)[]): SQL => {
+  const all = and(...conditions);
+  if (!all) throw new Error("allOf composed no condition");
+  return all;
+};
 
 /**
  * The scope-half of every predicate here: this scope column equals this
@@ -222,7 +229,7 @@ export const ownedWhere = <T extends WorkspaceResourceType>(
   }
   return allOf(
     id !== undefined ? eq(table.id, id) : undefined,
-    scopeWhere(scope, (ref as Record<string, string>)[scope.param]),
+    scopeWhere(scope, (ref as Record<ScopeParam, string>)[scope.param]),
   );
 };
 
@@ -281,7 +288,7 @@ export const listOwned = async <T extends WorkspaceResourceType>(
     .where(
       scopeWhere(
         scopeDescriptor,
-        (scope as Record<string, string>)[scopeDescriptor.param],
+        (scope as Record<ScopeParam, string>)[scopeDescriptor.param],
       ),
     );
   const rows = orderBy === null ? await query : await query.orderBy(orderBy);

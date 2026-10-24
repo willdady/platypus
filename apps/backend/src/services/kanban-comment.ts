@@ -17,6 +17,7 @@ import {
   type KanbanContext,
   type KanbanScope,
 } from "./kanban-shared.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /** A comment row, as the guards return it. */
 export type CommentRow = typeof kanbanCardCommentTable.$inferSelect;
@@ -148,7 +149,7 @@ export const createComment = async (
     })
     .returning();
 
-  return rows[0];
+  return oneRow(rows);
 };
 
 /**
@@ -168,7 +169,9 @@ export const updateCommentBody = async (
     .where(eq(kanbanCardCommentTable.id, comment.id))
     .returning();
 
-  return rows[0];
+  const [row] = rows;
+  if (!row) throw new NotFoundError("Comment not found");
+  return row;
 };
 
 /** Deletes a comment the caller has already resolved. */

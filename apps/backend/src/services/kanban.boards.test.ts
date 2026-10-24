@@ -248,6 +248,7 @@ describe("kanban module — Boards and Columns", () => {
         labels: [],
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.kanban_card_history ?? []).toEqual([]);
     });
   });

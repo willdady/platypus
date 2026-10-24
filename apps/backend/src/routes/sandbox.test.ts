@@ -155,6 +155,8 @@ describe("Sandbox Routes", () => {
           backend: "docker",
           config: {},
           credentials: { token: "secret-123" },
+          adminEnv: {},
+          userEnv: {},
         },
       ]);
 
@@ -172,7 +174,6 @@ describe("Sandbox Routes", () => {
       ["member", { privateKey: "PRIVATE-KEY", passphrase: "PASSPHRASE" }, true],
       ["admin", {}, false],
       ["member", {}, false],
-      ["member", null, false],
     ])(
       "tells a %s whether credentials are stored (%j → %s), never what they are",
       async (role, credentials, hasCredentials) => {
@@ -642,6 +643,7 @@ describe("Sandbox Routes", () => {
           name: "New",
           backend: "docker",
           config: { networks: ["shared"] },
+          credentials: {},
           adminEnv: { ADMIN_KEY: "x" },
           userEnv: { MY_KEY: "y" },
         },

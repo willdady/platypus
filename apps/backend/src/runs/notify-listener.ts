@@ -81,6 +81,7 @@ const listen = async (): Promise<void> => {
     client = await db.$client.connect();
     // Stopped while the connect was in flight: hand the client straight back,
     // so the shutdown drain's `pool.end()` is not held open by it.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set by the returned stop callback during the await, which TS narrowing does not track
     if (stopped) {
       client.release();
       client = undefined;

@@ -37,8 +37,12 @@ vi.mock("../index.ts", () => ({
   },
 }));
 
-const { importSkillBundle, replaceSkillBundle, exportSkillBundle } =
-  await import("./skill-bundle.ts");
+const {
+  importSkillBundle,
+  replaceSkillBundle,
+  exportSkillBundle,
+  rehashSkill,
+} = await import("./skill-bundle.ts");
 const { deleteSkill, updateSkill, upsertSkill } = await import("./skill.ts");
 const { prepareWorkspaceCleanup } = await import("./workspace-delete.ts");
 const { promoteScoped } = await import("./promote.ts");
@@ -401,6 +405,15 @@ describe("Skill writes outside the bundle", () => {
     const row = await importSkillBundle(wsScope, pdfZip());
     await deleteSkill(wsScope, row.id);
     expect(await storedUnder(skillPrefix(row.id))).toEqual([]);
+  });
+
+  it("rehashing a Skill deleted since it was read throws NotFoundError", async () => {
+    const row = await importSkillBundle(wsScope, pdfZip());
+    await deleteSkill(wsScope, row.id);
+
+    await expect(
+      rehashSkill((await import("../index.ts")).db, row),
+    ).rejects.toThrow(new NotFoundError("Skill not found"));
   });
 
   it("deleting a Shared Skill removes its stored files", async () => {

@@ -629,6 +629,7 @@ export const composeWebBackend = (
       // return anything. Boot stays fail-loud (the loader rejects a missing
       // `createExecutors`); runtime resolution stays graceful, so a malformed
       // executor object costs the turn its search tools, not the turn.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a JS plugin can return undefined, as above
       if (typeof executors?.web_search !== "function") {
         logger.warn(
           faultCtx,

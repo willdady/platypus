@@ -35,7 +35,10 @@ import {
   type RunEventScope,
 } from "./run-events.ts";
 import type { RunStats, RunStatus, TurnFacts } from "./types.ts";
-import { normalizeWebToolParts } from "./web-tool-normalize.ts";
+import {
+  normalizeWebToolMessage,
+  normalizeWebToolParts,
+} from "./web-tool-normalize.ts";
 import { replaySeededParts } from "./replay-seeded-parts.ts";
 import { withAgentCausation, withChildCausation } from "../event-causation.ts";
 
@@ -399,10 +402,11 @@ const runStreamedDrive = (
         // Normalized live, not only on the folded final: a search must render
         // identically while streaming and after a reload (issue #525), and the
         // final's own normalization run happens separately, in `onEnd` above.
-        const normalized = normalizeWebToolParts([message])[0];
+        const normalized = normalizeWebToolMessage(message);
         latest = normalized;
         // Drain past the handover but don't yield: a snapshot after the folded
         // final is no better than what it would overwrite (no durations).
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
         if (behavior.stopSnapshotsAfterFinal && finalHandedOver) continue;
         yield normalized;
       }

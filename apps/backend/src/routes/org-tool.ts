@@ -25,6 +25,7 @@ orgTool.get("/", requireAuth, requireOrgAccess(), async (c) => {
     // Workspace and are not knowable ahead of a turn.
     tools: Object.entries(toolSet.staticTools ?? {}).map(([toolId, tool]) => ({
       id: toolId,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
       description: tool.description || "No description",
     })),
   }));

@@ -79,6 +79,7 @@ import {
 } from "./a2a-call.ts";
 import { callerIsLive } from "./a2a-liveness.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * A2A conversations (ADR-0032): `SendMessage` starts a turn in a Chat and
@@ -191,19 +192,21 @@ const insertTask = async (
   messageId: string,
 ): Promise<TaskRow> => {
   const now = new Date();
-  const [row] = await executor
-    .insert(a2aTaskTable)
-    .values({
-      id: randomUUID(),
-      chatId,
-      contextId,
-      messageId,
-      endpointId: caller.endpoint.id,
-      tokenId: caller.token.id,
-      statusAt: now,
-      createdAt: now,
-    })
-    .returning();
+  const row = oneRow(
+    await executor
+      .insert(a2aTaskTable)
+      .values({
+        id: randomUUID(),
+        chatId,
+        contextId,
+        messageId,
+        endpointId: caller.endpoint.id,
+        tokenId: caller.token.id,
+        statusAt: now,
+        createdAt: now,
+      })
+      .returning(),
+  );
   return row;
 };
 
@@ -229,7 +232,9 @@ const taskFor = async (
   } catch (error) {
     // Two retries raced to make it; the other one's is this turn's Task.
     if (!isUniqueViolation(error)) throw error;
-    return findTask(where);
+    const raced = await findTask(where);
+    if (!raced) throw error;
+    return raced;
   }
 };
 
@@ -317,7 +322,9 @@ const waitForTask = async (
     }
     if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
     const read =
-      (event?.kind === "end" && event.task) || (await readTaskAfresh(task));
+      event?.kind === "end" && event.task
+        ? event.task
+        : await readTaskAfresh(task);
     if (isTerminal(read)) return read;
   }
   if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
@@ -574,6 +581,7 @@ export const startA2aTurn = async (
 ): Promise<StartedTurn> => {
   const key = JSON.stringify([
     caller.token.id,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
     params.message?.contextId || null,
     params.message?.messageId ?? null,
   ]);
@@ -762,10 +770,9 @@ export const listA2aTasks = async (
     after ? gte(a2aTaskTable.statusAt, after) : undefined,
   );
 
-  const [{ total }] = await db
-    .select({ total: count() })
-    .from(a2aTaskTable)
-    .where(filters);
+  const { total } = oneRow(
+    await db.select({ total: count() }).from(a2aTaskTable).where(filters),
+  );
   const rows = await db
     .select()
     .from(a2aTaskTable)
@@ -792,6 +799,7 @@ export const listA2aTasks = async (
       status: running.get(row.id) ?? (await taskStatus(row)),
     })),
   );
+  const last = page.at(-1);
   // Read only for the page's completed Tasks: their text only when asked for,
   // their stop reason always.
   const replies = await recordedReplies(page, {
@@ -804,7 +812,7 @@ export const listA2aTasks = async (
       return params.includeArtifacts ? read : { ...read, artifacts: [] };
     }),
     nextPageToken:
-      rows.length > pageSize ? pageTokenOf(caller, page[page.length - 1]) : "",
+      rows.length > pageSize && last ? pageTokenOf(caller, last) : "",
     pageSize,
     totalSize: total,
   };

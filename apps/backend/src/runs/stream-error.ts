@@ -104,6 +104,7 @@ const describeStringifiedToolInputError = (
   const match = TOOL_INPUT_MESSAGE.exec(text);
   if (!match) return undefined;
   const [, toolName, detail] = match;
+  if (toolName === undefined || detail === undefined) return undefined;
 
   const markerAt = detail.lastIndexOf(ISSUES_MARKER);
   if (markerAt !== -1) {
@@ -119,6 +120,7 @@ const describeStringifiedToolInputError = (
     }
   }
   // Strip the echoed value, which is the bulk of the SDK's message.
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- a detail that is all value keeps the whole
   const withoutValue = detail.split(/Value:/)[0] || detail;
   return `Invalid input for tool "${toolName}": ${truncate(
     withoutValue.replace(/\s+/g, " ").trim(),
@@ -168,12 +170,11 @@ export const describeSdkError = (error: unknown): string => {
   if (typeof error === "string") {
     const asToolInput = describeStringifiedToolInputError(error);
     if (asToolInput) return asToolInput;
-    const noSuchTool = /^(?:AI_)?NoSuchToolError:\s*([\s\S]*)$/.exec(error);
-    if (noSuchTool) {
-      return truncate(
-        noSuchTool[1].replace(/\s+/g, " ").trim(),
-        MAX_ISSUE_LENGTH,
-      );
+    const noSuchTool = /^(?:AI_)?NoSuchToolError:\s*([\s\S]*)$/.exec(
+      error,
+    )?.[1];
+    if (noSuchTool !== undefined) {
+      return truncate(noSuchTool.replace(/\s+/g, " ").trim(), MAX_ISSUE_LENGTH);
     }
     // Any other string is returned as-is: it used to be discarded entirely in
     // favour of the generic fallback, which is how the reported failure lost
@@ -215,6 +216,7 @@ const stringify = (value: unknown): string => {
     return `function ${value.name || "anonymous"}`;
   try {
     return (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JSON.stringify returns undefined for a function or symbol, though typed string
       JSON.stringify(value) ?? String(value === null ? "null" : "undefined")
     );
   } catch {
@@ -227,6 +229,7 @@ const describeNonError = (value: unknown): string => {
   if (value === null) return "null";
   if (value === undefined) return "undefined";
   if (typeof value === "object") {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- an Object.create(null) value has no constructor, though typed as having one
     const name = value.constructor?.name ?? "object";
     return truncate(`${name} ${stringify(value)}`, MAX_ISSUE_LENGTH);
   }

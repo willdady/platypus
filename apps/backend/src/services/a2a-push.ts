@@ -24,6 +24,7 @@ import {
 import { postWithRetries } from "./webhook-delivery.ts";
 import { taskIsLive } from "./a2a-liveness.ts";
 import { env } from "../env.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * A2A push notifications (ADR-0032): when a Task ends — `completed`, `failed`
@@ -142,7 +143,7 @@ const reservePushes = async (
       .where(eq(a2aTaskTable.id, taskId))
       .limit(1);
     if (!task) return 0;
-    // Never null in Postgres; the tests' in-memory db skips column defaults.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- NOT NULL in Postgres, but the tests' in-memory db skips column defaults
     const sent = task.pushCount ?? 0;
     const granted = Math.min(wanted, MAX_PUSHES_PER_TASK - sent);
     if (granted <= 0) return 0;
@@ -333,15 +334,20 @@ export const storePushConfig = async (
         .set(values)
         .where(configKey(task.id, existing.id))
         .returning();
+      if (!updated) {
+        throw new TaskNotFoundError("Push notification config not found");
+      }
       return updated;
     }
 
     // ponytail: a soft cap. Two registrations racing can each see room for
     // one more; lock the Task row if that matters.
-    const [{ n }] = await tx
-      .select({ n: count() })
-      .from(a2aPushConfigTable)
-      .where(eq(a2aPushConfigTable.taskId, task.id));
+    const { n } = oneRow(
+      await tx
+        .select({ n: count() })
+        .from(a2aPushConfigTable)
+        .where(eq(a2aPushConfigTable.taskId, task.id)),
+    );
     if (n >= MAX_PUSH_CONFIGS_PER_TASK) {
       throw new RequestMalformedError(
         `A Task takes at most ${MAX_PUSH_CONFIGS_PER_TASK} push notification configs`,

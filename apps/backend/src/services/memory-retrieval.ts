@@ -28,7 +28,7 @@ export function summaryCutoffForReference(
 ): string {
   const cutoffDate = new Date(referenceDate);
   cutoffDate.setDate(cutoffDate.getDate() - days);
-  return cutoffDate.toISOString().split("T")[0];
+  return cutoffDate.toISOString().slice(0, 10);
 }
 
 /**

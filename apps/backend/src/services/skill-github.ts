@@ -48,7 +48,8 @@ const API_HOST = "api.github.com";
 const ALLOWED_HOSTS = new Set([API_HOST, "codeload.github.com"]);
 const MAX_REDIRECTS = 5;
 
-const fail = (message: string): never => {
+// Annotated, not inferred, so a bare `fail(...)` call narrows like a `throw`.
+const fail: (message: string) => never = (message) => {
   throw new ValidationError(message);
 };
 
@@ -82,7 +83,7 @@ export const parseGithubSource = (input: string): GithubSkillSource => {
       fail("Only https://github.com URLs are supported");
     }
     try {
-      segments = url!.pathname
+      segments = url.pathname
         .split("/")
         .filter(Boolean)
         .map(decodeURIComponent);
@@ -93,10 +94,10 @@ export const parseGithubSource = (input: string): GithubSkillSource => {
       if (segments[2] !== "tree" || segments.length < 4) {
         fail("Link to a repository or a folder in it (…/tree/<ref>/<path>)");
       }
-      ref = segments[3];
+      ref = segments[3] ?? null;
       segments = [...segments.slice(0, 2), ...segments.slice(4)];
     }
-    segments[1] = segments[1]?.replace(/\.git$/, "");
+    if (segments[1]) segments[1] = segments[1].replace(/\.git$/, "");
   } else {
     const at = text.lastIndexOf("@");
     if (at >= 0) ref = text.slice(at + 1);
@@ -113,8 +114,10 @@ export const parseGithubSource = (input: string): GithubSkillSource => {
     ref,
     path: rest.join("/").replace(/\/+$/, ""),
   });
-  if (!parsed.success) fail(parsed.error.issues[0].message);
-  return parsed.data!;
+  if (!parsed.success) {
+    fail(parsed.error.issues[0]?.message ?? "The source is not valid");
+  }
+  return parsed.data;
 };
 
 const resetMessage = (response: Response): string => {

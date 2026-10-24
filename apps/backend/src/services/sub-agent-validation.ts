@@ -28,7 +28,7 @@ export const validateSubAgentAssignment = async (
   ctx: ScopeContext,
   agentId: string,
   subAgentIds: string[],
-): Promise<{ valid: boolean; error?: string }> => {
+): Promise<{ valid: true } | { valid: false; error: string }> => {
   // 1. Check self-assignment
   if (subAgentIds.includes(agentId)) {
     return { valid: false, error: SUB_AGENT_SELF_ASSIGNMENT_ERROR };

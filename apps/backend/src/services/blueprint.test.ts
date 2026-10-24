@@ -89,6 +89,25 @@ describe("Blueprint service", () => {
     expect(created.taskModelProviderId).toBe("shared-provider");
   });
 
+  it("throws NotFoundError when the blueprint is deleted right after it is written", async () => {
+    let written = false;
+    fake = seedDb(structuredClone(fake.tables), {
+      onQuery: (query) => {
+        if (query.table !== "blueprint") return;
+        if (query.kind === "insert") written = true;
+        else if (written && query.kind === "select") {
+          fake.tables.blueprint = fake.tables.blueprint.filter(
+            (row) => row.organizationId !== orgId,
+          );
+        }
+      },
+    });
+
+    await expect(createBlueprint(orgId, fields())).rejects.toThrow(
+      new NotFoundError("Blueprint not found"),
+    );
+  });
+
   it("throws NotFoundError for a blueprint in another organization", async () => {
     await expect(requireBlueprint("bp-other", orgId)).rejects.toThrow(
       new NotFoundError("Blueprint not found"),

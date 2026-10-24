@@ -49,11 +49,11 @@ const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
   const { credentials, adminEnv, ...rest } = record;
   const safeAdminEnv = isAdmin
     ? adminEnv
-    : Object.fromEntries(Object.keys(adminEnv ?? {}).map((k) => [k, ""]));
+    : Object.fromEntries(Object.keys(adminEnv).map((k) => [k, ""]));
   return {
     ...rest,
     adminEnv: safeAdminEnv,
-    hasCredentials: Object.keys(credentials ?? {}).length > 0,
+    hasCredentials: Object.keys(credentials).length > 0,
     transfer: transferSupport(record),
   };
 };

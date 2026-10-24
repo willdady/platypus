@@ -37,6 +37,7 @@ import {
   switchActivePath,
 } from "../services/chat-messages.ts";
 import type { PlatypusUIMessage } from "../types.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * Stored messages as a reader gets them: storage references rewritten to
@@ -132,10 +133,12 @@ chat.get(
       .limit(limit)
       .offset(offset);
 
-    const [{ totalCount }] = await db
-      .select({ totalCount: count() })
-      .from(chatTable)
-      .where(whereClause);
+    const { totalCount } = oneRow(
+      await db
+        .select({ totalCount: count() })
+        .from(chatTable)
+        .where(whereClause),
+    );
 
     return c.json({
       results: records.map(({ a2aClientName, ...record }) => ({

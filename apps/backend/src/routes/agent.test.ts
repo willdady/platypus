@@ -121,6 +121,7 @@ describe("Agent Routes", () => {
 
       const res = await send("POST", baseUrl, createBody);
       expect(res.status).toBe(403);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.agent ?? []).toEqual([]);
     });
 
@@ -812,6 +813,7 @@ describe("Agent Routes", () => {
         workspaceId,
         organizationId: null,
       });
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.attachment ?? []).toEqual([]);
     });
 

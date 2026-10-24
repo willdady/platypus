@@ -138,9 +138,14 @@ export const stopCanceledA2aRuns = async (): Promise<void> => {
       ),
     );
   for (const task of canceled) {
+    const { canceledAt } = task;
+    if (!canceledAt)
+      throw new Error(
+        `Canceled Task in Chat '${task.chatId}' has no canceledAt`,
+      );
     if (!(await isCurrentTurn(task))) continue;
     runRegistry.cancel(task.chatId, {
-      startedBefore: task.canceledAt!.getTime(),
+      startedBefore: canceledAt.getTime(),
     });
   }
 };

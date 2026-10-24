@@ -21,6 +21,7 @@ import type { Tool } from "ai";
  */
 export const normalizeToolResult = (value: unknown): unknown => {
   const json = JSON.stringify(value);
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JSON.stringify returns undefined for a function or symbol, though typed string
   if (json === undefined) return value;
   return JSON.parse(json);
 };

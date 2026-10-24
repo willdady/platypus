@@ -166,6 +166,18 @@ describe("agent module", () => {
   });
 
   describe("updateAgent (workspace scope)", () => {
+    it("throws NotFoundError when the agent is deleted before the write", async () => {
+      const fake = world();
+      vi.mocked(validateSubAgentAssignment).mockImplementationOnce(() => {
+        fake.tables.agent = fake.tables.agent.filter((row) => row.id !== "a1");
+        return Promise.resolve({ valid: true });
+      });
+
+      await expect(
+        updateAgent(workspaceScope, "a1", { subAgentIds: [] }),
+      ).rejects.toThrow(NotFoundError);
+    });
+
     it("updates only this Workspace's agent", async () => {
       const fake = world();
 
@@ -272,6 +284,20 @@ describe("agent module", () => {
         subAgentIds: undefined,
         toolSetIds: undefined,
       });
+    });
+
+    it("throws NotFoundError when the agent is deleted before the write", async () => {
+      const fake = world();
+      vi.mocked(findNonSharedReferences).mockImplementationOnce(() => {
+        fake.tables.agent = fake.tables.agent.filter(
+          (row) => row.id !== "loose",
+        );
+        return Promise.resolve([]);
+      });
+
+      await expect(
+        updateAgent(orgScope, "loose", { providerId: "p1", name: "x" }),
+      ).rejects.toThrow(NotFoundError);
     });
 
     it.each(["a1", "foreign", "missing"])(

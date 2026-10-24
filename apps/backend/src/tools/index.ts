@@ -550,14 +550,13 @@ registerToolSet(
         agentId,
         registerCloser,
       }) => {
-        const rows = await db
+        const [row] = await db
           .select()
           .from(sandboxTable)
           .where(eq(sandboxTable.workspaceId, workspaceId))
           .limit(1);
-        if (rows.length === 0) return {};
+        if (!row) return {};
 
-        const row = rows[0];
         // Every line below is core's, but the subject of all three is a *plugin's*
         // adapter, so each binds the owning plugin under the same `plugin` key the
         // plugin's own lines carry. Otherwise an Operator filtering on one plugin
@@ -574,9 +573,7 @@ registerToolSet(
           return {};
         }
 
-        const configResult = registration.configSchema.safeParse(
-          row.config ?? {},
-        );
+        const configResult = registration.configSchema.safeParse(row.config);
         if (!configResult.success) {
           logger.warn(
             {
@@ -591,7 +588,7 @@ registerToolSet(
         }
 
         const credentialsResult = registration.credentialsSchema.safeParse(
-          row.credentials ?? {},
+          row.credentials,
         );
         if (!credentialsResult.success) {
           logger.warn(
@@ -619,8 +616,8 @@ registerToolSet(
         // createSandboxTools (workspace wins), giving the full precedence order
         // adminEnv ▸ userEnv ▸ input.env.
         const workspaceEnv = {
-          ...(row.userEnv ?? {}),
-          ...(row.adminEnv ?? {}),
+          ...row.userEnv,
+          ...row.adminEnv,
         };
         return createSandboxTools(
           backend,

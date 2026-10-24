@@ -45,6 +45,7 @@ describe("Organization Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(403);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
       expect(fake.tables.organization ?? []).toEqual([]);
     });
 
@@ -191,16 +192,22 @@ describe("Organization Routes", () => {
   });
 
   describe("PUT /organizations/:orgId", () => {
-    const seed = (role: "admin" | "member") =>
-      seedDb({
-        organization: [
-          { id: "org-1", name: "Org 1" },
-          { id: "org-2", name: "Org 2" },
-        ],
-        organization_member: [
-          { id: "m1", userId: "user-1", organizationId: "org-1", role },
-        ],
-      });
+    const seed = (
+      role: "admin" | "member",
+      options?: Parameters<typeof seedDb>[1],
+    ) =>
+      seedDb(
+        {
+          organization: [
+            { id: "org-1", name: "Org 1" },
+            { id: "org-2", name: "Org 2" },
+          ],
+          organization_member: [
+            { id: "m1", userId: "user-1", organizationId: "org-1", role },
+          ],
+        },
+        options,
+      );
 
     const put = (body: unknown) =>
       app.request("/organizations/org-1", {
@@ -245,6 +252,24 @@ describe("Organization Routes", () => {
         }),
         { id: "org-2", name: "Org 2" },
       ]);
+    });
+
+    it("404s when the Organization is deleted mid-request", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      const fake = seed("admin", {
+        onQuery: (query) => {
+          if (query.kind === "update" && query.table === "organization") {
+            fake.tables.organization = fake.tables.organization.filter(
+              (o) => o.id !== "org-1",
+            );
+          }
+        },
+      });
+
+      const res = await put({ name: "Renamed" });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Organization not found" });
     });
   });
 
