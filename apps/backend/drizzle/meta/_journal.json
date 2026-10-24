@@ -659,6 +659,13 @@
       "when": 1792828443034,
       "tag": "0093_provider_workspace_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1792830554106,
+      "tag": "0094_skill_github_install",
+      "breakpoints": true
     }
   ]
 }
