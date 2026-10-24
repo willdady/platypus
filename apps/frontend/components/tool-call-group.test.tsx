@@ -12,7 +12,7 @@ function isTool(part: { type: string }): part is { type: string } {
 }
 
 function shape(parts: { type: string }[]) {
-  return partitionParts(parts, isTool).map((segment) =>
+  return partitionParts(parts, isTool, () => false).map((segment) =>
     segment.kind === "group"
       ? segment.entries.map((entry) => entry.index)
       : segment.index,

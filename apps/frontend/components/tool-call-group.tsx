@@ -35,7 +35,7 @@ export type PartSegment<P, G extends P> =
 export function partitionParts<P extends { type: string }, G extends P>(
   parts: readonly P[],
   isGroupable: (part: P) => part is G,
-  isHidden: (part: P) => boolean = () => false,
+  isHidden: (part: P) => boolean,
 ): PartSegment<P, G>[] {
   const segments: PartSegment<P, G>[] = [];
   let group: IndexedPart<G>[] | null = null;

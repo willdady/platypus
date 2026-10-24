@@ -133,7 +133,7 @@ The one presentation a reader sees for a native Provider search, a Web-search ba
 _Avoid_: web search card, search result block (both name only the search case; the block also covers a page read).
 
 **Tool call group**:
-Adjacent tool calls in one Chat message, shown as a single collapsible row that expands to each call in its own right. Any other part between two calls — text, reasoning, or a call with interactive UI of its own (a Sub-Agent delegation, a file download) — ends the group. Display only; the **Transcript** keeps every call as it was.
+Adjacent tool calls in one Chat message, shown as a single collapsible row that expands to each call in its own right. Any other part between two calls — text, reasoning, or a Sub-Agent delegation, which has interactive UI of its own — ends the group. A file offered for download is not a call row at all; it shows in a tray under the finished reply. Display only; the **Transcript** keeps every call as it was.
 _Avoid_: tool group (reads as a **Tool set**), tool run (a run is something else), batch, roll-up.
 
 **MCP**:

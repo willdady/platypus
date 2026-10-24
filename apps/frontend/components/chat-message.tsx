@@ -154,7 +154,7 @@ function isSubAgentToolPart(part: MessagePart): part is MessageToolPart {
 // An offered file shows in the tray under the finished reply, not in place. A
 // failed download has nothing to offer, so it falls through to the generic
 // renderer as an ordinary tool error.
-function isFsDownloadPart(
+function isOfferedFilePart(
   part: MessagePart,
 ): part is Exclude<PartOfType<"tool-fsDownload">, { state: "output-error" }> {
   return part.type === "tool-fsDownload" && part.state !== "output-error";
@@ -179,7 +179,7 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
   isReadSkillFilePart,
   isWebToolPart,
   isSubAgentToolPart,
-  isFsDownloadPart,
+  isOfferedFilePart,
 ];
 
 /**
@@ -539,7 +539,7 @@ export const ChatMessage = memo(function ChatMessage({
   const segments = partitionParts(
     message.parts ?? [],
     isGroupableToolPart,
-    isFsDownloadPart,
+    isOfferedFilePart,
   );
   const files = offeredFiles(message.parts ?? []);
   // Named for what it sits under, never "version" or "branch" (ADR-0026).
