@@ -11,6 +11,7 @@ import {
   resolveAuthCookieDomain,
 } from "./auth-cookie-domain.ts";
 import { env } from "./env.ts";
+import { deleteOwnedWorkspaces } from "./services/user-delete.ts";
 
 // Reported at module load, before the HTTP server listens: a backend and
 // frontend on unrelated hosts cannot authenticate server-side requests, and
@@ -43,6 +44,17 @@ export const auth = betterAuth({
         required: false,
         input: true,
         validator: { input: timezoneSchema.nullable() },
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      delete: {
+        // The User row's cascade would take their Workspaces' rows but not
+        // their Sandboxes or stored files (issue #1610).
+        before: async (user) => {
+          await deleteOwnedWorkspaces(user.id);
+        },
       },
     },
   },

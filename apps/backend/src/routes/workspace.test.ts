@@ -574,15 +574,7 @@ describe("Workspace Routes", () => {
   describe("DELETE /organizations/:orgId/workspaces/:workspaceId", () => {
     it("should delete workspace if owner", async () => {
       mockSession({ id: "user-1", role: "user" });
-      const fake = world({
-        rows: {
-          provider: [
-            { id: "p-own", organizationId: null, workspaceId: "ws-1" },
-            { id: "p-other", organizationId: null, workspaceId: "ws-x" },
-            { id: "p-shared", organizationId: "org-1", workspaceId: null },
-          ],
-        },
-      });
+      const fake = world();
 
       const res = await app.request("/organizations/org-1/workspaces/ws-1", {
         method: "DELETE",
@@ -591,16 +583,11 @@ describe("Workspace Routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Workspace deleted" });
       expect(fake.tables.workspace.map((w) => w.id)).toEqual(["ws-x"]);
-      // The route must delete Workspace-scoped Providers itself (issue #661):
-      // `provider.workspaceId` carries no FK, so nothing cascades this away —
-      // and only after the Workspace, which cascades its Agents first.
-      expect(fake.tables.provider.map((p) => p.id)).toEqual([
-        "p-other",
-        "p-shared",
-      ]);
+      // Triggers and Agents before the Workspace, whose cascade takes its
+      // Providers (issue #1610).
       expect(
         fake.queries.filter((q) => q.kind === "delete").map((q) => q.table),
-      ).toEqual(["workspace", "provider"]);
+      ).toEqual(["trigger", "agent", "workspace"]);
     });
 
     describe("stored files", () => {

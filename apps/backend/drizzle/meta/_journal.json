@@ -652,6 +652,13 @@
       "when": 1792728264684,
       "tag": "0092_chat_indexes_kanban_column_name",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1792828443034,
+      "tag": "0093_provider_workspace_fk",
+      "breakpoints": true
     }
   ]
 }

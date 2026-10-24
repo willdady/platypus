@@ -76,10 +76,6 @@ export const organization = pgTable("organization", (t) => ({
 }));
 
 // Provider defined before workspace to avoid circular reference with task_model_provider_id.
-// workspaceId intentionally carries no FK to `workspace`: a cascade FK would
-// race `agent.providerId`'s `restrict` constraint (Postgres checks RESTRICT
-// immediately, not deferred to end of statement), so the Workspace delete
-// route deletes Workspace-scoped Providers explicitly instead (issue #661).
 export const provider = pgTable(
   "provider",
   (t) => ({
@@ -89,7 +85,14 @@ export const provider = pgTable(
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-    workspaceId: t.text("workspace_id"),
+    // Cascades, but `agent.providerId` is RESTRICT and Postgres checks it as
+    // each cascade runs, so delete a Workspace's Agents before the Workspace
+    // (see `deleteWorkspaceRows`).
+    workspaceId: t
+      .text("workspace_id")
+      .references((): AnyPgColumn => workspace.id, {
+        onDelete: "cascade",
+      }),
     name: t.text("name").notNull(),
     providerType: t
       .text("provider_type")

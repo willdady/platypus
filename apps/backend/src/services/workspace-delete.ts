@@ -2,8 +2,8 @@ import { eq } from "drizzle-orm";
 import { db, type Tx } from "../index.ts";
 import {
   agent as agentTable,
-  provider as providerTable,
   skill as skillTable,
+  trigger as triggerTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { prepareWorkspaceSandboxTeardown } from "../sandbox/teardown.ts";
@@ -50,18 +50,20 @@ export const prepareWorkspaceCleanup = async (scope: {
 };
 
 /**
- * Deletes a Workspace's rows. `provider` carries no FK to `workspace` (issue
- * #661) — a cascade FK would race `agent.providerId`'s `restrict` constraint,
- * since Postgres checks RESTRICT immediately rather than deferring to end of
- * statement. So the Workspace goes first (cascading its Agents away), and its
- * no-longer-referenced Providers after it, in the caller's transaction.
+ * Deletes a Workspace's rows, in the caller's transaction, leaves first.
+ * `trigger.agent_id` and `agent.provider_id` are `ON DELETE RESTRICT`, which
+ * Postgres checks as each cascade runs, so a lone delete of the Workspace
+ * fails if its Providers' cascade runs before its Agents' (issues #661,
+ * #1609). Deleting Triggers, then Agents, leaves nothing for the Workspace's
+ * cascade to trip over.
  */
 export const deleteWorkspaceRows = async (
   tx: Tx,
   workspaceId: string,
 ): Promise<void> => {
-  await tx.delete(workspaceTable).where(eq(workspaceTable.id, workspaceId));
   await tx
-    .delete(providerTable)
-    .where(eq(providerTable.workspaceId, workspaceId));
+    .delete(triggerTable)
+    .where(eq(triggerTable.workspaceId, workspaceId));
+  await tx.delete(agentTable).where(eq(agentTable.workspaceId, workspaceId));
+  await tx.delete(workspaceTable).where(eq(workspaceTable.id, workspaceId));
 };
