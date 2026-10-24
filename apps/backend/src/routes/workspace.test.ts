@@ -580,6 +580,23 @@ describe("Workspace Routes", () => {
       expect(mockDb.update).not.toHaveBeenCalled();
     });
 
+    it("names both memory providers when both are invalid", async () => {
+      visibleProvider({});
+      resolveScopedMock.mockResolvedValueOnce(null);
+
+      const res = await putAsOwner({
+        memoryExtractionProviderId: "provider-1",
+        memoryEmbeddingProviderId: "provider-other-org",
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error:
+          "Invalid memory provider settings: memoryExtractionProviderId provider-1 does not have a memory extraction model configured; memoryEmbeddingProviderId provider-other-org not found",
+      });
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
     it("accepts a workspace-visible memory embedding provider that has the model", async () => {
       visibleProvider({ embeddingModelId: "embed-x" });
       mockDb.returning.mockResolvedValueOnce([{ id: "ws-1" }]);

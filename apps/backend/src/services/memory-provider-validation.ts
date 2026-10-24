@@ -9,6 +9,9 @@ type MemoryProviderSettings = {
   memoryEmbeddingProviderId?: string | null;
 };
 
+/** A Workspace, or an Organization surface (a Blueprint) with no Workspace. */
+type MemoryProviderScope = ScopeContext | { orgId: string };
+
 type MemoryModels = {
   memoryExtractionModelId: string | null;
   embeddingModelId: string | null;
@@ -36,7 +39,7 @@ const SLOTS = [
  */
 const providersInScope = async (
   ids: string[],
-  scope: ScopeContext | { orgId: string },
+  scope: MemoryProviderScope,
 ): Promise<Map<string, MemoryModels>> => {
   if ("workspaceId" in scope) {
     const resolved = await Promise.all(
@@ -64,7 +67,7 @@ const providersInScope = async (
  */
 export const requireMemoryProviderCapable = async (
   data: MemoryProviderSettings,
-  scope: ScopeContext | { orgId: string },
+  scope: MemoryProviderScope,
 ): Promise<void> => {
   const checks = SLOTS.flatMap((slot) => {
     const providerId = data[slot.field];
