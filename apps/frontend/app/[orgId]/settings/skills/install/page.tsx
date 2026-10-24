@@ -23,7 +23,7 @@ async function OrgSkillInstallPage({
       <SkillGithubInstall
         scope={{ orgId }}
         skillsHref={settings.skills}
-        skillHref={settings.skillDetail}
+        skillHrefBase={settings.skills}
       />
     </ResourcePage>
   );

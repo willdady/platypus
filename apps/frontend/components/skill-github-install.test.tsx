@@ -14,7 +14,7 @@ vi.mock("swr", () => swrMock);
 import { SkillGithubInstall } from "./skill-github-install";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
-const WARNING = /This Skill includes scripts written by a third party/;
+const WARNING = /1 selected Skill includes scripts written by a third party/;
 
 function candidate(
   skillPath: string,
@@ -96,7 +96,7 @@ async function renderInstall() {
     <SkillGithubInstall
       scope={{ orgId: "org1", workspaceId: "ws1" }}
       skillsHref="/skills"
-      skillHref={(id) => `/skills/${id}`}
+      skillHrefBase="/skills"
     />,
   );
   fireEvent.change(screen.getByLabelText("GitHub repository"), {
@@ -175,7 +175,7 @@ describe("SkillGithubInstall", () => {
       <SkillGithubInstall
         scope={{ orgId: "org1", workspaceId: "ws1" }}
         skillsHref="/skills"
-        skillHref={(id) => `/skills/${id}`}
+        skillHrefBase="/skills"
       />,
     );
     expect(
