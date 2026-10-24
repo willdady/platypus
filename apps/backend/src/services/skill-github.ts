@@ -42,7 +42,7 @@ import type { SkillScope } from "./skill.ts";
 const MiB = 1024 * 1024;
 
 /** The largest repository archive a preview or install downloads. */
-export const GITHUB_ARCHIVE_MAX_BYTES = 100 * MiB;
+export const GITHUB_ARCHIVE_MAX_BYTES = 100 * 1024 * 1024;
 
 const API_HOST = "api.github.com";
 const ALLOWED_HOSTS = new Set([API_HOST, "codeload.github.com"]);

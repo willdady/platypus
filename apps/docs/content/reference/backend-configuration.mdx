@@ -403,6 +403,18 @@ The Exa Web-search backend's API key is Plugin credentials, not a variable: set
 `credentials.apiKey` in `PLATYPUS_PLUGIN_CONFIG_EXA`
 (see [Configuration → Web search](/self-hosting/configuration#web-search)).
 
+## Skills
+
+| Variable       | Purpose                                                                                                                                                                                                                                                     | Default   | Required |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
+| `GITHUB_TOKEN` | A GitHub token sent with the request that looks up a repository when someone [installs Skills from GitHub](/building-with-platypus/skills#install-skills-from-github), raising GitHub's rate limit from 60 requests an hour shared by the whole deployment. | _(unset)_ | No       |
+
+<Callout type="warning">
+  Anyone allowed to install Skills can reach whatever the token can see. Use a
+  fine-grained token with **Public repositories (read-only)** access and no
+  other permissions.
+</Callout>
+
 ## Storage
 
 The file-storage backend. Disk is the default; S3 (or an S3-compatible service)

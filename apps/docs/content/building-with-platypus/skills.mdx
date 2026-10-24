@@ -1,6 +1,6 @@
 ---
 title: Skills
-description: Author or import a Skill — a named capability with a description, instructions and optional bundled files — attach it to an Agent, and let the model load it on demand via the loadSkill tool.
+description: Author, import or install from GitHub a Skill — a named capability with a description, instructions and optional bundled files — attach it to an Agent, and let the model load it on demand via the loadSkill tool.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -12,7 +12,7 @@ a body of instructions for doing one thing well, and optionally a **bundle** of
 reference files, scripts and assets that travel with it. The Agent sees only the
 name and description up front and pulls in the full body _on demand_ — keeping
 the system prompt short. For the concept, see [Skills](/concepts/skills); this
-page is how to author or import one.
+page is how to author, import or install one.
 
 ## Author a Skill
 
@@ -93,6 +93,101 @@ entries name the same path. A zip
 inside the zip is stored as an ordinary file. Any problem rejects the whole
 import with a message naming it, and nothing is saved.
 
+## Install Skills from GitHub
+
+You can install Skills straight from a public GitHub repository, such as
+[`anthropics/skills`](https://github.com/anthropics/skills), without zipping
+them yourself. Click **Install from GitHub** beside **Create skill**. An Org
+Admin can do the same from **Organization settings → Skills** to install
+Shared Skills.
+
+<Steps>
+
+### Enter the source
+
+Type the repository, or a folder in it, into **GitHub repository**, in either
+form:
+
+- a GitHub link: `https://github.com/anthropics/skills`, or one to a folder,
+  `https://github.com/anthropics/skills/tree/main/skills`
+- the short form `owner/repo[/path][@ref]`: `anthropics/skills`, or
+  `anthropics/skills/skills@main`
+
+Leave out the ref to use the repository's default branch. In a link the ref is
+the part straight after `tree/`, so a branch whose name contains `/` has to go
+in the short form, after `@`.
+
+### Review what was found
+
+Click **Find skills**. Every folder under the path that holds a `SKILL.md` is
+listed, with the commit the ref points at now, as `owner/repo@abc1234`. Expand
+a Skill to read its `SKILL.md` and see its files and their sizes before you
+pick it. A **Needs Sandbox** badge marks a Skill with scripts or binary files.
+
+A Skill you can't pick says why: its name is already taken here, or it breaks
+one of the [zip import rules](#limits), such as malformed YAML in its
+frontmatter.
+
+### Install
+
+Tick the Skills you want, up to **50** at a time, and click **Install**. Each
+one is installed on its own and the page shows how each went: one that fails
+leaves the others installed.
+
+</Steps>
+
+Platypus installs exactly the commit you reviewed, even if the branch has moved
+on since. Each Skill's files are checked against the same rules as **Import
+zip**, and the folder holding `SKILL.md` becomes the Skill's root.
+
+<Callout type="warning">
+  Ticking a Skill marked **Needs Sandbox** shows a warning before you install:
+  its scripts were written by someone else. If an Agent with a Sandbox runs
+  them, they run with the Workspace's [default environment
+  variables](/concepts/sandboxes#default-environment-variables) and can send
+  them anywhere the Sandbox can reach. Read the files in the review step before
+  installing.
+</Callout>
+
+An installed Skill's **Bundle** card says where it came from, for example
+**Installed from anthropics/skills/skills/pdf @ abc1234**, linking to that
+folder on GitHub. Editing the Skill in the form keeps that record; **Replace
+bundle** with a zip clears it.
+
+### Limits on installing from GitHub
+
+- **Repository size.** Platypus downloads the whole repository at that commit,
+  then reads only the Skills you picked. A repository whose download is larger
+  than **100 MiB** can't be installed from, even if the Skill itself is small.
+  Zip the Skill's folder and use **Import zip** instead.
+- **Public repositories only.**
+- **GitHub's rate limit.** Each **Find skills** costs one request to GitHub's
+  API, however many Skills the repository holds. Without a token, every install
+  on your deployment shares GitHub's anonymous limit of 60 requests an hour.
+  When it runs out, the page says when it resets. An Operator can raise it by
+  setting [`GITHUB_TOKEN`](/reference/backend-configuration#skills).
+
+## Who can import Skills
+
+An Org Admin decides which Workspaces may import Skill bundles, in
+**Organization settings → Skills → Importing in workspaces**. The setting
+covers **Import zip**, **Replace bundle** and **Install from GitHub** in a
+Workspace:
+
+- **All workspaces** _(the default)_ — every Workspace can import.
+- **Selected workspaces** — only the Workspaces switched on in the list below
+  it.
+- **No workspaces** — none can.
+
+Where importing isn't allowed, those buttons don't show. Skills already
+imported stay, and Org Admins can always import Shared Skills in
+**Organization settings → Skills**.
+
+<Callout type="info">
+  The setting stops bundles of files, not instructions. A Workspace Owner can
+  still create a Skill and type or paste anything into its body.
+</Callout>
+
 ## Bundled files, export and Replace bundle
 
 Open a Skill to see its **Bundle** card:
@@ -105,7 +200,8 @@ Open a Skill to see its **Bundle** card:
   same Skill.
 - **Replace bundle** takes a zip in the same format as **Import zip** and
   replaces the whole Skill with it — name, description, body, frontmatter and
-  every file. If the zip is refused, the Skill is left as it was.
+  every file. If the zip is refused, the Skill is left as it was. A Skill
+  installed from GitHub no longer shows where it came from afterwards.
 
 Editing the form still changes the name, description, body and the other
 fields; the bundled files stay as they are.
