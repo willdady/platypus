@@ -166,7 +166,7 @@ describe("Organization Blueprint Routes", () => {
             memoryExtractionModelId: "m",
             embeddingModelId: null,
           },
-        ]); // findInvalidMemoryProviders
+        ]); // requireMemoryProviderCapable
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -180,7 +180,7 @@ describe("Organization Blueprint Routes", () => {
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error:
-          "A blueprint's memory provider setting references a provider without the required model: memoryEmbeddingProviderId prov-1 does not have an embedding model configured",
+          "Invalid memory provider settings: memoryEmbeddingProviderId prov-1 does not have an embedding model configured",
       });
     });
 
@@ -204,7 +204,7 @@ describe("Organization Blueprint Routes", () => {
             memoryExtractionModelId: "m",
             embeddingModelId: "emb-model",
           },
-        ]); // findInvalidMemoryProviders: valid
+        ]); // requireMemoryProviderCapable: valid
 
       const res = await app.request(baseUrl, {
         method: "POST",

@@ -5,7 +5,6 @@ import { db } from "../index.ts";
 import {
   blueprint as blueprintTable,
   blueprintItem as blueprintItemTable,
-  provider as providerTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import {
@@ -19,10 +18,10 @@ import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { applyBlueprintsToWorkspace } from "../services/blueprint-apply.ts";
+import { requireMemoryProviderCapable } from "../services/memory-provider-validation.ts";
 import { isBlueprintReferencedByLiveInvitation } from "../services/blueprint-guard.ts";
 import {
   listOrgScopedIds,
-  orgScopedWhereIn,
   type ScopedResourceType,
 } from "../services/scoped-resource.ts";
 import { NotFoundError, isUniqueViolation } from "../errors.ts";
@@ -120,95 +119,18 @@ const tier2ProvidersNotAttached = (
 };
 
 /**
- * Tier 2 memory settings whose chosen Provider lacks the model that slot needs
- * — parity with the Workspace route, which rejects a memory-embedding Provider
- * with no embedding model (and a memory-extraction Provider with no extraction
- * model). Stamping such a Provider on apply would produce an unusable Workspace
- * memory config, so it is blocked when the Blueprint is authored.
- */
-const findInvalidMemoryProviders = async (
-  data: {
-    memoryExtractionProviderId?: string | null;
-    memoryEmbeddingProviderId?: string | null;
-  },
-  orgId: string,
-): Promise<{ field: string; providerId: string; reason: string }[]> => {
-  const checks: {
-    field: string;
-    providerId: string;
-    column: "memoryExtractionModelId" | "embeddingModelId";
-    reason: string;
-  }[] = [];
-  if (data.memoryExtractionProviderId) {
-    checks.push({
-      field: "memoryExtractionProviderId",
-      providerId: data.memoryExtractionProviderId,
-      column: "memoryExtractionModelId",
-      reason: "does not have a memory extraction model configured",
-    });
-  }
-  if (data.memoryEmbeddingProviderId) {
-    checks.push({
-      field: "memoryEmbeddingProviderId",
-      providerId: data.memoryEmbeddingProviderId,
-      column: "embeddingModelId",
-      reason: "does not have an embedding model configured",
-    });
-  }
-  if (checks.length === 0) return [];
-
-  const rows = await db
-    .select({
-      id: providerTable.id,
-      memoryExtractionModelId: providerTable.memoryExtractionModelId,
-      embeddingModelId: providerTable.embeddingModelId,
-    })
-    .from(providerTable)
-    .where(
-      orgScopedWhereIn(
-        "provider",
-        checks.map((c) => c.providerId),
-        orgId,
-      ),
-    );
-  const byId = new Map(rows.map((r) => [r.id, r]));
-
-  const invalid: { field: string; providerId: string; reason: string }[] = [];
-  for (const c of checks) {
-    const provider = byId.get(c.providerId);
-    if (!provider || !provider[c.column]) {
-      invalid.push({
-        field: c.field,
-        providerId: c.providerId,
-        reason: c.reason,
-      });
-    }
-  }
-  return invalid;
-};
-
-/**
  * Why the Blueprint's Tier 2 settings can't be saved, naming each offending
  * Provider, or `null` when they can. A setting may only point at a Provider the
  * Blueprint also attaches (ADR-0008), so applying it never points a Workspace
- * at an unattached Provider; and a memory Provider must expose the model its
- * slot needs (parity with the Workspace route), so apply never stamps an
- * unusable memory config.
+ * at an unattached Provider.
  */
-const tier2SettingsError = async (
+const tier2SettingsError = (
   data: Parameters<typeof tier2ProvidersNotAttached>[0],
   items: BlueprintItem[],
-  orgId: string,
-): Promise<string | null> => {
+): string | null => {
   const unattached = tier2ProvidersNotAttached(data, items);
   if (unattached.length > 0) {
     return `A blueprint's provider settings must reference providers the blueprint also attaches: ${unattached.join(", ")}`;
-  }
-  const invalidMemory = await findInvalidMemoryProviders(data, orgId);
-  if (invalidMemory.length > 0) {
-    return `A blueprint's memory provider setting references a provider without the required model: ${invalidMemory
-      .map((m) => `${m.field} ${m.providerId} ${m.reason}`)
-      .join("; ")}`;
   }
   return null;
 };
@@ -256,14 +178,13 @@ orgBlueprint.post(
 
     await requireSharedItems(deduped, orgId);
 
-    const settingsError = await tier2SettingsError(
-      c.req.valid("json"),
-      deduped,
-      orgId,
-    );
+    const settingsError = tier2SettingsError(c.req.valid("json"), deduped);
     if (settingsError) {
       return c.json({ error: settingsError }, 400);
     }
+    // A memory Provider must expose the model its slot needs, so apply never
+    // stamps an unusable memory config.
+    await requireMemoryProviderCapable(c.req.valid("json"), { orgId });
 
     const id = nanoid();
     try {
@@ -389,14 +310,13 @@ orgBlueprint.put(
 
     await requireSharedItems(deduped, orgId);
 
-    const settingsError = await tier2SettingsError(
-      c.req.valid("json"),
-      deduped,
-      orgId,
-    );
+    const settingsError = tier2SettingsError(c.req.valid("json"), deduped);
     if (settingsError) {
       return c.json({ error: settingsError }, 400);
     }
+    // A memory Provider must expose the model its slot needs, so apply never
+    // stamps an unusable memory config.
+    await requireMemoryProviderCapable(c.req.valid("json"), { orgId });
 
     try {
       await db.transaction(async (tx) => {
