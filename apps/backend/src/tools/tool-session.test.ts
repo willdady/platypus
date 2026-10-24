@@ -1139,7 +1139,7 @@ describe("openToolSession", () => {
       register(
         id,
         (ctx) => {
-          ctx.registerCloser?.(close);
+          ctx.registerCloser(close);
           return {};
         },
         { pluginName: "acme", isCore: false },
@@ -1260,7 +1260,7 @@ describe("openToolSession", () => {
         "set.js-plugin",
         (ctx) => {
           // What the types forbid and a third-party *JS* plugin can still do.
-          (ctx.registerCloser as unknown as (c: unknown) => void)?.("close me");
+          (ctx.registerCloser as unknown as (c: unknown) => void)("close me");
           return {};
         },
         { pluginName: "acme", isCore: false },

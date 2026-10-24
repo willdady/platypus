@@ -125,7 +125,7 @@ const pushesLanded = async () => {
     const [config] = await db()
       .select({ notifiedAt: a2aPushConfigTable.notifiedAt })
       .from(a2aPushConfigTable);
-    expect(config?.notifiedAt).not.toBeNull();
+    expect(config.notifiedAt).not.toBeNull();
   });
   await new Promise((resolve) => setTimeout(resolve, 50));
 };

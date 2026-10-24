@@ -180,7 +180,7 @@ export const suppressTriggerRun = async (input: {
       status: "suppressed",
       entityId: input.entityId,
       eventType: input.eventType,
-      eventData: input.eventData ?? null,
+      eventData: input.eventData,
       startedAt: now,
       createdAt: now,
     })

@@ -406,6 +406,7 @@ const runStreamedDrive = (
         latest = normalized;
         // Drain past the handover but don't yield: a snapshot after the folded
         // final is no better than what it would overwrite (no durations).
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
         if (behavior.stopSnapshotsAfterFinal && finalHandedOver) continue;
         yield normalized;
       }

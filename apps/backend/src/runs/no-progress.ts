@@ -37,6 +37,7 @@ export const DEFAULT_NO_PROGRESS_THRESHOLD = 3;
 const stableStringify = (value: unknown): string => {
   if (value === undefined) return "null";
   if (value === null || typeof value !== "object") {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JSON.stringify returns undefined for a function or symbol, though typed string
     return JSON.stringify(value) ?? "null";
   }
   if (Array.isArray(value)) {

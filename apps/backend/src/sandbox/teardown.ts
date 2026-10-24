@@ -83,7 +83,7 @@ const destroyOpened = async (
             id: nanoid(),
             workspaceId,
             backend: row.backend,
-            config: row.config ?? {},
+            config: row.config,
             error: message,
           });
         } catch (ledgerErr) {

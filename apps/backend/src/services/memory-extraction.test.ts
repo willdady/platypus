@@ -70,12 +70,14 @@ const messageRow = (chatId: string, message: Message, index: number) => ({
 const seedWithMessages = (store: Record<string, Record<string, unknown>[]>) =>
   seedDb({
     ...store,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
     chat: (store.chat ?? []).map(({ messages, ...chat }) => ({
       ...chat,
       activeLeafId: (messages as Message[]).length
         ? `${chat.id as string}:${(messages as Message[]).length - 1}`
         : null,
     })),
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
     chat_message: (store.chat ?? []).flatMap((chat) =>
       (chat.messages as Message[]).map((message, index) =>
         messageRow(chat.id as string, message, index),

@@ -134,10 +134,13 @@ export const sandboxBackendPoint = (
     // what the three static consumers call. Without this, a contribution missing
     // either schema registers fine and fails at *save* time — a 500 on an
     // Operator's sandbox form, attributed to nothing.
-    for (const [field, schema] of [
+    // `unknown`, not the declared Zod type: a third-party JS plugin can pass
+    // anything here.
+    const schemas: [string, unknown][] = [
       ["configSchema", configSchema],
       ["credentialsSchema", contribution.credentialsSchema],
-    ] as const) {
+    ];
+    for (const [field, schema] of schemas) {
       if (
         typeof schema !== "object" ||
         schema === null ||

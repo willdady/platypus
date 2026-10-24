@@ -128,6 +128,7 @@ export const clearStaleToolResults = (
         output: { type: "text" as const, value: CLEARED_TOOL_RESULT_MARKER },
       };
     });
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
     return changed ? { ...message, content } : message;
   });
 };

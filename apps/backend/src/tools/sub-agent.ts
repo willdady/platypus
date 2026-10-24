@@ -548,6 +548,9 @@ export const createDelegateTool = (
       });
     },
     toModelOutput: ({ output }) => {
+      /* eslint-disable @typescript-eslint/no-unnecessary-condition -- a
+         delegate that yields nothing leaves `output` undefined, though the SDK
+         types it as present */
       const value = output?.text ?? "Task completed.";
       // Annotated rather than thrown: the fragment is real work the parent can
       // still use, and the run path treats a cutoff as a fact to record rather
@@ -560,6 +563,7 @@ export const createDelegateTool = (
         : output?.stoppedAtStepLimit
           ? SUB_AGENT_STEP_LIMIT_NOTE
           : undefined;
+      /* eslint-enable @typescript-eslint/no-unnecessary-condition */
       return {
         type: "text" as const,
         value: note ? `${value}\n\n${note}`.trim() : value,

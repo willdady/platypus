@@ -122,10 +122,6 @@ export async function extractFiles(
 
   const processedMessages = await Promise.all(
     messages.map(async (message, messageIndex) => {
-      if (!message.parts || !Array.isArray(message.parts)) {
-        return message;
-      }
-
       const processedParts = await Promise.all(
         message.parts.map(async (part, partIndex) => {
           // Check if this is a file part with a data URL
@@ -194,10 +190,6 @@ export function rewriteStorageUrls(
   baseUrl: string,
 ): PlatypusUIMessage[] {
   return messages.map((message) => {
-    if (!message.parts || !Array.isArray(message.parts)) {
-      return message;
-    }
-
     const processedParts = message.parts.map((part) => {
       if (
         part.type !== "file" ||
@@ -253,10 +245,6 @@ export async function inlineFileUrls(
 
   return Promise.all(
     messages.map(async (message) => {
-      if (!message.parts || !Array.isArray(message.parts)) {
-        return message;
-      }
-
       const processedParts = await Promise.all(
         message.parts.map(async (part) => {
           if (

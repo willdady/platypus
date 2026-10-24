@@ -159,9 +159,7 @@ export async function updateProvider(
 
     // Snapshot the models as stored, so an alias this save removes can
     // de-migrate its references rather than dangling them (ADR-0017).
-    const previousModels = data.modelIds
-      ? await currentProviderModels(providerId, tx)
-      : null;
+    const previousModels = await currentProviderModels(providerId, tx);
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
@@ -174,15 +172,14 @@ export async function updateProvider(
 
     // Runs AFTER the row is written: a failed update must not leave Agents
     // repointed for an alias that still exists.
-    const aliasRepoints =
-      previousModels && data.modelIds
-        ? await deMigrateOrphanedAliases(
-            providerId,
-            previousModels,
-            data.modelIds,
-            tx,
-          )
-        : [];
+    const aliasRepoints = previousModels
+      ? await deMigrateOrphanedAliases(
+          providerId,
+          previousModels,
+          data.modelIds,
+          tx,
+        )
+      : [];
 
     return { row, aliasRepoints };
   });

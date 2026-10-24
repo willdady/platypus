@@ -96,6 +96,11 @@ export function baseConfig(tsconfigRootDir) {
         // throw instead. Off for tests (below), where a fixture's shape is known.
         "@typescript-eslint/no-non-null-assertion": "error",
 
+        // A condition the types say is always truthy (or always falsy) is
+        // either a dead branch or a type that is too narrow. Delete the branch,
+        // or widen the type to what the value really is.
+        "@typescript-eslint/no-unnecessary-condition": "error",
+
         // A `switch` over a union with no `default` must name every member, so
         // adding a member surfaces each switch that forgot it. A `default` still
         // counts as exhaustive: the codebase uses it deliberately for "everything

@@ -187,7 +187,7 @@ describe("Invitation Link Routes", () => {
       // provisioned, so the client can land the new member there.
       const provisioned = mockDb.values.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
-        .find((v) => v?.name);
+        .find((v) => v.name);
       expect(await res.json()).toEqual({
         message: "Invitation accepted",
         organizationId: "org-1",
@@ -350,7 +350,7 @@ describe("Invitation Link Routes", () => {
 
       const provisioned = mockDb.values.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
-        .find((v) => v?.name);
+        .find((v) => v.name);
       expect(await res.json()).toEqual({
         message: "Invitation accepted",
         organizationId: "org-1",

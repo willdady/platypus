@@ -216,6 +216,7 @@ const stringify = (value: unknown): string => {
     return `function ${value.name || "anonymous"}`;
   try {
     return (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JSON.stringify returns undefined for a function or symbol, though typed string
       JSON.stringify(value) ?? String(value === null ? "null" : "undefined")
     );
   } catch {
@@ -228,6 +229,7 @@ const describeNonError = (value: unknown): string => {
   if (value === null) return "null";
   if (value === undefined) return "undefined";
   if (typeof value === "object") {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- an Object.create(null) value has no constructor, though typed as having one
     const name = value.constructor?.name ?? "object";
     return truncate(`${name} ${stringify(value)}`, MAX_ISSUE_LENGTH);
   }

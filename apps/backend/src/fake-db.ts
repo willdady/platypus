@@ -177,10 +177,14 @@ const isMarker = (value: unknown): value is Marker =>
 const isCountMarker = (value: unknown): value is CountMarker =>
   !!value &&
   typeof value === "object" &&
-  (value as CountMarker).isCount === true;
+  "isCount" in value &&
+  value.isCount === true;
 
 const isMaxMarker = (value: unknown): value is MaxMarker =>
-  !!value && typeof value === "object" && (value as MaxMarker).isMax === true;
+  !!value &&
+  typeof value === "object" &&
+  "isMax" in value &&
+  value.isMax === true;
 
 /** Whether a projection value is a plain object of further selections. */
 const isNested = (value: unknown): value is Record<string, unknown> =>

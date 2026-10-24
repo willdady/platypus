@@ -351,7 +351,9 @@ export async function createTrigger(
     oneOff = parsed.config.isOneOff === true;
   } else if (fields.type === "event") {
     config = parseEventConfig(fields.config);
-  } else if (fields.type === "inbound") {
+  } else {
+    // A new trigger type fails to compile here rather than taking this branch.
+    fields.type satisfies "inbound";
     const inbound = parseInboundConfig(fields.config);
     config = inbound;
     if (fields.issueToken !== false) {
@@ -359,10 +361,6 @@ export async function createTrigger(
       token = generated.token;
       tokenFields = issuedTokenFields(generated.hash, inbound.tokenExpiryDays);
     }
-  } else {
-    throw new ValidationError(
-      "Invalid trigger type. Must be 'cron', 'event' or 'inbound'.",
-    );
   }
 
   const values = {
