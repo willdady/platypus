@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { vi, type Mock } from "vitest";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 
 /**
  * An in-memory stand-in for the Drizzle handle that **interprets the `WHERE` a
@@ -223,6 +224,13 @@ const matchesSql = (
     // Null-safe: two nulls are not distinct, a null and a value are.
     return (resolve(refOf(left)) ?? null) !== (resolve(refOf(right)) ?? null);
   }
+  if (shape === "?@>?::jsonb") {
+    // A jsonb array column containing every element of a JSON-encoded array,
+    // as a reference scrub finds the rows holding a deleted id.
+    const value = resolve(refOf(left));
+    const wanted = JSON.parse(right as string) as unknown[];
+    return Array.isArray(value) && wanted.every((v) => value.includes(v));
+  }
   throw new Error(
     `fake db cannot interpret this SQL fragment: \`${marker.strings.join("?")}\``,
   );
@@ -247,6 +255,12 @@ const sqlValue = (
     return new Date(
       Date.parse(start as string) + end.getTime() - begin.getTime(),
     );
+  }
+  if (shape === "?-?") {
+    // A jsonb array column minus a string: every element equal to it removed.
+    const [column, element] = marker.values;
+    const value = resolve(refOf(column)) as unknown[];
+    return value.filter((v) => v !== element);
   }
   throw new Error(
     `fake db cannot compute this SQL value: \`${marker.strings.join("?")}\``,
@@ -395,6 +409,11 @@ export type FakeDbOptions = {
   unique?: Record<string, UniqueConstraint[]>;
   /** Called before every insert, for tests that inject a failure mid-write. */
   onInsert?: (table: string, values: Row) => void;
+  /**
+   * Called as each query runs, before it touches a row. Throw (typically a
+   * {@link dbError}) to fail that query the way the driver would.
+   */
+  onQuery?: (query: QueryRecord) => void;
 };
 
 /** The rows the fake holds, keyed by Postgres table name. */
@@ -404,6 +423,8 @@ export type Store = Record<string, Row[]>;
 export type QueryRecord = {
   kind: "select" | "insert" | "update" | "delete";
   table: string;
+  /** A `select(…).for(strength)`'s lock strength, so a test can see it was taken. */
+  lock?: string;
 };
 
 export type FakeDb = {
@@ -429,12 +450,27 @@ const normaliseStore = (rows: Store): Store => {
   return store;
 };
 
-const uniqueViolation = (constraint: string) => {
-  const message = `duplicate key value violates unique constraint "${constraint}"`;
-  return Object.assign(new Error(`DrizzleQueryError: ${message}`), {
-    cause: { code: "23505", message },
-  });
-};
+/**
+ * A database failure in the shape drizzle-orm 0.45 throws: a
+ * `DrizzleQueryError` wrapping the pg error, whose SQLSTATE `code` sits on
+ * `.cause`, never on the error itself. Use it wherever a test simulates a
+ * failed query, so code that reads the wrong layer fails the test.
+ */
+export const dbError = (
+  code = "08006",
+  message = "connection failure",
+): DrizzleQueryError =>
+  new DrizzleQueryError(
+    "fake query",
+    [],
+    Object.assign(new Error(message), { code }),
+  );
+
+const uniqueViolation = (constraint: string) =>
+  dbError(
+    "23505",
+    `duplicate key value violates unique constraint "${constraint}"`,
+  );
 
 /**
  * Builds an in-memory Drizzle stand-in over `initialRows`, keyed by Postgres table
@@ -456,6 +492,10 @@ export const createFakeDb = (
 ): FakeDb => {
   const committed = normaliseStore(initialRows);
   const queries: QueryRecord[] = [];
+  const record = (query: QueryRecord) => {
+    queries.push(query);
+    options.onQuery?.(query);
+  };
   const execute = vi.fn((..._args: unknown[]) =>
     Promise.resolve({ rowCount: 0, rows: [] }),
   );
@@ -544,6 +584,7 @@ export const createFakeDb = (
       let skip = 0;
       let order: OrderMarker[] = [];
       let grouping: ColumnRef[] = [];
+      let lock: string | undefined;
       const joins: {
         table: unknown;
         on: Condition;
@@ -730,7 +771,9 @@ export const createFakeDb = (
           return builder;
         },
         // This fake is single-threaded; lock behavior is tested on Postgres.
-        for(_strength: string) {
+        // Only the strength is recorded, so a test can see the lock was asked for.
+        for(strength: string) {
+          lock = strength;
           return builder;
         },
         then(
@@ -739,7 +782,11 @@ export const createFakeDb = (
         ) {
           return Promise.resolve()
             .then(() => {
-              queries.push({ kind: "select", table: nameOf(table) });
+              record({
+                kind: "select",
+                table: nameOf(table),
+                ...(lock && { lock }),
+              });
               return rows();
             })
             .then(onFulfilled, onRejected);
@@ -754,7 +801,7 @@ export const createFakeDb = (
       let inserted: Row[] = [];
 
       const write = (values: Row | Row[]) => {
-        queries.push({ kind: "insert", table: name });
+        record({ kind: "insert", table: name });
         inserted = (Array.isArray(values) ? values : [values]).map((row) => ({
           ...row,
         }));
@@ -815,7 +862,7 @@ export const createFakeDb = (
       };
 
       const apply = (condition: Condition) => {
-        queries.push({ kind: "update", table: nameOf(table) });
+        record({ kind: "update", table: nameOf(table) });
         updated = rowsFor(table).filter((row) => matches(row, condition));
         for (const row of updated) {
           // Every value is read off the row as it stood, as Postgres does.
@@ -851,7 +898,7 @@ export const createFakeDb = (
 
     const remove = (table: unknown) => ({
       where(condition: Condition) {
-        queries.push({ kind: "delete", table: nameOf(table) });
+        record({ kind: "delete", table: nameOf(table) });
         const rows = rowsFor(table);
         const deleted = rows.filter((row) =>
           satisfies(flatResolver(row), condition),

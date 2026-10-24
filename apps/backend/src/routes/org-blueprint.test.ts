@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { dbError, mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("Organization Blueprint Routes", () => {
@@ -73,7 +73,7 @@ describe("Organization Blueprint Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       // Empty items → no validation queries; the blueprint insert conflicts.
       mockDb.insert.mockImplementationOnce(() => {
-        throw { code: "23505" };
+        throw dbError("23505");
       });
 
       const res = await app.request(baseUrl, {
@@ -367,7 +367,7 @@ describe("Organization Blueprint Routes", () => {
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
         .mockResolvedValueOnce([{ id: "bp-1" }]); // existing blueprint
       mockDb.transaction.mockImplementationOnce(() => {
-        throw { code: "23505" };
+        throw dbError("23505");
       });
 
       const res = await app.request(`${baseUrl}/bp-1`, {

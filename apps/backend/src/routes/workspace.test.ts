@@ -1,33 +1,20 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  mockDb,
+  dbError,
   mockSession,
   resetMockDb,
   seedDb,
   useTempDiskStorage,
   putStoredFiles,
   isStored,
+  type Store,
 } from "../test-utils.ts";
+import type { FakeDbOptions } from "../fake-db.ts";
 import { mockLogger } from "../test-setup.ts";
 import { getStorage } from "../storage/index.ts";
 import app from "../server.ts";
-import { resolveScoped } from "../services/scoped-resource.ts";
 import { transferWorkspace } from "../services/workspace-transfer.ts";
 import { ValidationError } from "../errors.ts";
-import {
-  workspace as workspaceTable,
-  provider as providerTable,
-} from "../db/schema.ts";
-
-// The memory pointer-settings must resolve through the Scoped resource
-// authority, not a bare id lookup (GHSA-qg7h-g2rm-37qh). Spy on it so the tests
-// assert the route delegates the scoping decision — the chained mockDb ignores
-// WHERE predicates and cannot itself tell a scoped lookup from a global one.
-vi.mock("../services/scoped-resource.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../services/scoped-resource.ts")>()),
-  resolveScoped: vi.fn(),
-}));
-const resolveScopedMock = vi.mocked(resolveScoped);
 
 // The transfer itself runs against a real Postgres in its own tests
 // (`workspace-transfer.test.ts`); here only who may call it, and what it answers.
@@ -36,41 +23,96 @@ vi.mock("../services/workspace-transfer.ts", () => ({
 }));
 const transferWorkspaceMock = vi.mocked(transferWorkspace);
 
+/**
+ * These tests state fixture rows rather than stubbing queries in call order:
+ * `seedDb()` installs the in-memory fake from `fake-db.ts`, which evaluates the
+ * `WHERE` each query builds. Every world holds a same-named Workspace, member
+ * and Provider in `org-2`, so a lookup that dropped its Organization or
+ * Workspace column reads a row it should not and the test fails.
+ */
 describe("Workspace Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-
-    // Force reset where to ensure it returns mockDb
-    mockDb.where.mockReturnValue(mockDb);
+    transferWorkspaceMock.mockReset();
   });
 
+  const json = (method: string, body: unknown): RequestInit => ({
+    method,
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+
+  /** `ws-1` as seeded: in `org-1`, owned by `user-1`, no delegation. */
+  const ws1 = (over: Store[string][number] = {}) => ({
+    id: "ws-1",
+    name: "WS 1",
+    organizationId: "org-1",
+    ownerId: "user-1",
+    providerSelfManagement: false,
+    mcpSelfManagement: false,
+    inboundTriggersAllowed: false,
+    ...over,
+  });
+
+  /**
+   * The baseline world: the caller (`user-1`) is a member of `org-1` at the
+   * given role beside `member-2`; `outsider` is a member of `org-2` only, which
+   * holds a Workspace of its own under the same name.
+   */
+  const world = (
+    options: {
+      role?: "admin" | "member";
+      workspace?: Store[string][number];
+      rows?: Store;
+      db?: FakeDbOptions;
+    } = {},
+  ) => {
+    const { role = "member", rows = {} } = options;
+    return seedDb(
+      {
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: "org-1", role },
+          {
+            id: "m2",
+            userId: "member-2",
+            organizationId: "org-1",
+            role: "member",
+          },
+          {
+            id: "m3",
+            userId: "outsider",
+            organizationId: "org-2",
+            role: "member",
+          },
+        ],
+        workspace: [
+          ws1(options.workspace),
+          { id: "ws-x", name: "WS 1", organizationId: "org-2", ownerId: "u-x" },
+        ],
+        ...rows,
+      },
+      options.db,
+    );
+  };
+
   describe("POST /organizations/:orgId/workspaces", () => {
+    const post = (body: unknown) =>
+      app.request("/organizations/org-1/workspaces", json("POST", body));
+
     // ADR-0008: Workspace creation is org-admin-only.
     it("should create workspace for an org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin" });
 
-      // Mock requireOrgAccess: return admin role
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ userId: "user-1" }]); // owner is a member
-
-      // Mock insert
-      const mockWorkspace = { id: "ws-1", name: "New Workspace" };
-      mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
-
-      const res = await app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify({
-          name: "New Workspace",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ name: "New Workspace" });
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockWorkspace);
+      const created = fake.tables.workspace.at(-1);
+      expect(await res.json()).toEqual(created);
       // Owner defaults to the calling admin when no ownerId is supplied.
-      const insertedValues = mockDb.values.mock.calls.at(-1)?.[0];
-      expect(insertedValues).toMatchObject({
+      expect(created).toMatchObject({
+        name: "New Workspace",
         ownerId: "user-1",
         organizationId: "org-1",
       });
@@ -79,143 +121,102 @@ describe("Workspace Routes", () => {
     // ADR-0008: a regular member can no longer self-create Workspaces.
     it("should return 403 for a regular member", async () => {
       mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "member" });
 
-      // Mock requireOrgAccess: return member role
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-
-      const res = await app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify({
-          name: "New Workspace",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ name: "New Workspace" });
 
       expect(res.status).toBe(403);
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.tables.workspace).toHaveLength(2);
     });
 
     // ADR-0008: ownerId is admin-assignable to another org member.
     it("should let an admin assign a different owner who is a member", async () => {
-      mockSession({ id: "admin-1", role: "user" });
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin" });
 
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ userId: "member-2" }]); // owner is a member
-      const mockWorkspace = { id: "ws-1", name: "Member Workspace" };
-      mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
-
-      const res = await app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify({
-          name: "Member Workspace",
-          ownerId: "member-2",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ name: "Member Workspace", ownerId: "member-2" });
 
       expect(res.status).toBe(201);
-      const insertedValues = mockDb.values.mock.calls.at(-1)?.[0];
-      expect(insertedValues).toMatchObject({
+      expect(fake.tables.workspace.at(-1)).toMatchObject({
         ownerId: "member-2",
         organizationId: "org-1",
       });
     });
 
-    // Governance: an admin cannot hand a workspace to a non-member.
-    it("should return 400 when the assigned owner is not an org member", async () => {
-      mockSession({ id: "admin-1", role: "user" });
+    // Governance: an admin cannot hand a workspace to a non-member. `outsider`
+    // is a member of org-2, so this guards the owner lookup's
+    // `organizationMember.organizationId` filter.
+    it("should return 400 when the assigned owner is a member of another org only", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin" });
 
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([]); // owner not a member
-
-      const res = await app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify({
-          name: "Member Workspace",
-          ownerId: "outsider",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ name: "Member Workspace", ownerId: "outsider" });
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: "Owner must be a member of the organization",
       });
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.tables.workspace).toHaveLength(2);
     });
 
     // Removing the owner meanwhile waits on this lock, then must decide the
     // new Workspace too (ADR-0035).
     it("locks the owner's membership until the Workspace is created", async () => {
-      mockSession({ id: "admin-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ userId: "member-2" }]); // owner is a member
-      mockDb.returning.mockResolvedValueOnce([{ id: "ws-1" }]);
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin" });
 
-      const res = await app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify({ name: "Member Workspace", ownerId: "member-2" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ name: "Member Workspace", ownerId: "member-2" });
 
       expect(res.status).toBe(201);
-      expect(mockDb.for).toHaveBeenCalledWith("share");
-      expect(mockDb.for.mock.invocationCallOrder[0]).toBeLessThan(
-        mockDb.insert.mock.invocationCallOrder[0],
+      const lock = fake.queries.findIndex((q) => q.lock === "share");
+      expect(fake.queries[lock]).toEqual({
+        kind: "select",
+        table: "organization_member",
+        lock: "share",
+      });
+      expect(lock).toBeLessThan(
+        fake.queries.findIndex(
+          (q) => q.kind === "insert" && q.table === "workspace",
+        ),
       );
     });
 
     it("lets a super admin with no membership create their own Workspace", async () => {
       mockSession({ id: "super-1", role: "admin" });
-      mockDb.returning.mockResolvedValueOnce([{ id: "ws-1" }]);
-      mockDb.limit.mockResolvedValue([]); // no membership anywhere
+      const fake = world();
 
-      const res = await app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify({ name: "Mine" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ name: "Mine" });
 
       expect(res.status).toBe(201);
+      expect(fake.tables.workspace.at(-1)).toMatchObject({
+        ownerId: "super-1",
+        organizationId: "org-1",
+      });
     });
 
     // The organization id is a tenancy boundary. It is derived from the path
     // after requireOrgAccess, rather than accepted from the request body.
     it("binds a workspace to the authorized organization", async () => {
-      mockSession({ id: "admin-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ userId: "admin-1" }]); // owner is a member
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "ws-1", name: "Bound Workspace", organizationId: "org-1" },
-      ]);
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin" });
 
-      const res = await app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify({
-          name: "Bound Workspace",
-          // A stale or malicious client cannot redirect creation into org-2.
-          organizationId: "org-2",
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        name: "Bound Workspace",
+        // A stale or malicious client cannot redirect creation into org-2.
+        organizationId: "org-2",
       });
 
       expect(res.status).toBe(201);
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          organizationId: "org-1",
-          ownerId: "admin-1",
-        }),
-      );
+      expect(fake.tables.workspace.at(-1)).toMatchObject({
+        organizationId: "org-1",
+        ownerId: "user-1",
+      });
     });
   });
 
   describe("POST /organizations/:orgId/workspaces with provisioned resources", () => {
     const post = (body: unknown) =>
-      app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify(body),
-        headers: { "Content-Type": "application/json" },
-      });
+      app.request("/organizations/org-1/workspaces", json("POST", body));
 
     const provider = {
       name: "OpenAI",
@@ -226,53 +227,74 @@ describe("Workspace Routes", () => {
       memoryExtractionModelId: "gpt-5",
     };
 
-    it("creates the Workspace, its Provider, Attachments and Sandbox in one transaction", async () => {
-      mockSession({ id: "admin-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
-      mockDb.where.mockResolvedValueOnce([{ id: "shared-1" }]); // the Shared Provider resolves in this org
-      mockDb.limit.mockResolvedValueOnce([{ userId: "admin-1" }]); // owner is a member
-      mockDb.returning.mockResolvedValueOnce([{ id: "ws-1", name: "Ready" }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "p-1" }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "sbx-1" }]);
+    // `shared-1` is a Shared Provider of org-1; `elsewhere` one of org-2.
+    const sharedProviders = {
+      provider: [
+        { id: "shared-1", organizationId: "org-1", workspaceId: null },
+        { id: "elsewhere", organizationId: "org-2", workspaceId: null },
+      ],
+    };
 
-      const res = await post({
-        name: "Ready",
-        provider,
-        sharedProviderIds: ["shared-1"],
-        sandbox: { name: "Local", backend: "docker" },
-      });
+    const provisioned = {
+      name: "Ready",
+      provider,
+      sharedProviderIds: ["shared-1"],
+      sandbox: { name: "Local", backend: "docker" },
+    };
+
+    it("creates the Workspace, its Provider, Attachments and Sandbox", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin", rows: sharedProviders });
+
+      const res = await post(provisioned);
 
       expect(res.status).toBe(201);
-      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
-      const inserted = mockDb.values.mock.calls.map((call) => call[0]);
-      expect(inserted).toEqual([
-        expect.objectContaining({ name: "Ready", organizationId: "org-1" }),
-        // The new Provider is scoped to the new Workspace, never the body.
-        expect.objectContaining({
-          name: "OpenAI",
-          workspaceId: "ws-1",
-          organizationId: null,
-        }),
-        [
-          expect.objectContaining({
-            workspaceId: "ws-1",
-            resourceType: "provider",
-            resourceId: "shared-1",
-          }),
-        ],
-        expect.objectContaining({ name: "Local", workspaceId: "ws-1" }),
-      ]);
+      const created = fake.tables.workspace.at(-1)!;
+      expect(created).toMatchObject({ name: "Ready", organizationId: "org-1" });
       // The nested resources are not columns of the Workspace row.
-      expect(inserted[0]).not.toHaveProperty("provider");
-      expect(inserted[0]).not.toHaveProperty("sandbox");
+      expect(created).not.toHaveProperty("provider");
+      expect(created).not.toHaveProperty("sandbox");
+      // The new Provider is scoped to the new Workspace, never the body.
+      expect(fake.tables.provider.at(-1)).toMatchObject({
+        name: "OpenAI",
+        workspaceId: created.id,
+        organizationId: null,
+      });
+      expect(fake.tables.attachment).toEqual([
+        expect.objectContaining({
+          workspaceId: created.id,
+          resourceType: "provider",
+          resourceId: "shared-1",
+        }),
+      ]);
+      expect(fake.tables.sandbox).toEqual([
+        expect.objectContaining({ name: "Local", workspaceId: created.id }),
+      ]);
+    });
+
+    it("writes nothing when a later step of the transaction fails", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({
+        role: "admin",
+        rows: sharedProviders,
+        db: {
+          onInsert: (table) => {
+            if (table === "sandbox") throw dbError();
+          },
+        },
+      });
+
+      const res = await post(provisioned);
+
+      expect(res.status).toBe(500);
+      expect(fake.tables.workspace).toHaveLength(2);
+      expect(fake.tables.provider).toHaveLength(2);
+      expect(fake.tables.attachment ?? []).toEqual([]);
     });
 
     it("returns 404 and writes nothing when a Shared Provider is not in this org", async () => {
-      mockSession({ id: "admin-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
-      mockDb.where.mockResolvedValueOnce([]); // not an org-scoped Provider here
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin", rows: sharedProviders });
 
       const res = await post({
         name: "Ready",
@@ -280,12 +302,12 @@ describe("Workspace Routes", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.queries.some((q) => q.kind === "insert")).toBe(false);
     });
 
     it("returns 400 and writes nothing when the Sandbox is invalid", async () => {
-      mockSession({ id: "admin-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin" });
 
       const res = await post({
         name: "Ready",
@@ -300,7 +322,7 @@ describe("Workspace Routes", () => {
 
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toMatch(/TOKEN/);
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.queries.some((q) => q.kind === "insert")).toBe(false);
     });
   });
 
@@ -326,6 +348,7 @@ describe("Workspace Routes", () => {
       return body.results.map((w) => w.id);
     };
 
+    // Guards the admin branch's `workspace.organizationId` filter.
     it("should return all of the org's workspaces for org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
       seedWorkspaces("admin");
@@ -344,323 +367,203 @@ describe("Workspace Routes", () => {
   describe("GET /organizations/:orgId/workspaces/:workspaceId", () => {
     it("should return workspace", async () => {
       mockSession({ id: "user-1", role: "user" });
-      const mockWorkspace = { id: "ws-1", name: "WS 1" };
-
-      // Mock requireOrgAccess: return member role
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // Mock requireWorkspaceAccess: workspace owned by user
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      // Mock get workspace
-      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      world();
 
       const res = await app.request("/organizations/org-1/workspaces/ws-1");
+
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockWorkspace);
+      expect(await res.json()).toEqual(ws1());
     });
 
     it("returns 404 for a workspace of another organization", async () => {
       mockSession({ id: "user-1", role: "user" });
-      seedDb({
-        organization_member: [
-          {
-            id: "m1",
-            userId: "user-1",
-            organizationId: "org-1",
-            role: "admin",
-          },
-        ],
-        workspace: [{ id: "ws-c", organizationId: "org-2", ownerId: "user-1" }],
-      });
+      world({ role: "admin" });
 
-      const res = await app.request("/organizations/org-1/workspaces/ws-c");
+      const res = await app.request("/organizations/org-1/workspaces/ws-x");
       expect(res.status).toBe(404);
     });
 
     it("should return 404 if workspace not found", async () => {
       mockSession({ id: "user-1", role: "user" });
+      world();
 
-      // Mock requireOrgAccess: return member role
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // Mock requireWorkspaceAccess: workspace not found
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const res = await app.request("/organizations/org-1/workspaces/ws-1");
+      const res = await app.request("/organizations/org-1/workspaces/ws-9");
       expect(res.status).toBe(404);
     });
   });
 
   describe("PUT /organizations/:orgId/workspaces/:workspaceId", () => {
+    const put = (body: Record<string, unknown>) =>
+      app.request(
+        "/organizations/org-1/workspaces/ws-1",
+        json("PUT", { name: "My Workspace", ...body }),
+      );
+
+    /** A Provider of `ws-1`, with whichever memory models the test gives it. */
+    const ownProvider = (over: Store[string][number] = {}) => ({
+      id: "provider-1",
+      organizationId: null,
+      workspaceId: "ws-1",
+      ...over,
+    });
+
+    /**
+     * A Shared Provider of org-2 carrying both memory models: a bare id lookup
+     * would accept it, so only the Scoped resource authority's Workspace/
+     * Organization filter rejects it (GHSA-qg7h-g2rm-37qh).
+     */
+    const otherOrgProvider = {
+      id: "provider-other-org",
+      organizationId: "org-2",
+      workspaceId: null,
+      memoryExtractionModelId: "model-x",
+      embeddingModelId: "embed-x",
+    };
+
     it("should update workspace if owner", async () => {
       mockSession({ id: "user-1", role: "user" });
-      const mockWorkspace = { id: "ws-1", name: "Updated WS" };
+      const fake = world();
 
-      // Mock requireOrgAccess: return member role
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // Mock requireWorkspaceAccess: workspace owned by user
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      // Mock update
-      mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
-
-      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
-        method: "PUT",
-        body: JSON.stringify({ name: "Updated WS" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await put({ name: "Updated WS" });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockWorkspace);
+      expect(await res.json()).toMatchObject({
+        id: "ws-1",
+        name: "Updated WS",
+      });
+      expect(fake.tables.workspace.map((w) => w.name)).toEqual([
+        "Updated WS",
+        "WS 1",
+      ]);
     });
 
     // ADR-0006: delegation flags are admin-only; a non-admin owner's attempt
     // to set them is silently stripped before the update.
     it("strips delegation flags from a non-admin owner's update", async () => {
       mockSession({ id: "user-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "ws-1", name: "My Workspace" },
-      ]);
+      const fake = world();
 
-      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "My Workspace",
-          providerSelfManagement: true,
-          mcpSelfManagement: true,
-          inboundTriggersAllowed: true,
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await put({
+        providerSelfManagement: true,
+        mcpSelfManagement: true,
+        inboundTriggersAllowed: true,
       });
 
       expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls.at(-1)?.[0];
-      expect(setArg).not.toHaveProperty("providerSelfManagement");
-      expect(setArg).not.toHaveProperty("mcpSelfManagement");
-      expect(setArg).not.toHaveProperty("inboundTriggersAllowed");
+      expect(fake.tables.workspace[0]).toMatchObject({
+        name: "My Workspace",
+        providerSelfManagement: false,
+        mcpSelfManagement: false,
+        inboundTriggersAllowed: false,
+      });
     });
 
-    // Security (GHSA-qg7h-g2rm-37qh): a memory Provider pointer must resolve
-    // through the Scoped resource authority, scoped to this Workspace, so a
-    // Provider not visible here — e.g. one owned by another Organization —
-    // resolves to null and is rejected, never stamped. Asserting the delegation
-    // (not just the 400) is what pins the fix: the vulnerable code did a bare id
-    // lookup and never called resolveScoped.
-    it("rejects a memory provider not visible in the workspace", async () => {
+    it("lets an org admin set delegation flags", async () => {
       mockSession({ id: "user-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      resolveScopedMock.mockResolvedValueOnce(null); // not visible in (org-1, ws-1)
+      // An admin, not the owner.
+      const fake = world({ role: "admin", workspace: { ownerId: "member-2" } });
 
-      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "My Workspace",
-          memoryExtractionProviderId: "provider-other-org",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error:
-          "Invalid memory provider settings: memoryExtractionProviderId provider-other-org not found",
-      });
-      expect(resolveScopedMock).toHaveBeenCalledWith(
-        expect.anything(),
-        "provider",
-        "provider-other-org",
-        // The middleware's WorkspaceScope, passed through: what pins the fix is
-        // that the org/workspace pair reaches resolveScoped at all.
-        expect.objectContaining({ orgId: "org-1", workspaceId: "ws-1" }),
-      );
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it("accepts a workspace-visible memory provider that has the model", async () => {
-      mockSession({ id: "user-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      resolveScopedMock.mockResolvedValueOnce({
-        row: {
-          id: "provider-1",
-          memoryExtractionModelId: "model-x",
-        } as never,
-        scope: "workspace",
-      });
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "ws-1", name: "My Workspace" },
-      ]);
-
-      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "My Workspace",
-          memoryExtractionProviderId: "provider-1",
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await put({
+        mcpSelfManagement: true,
+        inboundTriggersAllowed: true,
       });
 
       expect(res.status).toBe(200);
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ memoryExtractionProviderId: "provider-1" }),
-      );
+      expect(fake.tables.workspace[0]).toMatchObject({
+        mcpSelfManagement: true,
+        inboundTriggersAllowed: true,
+      });
     });
-
-    const putAsOwner = (body: Record<string, unknown>) => {
-      mockSession({ id: "user-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      return app.request("/organizations/org-1/workspaces/ws-1", {
-        method: "PUT",
-        body: JSON.stringify({ name: "My Workspace", ...body }),
-        headers: { "Content-Type": "application/json" },
-      });
-    };
-
-    const visibleProvider = (row: Record<string, unknown>) =>
-      resolveScopedMock.mockResolvedValueOnce({
-        row: { id: "provider-1", ...row } as never,
-        scope: "workspace",
-      });
 
     it.each([
       [
         "extraction",
         "memoryExtractionProviderId",
-        "Invalid memory provider settings: memoryExtractionProviderId provider-1 does not have a memory extraction model configured",
+        "Memory extraction provider not found",
       ],
       [
         "embedding",
         "memoryEmbeddingProviderId",
-        "Invalid memory provider settings: memoryEmbeddingProviderId provider-1 does not have an embedding model configured",
+        "Memory embedding provider not found",
+      ],
+    ])(
+      "rejects a memory %s provider of another organization",
+      async (_kind, field, error) => {
+        mockSession({ id: "user-1", role: "user" });
+        const fake = world({ rows: { provider: [otherOrgProvider] } });
+
+        const res = await put({ [field]: "provider-other-org" });
+
+        expect(res.status).toBe(404);
+        expect(await res.json()).toEqual({ error });
+        expect(fake.tables.workspace[0]).toEqual(ws1());
+      },
+    );
+
+    it.each([
+      [
+        "extraction",
+        "memoryExtractionProviderId",
+        "Selected provider does not have a memory extraction model configured",
+      ],
+      [
+        "embedding",
+        "memoryEmbeddingProviderId",
+        "Selected provider does not have an embedding model configured",
       ],
     ])(
       "rejects a memory %s provider without the needed model",
       async (_kind, field, error) => {
-        visibleProvider({});
+        mockSession({ id: "user-1", role: "user" });
+        const fake = world({ rows: { provider: [ownProvider()] } });
 
-        const res = await putAsOwner({ [field]: "provider-1" });
+        const res = await put({ [field]: "provider-1" });
 
         expect(res.status).toBe(400);
         expect(await res.json()).toEqual({ error });
-        expect(mockDb.update).not.toHaveBeenCalled();
+        expect(fake.tables.workspace[0]).toEqual(ws1());
       },
     );
 
-    it("rejects a memory embedding provider not visible in the workspace", async () => {
-      resolveScopedMock.mockResolvedValueOnce(null);
+    it.each([
+      [
+        "extraction",
+        "memoryExtractionProviderId",
+        { memoryExtractionModelId: "model-x" },
+      ],
+      [
+        "embedding",
+        "memoryEmbeddingProviderId",
+        { embeddingModelId: "embed-x" },
+      ],
+    ])(
+      "accepts a workspace-visible memory %s provider that has the model",
+      async (_kind, field, models) => {
+        mockSession({ id: "user-1", role: "user" });
+        const fake = world({ rows: { provider: [ownProvider(models)] } });
 
-      const res = await putAsOwner({
-        memoryEmbeddingProviderId: "provider-other-org",
-      });
+        const res = await put({ [field]: "provider-1" });
 
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error:
-          "Invalid memory provider settings: memoryEmbeddingProviderId provider-other-org not found",
-      });
-      expect(resolveScopedMock).toHaveBeenCalledWith(
-        expect.anything(),
-        "provider",
-        "provider-other-org",
-        expect.objectContaining({ orgId: "org-1", workspaceId: "ws-1" }),
-      );
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it("names both memory providers when both are invalid", async () => {
-      visibleProvider({});
-      resolveScopedMock.mockResolvedValueOnce(null);
-
-      const res = await putAsOwner({
-        memoryExtractionProviderId: "provider-1",
-        memoryEmbeddingProviderId: "provider-other-org",
-      });
-
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error:
-          "Invalid memory provider settings: memoryExtractionProviderId provider-1 does not have a memory extraction model configured; memoryEmbeddingProviderId provider-other-org not found",
-      });
-      expect(mockDb.update).not.toHaveBeenCalled();
-    });
-
-    it("accepts a workspace-visible memory embedding provider that has the model", async () => {
-      visibleProvider({ embeddingModelId: "embed-x" });
-      mockDb.returning.mockResolvedValueOnce([{ id: "ws-1" }]);
-
-      const res = await putAsOwner({ memoryEmbeddingProviderId: "provider-1" });
-
-      expect(res.status).toBe(200);
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ memoryEmbeddingProviderId: "provider-1" }),
-      );
-    });
-
-    it("lets an org admin set delegation flags", async () => {
-      mockSession({ id: "user-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-2", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess (admin, not owner)
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "ws-1", name: "My Workspace" },
-      ]);
-
-      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "My Workspace",
-          mcpSelfManagement: true,
-          inboundTriggersAllowed: true,
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-
-      expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls.at(-1)?.[0];
-      expect(setArg).toMatchObject({
-        mcpSelfManagement: true,
-        inboundTriggersAllowed: true,
-      });
-    });
+        expect(res.status).toBe(200);
+        expect(fake.tables.workspace[0]).toMatchObject({
+          [field]: "provider-1",
+        });
+      },
+    );
   });
 
   describe("DELETE /organizations/:orgId/workspaces/:workspaceId", () => {
     it("should delete workspace if owner", async () => {
       mockSession({ id: "user-1", role: "user" });
-
-      // Mock requireOrgAccess: return member role
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // Mock requireWorkspaceAccess: workspace owned by user
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      // Mock delete — order: orgAccess where (chained) → workspaceAccess where
-      // (chained) → destroyWorkspaceSandboxes select-where (resolves []) →
-      // Agent avatar select-where (resolves []) → workspace delete where
-      // (resolves) → provider delete where (resolves).
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+      const fake = world({
+        rows: {
+          provider: [
+            { id: "p-own", organizationId: null, workspaceId: "ws-1" },
+            { id: "p-other", organizationId: null, workspaceId: "ws-x" },
+            { id: "p-shared", organizationId: "org-1", workspaceId: null },
+          ],
+        },
+      });
 
       const res = await app.request("/organizations/org-1/workspaces/ws-1", {
         method: "DELETE",
@@ -668,14 +571,17 @@ describe("Workspace Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Workspace deleted" });
+      expect(fake.tables.workspace.map((w) => w.id)).toEqual(["ws-x"]);
       // The route must delete Workspace-scoped Providers itself (issue #661):
-      // `provider.workspaceId` carries no FK, so nothing cascades this away.
-      expect(mockDb.delete).toHaveBeenCalledWith(providerTable);
-      const deleteCalls = mockDb.delete.mock.calls.map((call) => call[0]);
-      const workspaceDeleteIndex = deleteCalls.indexOf(workspaceTable);
-      const providerDeleteIndex = deleteCalls.indexOf(providerTable);
-      expect(workspaceDeleteIndex).toBeGreaterThanOrEqual(0);
-      expect(providerDeleteIndex).toBeGreaterThan(workspaceDeleteIndex);
+      // `provider.workspaceId` carries no FK, so nothing cascades this away —
+      // and only after the Workspace, which cascades its Agents first.
+      expect(fake.tables.provider.map((p) => p.id)).toEqual([
+        "p-other",
+        "p-shared",
+      ]);
+      expect(
+        fake.queries.filter((q) => q.kind === "delete").map((q) => q.table),
+      ).toEqual(["workspace", "provider"]);
     });
 
     describe("stored files", () => {
@@ -691,26 +597,29 @@ describe("Workspace Routes", () => {
         "agents/agent-2/avatar-b.webp",
       ];
 
-      const seed = () =>
-        seedDb({
-          organization_member: [
-            {
-              id: "m1",
-              userId: "user-1",
-              organizationId: "org-1",
-              role: "member",
-            },
-          ],
-          workspace: [
-            { id: "ws-1", organizationId: "org-1", ownerId: "user-1" },
-            { id: "ws-10", organizationId: "org-1", ownerId: "user-1" },
-          ],
-          agent: [
-            { id: "agent-1", workspaceId: "ws-1", avatarKey: avatar },
-            { id: "agent-2", workspaceId: "ws-10", avatarKey: outside[1] },
-            { id: "agent-3", workspaceId: "ws-1", avatarKey: null },
-          ],
-        });
+      const seed = (options?: FakeDbOptions) =>
+        seedDb(
+          {
+            organization_member: [
+              {
+                id: "m1",
+                userId: "user-1",
+                organizationId: "org-1",
+                role: "member",
+              },
+            ],
+            workspace: [
+              { id: "ws-1", organizationId: "org-1", ownerId: "user-1" },
+              { id: "ws-10", organizationId: "org-1", ownerId: "user-1" },
+            ],
+            agent: [
+              { id: "agent-1", workspaceId: "ws-1", avatarKey: avatar },
+              { id: "agent-2", workspaceId: "ws-10", avatarKey: outside[1] },
+              { id: "agent-3", workspaceId: "ws-1", avatarKey: null },
+            ],
+          },
+          options,
+        );
 
       it("removes the Workspace's files and its Agents' avatars, and nothing else", async () => {
         mockSession({ id: "user-1", role: "user" });
@@ -732,18 +641,22 @@ describe("Workspace Routes", () => {
 
       it("leaves storage untouched when the DB delete fails", async () => {
         mockSession({ id: "user-1", role: "user" });
-        const fake = seed();
+        const fake = seed({
+          onQuery: (query) => {
+            if (query.kind === "delete") throw dbError();
+          },
+        });
         await putStoredFiles([...inside, avatar]);
-        vi.spyOn(
-          fake.handle as { transaction: () => Promise<never> },
-          "transaction",
-        ).mockRejectedValue(new Error("db down"));
 
         const res = await app.request("/organizations/org-1/workspaces/ws-1", {
           method: "DELETE",
         });
 
         expect(res.status).toBe(500);
+        expect(fake.tables.workspace.map((row) => row.id)).toEqual([
+          "ws-1",
+          "ws-10",
+        ]);
         for (const key of [...inside, avatar]) {
           expect(await isStored(key)).toBe(true);
         }
@@ -771,7 +684,7 @@ describe("Workspace Routes", () => {
   });
 
   describe("POST /organizations/:orgId/workspaces/:workspaceId/transfer", () => {
-    const world = () =>
+    const transferWorld = () =>
       seedDb({
         organization_member: [
           {
@@ -796,15 +709,14 @@ describe("Workspace Routes", () => {
         workspace: [{ id: "ws-1", organizationId: "org-1", ownerId: "u-old" }],
       });
     const transfer = (body: unknown) =>
-      app.request("/organizations/org-1/workspaces/ws-1/transfer", {
-        method: "POST",
-        body: JSON.stringify(body),
-        headers: { "Content-Type": "application/json" },
-      });
+      app.request(
+        "/organizations/org-1/workspaces/ws-1/transfer",
+        json("POST", body),
+      );
 
     it("transfers the Workspace for an Org Admin, naming them to the new Owner", async () => {
       mockSession({ id: "admin-1", name: "Ada", role: "user" });
-      world();
+      transferWorld();
 
       const res = await transfer({ newOwnerId: "u-new", keepHistory: false });
 
@@ -824,7 +736,7 @@ describe("Workspace Routes", () => {
       ["another member", "u-new"],
     ])("refuses %s with 403", async (_, id) => {
       mockSession({ id, role: "user" });
-      world();
+      transferWorld();
 
       const res = await transfer({ newOwnerId: "u-new", keepHistory: true });
 
@@ -834,8 +746,8 @@ describe("Workspace Routes", () => {
 
     it("answers 400 when the recipient is refused", async () => {
       mockSession({ id: "admin-1", role: "user" });
-      world();
-      transferWorkspaceMock.mockRejectedValueOnce(
+      transferWorld();
+      transferWorkspaceMock.mockRejectedValue(
         new ValidationError("New Owner must be a member of the organization"),
       );
 
@@ -849,7 +761,7 @@ describe("Workspace Routes", () => {
 
     it("answers 400 without a history choice", async () => {
       mockSession({ id: "admin-1", role: "user" });
-      world();
+      transferWorld();
 
       const res = await transfer({ newOwnerId: "u-new" });
 
@@ -859,7 +771,7 @@ describe("Workspace Routes", () => {
 
     it("refuses the old Owner once the Workspace is someone else's", async () => {
       mockSession({ id: "u-old", role: "user" });
-      const fake = world();
+      const fake = transferWorld();
       fake.tables.workspace[0].ownerId = "u-new";
 
       const res = await app.request("/organizations/org-1/workspaces/ws-1");

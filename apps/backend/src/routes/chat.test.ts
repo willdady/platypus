@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  dbError,
   mockDb,
   mockNoSession,
   mockSession,
@@ -902,7 +903,7 @@ describe("Chat Routes", () => {
           fake.handle as { delete: () => never },
           "delete",
         ).mockImplementation(() => {
-          throw new Error("db down");
+          throw dbError("08006", "db down");
         });
 
         const res = await app.request(`${baseUrl}/chat-1`, {

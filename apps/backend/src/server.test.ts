@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "./test-utils.ts";
+import { dbError, mockDb, mockSession, resetMockDb } from "./test-utils.ts";
 import app from "./server.ts";
 import { logger } from "./logger.ts";
 
@@ -57,9 +57,7 @@ describe("app error responses", () => {
 
   it("answers a thrown error with only an error key", async () => {
     mockSession({ id: "user-1", email: "test@example.com" });
-    mockDb.returning.mockRejectedValueOnce(
-      Object.assign(new Error("Failed query"), { cause: { code: "23505" } }),
-    );
+    mockDb.returning.mockRejectedValueOnce(dbError("23505"));
 
     const res = await app.request("/users/me/contexts", {
       method: "POST",

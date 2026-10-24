@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  mockDb,
+  dbError,
   mockSession,
   mockNoSession,
   resetMockDb,
@@ -38,19 +38,19 @@ describe("Organization Routes", () => {
 
     it("should return 403 if not super admin", async () => {
       mockSession({ id: "user-1", role: "user" });
+      const fake = seedDb();
       const res = await app.request("/organizations", {
         method: "POST",
         body: JSON.stringify({ name: "New Org" }),
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(403);
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.tables.organization ?? []).toEqual([]);
     });
 
     it("should create organization if super admin", async () => {
       mockSession({ id: "admin-1", role: "admin" });
-      const mockOrg = { id: "org-1", name: "New Org" };
-      mockDb.returning.mockResolvedValue([mockOrg]);
+      const fake = seedDb();
 
       const res = await app.request("/organizations", {
         method: "POST",
@@ -59,10 +59,11 @@ describe("Organization Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockOrg);
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "New Org" }),
-      );
+      const body = (await res.json()) as { id: string; name: string };
+      expect(body).toMatchObject({ name: "New Org" });
+      expect(fake.tables.organization).toEqual([
+        expect.objectContaining({ id: body.id, name: "New Org" }),
+      ]);
     });
   });
 
@@ -107,28 +108,57 @@ describe("Organization Routes", () => {
   });
 
   describe("GET /organizations/:orgId", () => {
-    it("should return 403 if user has no access", async () => {
-      mockSession({ id: "user-1", role: "user" });
-      // requireOrgAccess: db.select().from().where().limit(1)
-      mockDb.limit.mockResolvedValue([]); // No membership found
+    // `user-1` is a member of `org-1` only; `org-2` is seeded first, so a
+    // lookup that dropped its `id` filter returns it.
+    const seed = () =>
+      seedDb({
+        organization: [
+          { id: "org-2", name: "Org 2" },
+          { id: "org-1", name: "Org 1" },
+        ],
+        organization_member: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: "org-1",
+            role: "member",
+          },
+          {
+            id: "m2",
+            userId: "user-2",
+            organizationId: "org-2",
+            role: "admin",
+          },
+        ],
+      });
 
-      const res = await app.request("/organizations/org-1");
+    it("should return 403 if user has no access", async () => {
+      // A member of `org-1` only: the membership lookup's `organizationId`
+      // scope is what keeps `org-2` out of reach.
+      mockSession({ id: "user-1", role: "user" });
+      seed();
+
+      const res = await app.request("/organizations/org-2");
       expect(res.status).toBe(403);
     });
 
     it("should return organization if user has access", async () => {
+      // Guards the `id` filter: `org-2` must not come back for `org-1`.
       mockSession({ id: "user-1", role: "user" });
-      const mockOrg = { id: "org-1", name: "Org 1" };
-
-      // requireOrgAccess: db.select().from().where().limit(1)
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-
-      // get organization: db.select().from().where().limit(1)
-      mockDb.limit.mockResolvedValueOnce([mockOrg]);
+      seed();
 
       const res = await app.request("/organizations/org-1");
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockOrg);
+      expect(await res.json()).toEqual({ id: "org-1", name: "Org 1" });
+    });
+
+    it("returns 404 for a super admin asking for a missing Organization", async () => {
+      mockSession({ id: "admin-1", role: "admin" });
+      seed();
+
+      const res = await app.request("/organizations/org-9");
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Organization not found" });
     });
   });
 
@@ -161,47 +191,60 @@ describe("Organization Routes", () => {
   });
 
   describe("PUT /organizations/:orgId", () => {
-    it("returns 403 for a non-admin member", async () => {
-      mockSession({ id: "user-1", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+    const seed = (role: "admin" | "member") =>
+      seedDb({
+        organization: [
+          { id: "org-1", name: "Org 1" },
+          { id: "org-2", name: "Org 2" },
+        ],
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: "org-1", role },
+        ],
+      });
 
-      const res = await app.request("/organizations/org-1", {
+    const put = (body: unknown) =>
+      app.request("/organizations/org-1", {
         method: "PUT",
-        body: JSON.stringify({ name: "Renamed" }),
+        body: JSON.stringify(body),
         headers: { "Content-Type": "application/json" },
       });
 
+    it("returns 403 for a non-admin member", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      const fake = seed("member");
+
+      const res = await put({ name: "Renamed" });
+
       expect(res.status).toBe(403);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(fake.tables.organization.map((o) => o.name)).toEqual([
+        "Org 1",
+        "Org 2",
+      ]);
     });
 
     it("should accept and persist identityContext for an admin", async () => {
-      mockSession({ id: "admin-1", role: "user" });
-      const updated = {
-        id: "org-1",
+      mockSession({ id: "user-1", role: "user" });
+      const fake = seed("admin");
+
+      const res = await put({
         name: "Org 1",
         identityContext: "We are Acme.",
-      };
-
-      // requireOrgAccess(["admin"]): db.select().from().where().limit(1)
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      // update: db.update().set().where().returning()
-      mockDb.returning.mockResolvedValueOnce([updated]);
-
-      const res = await app.request("/organizations/org-1", {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Org 1",
-          identityContext: "We are Acme.",
-        }),
-        headers: { "Content-Type": "application/json" },
       });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(updated);
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ identityContext: "We are Acme." }),
-      );
+      expect(await res.json()).toMatchObject({
+        id: "org-1",
+        name: "Org 1",
+        identityContext: "We are Acme.",
+      });
+      // Guards the update's `id` filter: `org-2` is left as it was.
+      expect(fake.tables.organization).toEqual([
+        expect.objectContaining({
+          id: "org-1",
+          identityContext: "We are Acme.",
+        }),
+        { id: "org-2", name: "Org 2" },
+      ]);
     });
   });
 
@@ -381,7 +424,7 @@ describe("Organization Routes", () => {
       vi.spyOn(
         fake.handle as { transaction: () => Promise<never> },
         "transaction",
-      ).mockRejectedValue(new Error("db down"));
+      ).mockRejectedValue(dbError("08006", "db down"));
 
       const res = await app.request("/organizations/org-1", {
         method: "DELETE",

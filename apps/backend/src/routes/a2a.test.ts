@@ -4,6 +4,7 @@ import { MockLanguageModelV3, convertArrayToReadableStream } from "ai/test";
 import { tool } from "ai";
 import { z } from "zod";
 import {
+  dbError,
   makePluginContext,
   resetMockDb,
   seedDb,
@@ -2096,7 +2097,8 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       {},
       {
         onInsert: (table) => {
-          if (failing && table === "a2a_task") throw new Error("disk full");
+          if (failing && table === "a2a_task")
+            throw dbError("53100", "disk full");
         },
       },
     );
@@ -3219,7 +3221,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
       const handle = fake.handle as { select: (...args: unknown[]) => unknown };
       const select = handle.select;
       handle.select = () => {
-        throw new Error("connection lost");
+        throw dbError("08006", "connection lost");
       };
       await vi.advanceTimersByTimeAsync(5_000);
       handle.select = select;
@@ -5448,7 +5450,7 @@ describe("POST /a2a/:endpointId — streaming", () => {
     const handle = fake.handle as { select: (...args: unknown[]) => unknown };
     const select = handle.select;
     handle.select = () => {
-      throw new Error("connection to 10.0.0.5 lost");
+      throw dbError("08006", "connection to 10.0.0.5 lost");
     };
     const body = await res.text();
     handle.select = select;

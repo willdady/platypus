@@ -11,6 +11,7 @@ import {
 } from "./fake-db.ts";
 
 export type { FakeDb, Row, Store } from "./fake-db.ts";
+export { dbError } from "./fake-db.ts";
 import type {
   PluginConfigContext,
   PluginLogger,

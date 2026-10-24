@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { dbError, mockDb, resetMockDb } from "../test-utils.ts";
 import { mockLogger } from "../test-setup.ts";
 
 const { mockDispatchWebhookEvent } = vi.hoisted(() => ({
@@ -133,7 +133,7 @@ describe("announceTriggerRunsEnded", () => {
   });
 
   it("logs rather than throws when the lookup fails", async () => {
-    mockDb.where.mockRejectedValueOnce(new Error("db down"));
+    mockDb.where.mockRejectedValueOnce(dbError("08006", "db down"));
 
     await expect(
       announceTriggerRunsEnded([endedRun()]),

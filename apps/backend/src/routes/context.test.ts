@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  dbError,
   mockDb,
   mockSession,
   mockNoSession,
@@ -8,16 +9,11 @@ import {
 import app from "../server.ts";
 import { logger } from "../logger.ts";
 
-// drizzle-orm wraps the driver error in a DrizzleQueryError, with the pg code
-// on its `cause`.
 const uniqueViolation = () =>
-  Object.assign(new Error("DrizzleQueryError: Failed query"), {
-    cause: {
-      code: "23505",
-      message:
-        'duplicate key value violates unique constraint "unique_context"',
-    },
-  });
+  dbError(
+    "23505",
+    'duplicate key value violates unique constraint "unique_context"',
+  );
 
 describe("Context Routes", () => {
   beforeEach(() => {

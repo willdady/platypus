@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { seedDb, type Store } from "../test-utils.ts";
+import { dbError, seedDb, type Store } from "../test-utils.ts";
 import { fakeLockPool } from "./advisory-lock.test-fixtures.ts";
 import {
   seedFirstBoot,
@@ -170,7 +170,7 @@ describe("seedFirstBoot", () => {
     const fake = createFakeDb({
       onInsert: (table) => {
         if (table === "organization_member")
-          throw new Error("connection terminated");
+          throw dbError("08006", "connection terminated");
       },
     });
 
@@ -179,7 +179,7 @@ describe("seedFirstBoot", () => {
         createUser: createUserApi(fake.tables),
         env: VALID_ENV,
       }),
-    ).rejects.toThrow(/connection terminated/);
+    ).rejects.toMatchObject({ cause: { message: "connection terminated" } });
 
     expect(fake.tables.organization).toHaveLength(0);
     expect(fake.tables.organization_member).toHaveLength(0);
@@ -193,7 +193,7 @@ describe("seedFirstBoot", () => {
     const fake = createFakeDb({
       onInsert: (table) => {
         if (table === "organization_member")
-          throw new Error("connection terminated");
+          throw dbError("08006", "connection terminated");
       },
     });
     const handle = asSeedDb(fake);
@@ -201,7 +201,7 @@ describe("seedFirstBoot", () => {
       get: (target, prop, receiver) =>
         prop === "delete"
           ? () => {
-              throw new Error("database gone");
+              throw dbError("08006", "database gone");
             }
           : (Reflect.get(target, prop, receiver) as unknown),
     });
@@ -212,7 +212,7 @@ describe("seedFirstBoot", () => {
         createUser: createUserApi(fake.tables),
         env: VALID_ENV,
       }),
-    ).rejects.toThrow(/connection terminated/);
+    ).rejects.toMatchObject({ cause: { message: "connection terminated" } });
 
     expect(fake.tables.user).toHaveLength(1);
     expect(error).toHaveBeenCalledWith(
@@ -226,7 +226,7 @@ describe("seedFirstBoot", () => {
     const fake = createFakeDb({
       onInsert: (table) => {
         if (failing && table === "organization_member") {
-          throw new Error("connection terminated");
+          throw dbError("08006", "connection terminated");
         }
       },
     });
@@ -234,7 +234,7 @@ describe("seedFirstBoot", () => {
 
     await expect(
       seedFirstBoot(asSeedDb(fake), { createUser, env: VALID_ENV }),
-    ).rejects.toThrow(/connection terminated/);
+    ).rejects.toMatchObject({ cause: { message: "connection terminated" } });
 
     failing = false;
 
