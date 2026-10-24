@@ -33,6 +33,7 @@ import {
   resolveOwned,
   updateOwned,
 } from "./workspace-resource.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /** Makes a leaked Inbound Trigger token recognisable; see `generateBearerToken`. */
 const INBOUND_TOKEN_PREFIX = "pit_";
@@ -380,10 +381,12 @@ export async function createTrigger(
     nextRunAt,
     ...tokenFields,
   };
-  const [row] = await db.transaction(async (tx) => {
-    if (oneOff) await requireOneOffRoom(tx, ctx);
-    return tx.insert(triggerTable).values(values).returning();
-  });
+  const row = oneRow(
+    await db.transaction(async (tx) => {
+      if (oneOff) await requireOneOffRoom(tx, ctx);
+      return tx.insert(triggerTable).values(values).returning();
+    }),
+  );
   // The token leaves here once, beside the row, and is never readable again:
   // only its hash was stored.
   return token ? { ...row, issuedToken: token } : row;

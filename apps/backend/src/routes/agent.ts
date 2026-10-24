@@ -28,6 +28,7 @@ import {
 import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
 import { agentWithAvatarUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
+import { NotFoundError } from "../errors.ts";
 
 const agent = new Hono<{ Variables: Variables }>();
 
@@ -175,13 +176,14 @@ agent.post(
       return c.json({ error: result.error }, 400);
     }
 
-    const record = await db
+    const [record] = await db
       .update(agentTable)
       .set({ avatarKey: result.key, updatedAt: new Date() })
       .where(workspaceScopedWhere("agent", agentId, scope.workspaceId))
       .returning();
 
-    return c.json(agentWithAvatarUrl(record[0], baseUrl));
+    if (!record) throw new NotFoundError("Agent not found");
+    return c.json(agentWithAvatarUrl(record, baseUrl));
   },
 );
 
@@ -201,13 +203,14 @@ agent.delete(
 
     await deleteAvatar(found.row.avatarKey);
 
-    const record = await db
+    const [record] = await db
       .update(agentTable)
       .set({ avatarKey: null, updatedAt: new Date() })
       .where(workspaceScopedWhere("agent", agentId, scope.workspaceId))
       .returning();
 
-    return c.json(agentWithAvatarUrl(record[0], baseUrl));
+    if (!record) throw new NotFoundError("Agent not found");
+    return c.json(agentWithAvatarUrl(record, baseUrl));
   },
 );
 

@@ -15,6 +15,7 @@ import {
 } from "../errors.ts";
 import { isScopedResourceType, resolveOrgScoped } from "./scoped-resource.ts";
 import { agentPinWhere } from "./agent-pin.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The Attachment module: the rules for attaching and detaching a Shared
@@ -122,10 +123,12 @@ export async function attachResource(
   }
 
   try {
-    const [row] = await db
-      .insert(attachmentTable)
-      .values({ id: nanoid(), workspaceId, resourceType, resourceId })
-      .returning();
+    const row = oneRow(
+      await db
+        .insert(attachmentTable)
+        .values({ id: nanoid(), workspaceId, resourceType, resourceId })
+        .returning(),
+    );
     return row;
   } catch (error) {
     // Already attached → the unique constraint refuses the duplicate pair.

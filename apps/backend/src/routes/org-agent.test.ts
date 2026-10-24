@@ -358,6 +358,32 @@ describe("Organization Agent Routes", () => {
       );
     });
 
+    it("POST avatar 404s when the agent is deleted before the write", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "agent-1", avatarKey: null }]); // agent lookup
+      vi.mocked(storeAvatar).mockResolvedValueOnce({ ok: true, key: "new" });
+      mockDb.returning.mockResolvedValueOnce([]); // update matched nothing
+
+      const res = await upload();
+
+      expect(res.status).toBe(404);
+    });
+
+    it("DELETE avatar 404s when the agent is deleted before the write", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ avatarKey: null }]); // agent lookup
+      mockDb.returning.mockResolvedValueOnce([]); // update matched nothing
+
+      const res = await app.request(`${baseUrl}/agent-1/avatar`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(404);
+    });
+
     it("DELETE avatar 404s when the org agent does not exist", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess

@@ -99,12 +99,13 @@ orgAgent.post(
       return c.json({ error: result.error }, 400);
     }
 
-    const record = await db
+    const [record] = await db
       .update(agentTable)
       .set({ avatarKey: result.key, updatedAt: new Date() })
       .where(orgScopedWhere("agent", agentId, orgId))
       .returning();
-    return c.json(agentWithAvatarUrl(record[0], baseUrl));
+    if (!record) throw new NotFoundError("Agent not found");
+    return c.json(agentWithAvatarUrl(record, baseUrl));
   },
 );
 
@@ -122,12 +123,13 @@ orgAgent.delete(
 
     await deleteAvatar(existing.avatarKey);
 
-    const record = await db
+    const [record] = await db
       .update(agentTable)
       .set({ avatarKey: null, updatedAt: new Date() })
       .where(orgScopedWhere("agent", agentId, orgId))
       .returning();
-    return c.json(agentWithAvatarUrl(record[0], baseUrl));
+    if (!record) throw new NotFoundError("Agent not found");
+    return c.json(agentWithAvatarUrl(record, baseUrl));
   },
 );
 

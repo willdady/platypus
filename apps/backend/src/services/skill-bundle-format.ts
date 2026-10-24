@@ -278,7 +278,8 @@ const parseSkillMd = (
 
   const result = fieldsSchema.safeParse(mapped);
   if (!result.success) {
-    const issue = result.error.issues[0];
+    const [issue] = result.error.issues;
+    if (!issue) fail("SKILL.md is invalid");
     const field = String(issue.path[0]);
     const label =
       field === "body"

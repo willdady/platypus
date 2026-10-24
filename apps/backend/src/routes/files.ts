@@ -21,14 +21,11 @@ const files = new Hono<{ Variables: Variables }>();
 function parseStorageKey(
   key: string,
 ): { orgId: string; workspaceId: string } | null {
-  const parts = key.split("/");
-  if (parts.length < 2) {
+  const [orgId, workspaceId] = key.split("/");
+  if (orgId === undefined || workspaceId === undefined) {
     return null;
   }
-  return {
-    orgId: parts[0],
-    workspaceId: parts[1],
-  };
+  return { orgId, workspaceId };
 }
 
 /**

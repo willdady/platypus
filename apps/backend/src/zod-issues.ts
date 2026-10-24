@@ -92,20 +92,22 @@ const mergeAlternatives = (
   branches: AnnotatedLeaf[][],
 ): AnnotatedLeaf[] | undefined => {
   if (branches.some((branch) => branch.length !== 1)) return undefined;
-  const leaves = branches.map((branch) => branch[0]);
+  const leaves = branches.flat();
+  const [first] = leaves;
+  if (!first) return undefined;
 
-  const path = formatPath(leaves[0].path);
+  const path = formatPath(first.path);
   if (leaves.some((leaf) => formatPath(leaf.path) !== path)) return undefined;
 
   const expected = leaves.map((leaf) => leaf.expected);
   if (expected.some((type) => type === undefined)) return undefined;
 
   // Every branch rejected the same value, so any branch's message names it.
-  const received = /received (.+)$/.exec(leaves[0].message)?.[1];
+  const received = /received (.+)$/.exec(first.message)?.[1];
   const alternatives = [...new Set(expected)].join(" | ");
   return [
     {
-      path: leaves[0].path,
+      path: first.path,
       message: received
         ? `Invalid input: expected ${alternatives}, received ${received}`
         : `Invalid input: expected ${alternatives}`,
@@ -130,7 +132,9 @@ const selectBranch = (branches: AnnotatedLeaf[][]): AnnotatedLeaf[] => {
   const furthest = candidates.filter(
     (branch) => deepestPath(branch) === deepest,
   );
-  if (furthest.length === 1) return furthest[0];
+  const [first] = furthest;
+  if (!first) return [];
+  if (furthest.length === 1) return first;
 
   const merged = mergeAlternatives(furthest);
   if (merged) return merged;
@@ -141,7 +145,7 @@ const selectBranch = (branches: AnnotatedLeaf[][]): AnnotatedLeaf[] => {
   // objected least is the closer match: it agreed on everything the other one
   // additionally complained about, such as the discriminating `role`.
   const fewest = Math.min(...furthest.map((branch) => branch.length));
-  return furthest.find((branch) => branch.length === fewest) ?? furthest[0];
+  return furthest.find((branch) => branch.length === fewest) ?? first;
 };
 
 /** A leaf carrying the `expected` type through branch selection. */

@@ -746,6 +746,39 @@ describe("Agent Routes", () => {
       expect(res.status).toBe(status);
       expect(deleteAvatar).not.toHaveBeenCalled();
     });
+
+    // The agent is deleted between the existence check and the avatar write.
+    const deleteAgent = (fake: FakeDb) => {
+      fake.tables.agent = fake.tables.agent.filter((a) => a.id !== "agent-1");
+    };
+
+    it("POST 404s when the agent is deleted mid-upload", async () => {
+      mockSession();
+      const fake = world();
+      vi.mocked(storeAvatar).mockImplementationOnce(() => {
+        deleteAgent(fake);
+        return Promise.resolve({ ok: true, key: "new" });
+      });
+
+      const res = await upload("agent-1");
+
+      expect(res.status).toBe(404);
+    });
+
+    it("DELETE 404s when the agent is deleted mid-request", async () => {
+      mockSession();
+      const fake = world();
+      vi.mocked(deleteAvatar).mockImplementationOnce(() => {
+        deleteAgent(fake);
+        return Promise.resolve();
+      });
+
+      const res = await app.request(`${baseUrl}/agent-1/avatar`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(404);
+    });
   });
 
   describe("pin routes", () => {

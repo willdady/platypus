@@ -20,6 +20,7 @@ import {
   requireWorkspaceMutable,
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The MCP write model: create/update/delete that both route surfaces adapt
@@ -74,17 +75,19 @@ export async function createMcp(
   const slug = deriveMcpSlug(fields.name);
   await assertMcpSlugAvailable(slug, { orgId });
 
-  const [row] = await db
-    .insert(mcpTable)
-    .values({
-      id: nanoid(),
-      ...fields,
-      slug,
-      ...(scope.kind === "workspace"
-        ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
-        : { organizationId: scope.orgId, workspaceId: null }),
-    })
-    .returning();
+  const row = oneRow(
+    await db
+      .insert(mcpTable)
+      .values({
+        id: nanoid(),
+        ...fields,
+        slug,
+        ...(scope.kind === "workspace"
+          ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
+          : { organizationId: scope.orgId, workspaceId: null }),
+      })
+      .returning(),
+  );
   return row;
 }
 

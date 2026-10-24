@@ -25,6 +25,7 @@ import {
   type Database,
 } from "./scoped-resource.ts";
 import type { SkillRow, SkillScope } from "./skill.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * A Skill's bundle (ADR-0036): `SKILL.md` on the `skill` row, every other file
@@ -128,6 +129,7 @@ export const rehashSkill = async (
     .set({ bundleHash: await hashSkillRow(database, row) })
     .where(eq(skillTable.id, row.id))
     .returning();
+  if (!updated) throw new NotFoundError("Skill not found");
   return updated;
 };
 
@@ -187,17 +189,19 @@ export async function importSkillBundle(
   const { prefix, rows } = await storeFiles(orgIdOf(scope), id, bundle.files);
   try {
     return await db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(skillTable)
-        .values({
-          id,
-          ...bundle.fields,
-          frontmatter: bundle.frontmatter,
-          bundleHash: bundleHash(bundle),
-          needsSandbox: bundleNeedsSandbox(bundle.files),
-          ...scopeColumnsOf(scope),
-        })
-        .returning();
+      const row = oneRow(
+        await tx
+          .insert(skillTable)
+          .values({
+            id,
+            ...bundle.fields,
+            frontmatter: bundle.frontmatter,
+            bundleHash: bundleHash(bundle),
+            needsSandbox: bundleNeedsSandbox(bundle.files),
+            ...scopeColumnsOf(scope),
+          })
+          .returning(),
+      );
       if (rows.length > 0) await tx.insert(skillFileTable).values(rows);
       return row;
     });
