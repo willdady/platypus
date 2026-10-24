@@ -7,6 +7,12 @@ import {
   type PlatypusUIMessage,
 } from "@platypus/schemas";
 import { setErrorReporter } from "@/lib/error-reporting";
+import { authMock } from "@/test/test-utils";
+
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ orgId: "org1", workspaceId: "ws1" }),
+}));
 
 import {
   ChatMessage,
@@ -751,11 +757,14 @@ describe("ChatMessage generic tool renderer exclusion", () => {
     ).toBe(false);
   });
 
-  // A failed fsDownload has no file to offer, so it renders as a normal tool
-  // error rather than as a download card.
+  // A failed, denied or held fsDownload has no file to offer, so it renders
+  // as a normal tool call rather than in the tray.
   it.each([
+    ["input-available", false],
     ["output-available", false],
     ["output-error", true],
+    ["output-denied", true],
+    ["approval-requested", true],
   ])("treats an fsDownload part in %s as generic: %s", (state, generic) => {
     expect(
       isGenericToolPart({
@@ -1484,5 +1493,106 @@ describe("ChatMessage Tool call groups", () => {
       "2 tool calls: alpha, beta (with errors)",
     );
     expect(groupHeaders()[0]).toHaveTextContent("Error");
+  });
+});
+
+describe("ChatMessage offered files", () => {
+  const offer = (id: string, path: string, state = "output-available") =>
+    ({
+      type: "tool-fsDownload",
+      toolCallId: id,
+      state,
+      input: { path },
+      output: state === "output-available" ? { path, size: 10 } : undefined,
+      errorText: state === "output-error" ? "File not found" : undefined,
+      approval:
+        state === "output-denied"
+          ? { id: "a1", approved: false, reason: "Blocked by a Tool gate" }
+          : undefined,
+    }) as unknown as MessagePart;
+
+  const call = (id: string, toolName: string) =>
+    ({
+      type: "dynamic-tool",
+      toolName,
+      toolCallId: id,
+      state: "output-available",
+      input: {},
+      output: "ok",
+    }) as unknown as MessagePart;
+
+  const message = (parts: MessagePart[]): PlatypusUIMessage => ({
+    id: "m1",
+    role: "assistant",
+    parts,
+  });
+
+  const tray = () => screen.queryByRole("list", { name: "Files" });
+
+  it("lists each offered path once, in a tray under the finished reply", () => {
+    renderMessage(
+      message([
+        offer("c1", "a.csv"),
+        { type: "step-start" },
+        offer("c2", "a.csv"),
+        offer("c3", "b.pdf"),
+        { type: "text", text: "Done" },
+      ]),
+    );
+
+    expect(screen.getAllByRole("link", { name: /download/i })).toHaveLength(2);
+    expect(tray()).toBeVisible();
+  });
+
+  it("shows no tray while the turn is in flight", () => {
+    renderMessage(message([offer("c1", "a.csv")]), { status: "streaming" });
+
+    expect(tray()).not.toBeInTheDocument();
+  });
+
+  it("shows the tray on an earlier message while a later turn runs", () => {
+    renderMessage(message([offer("c1", "a.csv")]), {
+      status: "streaming",
+      isLastMessage: false,
+    });
+
+    expect(tray()).toBeVisible();
+  });
+
+  it("shows no tray when nothing was offered", () => {
+    renderMessage(message([{ type: "text", text: "Hi" }]));
+
+    expect(tray()).not.toBeInTheDocument();
+  });
+
+  it("groups the calls on either side of an offer together", () => {
+    renderMessage(
+      message([call("c1", "alpha"), offer("c2", "a.csv"), call("c3", "beta")]),
+    );
+
+    expect(
+      screen
+        .queryAllByRole("button", { name: /^\d+ tool calls?:/ })
+        .map((header) => header.ariaLabel),
+    ).toEqual(["2 tool calls: alpha, beta"]);
+  });
+
+  it("renders a failed offer inline as a tool error, not in the tray", () => {
+    renderMessage(message([offer("c1", "gone.txt", "output-error")]));
+
+    expect(tray()).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^1 tool call:.*with errors/ }),
+    ).toBeVisible();
+  });
+
+  // ADR-0033: a Tool gate's denial is shown where the call happened.
+  it("renders a denied offer inline, not in the tray", () => {
+    renderMessage(message([offer("c1", "secret.txt", "output-denied")]));
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^Fs Download/i }));
+
+    expect(tray()).not.toBeInTheDocument();
+    expect(screen.getByText("Blocked by a Tool gate")).toBeInTheDocument();
   });
 });
