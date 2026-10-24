@@ -47,7 +47,10 @@ import { logger } from "./logger.ts";
 import { mapError } from "./errors.ts";
 import type { UserScope, OrgScope, WorkspaceScope } from "./scope.ts";
 
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
+if (process.env.ALLOWED_ORIGINS === undefined) {
+  throw new Error("ALLOWED_ORIGINS is required");
+}
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS.split(",");
 
 /**
  * Organization membership type inferred from the database schema.

@@ -335,7 +335,7 @@ export const downloadSkillFile = async (
   const file = await requireSkillFile(skillId, fileId);
   const data = await readStoredSkillFile(file);
   if (!data) throw new Error(`Skill file missing: ${file.path}`);
-  return { data, filename: file.path.split("/").at(-1)! };
+  return { data, filename: file.path.slice(file.path.lastIndexOf("/") + 1) };
 };
 
 /** A Skill's files as the API returns them: no storage key. */

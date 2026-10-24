@@ -107,10 +107,11 @@ export const seedFirstBoot = async (
 
   // Validate before writing: a missing variable must cost nothing, so that the
   // operator's next attempt starts from a clean database.
-  const missing = (["ADMIN_EMAIL", "ADMIN_PASSWORD"] as const).filter(
-    (name) => !env[name],
-  );
-  if (missing.length > 0) {
+  const { ADMIN_EMAIL: email, ADMIN_PASSWORD: password } = env;
+  if (!email || !password) {
+    const missing = (["ADMIN_EMAIL", "ADMIN_PASSWORD"] as const).filter(
+      (name) => !env[name],
+    );
     const names = missing.join(" and ");
     const isAre =
       missing.length > 1
@@ -120,8 +121,6 @@ export const seedFirstBoot = async (
       `${names} ${isAre} required to seed the initial admin user. Set ${names} and restart.`,
     );
   }
-  const email = env.ADMIN_EMAIL!;
-  const password = env.ADMIN_PASSWORD!;
   if (password.length < MIN_ADMIN_PASSWORD_LENGTH) {
     throw new NonRetryableSeedError(
       `ADMIN_PASSWORD must be at least ${MIN_ADMIN_PASSWORD_LENGTH} characters. Set a longer one and restart.`,

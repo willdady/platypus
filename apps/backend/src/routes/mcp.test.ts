@@ -527,6 +527,7 @@ describe("MCP Routes", () => {
           id: "mcp-org",
           organizationId: orgId,
           workspaceId: null,
+          url: "http://mcp.com",
           authType: "OAuth",
           oauthAccessToken: "access-token",
         },

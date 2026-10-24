@@ -187,8 +187,9 @@ sandbox.put(
           updatedAt: new Date(),
         },
       );
+      if (!record) throw new NotFoundError("Sandbox not found");
       // Non-admin owner — redact adminEnv values in the response.
-      return c.json(sanitizeSandboxResponse(record!, false));
+      return c.json(sanitizeSandboxResponse(record, false));
     }
 
     // Admin: full update.
@@ -262,8 +263,9 @@ sandbox.put(
         updatedAt: new Date(),
       },
     );
+    if (!record) throw new NotFoundError("Sandbox not found");
     // Reached only on the admin branch above.
-    return c.json(sanitizeSandboxResponse(record!, true));
+    return c.json(sanitizeSandboxResponse(record, true));
   },
 );
 

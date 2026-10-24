@@ -91,6 +91,11 @@ export function baseConfig(tsconfigRootDir) {
         // reason.
         "@typescript-eslint/prefer-nullish-coalescing": "error",
 
+        // `x!` tells the compiler a value is present without checking. When it
+        // isn't, the failure surfaces far from the cause. Narrow, guard, or
+        // throw instead. Off for tests (below), where a fixture's shape is known.
+        "@typescript-eslint/no-non-null-assertion": "error",
+
         // A `switch` over a union with no `default` must name every member, so
         // adding a member surfaces each switch that forgot it. A `default` still
         // counts as exhaustive: the codebase uses it deliberately for "everything
@@ -120,6 +125,7 @@ export function baseConfig(tsconfigRootDir) {
       rules: {
         "@typescript-eslint/only-throw-error": "off",
         "@typescript-eslint/prefer-promise-reject-errors": "off",
+        "@typescript-eslint/no-non-null-assertion": "off",
       },
     },
   ]);

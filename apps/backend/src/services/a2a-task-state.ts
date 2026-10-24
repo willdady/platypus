@@ -305,10 +305,10 @@ export const recordedReplies = async (
   tasks: { id: string; chatId: string; status: TaskStatus }[],
   { withText = true }: { withText?: boolean } = {},
 ): Promise<Map<string, RecordedReply>> => {
-  const completed = tasks.filter(
-    (task) =>
-      task.status.state === TaskState.TASK_STATE_COMPLETED &&
-      task.status.replyId,
+  const completed = tasks.flatMap(({ id, chatId, status }) =>
+    status.state === TaskState.TASK_STATE_COMPLETED && status.replyId
+      ? [{ id, chatId, replyId: status.replyId }]
+      : [],
   );
   if (!completed.length) return new Map();
   const columns = {
@@ -330,7 +330,7 @@ export const recordedReplies = async (
           ...completed.map((task) =>
             and(
               eq(chatMessage.chatId, task.chatId),
-              eq(chatMessage.id, task.status.replyId!),
+              eq(chatMessage.id, task.replyId),
             ),
           ),
         ),
@@ -340,7 +340,7 @@ export const recordedReplies = async (
   const read = new Map<string, RecordedReply>();
   for (const task of completed) {
     const reply = replies.find(
-      (row) => row.chatId === task.chatId && row.id === task.status.replyId,
+      (row) => row.chatId === task.chatId && row.id === task.replyId,
     );
     if (!reply) continue;
     read.set(task.id, {
@@ -489,6 +489,15 @@ export const TERMINAL_TASK_STATES = new Set([
   TaskState.TASK_STATE_CANCELED,
 ]);
 
+/**
+ * A Task's status. Optional only in the protocol's generated type: every Task
+ * this server builds carries one.
+ */
+export const statusOf = (task: Task): NonNullable<Task["status"]> => {
+  if (!task.status) throw new Error(`Task '${task.id}' has no status`);
+  return task.status;
+};
+
 /** Whether a Task has ended: completed, failed or canceled. */
 export const isTerminal = (task: Task): boolean =>
-  TERMINAL_TASK_STATES.has(task.status!.state);
+  TERMINAL_TASK_STATES.has(statusOf(task).state);

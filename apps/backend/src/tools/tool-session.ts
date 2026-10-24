@@ -222,7 +222,13 @@ const lazyMcpTools = async (
           options: ToolExecutionOptions<unknown>,
         ) => {
           live ??= connectLive();
-          return (await live)[name].execute!(args, options) as unknown;
+          const execute = (await live)[name]?.execute;
+          if (!execute) {
+            throw new Error(
+              `MCP server '${mcpName}' no longer offers '${name}'`,
+            );
+          }
+          return execute(args, options) as unknown;
         },
       },
     ]),
