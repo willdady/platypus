@@ -6,7 +6,7 @@ import {
   widgetSchema,
   widgetUpdateDataSchema,
 } from "@platypus/schemas";
-import { db } from "../index.ts";
+import type { db } from "../index.ts";
 import {
   dashboard as dashboardTable,
   widget as widgetTable,

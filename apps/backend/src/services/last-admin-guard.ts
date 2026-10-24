@@ -1,5 +1,5 @@
 import { and, count, eq } from "drizzle-orm";
-import { db, type Tx } from "../index.ts";
+import type { db, Tx } from "../index.ts";
 import { organization, organizationMember } from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 

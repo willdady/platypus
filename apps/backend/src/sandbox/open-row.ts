@@ -1,9 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
-import {
-  sandbox as sandboxTable,
-  workspace as workspaceTable,
-} from "../db/schema.ts";
+import type { sandbox as sandboxTable } from "../db/schema.ts";
+import { workspace as workspaceTable } from "../db/schema.ts";
 import { getSandboxBackend } from "./index.ts";
 import type { SandboxBackend, SandboxContext } from "./types.ts";
 

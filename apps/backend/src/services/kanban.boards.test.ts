@@ -5,7 +5,7 @@ vi.mock("./event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
 }));
 
-import { db } from "../index.ts";
+import type { db } from "../index.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   createBoard,
