@@ -1,5 +1,6 @@
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { pageOf } from "./list-pagination";
+import { GhostCards, pageOf } from "./list-pagination";
 
 const items = ["a", "b", "c", "d", "e"];
 
@@ -29,5 +30,21 @@ describe("pageOf ghosts", () => {
 
   it("leaves rows to the page ghosts when there are several pages", () => {
     expect(pageOf("2", items, 4).rowGhosts).toBe(0);
+  });
+});
+
+describe("GhostCards", () => {
+  it("draws every ghost on wide screens only", () => {
+    render(
+      <ul>
+        <GhostCards page={{ ghosts: 2, rowGhosts: 1 }} />
+      </ul>,
+    );
+    // Ghosts are aria-hidden, so only a `hidden` query finds them.
+    const ghosts = screen.getAllByRole("listitem", { hidden: true });
+    expect(ghosts).toHaveLength(3);
+    for (const ghost of ghosts) {
+      expect(ghost).toHaveClass("hidden", "lg:block");
+    }
   });
 });
