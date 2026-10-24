@@ -67,7 +67,7 @@ import { TurnNotice } from "./turn-notice";
 import { MessagePartBoundary } from "./message-part-boundary";
 import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
-import { FsDownloadTool } from "./fs-download-tool";
+import { OfferedFiles, offeredFiles } from "./offered-files";
 import {
   WebToolCard,
   isNormalizedWebToolPart,
@@ -151,7 +151,8 @@ function isSubAgentToolPart(part: MessagePart): part is MessageToolPart {
   );
 }
 
-// A failed download has nothing to offer, so it falls through to the generic
+// An offered file shows in the tray under the finished reply, not in place. A
+// failed download has nothing to offer, so it falls through to the generic
 // renderer as an ordinary tool error.
 function isFsDownloadPart(
   part: MessagePart,
@@ -199,16 +200,13 @@ export function isGenericToolPart(part: MessagePart): part is MessageToolPart {
 }
 
 /**
- * Tool calls that sit in a Tool call group. Sub-Agent delegations and file
- * downloads have interactive UI of their own, so they stand alone and end
- * the group around them.
+ * Tool calls that sit in a Tool call group. A Sub-Agent delegation has
+ * interactive UI of its own, so it stands alone and ends the group around it.
  */
 function isGroupableToolPart(
   part: MessagePart,
 ): part is MessageToolPart | DynamicToolUIPart {
-  return (
-    isToolUIPart(part) && !isSubAgentToolPart(part) && !isFsDownloadPart(part)
-  );
+  return isToolUIPart(part) && !isSubAgentToolPart(part);
 }
 
 /** A call's name in its group's header: the Tool's name, not its row's label. */
@@ -473,9 +471,6 @@ export const ChatMessage = memo(function ChatMessage({
         messageMetadata={message.metadata}
       />
     )),
-    partRenderer(isFsDownloadPart, (part, i) => (
-      <FsDownloadTool key={`${message.id}-${i}`} toolPart={part} />
-    )),
     partRenderer(isGenericToolPart, (toolPart, i) => {
       const toolInput = toolPart.input as Record<string, unknown> | undefined;
       const toolLabel = (toolInput?.label ?? toolInput?.name) as
@@ -541,7 +536,12 @@ export const ChatMessage = memo(function ChatMessage({
       />
     ) : null;
   };
-  const segments = partitionParts(message.parts ?? [], isGroupableToolPart);
+  const segments = partitionParts(
+    message.parts ?? [],
+    isGroupableToolPart,
+    isFsDownloadPart,
+  );
+  const files = offeredFiles(message.parts ?? []);
   // Named for what it sits under, never "version" or "branch" (ADR-0026).
   const alternativeNoun = message.role === "user" ? "Message" : "Response";
   const alternativeLabel =
@@ -633,6 +633,7 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </>
       )}
+      {!isAwaitedReply && files.length > 0 && <OfferedFiles files={files} />}
       {/* The wait covers the whole turn, not only the chunks: between send and
       the first chunk the reply exists with nothing to show, and its controls
       would sit alone where the answer is about to appear. It is the REPLY that

@@ -54,6 +54,18 @@ describe("partitionParts", () => {
       ]),
     ).toEqual([0, [1, 3]]);
   });
+
+  it("drops a hidden part without ending the group around it", () => {
+    const parts = [{ type: "tool-a" }, { type: "hidden" }, { type: "tool-b" }];
+    expect(
+      partitionParts(parts, isTool, (part) => part.type === "hidden").map(
+        (segment) =>
+          segment.kind === "group"
+            ? segment.entries.map((entry) => entry.index)
+            : segment.index,
+      ),
+    ).toEqual([[0, 2]]);
+  });
 });
 
 describe("advanceVerb", () => {

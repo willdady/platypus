@@ -682,6 +682,8 @@ describe("renderSystemPrompt — sandbox fragment", () => {
       fsDownloadAvailable: true,
     });
     expect(withIt).toMatch(/`fsDownload`/);
-    expect(withIt).toMatch(/download button/);
+    expect(withIt).toMatch(/once, when it is final/);
+    expect(withIt).toMatch(/under your reply/);
+    expect(withIt).toMatch(/never write a link/i);
   });
 });

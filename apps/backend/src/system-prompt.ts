@@ -282,7 +282,7 @@ Tool output is bounded. When a response has \`truncated: true\`, narrow your vie
     ctx.fsDownloadAvailable
       ? `
 
-To give the user a file — especially a binary or large one — call \`fsDownload\` with its path. It shows the user a download button; it does not return the file's contents, and there is no link for you to share.`
+To give the user a file — especially a binary or large one — call \`fsDownload\` with its path, once, when it is final. Offered files appear under your reply with a download button; the call does not return the file's contents. Never write a link to the file — there is none.`
       : ""
   }
 

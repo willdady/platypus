@@ -29,15 +29,18 @@ export type PartSegment<P, G extends P> =
  * one group, a run of one included, so a row never changes shape when a
  * second call streams in. Any other part ends the run — except a step
  * boundary, which draws nothing, so the calls either side of it still sit
- * together on screen.
+ * together on screen. A hidden part renders elsewhere, so it is dropped
+ * without ending the run.
  */
 export function partitionParts<P extends { type: string }, G extends P>(
   parts: readonly P[],
   isGroupable: (part: P) => part is G,
+  isHidden: (part: P) => boolean = () => false,
 ): PartSegment<P, G>[] {
   const segments: PartSegment<P, G>[] = [];
   let group: IndexedPart<G>[] | null = null;
   parts.forEach((part, index) => {
+    if (isHidden(part)) return;
     if (isGroupable(part)) {
       if (!group) {
         group = [];
