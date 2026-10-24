@@ -255,6 +255,7 @@ describe("Organization Attachment (central sharing) Routes", () => {
     it.each([
       ["a non-string resourceId", { ...body, resourceId: {} }],
       ["a non-string workspaceId", { ...body, workspaceId: [] }],
+      ["a missing resourceId", { ...body, resourceId: undefined }],
       ["a missing workspaceId", { ...body, workspaceId: undefined }],
       ["an invalid resourceType", { ...body, resourceType: "blueprint" }],
     ])("400s %s", async (_, payload) => {
