@@ -9,6 +9,7 @@ import {
 import { ownedWhere, resolveOwned } from "./workspace-resource.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import { currentRunSource, type RunSource } from "../event-causation.ts";
+import { oneRow } from "../db/one-row.ts";
 
 type Database = typeof db;
 type NotificationContext = {
@@ -71,7 +72,7 @@ export const createNotification = async (
       updatedAt: new Date(),
     })
     .returning();
-  const record = toRecord(rows[0]);
+  const record = toRecord(oneRow(rows));
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.created",
     // Written with the Agent's id, so it has one; only Platypus posts without.
@@ -116,8 +117,9 @@ export const updateNotification = async (
     })
     .where(agentOwnedWhere(ctx, id))
     .returning();
-  if (!rows.length) return null;
-  const record = toRecord(rows[0]);
+  const [row] = rows;
+  if (!row) return null;
+  const record = toRecord(row);
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.updated",
     // Matched on the Agent's id, so it has one.

@@ -27,6 +27,7 @@ import { createSandboxBackend, openSandboxRow } from "../sandbox/open-row.ts";
 import { relativePathSchema } from "../sandbox/types.ts";
 import { findEntry, TRANSFER_BOUND } from "../sandbox/find-entry.ts";
 import { NotFoundError, UnsupportedError } from "../errors.ts";
+import { oneRow } from "../db/one-row.ts";
 import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
 import {
@@ -135,7 +136,7 @@ sandbox.post(
       })
       .returning();
     // POST is admin-only (requireSandboxAdmin), so always full response.
-    return c.json(sanitizeSandboxResponse(record[0], true), 201);
+    return c.json(sanitizeSandboxResponse(oneRow(record), true), 201);
   },
 );
 

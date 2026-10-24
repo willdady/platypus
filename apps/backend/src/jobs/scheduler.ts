@@ -42,6 +42,7 @@ import {
   runHeartbeatCutoff,
 } from "../runs/chat-run-heartbeat.ts";
 import { triggerPerRunTimeoutMs } from "../runs/trigger-timeouts.ts";
+import { oneRow } from "../db/one-row.ts";
 import { sweepMissedEnds, turnEnded } from "../services/a2a-task-lifecycle.ts";
 
 const DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS = 60 * 1000;
@@ -142,13 +143,18 @@ const cronConfigOrNull = (job: TriggerRow): CronTriggerConfig | null => {
 export async function processDueTriggers(): Promise<void> {
   const now = new Date();
 
-  const [{ running }] = await db
-    .select({ running: count() })
-    .from(triggerRunTable)
-    .innerJoin(triggerTable, eq(triggerTable.id, triggerRunTable.triggerId))
-    .where(
-      and(eq(triggerRunTable.status, "running"), eq(triggerTable.type, "cron")),
-    );
+  const { running } = oneRow(
+    await db
+      .select({ running: count() })
+      .from(triggerRunTable)
+      .innerJoin(triggerTable, eq(triggerTable.id, triggerRunTable.triggerId))
+      .where(
+        and(
+          eq(triggerRunTable.status, "running"),
+          eq(triggerTable.type, "cron"),
+        ),
+      ),
+  );
   let slots = MAX_CONCURRENT_TRIGGERS - running;
 
   const isDue = and(

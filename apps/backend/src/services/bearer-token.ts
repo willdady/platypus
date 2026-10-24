@@ -56,7 +56,7 @@ export const generateBearerToken = (
  */
 export const bearerToken = (header: string | undefined): string | null => {
   const match = header?.match(/^Bearer\s+(\S+)\s*$/i);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 };
 
 /**

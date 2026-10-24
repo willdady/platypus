@@ -176,7 +176,7 @@ export const resolveTurn = async ({
   // The message is the one thing a client still writes into the Transcript, so
   // it is a trust boundary: the schema has already held it to a user message of
   // text and files, and this holds each part to the shape the SDK converts.
-  let message: PlatypusUIMessage;
+  let message: PlatypusUIMessage | undefined;
   try {
     [message] = await validateUIMessages<PlatypusUIMessage>({
       messages: [request.message],
@@ -185,6 +185,7 @@ export const resolveTurn = async ({
   } catch (error) {
     throw new ValidationError(errorMessage(error));
   }
+  if (!message) throw new Error("validateUIMessages returned no message");
 
   const { parentId } = request;
   if (parentId !== null && !(owned && (await findMessage(chatId, parentId)))) {

@@ -7,6 +7,7 @@
     "noImplicitOverride": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "esModuleInterop": true,
@@ -17,5 +18,14 @@
     "types": ["node", "vitest/globals"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "drizzle"]
+  "exclude": [
+    "node_modules",
+    "drizzle",
+    "**/*.test.ts",
+    "**/*.test-fixtures.ts",
+    "src/test-utils.ts",
+    "src/fake-db.ts",
+    "src/test-setup.ts",
+    "vitest.config.ts"
+  ]
 }

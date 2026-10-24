@@ -2,6 +2,7 @@ import { and, count, eq } from "drizzle-orm";
 import type { db, Tx } from "../index.ts";
 import { organization, organizationMember } from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /** How a member stops being an admin: demoted, or removed outright. */
 type AdminLoss = "demote" | "remove";
@@ -73,15 +74,17 @@ export const requireAdminRemains = async (
     .for("update");
   const target = await findLossTarget(tx, request);
   if (target.role === "admin") {
-    const [{ value }] = await tx
-      .select({ value: count() })
-      .from(organizationMember)
-      .where(
-        and(
-          eq(organizationMember.organizationId, request.orgId),
-          eq(organizationMember.role, "admin"),
+    const { value } = oneRow(
+      await tx
+        .select({ value: count() })
+        .from(organizationMember)
+        .where(
+          and(
+            eq(organizationMember.organizationId, request.orgId),
+            eq(organizationMember.role, "admin"),
+          ),
         ),
-      );
+    );
     if (value <= 1) throw new ConflictError(LAST_ADMIN_MESSAGE[request.loss]);
   }
   return target;

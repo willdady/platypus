@@ -1522,7 +1522,7 @@ export const mediaTypeMatches = (
   patterns: string[],
 ): boolean => {
   if (!mediaType || patterns.length === 0) return false;
-  const type = mediaType.split(";")[0].trim().toLowerCase();
+  const type = (mediaType.split(";")[0] ?? "").trim().toLowerCase();
   return patterns.some((pattern) => {
     const p = pattern.trim().toLowerCase();
     if (p === "*/*" || p === "*") return true;

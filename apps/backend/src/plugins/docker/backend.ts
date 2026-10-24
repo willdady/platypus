@@ -174,7 +174,7 @@ export function buildSingleFileTar(name: string, content: Buffer): Buffer {
   // Compute checksum: sum of all unsigned header bytes (with checksum field
   // as spaces, which we already placed above).
   let sum = 0;
-  for (let i = 0; i < 512; i++) sum += header[i];
+  for (const byte of header) sum += byte;
   const chk = sum.toString(8).padStart(6, "0") + "\0 ";
   header.write(chk, 148, 8, "utf8");
 

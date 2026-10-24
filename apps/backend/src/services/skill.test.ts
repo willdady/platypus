@@ -221,6 +221,19 @@ describe("skill write model", () => {
       ).rejects.toThrow(NotFoundError);
     });
 
+    it("throws NotFoundError when a concurrently-deleted workspace skill is gone by the write", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
+      mockDb.returning.mockResolvedValueOnce([]); // UPDATE matched nothing
+
+      await expect(
+        updateSkill(
+          { kind: "workspace", ctx: workspaceCtx },
+          "s1",
+          updateFields(),
+        ),
+      ).rejects.toThrow(NotFoundError);
+    });
+
     it("rewrites the agent set only when the workspace update carries agentIds", async () => {
       mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
       mockDb.returning.mockResolvedValueOnce([

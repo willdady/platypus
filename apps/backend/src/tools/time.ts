@@ -20,14 +20,18 @@ function zoneOffsetMs(instant: number, timeZone: string): number {
       .formatToParts(instant)
       .map((p) => [p.type, Number(p.value)]),
   );
-  const wall = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-    parts.second,
-  );
+  const { year, month, day, hour, minute, second } = parts;
+  if (
+    year === undefined ||
+    month === undefined ||
+    day === undefined ||
+    hour === undefined ||
+    minute === undefined ||
+    second === undefined
+  ) {
+    throw new Error(`No full date-time for ${timeZone}`);
+  }
+  const wall = Date.UTC(year, month - 1, day, hour, minute, second);
   return wall - Math.floor(instant / 1000) * 1000;
 }
 
@@ -128,8 +132,12 @@ export const convertTimezone = tool({
     // ICU renders the longOffset sign as U+2212; normalise to ASCII so the
     // output stays valid ISO. UTC is "GMT" or "GMT+00:00" depending on the
     // ICU version; both become Z
+    const { timeZoneName } = parts;
+    if (timeZoneName === undefined) {
+      throw new Error(`No offset for ${toTimezone}`);
+    }
     const offset =
-      parts.timeZoneName.replace(/^GMT(\+00:00)?/, "").replace("−", "-") || "Z";
+      timeZoneName.replace(/^GMT(\+00:00)?/, "").replace("−", "-") || "Z";
     const isoDateTime = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}`;
 
     return {

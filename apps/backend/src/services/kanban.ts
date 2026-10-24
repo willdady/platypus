@@ -38,6 +38,7 @@ import {
 } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
+import { oneRow } from "../db/one-row.ts";
 import { listScopedByIds } from "./scoped-resource.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import {
@@ -851,16 +852,17 @@ export const calculateCardPosition = (
   afterCardId: string | null,
 ): { position: number; needsRebalance: boolean; afterIndex: number } => {
   if (afterCardId === null) {
-    const position = otherCards.length === 0 ? 1.0 : otherCards[0].position / 2;
+    const [first] = otherCards;
+    const position = first ? first.position / 2 : 1.0;
     return { position, needsRebalance: false, afterIndex: -1 };
   }
 
   const afterIndex = otherCards.findIndex((card) => card.id === afterCardId);
-  if (afterIndex === -1) {
+  const anchor = otherCards[afterIndex];
+  if (!anchor) {
     throw new ValidationError("afterCardId not found in column");
   }
 
-  const anchor = otherCards[afterIndex];
   const next = otherCards[afterIndex + 1];
   if (!next) {
     return {
@@ -1015,7 +1017,7 @@ export const createCard = async (
       })
       .returning();
 
-    const row = rows[0];
+    const row = oneRow(rows);
     await recordCardCreated(tx, ctx, row);
     return row;
   });
@@ -1206,6 +1208,7 @@ export const copyCard = async (
     .where(eq(kanbanCardTable.id, input.cardId))
     .limit(1);
   const sourceCard = sourceRows[0];
+  if (!sourceCard) throw new NotFoundError("Card not found");
 
   const record = await database.transaction(async (tx) => {
     const position = await placeCardInColumn(tx, {
@@ -1255,9 +1258,10 @@ export const copyCard = async (
 
     // The copy's history starts at the copy: it is a new Card, and the
     // source's past is not its own.
-    await recordCardCreated(tx, ctx, rows[0]);
+    const row = oneRow(rows);
+    await recordCardCreated(tx, ctx, row);
 
-    return rows[0];
+    return row;
   });
 
   dispatch(ctx, {
@@ -1463,6 +1467,7 @@ export const bulkUpdateCards = async (
         .returning();
 
       const row = rows[0];
+      if (!row) throw new NotFoundError("Card not found");
       // Computed here rather than after the transaction: the history entry
       // needs it inside, and one computation keeps the entry and the event
       // reporting the same diff.
@@ -1660,7 +1665,7 @@ export const createComment = async (
     })
     .returning();
 
-  return rows[0];
+  return oneRow(rows);
 };
 
 /**
@@ -1680,7 +1685,9 @@ export const updateCommentBody = async (
     .where(eq(kanbanCardCommentTable.id, comment.id))
     .returning();
 
-  return rows[0];
+  const [row] = rows;
+  if (!row) throw new NotFoundError("Comment not found");
+  return row;
 };
 
 /** Deletes a comment the caller has already resolved. */
@@ -1751,7 +1758,7 @@ export const createBoard = async (
       })),
     );
 
-    return rows[0];
+    return oneRow(rows);
   });
 };
 
@@ -1885,7 +1892,7 @@ export const createColumn = async (
     .returning()
     .catch(rethrowAsColumnNameClash);
 
-  return rows[0];
+  return oneRow(rows);
 };
 
 /** Renames a column. Keeping its own name is not a clash. */

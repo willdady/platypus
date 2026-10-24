@@ -36,6 +36,7 @@ import {
   prepareWorkspaceCleanup,
 } from "../services/workspace-delete.ts";
 import { transferWorkspace } from "../services/workspace-transfer.ts";
+import { oneRow } from "../db/one-row.ts";
 
 const workspace = new Hono<{ Variables: Variables }>();
 
@@ -102,18 +103,20 @@ workspace.post(
         throw new ValidationError("Owner must be a member of the organization");
       }
 
-      const [row] = await tx
-        .insert(workspaceTable)
-        .values({
-          id: nanoid(),
-          ...workspaceFields,
-          // The route's organization has already passed requireOrgAccess.
-          // Never take this tenancy boundary from client input: an admin of one
-          // org must not be able to create a workspace in another org.
-          organizationId: orgId,
-          ownerId,
-        })
-        .returning();
+      const row = oneRow(
+        await tx
+          .insert(workspaceTable)
+          .values({
+            id: nanoid(),
+            ...workspaceFields,
+            // The route's organization has already passed requireOrgAccess.
+            // Never take this tenancy boundary from client input: an admin of one
+            // org must not be able to create a workspace in another org.
+            organizationId: orgId,
+            ownerId,
+          })
+          .returning(),
+      );
       const ctx = { orgId, workspaceId: row.id };
 
       if (provider) {

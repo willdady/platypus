@@ -136,6 +136,19 @@ describe("provider-write module", () => {
       );
     });
 
+    it("throws NotFoundError when the provider is deleted before the write", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "p1", workspaceId: "ws-1" }]); // requireWorkspaceMutable
+      mockDb.returning.mockResolvedValueOnce([]); // UPDATE matched nothing
+
+      await expect(
+        updateProvider(
+          { kind: "workspace", ctx: workspaceCtx },
+          "p1",
+          updateFields(),
+        ),
+      ).rejects.toThrow(NotFoundError);
+    });
+
     it("throws NotFoundError for a workspace-scoped provider not visible here, before touching embeddings", async () => {
       mockDb.limit.mockResolvedValueOnce([]); // resolveScoped: no row
 

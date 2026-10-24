@@ -30,6 +30,7 @@ import {
   requireWorkspaceMutable,
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The Provider write model: the five-step save ordering — dedupe model
@@ -104,16 +105,18 @@ export async function createProvider(
 ): Promise<ProviderRow> {
   const data = dedupeModels(fields);
 
-  const [row] = await exec
-    .insert(providerTable)
-    .values({
-      id: nanoid(),
-      ...data,
-      ...(scope.kind === "workspace"
-        ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
-        : { organizationId: scope.orgId, workspaceId: null }),
-    })
-    .returning();
+  const row = oneRow(
+    await exec
+      .insert(providerTable)
+      .values({
+        id: nanoid(),
+        ...data,
+        ...(scope.kind === "workspace"
+          ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
+          : { organizationId: scope.orgId, workspaceId: null }),
+      })
+      .returning(),
+  );
   return row;
 }
 
@@ -167,6 +170,7 @@ export async function updateProvider(
       .set({ ...data, updatedAt: new Date() })
       .where(where)
       .returning();
+    if (!row) throw new NotFoundError("Provider not found");
 
     // Runs AFTER the row is written: a failed update must not leave Agents
     // repointed for an alias that still exists.
