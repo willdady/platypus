@@ -343,6 +343,7 @@ const rowCovers = (row: string, name: string): boolean => {
  */
 const BACKEND_DEFAULT_SOURCES: Record<string, string> = {
   PORT: "apps/backend/src/env.ts",
+  DATABASE_POOL_MAX: "apps/backend/src/env.ts",
   INVITATION_EXPIRY_DAYS: "apps/backend/src/env.ts",
   MEMORY_EXTRACTION_INTERVAL_MS: "apps/backend/src/env.ts",
   SCHEDULE_SCHEDULER_INTERVAL_MS: "apps/backend/src/env.ts",

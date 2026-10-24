@@ -3,7 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq } from "drizzle-orm";
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import { databaseConfig } from "./connection-config.ts";
+import { databaseConfig, buildPoolConfig } from "./connection-config.ts";
 
 /**
  * The app's and the migration runner's connections run in UTC, whatever the database's own
@@ -88,6 +88,31 @@ describe("databaseConfig", () => {
       host: "db.internal",
       port: 6543,
       database: "platypus",
+    });
+  });
+});
+
+describe("buildPoolConfig", () => {
+  it("sets the pool size and every connection guard explicitly", () => {
+    expect(buildPoolConfig(undefined, 10)).toEqual({
+      options: "-c TimeZone=UTC",
+      max: 10,
+      connectionTimeoutMillis: 10_000,
+      statement_timeout: 600_000,
+      idle_in_transaction_session_timeout: 60_000,
+    });
+  });
+
+  it("keeps the URL parse and the UTC pin", () => {
+    expect(
+      buildPoolConfig("postgres://alice:s3cret@db.internal:6543/platypus", 3),
+    ).toMatchObject({
+      user: "alice",
+      host: "db.internal",
+      port: 6543,
+      database: "platypus",
+      max: 3,
+      options: "-c TimeZone=UTC",
     });
   });
 });
