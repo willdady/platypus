@@ -102,7 +102,7 @@ organization.put(
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
-    const record = await db
+    const [record] = await db
       .update(organizationTable)
       .set({
         ...data,
@@ -110,7 +110,10 @@ organization.put(
       })
       .where(eq(organizationTable.id, orgId))
       .returning();
-    return c.json(record[0], 200);
+    if (!record) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+    return c.json(record, 200);
   },
 );
 

@@ -137,8 +137,7 @@ const finalToolResult = (
   message: PlatypusUIMessage | undefined,
 ): ToolResultSummary | undefined => {
   const parts = message?.parts ?? [];
-  for (let i = parts.length - 1; i >= 0; i -= 1) {
-    const part = parts[i];
+  for (const part of [...parts].reverse()) {
     if (isToolUIPart(part) && part.state === "output-available") {
       return {
         toolName: getToolName(part),

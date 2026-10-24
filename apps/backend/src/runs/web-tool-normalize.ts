@@ -213,7 +213,10 @@ export const normalizeWebToolPart = (part: {
     : normalizeNativeOutput(part.input, part.output);
 };
 
-const normalizeMessage = (message: PlatypusUIMessage): PlatypusUIMessage => {
+/** {@link normalizeWebToolParts} for one message. */
+export const normalizeWebToolMessage = (
+  message: PlatypusUIMessage,
+): PlatypusUIMessage => {
   let patched = false;
   const parts = message.parts.map((part) => {
     if (!isToolUIPart(part)) return part;
@@ -242,4 +245,4 @@ const normalizeMessage = (message: PlatypusUIMessage): PlatypusUIMessage => {
  */
 export const normalizeWebToolParts = (
   messages: PlatypusUIMessage[],
-): PlatypusUIMessage[] => messages.map(normalizeMessage);
+): PlatypusUIMessage[] => messages.map(normalizeWebToolMessage);

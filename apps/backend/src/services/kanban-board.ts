@@ -23,6 +23,7 @@ import {
   type Executor,
   type KanbanScope,
 } from "./kanban-shared.ts";
+import { oneRow } from "../db/one-row.ts";
 
 // --- Label pruning ---
 
@@ -121,7 +122,7 @@ export const createBoard = async (
       })),
     );
 
-    return rows[0];
+    return oneRow(rows);
   });
 };
 

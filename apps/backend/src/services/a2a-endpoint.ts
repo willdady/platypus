@@ -55,6 +55,7 @@ import {
 } from "./owner-membership.ts";
 import type { A2aRejectReason } from "./a2a-call.ts";
 import { stopRevokedA2aWork } from "./a2a-cancel.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * A2A endpoints (ADR-0032): one Agent made reachable over A2A from one
@@ -134,22 +135,24 @@ export const createA2aEndpoint = async (
   if (!agent) throw new NotFoundError("Agent not found in this workspace");
 
   const now = new Date();
-  const [row] = await db
-    .insert(a2aEndpointTable)
-    .values({
-      // The public, unguessable part of the URL — never the Agent's id.
-      id: nanoid(),
-      workspaceId: ctx.workspaceId,
-      agentId: fields.agentId,
-      name: fields.name ?? agent.row.name,
-      description: fields.description ?? agent.row.description,
-      enabled: fields.enabled ?? true,
-      includeMemories: fields.includeMemories ?? false,
-      extractMemories: fields.extractMemories ?? false,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
+  const row = oneRow(
+    await db
+      .insert(a2aEndpointTable)
+      .values({
+        // The public, unguessable part of the URL — never the Agent's id.
+        id: nanoid(),
+        workspaceId: ctx.workspaceId,
+        agentId: fields.agentId,
+        name: fields.name ?? agent.row.name,
+        description: fields.description ?? agent.row.description,
+        enabled: fields.enabled ?? true,
+        includeMemories: fields.includeMemories ?? false,
+        extractMemories: fields.extractMemories ?? false,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning(),
+  );
   return row;
 };
 
@@ -196,16 +199,18 @@ export const createA2aToken = async (
   await requireOwned(db, "a2aEndpoint", { id: endpointId, workspaceId });
   const { token, hash } = generateBearerToken(A2A_TOKEN_PREFIX);
   const now = new Date();
-  const [row] = await db
-    .insert(a2aTokenTable)
-    .values({
-      id: nanoid(),
-      endpointId,
-      name,
-      ...issuedTokenFields(hash, expiryDays, now),
-      createdAt: now,
-    })
-    .returning();
+  const row = oneRow(
+    await db
+      .insert(a2aTokenTable)
+      .values({
+        id: nanoid(),
+        endpointId,
+        name,
+        ...issuedTokenFields(hash, expiryDays, now),
+        createdAt: now,
+      })
+      .returning(),
+  );
   return { ...toPublicToken(row), token };
 };
 

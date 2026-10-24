@@ -24,6 +24,7 @@ import {
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
 import { deleteAvatar, storeAvatar } from "./avatar.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The Agent write model: dedupe, sub-agent validation, and the
@@ -125,15 +126,17 @@ export async function createAgent(
     }
   }
 
-  const [row] = await db
-    .insert(agentTable)
-    .values({
-      id,
-      ...data,
-      workspaceId: ctx.workspaceId,
-      organizationId: null,
-    })
-    .returning();
+  const row = oneRow(
+    await db
+      .insert(agentTable)
+      .values({
+        id,
+        ...data,
+        workspaceId: ctx.workspaceId,
+        organizationId: null,
+      })
+      .returning(),
+  );
   return { row };
 }
 
@@ -173,6 +176,7 @@ export async function updateAgent(
       .set({ ...data, updatedAt: new Date() })
       .where(workspaceScopedWhere("agent", agentId, scope.ctx.workspaceId))
       .returning();
+    if (!row) throw new NotFoundError("Agent not found");
     return { row };
   }
 
@@ -209,6 +213,7 @@ export async function updateAgent(
     .set({ ...data, updatedAt: new Date() })
     .where(orgScopedWhere("agent", agentId, scope.orgId))
     .returning();
+  if (!row) throw new NotFoundError("Agent not found");
   return { row };
 }
 
@@ -267,13 +272,14 @@ export async function deleteAgent(
   // exists. Organization scope: requireSharedDeletable only checks
   // referencing Attachments/Blueprints, not existence, so the delete itself is
   // where a missing Agent 404s.
-  if (result.length === 0) {
+  const [deleted] = result;
+  if (!deleted) {
     throw new NotFoundError("Agent not found");
   }
 
   // Best-effort, and only once the delete has committed: a storage miss must
   // not fail it, and a refused delete must not lose the avatar.
-  await deleteAvatar(result[0].avatarKey);
+  await deleteAvatar(deleted.avatarKey);
 }
 
 /**

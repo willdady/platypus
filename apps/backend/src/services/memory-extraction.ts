@@ -145,7 +145,7 @@ const completeChatExtraction = async (
  * Gets today's date string in YYYY-MM-DD format.
  */
 const getTodayDateString = (): string => {
-  return new Date().toISOString().split("T")[0];
+  return new Date().toISOString().slice(0, 10);
 };
 
 /**
@@ -176,7 +176,8 @@ const processChat = async (
     }
   }
   const fresh = messages.slice(readCount);
-  if (fresh.length === 0) {
+  const [oldestFresh] = fresh;
+  if (!oldestFresh) {
     await completeChatExtraction(chat.id, readAt, chat.activeLeafId);
     return;
   }
@@ -197,6 +198,7 @@ const processChat = async (
     )
     .limit(1);
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty summary counts as none
   const existingSummary = existingSummaryRow?.summary || null;
 
   const modelId = pointerSettingModelId(
@@ -216,19 +218,21 @@ const processChat = async (
     // One message larger than the whole budget: cut to fit, marked as cut, and
     // moved past like any other.
     included = 1;
-    newText =
-      freshLines[0].slice(0, Math.max(0, room - TRUNCATED.length)) + TRUNCATED;
+    const line = formatMessage(oldestFresh);
+    newText = line.slice(0, Math.max(0, room - TRUNCATED.length)) + TRUNCATED;
     logger.warn(
       {
         chatId: chat.id,
-        messageId: fresh[0].id,
-        length: freshLines[0].length,
+        messageId: oldestFresh.id,
+        length: line.length,
         room,
       },
       "Memory extraction truncated a message larger than its budget",
     );
   }
-  const cursor = fresh[included - 1].id;
+  const lastIncluded = fresh[included - 1];
+  if (!lastIncluded) throw new Error("Memory extraction included no message");
+  const cursor = lastIncluded.id;
 
   // Then the most recent of what came before, in what is left.
   const contextLines = messages

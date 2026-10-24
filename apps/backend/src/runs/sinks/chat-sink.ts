@@ -428,6 +428,7 @@ export class ChatSink implements RunSink {
       workspaceId,
       chatId: this.runId,
     });
+    if (!stored) throw new Error("extractFiles returned no message");
     return stored;
   }
 

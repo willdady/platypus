@@ -25,63 +25,60 @@ mcpOauthCallback.post(
     const { code, state } = c.req.valid("json");
 
     // Look up the MCP via the state parameter
-    const stateRecord = await db
+    const [stateRecord] = await db
       .select()
       .from(mcpOauthState)
       .where(eq(mcpOauthState.id, state))
       .limit(1);
 
-    if (stateRecord.length === 0) {
+    if (!stateRecord) {
       return c.json({ error: "Invalid or expired OAuth state" }, 400);
     }
 
     // Check expiry
-    if (stateRecord[0].expiresAt < new Date()) {
+    if (stateRecord.expiresAt < new Date()) {
       await db.delete(mcpOauthState).where(eq(mcpOauthState.id, state));
       return c.json({ error: "OAuth state has expired" }, 400);
     }
 
-    const mcpRecord = await db
+    const [mcpRecord] = await db
       .select()
       .from(mcpTable)
-      .where(eq(mcpTable.id, stateRecord[0].mcpId))
+      .where(eq(mcpTable.id, stateRecord.mcpId))
       .limit(1);
 
-    if (mcpRecord.length === 0) {
+    if (!mcpRecord) {
       return c.json({ error: "MCP not found" }, 404);
     }
 
-    if (!mcpRecord[0].url) {
+    if (!mcpRecord.url) {
       return c.json({ error: "MCP URL is not configured" }, 400);
     }
 
     // Resolve the orgId for the redirect URL. An org-scoped (Shared) MCP
     // carries its orgId directly; a workspace-scoped MCP gets it from its
     // workspace.
-    let redirectOrgId = mcpRecord[0].organizationId;
-    if (!redirectOrgId && mcpRecord[0].workspaceId) {
-      const wsRecord = await db
+    let redirectOrgId = mcpRecord.organizationId;
+    if (!redirectOrgId && mcpRecord.workspaceId) {
+      const [wsRecord] = await db
         .select()
         .from(workspace)
-        .where(eq(workspace.id, mcpRecord[0].workspaceId))
+        .where(eq(workspace.id, mcpRecord.workspaceId))
         .limit(1);
 
-      if (wsRecord.length === 0) {
+      if (!wsRecord) {
         return c.json({ error: "Workspace not found" }, 404);
       }
-      redirectOrgId = wsRecord[0].organizationId;
+      redirectOrgId = wsRecord.organizationId;
     }
 
     try {
       const callbackUrl = buildOAuthCallbackUrl();
-      const provider = new DatabaseOAuthClientProvider(
-        mcpRecord[0],
-        callbackUrl,
-      );
+      const provider = new DatabaseOAuthClientProvider(mcpRecord, callbackUrl);
       provider.setStateForLookup(state);
 
       const result = await mcpAuth(provider, {
-        serverUrl: mcpRecord[0].url,
+        serverUrl: mcpRecord.url,
         authorizationCode: code,
         callbackState: state,
         fetchFn: oauthFetchFn,
@@ -93,8 +90,8 @@ mcpOauthCallback.post(
       if (result === "AUTHORIZED") {
         return c.json({
           orgId: redirectOrgId,
-          workspaceId: mcpRecord[0].workspaceId,
-          mcpId: mcpRecord[0].id,
+          workspaceId: mcpRecord.workspaceId,
+          mcpId: mcpRecord.id,
         });
       }
 

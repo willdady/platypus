@@ -397,8 +397,15 @@ export const inboundEntityId = (
   trigger: Pick<TriggerRow, "id">,
   config: InboundTriggerConfig,
   inputs: Record<string, string>,
-): string =>
-  config.recordKey !== undefined ? inputs[config.recordKey] : trigger.id;
+): string => {
+  if (config.recordKey === undefined) return trigger.id;
+  // The record key names a required input, so validation already demanded it.
+  const entityId = inputs[config.recordKey];
+  if (entityId === undefined) {
+    throw new Error(`Inbound call has no '${config.recordKey}' input`);
+  }
+  return entityId;
+};
 
 export type InboundAcceptance =
   | { outcome: "accepted"; runId: string }

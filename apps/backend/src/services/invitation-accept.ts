@@ -69,21 +69,20 @@ export async function acceptInvitationForUser(
       .for("update")
       .limit(1);
 
-    if (invitation.length === 0) {
+    const [invite] = invitation;
+    if (!invite) {
       throw new NotFoundError("Invitation not found or already processed");
     }
 
     // Read the clock after acquiring the lock: an invitation can expire while
     // this transaction waits for another writer.
-    if (new Date(invitation[0].expiresAt) <= new Date()) {
+    if (new Date(invite.expiresAt) <= new Date()) {
       await tx
         .update(invitationTable)
         .set({ status: "expired" })
         .where(eq(invitationTable.id, invitationId));
       return { outcome: "expired" };
     }
-
-    const invite = invitation[0];
 
     // Ensure org membership exists. The invitation lock does not serialize two
     // accepts of different invitations for one user, so a check-then-insert

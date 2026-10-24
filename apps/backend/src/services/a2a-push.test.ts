@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
+import { TaskNotFoundError } from "@a2a-js/sdk/errors";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { a2aPushConfig as a2aPushConfigTable } from "../db/schema.ts";
@@ -86,5 +87,35 @@ describe("storePushConfig", () => {
       url: "https://client.example/hook",
       token: "secret",
     });
+  });
+
+  it("throws TaskNotFoundError when the config is deleted before its update", async () => {
+    const config = {
+      id: "cfg-1",
+      url: "https://client.example/hook",
+      token: "secret",
+      authentication: null,
+    };
+    await storePushConfig(TASK, config);
+    // The UPDATE then finds no row, as it would after a concurrent delete.
+    // `ENABLE ALWAYS`: the replica role set above skips ordinary triggers.
+    await pg.exec(`
+      CREATE FUNCTION skip_update() RETURNS trigger LANGUAGE plpgsql
+        AS $$ BEGIN RETURN NULL; END $$;
+      CREATE TRIGGER skip_update BEFORE UPDATE ON "a2a_push_config"
+        FOR EACH ROW EXECUTE FUNCTION skip_update();
+      ALTER TABLE "a2a_push_config" ENABLE ALWAYS TRIGGER skip_update;
+    `);
+
+    try {
+      await expect(
+        storePushConfig(TASK, { ...config, token: "rotated" }),
+      ).rejects.toThrow(TaskNotFoundError);
+    } finally {
+      await pg.exec(`
+        DROP TRIGGER skip_update ON "a2a_push_config";
+        DROP FUNCTION skip_update();
+      `);
+    }
   });
 });

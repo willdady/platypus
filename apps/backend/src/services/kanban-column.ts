@@ -20,6 +20,7 @@ import {
   type Executor,
   type KanbanScope,
 } from "./kanban-shared.ts";
+import { oneRow } from "../db/one-row.ts";
 
 /**
  * The ids of every board in scope, as a subquery. A board or column write puts
@@ -135,7 +136,7 @@ export const createColumn = async (
     .returning()
     .catch(rethrowAsColumnNameClash);
 
-  return rows[0];
+  return oneRow(rows);
 };
 
 /** Renames a column. Keeping its own name is not a clash. */

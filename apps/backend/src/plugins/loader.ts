@@ -533,7 +533,8 @@ export async function loadPlugins(
 
     let mod: PluginModule;
     try {
-      mod = isCore ? await builtins[name]() : await importPlugin(name);
+      const builtin = isCore ? builtins[name] : undefined;
+      mod = builtin ? await builtin() : await importPlugin(name);
     } catch (cause) {
       throw new Error(
         `Plugin "${name}": failed to resolve (${errorMessage(cause)}).`,

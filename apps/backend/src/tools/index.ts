@@ -550,14 +550,13 @@ registerToolSet(
         agentId,
         registerCloser,
       }) => {
-        const rows = await db
+        const [row] = await db
           .select()
           .from(sandboxTable)
           .where(eq(sandboxTable.workspaceId, workspaceId))
           .limit(1);
-        if (rows.length === 0) return {};
+        if (!row) return {};
 
-        const row = rows[0];
         // Every line below is core's, but the subject of all three is a *plugin's*
         // adapter, so each binds the owning plugin under the same `plugin` key the
         // plugin's own lines carry. Otherwise an Operator filtering on one plugin

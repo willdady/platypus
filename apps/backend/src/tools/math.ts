@@ -28,7 +28,7 @@ export const convertTemperature = tool({
   },
 });
 
-const DISTANCE_TO_METERS: Record<string, number> = {
+const DISTANCE_TO_METERS = {
   meters: 1,
   centimeters: 0.01,
   kilometers: 1000,

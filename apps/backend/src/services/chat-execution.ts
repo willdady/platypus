@@ -430,7 +430,7 @@ const drizzleChatTurnQueries: ChatTurnQueries = {
   },
 
   async getSandboxEnvKeys(workspaceId) {
-    const rows = await db
+    const [row] = await db
       .select({
         adminEnv: sandboxTable.adminEnv,
         userEnv: sandboxTable.userEnv,
@@ -438,9 +438,9 @@ const drizzleChatTurnQueries: ChatTurnQueries = {
       .from(sandboxTable)
       .where(eq(sandboxTable.workspaceId, workspaceId))
       .limit(1);
-    if (rows.length === 0) return [];
+    if (!row) return [];
     // Union of both tiers; the orientation block lists keys only (ADR-0004).
-    return Object.keys({ ...rows[0].userEnv, ...rows[0].adminEnv });
+    return Object.keys({ ...row.userEnv, ...row.adminEnv });
   },
 };
 

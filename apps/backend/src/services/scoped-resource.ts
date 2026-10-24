@@ -370,7 +370,7 @@ export const listScoped = async <T extends ScopedResourceType>(
   // resource type for every dual-scope table (`agent`, `skill`, `mcp`,
   // `provider`). The key is dynamic over the union table, so bridge through
   // `unknown` to recover the per-resource row shape.
-  const orgRows = (attachedRows as unknown as Record<string, RowOf[T]>[]).map(
+  const orgRows = (attachedRows as unknown as Record<T, RowOf[T]>[]).map(
     (r) => r[type],
   );
 

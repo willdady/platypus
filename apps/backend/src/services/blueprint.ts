@@ -179,6 +179,7 @@ const writeBlueprint = async (
     .from(blueprintTable)
     .where(eq(blueprintTable.id, blueprintId))
     .limit(1);
+  if (!record) throw new NotFoundError("Blueprint not found");
   return { ...record, items };
 };
 
