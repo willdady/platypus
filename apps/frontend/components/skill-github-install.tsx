@@ -134,13 +134,13 @@ function CandidateRow({
 export function SkillGithubInstall({
   scope,
   skillsHref,
-  skillHref,
+  skillHrefBase,
 }: {
   scope: Scope;
   /** Where the Skills list is. */
   skillsHref: string;
-  /** Where an installed Skill's own page is. */
-  skillHref: (skillId: string) => string;
+  /** Where installed Skills' own pages are, each at `<base>/<skillId>`. */
+  skillHrefBase: string;
 }) {
   const backendUrl = useBackendUrl();
   const importAllowed = useSkillImportAllowed(scope);
@@ -218,7 +218,7 @@ export function SkillGithubInstall({
               <span className="min-w-0 flex-1">
                 {result.status === 201 && result.skillId ? (
                   <Link
-                    href={skillHref(result.skillId)}
+                    href={`${skillHrefBase}/${result.skillId}`}
                     className="font-medium underline underline-offset-4"
                   >
                     {result.name}
@@ -249,9 +249,10 @@ export function SkillGithubInstall({
   );
   // One install takes at most this many.
   const selectAll = pickable?.slice(0, SKILL_GITHUB_INSTALL_MAX) ?? [];
-  const needsSandbox = preview?.skills.some(
-    (skill) => selected.has(skill.skillPath) && skill.needsSandbox,
-  );
+  const needsSandbox =
+    preview?.skills.filter(
+      (skill) => selected.has(skill.skillPath) && skill.needsSandbox,
+    ).length ?? 0;
   const repo = preview ? `${preview.owner}/${preview.repo}` : "";
 
   return (
@@ -341,16 +342,18 @@ export function SkillGithubInstall({
             </>
           )}
 
-          {needsSandbox && (
+          {needsSandbox > 0 && (
             <Alert>
               <TriangleAlert />
               <AlertTitle>Third-party scripts</AlertTitle>
               <AlertDescription>
-                This Skill includes scripts written by a third party. If an
-                Agent with a Sandbox runs them, they run with this
-                Workspace&apos;s default environment variables and can send them
-                anywhere the Sandbox can reach. Review the files before
-                installing.
+                {needsSandbox === 1
+                  ? "1 selected Skill includes"
+                  : `${needsSandbox} selected Skills include`}{" "}
+                scripts written by a third party. If an Agent with a Sandbox
+                runs them, they run with this Workspace&apos;s default
+                environment variables and can send them anywhere the Sandbox can
+                reach. Review the files before installing.
               </AlertDescription>
             </Alert>
           )}

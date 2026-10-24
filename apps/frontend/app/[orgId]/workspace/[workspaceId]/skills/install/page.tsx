@@ -22,7 +22,7 @@ async function SkillInstallPage({
       <SkillGithubInstall
         scope={{ orgId, workspaceId }}
         skillsHref={routes.root}
-        skillHref={(skillId) => `${routes.skills.root}/${skillId}`}
+        skillHrefBase={routes.skills.root}
       />
     </ResourcePage>
   );
