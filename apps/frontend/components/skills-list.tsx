@@ -47,6 +47,7 @@ import {
 import {
   ArrowUpFromLine,
   Bot,
+  FolderGit2,
   Plus,
   Share2,
   Sparkles,
@@ -55,6 +56,7 @@ import {
 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -247,6 +249,7 @@ export function SkillsList({
   const canAttach = canManageSharedResource(actor, workspaceId);
   const canPromote = canAttach;
   const canManageOrg = canManageOrgSharedResource(actor);
+  const importAllowed = useSkillImportAllowed(scope);
 
   const orgSkillDetach = useSharedDetach<SkillWithScope>({
     resourceType: "skill",
@@ -372,10 +375,16 @@ export function SkillsList({
           <Plus /> Create skill
         </Link>
       </Button>
-      <SkillImportButton
-        scope={workspaceId ? { orgId, workspaceId } : { orgId }}
-        onImported={() => void mutate()}
-      />
+      {importAllowed && (
+        <>
+          <SkillImportButton scope={scope} onImported={() => void mutate()} />
+          <Button variant="outline" asChild>
+            <Link href={`${editBasePath}/install`}>
+              <FolderGit2 /> Install from GitHub
+            </Link>
+          </Button>
+        </>
+      )}
       {canAttach && workspaceId && (
         <AttachSharedAction
           orgId={orgId}

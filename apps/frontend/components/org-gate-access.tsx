@@ -54,8 +54,11 @@ type GateCopy = {
   allowedDescription: string;
   /** The column header for how many gated resources a Workspace holds. */
   countHeader: string;
-  /** The warning for Workspaces with resources the save would cut off. */
-  cutOffMessage: (cutOff: GateWorkspace[]) => string;
+  /**
+   * The warning for Workspaces with resources the save would cut off. Absent
+   * where shutting a Workspace out leaves what it has working.
+   */
+  cutOffMessage?: (cutOff: GateWorkspace[]) => string;
 };
 
 /**
@@ -201,7 +204,7 @@ export function OrgGateAccess({
         </Field>
       )}
 
-      {cutOff.length > 0 && (
+      {copy.cutOffMessage && cutOff.length > 0 && (
         <Alert>
           <TriangleAlert />
           <AlertTitle>Calls will be refused</AlertTitle>
@@ -267,4 +270,25 @@ const A2A_GATE: GateCopy = {
  */
 export function OrgA2aAccess({ orgId }: { orgId: string }) {
   return <OrgGateAccess orgId={orgId} copy={A2A_GATE} />;
+}
+
+const SKILL_IMPORT_GATE: GateCopy = {
+  entity: "skill-import/access",
+  subject: "skill import access",
+  savedMessage: "Skill import access saved",
+  selectLabel: "Allow importing skills in",
+  selectName: "skillImportGate",
+  selectDescription:
+    "Which workspaces can import skill bundles: from a zip, by replacing a bundle, or from GitHub. Skills already imported stay, and anyone can still write a skill by hand.",
+  allowedDescription:
+    "Only the workspaces switched on here can import skills. Saved together with the setting above.",
+  countHeader: "Skills",
+};
+
+/**
+ * Which Workspaces may import Skill bundles (ADR-0037). On by default for
+ * every Workspace; importing at Organization scope is never gated.
+ */
+export function OrgSkillImportAccess({ orgId }: { orgId: string }) {
+  return <OrgGateAccess orgId={orgId} copy={SKILL_IMPORT_GATE} />;
 }

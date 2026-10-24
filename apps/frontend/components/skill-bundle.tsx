@@ -22,6 +22,7 @@ import {
   type Serialized,
 } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import { optionalFetcher } from "@/lib/utils";
 
 /** Marks a Skill whose scripts or binary files only a Sandbox can use. */
@@ -37,6 +38,15 @@ export function NeedsSandboxBadge({ skill }: { skill: Serialized<Skill> }) {
       Needs Sandbox
     </Badge>
   );
+}
+
+/** A link to a Skill's directory on GitHub, at one commit. */
+export function githubTreeUrl(
+  source: string,
+  commitSha: string,
+  skillPath: string,
+) {
+  return `https://github.com/${source}/tree/${commitSha}${skillPath ? `/${skillPath}` : ""}`;
 }
 
 /**
@@ -104,7 +114,7 @@ export function SkillImportButton({
   );
 }
 
-function formatSize(bytes: number) {
+export function formatSize(bytes: number) {
   return bytes < 1024
     ? `${bytes} B`
     : bytes < 1024 * 1024
@@ -147,6 +157,7 @@ export function SkillBundleCard({
   );
   const binariesSkipped =
     sandbox?.transfer.upload === false && files.some((file) => !file.isText);
+  const importAllowed = useSkillImportAllowed(scope);
 
   return (
     <Card className="mb-6">
@@ -161,6 +172,25 @@ export function SkillBundleCard({
           fields above, the frontmatter and every file with the zip&apos;s
           contents.
         </FieldDescription>
+
+        {skill.sourceType === "github" && skill.source && skill.commitSha && (
+          <p className="text-sm">
+            Installed from{" "}
+            <a
+              href={githubTreeUrl(
+                skill.source,
+                skill.commitSha,
+                skill.skillPath ?? "",
+              )}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono underline underline-offset-4"
+            >
+              {[skill.source, skill.skillPath].filter(Boolean).join("/")} @{" "}
+              {skill.commitSha.slice(0, 7)}
+            </a>
+          </p>
+        )}
 
         {binariesSkipped && (
           <p className="flex items-center gap-1 text-sm text-warning-foreground">
@@ -215,14 +245,19 @@ export function SkillBundleCard({
               <FileArchive /> Export
             </a>
           </Button>
-          {upload.input(`${skillUrl}/bundle`)}
-          <Button
-            variant="outline"
-            onClick={upload.pick}
-            disabled={upload.uploading}
-          >
-            <FileUp /> {upload.uploading ? "Replacing..." : "Replace bundle"}
-          </Button>
+          {importAllowed && (
+            <>
+              {upload.input(`${skillUrl}/bundle`)}
+              <Button
+                variant="outline"
+                onClick={upload.pick}
+                disabled={upload.uploading}
+              >
+                <FileUp />{" "}
+                {upload.uploading ? "Replacing..." : "Replace bundle"}
+              </Button>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>
