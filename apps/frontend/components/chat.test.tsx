@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { ChatStatus, FileUIPart, PrepareSendMessagesRequest } from "ai";
+import {
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+  type ChatStatus,
+  type FileUIPart,
+  type PrepareSendMessagesRequest,
+} from "ai";
 import type { PlatypusUIMessage } from "@platypus/schemas";
 import { reportPdf } from "@/test/chat-test-fixtures";
 import {
@@ -50,6 +55,7 @@ const { harness } = vi.hoisted(() => ({
     setMessages: vi.fn(),
     sendMessage: vi.fn(),
     regenerate: vi.fn(),
+    addToolApprovalResponse: vi.fn(),
     stop: vi.fn(),
     toastError: vi.fn(),
     toastInfo: vi.fn(),
@@ -70,6 +76,7 @@ const { harness } = vi.hoisted(() => ({
       | {
           transport: { prepareSendMessagesRequest: PrepareRequest };
           experimental_throttle?: number;
+          sendAutomaticallyWhen?: unknown;
         },
   },
 }));
@@ -119,6 +126,7 @@ function useChatState() {
     status: harness.turn.status,
     error: harness.turn.error,
     regenerate: harness.regenerate,
+    addToolApprovalResponse: harness.addToolApprovalResponse,
     stop: harness.stop,
   };
 }
@@ -255,6 +263,7 @@ vi.mock("./chat-message", () => ({
     alternatives,
     onSwitchAlternative,
     staleToolCallIds,
+    onApprovalResponse,
   }: {
     message: PlatypusUIMessage;
     editor?: React.ReactNode;
@@ -264,6 +273,7 @@ vi.mock("./chat-message", () => ({
     alternatives?: AlternativePosition;
     onSwitchAlternative: (fromId: string, toId: string) => void;
     staleToolCallIds?: ReadonlySet<string>;
+    onApprovalResponse?: (approvalId: string, approved: boolean) => void;
   }) => {
     harness.chatMessageRenders += 1;
     harness.lastChatMessageProps = {
@@ -285,6 +295,14 @@ vi.mock("./chat-message", () => ({
             {onRegenerate && (
               <button type="button" onClick={() => onRegenerate(message.id)}>
                 Regenerate {message.id}
+              </button>
+            )}
+            {onApprovalResponse && (
+              <button
+                type="button"
+                onClick={() => onApprovalResponse("ap1", true)}
+              >
+                Approve {message.id}
               </button>
             )}
             {alternatives && (
@@ -666,6 +684,7 @@ beforeEach(() => {
   harness.setMessages.mockReset();
   harness.sendMessage.mockReset();
   harness.regenerate.mockReset();
+  harness.addToolApprovalResponse.mockReset();
   harness.stop.mockReset();
   harness.toastError.mockReset();
   harness.toastInfo.mockReset();
@@ -936,6 +955,39 @@ describe("the server-owned Transcript", () => {
       id: CHAT_ID,
       trigger: "regenerate-message",
       messageId: "a1",
+    });
+  });
+
+  // Issue #1256: the SDK sends the answers by resubmitting the reply itself.
+  it("sends a reply's answered approvals as the answers alone", () => {
+    const answered = (id: string, approved: boolean) => ({
+      type: "dynamic-tool",
+      toolName: "db__drop_table",
+      toolCallId: `c-${id}`,
+      state: "approval-responded",
+      input: {},
+      approval: { id, approved },
+    });
+    const reply = {
+      ...message("a1", "a"),
+      role: "assistant",
+      parts: [answered("ap1", true), answered("ap2", false)],
+    } as unknown as ReturnType<typeof message>;
+
+    const { body } = prepare({
+      messages: [message("u1", "q"), reply],
+      messageId: "a1",
+    });
+
+    expect(body).toEqual({
+      providerId: "p1",
+      id: CHAT_ID,
+      trigger: "respond-to-approvals",
+      messageId: "a1",
+      responses: [
+        { approvalId: "ap1", approved: true },
+        { approvalId: "ap2", approved: false },
+      ],
     });
   });
 
@@ -1389,6 +1441,48 @@ describe("starting a turn", () => {
       expect(harness.chatMutate).toHaveBeenCalledWith();
     },
   );
+
+  // Issue #1256: the last answer sends every answer, with the turn's body.
+  it("answers an approval with the turn's body, sending once all are answered", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve a1" }));
+
+    expect(harness.addToolApprovalResponse).toHaveBeenCalledWith({
+      id: "ap1",
+      approved: true,
+      options: {
+        body: expect.objectContaining({
+          providerId: "p1",
+          maxSteps: 10,
+        }) as unknown,
+      },
+    });
+    expect(harness.chatOptions!.sendAutomaticallyWhen).toBe(
+      lastAssistantMessageIsCompleteWithApprovalResponses,
+    );
+  });
+
+  it("offers an answer only on the Active leaf, and only while idle", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    const view = renderChat();
+    expect(
+      screen.queryByRole("button", { name: "Approve u1" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Approve a1" }),
+    ).toBeInTheDocument();
+
+    harness.turn.status = "streaming";
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(
+      screen.queryByRole("button", { name: "Approve a1" }),
+    ).not.toBeInTheDocument();
+  });
 
   it("does not re-read the row on a render with no turn ending", () => {
     harness.data.set(`/chat/${CHAT_ID}`, directRow(10));

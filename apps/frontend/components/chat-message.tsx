@@ -67,6 +67,7 @@ import { TurnNotice } from "./turn-notice";
 import { MessagePartBoundary } from "./message-part-boundary";
 import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
+import { ToolApprovalCard } from "./tool-approval-card";
 import { OfferedFiles, offeredFiles } from "./offered-files";
 import {
   WebToolCard,
@@ -207,12 +208,17 @@ export function isGenericToolPart(part: MessagePart): part is MessageToolPart {
 
 /**
  * Tool calls that sit in a Tool call group. A Sub-Agent delegation has
- * interactive UI of its own, so it stands alone and ends the group around it.
+ * interactive UI of its own, and a call waiting on the User's approval must
+ * be seen, so each stands alone and ends the group around it.
  */
 function isGroupableToolPart(
   part: MessagePart,
 ): part is MessageToolPart | DynamicToolUIPart {
-  return isToolUIPart(part) && !isSubAgentToolPart(part);
+  return (
+    isToolUIPart(part) &&
+    !isSubAgentToolPart(part) &&
+    part.state !== "approval-requested"
+  );
 }
 
 /** A call's name in its group's header: the Tool's name, not its row's label. */
@@ -239,6 +245,19 @@ function toolCallErrored(part: MessagePart): boolean {
     isToolUIPart(part) &&
     (part.state === "output-error" || part.state === "output-denied")
   );
+}
+
+/**
+ * A call the User denied reads as **Denied**, like one a gate denied. One
+ * denied by a newer message keeps its answered state for good: no turn ever
+ * resumes the reply it sits on.
+ */
+function shownAsDenied(part: MessagePart): MessagePart {
+  return isToolUIPart(part) &&
+    part.state === "approval-responded" &&
+    !part.approval.approved
+    ? ({ ...part, state: "output-denied" } as MessagePart)
+    : part;
 }
 
 function isImageFilePart(part: MessagePart): part is FileUIPart {
@@ -310,6 +329,11 @@ type ChatMessageProps = {
    * renders every tool part exactly as before.
    */
   staleToolCallIds?: ReadonlySet<string>;
+  /**
+   * Answers one of the reply's tool approvals. Passed only to the Active leaf
+   * while no turn is running, the one place an answer can resume the reply.
+   */
+  onApprovalResponse?: (approvalId: string, approved: boolean) => void;
 };
 
 export const ChatMessage = memo(function ChatMessage({
@@ -327,6 +351,7 @@ export const ChatMessage = memo(function ChatMessage({
   onCopyMessage,
   copiedMessageId,
   staleToolCallIds,
+  onApprovalResponse,
 }: ChatMessageProps) {
   // An edit takes the message's place rather than sitting inside it: the
   // surface holds the text, the attachments and its own Save/Cancel, so
@@ -537,18 +562,41 @@ export const ChatMessage = memo(function ChatMessage({
   const isAwaitedReply =
     message.role === "assistant" && isLastMessage && isTurnInFlight;
 
+  // A call waiting on the User is drawn the same way whatever the tool: its
+  // own renderer has nothing to show until it has run.
+  const renderApproval = (part: MessagePart) => {
+    if (!isToolUIPart(part) || part.state !== "approval-requested") return null;
+    const approvalId = part.approval.id;
+    return (
+      <ToolApprovalCard
+        name={toolCallName(part)}
+        type={part.type}
+        input={part.input}
+        reason={part.approval.requestReason}
+        onRespond={
+          onApprovalResponse &&
+          ((approved) => onApprovalResponse(approvalId, approved))
+        }
+      />
+    );
+  };
+
   const renderPart = (part: MessagePart, i: number) => {
+    const approval = renderApproval(part);
     const renderer = partRenderers.find((r) => r.matches(part));
-    return renderer ? (
+    const render = approval
+      ? () => approval
+      : renderer && (() => renderer.render(part, i));
+    return render ? (
       <MessagePartBoundary
         key={`${message.id}-${i}`}
         resetKey={part}
-        render={() => renderer.render(part, i)}
+        render={render}
       />
     ) : null;
   };
   const segments = partitionParts(
-    message.parts ?? [],
+    (message.parts ?? []).map(shownAsDenied),
     isGroupableToolPart,
     isOfferedFilePart,
   );

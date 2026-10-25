@@ -1534,6 +1534,109 @@ describe("Chat Routes", () => {
       });
     });
 
+    describe("answering a reply's tool approvals", () => {
+      const asked = {
+        type: "tool-wipe",
+        toolCallId: "tc1",
+        state: "approval-requested",
+        input: { path: "/data" },
+        approval: { id: "ap1", requestReason: "Looks risky." },
+      };
+
+      /** `seedChat` with a2 stopped to ask about tc1. */
+      const seedWaiting = (owner?: string) => {
+        const fake = seedChat();
+        rowOf(fake, "a2")!.parts = [{ type: "text", text: "a2" }, asked];
+        if (owner) fake.tables.workspace[0].ownerId = owner;
+        return fake;
+      };
+
+      const respond = (approved = true, approvalId = "ap1") =>
+        post({
+          trigger: "respond-to-approvals",
+          messageId: "a2",
+          responses: [{ approvalId, approved }],
+        });
+
+      it("writes the answer onto the stored part and continues the same reply", async () => {
+        mockSession();
+        const fake = seedWaiting();
+        startsTurn();
+
+        const res = await respond(false);
+
+        expect(res.status).toBe(200);
+        expect(historyIds()).toEqual(["u1", "a1", "u2", "a2"]);
+        expect(fake.tables.chat_message).toHaveLength(4);
+        expect(rowOf(fake, "a2")?.parts).toContainEqual({
+          ...asked,
+          state: "approval-responded",
+          approval: {
+            ...asked.approval,
+            approved: false,
+            reason: "The User denied this call.",
+          },
+        });
+        expect(fake.tables.chat[0].activeLeafId).toBe("a2");
+      });
+
+      it.each([
+        ["an unknown approval", () => respond(true, "ap9")],
+        [
+          "a reply that is not the Active leaf",
+          () =>
+            post({
+              trigger: "respond-to-approvals",
+              messageId: "a1",
+              responses: [{ approvalId: "ap1", approved: true }],
+            }),
+        ],
+      ])("409s %s", async (_, send) => {
+        mockSession();
+        seedWaiting();
+
+        expect((await send()).status).toBe(409);
+        expect(mockPrepareChatTurn).not.toHaveBeenCalled();
+      });
+
+      it("409s while the Chat is running, leaving the approval waiting", async () => {
+        mockSession();
+        const fake = seedWaiting();
+        fake.tables.chat[0].status = "running";
+
+        expect((await respond()).status).toBe(409);
+        expect(rowOf(fake, "a2")?.parts).toContainEqual(asked);
+      });
+
+      it("403s anyone but the Workspace Owner", async () => {
+        mockSession();
+        const fake = seedWaiting("user-2");
+
+        expect((await respond()).status).toBe(403);
+        expect(rowOf(fake, "a2")?.parts).toContainEqual(asked);
+      });
+
+      it("denies the approval when a new message is sent instead", async () => {
+        mockSession();
+        const fake = seedWaiting();
+        startsTurn();
+
+        const res = await post({ message: message("u3"), parentId: "a2" });
+
+        expect(res.status).toBe(200);
+        expect(rowOf(fake, "a2")?.parts).toContainEqual({
+          ...asked,
+          state: "approval-responded",
+          approval: {
+            ...asked.approval,
+            approved: false,
+            reason:
+              "The User sent a new message instead of answering this approval request, so the call was not run.",
+          },
+        });
+      });
+    });
+
     describe("DELETE /:chatId/messages/:messageId", () => {
       it("takes the message out of the Chat for good, with no further send", async () => {
         mockSession();

@@ -58,6 +58,11 @@ export type UseChatTurnInput<T extends UIMessage> = {
   chat: {
     sendMessage: (message: Outgoing, options: TurnOptions) => unknown;
     regenerate: (options: TurnOptions & { messageId: string }) => unknown;
+    addToolApprovalResponse: (response: {
+      id: string;
+      approved: boolean;
+      options: TurnOptions;
+    }) => unknown;
     stop: () => unknown;
     setMessages: (update: (held: T[]) => T[]) => void;
   };
@@ -86,7 +91,13 @@ export function useChatTurn<T extends UIMessage>({
   settings,
   search,
   runHeldElsewhere,
-  chat: { sendMessage, regenerate: regenerateTurn, stop, setMessages },
+  chat: {
+    sendMessage,
+    regenerate: regenerateTurn,
+    addToolApprovalResponse,
+    stop,
+    setMessages,
+  },
   refreshChat,
   backendUrl,
   scope,
@@ -153,6 +164,29 @@ export function useChatTurn<T extends UIMessage>({
     [sendMessage, setMessages, start],
   );
 
+  /**
+   * Answers one of a reply's tool approvals (issue #1256). The chat hook
+   * holds each answer until the reply's last, then sends them all as one turn
+   * with that answer's body, so every answer carries it. No refresh: a read
+   * landing between two answers would put the first one's card back.
+   */
+  const respond = useCallback(
+    (approvalId: string, approved: boolean): boolean => {
+      if (runHeldElsewhere) return false;
+      if (!request.ok) {
+        toast.error(request.reason);
+        return false;
+      }
+      addToolApprovalResponse({
+        id: approvalId,
+        approved,
+        options: { body: request.body },
+      });
+      return true;
+    },
+    [addToolApprovalResponse, request, runHeldElsewhere],
+  );
+
   const cancel = useCallback(() => {
     // The server-side run is decoupled from the request lifecycle, so
     // aborting the local fetch (what `stop()` does) no longer cancels
@@ -178,5 +212,5 @@ export function useChatTurn<T extends UIMessage>({
     stop();
   }, [backendUrl, chatId, scope, stop]);
 
-  return { send, regenerate, resendEdited, cancel };
+  return { send, regenerate, resendEdited, respond, cancel };
 }

@@ -405,15 +405,19 @@ the same reason.
 
 <Callout type="warning">
   **A gate fails closed.** A gate that errors or takes longer than its own time
-  limit stops the call, as if it had said no. An outage of the model behind
-  `@platypus/decision-gate` is therefore an outage of every tool call on the
-  deployment until it recovers, or until you remove the Plugin from
-  `PLATYPUS_PLUGINS` and restart.
+  limit stops the call, as if it had said no — or, in a Chat, asks the Workspace
+  Owner to approve it. An outage of the model behind `@platypus/decision-gate`
+  therefore stops every tool call in Trigger runs, A2A calls and Sub-Agent runs,
+  and turns every tool call in a Chat into a request for approval, until it
+  recovers or until you remove the Plugin from `PLATYPUS_PLUGINS` and restart.
 </Callout>
 
-**Asking a person is not available yet.** A call a gate wants approved is
-stopped too, so `askThreshold` behaves as a second, lower `denyThreshold` for
-now. What gates can and cannot see, and how they combine, is in [Tool
+**A call a gate wants approved is asked about only in a Chat.** The reply stops
+and the Workspace Owner approves or denies the call (see [Chat → Approving a
+tool call](/building-with-platypus/chat#approving-a-tool-call)). In a Trigger
+run, an A2A call or a Sub-Agent run no one can be asked, so the call is stopped,
+and there `askThreshold` behaves as a second, lower `denyThreshold`. What gates
+can and cannot see, and how they combine, is in [Tool
 gates](/extending/tool-gates).
 
 ## Tool egress

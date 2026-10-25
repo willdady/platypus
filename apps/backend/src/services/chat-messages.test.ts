@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
-import { deleteMessage, loadActivePath, resolveTurn } from "./chat-messages.ts";
+import {
+  deleteMessage,
+  loadActivePath,
+  MOVED_ON_REASON,
+  resolveTurn,
+  USER_DENIED_REASON,
+} from "./chat-messages.ts";
 
 const at = (seconds: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, seconds));
 
@@ -303,6 +309,153 @@ describe("chat messages", () => {
       });
       await expect(turn).rejects.toBeInstanceOf(ConflictError);
       await expect(turn).rejects.toThrow(error);
+    });
+  });
+
+  describe("tool approvals", () => {
+    const asked = (toolCallId: string, approvalId: string) => ({
+      type: "tool-wipe",
+      toolCallId,
+      state: "approval-requested",
+      input: { path: "/data" },
+      approval: { id: approvalId, requestReason: "Looks risky." },
+    });
+    const responded = (
+      toolCallId: string,
+      approvalId: string,
+      approved: boolean,
+      reason?: string,
+    ) => ({
+      ...asked(toolCallId, approvalId),
+      state: "approval-responded",
+      approval: {
+        id: approvalId,
+        requestReason: "Looks risky.",
+        approved,
+        ...(reason ? { reason } : {}),
+      },
+    });
+
+    /** `tree()` with a2 waiting on two approvals. */
+    const waiting = () => {
+      const rows = tree();
+      rows[3].parts = [text("a2"), asked("tc1", "ap1"), asked("tc2", "ap2")];
+      return rows;
+    };
+
+    const respond = (
+      responses: { approvalId: string; approved: boolean }[],
+      messageId = "a2",
+    ) => ({
+      trigger: "respond-to-approvals" as const,
+      messageId,
+      responses,
+    });
+
+    const BOTH = [
+      { approvalId: "ap1", approved: true },
+      { approvalId: "ap2", approved: false },
+    ];
+
+    it("continues the reply with each answer written onto its part", async () => {
+      seedDb({ chat_message: waiting() });
+
+      const turn = await resolveTurn({
+        chatId: "chat-1",
+        owned: true,
+        activeLeafId: "a2",
+        request: respond(BOTH),
+      });
+
+      const reply = {
+        id: "a2",
+        role: "assistant",
+        parts: [
+          text("a2"),
+          responded("tc1", "ap1", true),
+          responded("tc2", "ap2", false, USER_DENIED_REASON),
+        ],
+      };
+      expect(turn.messages.map((m) => m.id)).toEqual(["u1", "a1", "u2", "a2"]);
+      expect(turn.messages.at(-1)).toEqual(reply);
+      expect(turn.message).toBeUndefined();
+      expect(turn.parentId).toBe("a2");
+      expect(turn.answered).toEqual([reply]);
+    });
+
+    it.each([
+      ["a reply that is not the Active leaf", {}, "a1", BOTH],
+      ["a user message", { activeLeafId: "u2" }, "u2", BOTH],
+      ["a message not in the Chat", {}, "nope", BOTH],
+      [
+        "an unknown approval",
+        {},
+        "a2",
+        [...BOTH, { approvalId: "ap9", approved: true }],
+      ],
+      ["an approval left unanswered", {}, "a2", BOTH.slice(0, 1)],
+    ])("409s %s", async (_, leaf, messageId, responses) => {
+      seedDb({ chat_message: waiting() });
+
+      await expect(
+        resolveTurn({
+          chatId: "chat-1",
+          owned: true,
+          activeLeafId: "a2",
+          ...leaf,
+          request: respond(responses, messageId),
+        }),
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it("409s a deleted reply", async () => {
+      const rows = waiting();
+      rows[3].deletedAt = at(9);
+      seedDb({ chat_message: rows });
+
+      await expect(
+        resolveTurn({
+          chatId: "chat-1",
+          owned: true,
+          activeLeafId: "a2",
+          request: respond(BOTH),
+        }),
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it("denies what a new message leaves unanswered, for the model and for the record", async () => {
+      seedDb({ chat_message: waiting() });
+
+      const turn = await resolveTurn({
+        chatId: "chat-1",
+        owned: true,
+        request: submit(),
+      });
+
+      const reply = {
+        id: "a2",
+        role: "assistant",
+        parts: [
+          text("a2"),
+          responded("tc1", "ap1", false, MOVED_ON_REASON),
+          responded("tc2", "ap2", false, MOVED_ON_REASON),
+        ],
+      };
+      expect(turn.messages.at(-2)).toEqual(reply);
+      expect(turn.answered).toEqual([reply]);
+    });
+
+    it("lets a waiting reply regenerate, leaving it as it was", async () => {
+      seedDb({ chat_message: waiting() });
+
+      const turn = await resolveTurn({
+        chatId: "chat-1",
+        owned: true,
+        request: { trigger: "regenerate-message", messageId: "a2" },
+      });
+
+      expect(turn.messages.map((m) => m.id)).toEqual(["u1", "a1", "u2"]);
+      expect(turn.answered).toEqual([]);
     });
   });
 

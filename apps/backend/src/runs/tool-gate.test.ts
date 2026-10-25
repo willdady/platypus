@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { dynamicTool, simulateReadableStream } from "ai";
+import {
+  convertToModelMessages,
+  dynamicTool,
+  simulateReadableStream,
+} from "ai";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
 import { z } from "zod";
@@ -9,6 +13,7 @@ import { driveChat, driveDelegate, driveOnce } from "./drive.ts";
 import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import type { RunStatus } from "./types.ts";
+import type { PlatypusUIMessage } from "../types.ts";
 import {
   clearToolGates,
   registerToolGate,
@@ -340,25 +345,18 @@ describe("failing closed", () => {
     expect(executed).toEqual([]);
   });
 
-  it("treats ask as deny, even in an attended Chat turn", async () => {
+  it("treats ask as deny in an unattended run", async () => {
     gate("cautious", () => ({ verdict: "ask", reason: "Looks risky." }));
     const { model, prompts } = callThenAnswer();
     const executed: string[] = [];
     const { run } = startRecordedRun();
 
-    const drive = driveChat({
-      plan: planWith(model, executed, { ...SCOPE, attended: true }),
-      modelMessages: [{ role: "user", content: "go" }],
-      run,
-    });
-    void (async () => {
-      for await (const _ of drive.response);
-    })();
-    for await (const _ of drive.snapshots);
-    await drive.done;
+    await driveOnce({ plan: planWith(model, executed), prompt: "go", run });
 
     expect(executed).toEqual([]);
-    expect(toolResultSentBack(prompts).output.reason).toContain("Looks risky.");
+    const reason = toolResultSentBack(prompts).output.reason;
+    expect(reason).toContain("Looks risky.");
+    expect(reason).toContain("no one can approve it here");
   });
 
   it("does not run a call when the plan carries no gate scope", async () => {
@@ -376,6 +374,202 @@ describe("failing closed", () => {
     });
 
     expect(executed).toEqual([]);
+  });
+});
+
+/** Drains a Chat drive and returns its folded messages and outcome. */
+const drain = async (drive: ReturnType<typeof driveChat>) => {
+  void (async () => {
+    for await (const _ of drive.response);
+  })();
+  for await (const _ of drive.snapshots);
+  return drive.done;
+};
+
+type ToolPart = {
+  type: string;
+  toolCallId: string;
+  state: string;
+  approval?: {
+    id: string;
+    approved?: boolean;
+    reason?: string;
+    requestReason?: string;
+  };
+};
+
+const toolParts = (messages: PlatypusUIMessage[] | undefined) =>
+  (messages ?? [])
+    .flatMap((m) => m.parts)
+    .filter((p) => (p.type as string) === "tool-wipe") as unknown as ToolPart[];
+
+/** Calls `wipe` three times in one step (`tc1`–`tc3` on /a–/c), then answers. */
+const threeCallsThenAnswer = () => {
+  const prompts: unknown[] = [];
+  let index = 0;
+  const model = new MockLanguageModelV3({
+    doStream: (options) => {
+      prompts.push(options.prompt);
+      const parts =
+        index === 0
+          ? step(
+              [
+                {
+                  type: "tool-call",
+                  toolCallId: "tc1",
+                  toolName: "wipe",
+                  input: JSON.stringify({ path: "/a" }),
+                },
+                {
+                  type: "tool-call",
+                  toolCallId: "tc2",
+                  toolName: "wipe",
+                  input: JSON.stringify({ path: "/b" }),
+                },
+                {
+                  type: "tool-call",
+                  toolCallId: "tc3",
+                  toolName: "wipe",
+                  input: JSON.stringify({ path: "/c" }),
+                },
+              ],
+              "tool-calls",
+            )
+          : answerStep;
+      index += 1;
+      return Promise.resolve({
+        stream: simulateReadableStream({ chunks: parts }),
+      });
+    },
+  });
+  return { model, prompts };
+};
+
+describe("a Tool gate's ask in an attended Chat turn", () => {
+  const ATTENDED = { ...SCOPE, attended: true };
+
+  it("stops the turn after the step and asks the User, with the gate's reason", async () => {
+    const verdicts: Record<string, ToolGateVerdict> = {
+      "/a": { verdict: "ask", reason: "Looks risky." },
+      "/b": { verdict: "allow" },
+      "/c": { verdict: "deny" },
+    };
+    gate("cautious", (call) => verdicts[(call.args as { path: string }).path]);
+    const { model, prompts } = threeCallsThenAnswer();
+    const executed: string[] = [];
+    const { run, outcome } = startRecordedRun();
+
+    const { messages } = await drain(
+      driveChat({
+        plan: planWith(model, executed, ATTENDED),
+        modelMessages: [{ role: "user", content: "go" }],
+        run,
+      }),
+    );
+
+    // The step's allowed call ran and its denied one did not; the model was
+    // not called again.
+    expect(executed).toEqual(["/b"]);
+    expect(prompts).toHaveLength(1);
+    expect(outcome[0]?.status).toBe("succeeded");
+    const [asked, allowed, denied] = toolParts(messages);
+    expect(asked.state).toBe("approval-requested");
+    expect(asked.approval?.requestReason).toBe("Looks risky.");
+    expect(allowed.state).toBe("output-available");
+    expect(denied.state).toBe("output-denied");
+  });
+
+  /** Asks once, then answers `approved` for the call and resumes. */
+  const askThenResume = async (approved: boolean, reason?: string) => {
+    let gateCalls = 0;
+    gate("cautious", () => {
+      gateCalls += 1;
+      if (gateCalls > 1) throw new Error("re-vetted an approved call");
+      return { verdict: "ask", reason: "Looks risky." };
+    });
+    const first = callThenAnswer();
+    const executed: string[] = [];
+    const stopped = await drain(
+      driveChat({
+        plan: planWith(first.model, executed, ATTENDED),
+        modelMessages: [{ role: "user", content: "go" }],
+        run: startRecordedRun().run,
+      }),
+    );
+    const reply = stopped.messages?.at(-1) as PlatypusUIMessage;
+    const answered = {
+      ...reply,
+      // As if the ask fell on the step ceiling: how the first request ended
+      // says nothing about how the resumed reply does.
+      metadata: { ...reply.metadata, stoppedAtStepLimit: true as const },
+      parts: reply.parts.map((p) => {
+        const part = p as unknown as ToolPart;
+        return part.state === "approval-requested"
+          ? ({
+              ...part,
+              state: "approval-responded",
+              approval: { ...part.approval, approved, reason },
+            } as unknown as typeof p)
+          : p;
+      }),
+    };
+    const user: PlatypusUIMessage = {
+      id: "u1",
+      role: "user",
+      parts: [{ type: "text", text: "go" }],
+    };
+    const prompts: unknown[] = [];
+    const second = new MockLanguageModelV3({
+      doStream: (options) => {
+        prompts.push(options.prompt);
+        return Promise.resolve({
+          stream: simulateReadableStream({ chunks: answerStep }),
+        });
+      },
+    });
+    const resumed = await drain(
+      driveChat({
+        plan: planWith(second, executed, ATTENDED),
+        modelMessages: await convertToModelMessages([user, answered]),
+        originalMessages: [user, answered],
+        run: startRecordedRun().run,
+      }),
+    );
+    return { reply, resumed, executed, gateCalls, prompts };
+  };
+
+  it("runs an approved call without asking any gate again, and continues the same reply", async () => {
+    const { reply, resumed, executed, gateCalls } = await askThenResume(true);
+
+    expect(executed).toEqual(["/data"]);
+    expect(gateCalls).toBe(1);
+    expect(resumed.messages).toHaveLength(2);
+    const continued = resumed.messages?.at(-1);
+    expect(continued?.id).toBe(reply.id);
+    expect(toolParts(resumed.messages)[0]?.state).toBe("output-available");
+    expect(continued?.metadata?.stoppedAtStepLimit).toBeUndefined();
+  });
+
+  it("hands the model a denied call with the User's reason", async () => {
+    const { resumed, executed, prompts } = await askThenResume(
+      false,
+      "The User denied this call.",
+    );
+
+    expect(executed).toEqual([]);
+    expect(toolParts(resumed.messages)[0]?.state).toBe("output-denied");
+    const denial = (prompts[0] as Array<{ role: string; content: unknown[] }>)
+      .filter((m) => m.role === "tool")
+      .flatMap((m) => m.content)
+      .find(
+        (p) =>
+          (p as { type: string }).type === "tool-result" &&
+          (p as { toolCallId?: string }).toolCallId === "tc1",
+      ) as { output: { type: string; reason?: string } };
+    expect(denial.output).toEqual({
+      type: "execution-denied",
+      reason: "The User denied this call.",
+    });
   });
 });
 

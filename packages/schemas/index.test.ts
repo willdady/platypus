@@ -584,6 +584,26 @@ describe("Chat Submit Schema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("should accept answers to a reply's approvals, and only the answers", () => {
+    const respond = {
+      ...baseTurn,
+      trigger: "respond-to-approvals",
+      messageId: "a1",
+      responses: [{ approvalId: "ap1", approved: true }],
+    };
+    expect(chatSubmitSchema.safeParse(respond).success).toBe(true);
+    expect(
+      chatSubmitSchema.safeParse({ ...respond, responses: [] }).success,
+    ).toBe(false);
+    // The server writes the reason; the client sends only the decision.
+    expect(
+      chatSubmitSchema.safeParse({
+        ...respond,
+        responses: [{ approvalId: "ap1", approved: false, reason: "No." }],
+      }).success,
+    ).toBe(false);
+  });
+
   // The server owns the Transcript (ADR-0026): a client that still sends its
   // whole history is refused, not quietly half-honoured.
   it.each([

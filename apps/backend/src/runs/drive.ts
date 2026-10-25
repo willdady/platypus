@@ -121,6 +121,23 @@ const detectorFor = (unattended: boolean): NoProgressDetector | null =>
 const planRecording = (plan: RunPlan, scope: RunEventScope | undefined) =>
   scope ? { ...plan, tools: wrapToolsWithRunEvents(plan.tools, scope) } : plan;
 
+/**
+ * A continued reply without the marks saying how its last request ended:
+ * whether a resumed reply was cut short is this request's to say, and the
+ * SDK's merge would otherwise keep a mark the request never set.
+ */
+const withoutCutShortFlags = (
+  message: PlatypusUIMessage | undefined,
+): PlatypusUIMessage | undefined => {
+  if (!message?.metadata) return message;
+  const {
+    truncatedByTokenLimit: _truncated,
+    stoppedAtStepLimit: _stopped,
+    ...metadata
+  } = message.metadata;
+  return { ...message, metadata };
+};
+
 /** What a streamed drive settled on. */
 export type StreamedDriveResult = {
   /** The terminal status the run was finished with. Reported so a caller that
@@ -298,7 +315,7 @@ const runStreamedDrive = (
 ): StreamedCore => {
   const {
     run,
-    originalMessages = [],
+    originalMessages: given = [],
     facts,
     generateMessageId,
     toolDurations,
@@ -310,6 +327,13 @@ const runStreamedDrive = (
 
   const noProgress = detectorFor(behavior.unattended);
   const plan = planRecording(opts.plan, events);
+  /** The reply this turn continues: a seeded `/skill` one, or a resumed one. */
+  const continued = withoutCutShortFlags(
+    given.at(-1)?.role === "assistant" ? given.at(-1) : undefined,
+  );
+  const originalMessages = continued
+    ? [...given.slice(0, -1), continued]
+    : given;
 
   let failure: string | undefined;
   let truncated = false;
@@ -360,6 +384,7 @@ const runStreamedDrive = (
       stepCeiling: opts.plan.maxSteps,
       driveStartMs,
       delegatedUsage: run.delegatedUsage,
+      continued: continued?.metadata,
       isClearableTool: (toolName) =>
         isClearableToolName(
           toolName,
@@ -396,6 +421,10 @@ const runStreamedDrive = (
   const snapshots: AsyncIterable<PlatypusUIMessage> = (async function* () {
     try {
       for await (const message of readUIMessageStream<PlatypusUIMessage>({
+        // Folded onto, as the SDK's own fold is: a reply resumed after its
+        // approvals were answered holds parts the stream never re-sends, and
+        // goes on to update them by id.
+        ...(continued ? { message: structuredClone(continued) } : {}),
         stream: consume,
         onError: (error) => {
           failure ??= describeSdkError(error);

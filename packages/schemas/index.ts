@@ -399,8 +399,9 @@ export const formatFileSize = (bytes: number): string => {
 };
 
 /**
- * A Chat turn: a new user message and the id it follows, or the id of a reply
- * to regenerate.
+ * A Chat turn: a new user message and the id it follows, the id of a reply
+ * to regenerate, or the answers to a reply's tool approvals. An answer is only
+ * whether the call may run: the server writes it onto its own stored part.
  *
  * The message is a trust boundary — a user message of text and files, with no
  * metadata, which only the server writes. The backend also runs it through the
@@ -425,6 +426,18 @@ export const chatSubmitSchema = z
     chatTurnSchema.extend({
       trigger: z.literal("regenerate-message"),
       messageId: z.string().min(1),
+    }),
+    chatTurnSchema.extend({
+      trigger: z.literal("respond-to-approvals"),
+      messageId: z.string().min(1),
+      responses: z
+        .array(
+          z.strictObject({
+            approvalId: z.string().min(1),
+            approved: z.boolean(),
+          }),
+        )
+        .min(1),
     }),
   ])
   .refine(

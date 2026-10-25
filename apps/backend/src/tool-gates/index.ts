@@ -1,4 +1,4 @@
-import type { Tool, ToolApprovalStatus } from "ai";
+import type { ModelMessage, Tool, ToolApprovalStatus } from "ai";
 import type {
   ReadOnlyHint,
   ToolGateCall,
@@ -14,7 +14,8 @@ import { errorMessage } from "../utils/error-message.ts";
 // tool call before it runs, through the one seam all three Drives share — the
 // AI SDK's `toolApproval` hook on `buildModelInvocation`. Core owns the rules a
 // gate cannot be trusted to keep: the timeout, failing closed, combining
-// several gates, and turning `ask` into `deny` where no one can be asked.
+// several gates, asking the User where one is watching, turning `ask` into
+// `deny` where no one can be asked, and never re-vetting an approved call.
 
 // The default applies when a contribution omits `timeoutMs`; the ceiling is
 // refused at boot by the plugin loader, as the Web-search backend's is. A gate
@@ -65,7 +66,13 @@ export type ToolGateScope = {
   readOnlyHints: ReadonlyMap<string, Exclude<ReadOnlyHint, "undeclared">>;
 };
 
-type Decision = { verdict: ToolGateVerdict["verdict"]; reason: string };
+type Decision = {
+  verdict: ToolGateVerdict["verdict"];
+  /** Why the call was not run, as the model is told it. */
+  reason: string;
+  /** For an `ask`: what a User asked to approve the call is shown. */
+  ask?: string;
+};
 
 const RANK = { allow: 0, ask: 1, deny: 2 } as const;
 
@@ -86,39 +93,73 @@ const runGate = async (
     if (verdict !== "allow" && verdict !== "ask" && verdict !== "deny") {
       throw new Error(`returned ${JSON.stringify(verdict)}, not a Verdict`);
     }
-    const reason =
-      typeof answer.reason === "string" && answer.reason.trim()
-        ? `: ${answer.reason.trim()}`
-        : ".";
-    return {
-      verdict,
-      reason:
-        verdict === "ask"
-          ? `The "${gate.name}" Tool gate wants a person to approve this call, and no one can approve it here${reason}`
-          : `Blocked by the "${gate.name}" Tool gate${reason}`,
-    };
+    const given = typeof answer.reason === "string" ? answer.reason.trim() : "";
+    const reason = given ? `: ${given}` : ".";
+    return verdict === "ask"
+      ? {
+          verdict,
+          reason: `The "${gate.name}" Tool gate wants a person to approve this call, and no one can approve it here${reason}`,
+          // The User is shown the gate's own words, when it gave any.
+          ask:
+            given ||
+            `The "${gate.name}" Tool gate wants a person to approve this call.`,
+        }
+      : { verdict, reason: `Blocked by the "${gate.name}" Tool gate${reason}` };
   } catch (error) {
     logger.warn(
       { err: error, toolGate: gate.id, toolName: call.toolName },
       "Tool gate failed to answer; the call is not run",
     );
+    const failure =
+      error instanceof DeadlineExceededError
+        ? `The "${gate.name}" Tool gate did not answer within ${gate.timeoutMs}ms`
+        : `The "${gate.name}" Tool gate failed (${errorMessage(error)})`;
     return {
       verdict: "ask",
-      reason:
-        error instanceof DeadlineExceededError
-          ? `The "${gate.name}" Tool gate did not answer within ${gate.timeoutMs}ms, so the call was not run.`
-          : `The "${gate.name}" Tool gate failed (${errorMessage(error)}), so the call was not run.`,
+      reason: `${failure}, so the call was not run.`,
+      ask: `${failure}.`,
     };
   }
 };
 
 type ApprovalRequest = {
   toolCall: {
+    toolCallId: string;
     toolName: string;
     input: unknown;
     providerExecuted?: boolean;
   };
   tools: Record<string, Tool> | undefined;
+  messages: ModelMessage[];
+};
+
+/**
+ * Whether the User has already approved this call: the SDK hands the hook
+ * every approved call again before running it, with the Transcript holding
+ * the request and its answer. Tool call ids are unique per call, so a call
+ * being vetted for the first time never matches. The Transcript is the
+ * server's own rows (ADR-0026), so a client cannot forge an approval.
+ */
+const approvedByUser = (
+  toolCallId: string,
+  messages: ModelMessage[],
+): boolean => {
+  const requested = new Set<string>();
+  const approved = new Set<string>();
+  for (const message of messages) {
+    if (typeof message.content === "string") continue;
+    for (const part of message.content) {
+      if (
+        part.type === "tool-approval-request" &&
+        part.toolCallId === toolCallId
+      ) {
+        requested.add(part.approvalId);
+      } else if (part.type === "tool-approval-response" && part.approved) {
+        approved.add(part.approvalId);
+      }
+    }
+  }
+  return [...requested].some((id) => approved.has(id));
 };
 
 /**
@@ -139,9 +180,11 @@ export const toolGateOptions = (
   return gates.length === 0
     ? {}
     : {
-        toolApproval: async ({ toolCall, tools }) => {
+        toolApproval: async ({ toolCall, tools, messages }) => {
           // Never reached the backend, so nothing here can stop it (ADR-0033).
           if (toolCall.providerExecuted) return undefined;
+          // A User's approval is final: no gate re-vets the call it approved.
+          if (approvedByUser(toolCall.toolCallId, messages)) return "approved";
           // Every plan core builds carries a scope; one that doesn't cannot be
           // vetted, and an unvetted call does not run.
           if (!scope) {
@@ -174,9 +217,11 @@ export const toolGateOptions = (
           const decision = decisions.reduce((worst, next) =>
             RANK[next.verdict] > RANK[worst.verdict] ? next : worst,
           );
-          // `ask` reaches no one yet (#1256): it is `deny` in every Drive.
-          return decision.verdict === "allow"
-            ? undefined
+          if (decision.verdict === "allow") return undefined;
+          // Only a watching User can be asked; anywhere else `ask` is `deny`.
+          // The SDK stops the turn at the end of the step to ask.
+          return decision.verdict === "ask" && scope.attended
+            ? { type: "user-approval", reason: decision.ask }
             : { type: "denied", reason: decision.reason };
         },
       };

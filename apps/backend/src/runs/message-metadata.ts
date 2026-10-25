@@ -81,6 +81,12 @@ export type MessageMetadataFacts = TurnFacts & {
    * ended by the time that step's `finish-step` part arrives.
    */
   delegatedUsage?: () => readonly ModelUsage[];
+  /**
+   * What the reply this turn continues already recorded (issue #1256): a
+   * reply resumed after its approvals were answered is two requests, and its
+   * usage and durations are the sum of both rather than the second's alone.
+   */
+  continued?: ChatMessageMetadata;
 };
 
 export const createMessageMetadata = ({
@@ -93,7 +99,10 @@ export const createMessageMetadata = ({
   now = Date.now,
   isClearableTool,
   delegatedUsage,
+  continued,
 }: MessageMetadataFacts = {}) => {
+  const priorUsage = continued?.tokenUsage ? [continued.tokenUsage] : [];
+  const priorModelMs = continued?.modelDurationMs ?? 0;
   // Whether any step of this turn has reported an input-token count. Only
   // read to erase a reading, never to synthesise one — see the `finish-step`
   // branch below.
@@ -123,7 +132,9 @@ export const createMessageMetadata = ({
       if (agentId) meta.agentId = agentId;
       if (searchUnavailable) meta.searchUnavailable = true;
       if (typeof prepDurationMs === "number") {
-        meta.prepDurationMs = Math.round(prepDurationMs);
+        meta.prepDurationMs = Math.round(
+          prepDurationMs + (continued?.prepDurationMs ?? 0),
+        );
       }
       return Object.keys(meta).length > 0 ? meta : undefined;
     }
@@ -177,11 +188,15 @@ export const createMessageMetadata = ({
           },
         ]);
         // The turn's delegates were billed too, so they count (issue #1634).
-        meta.tokenUsage = sumUsage([ownUsage, ...(delegatedUsage?.() ?? [])]);
+        meta.tokenUsage = sumUsage([
+          ...priorUsage,
+          ownUsage,
+          ...(delegatedUsage?.() ?? []),
+        ]);
       }
 
       if (typeof driveStartMs === "number") {
-        meta.modelDurationMs = Math.round(now() - driveStartMs);
+        meta.modelDurationMs = Math.round(priorModelMs + now() - driveStartMs);
       }
 
       return Object.keys(meta).length > 0 ? meta : undefined;
