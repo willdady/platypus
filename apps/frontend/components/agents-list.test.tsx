@@ -447,7 +447,114 @@ describe("AgentsList menu", () => {
     await renderAgents([orgAgent]);
     await openDropdownMenu();
 
-    expect(menuItemLabels()).toEqual(["Edit in org settings", "Pin", "Detach"]);
+    expect(menuItemLabels()).toEqual([
+      "Edit in org settings",
+      "Pin",
+      "Clone",
+      "Detach",
+    ]);
+  });
+
+  it("offers an Owner who isn't an Org Admin Pin and Clone on a shared agent", async () => {
+    authState.ownsWorkspace = true;
+    authState.actor = "workspace-owner";
+
+    await renderAgents([orgAgent]);
+    await openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Pin", "Clone"]);
+  });
+
+  it("offers a read-only viewer no Clone of a shared agent", async () => {
+    authState.ownsWorkspace = false;
+
+    await renderAgents([orgAgent]);
+    await openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Edit in org settings", "Detach"]);
+  });
+});
+
+describe("AgentsList clone of a shared agent", () => {
+  beforeEach(() => {
+    authState.ownsWorkspace = true;
+    mockScopedSWR({
+      "/tools": [{ id: "t1", name: "Search" }],
+      "/skills": [{ id: "s1", name: "Writing" }],
+    });
+  });
+
+  afterEach(() => {
+    authState.ownsWorkspace = undefined;
+  });
+
+  /** The JSON body of the create the Clone sent. */
+  const sentBody = (fetchMock: ReturnType<typeof stubAcceptedSave>) => {
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    return JSON.parse(init.body as string) as Record<string, unknown>;
+  };
+
+  it("copies every reference visible in the workspace", async () => {
+    const fetchMock = stubAcceptedSave({ id: "a3", name: "Cloned" }, 201);
+
+    await renderAgents(
+      [
+        {
+          ...orgAgent,
+          providerId: "p1",
+          subAgentIds: ["a2"],
+          skillIds: ["s1"],
+          toolSetIds: ["t1"],
+        },
+        workspaceAgent,
+      ],
+      "Clone",
+    );
+    expect(screen.queryByText(/Not included/)).not.toBeInTheDocument();
+    await confirmDialog("Clone");
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/agents/a3"),
+    );
+    expect(sentBody(fetchMock)).toMatchObject({
+      name: "Shared Agent (copy)",
+      workspaceId: "ws1",
+      providerId: "p1",
+      subAgentIds: ["a2"],
+      skillIds: ["s1"],
+      toolSetIds: ["t1"],
+    });
+    expect(sentBody(fetchMock)).not.toHaveProperty("scope");
+  });
+
+  it("leaves out, and names, the references not attached here", async () => {
+    const fetchMock = stubAcceptedSave({ id: "a3", name: "Cloned" }, 201);
+
+    await renderAgents(
+      [
+        {
+          ...orgAgent,
+          subAgentIds: ["a2", "a9"],
+          skillIds: ["s9"],
+          toolSetIds: ["t1", "t8", "t9"],
+        },
+        workspaceAgent,
+      ],
+      "Clone",
+    );
+    expect(
+      screen.getByText(
+        "Not included, as not attached to this workspace: 1 sub-agent, 1 skill, 2 tool sets.",
+      ),
+    ).toBeInTheDocument();
+    await confirmDialog("Clone");
+
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(sentBody(fetchMock)).toMatchObject({
+      subAgentIds: ["a2"],
+      skillIds: [],
+      toolSetIds: ["t1"],
+    });
   });
 });
 
