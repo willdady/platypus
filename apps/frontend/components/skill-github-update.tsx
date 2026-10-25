@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { CircleCheck, RefreshCw, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { Skill, SkillGithubUpdateCheck } from "@platypus/schemas";
@@ -102,17 +102,20 @@ function UpdateDiff({ diff }: { diff: Diff }) {
 /**
  * Check for updates on a Skill installed from GitHub: up to date, or the diff
  * of what updating would change, then Update to exactly the checked commit.
- * A Modified Skill warns that its local edits will be overwritten.
+ * A Modified Skill warns that its local edits will be overwritten. `children`
+ * are the card's other buttons, sharing the button row.
  */
 export function SkillGithubUpdate({
   skillUrl,
   skill,
   onUpdated,
+  children,
 }: {
   /** The Skill's backend URL at the scope it is managed from. */
   skillUrl: string;
   skill: Serialized<Skill>;
   onUpdated: (skill: Serialized<Skill>) => void;
+  children?: ReactNode;
 }) {
   const [checking, setChecking] = useState(false);
   const [check, setCheck] = useState<SkillGithubUpdateCheck | null>(null);
@@ -152,13 +155,6 @@ export function SkillGithubUpdate({
 
   return (
     <div className="flex flex-col gap-3">
-      {check?.upToDate && (
-        <p className="flex items-center gap-1 text-sm">
-          <CircleCheck className="size-4 text-success-foreground" />
-          Up to date
-        </p>
-      )}
-
       {check && !check.upToDate && (
         <>
           <UpdateDiff diff={check} />
@@ -171,7 +167,8 @@ export function SkillGithubUpdate({
         </>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {children}
         <Button
           type="button"
           variant="outline"
@@ -180,6 +177,12 @@ export function SkillGithubUpdate({
         >
           <RefreshCw /> {checking ? "Checking..." : "Check for updates"}
         </Button>
+        {check?.upToDate && (
+          <p className="flex items-center gap-1 text-sm">
+            <CircleCheck className="size-4 text-success-foreground" />
+            Up to date
+          </p>
+        )}
         {check && !check.upToDate && (
           <Button
             type="button"
