@@ -6,7 +6,7 @@ import type { ModelUsage } from "@platypus/schemas";
 import {
   accumulateStepStats,
   mergeUsageByModel,
-  reportStats,
+  withDelegatedUsage,
   type RunStep,
   type UsageModel,
 } from "./run-stats.ts";
@@ -31,7 +31,7 @@ export type RunLifecycle = {
   handle: RunHandle;
   /**
    * The run's OWN model calls, accumulated as steps finish. What the terminal
-   * callback is handed also counts its delegates — see `reportStats`.
+   * callback is handed also counts its delegates — see `withDelegatedUsage`.
    */
   readonly stats: RunStats;
   /** The (Provider, model) pair the run's own calls are billed under, so they
@@ -121,7 +121,8 @@ export const startRun = (params: {
   let stats: RunStats = {};
   let usageModel: UsageModel | undefined;
   let delegated: ModelUsage[] = [];
-  const report = (): RunStats => reportStats(stats, usageModel, delegated);
+  const reported = (): RunStats =>
+    withDelegatedUsage(stats, usageModel, delegated);
   let terminated = false;
   /** The Tool session this run must close, once it has one — see
    *  {@link RunLifecycle.adoptOrDispose}. One, not a list: a run resolves one
@@ -148,7 +149,7 @@ export const startRun = (params: {
     // time the sink writes the run's terminal record.
     if (disposer) await runDisposer(disposer);
     try {
-      await onTerminate({ status, error, stats: report() });
+      await onTerminate({ status, error, stats: reported() });
     } catch (err) {
       logger.error({ err, ...logFields }, "Error terminating run");
     }
@@ -176,7 +177,7 @@ export const startRun = (params: {
           ...logFields,
           kind: error.kind,
           message: error.message,
-          stats: report(),
+          stats: reported(),
         },
         "Run timed out",
       );
@@ -217,7 +218,7 @@ export const startRun = (params: {
         "Tool call failed",
       );
     }
-    params.onStepProgress?.(report());
+    params.onStepProgress?.(reported());
   };
 
   // Start events hold the per-step stall timer down for the duration of the

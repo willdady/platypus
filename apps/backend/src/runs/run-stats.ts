@@ -206,7 +206,7 @@ export const mergeUsageByModel = (
  * `contextOccupancy` is the run's own and passes through untouched: a
  * delegate's calls never sent the parent's conversation (ADR-0018).
  */
-export const reportStats = (
+export const withDelegatedUsage = (
   own: RunStats,
   model: UsageModel | undefined,
   delegated: readonly ModelUsage[],

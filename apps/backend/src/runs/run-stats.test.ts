@@ -4,7 +4,7 @@ import {
   computeStats,
   mergeUsageByModel,
   pickCachedInput,
-  reportStats,
+  withDelegatedUsage,
   type RunStep,
 } from "./run-stats.ts";
 import type { RunStats } from "./types.ts";
@@ -180,7 +180,7 @@ describe("pickCachedInput", () => {
  * A run's reported Token usage spans its delegated Sub-Agent runs (issue
  * #1634): the headline sums fold them in and `usageByModel` breaks them down.
  */
-describe("reportStats", () => {
+describe("withDelegatedUsage", () => {
   const PARENT = { providerId: "p1", model: "big" };
   const own: RunStats = {
     steps: 2,
@@ -191,7 +191,7 @@ describe("reportStats", () => {
   };
 
   it("reports the run's own calls as one row when nothing was delegated", () => {
-    expect(reportStats(own, PARENT, [])).toEqual({
+    expect(withDelegatedUsage(own, PARENT, [])).toEqual({
       ...own,
       usageByModel: [
         {
@@ -205,7 +205,7 @@ describe("reportStats", () => {
   });
 
   it("folds delegates into the sums, rows merged by (Provider, model)", () => {
-    const reported = reportStats(own, PARENT, [
+    const reported = withDelegatedUsage(own, PARENT, [
       { providerId: "p2", model: "small", inputTokens: 20, outputTokens: 5 },
       {
         providerId: "p1",
@@ -239,7 +239,7 @@ describe("reportStats", () => {
   // ADR-0018: occupancy is the parent's last call, never a delegate's.
   it("leaves contextOccupancy as the run's own", () => {
     expect(
-      reportStats(own, PARENT, [
+      withDelegatedUsage(own, PARENT, [
         { ...PARENT, inputTokens: 9_000, outputTokens: 1 },
       ]).contextOccupancy,
     ).toBe(60);
@@ -247,7 +247,9 @@ describe("reportStats", () => {
 
   it("counts delegates of a run that made no call of its own", () => {
     expect(
-      reportStats({}, PARENT, [{ ...PARENT, inputTokens: 5, outputTokens: 2 }]),
+      withDelegatedUsage({}, PARENT, [
+        { ...PARENT, inputTokens: 5, outputTokens: 2 },
+      ]),
     ).toEqual({
       inputTokens: 5,
       outputTokens: 2,
@@ -256,7 +258,7 @@ describe("reportStats", () => {
   });
 
   it("returns the stats unchanged when no row is known", () => {
-    expect(reportStats(own, undefined, [])).toBe(own);
+    expect(withDelegatedUsage(own, undefined, [])).toBe(own);
   });
 });
 

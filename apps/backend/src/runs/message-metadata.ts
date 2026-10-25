@@ -104,16 +104,10 @@ export const createMessageMetadata = ({
   let steps = 0;
   // The running Token usage sum (issue #354) — folded across every step that
   // reported one, as opposed to `contextOccupancy`'s last-value replacement
-  // right beside it.
-  let inputTokensSum = 0;
-  let outputTokensSum = 0;
-  // Cached-input read and write counts, summed the same way as a breakdown of
-  // the input figure (issue #734). A step that reports none leaves the sum
-  // standing — the deep merge keeps a key an override omits — so a key exists
-  // only once some step has reported a value for it, never as a `0` sum for a
-  // Provider that reports no cache detail.
-  let cacheReadTokensSum: number | undefined;
-  let cacheWriteTokensSum: number | undefined;
+  // right beside it. Its cached-input read and write counts are a breakdown of
+  // the input figure (issue #734), each present only once some step has
+  // reported it, never as a `0` sum for a Provider that reports no cache detail.
+  let ownUsage = sumUsage([]);
   // The turn's clearable Tool names among the ones it has actually called so
   // far — reported in full each time, like `tokenUsage`'s sum, since the
   // merge replaces an array rather than concatenating it.
@@ -174,36 +168,16 @@ export const createMessageMetadata = ({
       // step reports a number, the key stays absent rather than writing a
       // `{ 0, 0 }` sum for a turn whose Provider never reported anything.
       if (typeof inputTokens === "number" || typeof outputTokens === "number") {
-        inputTokensSum += inputTokens ?? 0;
-        outputTokensSum += outputTokens ?? 0;
-        // Cached input, summed across the turn's steps just like the flat input
-        // figure beside it — a breakdown of that number, never subtracted. A
-        // step that reports no read (or write) count adds nothing and, unlike
-        // occupancy, needs no erasing: the sum only grows. A sum stays
-        // undefined until some step reports a value for it, so a Provider that
-        // reports no cache detail at all persists no cache key rather than a
-        // `0` sum.
-        const cached = pickCachedInput(part.usage.inputTokenDetails);
-        if (cached.cacheReadTokens !== undefined) {
-          cacheReadTokensSum =
-            (cacheReadTokensSum ?? 0) + cached.cacheReadTokens;
-        }
-        if (cached.cacheWriteTokens !== undefined) {
-          cacheWriteTokensSum =
-            (cacheWriteTokensSum ?? 0) + cached.cacheWriteTokens;
-        }
-        // The turn's delegates were billed too, so they count (issue #1634).
-        meta.tokenUsage = sumUsage([
+        ownUsage = sumUsage([
+          ownUsage,
           {
-            inputTokens: inputTokensSum,
-            outputTokens: outputTokensSum,
-            ...pickCachedInput({
-              cacheReadTokens: cacheReadTokensSum,
-              cacheWriteTokens: cacheWriteTokensSum,
-            }),
+            inputTokens: inputTokens ?? 0,
+            outputTokens: outputTokens ?? 0,
+            ...pickCachedInput(part.usage.inputTokenDetails),
           },
-          ...(delegatedUsage?.() ?? []),
         ]);
+        // The turn's delegates were billed too, so they count (issue #1634).
+        meta.tokenUsage = sumUsage([ownUsage, ...(delegatedUsage?.() ?? [])]);
       }
 
       if (typeof driveStartMs === "number") {

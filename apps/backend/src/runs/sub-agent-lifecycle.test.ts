@@ -491,6 +491,7 @@ describe("a delegated run's Token usage", () => {
       name: string,
       parentRun: ParentRunContext,
     ) => SubAgentDelegate,
+    cancelAfterMs?: number,
   ) => {
     let reported: RunStats | undefined;
     const parent = startRun({
@@ -504,6 +505,11 @@ describe("a delegated run's Token usage", () => {
       scope: parentScope,
       addDelegateUsage: parent.addDelegateUsage,
     };
+    if (cancelAfterMs !== undefined) {
+      // A Chat or Trigger run always holds its Tool session's disposer.
+      await parent.adoptOrDispose(() => Promise.resolve());
+      setTimeout(() => runRegistry.cancel(parent.handle.runId), cancelAfterMs);
+    }
     const tool = createDelegateTool(
       names.map((name) => delegateFor(name, parentRun)),
     );
@@ -529,7 +535,7 @@ describe("a delegated run's Token usage", () => {
       },
       run: parent,
       prompt: "Fan out",
-    });
+    }).catch(() => undefined);
     return reported;
   };
 
@@ -570,6 +576,20 @@ describe("a delegated run's Token usage", () => {
     expect(reported?.usageByModel).toEqual([
       { ...PARENT, inputTokens: 10, outputTokens: 4 },
       { ...CHILD, inputTokens: 15, outputTokens: 6 },
+    ]);
+  });
+
+  it("counts a delegate cancelled along with its parent", async () => {
+    const reported = await runParent(
+      ["Slow"],
+      (name, parentRun) => delegateOf(name, parentRun, [15, 500]),
+      100,
+    );
+
+    // The parent's one call never finished its step — the delegate was still
+    // running — so the only usage recorded is the delegate's completed step.
+    expect(reported?.usageByModel).toEqual([
+      { ...CHILD, inputTokens: 5, outputTokens: 2 },
     ]);
   });
 });
