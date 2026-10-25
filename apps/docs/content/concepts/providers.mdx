@@ -66,7 +66,8 @@ or `flagship` — that an Agent or a Chat selects instead of the vendor's model
 id. Point the alias at a newer model and every Agent and Chat using it moves
 with it, on their next turn, with no edits to any of them.
 
-Whoever manages the Provider sets one in the **Alias** field of the model's **Edit model** dialog.
+Whoever manages the Provider sets one in the **Alias** field of the model's
+**Add model** or **Edit model** dialog.
 From then on, that model appears in the Agent and Chat model pickers under its
 alias rather than its model id.
 
@@ -148,16 +149,17 @@ endpoint, or Bedrock.
 
 <Callout type="warning">
   **Selecting a backend that reads pages lets the model fetch any URL your
-  deployment can reach.** A backend supplies its own search, and optionally a
-  page reader; where it supplies both, every searching turn on that Provider can
-  fetch pages by URL from your deployment. The vendors' built-in search runs on
-  the vendor's side — some open pages as part of searching, but nothing is
-  fetched from your deployment. There is no separate setting for it: the reader
-  comes with the backend, so the decision is which backend you select. What a
-  fetch may reach is bounded by [the egress
-  guard](/self-hosting/configuration#the-egress-guard). Platypus does not check
-  `robots.txt` for a backend's reader, though the backend itself may; the **Web
-  Fetch** Tool set honours it unless an Operator has turned that off.
+  deployment can reach, short of what the egress guard blocks.** A backend
+  supplies its own search, and optionally a page reader; where it supplies both,
+  every searching turn on that Provider can fetch pages by URL from your
+  deployment. The vendors' built-in search runs on the vendor's side — some open
+  pages as part of searching, but nothing is fetched from your deployment. There
+  is no separate setting for it: the reader comes with the backend, so the
+  decision is which backend you select. What a fetch may reach is bounded by
+  [the egress guard](/self-hosting/configuration#the-egress-guard). Platypus
+  does not check `robots.txt` for a backend's reader, though the backend itself
+  may; the **Web Fetch** Tool set honours it unless an Operator has turned that
+  off.
 </Callout>
 
 Three things the field tells you about a selection:

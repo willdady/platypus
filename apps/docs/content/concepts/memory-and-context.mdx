@@ -45,7 +45,9 @@ dropdowns](/administering/workspaces#the-three-provider-dropdowns).
 Once Memory is on, the summaries from the past **2 days** are injected into
 **every** Chat turn in that Workspace, for every Agent, whether or not the Agent
 has the **Memory** Tool set. It is not opt-in per Agent and there is no way to
-exclude one Agent from it.
+exclude one Agent from it. The one exception is an
+[A2A](/building-with-platypus/a2a-endpoints#memories) Chat, which gets them only
+when its endpoint has **Include Memories** on.
 
 Which summaries a Chat gets is fixed when it starts. A Chat keeps the same set
 for as long as you keep using it, and picks up current summaries on your next
