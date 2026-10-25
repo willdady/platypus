@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.28.0](https://github.com/willdady/platypus/compare/v3.27.0...v3.28.0) (2026-10-25)
+
+
+### Features
+
+* ask the User to approve a tool call a Tool gate asks about ([#1704](https://github.com/willdady/platypus/issues/1704)) ([90491c4](https://github.com/willdady/platypus/commit/90491c42390516c6d8447ec407e7283955156eae))
+* **backend:** bound background LLM calls and cap tool result size ([#1700](https://github.com/willdady/platypus/issues/1700)) ([dfbc2d5](https://github.com/willdady/platypus/commit/dfbc2d56df5b7ab2eff91c362d9a548ad2d36292))
+* **backend:** count Sub-Agent token usage in the parent run's stats ([#1699](https://github.com/willdady/platypus/issues/1699)) ([e8c6c60](https://github.com/willdady/platypus/commit/e8c6c606bd22a62fa1a783d0464fe445a604c636))
+* **backend:** stream stored files and cap what a turn inlines ([#1698](https://github.com/willdady/platypus/issues/1698)) ([0670495](https://github.com/willdady/platypus/commit/0670495d8faa81bda4104290d281efb01dc6882f))
+* **backend:** support the AWS default credential chain for S3 and build storage at boot ([#1692](https://github.com/willdady/platypus/issues/1692)) ([451e784](https://github.com/willdady/platypus/commit/451e7848bb39d91b39e538e22afa5ccc76969529))
+* check GitHub-installed Skills for updates ([#1703](https://github.com/willdady/platypus/issues/1703)) ([1a1cba0](https://github.com/willdady/platypus/commit/1a1cba04f5350caead411b3f79486d545dcf400c))
+* **frontend:** clone a Shared Agent into a Workspace ([#1694](https://github.com/willdady/platypus/issues/1694)) ([4ed8612](https://github.com/willdady/platypus/commit/4ed86126770b64f35561f0a79e19303c1632f988))
+* **frontend:** name the Provider on the model picker when a label is shared ([#1696](https://github.com/willdady/platypus/issues/1696)) ([9902bc3](https://github.com/willdady/platypus/commit/9902bc3da02aa7fbe55d952c12415941c6ba44ba))
+
+
+### Bug Fixes
+
+* **backend:** hold a cancelled run until its drive settles, capped at 5 s ([#1695](https://github.com/willdady/platypus/issues/1695)) ([070e710](https://github.com/willdady/platypus/commit/070e7105b124077515053803dbae35042859870f))
+* **backend:** make the image's exposed port match the port it serves on ([#1697](https://github.com/willdady/platypus/issues/1697)) ([bf20933](https://github.com/willdady/platypus/commit/bf20933a72a27d921e112c318e9728bad4b1cfdc))
+* **frontend:** put the Skill update check in the Bundle button row ([#1705](https://github.com/willdady/platypus/issues/1705)) ([3ad43ed](https://github.com/willdady/platypus/commit/3ad43ed79a15e99d876b90234e5757b7d617eb49))
+
 ## [3.27.0](https://github.com/willdady/platypus/compare/v3.26.0...v3.27.0) (2026-10-24)
 
 
