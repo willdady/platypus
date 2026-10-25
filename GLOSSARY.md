@@ -70,7 +70,7 @@ _Avoid_: prompt, preamble, prompt template.
 A configured connection to an AI vendor (OpenAI, OpenRouter, Bedrock, Anthropic, Google, …). Carries credentials, base URL, the enabled `modelIds`, and a `taskModelId` for one-shot tasks. Lives at either Organization or Workspace scope.
 
 **Model entry**:
-One model a Provider exposes, identified by the concrete model id sent to the vendor, with its optional **Model alias**, **Context window**, native file types, extracted-text cap and **Output ceiling**. A Provider's model entries are the list Agents and Chats choose from.
+One model a Provider exposes, identified by the concrete model id sent to the vendor, with its optional **Model alias**, **Context window**, native file types, extracted-text cap, **Output ceiling** and **Reasoning map**. A Provider's model entries are the list Agents and Chats choose from.
 _Avoid_: model row, model config.
 
 **Model alias**:
@@ -112,6 +112,18 @@ _Avoid_: tokens used (ambiguous between this and **Context occupancy** — name 
 **Output ceiling**:
 The most a `(Provider, model)` pair may produce in a single reply, declared by an Org Admin on the Provider's **Model entry** and surfaced as **Max output tokens**. Unlike the **Context window** it is enforced: it is sent as the output limit on every **Chat turn** and delegated **Sub-Agent** run against that model. The Provider's own one-shot executions — Chat metadata and memory extraction, which run against its pointer-settings — do not carry it. Optional; a model without one is sent no limit at all, leaving the vendor's own default in force, which on Bedrock is far below the model's real capability. Bounds a reply, never the conversation.
 _Avoid_: max tokens, token limit, context window (that names the total capacity), output budget.
+
+**Reasoning controls**:
+The three settings that steer how much a reasoning model thinks before it answers: a **Thinking** switch, an **Effort** step and a **Thinking budget**. Carried on an Agent, and on a **Chat turn** with no Agent, beside the sampling parameters and resolved the same way — an Agent's values apply wherever it runs, and a Chat with an Agent selected has none of its own (the rule in `.out-of-scope/per-chat-model-override.md`). Effort uses the AI SDK's fixed scale, `minimal · low · medium · high · xhigh · max`, so a step means the same thing on every model. Each control appears only where the selected model's **Reasoning map** declares it; a model with no map shows none and is sent nothing (ADR-0040).
+_Avoid_: reasoning settings, thinking mode, reasoning level.
+
+**Reasoning map**:
+The optional JSON an Org Admin writes on a **Model entry** that says which **Reasoning controls** the model has and what each one becomes on the wire. It maps the Thinking switch's two states and each declared Effort step to a request-body fragment, names the field a **Thinking budget** is sent under, carries an always-sent fragment for per-model extras, and gives the defaults a turn starts from when nobody chose. Only an OpenAI-type Provider in chat mode can carry one, because only that path passes raw fields through to the server; native Providers translate the same controls through the SDK instead. Platypus sends what the map says and nothing it does not say — it cannot verify that the model obeys.
+_Avoid_: reasoning config, model config, extra body, template kwargs.
+
+**Thinking budget**:
+The most reasoning tokens a model may spend on one reply before it is made to answer, one of the **Reasoning controls**. An integer the model's **Reasoning map** names the wire field for; absent that field it is neither shown nor sent. Bounds thinking only — the **Output ceiling** bounds the whole reply — and Platypus does not check one against the other, since how a server counts the two is its own affair.
+_Avoid_: reasoning budget, thinking tokens, budget tokens.
 
 **Step ceiling**:
 The most model calls one turn's loop may make before it is stopped, counting every round trip a tool call costs rather than the size of any one reply. Set as an Agent's **Max steps**, defaulted where none is given; a **Chat turn** with no Agent runs under its own resolved value. Enforced as a stop condition, not an error: the loop simply ends, and the run is recorded as succeeded because it did the work it was allowed to do. Where it stopped a loop the model meant to continue, that is recorded and told to whoever reads the output — the same way an **Output ceiling** cutoff is. Distinct from the **Output ceiling**: this one bounds the loop, that one bounds a single reply, and a "cut short" notice names which of the two it means.
