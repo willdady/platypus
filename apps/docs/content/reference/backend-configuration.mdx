@@ -25,17 +25,17 @@ required variable left unset — stops it before it serves anything, and the log
 names the variable at fault. An empty value counts as unset.
 
 <Callout type="warning">
-  The shipped `compose.yaml` sets `PORT`, `DATABASE_URL`, `NODE_OPTIONS` and
+  The shipped `compose.yaml` sets `DATABASE_URL`, `NODE_OPTIONS` and
   `BETTER_AUTH_URL` (from `BACKEND_URL`) for the backend itself, and those take
   precedence over `.env`. Pointing `DATABASE_URL` at an external Postgres in
-  `.env` is silently ignored: change these four in a `compose.override.yaml`.
+  `.env` is silently ignored: change these three in a `compose.override.yaml`.
 </Callout>
 
 ## Core
 
 | Variable            | Purpose                                                                                                                                                                                                                                                                                                                                   | Default   | Required |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
-| `PORT`              | Port the backend HTTP server listens on.                                                                                                                                                                                                                                                                                                  | `4001`    | No       |
+| `PORT`              | Port the backend HTTP server listens on. The backend Docker image sets it to `4000`.                                                                                                                                                                                                                                                      | `4001`    | No       |
 | `ALLOWED_ORIGINS`   | Comma-separated origins allowed by CORS and better-auth's trusted origins. **No default in code** — an unset value stops the backend before it starts. `.example.env` ships `http://localhost:3001`.                                                                                                                                      | _(none)_  | **Yes**  |
 | `DATABASE_URL`      | Postgres 17 connection string (with pgvector). **No default in code.** `.example.env` ships `postgres://postgres:mypassword@localhost:5432/postgres`.                                                                                                                                                                                     | _(none)_  | **Yes**  |
 | `DATABASE_POOL_MAX` | Maximum connections in the backend's Postgres pool. One connection is held permanently by the Postgres `LISTEN` listener, and one by each background job tick's advisory lock, so raise this when you raise the backend's concurrency. An unset value uses the default; a value that is not a positive integer stops the backend at boot. | `10`      | No       |

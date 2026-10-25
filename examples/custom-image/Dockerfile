@@ -2,6 +2,10 @@
 # Bump this tag, and the frontend tag in compose.override.yaml, together.
 FROM willdady/platypus-backend:3.10.2
 
+# The root compose.yaml no longer sets PORT; images before the one that sets it
+# themselves serve on 4001. Delete this once the tag above is bumped past that.
+ENV PORT=4000
+
 # Install the plugin into its own npm project, outside the pnpm workspace in
 # /app, so pnpm's node_modules is never touched. The plugin brings its own
 # copy of @platypuschat/plugin-sdk and its other dependencies from npm.
