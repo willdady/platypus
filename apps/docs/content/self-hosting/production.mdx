@@ -181,6 +181,10 @@ Point `STORAGE_BACKEND` at `s3` — AWS S3, or anything S3-compatible like MinIO
 R2 or Spaces — before you run more than one backend. The variables are in
 [Storage](/reference/backend-configuration#storage).
 
+On AWS, prefer an IAM role to access keys: leave `STORAGE_S3_ACCESS_KEY_ID`
+and `STORAGE_S3_SECRET_ACCESS_KEY` unset and the backend uses the role attached
+to it — IRSA on EKS, a task role on ECS, an instance profile on EC2.
+
 The S3 credentials need `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on
 the bucket's objects, and `s3:ListBucket` on the bucket itself. Without
 `s3:ListBucket`, deleting a Chat, Workspace or Organization leaves its files

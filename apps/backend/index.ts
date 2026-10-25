@@ -29,6 +29,7 @@ import { validateTriggerBreakerConfig } from "./src/services/trigger-breaker.ts"
 import { validateInboundTriggerSettings } from "./src/services/inbound-trigger.ts";
 import { validateA2aSettings } from "./src/services/a2a-call.ts";
 import { env } from "./src/env.ts";
+import { getStorage } from "./src/storage/index.ts";
 
 const { PORT } = env();
 
@@ -67,6 +68,9 @@ const main = async () => {
     validateInboundTriggerSettings();
     // And for the A2A load cap (ADR-0032).
     validateA2aSettings();
+    // Build the storage backend now, so a bad `STORAGE_*` configuration stops
+    // boot instead of surfacing on the first upload (#1686).
+    getStorage();
 
     await exponentialBackoff(async () => {
       // Enable pgvector extension for embedding storage (needed before drizzle-kit push in dev)

@@ -61,9 +61,26 @@ describe("parseEnv", () => {
     ).toThrow(/EGRESS_ALLOW_PRIVATE_NETWORKS/);
   });
 
-  it("requires the S3 credentials only when STORAGE_BACKEND=s3", () => {
+  it("requires the S3 bucket only when STORAGE_BACKEND=s3", () => {
     expect(() => parseEnv({ ...valid, STORAGE_BACKEND: "s3" })).toThrow(
-      /STORAGE_S3_BUCKET.*STORAGE_S3_ACCESS_KEY_ID.*STORAGE_S3_SECRET_ACCESS_KEY/,
+      /STORAGE_S3_BUCKET/,
     );
+    expect(() =>
+      parseEnv({ ...valid, STORAGE_BACKEND: "s3", STORAGE_S3_BUCKET: "b" }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["STORAGE_S3_ACCESS_KEY_ID", "STORAGE_S3_SECRET_ACCESS_KEY"],
+    ["STORAGE_S3_SECRET_ACCESS_KEY", "STORAGE_S3_ACCESS_KEY_ID"],
+  ])("refuses %s without %s, naming both", (set, missing) => {
+    expect(() =>
+      parseEnv({
+        ...valid,
+        STORAGE_BACKEND: "s3",
+        STORAGE_S3_BUCKET: "b",
+        [set]: "x",
+      }),
+    ).toThrow(new RegExp(`${missing}: is required when ${set} is set`));
   });
 });
