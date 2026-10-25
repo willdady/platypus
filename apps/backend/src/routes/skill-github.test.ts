@@ -2,13 +2,17 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockSession, resetMockDb, seedDb } from "../test-utils.ts";
 import app from "../server.ts";
 import {
+  checkGithubSkillUpdate,
   installGithubSkills,
   previewGithubSkills,
+  updateGithubSkill,
 } from "../services/skill-github.ts";
 
 vi.mock("../services/skill-github.ts", () => ({
   previewGithubSkills: vi.fn(),
   installGithubSkills: vi.fn(),
+  checkGithubSkillUpdate: vi.fn(),
+  updateGithubSkill: vi.fn(),
 }));
 
 /**
@@ -79,6 +83,8 @@ const imports = {
   "GitHub preview": () =>
     post(`${skillsUrl}/github/preview`, { source: "acme/skills" }),
   "GitHub install": () => post(`${skillsUrl}/github/install`, installBody),
+  "update check": () => post(`${skillsUrl}/skill-1/github/check`, {}),
+  update: () => post(`${skillsUrl}/skill-1/github/update`, { commitSha: SHA }),
 };
 
 beforeEach(() => {
@@ -93,6 +99,10 @@ beforeEach(() => {
     skills: [],
   });
   vi.mocked(installGithubSkills).mockResolvedValue({ results: [] });
+  vi.mocked(checkGithubSkillUpdate).mockResolvedValue({ upToDate: true });
+  vi.mocked(updateGithubSkill).mockResolvedValue(
+    {} as Awaited<ReturnType<typeof updateGithubSkill>>,
+  );
 });
 
 describe("the Skill import gate", () => {
@@ -108,6 +118,8 @@ describe("the Skill import gate", () => {
       expect(res.status).toBe(403);
       expect(previewGithubSkills).not.toHaveBeenCalled();
       expect(installGithubSkills).not.toHaveBeenCalled();
+      expect(checkGithubSkillUpdate).not.toHaveBeenCalled();
+      expect(updateGithubSkill).not.toHaveBeenCalled();
     },
   );
 
@@ -151,6 +163,16 @@ describe("the Skill import gate", () => {
       ).toBe(200);
       expect(
         (await post(`${orgSkillsUrl}/github/install`, installBody)).status,
+      ).toBe(200);
+      expect(
+        (await post(`${orgSkillsUrl}/skill-1/github/check`, {})).status,
+      ).toBe(200);
+      expect(
+        (
+          await post(`${orgSkillsUrl}/skill-1/github/update`, {
+            commitSha: SHA,
+          })
+        ).status,
       ).toBe(200);
     },
   );
@@ -240,6 +262,32 @@ describe("the GitHub routes", () => {
     });
     expect(res.status).toBe(400);
     expect(installGithubSkills).not.toHaveBeenCalled();
+  });
+
+  it("hands an update the checked commit, and refuses one that isn't a SHA", async () => {
+    seed("all", false);
+    mockSession();
+    const url = `${skillsUrl}/skill-1/github/update`;
+    expect((await post(url, { commitSha: "main" })).status).toBe(400);
+    expect((await post(url, { commitSha: SHA })).status).toBe(200);
+    expect(updateGithubSkill).toHaveBeenCalledWith(
+      {
+        kind: "workspace",
+        ctx: expect.objectContaining({ orgId, workspaceId }) as unknown,
+      },
+      "skill-1",
+      SHA,
+    );
+  });
+
+  it("refuses an Organization-scope update from a member", async () => {
+    seed("all", false);
+    mockSession();
+    const res = await post(`${orgSkillsUrl}/skill-1/github/update`, {
+      commitSha: SHA,
+    });
+    expect(res.status).toBe(403);
+    expect(updateGithubSkill).not.toHaveBeenCalled();
   });
 
   it("refuses an Organization-scope install from a member", async () => {

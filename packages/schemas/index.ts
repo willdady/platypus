@@ -708,6 +708,10 @@ export const skillBaseSchema = z.object({
   skillPath: z.string().nullable().optional(),
   commitSha: z.string().nullable().optional(),
   installedHash: z.string().nullable().optional(),
+  // Whether a Skill with a source record has been edited since it was
+  // installed or updated: its bundle hash no longer matches `installedHash`.
+  // Present on a single Skill's read. Read-only.
+  modified: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -875,6 +879,42 @@ export const skillGithubInstallResultSchema = z.object({
 export type SkillGithubInstallResult = z.infer<
   typeof skillGithubInstallResultSchema
 >;
+
+/**
+ * An update check on a Skill installed from GitHub: up to date, or what
+ * updating to `toSha` would change. Files are compared by path and sha256;
+ * `skillMd` is `SKILL.md` as an export writes it, before and after.
+ */
+export const skillGithubUpdateCheckSchema = z.discriminatedUnion("upToDate", [
+  z.object({ upToDate: z.literal(true) }),
+  z.object({
+    upToDate: z.literal(false),
+    fromSha: z.string(),
+    toSha: z.string(),
+    files: z.object({
+      added: z.array(z.object({ path: z.string(), size: z.number() })),
+      removed: z.array(z.object({ path: z.string(), size: z.number() })),
+      changed: z.array(
+        z.object({
+          path: z.string(),
+          oldSize: z.number(),
+          newSize: z.number(),
+        }),
+      ),
+    }),
+    skillMd: z.object({ before: z.string(), after: z.string() }),
+    needsSandbox: z.object({ before: z.boolean(), after: z.boolean() }),
+  }),
+]);
+
+export type SkillGithubUpdateCheck = z.infer<
+  typeof skillGithubUpdateCheckSchema
+>;
+
+/** An update: the commit the check resolved, never the ref, so it applies exactly what was reviewed. */
+export const skillGithubUpdateRequestSchema = z.object({
+  commitSha: z.string().regex(/^[0-9a-f]{40}$/, "Not a commit SHA"),
+});
 
 // Tool
 

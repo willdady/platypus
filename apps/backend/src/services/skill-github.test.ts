@@ -18,6 +18,7 @@ import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { resetStorage } from "../storage/index.ts";
 import { mockNanoid } from "../test-setup.ts";
 import { ValidationError } from "../errors.ts";
+import type { SkillScope } from "./skill.ts";
 
 /**
  * Installing Skills from GitHub (ADR-0037) end to end against an in-process
@@ -33,9 +34,14 @@ vi.mock("../index.ts", () => ({
   },
 }));
 
-const { previewGithubSkills, installGithubSkills, GITHUB_ARCHIVE_MAX_BYTES } =
-  await import("./skill-github.ts");
-const { replaceSkillBundle } = await import("./skill-bundle.ts");
+const {
+  previewGithubSkills,
+  installGithubSkills,
+  checkGithubSkillUpdate,
+  updateGithubSkill,
+  GITHUB_ARCHIVE_MAX_BYTES,
+} = await import("./skill-github.ts");
+const { replaceSkillBundle, isModified } = await import("./skill-bundle.ts");
 const { updateSkill } = await import("./skill.ts");
 
 let pg: PGlite;
@@ -474,6 +480,205 @@ describe("installGithubSkills", () => {
       skillPath: null,
       commitSha: null,
       installedHash: null,
+    });
+  });
+});
+
+describe("checking and updating a GitHub-installed Skill", () => {
+  const NEXT_SHA = "c".repeat(40);
+  const MOVED_REPO: Zippable = {
+    "skills/pdf/SKILL.md": skillMd("pdf", "\nlicense: MIT"),
+    "skills/pdf/forms.md": strToU8("# Forms, revised"),
+    "skills/pdf/reference.md": strToU8("# Reference"),
+  };
+
+  const install = async (
+    ref: string | null = null,
+    scope: SkillScope = wsScope,
+  ) => {
+    const { results } = await installGithubSkills(scope, {
+      owner: "acme",
+      repo: "skills",
+      ref,
+      commitSha: SHA,
+      skillPaths: ["skills/pdf"],
+    });
+    calls = [];
+    return results[0].skillId!;
+  };
+  const row = async (id: string) =>
+    (
+      await pg.query<Record<string, unknown>>(
+        `SELECT * FROM "skill" WHERE id = $1`,
+        [id],
+      )
+    ).rows[0];
+  const storedFiles = async () =>
+    (
+      await fs.readdir(process.env.STORAGE_DISK_PATH!, {
+        recursive: true,
+        withFileTypes: true,
+      })
+    ).filter((entry) => entry.isFile()).length;
+
+  it("finds an unmoved ref up to date with one REST request and no download", async () => {
+    const id = await install();
+    expect(await checkGithubSkillUpdate(wsScope, id)).toEqual({
+      upToDate: true,
+    });
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://api.github.com/repos/acme/skills/commits/HEAD",
+    ]);
+  });
+
+  it("finds a commit SHA ref up to date without asking GitHub", async () => {
+    const id = await install(MOVED_SHA);
+    expect(await checkGithubSkillUpdate(wsScope, id)).toEqual({
+      upToDate: true,
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("diffs a moved ref against the Skill as it stands", async () => {
+    const id = await install();
+    refAt("HEAD", MOVED_SHA);
+    repoAt(MOVED_SHA, MOVED_REPO);
+
+    expect(await checkGithubSkillUpdate(wsScope, id)).toEqual({
+      upToDate: false,
+      fromSha: SHA,
+      toSha: MOVED_SHA,
+      files: {
+        added: [{ path: "reference.md", size: 11 }],
+        removed: [{ path: "scripts/fill.py", size: 13 }],
+        changed: [{ path: "forms.md", oldSize: 7, newSize: 16 }],
+      },
+      skillMd: {
+        before: "---\nname: pdf\ndescription: The pdf skill.\n---\nUse pdf.",
+        after:
+          "---\nname: pdf\ndescription: The pdf skill.\nlicense: MIT\n---\nUse pdf.",
+      },
+      needsSandbox: { before: true, after: false },
+    });
+    expect((await row(id)).commit_sha).toBe(SHA);
+  });
+
+  it("applies the checked commit even after the ref moves again", async () => {
+    const id = await install();
+    refAt("HEAD", MOVED_SHA);
+    repoAt(MOVED_SHA, MOVED_REPO);
+    await checkGithubSkillUpdate(wsScope, id);
+    const before = await storedFiles();
+    refAt("HEAD", NEXT_SHA);
+    repoAt(NEXT_SHA, { "skills/pdf/SKILL.md": skillMd("pdf-next") });
+    calls = [];
+
+    const updated = await updateGithubSkill(wsScope, id, MOVED_SHA);
+
+    expect(calls.map((c) => c.url)).toEqual([
+      `https://codeload.github.com/acme/skills/zip/${MOVED_SHA}`,
+    ]);
+    expect(updated).toMatchObject({
+      name: "pdf",
+      frontmatter: { license: "MIT" },
+      needsSandbox: false,
+      sourceType: "github",
+      source: "acme/skills",
+      ref: null,
+      skillPath: "skills/pdf",
+      commitSha: MOVED_SHA,
+      installedHash: updated.bundleHash,
+    });
+    expect(isModified(updated)).toBe(false);
+    const files = await pg.query(
+      `SELECT path FROM "skill_file" WHERE skill_id = $1 ORDER BY path`,
+      [id],
+    );
+    expect(files.rows).toEqual([
+      { path: "forms.md" },
+      { path: "reference.md" },
+    ]);
+    // Two files out, two in: the removed script's bytes are gone too.
+    expect(await storedFiles()).toBe(before);
+  });
+
+  it("marks a body edit Modified, and an update clears it", async () => {
+    const id = await install();
+    const edited = await updateSkill(wsScope, id, {
+      name: "pdf",
+      description: "The pdf skill.",
+      body: "Edited.",
+    });
+    expect(isModified(edited)).toBe(true);
+
+    refAt("HEAD", MOVED_SHA);
+    repoAt(MOVED_SHA, MOVED_REPO);
+    const check = await checkGithubSkillUpdate(wsScope, id);
+    expect(check).toMatchObject({
+      skillMd: { before: expect.stringContaining("Edited.") as unknown },
+    });
+    expect(isModified(await updateGithubSkill(wsScope, id, MOVED_SHA))).toBe(
+      false,
+    );
+  });
+
+  it("refuses a commit without the Skill's path and changes nothing", async () => {
+    const id = await install();
+    refAt("HEAD", MOVED_SHA);
+    repoAt(MOVED_SHA, { "README.md": strToU8("# Moved out") });
+    const before = await row(id);
+
+    await expect(checkGithubSkillUpdate(wsScope, id)).rejects.toThrow(
+      "No Skill at skills/pdf in commit bbbbbbb",
+    );
+    await expect(updateGithubSkill(wsScope, id, MOVED_SHA)).rejects.toThrow(
+      "No Skill at skills/pdf in commit bbbbbbb",
+    );
+    expect(await row(id)).toEqual(before);
+  });
+
+  it("refuses an invalid bundle at the new commit", async () => {
+    const id = await install();
+    refAt("HEAD", MOVED_SHA);
+    repoAt(MOVED_SHA, {
+      "skills/pdf/SKILL.md": strToU8("---\nname: pdf\n---\nx\n"),
+    });
+    await expect(checkGithubSkillUpdate(wsScope, id)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
+
+  it("refuses a Skill not installed from GitHub", async () => {
+    const id = await install();
+    await replaceSkillBundle(
+      wsScope,
+      id,
+      zipSync({ "SKILL.md": skillMd("pdf") }),
+    );
+    await expect(checkGithubSkillUpdate(wsScope, id)).rejects.toThrow(
+      "This Skill wasn't installed from GitHub",
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it("updates a Shared Skill only at Organization scope", async () => {
+    const id = await install(null, orgScope);
+    await pg.exec(
+      `INSERT INTO "attachment" ("id", "workspace_id", "resource_type", "resource_id") VALUES ('a-1', 'ws-1', 'skill', '${id}')`,
+    );
+    refAt("HEAD", MOVED_SHA);
+    repoAt(MOVED_SHA, MOVED_REPO);
+
+    await expect(checkGithubSkillUpdate(wsScope, id)).rejects.toMatchObject({
+      name: "LockedError",
+    });
+    await expect(
+      updateGithubSkill(wsScope, id, MOVED_SHA),
+    ).rejects.toMatchObject({ name: "LockedError" });
+    expect(calls).toEqual([]);
+
+    expect(await updateGithubSkill(orgScope, id, MOVED_SHA)).toMatchObject({
+      commitSha: MOVED_SHA,
     });
   });
 });
