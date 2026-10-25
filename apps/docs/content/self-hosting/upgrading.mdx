@@ -50,6 +50,17 @@ Dashboard and its widgets, and Agents lose the **Dashboards** Tool set. Move
 anything you want to keep before you upgrade; see
 [Dashboards](/building-with-platypus/dashboards).
 
+## Coming from 3.27
+
+The backend image now sets `PORT` to `4000`, the port it has always exposed.
+Under the shipped `compose.yaml` nothing changes. A backend container run any
+other way with `PORT` unset used to serve on `4001` and now serves on `4000`, so
+point its port mapping and health probes at `4000`, or set `PORT=4001` to keep
+the old port.
+
+With Compose, a `PORT` in your `.env` now takes effect where `compose.yaml` used
+to override it. Remove it, or set it to `4000`.
+
 ## Coming from 3.26
 
 The backend now checks its environment variables when it starts, and stops on a
@@ -65,8 +76,8 @@ existing deployment:
 - A timeout or interval of `0`, or one that isn't a whole number. A Chat or
   Trigger timeout used to fall back to its default.
 - A `TIMEZONE` that isn't an IANA timezone name.
-- `STORAGE_BACKEND=s3` without the bucket and both keys. This used to fail only
-  when a file was first stored.
+- `STORAGE_BACKEND=s3` without a bucket, or with only one of the two access
+  keys. This used to fail only when a file was first stored.
 
 See [Backend configuration](/reference/backend-configuration) for what each
 variable accepts.
