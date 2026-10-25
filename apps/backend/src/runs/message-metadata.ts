@@ -1,10 +1,10 @@
 import type { TextStreamPart, ToolSet } from "ai";
-import type { CachedInputTokens } from "@platypus/schemas";
+import type { ModelUsage } from "@platypus/schemas";
 import {
   isTruncatedByTokenLimit,
   stoppedAtStepCeiling,
 } from "./stream-error.ts";
-import { pickCachedInput } from "./run-stats.ts";
+import { pickCachedInput, sumUsage } from "./run-stats.ts";
 import type { ChatMessageMetadata } from "../types.ts";
 import type { TurnFacts } from "./types.ts";
 
@@ -75,6 +75,12 @@ export type MessageMetadataFacts = TurnFacts & {
    * no resolved Tool session (a headless Trigger) already gets today.
    */
   isClearableTool?: (toolName: string) => boolean;
+  /**
+   * The usage the turn's delegated Sub-Agent runs have reported so far (issue
+   * #1634), added into `tokenUsage`. Read live: a step's delegates have all
+   * ended by the time that step's `finish-step` part arrives.
+   */
+  delegatedUsage?: () => readonly ModelUsage[];
 };
 
 export const createMessageMetadata = ({
@@ -86,6 +92,7 @@ export const createMessageMetadata = ({
   driveStartMs,
   now = Date.now,
   isClearableTool,
+  delegatedUsage,
 }: MessageMetadataFacts = {}) => {
   // Whether any step of this turn has reported an input-token count. Only
   // read to erase a reading, never to synthesise one — see the `finish-step`
@@ -105,8 +112,8 @@ export const createMessageMetadata = ({
   // standing — the deep merge keeps a key an override omits — so a key exists
   // only once some step has reported a value for it, never as a `0` sum for a
   // Provider that reports no cache detail.
-  let cacheReadTokensSum = 0;
-  let cacheWriteTokensSum = 0;
+  let cacheReadTokensSum: number | undefined;
+  let cacheWriteTokensSum: number | undefined;
   // The turn's clearable Tool names among the ones it has actually called so
   // far — reported in full each time, like `tokenUsage`'s sum, since the
   // merge replaces an array rather than concatenating it.
@@ -169,29 +176,34 @@ export const createMessageMetadata = ({
       if (typeof inputTokens === "number" || typeof outputTokens === "number") {
         inputTokensSum += inputTokens ?? 0;
         outputTokensSum += outputTokens ?? 0;
-        const tokenUsage: {
-          inputTokens: number;
-          outputTokens: number;
-        } & CachedInputTokens = {
-          inputTokens: inputTokensSum,
-          outputTokens: outputTokensSum,
-        };
         // Cached input, summed across the turn's steps just like the flat input
         // figure beside it — a breakdown of that number, never subtracted. A
         // step that reports no read (or write) count adds nothing and, unlike
-        // occupancy, needs no erasing: the sum only grows, and the merge keeps
-        // the key an override omits, so a Provider that reports no cache detail
-        // at all persists no cache key rather than a `0` sum.
+        // occupancy, needs no erasing: the sum only grows. A sum stays
+        // undefined until some step reports a value for it, so a Provider that
+        // reports no cache detail at all persists no cache key rather than a
+        // `0` sum.
         const cached = pickCachedInput(part.usage.inputTokenDetails);
         if (cached.cacheReadTokens !== undefined) {
-          cacheReadTokensSum += cached.cacheReadTokens;
-          tokenUsage.cacheReadTokens = cacheReadTokensSum;
+          cacheReadTokensSum =
+            (cacheReadTokensSum ?? 0) + cached.cacheReadTokens;
         }
         if (cached.cacheWriteTokens !== undefined) {
-          cacheWriteTokensSum += cached.cacheWriteTokens;
-          tokenUsage.cacheWriteTokens = cacheWriteTokensSum;
+          cacheWriteTokensSum =
+            (cacheWriteTokensSum ?? 0) + cached.cacheWriteTokens;
         }
-        meta.tokenUsage = tokenUsage;
+        // The turn's delegates were billed too, so they count (issue #1634).
+        meta.tokenUsage = sumUsage([
+          {
+            inputTokens: inputTokensSum,
+            outputTokens: outputTokensSum,
+            ...pickCachedInput({
+              cacheReadTokens: cacheReadTokensSum,
+              cacheWriteTokens: cacheWriteTokensSum,
+            }),
+          },
+          ...(delegatedUsage?.() ?? []),
+        ]);
       }
 
       if (typeof driveStartMs === "number") {

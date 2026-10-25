@@ -83,6 +83,7 @@ const toTriggerRunStats = (stats: RunStats): TriggerRunStats | null => {
     // Same idiom, same reason: a run whose loop was never stopped short stores
     // no key, so the flag's presence is the whole of its meaning.
     ...(stats.stoppedAtStepLimit ? { stoppedAtStepLimit: true as const } : {}),
+    ...(stats.usageByModel ? { usageByModel: stats.usageByModel } : {}),
   };
 };
 

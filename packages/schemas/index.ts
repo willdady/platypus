@@ -2745,16 +2745,36 @@ export type CachedInputTokens = z.infer<
   z.ZodObject<typeof cachedInputTokensShape>
 >;
 
+/**
+ * One (Provider, model) pair's share of a run's Token usage (issue #1634): the
+ * run's own model calls are one row, and each Sub-Agent it delegated to adds
+ * to the row for the pair that delegate ran on. Rows are merged by pair, so
+ * two delegates on the same model are one row.
+ */
+export const modelUsageSchema = z.object({
+  providerId: z.string(),
+  model: z.string(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  ...cachedInputTokensShape,
+});
+
+export type ModelUsage = z.infer<typeof modelUsageSchema>;
+
 export const triggerRunStatsSchema = z.object({
   steps: z.number(),
   toolCalls: z.array(z.object({ name: z.string(), count: z.number() })),
   // Cross-step SUMS, and billing figures: every step's usage folded together.
   // They are rendered on the trigger runs page and deliberately keep that
   // meaning — occupancy gets its own field below rather than reinterpreting a
-  // number an Operator already reads (ADR-0018).
+  // number an Operator already reads (ADR-0018). They include the tokens of
+  // every Sub-Agent run the run delegated to — the sum of `usageByModel`.
   inputTokens: z.number(),
   outputTokens: z.number(),
   ...cachedInputTokensShape,
+  /** The figures above broken down by (Provider, model). Absent on a run
+   *  recorded before the breakdown existed, or that made no model call. */
+  usageByModel: z.array(modelUsageSchema).optional(),
   /**
    * How full the model's context got: the input tokens reported for the FINAL
    * step of the run, which is the whole conversation as last sent. A last

@@ -2,7 +2,14 @@ import { logger } from "../logger.ts";
 import { rejectedToolInputs } from "../rejected-tool-input.ts";
 import type { ToolActivityEvent } from "../services/tool-activity.ts";
 import { isTruncatedByTokenLimit } from "./stream-error.ts";
-import { accumulateStepStats, type RunStep } from "./run-stats.ts";
+import type { ModelUsage } from "@platypus/schemas";
+import {
+  accumulateStepStats,
+  mergeUsageByModel,
+  reportStats,
+  type RunStep,
+  type UsageModel,
+} from "./run-stats.ts";
 import {
   runRegistry,
   TimeoutError,
@@ -22,8 +29,18 @@ import type { RunId, RunStats, RunStatus } from "./types.ts";
  */
 export type RunLifecycle = {
   handle: RunHandle;
-  /** Accumulated as steps finish; read by the terminal callback. */
+  /**
+   * The run's OWN model calls, accumulated as steps finish. What the terminal
+   * callback is handed also counts its delegates — see `reportStats`.
+   */
   readonly stats: RunStats;
+  /** The (Provider, model) pair the run's own calls are billed under, so they
+   *  are one row of `usageByModel`. Set by the drive, from its plan. */
+  setUsageModel: (model: UsageModel | undefined) => void;
+  /** Folds a delegated run's final stats into this run's (issue #1634). */
+  addDelegateUsage: (stats: RunStats) => void;
+  /** The delegates' usage folded so far, by (Provider, model). */
+  delegatedUsage: () => readonly ModelUsage[];
   /**
    * Replace the accumulated statistics with the authoritative per-run figures
    * an SDK result carries (`computeStats`). The accumulator exists so a run
@@ -102,6 +119,9 @@ export const startRun = (params: {
   const { runId, onTerminate } = params;
   const logFields = { runId, ...params.log };
   let stats: RunStats = {};
+  let usageModel: UsageModel | undefined;
+  let delegated: ModelUsage[] = [];
+  const report = (): RunStats => reportStats(stats, usageModel, delegated);
   let terminated = false;
   /** The Tool session this run must close, once it has one — see
    *  {@link RunLifecycle.adoptOrDispose}. One, not a list: a run resolves one
@@ -128,7 +148,7 @@ export const startRun = (params: {
     // time the sink writes the run's terminal record.
     if (disposer) await runDisposer(disposer);
     try {
-      await onTerminate({ status, error, stats });
+      await onTerminate({ status, error, stats: report() });
     } catch (err) {
       logger.error({ err, ...logFields }, "Error terminating run");
     }
@@ -152,7 +172,12 @@ export const startRun = (params: {
     // and the abort listener below is what terminates the run.
     onTimeout: (error) => {
       logger.error(
-        { ...logFields, kind: error.kind, message: error.message, stats },
+        {
+          ...logFields,
+          kind: error.kind,
+          message: error.message,
+          stats: report(),
+        },
         "Run timed out",
       );
     },
@@ -192,7 +217,7 @@ export const startRun = (params: {
         "Tool call failed",
       );
     }
-    params.onStepProgress?.(stats);
+    params.onStepProgress?.(report());
   };
 
   // Start events hold the per-step stall timer down for the duration of the
@@ -271,6 +296,16 @@ export const startRun = (params: {
     setStats: (next: RunStats) => {
       stats = next;
     },
+    setUsageModel: (model) => {
+      usageModel = model;
+    },
+    addDelegateUsage: (delegate) => {
+      delegated = mergeUsageByModel([
+        ...delegated,
+        ...(delegate.usageByModel ?? []),
+      ]);
+    },
+    delegatedUsage: () => delegated,
     onStep,
     onStreamChunk: () => handle.noteActivity(),
     onActivity,

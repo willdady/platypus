@@ -648,6 +648,7 @@ describe("createSubAgentDelegate", () => {
           runId: "parent-1",
           scope: parentScope,
           timeouts: { perStepTimeoutMs: 600_000, perRunTimeoutMs: 3_600_000 },
+          addDelegateUsage: () => undefined,
         },
       });
 

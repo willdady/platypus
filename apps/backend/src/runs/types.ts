@@ -1,5 +1,9 @@
 import type { PlatypusUIMessage } from "../types.ts";
-import type { CachedInputTokens, UnloadedToolSet } from "@platypus/schemas";
+import type {
+  CachedInputTokens,
+  ModelUsage,
+  UnloadedToolSet,
+} from "@platypus/schemas";
 import type { WorkspaceScope } from "../scope.ts";
 import type { RunTimeouts } from "./run-registry.ts";
 import type { RunEventRecorder } from "./run-events.ts";
@@ -53,6 +57,12 @@ export type ParentRunContext = {
   runId: RunId;
   scope: WorkspaceScope;
   timeouts?: RunTimeouts;
+  /**
+   * Folds a delegated run's final stats into this run's Token usage (issue
+   * #1634). Called from the delegate's terminal callback, so every way a
+   * delegate ends — including a cancel or a timeout — counts what it was billed.
+   */
+  addDelegateUsage: (stats: RunStats) => void;
 };
 
 export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
@@ -67,9 +77,18 @@ export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
 export type RunStats = {
   steps?: number;
   toolCalls?: Array<{ name: string; count: number }>;
-  /** Cross-step SUMS of every step's usage — billing figures, not occupancy. */
+  /**
+   * Cross-step SUMS of every step's usage — billing figures, not occupancy —
+   * including every delegated Sub-Agent run's (issue #1634).
+   */
   inputTokens?: number;
   outputTokens?: number;
+  /**
+   * The sums above broken down by (Provider, model): the run's own calls are
+   * one row, its delegates' merge into theirs. Absent until a model call is
+   * known to have been made under a known model.
+   */
+  usageByModel?: ModelUsage[];
   /**
    * How full the model's context got: the input tokens reported for the LAST
    * step, which is the whole conversation as last sent (ADR-0018). A last

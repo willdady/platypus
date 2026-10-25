@@ -289,6 +289,9 @@ export const createSubAgentDelegate = (
           actorUserId: scope ? actorUserId(scope.principal) : undefined,
         },
         onTerminate: ({ status, error, stats }) => {
+          // Every exit — succeeded, failed, cancelled or timed out — lands
+          // here, and each was billed for whatever it got through.
+          parentRun?.addDelegateUsage(stats);
           logger.info(
             {
               runId,

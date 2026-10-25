@@ -1,5 +1,5 @@
 import type { RunStats } from "./types.ts";
-import type { CachedInputTokens } from "@platypus/schemas";
+import type { CachedInputTokens, ModelUsage } from "@platypus/schemas";
 
 /**
  * Per-run statistics, folded from the SDK's step results.
@@ -150,5 +150,80 @@ export const computeStats = (result: {
     // matching the schema's optional field: absent means unknown, and 0 would
     // read as a measurement of an empty context.
     ...(contextOccupancy === undefined ? {} : { contextOccupancy }),
+  };
+};
+
+/** The (Provider, model) pair a `ModelUsage` row is keyed on. */
+export type UsageModel = Pick<ModelUsage, "providerId" | "model">;
+
+type TokenCounts = {
+  inputTokens: number;
+  outputTokens: number;
+} & CachedInputTokens;
+
+/** Absent only where both sides are: a cache key one side reported is kept. */
+const sumOptional = (a?: number, b?: number): number | undefined =>
+  a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
+
+const addCounts = (a: TokenCounts, b: TokenCounts): TokenCounts => ({
+  inputTokens: a.inputTokens + b.inputTokens,
+  outputTokens: a.outputTokens + b.outputTokens,
+  ...pickCachedInput({
+    cacheReadTokens: sumOptional(a.cacheReadTokens, b.cacheReadTokens),
+    cacheWriteTokens: sumOptional(a.cacheWriteTokens, b.cacheWriteTokens),
+  }),
+});
+
+const NO_TOKENS: TokenCounts = { inputTokens: 0, outputTokens: 0 };
+
+/** Sums `rows` into one set of counts, with no pair. */
+export const sumUsage = (rows: readonly TokenCounts[]): TokenCounts =>
+  rows.reduce(addCounts, NO_TOKENS);
+
+/** Merges rows that share a (Provider, model) pair, in first-seen order. */
+export const mergeUsageByModel = (
+  rows: readonly ModelUsage[],
+): ModelUsage[] => {
+  const merged = new Map<string, ModelUsage>();
+  for (const row of rows) {
+    const key = JSON.stringify([row.providerId, row.model]);
+    const into = merged.get(key);
+    merged.set(key, {
+      providerId: row.providerId,
+      model: row.model,
+      ...addCounts(into ?? NO_TOKENS, row),
+    });
+  }
+  return [...merged.values()];
+};
+
+/**
+ * A run's stats as reported: its own model calls, folded above, plus the
+ * usage of every Sub-Agent run it delegated to (issue #1634). The headline
+ * sums cover both, and `usageByModel` breaks them down by (Provider, model) —
+ * the run's own calls as one row, under `model`, where it is known.
+ *
+ * `contextOccupancy` is the run's own and passes through untouched: a
+ * delegate's calls never sent the parent's conversation (ADR-0018).
+ */
+export const reportStats = (
+  own: RunStats,
+  model: UsageModel | undefined,
+  delegated: readonly ModelUsage[],
+): RunStats => {
+  const ownCounts: TokenCounts = {
+    inputTokens: own.inputTokens ?? 0,
+    outputTokens: own.outputTokens ?? 0,
+    ...pickCachedInput(own),
+  };
+  const usageByModel = mergeUsageByModel([
+    ...(model && own.steps ? [{ ...model, ...ownCounts }] : []),
+    ...delegated,
+  ]);
+  if (usageByModel.length === 0) return own;
+  return {
+    ...own,
+    ...(delegated.length ? addCounts(ownCounts, sumUsage(delegated)) : {}),
+    usageByModel,
   };
 };
