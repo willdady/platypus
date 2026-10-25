@@ -144,9 +144,9 @@ function formatValue(value: unknown) {
 }
 
 /**
- * A Skill's bundle beyond the form's fields: Export, Replace bundle, the
- * GitHub source and its update check, the bundled files (view-only, each downloadable), and the frontmatter kept from
- * the imported `SKILL.md`, read-only.
+ * A Skill's bundle beyond the form's fields: the GitHub source, the bundled
+ * files (view-only, each downloadable), the frontmatter kept from the imported
+ * `SKILL.md` (read-only), then Export, Replace bundle and the update check.
  */
 export function SkillBundleCard({
   scope,
@@ -175,6 +175,27 @@ export function SkillBundleCard({
   const binariesSkipped =
     sandbox?.transfer.upload === false && files.some((file) => !file.isText);
   const importAllowed = useSkillImportAllowed(scope);
+  const actions = (
+    <>
+      <Button variant="outline" asChild>
+        <a href={`${skillUrl}/export`}>
+          <FileArchive /> Export
+        </a>
+      </Button>
+      {importAllowed && (
+        <>
+          {upload.input(`${skillUrl}/bundle`)}
+          <Button
+            variant="outline"
+            onClick={upload.pick}
+            disabled={upload.uploading}
+          >
+            <FileUp /> {upload.uploading ? "Replacing..." : "Replace bundle"}
+          </Button>
+        </>
+      )}
+    </>
+  );
 
   return (
     <Card className="mb-6">
@@ -208,14 +229,6 @@ export function SkillBundleCard({
               {skill.commitSha.slice(0, 7)}
             </a>
           </p>
-        )}
-
-        {skill.sourceType === "github" && importAllowed && (
-          <SkillGithubUpdate
-            skillUrl={skillUrl}
-            skill={skill}
-            onUpdated={onReplaced}
-          />
         )}
 
         {binariesSkipped && (
@@ -265,26 +278,17 @@ export function SkillBundleCard({
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" asChild>
-            <a href={`${skillUrl}/export`}>
-              <FileArchive /> Export
-            </a>
-          </Button>
-          {importAllowed && (
-            <>
-              {upload.input(`${skillUrl}/bundle`)}
-              <Button
-                variant="outline"
-                onClick={upload.pick}
-                disabled={upload.uploading}
-              >
-                <FileUp />{" "}
-                {upload.uploading ? "Replacing..." : "Replace bundle"}
-              </Button>
-            </>
-          )}
-        </div>
+        {skill.sourceType === "github" && importAllowed ? (
+          <SkillGithubUpdate
+            skillUrl={skillUrl}
+            skill={skill}
+            onUpdated={onReplaced}
+          >
+            {actions}
+          </SkillGithubUpdate>
+        ) : (
+          <div className="flex flex-wrap gap-2">{actions}</div>
+        )}
       </CardContent>
     </Card>
   );

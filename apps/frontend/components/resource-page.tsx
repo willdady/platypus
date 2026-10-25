@@ -13,7 +13,7 @@ export type ResourcePageProps = {
 };
 
 const narrowTitleClass = "text-2xl mb-4 font-bold";
-const narrowColumnClass = "w-full px-4 md:px-0 md:w-4/5 xl:w-2/5";
+const narrowColumnClass = "w-full px-4 md:px-0 md:w-4/5 max-w-3xl";
 
 // Exported so a loading fallback can take the same column as the page it stands
 // in for.
