@@ -74,8 +74,8 @@ COPY --chown=platypus:platypus apps/backend/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # The port this image serves on, so EXPOSE, the healthcheck and the server
-# agree without the deployment setting it. The app's own default (4001) stays
-# for runs outside a container.
+# agree without the deployment setting it. The app's own default stays for runs
+# outside a container.
 ENV PORT=4000
 EXPOSE 4000
 
