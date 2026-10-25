@@ -68,8 +68,9 @@ const main = async () => {
     validateInboundTriggerSettings();
     // And for the A2A load cap (ADR-0032).
     validateA2aSettings();
-    // Build the storage backend now, so a bad `STORAGE_*` configuration stops
-    // boot instead of surfacing on the first upload (#1686).
+    // Build the storage backend now, so a backend that cannot be built stops
+    // boot instead of surfacing on the first upload (#1686). The `STORAGE_*`
+    // values themselves were already validated by `boot-env.ts`.
     getStorage();
 
     await exponentialBackoff(async () => {

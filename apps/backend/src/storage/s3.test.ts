@@ -5,7 +5,7 @@ interface S3ClientConfig {
   endpoint?: string;
   credentials?: { accessKeyId: string; secretAccessKey: string };
   forcePathStyle?: boolean;
-  requestHandler?: { connectionTimeout: number; requestTimeout: number };
+  requestHandler?: Record<string, unknown>;
 }
 
 interface MockCommand {
@@ -115,6 +115,7 @@ describe("S3Storage", () => {
       expect(capturedConfigs[0].requestHandler).toEqual({
         connectionTimeout: 5_000,
         requestTimeout: 30_000,
+        throwOnRequestTimeout: true,
       });
     });
 

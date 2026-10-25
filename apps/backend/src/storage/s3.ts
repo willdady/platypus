@@ -49,6 +49,8 @@ export class S3Storage implements StorageBackend {
       requestHandler: {
         connectionTimeout: S3_CONNECTION_TIMEOUT_MS,
         requestTimeout: S3_REQUEST_TIMEOUT_MS,
+        // Otherwise the SDK only logs a warning and lets the request hang.
+        throwOnRequestTimeout: true,
       },
     });
   }

@@ -104,15 +104,17 @@ const envSchema = z
     }
     // Both unset leaves the AWS SDK's default credential chain (#1686); one
     // alone is almost certainly a typo, not a choice.
-    const keyId = "STORAGE_S3_ACCESS_KEY_ID";
-    const secret = "STORAGE_S3_SECRET_ACCESS_KEY";
-    if (!env[keyId] !== !env[secret]) {
-      const [missing, set] = env[keyId] ? [secret, keyId] : [keyId, secret];
-      ctx.addIssue({
-        code: "custom",
-        path: [missing],
-        message: `is required when ${set} is set; set both or neither`,
-      });
+    for (const [key, partner] of [
+      ["STORAGE_S3_ACCESS_KEY_ID", "STORAGE_S3_SECRET_ACCESS_KEY"],
+      ["STORAGE_S3_SECRET_ACCESS_KEY", "STORAGE_S3_ACCESS_KEY_ID"],
+    ] as const) {
+      if (env[partner] && !env[key]) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: `is required when ${partner} is set; set both or neither`,
+        });
+      }
     }
   });
 
