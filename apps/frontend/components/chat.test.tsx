@@ -1454,7 +1454,10 @@ describe("starting a turn", () => {
       id: "ap1",
       approved: true,
       options: {
-        body: expect.objectContaining({ providerId: "p1", maxSteps: 10 }),
+        body: expect.objectContaining({
+          providerId: "p1",
+          maxSteps: 10,
+        }) as unknown,
       },
     });
     expect(harness.chatOptions!.sendAutomaticallyWhen).toBe(
