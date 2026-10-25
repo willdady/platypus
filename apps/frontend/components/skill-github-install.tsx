@@ -33,6 +33,32 @@ import { formatSize, githubTreeUrl } from "@/components/skill-bundle";
 import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import { scopedUrl, writeAt, type Scope } from "@/lib/api-write";
 
+/**
+ * The warning before taking a GitHub bundle whose scripts only a Sandbox can
+ * run: they're a third party's, and run with the Workspace's environment.
+ */
+export function ThirdPartyScriptsAlert({
+  subject,
+  action,
+}: {
+  /** What includes the scripts, e.g. "1 selected Skill includes". */
+  subject: string;
+  action: "installing" | "updating";
+}) {
+  return (
+    <Alert>
+      <TriangleAlert />
+      <AlertTitle>Third-party scripts</AlertTitle>
+      <AlertDescription>
+        {subject} scripts written by a third party. If an Agent with a Sandbox
+        runs them, they run with this Workspace&apos;s default environment
+        variables and can send them anywhere the Sandbox can reach. Review the
+        files before {action}.
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 /** Why a discovered Skill can't be picked, or null when it can. */
 function unselectableReason(skill: SkillGithubCandidate) {
   return (
@@ -357,19 +383,14 @@ export function SkillGithubInstall({
           )}
 
           {needsSandbox > 0 && (
-            <Alert>
-              <TriangleAlert />
-              <AlertTitle>Third-party scripts</AlertTitle>
-              <AlertDescription>
-                {needsSandbox === 1
+            <ThirdPartyScriptsAlert
+              subject={
+                needsSandbox === 1
                   ? "1 selected Skill includes"
-                  : `${needsSandbox} selected Skills include`}{" "}
-                scripts written by a third party. If an Agent with a Sandbox
-                runs them, they run with this Workspace&apos;s default
-                environment variables and can send them anywhere the Sandbox can
-                reach. Review the files before installing.
-              </AlertDescription>
-            </Alert>
+                  : `${needsSandbox} selected Skills include`
+              }
+              action="installing"
+            />
           )}
 
           {preview.skills.length > 0 && (

@@ -5,6 +5,7 @@ import {
   Download,
   FileArchive,
   FileUp,
+  PencilLine,
   SquareTerminal,
   TriangleAlert,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import {
   type Scope,
   type Serialized,
 } from "@/lib/api-write";
+import { SkillGithubUpdate } from "@/components/skill-github-update";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import { optionalFetcher } from "@/lib/utils";
@@ -36,6 +38,21 @@ export function NeedsSandboxBadge({ skill }: { skill: Serialized<Skill> }) {
     >
       <SquareTerminal />
       Needs Sandbox
+    </Badge>
+  );
+}
+
+/** Marks a GitHub-installed Skill edited since it was installed or updated. */
+export function ModifiedBadge({ skill }: { skill: Serialized<Skill> }) {
+  if (!skill.modified) return null;
+
+  return (
+    <Badge
+      variant="pill"
+      title="This skill has been edited since it was installed from GitHub. Updating it overwrites those edits."
+    >
+      <PencilLine />
+      Modified
     </Badge>
   );
 }
@@ -128,7 +145,7 @@ function formatValue(value: unknown) {
 
 /**
  * A Skill's bundle beyond the form's fields: Export, Replace bundle, the
- * bundled files (view-only, each downloadable), and the frontmatter kept from
+ * GitHub source and its update check, the bundled files (view-only, each downloadable), and the frontmatter kept from
  * the imported `SKILL.md`, read-only.
  */
 export function SkillBundleCard({
@@ -164,6 +181,7 @@ export function SkillBundleCard({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           Bundle <NeedsSandboxBadge skill={skill} />
+          <ModifiedBadge skill={skill} />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -190,6 +208,14 @@ export function SkillBundleCard({
               {skill.commitSha.slice(0, 7)}
             </a>
           </p>
+        )}
+
+        {skill.sourceType === "github" && importAllowed && (
+          <SkillGithubUpdate
+            skillUrl={skillUrl}
+            skill={skill}
+            onUpdated={onReplaced}
+          />
         )}
 
         {binariesSkipped && (

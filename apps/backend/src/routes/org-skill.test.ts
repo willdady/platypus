@@ -106,7 +106,11 @@ describe("Organization Skill Routes", () => {
 
       const res = await app.request(`${baseUrl}/skill-1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ...skill, files: [] });
+      expect(await res.json()).toEqual({
+        ...skill,
+        files: [],
+        modified: false,
+      });
     });
 
     it("returns 404 if not found", async () => {

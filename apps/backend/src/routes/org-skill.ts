@@ -5,6 +5,7 @@ import {
   skillCreateSchema,
   skillGithubInstallRequestSchema,
   skillGithubPreviewRequestSchema,
+  skillGithubUpdateRequestSchema,
   skillUpdateSchema,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -18,13 +19,16 @@ import {
   exportSkillBundle,
   importSkillBundle,
   downloadSkillFile,
+  isModified,
   replaceSkillBundle,
   SKILL_FILE_CONTENT_TYPE,
   skillFilesForApi,
 } from "../services/skill-bundle.ts";
 import {
+  checkGithubSkillUpdate,
   installGithubSkills,
   previewGithubSkills,
+  updateGithubSkill,
 } from "../services/skill-github.ts";
 import {
   getSkillImportAccess,
@@ -70,7 +74,11 @@ orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const skillId = c.req.param("skillId");
   const record = await requireOrgScoped(db, "skill", skillId, orgId);
-  return c.json({ ...record, files: await skillFilesForApi(skillId) });
+  return c.json({
+    ...record,
+    files: await skillFilesForApi(skillId),
+    modified: isModified(record),
+  });
 });
 
 /** Import a zip as a new org-scoped Skill (admin only) */
@@ -136,6 +144,36 @@ orgSkill.put(
     );
     return c.json(row, 200);
   },
+);
+
+/** Check a GitHub-installed Skill for updates (admin only) */
+orgSkill.post(
+  "/:skillId/github/check",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  async (c) =>
+    c.json(
+      await checkGithubSkillUpdate(
+        { kind: "organization", orgId: orgScopeOf(c).orgId },
+        c.req.param("skillId"),
+      ),
+    ),
+);
+
+/** Update a GitHub-installed Skill to the checked commit (admin only) */
+orgSkill.post(
+  "/:skillId/github/update",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  validate("json", skillGithubUpdateRequestSchema),
+  async (c) =>
+    c.json(
+      await updateGithubSkill(
+        { kind: "organization", orgId: orgScopeOf(c).orgId },
+        c.req.param("skillId"),
+        c.req.valid("json").commitSha,
+      ),
+    ),
 );
 
 /** Export an org-scoped Skill as a zip */

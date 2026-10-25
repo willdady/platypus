@@ -90,6 +90,34 @@ describe("SkillBundleCard", () => {
     expect(screen.queryByText("Needs Sandbox")).not.toBeInTheDocument();
   });
 
+  it("badges a Modified Skill and offers its update check behind the gate", () => {
+    const github = skill({
+      sourceType: "github",
+      source: "acme/skills",
+      commitSha: "a".repeat(40),
+      modified: true,
+    });
+    renderCard(github);
+    expect(screen.getByText("Modified")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Check for updates/ }),
+    ).toBeInTheDocument();
+
+    mockReads({}, { skillImportGate: "off", skillImportAllowed: false });
+    renderCard({ ...github, modified: false });
+    expect(screen.getAllByText("Modified")).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: /Check for updates/ }),
+    ).toHaveLength(1);
+  });
+
+  it("offers no update check on a Skill not installed from GitHub", () => {
+    renderCard(skill({}));
+    expect(
+      screen.queryByRole("button", { name: /Check for updates/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("warns when the Sandbox can't take this Skill's binary files", () => {
     mockReads({ "/sandbox": { data: { transfer: { upload: false } } } });
     renderCard(skill({ needsSandbox: true, files: [file("logo.png", false)] }));

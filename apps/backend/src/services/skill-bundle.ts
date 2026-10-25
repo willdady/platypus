@@ -106,6 +106,13 @@ export const listSkillFiles = (
     .where(eq(skillFileTable.skillId, skillId))
     .orderBy(asc(skillFileTable.path));
 
+/**
+ * Whether a Skill with a source record has been edited since it was installed
+ * or updated (ADR-0037).
+ */
+export const isModified = (row: SkillRow): boolean =>
+  row.installedHash !== null && row.bundleHash !== row.installedHash;
+
 /** The bundle hash of a row as it now stands, with the files it holds. */
 export const hashSkillRow = async (
   database: Executor,
@@ -256,12 +263,9 @@ const uploadPrefixesOf = (rows: { storageKey: string }[]) =>
   );
 
 /**
- * Replaces an existing Skill's whole bundle — mapped fields, frontmatter, body
- * and files — from an uploaded zip. The new files go under a new upload prefix
- * and the rows swap in one transaction; only then is the old prefix deleted. A
- * failed swap deletes the new prefix instead, leaving the old bundle intact. At
- * Workspace scope a Shared Skill is locked (ADR-0007), as for any edit. The
- * zip didn't come from GitHub, so the source record is cleared.
+ * Replaces an existing Skill's whole bundle from an uploaded zip. See
+ * `swapSkillBundle`. The zip didn't come from GitHub, so the source record is
+ * cleared.
  */
 export async function replaceSkillBundle(
   scope: SkillScope,
@@ -269,7 +273,42 @@ export async function replaceSkillBundle(
   zip: Uint8Array,
 ): Promise<SkillRow> {
   const where = await writableSkillWhere(scope, skillId);
-  const bundle = parseSkillZip(zip);
+  return swapSkillBundle(scope, skillId, where, parseSkillZip(zip), NO_SOURCE);
+}
+
+/**
+ * Replaces a GitHub-installed Skill's whole bundle with the one at
+ * `commitSha`, keeping its source record and moving it to that commit. See
+ * `swapSkillBundle`.
+ */
+export async function updateSkillBundleFromGithub(
+  scope: SkillScope,
+  skillId: string,
+  bundle: ParsedSkillBundle,
+  commitSha: string,
+): Promise<SkillRow> {
+  const where = await writableSkillWhere(scope, skillId);
+  return swapSkillBundle(scope, skillId, where, bundle, {
+    commitSha,
+    installedHash: bundleHash(bundle),
+  });
+}
+
+/**
+ * Swaps in a Skill's whole bundle — mapped fields, frontmatter, body and
+ * files — with `source` the source-record columns to set. The new files go
+ * under a new upload prefix and the rows swap in one transaction; only then
+ * is the old prefix deleted. A failed swap deletes the new prefix instead,
+ * leaving the old bundle intact. `where` comes from `writableSkillWhere`, so
+ * at Workspace scope a Shared Skill is locked (ADR-0007), as for any edit.
+ */
+async function swapSkillBundle(
+  scope: SkillScope,
+  skillId: string,
+  where: SQL,
+  bundle: ParsedSkillBundle,
+  source: typeof NO_SOURCE | { commitSha: string; installedHash: string },
+): Promise<SkillRow> {
   const { prefix, rows } = await storeFiles(
     orgIdOf(scope),
     skillId,
@@ -289,7 +328,7 @@ export async function replaceSkillBundle(
           frontmatter: bundle.frontmatter,
           bundleHash: bundleHash(bundle),
           needsSandbox: bundleNeedsSandbox(bundle.files),
-          ...NO_SOURCE,
+          ...source,
           updatedAt: new Date(),
         })
         .where(where)

@@ -7,6 +7,7 @@ import {
   skillCreateSchema,
   skillGithubInstallRequestSchema,
   skillGithubPreviewRequestSchema,
+  skillGithubUpdateRequestSchema,
   skillUpdateSchema,
 } from "@platypus/schemas";
 import { eq, and, sql } from "drizzle-orm";
@@ -22,13 +23,16 @@ import {
   exportSkillBundle,
   importSkillBundle,
   downloadSkillFile,
+  isModified,
   replaceSkillBundle,
   SKILL_FILE_CONTENT_TYPE,
   skillFilesForApi,
 } from "../services/skill-bundle.ts";
 import {
+  checkGithubSkillUpdate,
   installGithubSkills,
   previewGithubSkills,
+  updateGithubSkill,
 } from "../services/skill-github.ts";
 import { skillImportAllowed } from "../services/skill-import-gate.ts";
 import { promoteScoped } from "../services/promote.ts";
@@ -104,6 +108,7 @@ skill.get(
       scope: found.scope,
       agentIds: agentsWithSkill.map((a) => a.id),
       files: await skillFilesForApi(skillId),
+      modified: isModified(found.row),
     });
   },
 );
@@ -178,6 +183,40 @@ skill.post(
       await installGithubSkills(
         { kind: "workspace", ctx: workspaceScopeOf(c) },
         c.req.valid("json"),
+      ),
+    ),
+);
+
+/** Check a GitHub-installed Skill for updates (editor+) */
+skill.post(
+  "/:skillId/github/check",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireSkillImport,
+  async (c) =>
+    c.json(
+      await checkGithubSkillUpdate(
+        { kind: "workspace", ctx: workspaceScopeOf(c) },
+        c.req.param("skillId"),
+      ),
+    ),
+);
+
+/** Update a GitHub-installed Skill to the checked commit (editor+) */
+skill.post(
+  "/:skillId/github/update",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireSkillImport,
+  validate("json", skillGithubUpdateRequestSchema),
+  async (c) =>
+    c.json(
+      await updateGithubSkill(
+        { kind: "workspace", ctx: workspaceScopeOf(c) },
+        c.req.param("skillId"),
+        c.req.valid("json").commitSha,
       ),
     ),
 );
