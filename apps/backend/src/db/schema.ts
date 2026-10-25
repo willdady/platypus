@@ -245,6 +245,10 @@ export const chat = pgTable(
     status: t.text("status").notNull().default("succeeded"),
     isPinned: t.boolean("is_pinned").notNull().default(false),
     tags: t.jsonb("tags").$type<string[]>().default([]),
+    // How many titling attempts failed while the Chat was still Untitled.
+    // Titling stops once it reaches its bound, so a Chat whose model keeps
+    // producing an unusable title is not re-sent after every turn (#1618).
+    titleFailures: t.integer("title_failures").notNull().default(0),
     // The Agent and Provider the Chat was last run with. No foreign key, by
     // decision: a dangling id is how the Chat tells the user its Agent or
     // Provider is gone. `RESTRICT` would make either undeletable once a Chat

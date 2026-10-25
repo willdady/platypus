@@ -35,9 +35,13 @@ function SkillToolRow({
   toolPart: LoadSkillToolPart | ReadSkillFileToolPart;
   label: string;
 }) {
-  const { output } = toolPart;
+  // A result the backend truncated arrives as a string, whatever its type says.
+  const output: unknown = toolPart.output;
   const errorText =
-    toolPart.errorText || (output && "error" in output ? output.error : null);
+    toolPart.errorText ||
+    (output && typeof output === "object" && "error" in output
+      ? String(output.error)
+      : null);
 
   return (
     <div className="w-full min-w-0">

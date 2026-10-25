@@ -145,12 +145,24 @@ describe("createMemoryTools", () => {
     it("embeds the query with the workspace's provider and model", async () => {
       mockDb.execute.mockResolvedValueOnce({ rows: [] });
 
-      await callTool(tools.memorySearch, { query: "meeting notes", limit: 5 });
+      const { signal } = new AbortController();
+      await callTool(
+        tools.memorySearch,
+        { query: "meeting notes", limit: 5 },
+        {
+          toolCallId: "test",
+          messages: [],
+          context: undefined,
+          abortSignal: signal,
+        },
+      );
 
       expect(mockGenerateEmbedding).toHaveBeenCalledWith(
         EMBEDDING_PROVIDER,
         "text-embedding-3-small",
         "meeting notes",
+        // The turn's signal, so a cancelled turn stops the embedding call.
+        signal,
       );
     });
 

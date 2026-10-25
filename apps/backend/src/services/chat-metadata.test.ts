@@ -26,7 +26,11 @@ vi.mock("./provider.ts", () => ({
   }),
 }));
 
-import { generateChatMetadata, toKebabCase } from "./chat-metadata.ts";
+import {
+  generateChatMetadata,
+  MAX_TITLE_FAILURES,
+  toKebabCase,
+} from "./chat-metadata.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
 const userMessage: PlatypusUIMessage = {
@@ -221,11 +225,106 @@ describe("generateChatMetadata", () => {
       mockGenerateText.mockResolvedValueOnce({
         output: { title, tags: ["misc"] },
       });
+      mockDb.returning.mockResolvedValueOnce([{ titleFailures: 1 }]);
 
       expect(await generateChatMetadata(params)).toBeNull();
-      expect(mockDb.set).not.toHaveBeenCalled();
+      // Only the failure count is written, never a title.
+      expect(mockDb.set).toHaveBeenCalledTimes(1);
+      expect(mockDb.set.mock.calls[0]?.[0]).not.toHaveProperty("title");
     },
   );
+
+  it("stops calling the model once a chat has failed MAX_TITLE_FAILURES times", async () => {
+    stubReads({
+      chat: {
+        id: "chat-1",
+        title: "Untitled",
+        titleFailures: MAX_TITLE_FAILURES,
+        messages: [userMessage],
+      },
+    });
+
+    expect(await generateChatMetadata(params)).toBeNull();
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("warns once, on the attempt that reaches the bound", async () => {
+    const warn = vi.spyOn(logger, "warn");
+    for (const failures of [MAX_TITLE_FAILURES - 1, MAX_TITLE_FAILURES]) {
+      stubReads({
+        chat: {
+          id: "chat-1",
+          title: "Untitled",
+          titleFailures: failures - 1,
+          messages: [userMessage],
+        },
+        workspace: { id: "ws-1", taskModelProviderId: null },
+        provider,
+      });
+      mockGenerateText.mockResolvedValueOnce({
+        output: { title: "", tags: [] },
+      });
+      mockDb.returning.mockResolvedValueOnce([{ titleFailures: failures }]);
+      await generateChatMetadata(params);
+    }
+    const gaveUp = warn.mock.calls.filter(
+      ([, msg]) => typeof msg === "string" && msg.includes("gave up"),
+    );
+    expect(gaveUp).toHaveLength(1);
+  });
+
+  it("counts a failed model call as an attempt and rethrows it", async () => {
+    stubReads({
+      chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider,
+    });
+    mockGenerateText.mockRejectedValueOnce(new Error("provider down"));
+    mockDb.returning.mockResolvedValueOnce([{ titleFailures: 1 }]);
+
+    await expect(generateChatMetadata(params)).rejects.toThrow("provider down");
+    expect(mockDb.set).toHaveBeenCalledTimes(1);
+  });
+
+  it("bounds the call and caps the conversation text it sends", async () => {
+    stubReads({
+      chat: {
+        id: "chat-1",
+        title: "Untitled",
+        messages: [
+          {
+            id: "m-1",
+            role: "user",
+            parts: [{ type: "text", text: "a".repeat(50_000) }],
+          },
+        ],
+      },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider,
+    });
+    mockGenerateText.mockResolvedValueOnce({
+      output: { title: "Lots of a", tags: [] },
+    });
+    mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+
+    await generateChatMetadata(params);
+    const call = mockGenerateText.mock.calls[0]?.[0] as {
+      prompt: string;
+      maxOutputTokens: number;
+      maxRetries: number;
+      abortSignal: AbortSignal;
+    };
+    expect(call.prompt.length).toBeLessThan(10_000);
+    expect(call.maxOutputTokens).toBeGreaterThan(0);
+    expect(call.maxRetries).toBe(1);
+    expect(call.abortSignal).toBeInstanceOf(AbortSignal);
+    // The tag query is bounded too.
+    const [tagQuery] = mockDb.execute.mock.calls[0] as [
+      { strings: string[]; values: unknown[] },
+    ];
+    expect(tagQuery.strings.join("?")).toMatch(/LIMIT \?\s*$/);
+    expect(tagQuery.values.at(-1)).toBe(100);
+  });
 
   it("prefers the workspace task-model provider override", async () => {
     stubReads({

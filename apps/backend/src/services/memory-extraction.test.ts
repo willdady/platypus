@@ -18,7 +18,11 @@ vi.mock("./chat-messages.ts", async (importActual) => {
   return { ...actual, loadActivePath: vi.fn(actual.loadActivePath) };
 });
 
-import { processMemoryExtractionBatch } from "./memory-extraction.ts";
+import {
+  BATCH_DEADLINE_MS,
+  processMemoryExtractionBatch,
+  SUMMARY_TIMEOUT_MS,
+} from "./memory-extraction.ts";
 import { loadActivePath } from "./chat-messages.ts";
 import { logger } from "../logger.ts";
 import { eq } from "drizzle-orm";
@@ -536,6 +540,40 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect(section("new-messages")).toBe(
       "user: chat:flaky q1\n\nassistant: a1",
     );
+  });
+
+  it("fails a Chat whose model call outruns its deadline, and moves on to the next", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(T0);
+    seedChats(chat("hung"), chat("next"));
+    // A provider that never answers, and never reads the signal it is given.
+    mockGenerateText.mockImplementationOnce(() => new Promise(() => {}));
+
+    const batch = run();
+    await vi.advanceTimersByTimeAsync(SUMMARY_TIMEOUT_MS);
+    // The batch settles, so the advisory lock around it is released.
+    expect(await batch).toEqual(["hung", "next"]);
+    expect(chatRow("hung").memoryExtractionStatus).toBe("failed");
+    expect(chatRow("next").memoryExtractionStatus).toBe("completed");
+    const [first] = mockGenerateText.mock.calls[0] as [
+      { abortSignal: AbortSignal; maxOutputTokens: number; maxRetries: number },
+    ];
+    expect(first.abortSignal.aborted).toBe(true);
+    expect(first.maxOutputTokens).toBeGreaterThan(0);
+    expect(first.maxRetries).toBe(1);
+  });
+
+  it("stops before the next Chat once the batch passes its deadline", async () => {
+    seedChats(chat("slow"), chat("left"));
+    mockGenerateText.mockImplementationOnce(() => {
+      vi.setSystemTime(new Date(T0.getTime() + BATCH_DEADLINE_MS));
+      return Promise.resolve({ text: "Updated summary" });
+    });
+
+    expect(await run()).toEqual(["slow"]);
+    // The Chat in flight finished; the one never reached is left for the next.
+    expect(chatRow("slow").memoryExtractionStatus).toBe("completed");
+    expect(chatRow("left").memoryExtractionStatus).toBe("pending");
   });
 
   it("fails a pass the model answers with nothing, leaving the cursor", async () => {

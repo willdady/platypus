@@ -44,6 +44,19 @@ describe("LoadSkillTool", () => {
     expect(screen.getByText("Skill not found")).toBeInTheDocument();
   });
 
+  it("shows a result the backend truncated to a string as completed", () => {
+    render(
+      <LoadSkillTool
+        toolPart={loadSkillCall({
+          output:
+            "{...\n[truncated: ...]" as unknown as LoadSkillPart["output"],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+  });
+
   it("draws no border, matching the tool rows around it", () => {
     const { container } = render(<LoadSkillTool toolPart={loadSkillCall()} />);
 
