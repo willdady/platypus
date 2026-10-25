@@ -4,10 +4,10 @@ import { useState } from "react";
 import { CircleCheck, RefreshCw, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { Skill, SkillGithubUpdateCheck } from "@platypus/schemas";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatSize } from "@/components/skill-bundle";
+import { ThirdPartyScriptsAlert } from "@/components/skill-github-install";
 import { writeAt, type Serialized } from "@/lib/api-write";
 import { lineDiff } from "@/lib/line-diff";
 import { cn } from "@/lib/utils";
@@ -118,6 +118,7 @@ export function SkillGithubUpdate({
   const [check, setCheck] = useState<SkillGithubUpdateCheck | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const runCheck = async () => {
     setChecking(true);
@@ -137,11 +138,13 @@ export function SkillGithubUpdate({
       { method: "POST", data: { commitSha } },
     );
     setUpdating(false);
-    setConfirming(false);
     if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
+      // A refused update shows in the confirm dialog, which stays open.
+      if (confirming) setUpdateError(outcome.message);
+      else toast.error(outcome.message);
       return;
     }
+    setConfirming(false);
     toast.success("Skill updated");
     setCheck(null);
     onUpdated(outcome.data);
@@ -160,17 +163,10 @@ export function SkillGithubUpdate({
         <>
           <UpdateDiff diff={check} />
           {check.needsSandbox.after && (
-            <Alert>
-              <TriangleAlert />
-              <AlertTitle>Third-party scripts</AlertTitle>
-              <AlertDescription>
-                This update includes scripts written by a third party. If an
-                Agent with a Sandbox runs them, they run with the
-                Workspace&apos;s default environment variables and can send them
-                anywhere the Sandbox can reach. Review the files before
-                updating.
-              </AlertDescription>
-            </Alert>
+            <ThirdPartyScriptsAlert
+              subject="This update includes"
+              action="updating"
+            />
           )}
         </>
       )}
@@ -187,9 +183,11 @@ export function SkillGithubUpdate({
         {check && !check.upToDate && (
           <Button
             type="button"
-            onClick={() =>
-              skill.modified ? setConfirming(true) : void update(check.toSha)
-            }
+            onClick={() => {
+              if (!skill.modified) return void update(check.toSha);
+              setUpdateError(null);
+              setConfirming(true);
+            }}
             disabled={checking || updating}
           >
             {updating ? "Updating..." : "Update"}
@@ -207,6 +205,7 @@ export function SkillGithubUpdate({
           loadingLabel="Updating..."
           confirmVariant="destructive"
           loading={updating}
+          error={updateError}
           onConfirm={() => void update(check.toSha)}
         />
       )}

@@ -791,6 +791,11 @@ const githubPathSchema = z
   .regex(/^(?!\/)[^\x00-\x1f\x7f\\]*$/, "Not a valid repository path")
   .refine((path) => !hasDotDotSegment(path), "Not a valid repository path");
 
+/** A full commit SHA, as GitHub writes one: 40 lowercase hex digits. */
+export const commitShaSchema = z
+  .string()
+  .regex(/^[0-9a-f]{40}$/, "Not a commit SHA");
+
 /**
  * Where on GitHub to look for Skills: an owner, a repo, the ref as entered
  * (null for the default branch) and a path within it (`""` for the root).
@@ -844,7 +849,7 @@ export type SkillGithubPreview = z.infer<typeof skillGithubPreviewSchema>;
 export const skillGithubInstallRequestSchema = githubSkillSourceSchema
   .omit({ path: true })
   .extend({
-    commitSha: z.string().regex(/^[0-9a-f]{40}$/, "Not a commit SHA"),
+    commitSha: commitShaSchema,
     skillPaths: z
       .array(githubPathSchema)
       .min(1)
@@ -913,7 +918,7 @@ export type SkillGithubUpdateCheck = z.infer<
 
 /** An update: the commit the check resolved, never the ref, so it applies exactly what was reviewed. */
 export const skillGithubUpdateRequestSchema = z.object({
-  commitSha: z.string().regex(/^[0-9a-f]{40}$/, "Not a commit SHA"),
+  commitSha: commitShaSchema,
 });
 
 // Tool

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import {
+  commitShaSchema,
   githubSkillSourceSchema,
   type GithubSkillSource,
   type SkillGithubCandidate,
@@ -213,7 +214,7 @@ const resolveCommit = async (source: GithubSkillSource): Promise<string> => {
   }
   if (!response.ok) throw upstream(response);
   const sha = (await response.text()).trim();
-  if (!/^[0-9a-f]{40}$/.test(sha)) {
+  if (!commitShaSchema.safeParse(sha).success) {
     throw new UpstreamError("GitHub didn't answer with a commit SHA");
   }
   return sha;
@@ -441,7 +442,10 @@ const requireGithubSkill = async (scope: SkillScope, skillId: string) => {
   ) {
     fail("This Skill wasn't installed from GitHub");
   }
-  const [owner = "", repo = ""] = row.source.split("/");
+  const [owner, repo, ...rest] = row.source.split("/");
+  if (!owner || !repo || rest.length > 0) {
+    throw new Error(`Skill ${row.id} has a malformed source: ${row.source}`);
+  }
   return {
     row,
     owner,
@@ -481,7 +485,8 @@ export const checkGithubSkillUpdate = async (
     scope,
     skillId,
   );
-  if (row.ref && /^[0-9a-f]{40}$/i.test(row.ref)) return { upToDate: true };
+  // A commit SHA never moves.
+  if (commitShaSchema.safeParse(row.ref).success) return { upToDate: true };
   const toSha = await resolveCommit({
     owner,
     repo,

@@ -532,7 +532,7 @@ describe("checking and updating a GitHub-installed Skill", () => {
   });
 
   it("finds a commit SHA ref up to date without asking GitHub", async () => {
-    const id = await install(MOVED_SHA);
+    const id = await install(SHA);
     expect(await checkGithubSkillUpdate(wsScope, id)).toEqual({
       upToDate: true,
     });
