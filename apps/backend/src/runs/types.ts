@@ -58,11 +58,13 @@ export type ParentRunContext = {
   scope: WorkspaceScope;
   timeouts?: RunTimeouts;
   /**
-   * Folds a delegated run's final stats into this run's Token usage (issue
-   * #1634). Called from the delegate's terminal callback, so every way a
-   * delegate ends — including a cancel or a timeout — counts what it was billed.
+   * Records a delegated run's latest stats, folded into this run's Token
+   * usage (issue #1634). Each call replaces that delegate's previous report.
+   * Called after each of the delegate's steps and from its terminal callback:
+   * a parent can be finished while a delegate is still unwinding (the abort
+   * grace, #1613), and still counts the steps the delegate was billed for.
    */
-  addDelegateUsage: (stats: RunStats) => void;
+  setDelegateUsage: (delegateRunId: RunId, stats: RunStats) => void;
 };
 
 export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";

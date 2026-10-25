@@ -45,8 +45,9 @@ export type RunLifecycle = {
   /** The (Provider, model) pair the run's own calls are billed under, so they
    *  are one row of `usageByModel`. Set by the drive, from its plan. */
   setUsageModel: (model: UsageModel | undefined) => void;
-  /** Folds a delegated run's final stats into this run's (issue #1634). */
-  addDelegateUsage: (stats: RunStats) => void;
+  /** Records a delegated run's latest stats, folded into this run's (issue
+   *  #1634). Each call replaces that delegate's previous report. */
+  setDelegateUsage: (delegateRunId: RunId, stats: RunStats) => void;
   /** The delegates' usage folded so far, by (Provider, model). */
   delegatedUsage: () => readonly ModelUsage[];
   /**
@@ -130,6 +131,7 @@ export const startRun = (params: {
   let stats: RunStats = {};
   let usageModel: UsageModel | undefined;
   let delegated: ModelUsage[] = [];
+  const delegateReports = new Map<RunId, readonly ModelUsage[]>();
   const reported = (): RunStats =>
     withDelegatedUsage(stats, usageModel, delegated);
   let terminated = false;
@@ -326,11 +328,9 @@ export const startRun = (params: {
     setUsageModel: (model) => {
       usageModel = model;
     },
-    addDelegateUsage: (delegate) => {
-      delegated = mergeUsageByModel([
-        ...delegated,
-        ...(delegate.usageByModel ?? []),
-      ]);
+    setDelegateUsage: (delegateRunId, delegate) => {
+      delegateReports.set(delegateRunId, delegate.usageByModel ?? []);
+      delegated = mergeUsageByModel([...delegateReports.values()].flat());
     },
     delegatedUsage: () => delegated,
     onStep,

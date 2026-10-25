@@ -164,7 +164,7 @@ export class AgentRunner {
     timeouts: RunTimeouts | undefined,
     onActivity: (event: ToolActivityEvent) => void,
     signal: AbortSignal,
-    addDelegateUsage: ParentRunContext["addDelegateUsage"],
+    setDelegateUsage: ParentRunContext["setDelegateUsage"],
   ): Promise<ChatTurn> {
     // The turn rides down whole; the runner adds only what it is the one to
     // know. `runId` is the run's own identity, not the turn's, so it is the
@@ -185,7 +185,7 @@ export class AgentRunner {
       // as children of this one, so they need to know whose child they are and
       // what bounds this run was started under, and report their Token usage
       // back into this run's.
-      run: { runId, scope, timeouts, addDelegateUsage },
+      run: { runId, scope, timeouts, setDelegateUsage },
       // A cancelled run, or one its step timer has already killed, stops
       // waiting on a Tool set or MCP server that has not answered (#1135).
       signal,
@@ -305,7 +305,7 @@ export class AgentRunner {
           params.timeouts,
           run.onActivity,
           run.handle.signal,
-          run.addDelegateUsage,
+          run.setDelegateUsage,
         ),
     );
 

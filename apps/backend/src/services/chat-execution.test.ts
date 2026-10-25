@@ -2628,7 +2628,7 @@ describe("chat-execution", () => {
               "ws-1",
               true,
             ),
-            addDelegateUsage: () => undefined,
+            setDelegateUsage: () => undefined,
           },
         },
         queries,

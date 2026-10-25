@@ -155,7 +155,7 @@ describe("a delegated run inside a parent run", () => {
       parentRun: {
         runId: "parent",
         scope: parentScope,
-        addDelegateUsage: parent.addDelegateUsage,
+        setDelegateUsage: parent.setDelegateUsage,
       },
     });
 
@@ -229,7 +229,7 @@ describe("a delegated run inside a parent run", () => {
       parentRun: {
         runId: "parent",
         scope: parentScope,
-        addDelegateUsage: parent.addDelegateUsage,
+        setDelegateUsage: parent.setDelegateUsage,
       },
     });
 
@@ -285,7 +285,7 @@ describe("a delegated run's Run events", () => {
   const workingDelegate = (
     id: string,
     name: string,
-    addDelegateUsage: ParentRunContext["addDelegateUsage"] = () => undefined,
+    setDelegateUsage: ParentRunContext["setDelegateUsage"] = () => undefined,
   ) =>
     createSubAgentDelegate({
       id,
@@ -327,7 +327,7 @@ describe("a delegated run's Run events", () => {
           readOnlyToolNames: new Set(),
           gateScope: GATE_SCOPE,
         }),
-      parentRun: { runId: "parent", scope: parentScope, addDelegateUsage },
+      parentRun: { runId: "parent", scope: parentScope, setDelegateUsage },
     });
 
   it("nests the delegate's events beneath the parent's delegate event, and loses none across parallel delegates", async () => {
@@ -504,7 +504,7 @@ describe("a delegated run's Token usage", () => {
     const parentRun: ParentRunContext = {
       runId: parent.handle.runId,
       scope: parentScope,
-      addDelegateUsage: parent.addDelegateUsage,
+      setDelegateUsage: parent.setDelegateUsage,
     };
     if (cancelAfterMs !== undefined) {
       // A Chat or Trigger run always holds its Tool session's disposer.
