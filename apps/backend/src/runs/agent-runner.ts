@@ -126,7 +126,14 @@ const finishFailedOnThrow = async <T>(
     if (!(err instanceof ConflictError)) {
       logger.error({ error, runId: run.handle.runId }, message);
     }
-    await run.finish("failed", err);
+    // Work that threw because the run was stopped ends as the stop says —
+    // a cancel is `cancelled`, not a failure of the work it interrupted.
+    if (run.handle.signal.aborted) {
+      const { status, error: stopped } = run.statusFromSignal();
+      await run.finish(status, stopped);
+    } else {
+      await run.finish("failed", err);
+    }
     throw err;
   }
 };
