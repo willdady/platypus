@@ -20,7 +20,6 @@ services:
     env_file: .env
     environment:
       NODE_OPTIONS: "--disable-warning=ExperimentalWarning"
-      PORT: "4000"
       DATABASE_URL: postgres://postgres:mypassword@database:5432/postgres
       BETTER_AUTH_URL: "${BACKEND_URL}"
     volumes:

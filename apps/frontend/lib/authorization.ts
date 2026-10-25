@@ -204,3 +204,12 @@ export function canChangeChat(ownsWorkspace: boolean): boolean {
 export function canPinAgent(ownsWorkspace: boolean): boolean {
   return ownsWorkspace;
 }
+
+/**
+ * May this caller create an Agent in this Workspace, such as by Clone? Literal
+ * ownership, as with {@link canPinAgent}: an Org Admin visiting someone else's
+ * Workspace sees it read-only.
+ */
+export function canCreateAgent(ownsWorkspace: boolean): boolean {
+  return ownsWorkspace;
+}

@@ -6,6 +6,7 @@ interface S3ClientConfig {
   endpoint?: string;
   credentials?: { accessKeyId: string; secretAccessKey: string };
   forcePathStyle?: boolean;
+  requestHandler?: Record<string, unknown>;
 }
 
 interface MockCommand {
@@ -95,12 +96,28 @@ describe("S3Storage", () => {
       );
     });
 
-    it("should throw if credentials are not set", () => {
+    it("should leave credentials to the SDK default chain when no keys are set", () => {
       delete process.env.STORAGE_S3_ACCESS_KEY_ID;
       delete process.env.STORAGE_S3_SECRET_ACCESS_KEY;
-      expect(() => new S3Storage()).toThrow(
-        "STORAGE_S3_ACCESS_KEY_ID and STORAGE_S3_SECRET_ACCESS_KEY are required",
-      );
+      new S3Storage();
+      expect(capturedConfigs[0]).not.toHaveProperty("credentials");
+    });
+
+    it("should pass static credentials when both keys are set", () => {
+      new S3Storage();
+      expect(capturedConfigs[0].credentials).toEqual({
+        accessKeyId: "test-key",
+        secretAccessKey: "test-secret",
+      });
+    });
+
+    it("should set connection and request timeouts", () => {
+      new S3Storage();
+      expect(capturedConfigs[0].requestHandler).toEqual({
+        connectionTimeout: 5_000,
+        requestTimeout: 30_000,
+        throwOnRequestTimeout: true,
+      });
     });
 
     it("should create S3Client with configured region", () => {

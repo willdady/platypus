@@ -66,7 +66,8 @@ button then reads **Update**.
 </Steps>
 
 A Shared Agent, badged **Organization** in the list, opens read-only in a
-Workspace. Edit or delete it from **Organization settings**.
+Workspace. Edit or delete it from **Organization settings**, or
+[clone it](#clone-an-agent) into an Agent of your own.
 
 <Callout type="info">
   Selecting an Agent on a Chat replaces choosing a Provider and model by hand —
@@ -264,6 +265,27 @@ The row then shows a muted line under the response reading **Sub-Agent response
 cut short at the step limit.**, and the parent Agent is told in the same breath
 that what came back is not a finished answer — so it reports a partial result
 rather than presenting it as the finding.
+
+## Clone an Agent
+
+A clone is an independent copy of an Agent, owned by this Workspace and fully
+editable. Later edits to the original don't reach it, and its avatar isn't
+copied.
+
+On the Workspace home, open the **⋮** menu on the Agent's card and click
+**Clone**. The copy is named `<name> (copy)`; change the name if you like, then
+click **Clone**. The new Agent opens in the Agent form.
+
+The Workspace Owner can clone any Agent in the list, Shared Agents included.
+Cloning a Shared Agent is how you get a version of it you can change.
+
+<Callout type="warning">
+  **A clone keeps only the Sub-Agents, Skills and Tool sets visible in this
+  Workspace.** A Shared Agent can use Shared resources that were never attached
+  here; those don't run here anyway, so the clone leaves them out. Before you
+  confirm, the Clone dialog says how many of each it leaves out. To keep one,
+  ask an Org Admin to attach it to this Workspace, then add it to the clone.
+</Callout>
 
 ## Pin an Agent
 

@@ -14,6 +14,9 @@ import { servedFileHeaders } from "./response-headers.ts";
 import { logger } from "../logger.ts";
 import { env } from "../env.ts";
 
+const S3_CONNECTION_TIMEOUT_MS = 5_000;
+const S3_REQUEST_TIMEOUT_MS = 30_000;
+
 /** The object's content type, from the response or its metadata. */
 function contentTypeOf(response: GetObjectCommandOutput): string {
   return (
@@ -48,19 +51,19 @@ export class S3Storage implements StorageBackend {
       );
     }
 
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error(
-        "STORAGE_S3_ACCESS_KEY_ID and STORAGE_S3_SECRET_ACCESS_KEY are required for S3 storage",
-      );
-    }
-
     this.bucket = bucket;
     this.client = new S3Client({
       region,
       endpoint,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
+      // Without keys the SDK's default chain applies: env vars, shared
+      // config, IRSA, task role, instance profile. `env.ts` refuses one alone.
+      ...(accessKeyId &&
+        secretAccessKey && { credentials: { accessKeyId, secretAccessKey } }),
+      requestHandler: {
+        connectionTimeout: S3_CONNECTION_TIMEOUT_MS,
+        requestTimeout: S3_REQUEST_TIMEOUT_MS,
+        // Otherwise the SDK only logs a warning and lets the request hang.
+        throwOnRequestTimeout: true,
       },
     });
   }

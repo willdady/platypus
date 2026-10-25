@@ -45,7 +45,11 @@ import { useScopedList } from "@/hooks/use-scoped-list";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { canManageSharedResource, canPinAgent } from "@/lib/authorization";
+import {
+  canCreateAgent,
+  canManageSharedResource,
+  canPinAgent,
+} from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import {
   AttachSharedAction,
@@ -195,6 +199,7 @@ export function AgentsList({
   // (ADR-0007), asked of the auth module instead of re-derived here.
   const canManageShared = canManageSharedResource(actor, workspaceId);
   const canPin = canPinAgent(ownsWorkspace);
+  const canClone = canCreateAgent(ownsWorkspace);
 
   const getToolSetNames = (toolSetIds: string[] | undefined) => {
     if (!toolSetIds?.length) return [];
@@ -227,8 +232,35 @@ export function AgentsList({
     deleteFlow.request(agent);
   };
 
+  // A clone keeps only the references visible in this workspace: a Shared
+  // Agent may point at Shared resources never attached here (ADR-0007),
+  // which the create refuses (sub-agents) or keeps as dead references.
+  const cloneReferences = (agent: AgentWithScope) => {
+    const keep = (ids: string[] | undefined, visible: { id: string }[]) =>
+      ids?.filter((id) => visible.some((resource) => resource.id === id));
+    const kept = {
+      subAgentIds: keep(agent.subAgentIds, agents),
+      skillIds: keep(agent.skillIds, skills),
+      toolSetIds: keep(agent.toolSetIds, toolSets),
+    };
+    const dropped = (
+      [
+        ["sub-agent", agent.subAgentIds, kept.subAgentIds],
+        ["skill", agent.skillIds, kept.skillIds],
+        ["tool set", agent.toolSetIds, kept.toolSetIds],
+      ] as const
+    )
+      .map(([noun, ids, keptIds]) => {
+        const count = (ids?.length ?? 0) - (keptIds?.length ?? 0);
+        return count && `${count} ${noun}${count === 1 ? "" : "s"}`;
+      })
+      .filter(Boolean);
+    return { kept, dropped };
+  };
+
   const createClone = (
     agent: AgentWithScope,
+    references: ReturnType<typeof cloneReferences>["kept"],
     cloneName: string,
     url: string,
   ) => {
@@ -245,6 +277,7 @@ export function AgentsList({
     const sanitizedData = Object.fromEntries(
       Object.entries({
         ...cloneData,
+        ...references,
         workspaceId,
         name: cloneName,
       }).map(([key, value]) => [key, value === null ? undefined : value]),
@@ -294,7 +327,8 @@ export function AgentsList({
 
     if (isOrgScoped) {
       // A Shared Agent is locked in the Workspace; only an Org Admin can
-      // open it in the org settings editor or detach it here (ADR-0007).
+      // open it in the org settings editor or detach it here (ADR-0007). The
+      // Owner can Clone it into a Workspace Agent of their own.
       return (
         <RowActionsMenu
           name={agent.name}
@@ -305,6 +339,9 @@ export function AgentsList({
               : undefined
           }
           actions={pinAction}
+          clone={
+            canClone ? { onSelect: () => setAgentToClone(agent) } : undefined
+          }
           remove={
             canManageShared
               ? { onSelect: () => orgAgentDetach.open(agent) }
@@ -418,6 +455,8 @@ export function AgentsList({
     );
   };
 
+  const cloneRefs = agentToClone && cloneReferences(agentToClone);
+
   const gridClassName =
     "grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4";
 
@@ -501,12 +540,22 @@ export function AgentsList({
 
       <PromoteSharedDialog promote={promote} noun="agent" />
 
-      {agentToClone && (
+      {cloneRefs && agentToClone && (
         <CloneDialog
           noun="Agent"
           original={agentToClone.name}
           onClose={() => setAgentToClone(null)}
-          create={(name, url) => createClone(agentToClone, name, url)}
+          create={(name, url) =>
+            createClone(agentToClone, cloneRefs.kept, name, url)
+          }
+          note={
+            cloneRefs.dropped.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                Not included, as not attached to this workspace:{" "}
+                {cloneRefs.dropped.join(", ")}.
+              </p>
+            )
+          }
           onCreated={(id) => {
             void mutate();
             router.push(routes.agents.detail(id));
