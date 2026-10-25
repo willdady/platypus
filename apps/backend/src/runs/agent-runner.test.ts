@@ -1525,6 +1525,34 @@ describe("a turn that resolves after its run has already terminated", () => {
       (sink.events[1] as Extract<LifecycleEvent, { name: "onFinish" }>).status,
     ).toBe("cancelled");
   });
+
+  // Turn resolution races its slow sources against the run's signal, so a stop
+  // can surface as resolution throwing. That is the stop, not a failure.
+  it("records a cancel that made the turn's resolution throw as cancelled", async () => {
+    mockPrepareChatTurn.mockImplementationOnce(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+      throw new Error("aborted");
+    });
+    const sink = new RecordingSink();
+    const inFlight = runner.generate({
+      scope,
+      input: { ...baseInput, runId: "cancel-prepare-throws" },
+      sink,
+    });
+    inFlight.catch(() => {});
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(runRegistry.cancel("cancel-prepare-throws")).toBe(true);
+    await vi.advanceTimersByTimeAsync(60);
+
+    await expect(inFlight).rejects.toThrow("aborted");
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("cancelled");
+    expect(finish.error).toBeUndefined();
+  });
 });
 
 describe("AgentRunner.stream — success & interruption", () => {

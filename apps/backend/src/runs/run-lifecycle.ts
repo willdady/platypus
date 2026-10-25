@@ -153,8 +153,7 @@ export const startRun = (params: {
     // the run, so nothing is gained by waiting out the abort grace.
     if (!terminated && handle.signal.aborted) {
       disposer = dispose;
-      const { status, error } = statusFromSignal();
-      await finish(status, error);
+      await finishFromSignal();
       return false;
     }
     if (terminated) {
@@ -241,6 +240,12 @@ export const startRun = (params: {
       : { status: "cancelled" };
   };
 
+  /** Finish with the outcome the abort signal records. */
+  const finishFromSignal = (): Promise<void> => {
+    const { status, error } = statusFromSignal();
+    return finish(status, error);
+  };
+
   const abortReason = (): string | undefined => {
     if (!handle.signal.aborted) return undefined;
     const reason: unknown = handle.signal.reason;
@@ -273,10 +278,13 @@ export const startRun = (params: {
   handle.signal.addEventListener(
     "abort",
     () => {
-      graceTimer = setTimeout(() => {
-        const { status, error } = statusFromSignal();
-        void finish(status, error);
-      }, ABORT_GRACE_MS);
+      // A stopping process has no next turn to hold the claim against, and a
+      // crash drain is shorter than the grace: finish now, as before #1613.
+      if (runRegistry.stopping) {
+        void finishFromSignal();
+        return;
+      }
+      graceTimer = setTimeout(() => void finishFromSignal(), ABORT_GRACE_MS);
     },
     { once: true },
   );

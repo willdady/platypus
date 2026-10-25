@@ -16,27 +16,6 @@ import { runRegistry } from "./run-registry.ts";
 import { ChatSink } from "./sinks/chat-sink.ts";
 import type { RunStatus } from "./types.ts";
 
-/**
- * A run whose drive observes its signal: on abort it unwinds and finishes at
- * once, as a real drive does, rather than leaving the run to the abort grace.
- */
-const startDrivenRun = (params: Parameters<typeof startRun>[0]) => {
-  const run = startRun(params);
-  run.handle.signal.addEventListener("abort", () => {
-    const { status, error } = run.statusFromSignal();
-    void run.finish(status, error);
-  });
-  return run;
-};
-
-/** Ends every held run outright, so none outlives its test under the grace. */
-const releaseHeldRuns = () => {
-  for (const { runId } of runRegistry.heldRuns()) {
-    runRegistry.cancel(runId);
-    runRegistry.unregister(runId);
-  }
-};
-
 /** A Chat whose turn this process is running, through its real sink. */
 const startChatRun = async () => {
   const fake = seedDb({
@@ -60,7 +39,7 @@ const startChatRun = async () => {
     message: { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
   });
   await sink.onStart({ runId: "chat-1", messages: [] });
-  startDrivenRun({
+  startRun({
     runId: "chat-1",
     onTerminate: ({ status }) =>
       sink.onFinish({ runId: "chat-1", status, messages: [], stats: {} }),
@@ -74,14 +53,14 @@ describe("drainRuns", () => {
   });
 
   afterEach(() => {
-    releaseHeldRuns();
+    for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
     vi.useRealTimers();
   });
 
   it("cancels every held run and waits for each to write its end", async () => {
     const ended: RunStatus[] = [];
     for (const runId of ["run-a", "run-b"]) {
-      startDrivenRun({
+      startRun({
         runId,
         onTerminate: async ({ status }) => {
           await new Promise((resolve) => setTimeout(resolve, 20));
@@ -125,7 +104,7 @@ describe("installShutdownHandlers", () => {
 
   afterEach(() => {
     uninstall();
-    releaseHeldRuns();
+    for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
     vi.useRealTimers();
   });
 
@@ -170,7 +149,7 @@ describe("installShutdownHandlers", () => {
   it("stops background work, drains runs, then closes server and pool in order", async () => {
     const ended: RunStatus[] = [];
     for (const runId of ["run-a", "run-b"]) {
-      startDrivenRun({
+      startRun({
         runId,
         onTerminate: async ({ status }) => {
           await new Promise((resolve) => setTimeout(resolve, 10));
@@ -218,7 +197,7 @@ describe("installShutdownHandlers", () => {
   });
 
   it("refuses new runs once the drain has started (503, not a new run)", async () => {
-    startDrivenRun({
+    startRun({
       runId: "held",
       onTerminate: async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -290,14 +269,14 @@ describe("installCrashHandlers", () => {
 
   afterEach(() => {
     uninstall();
-    releaseHeldRuns();
+    for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
     vi.useRealTimers();
   });
 
   it("logs a rejection fatal, drains the held runs, and exits 1", async () => {
     const ended: RunStatus[] = [];
     for (const runId of ["crash-a"]) {
-      startDrivenRun({
+      startRun({
         runId,
         onTerminate: async ({ status }) => {
           await new Promise((resolve) => setTimeout(resolve, 5));

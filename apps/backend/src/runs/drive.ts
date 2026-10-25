@@ -732,18 +732,19 @@ export const driveOnce = async (
       { error, runId: run.handle.runId, duration: Date.now() - startTime },
       "Run generate failed",
     );
-    // A cancelled run is recorded as cancelled; a timed-out one stays a
-    // failure, and so does anything the model call threw on its own. The status
-    // choice is the shared one; only the error is the thrown one, not the
-    // signal's (there is no `TimeoutError` for a run that merely threw).
+    // A stopped run is recorded as the stop says — cancelled with no error, or
+    // failed with the `TimeoutError` — whatever the aborted call threw.
+    // Anything the model call threw on its own is a failure with the thrown
+    // error (there is no `TimeoutError` for a run that merely threw).
     const decision = decideTerminalStatus(run, {
       noProgress,
       failOnStreamError: false,
     });
-    await run.finish(
-      decision.status === "cancelled" ? "cancelled" : "failed",
-      err,
-    );
+    if (run.handle.signal.aborted) {
+      await run.finish(decision.status, decision.error);
+    } else {
+      await run.finish("failed", err);
+    }
     throw err;
   }
 };
