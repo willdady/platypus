@@ -310,6 +310,11 @@ const runStreamedDrive = (
 
   const noProgress = detectorFor(behavior.unattended);
   const plan = planRecording(opts.plan, events);
+  /** The reply this turn continues: a seeded `/skill` one, or a resumed one. */
+  const continued =
+    originalMessages.at(-1)?.role === "assistant"
+      ? originalMessages.at(-1)
+      : undefined;
 
   let failure: string | undefined;
   let truncated = false;
@@ -360,6 +365,7 @@ const runStreamedDrive = (
       stepCeiling: opts.plan.maxSteps,
       driveStartMs,
       delegatedUsage: run.delegatedUsage,
+      continued: continued?.metadata,
       isClearableTool: (toolName) =>
         isClearableToolName(
           toolName,
@@ -396,6 +402,10 @@ const runStreamedDrive = (
   const snapshots: AsyncIterable<PlatypusUIMessage> = (async function* () {
     try {
       for await (const message of readUIMessageStream<PlatypusUIMessage>({
+        // Folded onto, as the SDK's own fold is: a reply resumed after its
+        // approvals were answered holds parts the stream never re-sends, and
+        // goes on to update them by id.
+        ...(continued ? { message: structuredClone(continued) } : {}),
         stream: consume,
         onError: (error) => {
           failure ??= describeSdkError(error);

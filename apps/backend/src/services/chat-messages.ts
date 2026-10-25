@@ -1,4 +1,4 @@
-import { validateUIMessages } from "ai";
+import { isToolUIPart, validateUIMessages } from "ai";
 import { sandboxUploadSchema } from "@platypus/schemas";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -115,15 +115,81 @@ export type TurnTarget =
       message: { id: string; role: "user"; parts: unknown[] };
       parentId: string | null;
     }
-  | { trigger: "regenerate-message"; messageId: string };
+  | { trigger: "regenerate-message"; messageId: string }
+  | {
+      trigger: "respond-to-approvals";
+      messageId: string;
+      responses: { approvalId: string; approved: boolean }[];
+    };
 
 export type ResolvedTurn = {
   /** What the turn continues, from the server's rows, never the client's. */
   messages: PlatypusUIMessage[];
-  /** The user message this turn adds, absent on a regenerate. */
+  /** The user message this turn adds, absent on a regenerate or a resume. */
   message?: PlatypusUIMessage;
-  /** The row the turn's new messages hang from. */
+  /** The row the turn's new messages hang from, or the reply it resumes. */
   parentId: string | null;
+  /**
+   * Stored messages on the path whose tool approvals this turn answers, as
+   * they now read. Written with the turn's claim, so they are never answered
+   * by a turn that did not run.
+   */
+  answered: PlatypusUIMessage[];
+};
+
+/** The reason a call the User denied reaches the model with. */
+export const USER_DENIED_REASON = "The User denied this call.";
+
+/** The reason a call left unanswered under a newer message reaches it with. */
+export const MOVED_ON_REASON =
+  "The User sent a new message instead of answering this approval request, so the call was not run.";
+
+/** The approval ids a message is still waiting on. */
+const pendingApprovalIds = (message: PlatypusUIMessage): string[] =>
+  message.parts.flatMap((part) =>
+    isToolUIPart(part) && part.state === "approval-requested"
+      ? [part.approval.id]
+      : [],
+  );
+
+/** `message` with each approval it waits on answered as `answer` says. */
+const answerApprovals = (
+  message: PlatypusUIMessage,
+  answer: (approvalId: string) => { approved: boolean; reason?: string },
+): PlatypusUIMessage => ({
+  ...message,
+  parts: message.parts.map((part) =>
+    isToolUIPart(part) && part.state === "approval-requested"
+      ? {
+          ...part,
+          state: "approval-responded",
+          approval: { ...part.approval, ...answer(part.approval.id) },
+        }
+      : part,
+  ),
+});
+
+/**
+ * The path with every approval still waiting denied: the User moved on
+ * without answering. Without the denial the SDK leaves the call out of the
+ * model's view altogether, as if it had never been made.
+ */
+const denyUnanswered = (
+  messages: PlatypusUIMessage[],
+): { messages: PlatypusUIMessage[]; answered: PlatypusUIMessage[] } => {
+  const answered: PlatypusUIMessage[] = [];
+  return {
+    messages: messages.map((message) => {
+      if (pendingApprovalIds(message).length === 0) return message;
+      const denied = answerApprovals(message, () => ({
+        approved: false,
+        reason: MOVED_ON_REASON,
+      }));
+      answered.push(denied);
+      return denied;
+    }),
+    answered,
+  };
 };
 
 /**
@@ -136,6 +202,12 @@ export type ResolvedTurn = {
  *   to the model, so a stale tab can never write over a newer path.
  * - **Regenerate** runs again from the reply's parent, which must be a user
  *   message still in the Chat. The old reply stays, as an Alternative.
+ * - **Respond to approvals** resumes the reply that stopped to ask, under its
+ *   own id. It must be the Chat's Active leaf, and the answers must cover
+ *   exactly the approvals it is waiting on.
+ *
+ * Every approval still waiting elsewhere on the path is denied: the User
+ * moved on without answering it.
  *
  * `owned` is whether the Chat exists in this Workspace. A Chat that does not
  * has no messages to hang from or regenerate, whatever holds its id elsewhere.
@@ -143,12 +215,56 @@ export type ResolvedTurn = {
 export const resolveTurn = async ({
   chatId,
   owned,
+  activeLeafId = null,
   request,
 }: {
   chatId: string;
   owned: boolean;
+  /** The Chat's Active leaf, the only reply whose approvals can be answered. */
+  activeLeafId?: string | null;
   request: TurnTarget;
 }): Promise<ResolvedTurn> => {
+  if ("trigger" in request && request.trigger === "respond-to-approvals") {
+    const target = owned
+      ? await findMessage(chatId, request.messageId)
+      : undefined;
+    if (
+      target?.role !== "assistant" ||
+      target.deletedAt ||
+      target.id !== activeLeafId
+    ) {
+      throw new ConflictError(
+        "Only the Chat's latest reply can have its approvals answered",
+      );
+    }
+    const { messages } = await loadActivePath(chatId, target.id);
+    const reply = messages.at(-1);
+    if (!reply) throw new Error(`Reply '${target.id}' was not read`);
+    const pending = new Set(pendingApprovalIds(reply));
+    const answers = new Map(
+      request.responses.map((r) => [r.approvalId, r.approved]),
+    );
+    if (
+      answers.size !== pending.size ||
+      [...answers.keys()].some((id) => !pending.has(id))
+    ) {
+      throw new ConflictError(
+        "Answer every approval this reply is waiting on, and only those",
+      );
+    }
+    const answered = answerApprovals(reply, (id) =>
+      answers.get(id)
+        ? { approved: true }
+        : { approved: false, reason: USER_DENIED_REASON },
+    );
+    const earlier = denyUnanswered(messages.slice(0, -1));
+    return {
+      messages: [...earlier.messages, answered],
+      parentId: target.id,
+      answered: [...earlier.answered, answered],
+    };
+  }
+
   if ("trigger" in request) {
     const target = owned
       ? await findMessage(chatId, request.messageId)
@@ -170,7 +286,7 @@ export const resolveTurn = async ({
       );
     }
     const { messages } = await loadActivePath(chatId, parent.id);
-    return { messages, parentId: parent.id };
+    return { ...denyUnanswered(messages), parentId: parent.id };
   }
 
   // The message is the one thing a client still writes into the Transcript, so
@@ -195,8 +311,15 @@ export const resolveTurn = async ({
     throw new ConflictError(`Message '${message.id}' already exists`);
   }
 
-  const { messages } = await loadActivePath(chatId, parentId);
-  return { messages: [...messages, message], message, parentId };
+  const path = denyUnanswered(
+    (await loadActivePath(chatId, parentId)).messages,
+  );
+  return {
+    messages: [...path.messages, message],
+    message,
+    parentId,
+    answered: path.answered,
+  };
 };
 
 /**

@@ -53,3 +53,32 @@ Core ships one gate as a built-in Plugin that is off by default: a **decision-mo
 - **Latency on every tool call.** Every enabled gate adds a call to each local tool call. Verdicts are not cached, even for identical calls within a run. An unattended run that retries the same denied call gets the same refusal back each time, so the no-progress detector halts it the way it halts any repeated call with the same result. There is no special handling for gates.
 - **Unattended runs feel the gate hardest.** With `ask` read as `deny`, a Trigger or A2A run cannot get a cautious verdict past a human. That is the case a gate exists for.
 - **Before tool call is the only stage.** Rewriting or redacting a result, observing whole runs, and changing what the model is sent are separate stages, each with a different contract. A gate is not middleware and is not the place for them.
+
+## Notes: the approval round-trip (2026-10-25)
+
+Added when `ask` began reaching a User (issue #1256). It replaces the "`ask` is
+`deny` everywhere until the approval round-trip ships" bullet above, which no
+longer holds; the rest of the Decision is unchanged.
+
+- **In an attended run `ask` stops the turn.** Core returns the SDK's
+  `user-approval` with the gate's reason. The SDK runs the step's allowed calls,
+  denies its denied ones and ends the loop after that step; the run succeeds and
+  the reply is stored holding its `approval-requested` parts. There is no Chat
+  status for a reply that waits. Unattended runs (Trigger, A2A, Sub-Agent, and a
+  plan with no gate scope) keep `ask` as `deny`. A gate that fails is still
+  `ask`, so in a Chat the User may approve a call its gate could not vet.
+- **The answer is a turn the server verifies against its own rows** (ADR-0026).
+  `respond-to-approvals` names the Chat's Active leaf and answers exactly the
+  approvals it waits on; the server writes each answer onto its stored part and
+  continues the reply under its own id, with a fresh Step ceiling and turn
+  deadline. The client sends only whether each call may run, never an approval
+  object, so `experimental_toolApprovalSecret` is not used.
+- **An approved call is not re-vetted.** The SDK hands every approved call to
+  the hook again before running it; core finds the User's approval for that
+  call id in the Transcript and returns `approved` without asking any gate. A
+  gate cannot revise its Verdict on resume.
+- **Moving on denies.** A new message under a reply still waiting denies each
+  unanswered call with a reason saying the User sent a new message instead, so
+  the model sees a refusal rather than the call vanishing from later turns. A
+  regenerate leaves the waiting reply as an Alternative, and the same denial
+  applies if that Alternative is ever continued.

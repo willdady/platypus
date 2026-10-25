@@ -11,20 +11,14 @@ type Chunk = InferUIMessageChunk<PlatypusUIMessage>;
  * `toUIMessageStream` treats a trailing assistant message as a continuation and
  * reuses its id, but it never re-emits that message's existing parts. Its own
  * terminal fold does not need them — that fold's state is seeded from the
- * message itself — and that fold runs INSIDE `toUIMessageStream`, so it is the
- * one consumer already holding them. Every consumer downstream of the returned
- * stream starts from nothing:
+ * message itself. `drive.ts` seeds its own snapshot reader the same way. The
+ * browser never held a seeded message at all: a user-invoked Skill's
+ * `loadSkill` pair is built server-side (issue #649), so the live turn
+ * rendered the reply with no card above it, and the card only appeared on a
+ * reload. A reply resumed after its approvals were answered is one the
+ * browser already holds, and a replayed part lands on its own by id.
  *
- * - the browser, which never held the message at all. A user-invoked Skill's
- *   `loadSkill` pair is built server-side (issue #649), so the live turn
- *   rendered the reply with no card above it, and the card only appeared on a
- *   reload.
- * - `readUIMessageStream` in `drive.ts`, whose snapshots are what a mid-run
- *   flush persists. Those snapshots replace the seeded message (they carry its
- *   id), so a reconnect mid-run read a message stripped of its own opening
- *   parts until the terminal write put them back.
- *
- * Replaying puts both on the same footing as the fold. Nothing is duplicated:
+ * Replaying puts the browser on the same footing as the fold. Nothing is duplicated:
  * these chunks are appended after `toUIMessageStream` has returned, so the SDK's
  * fold never sees them.
  *

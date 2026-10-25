@@ -295,6 +295,33 @@ number on the page and the first one to look at on a slow turn.
   is what tells you that.
 </Callout>
 
+## Approving a tool call
+
+When your Operator has enabled a Tool gate, a gate can ask for a person to
+approve a call before it runs. The reply then stops once the model's current
+step is done, and the call appears as a card with the Tool's name, its
+parameters, the gate's reason and **Approve** / **Deny** buttons. Other calls
+in the same step that the gate allowed have already run.
+
+Answer every card on the reply and it carries on as the same reply, with what
+you decided: an approved call runs, without the gate being asked again, and a
+denied one shows **Denied** and is reported to the model as a call you refused.
+The reply's time and tokens count both halves.
+
+The buttons appear only on the last reply in the Chat, while nothing is
+running. On an older reply the card shows **Approval Requested** and cannot be
+answered.
+
+<Callout>
+  **Sending a new message instead of answering denies the call.** The model is
+  told you sent a new message rather than answering, and the card shows
+  **Denied** from then on. Regenerating the reply leaves the waiting reply as an
+  Alternative instead.
+</Callout>
+
+A gate asks only in a Chat. In a Trigger run, an A2A call or a Sub-Agent run
+there is no one to ask, so a call a gate wants approved is stopped there.
+
 ## Where a reply's time and tokens went
 
 An **(i)** button on an assistant message opens a panel breaking the reply down

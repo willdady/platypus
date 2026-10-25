@@ -67,12 +67,12 @@ export const plugin: PlatypusPlugin = {
   run continues, so the Agent can try something else or explain itself. The
   Chat's tool card shows **Denied** with the reason, and the Run timeline shows
   the call as cancelled with the reason.
-- **`ask`** — a person may decide. Platypus cannot put the question to anyone
-  yet, so for now `ask` stops the call exactly as `deny` does, in Chats too.
-  Return it where a person's approval is what you mean; your gate will not need
-  to change when asking arrives. It will only ever reach a person in a
-  top-level Chat turn — wherever `attended` is `false` there is no one to ask, and
-  `ask` stays a `deny`.
+- **`ask`** — a person may decide. In a top-level Chat turn the reply stops
+  once the model's current step is done, and the Workspace Owner sees the call
+  with your `reason` and **Approve** / **Deny** buttons. An approved call runs
+  without any gate being asked about it again; a denied one reaches the model
+  as a denial by the User. Wherever `attended` is `false` there is no one to
+  ask, and `ask` stops the call exactly as `deny` does.
 
 Write `reason` for the model, the User and the Operator at once: it is shown to
 all three.
@@ -84,11 +84,12 @@ restrictive Verdict wins: `deny` over `ask` over `allow`.
 
 <Callout type="warning">
   A gate that throws, returns something that is not a Verdict, or doesn't answer
-  within its `timeoutMs` counts as `ask` — so the call does not run. A gate that
-  never answers stops every tool call on the deployment. That is deliberate: a
-  gate that times out under load must not let through the calls it exists to
-  stop. Budget your timeout for your slowest honest answer, and honour the
-  `signal`.
+  within its `timeoutMs` counts as `ask` — so the call does not run unless a
+  person in a Chat approves it. A gate that never answers stops every unattended
+  tool call on the deployment, and asks about every attended one. That is
+  deliberate: a gate that times out under load must not let through the calls it
+  exists to stop. Budget your timeout for your slowest honest answer, and honour
+  the `signal`.
 </Callout>
 
 `timeoutMs` defaults to **10 000** ms and is capped at **30 000**. A

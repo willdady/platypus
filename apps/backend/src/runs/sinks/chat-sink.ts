@@ -37,9 +37,14 @@ export type ChatSinkParams = {
   message?: PlatypusUIMessage;
   /**
    * The row this turn hangs from: the submitted message's parent, or the
-   * regenerated reply's parent.
+   * regenerated reply's parent — or, on a resume, the reply it continues.
    */
   parentId: string | null;
+  /**
+   * Stored messages whose tool approvals this turn answers, as they now read.
+   * Their parts are written with the claim.
+   */
+  answered?: PlatypusUIMessage[];
   /**
    * Columns a Chat this turn creates starts with, beside the defaults: an A2A
    * Chat is bound to its endpoint, its Agent and its token from its first row
@@ -82,7 +87,7 @@ export type ChatSinkParams = {
  * - `onStart`: claim the Chat by flipping its row to `status: "running"`
  *   (creating it for a new Chat), insert the submitted user message and point
  *   the leaf at the message being answered, so a disconnected client can read
- *   the in-progress state. The claim is the one-run-per-Chat lock across every
+ *   the in-progress state. Tool approvals the turn answers are written too. The claim is the one-run-per-Chat lock across every
  *   backend instance (#1237): a Chat already `running` is a `ConflictError`,
  *   unless its run's heartbeat has gone stale (#1297) — that run died with its
  *   instance, and the claim takes the Chat from it. Rows the turn owns
@@ -215,8 +220,20 @@ export class ChatSink implements RunSink {
         });
       }
 
+      for (const answered of this.params.answered ?? []) {
+        await tx
+          .update(chatMessage)
+          .set({ parts: answered.parts })
+          .where(
+            and(
+              eq(chatMessage.chatId, ctx.runId),
+              eq(chatMessage.id, answered.id),
+            ),
+          );
+      }
+
       // The message being answered: the new one on a submit, the regenerated
-      // reply's own on a regenerate. A reader arriving before the reply's first
+      // reply's own on a regenerate, the reply itself on a resume. A reader arriving before the reply's first
       // write sees that message, not the reply being replaced, and the
       // hydration guard keeps a partial reply on screen over it.
       await tx
@@ -438,9 +455,10 @@ export class ChatSink implements RunSink {
    * Resolves `false`, having written nothing, when either step fails.
    *
    * The reply is the trailing message when it is an assistant's. What the
-   * server loaded for the turn always ends in a user message — the one submitted, or the
-   * regenerated reply's parent — so a trailing assistant message is this
-   * turn's own: the streamed reply, or the seeded `loadSkill` message the SDK
+   * server loaded for the turn ends in a user message — the one submitted, or
+   * the regenerated reply's parent — or in the reply a resume continues, so a
+   * trailing assistant message is this turn's own: the streamed reply, the
+   * seeded `loadSkill` message, or the resumed reply, each of which the SDK
    * continues under the same id. Before the first step that is all there is.
    */
   private async writeRow(args: {

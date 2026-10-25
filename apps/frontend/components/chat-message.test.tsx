@@ -1364,6 +1364,82 @@ describe("ChatMessage dynamic tool renderer", () => {
   });
 });
 
+// Issue #1256: a Tool gate's `ask` stops the turn to ask the User.
+describe("ChatMessage tool approvals", () => {
+  const waiting: PlatypusUIMessage = {
+    id: "m1",
+    role: "assistant",
+    parts: [
+      {
+        type: "dynamic-tool",
+        toolName: "db__drop_table",
+        toolCallId: "c1",
+        state: "approval-requested",
+        input: { table: "users" },
+        approval: {
+          id: "ap1",
+          requestReason:
+            'The "Cautious" Tool gate wants a person to approve this call: Drops a table.',
+        },
+      } as unknown as MessagePart,
+    ],
+  };
+
+  it("shows the call, its input and the gate's reason, with Approve and Deny", () => {
+    const onApprovalResponse = vi.fn();
+    renderMessage(waiting, { onApprovalResponse });
+
+    expect(screen.getByText("db__drop_table")).toBeInTheDocument();
+    expect(screen.getByText(/"table": "users"/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The "Cautious" Tool gate wants a person to approve this call: Drops a table.',
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onApprovalResponse).toHaveBeenCalledWith("ap1", true);
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    expect(onApprovalResponse).toHaveBeenCalledWith("ap1", false);
+  });
+
+  it("shows a call the User denied as Denied, with the reason", () => {
+    renderMessage({
+      ...waiting,
+      parts: [
+        {
+          ...(waiting.parts[0] as object),
+          state: "approval-responded",
+          approval: {
+            id: "ap1",
+            approved: false,
+            reason: "The User sent a new message instead.",
+          },
+        } as unknown as MessagePart,
+      ],
+    });
+    openToolCallGroups();
+    fireEvent.click(screen.getByRole("button", { name: /^db__drop_table/ }));
+
+    expect(screen.getByText("Denied")).toBeInTheDocument();
+    expect(
+      screen.getByText("The User sent a new message instead."),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no answer where the reply cannot be resumed", () => {
+    renderMessage(waiting);
+
+    expect(screen.getByText("Approval Requested")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Approve" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Deny" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("ChatMessage Tool call groups", () => {
   const call = (id: string, toolName: string, state = "output-available") =>
     ({

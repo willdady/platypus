@@ -75,6 +75,7 @@ export const startChatTurn = async (params: {
       runHeartbeatAt: chatTable.runHeartbeatAt,
       updatedAt: chatTable.updatedAt,
       a2aEndpointId: chatTable.a2aEndpointId,
+      activeLeafId: chatTable.activeLeafId,
     })
     .from(chatTable)
     .where(
@@ -84,10 +85,12 @@ export const startChatTurn = async (params: {
 
   // What the turn continues, from the server's own rows (ADR-0026). Refuses a
   // turn that cannot run — an unknown parent, a duplicate id, a reply that
-  // cannot regenerate — before anything is retrieved or written.
+  // cannot regenerate or have its approvals answered — before anything is
+  // retrieved or written. A Chat still running refuses at the claim.
   const turn = await resolveTurn({
     chatId: request.id,
     owned: existingChat.length > 0,
+    activeLeafId: existingChat[0]?.activeLeafId,
     request,
   });
 
@@ -166,6 +169,7 @@ export const startChatTurn = async (params: {
     ownerId: actorUserId(scope.principal),
     message: turn.message,
     parentId: turn.parentId,
+    answered: turn.answered,
     newChat,
     onClaimed,
     // Any turn in a Chat may be an A2A Task's, the Owner's own included: one

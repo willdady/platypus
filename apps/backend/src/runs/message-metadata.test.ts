@@ -470,6 +470,39 @@ describe("Token usage over a real multi-step stream", () => {
     });
   });
 
+  // Issue #1256: a reply resumed after its approvals were answered is two
+  // requests, and both were billed.
+  it("adds onto what a continued reply already recorded", async () => {
+    const result = streamText({
+      model: mockModel([answerStep(usage(4_200, 70))]),
+      prompt: "Carry on.",
+    });
+    let clock = 1_000;
+
+    const message = await lastSnapshot(
+      toUIMessageStream({
+        stream: result.stream,
+        messageMetadata: createMessageMetadata({
+          prepDurationMs: 40,
+          driveStartMs: 1_000,
+          now: () => (clock += 500),
+          continued: {
+            tokenUsage: { inputTokens: 1_000, outputTokens: 30 },
+            modelDurationMs: 2_000,
+            prepDurationMs: 60,
+          },
+        }),
+      }),
+    );
+
+    expect(message?.metadata?.tokenUsage).toEqual({
+      inputTokens: 5_200,
+      outputTokens: 100,
+    });
+    expect(message?.metadata?.modelDurationMs).toBe(2_500);
+    expect(message?.metadata?.prepDurationMs).toBe(100);
+  });
+
   it("keeps the folded sum from a turn cancelled mid-stream", async () => {
     const controller = new AbortController();
     const result = streamText({

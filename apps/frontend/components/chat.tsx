@@ -12,7 +12,11 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import {
+  DefaultChatTransport,
+  isToolUIPart,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
@@ -151,7 +155,8 @@ export function Chat({
         // The AI SDK calls this before each fetch. The server owns the
         // Transcript (ADR-0026), so a turn carries only what is new: the
         // message and the id it follows, or the reply to regenerate. Never
-        // the Transcript.
+        // the Transcript. A reply's answered approvals go as the answers alone:
+        // the server writes them onto its own rows (issue #1256).
         prepareSendMessagesRequest: ({
           id,
           messages,
@@ -163,6 +168,29 @@ export function Chat({
           // the last message on screen.
           const { parentId = messages.at(-2)?.id ?? null, ...rest } = (body ??
             {}) as { parentId?: string | null };
+          // Only the SDK's send of a reply's answers ends on an assistant
+          // message: every other send ends on the user message it adds.
+          const last = messages.at(-1);
+          if (last?.role === "assistant") {
+            return {
+              body: {
+                ...rest,
+                id,
+                trigger: "respond-to-approvals",
+                messageId: last.id,
+                responses: last.parts.flatMap((part) =>
+                  isToolUIPart(part) && part.state === "approval-responded"
+                    ? [
+                        {
+                          approvalId: part.approval.id,
+                          approved: part.approval.approved,
+                        },
+                      ]
+                    : [],
+                ),
+              },
+            };
+          }
           return {
             body: {
               ...rest,
@@ -183,11 +211,14 @@ export function Chat({
     sendMessage,
     status,
     regenerate,
+    addToolApprovalResponse,
     error,
     stop,
   } = useChat<PlatypusUIMessage>({
     id: chatId,
     transport,
+    // The answer to a reply's last waiting approval sends them all.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     // Streamed chunks reach the screen at most once per 50ms, rather than one
     // render of the whole Chat per chunk.
     experimental_throttle: 50,
@@ -397,7 +428,13 @@ export function Chat({
     settings,
     search,
     runHeldElsewhere,
-    chat: { sendMessage, regenerate, stop, setMessages },
+    chat: {
+      sendMessage,
+      regenerate,
+      addToolApprovalResponse,
+      stop,
+      setMessages,
+    },
     refreshChat,
     backendUrl,
     scope,
@@ -821,6 +858,15 @@ export function Chat({
                     onCopyMessage={handleCopyMessage}
                     copiedMessageId={copiedMessageId}
                     staleToolCallIds={staleToolCallIds}
+                    onApprovalResponse={
+                      // Only the Active leaf can be resumed, and only while
+                      // no turn holds the Chat.
+                      canSendMessages &&
+                      !turnInFlight &&
+                      messageIndex === messages.length - 1
+                        ? turn.respond
+                        : undefined
+                    }
                   />
                 </div>
               ))}

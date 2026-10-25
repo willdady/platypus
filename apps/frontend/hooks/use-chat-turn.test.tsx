@@ -47,6 +47,7 @@ function harness({
   const chat = {
     sendMessage: spy("sendMessage"),
     regenerate: spy("regenerate"),
+    addToolApprovalResponse: spy("addToolApprovalResponse"),
     stop: spy("stop"),
     setMessages: spy("setMessages"),
   };
@@ -81,6 +82,7 @@ const starts: [string, (turn: Turn) => boolean][] = [
   ["send", (turn) => turn.send(edit)],
   ["regenerate", (turn) => turn.regenerate("a1")],
   ["resendEdited", (turn) => turn.resendEdited(1, edit)],
+  ["respond", (turn) => turn.respond("ap1", true)],
 ];
 
 beforeEach(() => resetSharedSpies());
@@ -126,6 +128,21 @@ describe("useChatTurn refusing a turn", () => {
 });
 
 describe("useChatTurn starting a turn", () => {
+  // Issue #1256: the answer that completes a reply's set sends the turn, so
+  // each carries the body. A refresh between two answers would undo the first.
+  it("answers an approval with the turn's body, and no refresh", () => {
+    const h = harness();
+
+    expect(h.turn.respond("ap1", false)).toBe(true);
+
+    expect(h.addToolApprovalResponse).toHaveBeenCalledWith({
+      id: "ap1",
+      approved: false,
+      options: { body },
+    });
+    expect(h.calls).toEqual(["addToolApprovalResponse"]);
+  });
+
   it("sends a composer message with the turn's body, then refreshes the row", () => {
     const h = harness();
 
