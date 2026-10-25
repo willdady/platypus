@@ -98,15 +98,22 @@ describe("ModelSelectorDialog trigger label", () => {
     ({
       id,
       name,
-      modelIds: models.map((model) => ({ id: model, passthroughFileTypes: [] })),
+      modelIds: models.map((model) => ({
+        id: model,
+        passthroughFileTypes: [],
+      })),
     }) as unknown as Serialized<Provider>;
 
-  const triggerFor = (providers: Serialized<Provider>[], providerId: string) =>
+  const triggerFor = (
+    providers: Serialized<Provider>[],
+    providerId: string,
+    agents: Serialized<Agent>[] = [],
+  ) =>
     render(
       <ModelSelectorDialog
-        agents={[]}
+        agents={agents}
         providers={providers}
-        agentId=""
+        agentId={agents[0]?.id ?? ""}
         modelId="glm-flash"
         providerId={providerId}
         isResolved
@@ -128,7 +135,7 @@ describe("ModelSelectorDialog trigger label", () => {
     );
 
     expect(screen.getByRole("button")).toHaveTextContent(
-      "glm-flash · OpenRouter (Completions API)",
+      /^glm-flash · OpenRouter \(Completions API\)$/,
     );
   });
 
@@ -141,6 +148,19 @@ describe("ModelSelectorDialog trigger label", () => {
       "p1",
     );
 
-    expect(screen.getByRole("button").textContent).toBe("glm-flash");
+    expect(screen.getByRole("button")).toHaveTextContent(/^glm-flash$/);
+  });
+
+  it("shows only the Agent's name when an Agent is selected", () => {
+    triggerFor(
+      [
+        provider("p1", "OpenRouter", ["glm-flash"]),
+        provider("p2", "OpenRouter (Completions API)", ["glm-flash"]),
+      ],
+      "p2",
+      [{ id: "a1", name: "Writer" } as unknown as Serialized<Agent>],
+    );
+
+    expect(screen.getByRole("button")).toHaveTextContent(/^Writer$/);
   });
 });
