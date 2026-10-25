@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { buffer } from "node:stream/consumers";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { FileExtractionContext } from "./types.ts";
 import { getStorage } from "./index.ts";
@@ -230,6 +231,13 @@ export function rewriteStorageUrls(
 }
 
 /**
+ * The largest stored file a turn inlines for the model — the common Provider
+ * ceiling for inline media. A larger file is left as its reference, so
+ * `normalizeFileParts` announces it unavailable, as for a storage miss.
+ */
+export const MAX_INLINE_FILE_BYTES = 20 * 1024 * 1024;
+
+/**
  * Resolve every stored File-part reference back to inline `data:` bytes so that
  * `convertToModelMessages()` can access file content without making HTTP
  * requests (which would fail without session cookies).
@@ -304,13 +312,23 @@ export async function inlineFileUrls(
           const key = candidate.key;
 
           try {
-            const result = await storage.get(key);
+            const result = await storage.getStream(key);
             if (!result) {
               logger.warn({ key }, "File not found in storage during inlining");
               return part;
             }
 
-            const dataUrl = `data:${result.contentType};base64,${result.data.toString("base64")}`;
+            if (result.contentLength > MAX_INLINE_FILE_BYTES) {
+              result.stream.destroy();
+              logger.warn(
+                { key, size: result.contentLength },
+                "File too large to inline, leaving as-is",
+              );
+              return part;
+            }
+
+            const data = await buffer(result.stream);
+            const dataUrl = `data:${result.contentType};base64,${data.toString("base64")}`;
             return { ...part, url: dataUrl };
           } catch (error) {
             logger.error(

@@ -13,15 +13,16 @@ A **Provider** is a configured connection to an AI vendor. It's what lets
 Platypus talk to a model on your behalf.
 
 There are five Provider types — OpenAI, OpenRouter, Bedrock, Google,
-Anthropic — and no others. Ollama, vLLM, Azure OpenAI and any other
-OpenAI-compatible endpoint are reached through the **OpenAI** type with its
+Anthropic — and no others. Ollama, vLLM and any other OpenAI-compatible
+endpoint are reached through the **OpenAI** type with its
 **Base URL** overridden, and **API Mode** set to **Chat Completions** where the
 server has no Responses API; see [Supported
 vendors](/self-hosting/providers-and-auth#supported-vendors).
 
 A Provider carries:
 
-- the **credentials** (such as an API key) for that vendor,
+- the **credentials** for that vendor — an API key, and any custom headers a
+  proxy needs,
 - an optional **base URL** for self-hosted or proxied endpoints,
 - the list of **models** that have been enabled for use,
 - a default **task model** used for quick one-shot jobs (like generating a
@@ -65,7 +66,8 @@ or `flagship` — that an Agent or a Chat selects instead of the vendor's model
 id. Point the alias at a newer model and every Agent and Chat using it moves
 with it, on their next turn, with no edits to any of them.
 
-Whoever manages the Provider sets one in the **Alias** field beside a model.
+Whoever manages the Provider sets one in the **Alias** field of the model's
+**Add model** or **Edit model** dialog.
 From then on, that model appears in the Agent and Chat model pickers under its
 alias rather than its model id.
 
@@ -146,9 +148,10 @@ to Providers that never had it otherwise: a self-hosted vLLM or LiteLLM
 endpoint, or Bedrock.
 
 <Callout type="warning">
-  **Selecting a backend can grant page reading as well as search.** A backend
+  **Selecting a backend that reads pages lets the model fetch any URL your
+  deployment can reach, short of what the egress guard blocks.** A backend
   supplies its own search, and optionally a page reader; where it supplies both,
-  a searching turn on that Provider lets the model fetch pages by URL from your
+  every searching turn on that Provider can fetch pages by URL from your
   deployment. The vendors' built-in search runs on the vendor's side — some open
   pages as part of searching, but nothing is fetched from your deployment. There
   is no separate setting for it: the reader comes with the backend, so the

@@ -5,12 +5,28 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   ListObjectsV2Command,
+  type GetObjectCommandOutput,
 } from "@aws-sdk/client-s3";
-import type { StorageBackend } from "./types.ts";
+import type { Readable } from "node:stream";
+import type { StorageBackend, StoredFileStream } from "./types.ts";
 import { assertValidStoragePrefix } from "./keys.ts";
 import { servedFileHeaders } from "./response-headers.ts";
 import { logger } from "../logger.ts";
 import { env } from "../env.ts";
+
+const S3_CONNECTION_TIMEOUT_MS = 5_000;
+const S3_REQUEST_TIMEOUT_MS = 30_000;
+
+/** The object's content type, from the response or its metadata. */
+function contentTypeOf(response: GetObjectCommandOutput): string {
+  return (
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
+    response.ContentType ||
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
+    response.Metadata?.["content-type"] ||
+    "application/octet-stream"
+  );
+}
 
 /**
  * S3-compatible storage backend.
@@ -35,19 +51,19 @@ export class S3Storage implements StorageBackend {
       );
     }
 
-    if (!accessKeyId || !secretAccessKey) {
-      throw new Error(
-        "STORAGE_S3_ACCESS_KEY_ID and STORAGE_S3_SECRET_ACCESS_KEY are required for S3 storage",
-      );
-    }
-
     this.bucket = bucket;
     this.client = new S3Client({
       region,
       endpoint,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
+      // Without keys the SDK's default chain applies: env vars, shared
+      // config, IRSA, task role, instance profile. `env.ts` refuses one alone.
+      ...(accessKeyId &&
+        secretAccessKey && { credentials: { accessKeyId, secretAccessKey } }),
+      requestHandler: {
+        connectionTimeout: S3_CONNECTION_TIMEOUT_MS,
+        requestTimeout: S3_REQUEST_TIMEOUT_MS,
+        // Otherwise the SDK only logs a warning and lets the request hang.
+        throwOnRequestTimeout: true,
       },
     });
   }
@@ -95,15 +111,44 @@ export class S3Storage implements StorageBackend {
       }
       const data = Buffer.concat(chunks);
 
-      // Get content type from response or metadata
-      const contentType =
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
-        response.ContentType ||
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
-        response.Metadata?.["content-type"] ||
-        "application/octet-stream";
+      const contentType = contentTypeOf(response);
 
       return { data, contentType };
+    } catch (error) {
+      const e = error as { name?: string; Code?: string };
+      if (e.name === "NoSuchKey" || e.Code === "NoSuchKey") {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async getStream(key: string): Promise<StoredFileStream | null> {
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+        }),
+      );
+
+      if (!response.Body) {
+        return null;
+      }
+      // In Node the SDK's body is an `IncomingMessage`.
+      const stream = response.Body as Readable;
+      if (response.ContentLength === undefined) {
+        stream.destroy();
+        throw new Error(`S3 returned no Content-Length for ${key}`);
+      }
+
+      const contentType = contentTypeOf(response);
+
+      return {
+        stream,
+        contentType,
+        contentLength: response.ContentLength,
+      };
     } catch (error) {
       const e = error as { name?: string; Code?: string };
       if (e.name === "NoSuchKey" || e.Code === "NoSuchKey") {

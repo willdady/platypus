@@ -25,17 +25,17 @@ required variable left unset — stops it before it serves anything, and the log
 names the variable at fault. An empty value counts as unset.
 
 <Callout type="warning">
-  The shipped `compose.yaml` sets `PORT`, `DATABASE_URL`, `NODE_OPTIONS` and
+  The shipped `compose.yaml` sets `DATABASE_URL`, `NODE_OPTIONS` and
   `BETTER_AUTH_URL` (from `BACKEND_URL`) for the backend itself, and those take
   precedence over `.env`. Pointing `DATABASE_URL` at an external Postgres in
-  `.env` is silently ignored: change these four in a `compose.override.yaml`.
+  `.env` is silently ignored: change these three in a `compose.override.yaml`.
 </Callout>
 
 ## Core
 
 | Variable            | Purpose                                                                                                                                                                                                                                                                                                                                   | Default   | Required |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
-| `PORT`              | Port the backend HTTP server listens on.                                                                                                                                                                                                                                                                                                  | `4001`    | No       |
+| `PORT`              | Port the backend HTTP server listens on. The backend Docker image sets it to `4000`.                                                                                                                                                                                                                                                      | `4001`    | No       |
 | `ALLOWED_ORIGINS`   | Comma-separated origins allowed by CORS and better-auth's trusted origins. **No default in code** — an unset value stops the backend before it starts. `.example.env` ships `http://localhost:3001`.                                                                                                                                      | _(none)_  | **Yes**  |
 | `DATABASE_URL`      | Postgres 17 connection string (with pgvector). **No default in code.** `.example.env` ships `postgres://postgres:mypassword@localhost:5432/postgres`.                                                                                                                                                                                     | _(none)_  | **Yes**  |
 | `DATABASE_POOL_MAX` | Maximum connections in the backend's Postgres pool. One connection is held permanently by the Postgres `LISTEN` listener, and one by each background job tick's advisory lock, so raise this when you raise the backend's concurrency. An unset value uses the default; a value that is not a positive integer stops the backend at boot. | `10`      | No       |
@@ -428,8 +428,14 @@ is the production option.
 | `STORAGE_S3_BUCKET`            | S3 bucket name.                                                                                               | _(unset)_      | When `STORAGE_BACKEND=s3` |
 | `STORAGE_S3_REGION`            | S3 region.                                                                                                    | `us-east-1`    | No                        |
 | `STORAGE_S3_ENDPOINT`          | S3 endpoint URL. Only needed for S3-compatible services (MinIO, R2, Spaces); leave unset for AWS S3.          | _(unset)_      | No                        |
-| `STORAGE_S3_ACCESS_KEY_ID`     | S3 access key ID.                                                                                             | _(unset)_      | When `STORAGE_BACKEND=s3` |
-| `STORAGE_S3_SECRET_ACCESS_KEY` | S3 secret access key.                                                                                         | _(unset)_      | When `STORAGE_BACKEND=s3` |
+| `STORAGE_S3_ACCESS_KEY_ID`     | S3 access key ID. Set it together with `STORAGE_S3_SECRET_ACCESS_KEY`, or leave both unset.                   | _(unset)_      | No                        |
+| `STORAGE_S3_SECRET_ACCESS_KEY` | S3 secret access key. Set it together with `STORAGE_S3_ACCESS_KEY_ID`, or leave both unset.                   | _(unset)_      | No                        |
+
+With both key variables unset, the backend finds credentials the way any AWS
+SDK does: the standard `AWS_*` variables, a shared config file, or the role
+attached to its container or instance (IRSA, an ECS task role, an EC2 instance
+profile). Setting only one of the two stops the backend at boot, as does
+`STORAGE_BACKEND=s3` without a bucket.
 
 <Callout type="warning">
   With `STORAGE_PUBLIC_URL` set, the browser fetches files from the bucket or

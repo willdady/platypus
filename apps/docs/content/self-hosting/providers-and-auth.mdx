@@ -31,7 +31,6 @@ API is reached through the **OpenAI** type with `baseUrl` pointed at it:
 | ----------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ollama            | OpenAI        | `baseUrl` → your Ollama host's `/v1` (see [Reaching a model server on the host machine](#reaching-a-model-server-on-the-host-machine)); any non-empty API key; **API Mode** → **Chat Completions** |
 | vLLM              | OpenAI        | `baseUrl` → your vLLM server; usually `apiMode: "chat"`                                                                                                                                            |
-| Azure OpenAI      | OpenAI        | `baseUrl` → your Azure deployment endpoint                                                                                                                                                         |
 | LiteLLM / a proxy | OpenAI        | `baseUrl` → the gateway (see [Fronting a Provider with a proxy](#fronting-a-provider-with-a-proxy))                                                                                                |
 
 So "is my stack supported?" comes down to: does it speak the OpenAI API? If yes,

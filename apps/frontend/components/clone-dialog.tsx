@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +27,7 @@ export function CloneDialog({
   onClose,
   create,
   onCreated,
+  note,
 }: {
   /** The item's kind, capitalised, as in "Clone Agent". */
   noun: string;
@@ -43,6 +44,8 @@ export function CloneDialog({
   ) => Promise<WriteOutcome<{ id: string }>>;
   /** After a successful create, the dialog closed: revalidate and navigate. */
   onCreated: (id: string) => void;
+  /** Shown above the name, such as what the copy leaves out. */
+  note?: ReactNode;
 }) {
   const backendUrl = useBackendUrl();
   const [name, setName] = useState(`${original} (copy)`);
@@ -69,6 +72,7 @@ export function CloneDialog({
             Enter a name for the cloned {noun.toLowerCase()}.
           </DialogDescription>
         </DialogHeader>
+        {note}
         <Field>
           <FieldLabel htmlFor={inputId}>Name</FieldLabel>
           <Input

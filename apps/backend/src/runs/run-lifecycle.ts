@@ -19,6 +19,14 @@ import {
 import type { RunId, RunStats, RunStatus } from "./types.ts";
 
 /**
+ * How long an aborted run waits for its drive to settle before it is finished
+ * anyway (#1613). Long enough for a drive that observes its signal to unwind
+ * and write its own final state; short enough that work which never unwinds
+ * still reaches a terminal status promptly (#937).
+ */
+export const ABORT_GRACE_MS = 5_000;
+
+/**
  * A registered run: its abort signal and timers, its accumulating statistics,
  * the callbacks the SDK invokes, and a once-only termination.
  *
@@ -63,7 +71,8 @@ export type RunLifecycle = {
   finish: (status: RunStatus, error?: Error) => Promise<void>;
   /**
    * Hand the run a Tool session's `dispose` to close when it ends — or, if the
-   * run has already ended, have it closed here and be told so. `false` means
+   * run has already ended or been stopped, have it closed here (finishing the
+   * run, if it is not finished yet) and be told so. `false` means
    * the second: `dispose` has been run, and the caller must not go on.
    *
    * Both halves are the method, which is why the name carries them. A run's
@@ -124,6 +133,7 @@ export const startRun = (params: {
   const reported = (): RunStats =>
     withDelegatedUsage(stats, usageModel, delegated);
   let terminated = false;
+  let graceTimer: ReturnType<typeof setTimeout> | undefined;
   /** The Tool session this run must close, once it has one — see
    *  {@link RunLifecycle.adoptOrDispose}. One, not a list: a run resolves one
    *  turn, and a turn has exactly one session to dispose however many tool
@@ -145,6 +155,7 @@ export const startRun = (params: {
   const finish = async (status: RunStatus, error?: Error): Promise<void> => {
     if (terminated) return;
     terminated = true;
+    clearTimeout(graceTimer);
     // Before `onTerminate`, so the connections a turn opened are closed by the
     // time the sink writes the run's terminal record.
     if (disposer) await runDisposer(disposer);
@@ -159,6 +170,13 @@ export const startRun = (params: {
   const adoptOrDispose = async (
     dispose: () => Promise<void>,
   ): Promise<boolean> => {
+    // Stopped before a drive could take it: no drive will unwind to finish
+    // the run, so nothing is gained by waiting out the abort grace.
+    if (!terminated && handle.signal.aborted) {
+      disposer = dispose;
+      await finishFromSignal();
+      return false;
+    }
     if (terminated) {
       await runDisposer(dispose);
       return false;
@@ -248,6 +266,12 @@ export const startRun = (params: {
       : { status: "cancelled" };
   };
 
+  /** Finish with the outcome the abort signal records. */
+  const finishFromSignal = (): Promise<void> => {
+    const { status, error } = statusFromSignal();
+    return finish(status, error);
+  };
+
   const abortReason = (): string | undefined => {
     if (!handle.signal.aborted) return undefined;
     const reason: unknown = handle.signal.reason;
@@ -255,36 +279,38 @@ export const startRun = (params: {
   };
 
   /**
-   * The abort writes the terminal status itself.
+   * An abort finishes the run itself if the run's own work does not first.
    *
    * Both ways a run is stopped — `RunRegistry.cancel` and either timeout —
-   * abort the controller and clear the run's timers. Until now the terminal
-   * write still depended on the run's own work unwinding afterwards: every
+   * abort the controller and clear the run's timers. Once, the terminal write
+   * depended entirely on the run's own work unwinding afterwards: every
    * in-flight tool promise settling, the drive draining, its `finally` calling
    * `finish`. Anything that does not observe the signal never unwinds, and with
    * both timers already cleared nothing was left to recover it — the Chat row
-   * kept `status: "running"` (a stop button that does nothing, however often
-   * the page is reloaded) and the registry entry was never unregistered, so
-   * every later turn in that Chat was answered 409 until the process
-   * restarted. That is why deleting the Chat was the only way out.
-   *
-   * Issue #921 closed one instance of this at the sandbox tool layer. The hole
-   * is not the sandbox's: a Turn still resolving against an unresponsive MCP
-   * server, or any tool that ignores the signal it is handed, strands a run the
-   * same way. This is the one place every run in the system registers, so it is
+   * kept `status: "running"` and the registry entry was never unregistered, so
+   * every later turn in that Chat was answered 409 until the process restarted
+   * (#937). This is the one place every run in the system registers, so it is
    * where the guarantee belongs: an aborted run reaches a terminal status
    * whatever its work is doing.
    *
-   * The ordering is the timeout path's, which already terminated from its own
-   * handler rather than waiting for the drive. `finish` is once-only, so a run
-   * that does unwind normally still finishes exactly once — whoever gets there
-   * first wins, and the other call is the no-op.
+   * It does so after {@link ABORT_GRACE_MS}, not at once (#1613). A drive that
+   * unwinds within the grace finishes with its full final state — tool
+   * durations, normalised web-tool parts, the SDK's stats — which an immediate
+   * finish would have discarded. And the registry claim is held until then, so
+   * a new turn on the same Chat cannot start while a tool from the stopped one
+   * is still running against the same resources. `finish` is once-only and
+   * clears the timer, so whoever gets there first wins.
    */
   handle.signal.addEventListener(
     "abort",
     () => {
-      const { status, error } = statusFromSignal();
-      void finish(status, error);
+      // A stopping process has no next turn to hold the claim against, and a
+      // crash drain is shorter than the grace: finish now, as before #1613.
+      if (runRegistry.stopping) {
+        void finishFromSignal();
+        return;
+      }
+      graceTimer = setTimeout(() => void finishFromSignal(), ABORT_GRACE_MS);
     },
     { once: true },
   );

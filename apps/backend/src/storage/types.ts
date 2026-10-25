@@ -1,3 +1,12 @@
+import type { Readable } from "node:stream";
+
+/** A stored file opened as a stream, with its content type and length in bytes. */
+export interface StoredFileStream {
+  stream: Readable;
+  contentType: string;
+  contentLength: number;
+}
+
 /**
  * Storage backend interface for file storage operations.
  * Implementations can store files on disk, S3, or other storage systems.
@@ -17,6 +26,14 @@ export interface StorageBackend {
    * @returns The file data and content type, or null if not found
    */
   get(key: string): Promise<{ data: Buffer; contentType: string } | null>;
+
+  /**
+   * Open a file as a stream, without reading it into memory.
+   * @param key - Unique identifier for the file
+   * @returns The file, or null if not found. The caller must consume or
+   *   destroy the stream.
+   */
+  getStream(key: string): Promise<StoredFileStream | null>;
 
   /**
    * Delete a file by its key.

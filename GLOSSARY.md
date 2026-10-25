@@ -305,7 +305,7 @@ Removing a Shared resource's Attachment from one Workspace. The Shared resource 
 _Avoid_: delete, unshare, remove (for a Shared resource).
 
 **Clone**:
-Making an independent, Workspace-owned copy of an Agent or a Trigger, with no link back to the original. A cloned Trigger starts disabled, and a cloned Inbound Trigger has no token until the Owner issues one.
+Making an independent, Workspace-owned copy of an Agent or a Trigger, with no link back to the original. A Shared Agent can be cloned into a Workspace; the copy leaves out any Sub-Agents, Skills and Tool sets not attached there. A cloned Trigger starts disabled, and a cloned Inbound Trigger has no token until the Owner issues one.
 _Avoid_: duplicate, copy, fork.
 
 **Blueprint**:

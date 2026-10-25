@@ -95,16 +95,24 @@ const envSchema = z
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_BACKEND !== "s3") return;
-    for (const key of [
-      "STORAGE_S3_BUCKET",
-      "STORAGE_S3_ACCESS_KEY_ID",
-      "STORAGE_S3_SECRET_ACCESS_KEY",
+    if (!env.STORAGE_S3_BUCKET) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["STORAGE_S3_BUCKET"],
+        message: "is required when STORAGE_BACKEND=s3",
+      });
+    }
+    // Both unset leaves the AWS SDK's default credential chain (#1686); one
+    // alone is almost certainly a typo, not a choice.
+    for (const [key, partner] of [
+      ["STORAGE_S3_ACCESS_KEY_ID", "STORAGE_S3_SECRET_ACCESS_KEY"],
+      ["STORAGE_S3_SECRET_ACCESS_KEY", "STORAGE_S3_ACCESS_KEY_ID"],
     ] as const) {
-      if (!env[key]) {
+      if (env[partner] && !env[key]) {
         ctx.addIssue({
           code: "custom",
           path: [key],
-          message: "is required when STORAGE_BACKEND=s3",
+          message: `is required when ${partner} is set; set both or neither`,
         });
       }
     }
