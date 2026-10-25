@@ -118,13 +118,21 @@ export function ModelSelectorDialog({
   const selectedProvider = providerId
     ? providers.find((p) => p.id === providerId)
     : undefined;
-  const selectedModelLabel = useMemo(
-    () =>
+  // A label more than one Provider offers names its Provider too (issue
+  // #1651): the button otherwise reads the same for either, though
+  // Provider-level settings like Web search differ. Compared by label, not
+  // reference — that is what the user sees.
+  const selectedModelLabel = useMemo(() => {
+    const label =
       selectedProvider && modelId
         ? findModelOption(selectedProvider, modelId)?.label
-        : undefined,
-    [selectedProvider, modelId],
-  );
+        : undefined;
+    if (!selectedProvider || !label) return label;
+    const offeredBy = providerOptions.filter(({ options }) =>
+      options.some((option) => option.label === label),
+    ).length;
+    return offeredBy > 1 ? `${label} · ${selectedProvider.name}` : label;
+  }, [selectedProvider, modelId, providerOptions]);
 
   const trigger = (
     <Button
