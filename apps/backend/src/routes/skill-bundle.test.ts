@@ -22,6 +22,7 @@ beforeEach(() => {
   vi.mocked(getStorage).mockReturnValue({
     get: storageGet,
     put: storagePut,
+    getStream: vi.fn(),
     delete: vi.fn(),
     deletePrefix: vi.fn(),
   });

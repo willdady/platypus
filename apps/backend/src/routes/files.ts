@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -109,13 +110,14 @@ files.get("/*", requireAuth, async (c) => {
 
   // Fetch file from storage
   const storage = getStorage();
-  const result = await storage.get(key);
+  // Streamed, so a large file is never held in memory whole.
+  const result = await storage.getStream(key);
 
   if (!result) {
     return c.json({ error: "File not found" }, 404);
   }
 
-  const { data, contentType } = result;
+  const { stream, contentType, contentLength } = result;
 
   // Set response headers
   c.header("Content-Type", contentType);
@@ -129,9 +131,9 @@ files.get("/*", requireAuth, async (c) => {
     c.header(name, value);
   }
   c.header("Cache-Control", "private, max-age=31536000, immutable");
-  c.header("Content-Length", data.length.toString());
+  c.header("Content-Length", contentLength.toString());
 
-  return c.body(new Uint8Array(data));
+  return c.body(Readable.toWeb(stream) as ReadableStream<Uint8Array>);
 });
 
 export { files };

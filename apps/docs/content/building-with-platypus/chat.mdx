@@ -103,6 +103,10 @@ sent in the file's place. Anything else gets an amber notice naming the file as
 soon as you attach it — remove it or switch to a model that accepts it, or the
 turn is refused.
 
+A file over **20 MiB** reaches the model only on the turn you first send it.
+On later turns, including a regenerated reply, the model is told the file is
+unavailable. The file itself stays in the conversation for you to open.
+
 <Callout type="warning">
   A warning appears above the input when the model you have selected can't read
   an attached type natively. It is telling you the model will read a text

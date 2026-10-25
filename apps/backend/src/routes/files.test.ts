@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   mockDb,
@@ -13,11 +14,19 @@ vi.mock("../storage/index.ts", () => ({
 }));
 
 const mockStorageGet = vi.fn();
+const mockStorageGetStream = vi.fn();
 const mockStorage = {
   get: mockStorageGet,
+  getStream: mockStorageGetStream,
   put: vi.fn(),
   delete: vi.fn(),
 };
+
+const streamed = (data: Buffer, contentType: string) => ({
+  stream: Readable.from([data]),
+  contentType,
+  contentLength: data.length,
+});
 
 describe("Files Routes", () => {
   beforeEach(() => {
@@ -26,6 +35,7 @@ describe("Files Routes", () => {
     mockDb.where.mockReturnValue(mockDb);
     (getStorage as ReturnType<typeof vi.fn>).mockReturnValue(mockStorage);
     mockStorageGet.mockReset();
+    mockStorageGetStream.mockReset();
   });
 
   const fileKey = "org-1/ws-1/chat-1/msg-1/0-abc12345.png";
@@ -64,7 +74,7 @@ describe("Files Routes", () => {
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("Invalid file key");
-      expect(mockStorageGet).not.toHaveBeenCalled();
+      expect(mockStorageGetStream).not.toHaveBeenCalled();
     });
 
     it("should return 400 for invalid key format with less than 2 segments", async () => {
@@ -77,10 +87,9 @@ describe("Files Routes", () => {
 
     it("should bypass access checks and serve file for super admin", async () => {
       mockSession({ id: "user-1", email: "admin@example.com", role: "admin" });
-      mockStorageGet.mockResolvedValueOnce({
-        data: Buffer.from("test image data"),
-        contentType: "image/png",
-      });
+      mockStorageGetStream.mockResolvedValueOnce(
+        streamed(Buffer.from("test image data"), "image/png"),
+      );
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -104,10 +113,9 @@ describe("Files Routes", () => {
       mockSession();
       // Membership check returns org admin role
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockStorageGet.mockResolvedValueOnce({
-        data: Buffer.from("test image data"),
-        contentType: "image/png",
-      });
+      mockStorageGetStream.mockResolvedValueOnce(
+        streamed(Buffer.from("test image data"), "image/png"),
+      );
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -146,20 +154,32 @@ describe("Files Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // Workspace lookup returns workspace owned by user-1
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGet.mockResolvedValueOnce({
-        data: Buffer.from("test image data"),
-        contentType: "image/png",
-      });
+      mockStorageGetStream.mockResolvedValueOnce(
+        streamed(Buffer.from("test image data"), "image/png"),
+      );
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
+    });
+
+    it("should serve the body from getStream, never get", async () => {
+      mockSession({ id: "user-1", email: "admin@example.com", role: "admin" });
+      mockStorageGetStream.mockResolvedValueOnce(
+        streamed(Buffer.from("test image data"), "image/png"),
+      );
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Length")).toBe("15");
+      expect(await res.text()).toBe("test image data");
+      expect(mockStorageGet).not.toHaveBeenCalled();
     });
 
     it("should return 404 when storage returns null", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGet.mockResolvedValueOnce(null);
+      mockStorageGetStream.mockResolvedValueOnce(null);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(404);
@@ -171,10 +191,9 @@ describe("Files Routes", () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGet.mockResolvedValueOnce({
-        data: Buffer.from("test image data"),
-        contentType: "image/png",
-      });
+      mockStorageGetStream.mockResolvedValueOnce(
+        streamed(Buffer.from("test image data"), "image/png"),
+      );
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -185,10 +204,9 @@ describe("Files Routes", () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGet.mockResolvedValueOnce({
-        data: Buffer.from("test image data"),
-        contentType: "image/png",
-      });
+      mockStorageGetStream.mockResolvedValueOnce(
+        streamed(Buffer.from("test image data"), "image/png"),
+      );
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -203,10 +221,9 @@ describe("Files Routes", () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGet.mockResolvedValueOnce({
-        data: Buffer.from("test image data"),
-        contentType: "image/png",
-      });
+      mockStorageGetStream.mockResolvedValueOnce(
+        streamed(Buffer.from("test image data"), "image/png"),
+      );
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -221,10 +238,9 @@ describe("Files Routes", () => {
         mockSession({ id: "user-1", email: "test@example.com", role: "user" });
         mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-        mockStorageGet.mockResolvedValueOnce({
-          data: Buffer.from(body),
-          contentType,
-        });
+        mockStorageGetStream.mockResolvedValueOnce(
+          streamed(Buffer.from(body), contentType),
+        );
         const res = await app.request(`/files/org-1/ws-1/chat-1/msg-1/${key}`);
         expect(res.status).toBe(200);
         expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
