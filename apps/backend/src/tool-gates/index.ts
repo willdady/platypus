@@ -93,15 +93,16 @@ const runGate = async (
     if (verdict !== "allow" && verdict !== "ask" && verdict !== "deny") {
       throw new Error(`returned ${JSON.stringify(verdict)}, not a Verdict`);
     }
-    const reason =
-      typeof answer.reason === "string" && answer.reason.trim()
-        ? `: ${answer.reason.trim()}`
-        : ".";
+    const given = typeof answer.reason === "string" ? answer.reason.trim() : "";
+    const reason = given ? `: ${given}` : ".";
     return verdict === "ask"
       ? {
           verdict,
           reason: `The "${gate.name}" Tool gate wants a person to approve this call, and no one can approve it here${reason}`,
-          ask: `The "${gate.name}" Tool gate wants a person to approve this call${reason}`,
+          // The User is shown the gate's own words, when it gave any.
+          ask:
+            given ||
+            `The "${gate.name}" Tool gate wants a person to approve this call.`,
         }
       : { verdict, reason: `Blocked by the "${gate.name}" Tool gate${reason}` };
   } catch (error) {

@@ -311,6 +311,61 @@ describe("ChatSink", () => {
 
   // Issue #1297: a peer tells a live run from one lost with its instance by
   // the Chat's heartbeat.
+  // Issue #1256: answers are checked again under the claim, so two answers
+  // racing for one reply never both run it.
+  describe("answered tool approvals", () => {
+    const call = (state: string, approval: Record<string, unknown>) => ({
+      type: "tool-wipe",
+      toolCallId: "tc1",
+      state,
+      input: {},
+      approval: { id: "ap1", ...approval },
+    });
+    const waitingParts = [call("approval-requested", {})];
+    const answered: PlatypusUIMessage = {
+      ...a0,
+      parts: [call("approval-responded", { approved: true })],
+    } as unknown as PlatypusUIMessage;
+    const resumeSink = () =>
+      submitSink({ message: undefined, parentId: "a0", answered: [answered] });
+
+    it("writes the answers with the claim", async () => {
+      const fake = seedChat();
+      rowOf(fake, "chat_message", "a0")!.parts = waitingParts;
+
+      await resumeSink().onStart({ runId: "chat-1", messages: [u0, answered] });
+
+      expect(rowOf(fake, "chat_message", "a0")?.parts).toEqual(answered.parts);
+      expect(rowOf(fake, "chat", "chat-1")?.activeLeafId).toBe("a0");
+    });
+
+    it("refuses a resume whose approvals another turn has answered", async () => {
+      const fake = seedChat();
+      const already = [call("output-available", { approved: true })];
+      rowOf(fake, "chat_message", "a0")!.parts = already;
+
+      await expect(
+        resumeSink().onStart({ runId: "chat-1", messages: [u0, answered] }),
+      ).rejects.toBeInstanceOf(ConflictError);
+      expect(rowOf(fake, "chat_message", "a0")?.parts).toEqual(already);
+      expect(rowOf(fake, "chat", "chat-1")?.status).not.toBe("running");
+    });
+
+    it("leaves a reply another turn has answered when a new message moves on", async () => {
+      const fake = seedChat();
+      const already = [call("output-available", { approved: true })];
+      rowOf(fake, "chat_message", "a0")!.parts = already;
+
+      await submitSink({ answered: [answered] }).onStart({
+        runId: "chat-1",
+        messages: [u0, answered, u1],
+      });
+
+      expect(rowOf(fake, "chat_message", "a0")?.parts).toEqual(already);
+      expect(rowOf(fake, "chat", "chat-1")?.status).toBe("running");
+    });
+  });
+
   describe("run heartbeat", () => {
     const t0 = new Date("2026-08-30T12:00:00.000Z");
     const at = (seconds: number) => new Date(t0.getTime() + seconds * 1000);

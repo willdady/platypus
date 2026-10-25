@@ -8,6 +8,7 @@ import {
 import { ConflictError, isUniqueViolation } from "../../errors.ts";
 import { logger } from "../../logger.ts";
 import { generateChatMetadata } from "../../services/chat-metadata.ts";
+import { stillAwaits } from "../../services/chat-messages.ts";
 import { extractFiles } from "../../storage/utils.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 import { FlushScheduler } from "../flush-scheduler.ts";
@@ -87,8 +88,8 @@ export type ChatSinkParams = {
  * - `onStart`: claim the Chat by flipping its row to `status: "running"`
  *   (creating it for a new Chat), insert the submitted user message and point
  *   the leaf at the message being answered, so a disconnected client can read
- *   the in-progress state. Tool approvals the turn answers are written too. The claim is the one-run-per-Chat lock across every
- *   backend instance (#1237): a Chat already `running` is a `ConflictError`,
+ *   the in-progress state, and write the tool approvals the turn answers. The
+ *   claim is the one-run-per-Chat lock across every backend instance (#1237): a Chat already `running` is a `ConflictError`,
  *   unless its run's heartbeat has gone stale (#1297) — that run died with its
  *   instance, and the claim takes the Chat from it. Rows the turn owns
  *   (`onClaimed`) are written in the same transaction. Once claimed, the
@@ -220,7 +221,27 @@ export class ChatSink implements RunSink {
         });
       }
 
+      // Checked again under the claim: another turn may have answered since
+      // this one was resolved. A resume that lost that race must not run the
+      // reply a second time; a new message that lost it leaves the answer be.
       for (const answered of this.params.answered ?? []) {
+        const [stored] = await tx
+          .select({ parts: chatMessage.parts })
+          .from(chatMessage)
+          .where(
+            and(
+              eq(chatMessage.chatId, ctx.runId),
+              eq(chatMessage.id, answered.id),
+            ),
+          );
+        if (!stored || !stillAwaits(stored.parts, answered)) {
+          if (answered.id === this.answeredId) {
+            throw new ConflictError(
+              "This reply's approvals have already been answered",
+            );
+          }
+          continue;
+        }
         await tx
           .update(chatMessage)
           .set({ parts: answered.parts })
@@ -233,9 +254,10 @@ export class ChatSink implements RunSink {
       }
 
       // The message being answered: the new one on a submit, the regenerated
-      // reply's own on a regenerate, the reply itself on a resume. A reader arriving before the reply's first
-      // write sees that message, not the reply being replaced, and the
-      // hydration guard keeps a partial reply on screen over it.
+      // reply's own on a regenerate, the reply itself on a resume. A reader
+      // arriving before the reply's first write sees that message, not the
+      // reply being replaced, and the hydration guard keeps a partial reply on
+      // screen over it.
       await tx
         .update(chatTable)
         .set({ activeLeafId: this.answeredId })

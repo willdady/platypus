@@ -403,8 +403,8 @@ const toolParts = (messages: PlatypusUIMessage[] | undefined) =>
     .flatMap((m) => m.parts)
     .filter((p) => (p.type as string) === "tool-wipe") as unknown as ToolPart[];
 
-/** Calls `wipe` twice in one step (`tc1` on /a, `tc2` on /b), then answers. */
-const twoCallsThenAnswer = () => {
+/** Calls `wipe` three times in one step (`tc1`–`tc3` on /a–/c), then answers. */
+const threeCallsThenAnswer = () => {
   const prompts: unknown[] = [];
   let index = 0;
   const model = new MockLanguageModelV3({
@@ -426,6 +426,12 @@ const twoCallsThenAnswer = () => {
                   toolName: "wipe",
                   input: JSON.stringify({ path: "/b" }),
                 },
+                {
+                  type: "tool-call",
+                  toolCallId: "tc3",
+                  toolName: "wipe",
+                  input: JSON.stringify({ path: "/c" }),
+                },
               ],
               "tool-calls",
             )
@@ -443,12 +449,13 @@ describe("a Tool gate's ask in an attended Chat turn", () => {
   const ATTENDED = { ...SCOPE, attended: true };
 
   it("stops the turn after the step and asks the User, with the gate's reason", async () => {
-    gate("cautious", (call) =>
-      (call.args as { path: string }).path === "/a"
-        ? { verdict: "ask", reason: "Looks risky." }
-        : { verdict: "allow" },
-    );
-    const { model, prompts } = twoCallsThenAnswer();
+    const verdicts: Record<string, ToolGateVerdict> = {
+      "/a": { verdict: "ask", reason: "Looks risky." },
+      "/b": { verdict: "allow" },
+      "/c": { verdict: "deny" },
+    };
+    gate("cautious", (call) => verdicts[(call.args as { path: string }).path]);
+    const { model, prompts } = threeCallsThenAnswer();
     const executed: string[] = [];
     const { run, outcome } = startRecordedRun();
 
@@ -460,15 +467,16 @@ describe("a Tool gate's ask in an attended Chat turn", () => {
       }),
     );
 
-    // The allowed call in the same step ran; the model was not called again.
+    // The step's allowed call ran and its denied one did not; the model was
+    // not called again.
     expect(executed).toEqual(["/b"]);
     expect(prompts).toHaveLength(1);
     expect(outcome[0]?.status).toBe("succeeded");
-    const [asked, allowed] = toolParts(messages);
+    const [asked, allowed, denied] = toolParts(messages);
     expect(asked.state).toBe("approval-requested");
-    expect(asked.approval?.requestReason).toContain("Looks risky.");
-    expect(asked.approval?.requestReason).not.toContain("no one can approve");
+    expect(asked.approval?.requestReason).toBe("Looks risky.");
     expect(allowed.state).toBe("output-available");
+    expect(denied.state).toBe("output-denied");
   });
 
   /** Asks once, then answers `approved` for the call and resumes. */
@@ -491,6 +499,9 @@ describe("a Tool gate's ask in an attended Chat turn", () => {
     const reply = stopped.messages?.at(-1) as PlatypusUIMessage;
     const answered = {
       ...reply,
+      // As if the ask fell on the step ceiling: how the first request ended
+      // says nothing about how the resumed reply does.
+      metadata: { ...reply.metadata, stoppedAtStepLimit: true as const },
       parts: reply.parts.map((p) => {
         const part = p as unknown as ToolPart;
         return part.state === "approval-requested"
@@ -536,6 +547,7 @@ describe("a Tool gate's ask in an attended Chat turn", () => {
     const continued = resumed.messages?.at(-1);
     expect(continued?.id).toBe(reply.id);
     expect(toolParts(resumed.messages)[0]?.state).toBe("output-available");
+    expect(continued?.metadata?.stoppedAtStepLimit).toBeUndefined();
   });
 
   it("hands the model a denied call with the User's reason", async () => {

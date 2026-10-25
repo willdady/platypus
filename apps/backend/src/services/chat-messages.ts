@@ -152,6 +152,26 @@ const pendingApprovalIds = (message: PlatypusUIMessage): string[] =>
       : [],
   );
 
+/**
+ * Whether a stored message still waits on what `answered` answers: something
+ * is pending, and `answered` answers all of it. False once another turn has
+ * answered it first.
+ */
+export const stillAwaits = (
+  stored: PlatypusUIMessage["parts"],
+  answered: PlatypusUIMessage,
+): boolean => {
+  const pending = pendingApprovalIds({ ...answered, parts: stored });
+  const responded = new Set(
+    answered.parts.flatMap((part) =>
+      isToolUIPart(part) && part.state === "approval-responded"
+        ? [part.approval.id]
+        : [],
+    ),
+  );
+  return pending.length > 0 && pending.every((id) => responded.has(id));
+};
+
 /** `message` with each approval it waits on answered as `answer` says. */
 const answerApprovals = (
   message: PlatypusUIMessage,

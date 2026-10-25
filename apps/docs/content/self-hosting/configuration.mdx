@@ -407,8 +407,9 @@ the same reason.
   **A gate fails closed.** A gate that errors or takes longer than its own time
   limit stops the call, as if it had said no — or, in a Chat, asks the Workspace
   Owner to approve it. An outage of the model behind `@platypus/decision-gate`
-  is therefore an outage of every tool call on the deployment until it recovers,
-  or until you remove the Plugin from `PLATYPUS_PLUGINS` and restart.
+  therefore stops every tool call in Trigger runs, A2A calls and Sub-Agent runs,
+  and turns every tool call in a Chat into a request for approval, until it
+  recovers or until you remove the Plugin from `PLATYPUS_PLUGINS` and restart.
 </Callout>
 
 **A call a gate wants approved is asked about only in a Chat.** The reply stops
