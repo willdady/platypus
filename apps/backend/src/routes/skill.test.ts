@@ -183,6 +183,7 @@ describe("Skill Routes", () => {
         scope: "workspace",
         agentIds: ["agent-1"],
         files: [],
+        modified: false,
       });
     });
 

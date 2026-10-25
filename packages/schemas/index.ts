@@ -721,6 +721,10 @@ export const skillBaseSchema = z.object({
   skillPath: z.string().nullable().optional(),
   commitSha: z.string().nullable().optional(),
   installedHash: z.string().nullable().optional(),
+  // Whether a Skill with a source record has been edited since it was
+  // installed or updated: its bundle hash no longer matches `installedHash`.
+  // Present on a single Skill's read. Read-only.
+  modified: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -800,6 +804,11 @@ const githubPathSchema = z
   .regex(/^(?!\/)[^\x00-\x1f\x7f\\]*$/, "Not a valid repository path")
   .refine((path) => !hasDotDotSegment(path), "Not a valid repository path");
 
+/** A full commit SHA, as GitHub writes one: 40 lowercase hex digits. */
+export const commitShaSchema = z
+  .string()
+  .regex(/^[0-9a-f]{40}$/, "Not a commit SHA");
+
 /**
  * Where on GitHub to look for Skills: an owner, a repo, the ref as entered
  * (null for the default branch) and a path within it (`""` for the root).
@@ -853,7 +862,7 @@ export type SkillGithubPreview = z.infer<typeof skillGithubPreviewSchema>;
 export const skillGithubInstallRequestSchema = githubSkillSourceSchema
   .omit({ path: true })
   .extend({
-    commitSha: z.string().regex(/^[0-9a-f]{40}$/, "Not a commit SHA"),
+    commitSha: commitShaSchema,
     skillPaths: z
       .array(githubPathSchema)
       .min(1)
@@ -888,6 +897,42 @@ export const skillGithubInstallResultSchema = z.object({
 export type SkillGithubInstallResult = z.infer<
   typeof skillGithubInstallResultSchema
 >;
+
+/**
+ * An update check on a Skill installed from GitHub: up to date, or what
+ * updating to `toSha` would change. Files are compared by path and sha256;
+ * `skillMd` is `SKILL.md` as an export writes it, before and after.
+ */
+export const skillGithubUpdateCheckSchema = z.discriminatedUnion("upToDate", [
+  z.object({ upToDate: z.literal(true) }),
+  z.object({
+    upToDate: z.literal(false),
+    fromSha: z.string(),
+    toSha: z.string(),
+    files: z.object({
+      added: z.array(z.object({ path: z.string(), size: z.number() })),
+      removed: z.array(z.object({ path: z.string(), size: z.number() })),
+      changed: z.array(
+        z.object({
+          path: z.string(),
+          oldSize: z.number(),
+          newSize: z.number(),
+        }),
+      ),
+    }),
+    skillMd: z.object({ before: z.string(), after: z.string() }),
+    needsSandbox: z.object({ before: z.boolean(), after: z.boolean() }),
+  }),
+]);
+
+export type SkillGithubUpdateCheck = z.infer<
+  typeof skillGithubUpdateCheckSchema
+>;
+
+/** An update: the commit the check resolved, never the ref, so it applies exactly what was reviewed. */
+export const skillGithubUpdateRequestSchema = z.object({
+  commitSha: commitShaSchema,
+});
 
 // Tool
 

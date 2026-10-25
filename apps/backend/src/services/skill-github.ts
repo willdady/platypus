@@ -1,11 +1,13 @@
 import { eq } from "drizzle-orm";
 import {
+  commitShaSchema,
   githubSkillSourceSchema,
   type GithubSkillSource,
   type SkillGithubCandidate,
   type SkillGithubInstallRequest,
   type SkillGithubInstallResult,
   type SkillGithubPreview,
+  type SkillGithubUpdateCheck,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
 import { skill as skillTable } from "../db/schema.ts";
@@ -18,6 +20,7 @@ import {
   ValidationError,
 } from "../errors.ts";
 import {
+  buildSkillMd,
   bundleNeedsSandbox,
   inflateZipRecord,
   listZipRecords,
@@ -27,15 +30,21 @@ import {
   type ParsedSkillBundle,
   type ZipRecord,
 } from "./skill-bundle-format.ts";
-import { createSkillFromBundle } from "./skill-bundle.ts";
+import {
+  createSkillFromBundle,
+  fieldsOf,
+  listSkillFiles,
+  updateSkillBundleFromGithub,
+  writableSkillWhere,
+} from "./skill-bundle.ts";
 import type { SkillScope } from "./skill.ts";
 
 /**
  * Installing Skills from GitHub (ADR-0037): the ref resolves to a commit SHA
  * through the REST API, then that commit's zip archive is downloaded from
  * codeload and only the entries under the Skill paths are decompressed, in
- * memory. One REST request and one download per preview; an install, which
- * already has its SHA, makes only the download. Only the two allowlisted hosts
+ * memory. One REST request and one download per preview or update check; an
+ * install or update, which already has its SHA, makes only the download. Only the two allowlisted hosts
  * are ever requested, and users supply names, never a URL.
  */
 
@@ -205,7 +214,7 @@ const resolveCommit = async (source: GithubSkillSource): Promise<string> => {
   }
   if (!response.ok) throw upstream(response);
   const sha = (await response.text()).trim();
-  if (!/^[0-9a-f]{40}$/.test(sha)) {
+  if (!commitShaSchema.safeParse(sha).success) {
     throw new UpstreamError("GitHub didn't answer with a commit SHA");
   }
   return sha;
@@ -415,4 +424,129 @@ export const installGithubSkills = async (
     }
   }
   return { results };
+};
+
+/** A Skill writable in `scope` that was installed from GitHub, and its source. */
+const requireGithubSkill = async (scope: SkillScope, skillId: string) => {
+  const [row] = await db
+    .select()
+    .from(skillTable)
+    .where(await writableSkillWhere(scope, skillId))
+    .limit(1);
+  if (!row) throw new NotFoundError("Skill not found");
+  if (
+    row.sourceType !== "github" ||
+    !row.source ||
+    row.skillPath === null ||
+    !row.commitSha
+  ) {
+    fail("This Skill wasn't installed from GitHub");
+  }
+  const [owner, repo, ...rest] = row.source.split("/");
+  if (!owner || !repo || rest.length > 0) {
+    throw new Error(`Skill ${row.id} has a malformed source: ${row.source}`);
+  }
+  return {
+    row,
+    owner,
+    repo,
+    skillPath: row.skillPath,
+    commitSha: row.commitSha,
+  };
+};
+
+/** The Skill at `skillPath` in a commit, validated as an install would be. */
+const fetchSkill = async (
+  owner: string,
+  repo: string,
+  sha: string,
+  skillPath: string,
+): Promise<ParsedSkillBundle> => {
+  const entries = archiveEntries(await fetchArchive(owner, repo, sha));
+  if (!entries.some(({ path }) => path === skillMdPath(skillPath))) {
+    throw new NotFoundError(
+      `No Skill at ${skillPath || "the repository root"} in commit ${sha.slice(0, 7)}`,
+    );
+  }
+  return readSkill(entries, skillPath);
+};
+
+/**
+ * Whether a GitHub-installed Skill's ref has moved, and if so what updating
+ * would change, compared with the Skill as it stands now (local edits
+ * included). An unmoved ref costs one REST request and no download; a ref
+ * that is itself a commit SHA never moves, so costs nothing. Writes nothing.
+ */
+export const checkGithubSkillUpdate = async (
+  scope: SkillScope,
+  skillId: string,
+): Promise<SkillGithubUpdateCheck> => {
+  const { row, owner, repo, skillPath, commitSha } = await requireGithubSkill(
+    scope,
+    skillId,
+  );
+  // A commit SHA never moves.
+  if (commitShaSchema.safeParse(row.ref).success) return { upToDate: true };
+  const toSha = await resolveCommit({
+    owner,
+    repo,
+    ref: row.ref,
+    path: skillPath,
+  });
+  if (toSha === commitSha) return { upToDate: true };
+
+  const bundle = await fetchSkill(owner, repo, toSha, skillPath);
+  const before = new Map(
+    (await listSkillFiles(db, row.id)).map((file) => [file.path, file]),
+  );
+  const after = new Set(bundle.files.map(({ path }) => path));
+  return {
+    upToDate: false,
+    fromSha: commitSha,
+    toSha,
+    files: {
+      added: bundle.files
+        .filter(({ path }) => !before.has(path))
+        .map(({ path, size }) => ({ path, size })),
+      removed: [...before.values()]
+        .filter(({ path }) => !after.has(path))
+        .map(({ path, size }) => ({ path, size })),
+      changed: bundle.files.flatMap(({ path, size, sha256 }) => {
+        const old = before.get(path);
+        return old && old.sha256 !== sha256
+          ? [{ path, oldSize: old.size, newSize: size }]
+          : [];
+      }),
+    },
+    skillMd: {
+      before: buildSkillMd({
+        fields: fieldsOf(row),
+        frontmatter: row.frontmatter,
+      }),
+      after: buildSkillMd(bundle),
+    },
+    needsSandbox: {
+      before: row.needsSandbox,
+      after: bundleNeedsSandbox(bundle.files),
+    },
+  };
+};
+
+/**
+ * Updates a GitHub-installed Skill to the commit its check resolved, never
+ * the ref, so it applies exactly what was reviewed. Local edits are
+ * overwritten; the source record moves to `commitSha`.
+ */
+export const updateGithubSkill = async (
+  scope: SkillScope,
+  skillId: string,
+  commitSha: string,
+) => {
+  const { owner, repo, skillPath } = await requireGithubSkill(scope, skillId);
+  return updateSkillBundleFromGithub(
+    scope,
+    skillId,
+    await fetchSkill(owner, repo, commitSha, skillPath),
+    commitSha,
+  );
 };

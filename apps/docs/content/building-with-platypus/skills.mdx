@@ -154,6 +154,33 @@ An installed Skill's **Bundle** card says where it came from, for example
 folder on GitHub. Editing the Skill in the form keeps that record; **Replace
 bundle** with a zip clears it.
 
+### Update a Skill installed from GitHub
+
+Platypus never checks for updates on its own. To check one Skill, open it and
+click **Check for updates** on its **Bundle** card:
+
+- If the branch or tag it was installed from hasn't moved, the card says **Up
+  to date**. A Skill installed from a commit SHA is always up to date.
+- Otherwise the card shows what updating would change: the files added,
+  removed and changed, a line-by-line comparison of `SKILL.md`, and a note when
+  the Skill starts or stops needing a Sandbox. If the new version has scripts,
+  the [third-party scripts warning](#install) shows again.
+
+Click **Update** to apply it. Platypus applies exactly the commit you reviewed,
+even if the branch has moved again since, and the Skill keeps its GitHub record,
+now at the new commit. If the Skill's folder is gone from the repository, or its
+new version breaks a [zip import rule](#limits), the check says so and the
+Skill is left as it was.
+
+A Skill edited since it was installed or last updated carries a **Modified**
+badge. Updating it replaces the whole Skill, so Platypus asks you to confirm
+before it overwrites your edits.
+
+Checking and updating follow [who can import Skills](#who-can-import-skills). A
+Shared Skill is checked and updated only in **Organization settings → Skills**.
+Each check costs one request to GitHub's API, plus a download when the branch
+has moved.
+
 ### Limits on installing from GitHub
 
 - **Repository size.** Platypus downloads the whole repository at that commit,
@@ -171,8 +198,8 @@ bundle** with a zip clears it.
 
 An Org Admin decides which Workspaces may import Skill bundles, in
 **Organization settings → Skills → Importing in workspaces**. The setting
-covers **Import zip**, **Replace bundle** and **Install from GitHub** in a
-Workspace:
+covers **Import zip**, **Replace bundle**, **Install from GitHub** and
+**Check for updates** in a Workspace:
 
 - **All workspaces** _(the default)_ — every Workspace can import.
 - **Selected workspaces** — only the Workspaces switched on in the list below
