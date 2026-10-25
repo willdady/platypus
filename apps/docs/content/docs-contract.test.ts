@@ -2008,6 +2008,13 @@ const BACKEND_CONSTANTS = [
     cost: "A reader attaching a large PDF is refused at a size the page never warned of.",
   },
   {
+    source: "apps/backend/src/storage/utils.ts",
+    name: "MAX_INLINE_FILE_BYTES",
+    phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A reader expecting the model to reread a large attachment later in the Chat finds it reported unavailable.",
+  },
+  {
     source: "apps/backend/src/services/skill-github.ts",
     name: "GITHUB_ARCHIVE_MAX_BYTES",
     phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,

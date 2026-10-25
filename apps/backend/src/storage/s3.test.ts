@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 interface S3ClientConfig {
@@ -191,6 +192,41 @@ describe("S3Storage", () => {
 
       const cmd = sendMock.mock.calls[0][0] as MockCommand;
       expect(cmd.input.ContentDisposition).toBeUndefined();
+    });
+  });
+
+  describe("getStream", () => {
+    it("should pass the response body through with its type and length", async () => {
+      const body = Readable.from([Buffer.from("file content")]);
+      sendMock.mockResolvedValueOnce({
+        Body: body,
+        ContentType: "image/png",
+        ContentLength: 12,
+      });
+
+      const storage = new S3Storage();
+      const result = await storage.getStream("org/ws/chat/msg/0-abc.png");
+
+      const cmd = sendMock.mock.calls[0][0] as MockCommand;
+      expect(cmd._type).toBe("GetObjectCommand");
+      expect(cmd.input).toEqual({
+        Bucket: "test-bucket",
+        Key: "org/ws/chat/msg/0-abc.png",
+      });
+      expect(result).toEqual({
+        stream: body,
+        contentType: "image/png",
+        contentLength: 12,
+      });
+    });
+
+    it("should return null for a missing key", async () => {
+      sendMock.mockRejectedValueOnce(
+        Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" }),
+      );
+
+      const storage = new S3Storage();
+      expect(await storage.getStream("non-existent")).toBeNull();
     });
   });
 

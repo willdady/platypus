@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
-import type { StorageBackend } from "./types.ts";
+import type { StorageBackend, StoredFileStream } from "./types.ts";
 import { logger } from "../logger.ts";
 import { ValidationError } from "../errors.ts";
 import { assertValidStoragePrefix } from "./keys.ts";
@@ -96,6 +96,35 @@ export class DiskStorage implements StorageBackend {
 
       const meta = JSON.parse(metaContent) as { contentType: string };
       return { data, contentType: meta.contentType };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async getStream(key: string): Promise<StoredFileStream | null> {
+    const filePath = this.getFilePath(key);
+    const metaPath = this.getMetaPath(key);
+
+    try {
+      const meta = JSON.parse(await fs.readFile(metaPath, "utf-8")) as {
+        contentType: string;
+      };
+      const handle = await fs.open(filePath);
+      try {
+        const { size } = await handle.stat();
+        // The stream closes the handle once it ends or is destroyed.
+        return {
+          stream: handle.createReadStream(),
+          contentType: meta.contentType,
+          contentLength: size,
+        };
+      } catch (error) {
+        await handle.close();
+        throw error;
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return null;
