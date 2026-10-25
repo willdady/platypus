@@ -69,6 +69,8 @@ there. Its card gets a ⋮ menu with:
 - **Edit in org settings**, linking to the item in the organization settings,
   only for a User who can manage Shared resources (`canManageSharedResource`);
 - the item-specific items that still apply (Pin);
+- **Clone**, for a Shared Agent, only for a User who can create one here
+  (`canCreateAgent`);
 - separator, then **Detach**, in Delete's place.
 
 Pass `shared` to `RowActionsMenu` for both labels.
@@ -112,5 +114,8 @@ timestamps, `scope`) or its run and token state.
 - A cloned Trigger starts disabled, so it never fires beside its original.
 - A cloned Inbound Trigger has no token (`issueToken: false` on the create)
   until the Owner issues one.
+- An Agent clone keeps only the Sub-Agents, Skills and Tool sets visible in the
+  Workspace (the lists the cards count), and the Clone dialog's `note` says how
+  many of each it leaves out.
 - After the create, go to the clone's edit page.
 - Use `CloneDialog` (`components/clone-dialog.tsx`) for the dialog.
