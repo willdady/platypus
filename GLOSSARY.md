@@ -106,7 +106,7 @@ Replacing the content of an older tool result in what a model call receives, lea
 _Avoid_: pruning, compaction (reserve for summarising, which Platypus does not do), context editing, truncation (that names a per-call bound on a single result or reply).
 
 **Token usage**:
-The tokens a **Chat turn** or run was billed for — the vendor's reported input and output counts folded across every model call the turn made. A sum, and legitimately one: each call is billed separately. Distinct from **Context occupancy**, which is a single call's input count and never accumulates — on a long tool-using turn the two differ by roughly an order of magnitude. Counts only: no Provider declares what a model costs per token, so Platypus states no monetary figure anywhere.
+The tokens a **Chat turn** or run was billed for — the vendor's reported input and output counts folded across every model call the turn made. A sum, and legitimately one: each call is billed separately. It spans the run's delegated **Sub-Agent** runs too, which may be on other models. Distinct from **Context occupancy**, which is a single call's input count and never accumulates — on a long tool-using turn the two differ by roughly an order of magnitude. Counts only: no Provider declares what a model costs per token, so Platypus states no monetary figure anywhere.
 _Avoid_: tokens used (ambiguous between this and **Context occupancy** — name which one), cost, spend, context usage.
 
 **Output ceiling**:

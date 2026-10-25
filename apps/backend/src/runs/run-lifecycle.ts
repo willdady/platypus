@@ -2,7 +2,14 @@ import { logger } from "../logger.ts";
 import { rejectedToolInputs } from "../rejected-tool-input.ts";
 import type { ToolActivityEvent } from "../services/tool-activity.ts";
 import { isTruncatedByTokenLimit } from "./stream-error.ts";
-import { accumulateStepStats, type RunStep } from "./run-stats.ts";
+import type { ModelUsage } from "@platypus/schemas";
+import {
+  accumulateStepStats,
+  mergeUsageByModel,
+  withDelegatedUsage,
+  type RunStep,
+  type UsageModel,
+} from "./run-stats.ts";
 import {
   runRegistry,
   TimeoutError,
@@ -30,8 +37,19 @@ export const ABORT_GRACE_MS = 5_000;
  */
 export type RunLifecycle = {
   handle: RunHandle;
-  /** Accumulated as steps finish; read by the terminal callback. */
+  /**
+   * The run's OWN model calls, accumulated as steps finish. What the terminal
+   * callback is handed also counts its delegates — see `withDelegatedUsage`.
+   */
   readonly stats: RunStats;
+  /** The (Provider, model) pair the run's own calls are billed under, so they
+   *  are one row of `usageByModel`. Set by the drive, from its plan. */
+  setUsageModel: (model: UsageModel | undefined) => void;
+  /** Records a delegated run's latest stats, folded into this run's (issue
+   *  #1634). Each call replaces that delegate's previous report. */
+  setDelegateUsage: (delegateRunId: RunId, stats: RunStats) => void;
+  /** The delegates' usage folded so far, by (Provider, model). */
+  delegatedUsage: () => readonly ModelUsage[];
   /**
    * Replace the accumulated statistics with the authoritative per-run figures
    * an SDK result carries (`computeStats`). The accumulator exists so a run
@@ -111,6 +129,11 @@ export const startRun = (params: {
   const { runId, onTerminate } = params;
   const logFields = { runId, ...params.log };
   let stats: RunStats = {};
+  let usageModel: UsageModel | undefined;
+  let delegated: ModelUsage[] = [];
+  const delegateReports = new Map<RunId, readonly ModelUsage[]>();
+  const reported = (): RunStats =>
+    withDelegatedUsage(stats, usageModel, delegated);
   let terminated = false;
   let graceTimer: ReturnType<typeof setTimeout> | undefined;
   /** The Tool session this run must close, once it has one — see
@@ -139,7 +162,7 @@ export const startRun = (params: {
     // time the sink writes the run's terminal record.
     if (disposer) await runDisposer(disposer);
     try {
-      await onTerminate({ status, error, stats });
+      await onTerminate({ status, error, stats: reported() });
     } catch (err) {
       logger.error({ err, ...logFields }, "Error terminating run");
     }
@@ -170,7 +193,12 @@ export const startRun = (params: {
     // and the abort listener below is what terminates the run.
     onTimeout: (error) => {
       logger.error(
-        { ...logFields, kind: error.kind, message: error.message, stats },
+        {
+          ...logFields,
+          kind: error.kind,
+          message: error.message,
+          stats: reported(),
+        },
         "Run timed out",
       );
     },
@@ -210,7 +238,7 @@ export const startRun = (params: {
         "Tool call failed",
       );
     }
-    params.onStepProgress?.(stats);
+    params.onStepProgress?.(reported());
   };
 
   // Start events hold the per-step stall timer down for the duration of the
@@ -297,6 +325,14 @@ export const startRun = (params: {
     setStats: (next: RunStats) => {
       stats = next;
     },
+    setUsageModel: (model) => {
+      usageModel = model;
+    },
+    setDelegateUsage: (delegateRunId, delegate) => {
+      delegateReports.set(delegateRunId, delegate.usageByModel ?? []);
+      delegated = mergeUsageByModel([...delegateReports.values()].flat());
+    },
+    delegatedUsage: () => delegated,
     onStep,
     onStreamChunk: () => handle.noteActivity(),
     onActivity,

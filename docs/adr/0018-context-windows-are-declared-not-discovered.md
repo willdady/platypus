@@ -212,3 +212,12 @@ renders.
 ADR-0039 applies this ADR's principle to a model's Passthrough file types:
 declared by the Operator, never inferred from the Provider type. Nothing above is
 narrowed or withdrawn.
+
+## Notes: Token usage spans delegated Sub-Agent runs
+
+Issue #1634 folds a delegated Sub-Agent run's tokens into its parent run's
+`inputTokens`/`outputTokens` (and their cached-input breakdown), with a
+per-(Provider, model) breakdown beside them. That keeps those fields what this
+ADR said they are, billing sums, and corrects them to cover everything the run
+was billed for. `contextOccupancy` is unchanged: it is still the parent's own
+last call, and Sub-Agent occupancy is still out of scope.

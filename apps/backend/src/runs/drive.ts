@@ -329,6 +329,7 @@ const runStreamedDrive = (
   // earliest point the model request can be said to have been sent.
   const driveStartMs = Date.now();
 
+  run.setUsageModel(opts.plan.usageModel);
   const result = streamText({
     ...modelArgs({ ...opts, plan }, noProgress),
     onStepEnd: (step: RunStep) => {
@@ -358,6 +359,7 @@ const runStreamedDrive = (
       // know whether the loop was stopped or the model was done.
       stepCeiling: opts.plan.maxSteps,
       driveStartMs,
+      delegatedUsage: run.delegatedUsage,
       isClearableTool: (toolName) =>
         isClearableToolName(
           toolName,
@@ -629,6 +631,7 @@ export const driveOnce = async (
   // The plan's tool wrapping is inside the `try` too: nothing above this drive
   // finishes the run if it throws (issue #1122).
   try {
+    run.setUsageModel(opts.plan.usageModel);
     const plan = planRecording(opts.plan, scope);
     const result = await withAgentCausation(opts.agentId, async () => {
       const streamed = streamText({

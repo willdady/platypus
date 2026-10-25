@@ -146,6 +146,7 @@ export const resolveGenerationPlan = async (
   return {
     plan: {
       model,
+      usageModel: { providerId: provider.id, model: resolvedModelId },
       maxSteps,
       // Left off entirely rather than sent as `undefined` when the Provider
       // declares no ceiling for this model (issue #454) — so a reader can

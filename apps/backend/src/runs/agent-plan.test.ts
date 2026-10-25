@@ -264,13 +264,16 @@ describe("resolveGenerationPlan", () => {
       ],
     } satisfies ProviderRow;
 
-    const { resolvedModelId, modelReference } = await resolveGenerationPlan(
-      { agent: { providerId: "p1", modelId: "alias:flagship" } },
-      scope,
-      queriesWith([provider]),
-    );
+    const { plan, resolvedModelId, modelReference } =
+      await resolveGenerationPlan(
+        { agent: { providerId: "p1", modelId: "alias:flagship" } },
+        scope,
+        queriesWith([provider]),
+      );
 
     expect(resolvedModelId).toBe("gpt-4");
+    // Token usage is broken down by the model billed, not the alias (#1634).
+    expect(plan.usageModel).toEqual({ providerId: "p1", model: "gpt-4" });
     // The reference, not the resolution — a repoint must reach every caller.
     expect(modelReference).toBe("alias:flagship");
   });
