@@ -28,6 +28,12 @@ Tool sets come from two kinds of source:
 When an Agent runs, each Tool set it's been granted is resolved into the actual
 tools the model can call.
 
+Granting a tool does not guarantee it runs. A **Tool gate**, contributed by a
+Plugin the Operator enabled, sees every call before it runs — from any source —
+and can allow it, deny it, or stop to ask a person. See [Configuration → Tool
+gates](/self-hosting/configuration#tool-gates), and [Extending → Tool
+gates](/extending/tool-gates) to write your own.
+
 ## MCP
 
 **MCP** stands for the Model Context Protocol — an open standard for exposing
