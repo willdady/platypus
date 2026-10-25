@@ -1928,6 +1928,65 @@ describe("AgentRunner.stream — success & interruption", () => {
     expect(finish.messages).toEqual([partial]);
   });
 
+  // Issue #1613: the drive's final stamping — tool durations, the steps that
+  // finished as it unwound — used to land on a run the abort had already
+  // finished, and was discarded.
+  it("finalises a cancelled run with the drive's final messages and stats", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeStreamText();
+
+    const sink = new RecordingSink();
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-cancel-final" },
+      sink,
+      options: { origin: "http://test" },
+    });
+
+    expect(runRegistry.cancel("s-cancel-final")).toBe(true);
+    await tick();
+    // The SDK unwinds: the in-flight tool call and its step end, then the UI
+    // stream hands over the folded final.
+    streamHarness.onToolExecutionEnd!({
+      toolCall: { toolCallId: "call-1" },
+      toolExecutionMs: 1234,
+    });
+    streamHarness.onStepEnd!({ usage: {}, toolCalls: [] });
+    await streamHarness.onFinish!({
+      messages: [
+        {
+          id: "m1",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-getCard",
+              toolCallId: "call-1",
+              state: "output-available",
+              input: {},
+              output: {},
+            },
+          ],
+        },
+      ],
+    });
+    expect(sink.names()).not.toContain("onFinish");
+    queue.end();
+    await tick();
+
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("cancelled");
+    expect(
+      (finish.messages![0] as { parts: unknown[] }).parts[0],
+    ).toMatchObject({ toolMetadata: { durationMs: 1234 } });
+    expect(finish.stats?.steps).toBe(1);
+    expect(runRegistry.has("s-cancel-final")).toBe(false);
+  });
+
   it("finalises as failed with a TimeoutError and the partial messages on per-run timeout", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const queue = new streamHarness.AsyncQueue();
@@ -1952,10 +2011,17 @@ describe("AgentRunner.stream — success & interruption", () => {
     };
     queue.push(partial);
     await tick();
-    // Let the per-run timer fire -> registry aborts -> onTimeout -> finalize.
-    await vi.waitFor(() => expect(sink.names()).toContain("onFinish"));
+    // Let the per-run timer fire -> registry aborts the signal the model call
+    // was handed -> the SDK observes it and the stream ends -> the drive
+    // finishes the run.
+    await vi.waitFor(() =>
+      expect(
+        (mockStreamText.mock.calls[0][0] as { abortSignal: AbortSignal })
+          .abortSignal.aborted,
+      ).toBe(true),
+    );
     queue.end();
-    await tick();
+    await vi.waitFor(() => expect(sink.names()).toContain("onFinish"));
 
     const finish = sink.events.at(-1) as Extract<
       LifecycleEvent,

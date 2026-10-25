@@ -3,7 +3,7 @@ import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { MockLanguageModelV3, convertArrayToReadableStream } from "ai/test";
 import { z } from "zod";
 
-import { startRun } from "./run-lifecycle.ts";
+import { ABORT_GRACE_MS, startRun } from "./run-lifecycle.ts";
 import { driveOnce } from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import { runRegistry, type RunHandle } from "./run-registry.ts";
@@ -190,7 +190,8 @@ describe("a delegated run inside a parent run", () => {
   it("still stalls a parent that is idle for the same span", async () => {
     startParent();
 
-    await vi.advanceTimersByTimeAsync(PER_STEP_MS * 2);
+    // No drive unwinds the parent here, so it is finished by the abort grace.
+    await vi.advanceTimersByTimeAsync(PER_STEP_MS * 2 + ABORT_GRACE_MS);
 
     expect(parentHandle.signal.aborted).toBe(true);
     expect(outcomes.map((o) => o.status)).toEqual(["failed"]);

@@ -2035,6 +2035,13 @@ const BACKEND_CONSTANTS = [
     cost: "A load balancer is configured to wait for a readiness answer that never comes if the page's patience differs from the backend's.",
   },
   {
+    source: "apps/backend/src/runs/run-lifecycle.ts",
+    name: "ABORT_GRACE_MS",
+    phrase: (ms: number) => `${NUMBER_WORDS[ms / 1_000] ?? ms / 1_000} seconds`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A User who presses stop and sends at once is refused for longer than the page said.",
+  },
+  {
     source: "apps/backend/src/jobs/scheduler.ts",
     name: "RECOVERY_STALE_BUFFER_MS",
     phrase: (ms: number) =>

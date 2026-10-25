@@ -620,7 +620,9 @@ untouched.
   Pressing stop, or **Escape**, **cancels the run on the server**, not only your
   connection to it. The Agent stops working, the tokens stop being spent, and
   the partial reply is kept. Closing the tab does none of that — the run carries
-  on and finishes.
+  on and finishes. A tool call that was mid-way can take up to five seconds to
+  wind down, and the Chat shows as stopped once it has; a message sent before
+  then is refused.
 </Callout>
 
 ## Per-Chat settings, and when they exist
