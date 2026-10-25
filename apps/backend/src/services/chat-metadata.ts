@@ -13,6 +13,20 @@ import { UNTITLED_CHAT_TITLE, chatSchema } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import { logger } from "../logger.ts";
 import { loadActivePath } from "./chat-messages.ts";
+import { withDeadline } from "../utils/abort-race.ts";
+
+/**
+ * Bounds on titling (issue #1618). A title needs the start of a conversation,
+ * not all of it, and a sample of the Workspace's tags, not every one. The
+ * deadline covers the call's retries. After `MAX_TITLE_FAILURES` failed
+ * attempts a Chat stays Untitled until the User names it.
+ */
+const MAX_CONVERSATION_CHARS = 8_000;
+const MAX_EXISTING_TAGS = 100;
+const TITLE_TIMEOUT_MS = 30_000;
+const TITLE_MAX_OUTPUT_TOKENS = 2_048;
+const TITLE_MAX_RETRIES = 1;
+export const MAX_TITLE_FAILURES = 3;
 
 export type GenerateChatMetadataParams = {
   chatId: string;
@@ -76,6 +90,7 @@ export const generateChatMetadata = async (
       id: chatTable.id,
       title: chatTable.title,
       activeLeafId: chatTable.activeLeafId,
+      titleFailures: chatTable.titleFailures,
     })
     .from(chatTable)
     .where(
@@ -89,6 +104,7 @@ export const generateChatMetadata = async (
   // conditional write below is the real concurrency backstop; this just avoids
   // a pointless model call in the common already-titled case.
   if (chat.title !== UNTITLED_CHAT_TITLE) return null;
+  if (chat.titleFailures >= MAX_TITLE_FAILURES) return null;
 
   const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
   if (!hasUserText(messages)) return null;
@@ -132,12 +148,15 @@ export const generateChatMetadata = async (
   }
   const provider = found.row;
 
-  // Fetch existing tags from all chats in the workspace so the model can reuse
-  // them rather than minting near-duplicate variants.
+  // Fetch the workspace's most-used tags so the model can reuse them rather
+  // than minting near-duplicate variants.
   const existingTagsResult = await db.execute(sql`
-    SELECT DISTINCT value as tag
+    SELECT value as tag
     FROM ${chatTable}, jsonb_array_elements_text(${chatTable.tags})
     WHERE ${chatTable.workspaceId} = ${workspaceId}
+    GROUP BY value
+    ORDER BY count(*) DESC, value
+    LIMIT ${MAX_EXISTING_TAGS}
   `);
   const existingTags = existingTagsResult.rows.map((row) => row.tag as string);
 
@@ -153,7 +172,8 @@ export const generateChatMetadata = async (
       });
       return `${m.role}:\n${message.join("")}`;
     })
-    .join("\n");
+    .join("\n")
+    .slice(0, MAX_CONVERSATION_CHARS);
 
   const promptParts = [
     `Generate a short, descriptive title for this chat conversation. You MAY use at most one emoji. The complete title MUST NOT exceed 30 characters.`,
@@ -174,16 +194,47 @@ export const generateChatMetadata = async (
 
   promptParts.push(`Conversation:\n${conversationText}`);
 
-  const { output } = await generateText({
-    model,
-    output: Output.object({
-      schema: z.object({
-        title: z.string(),
-        tags: z.array(z.string()),
-      }),
-    }),
-    prompt: promptParts.join("\n"),
-  });
+  // Counted where a model call was made and produced nothing usable, so the
+  // warning that titling gave up is logged once, by the attempt that hit it.
+  const recordFailure = async () => {
+    const [counted] = await db
+      .update(chatTable)
+      .set({ titleFailures: sql`${chatTable.titleFailures} + 1` })
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.title, UNTITLED_CHAT_TITLE)),
+      )
+      .returning({ titleFailures: chatTable.titleFailures });
+    if (counted?.titleFailures === MAX_TITLE_FAILURES) {
+      logger.warn(
+        { chatId, workspaceId, failures: MAX_TITLE_FAILURES },
+        "Chat titling gave up: the chat stays Untitled until renamed",
+      );
+    }
+  };
+
+  let output: { title: string; tags: string[] };
+  try {
+    ({ output } = await withDeadline(
+      (abortSignal) =>
+        generateText({
+          model,
+          output: Output.object({
+            schema: z.object({
+              title: z.string(),
+              tags: z.array(z.string()),
+            }),
+          }),
+          prompt: promptParts.join("\n"),
+          maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS,
+          maxRetries: TITLE_MAX_RETRIES,
+          abortSignal,
+        }),
+      TITLE_TIMEOUT_MS,
+    ));
+  } catch (error) {
+    await recordFailure();
+    throw error;
+  }
 
   let newTitle = output.title;
   // Truncate the title if it exceeds 30 characters. This is needed as some
@@ -192,9 +243,11 @@ export const generateChatMetadata = async (
     newTitle = newTitle.slice(0, 29) + "…";
   }
   // This write skips zod, so check the title here. A too-short one is not
-  // padded: the chat stays Untitled and a later turn tries again.
+  // padded: the chat stays Untitled and a later turn tries again, up to
+  // `MAX_TITLE_FAILURES`.
   if (!chatSchema.shape.title.safeParse(newTitle).success) {
     logger.warn({ chatId, title: newTitle }, "Generated chat title rejected");
+    await recordFailure();
     return null;
   }
 

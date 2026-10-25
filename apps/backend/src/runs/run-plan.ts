@@ -12,6 +12,7 @@ import {
 } from "./tool-result-clearing.ts";
 import { stepOccupancy } from "./run-stats.ts";
 import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
+import { capToolResults } from "../services/tool-result.ts";
 
 /**
  * Prompt caching — one mechanism is not enough (ADR-0020 Notes, issue #682).
@@ -159,7 +160,9 @@ export const buildModelInvocation = (
           content: plan.system,
           providerOptions: BEDROCK_CACHE_POINT,
         } satisfies SystemModelMessage),
-  tools: plan.tools,
+  // Every tool's result is capped here, core-built ones included: the one seam
+  // every Drive passes through (issue #1618).
+  tools: capToolResults(plan.tools),
   stopWhen: options.extraStopCondition
     ? [stepCountIs(plan.maxSteps), options.extraStopCondition]
     : [stepCountIs(plan.maxSteps)],

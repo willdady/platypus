@@ -252,6 +252,10 @@ read the Tool's parameters and result; it stays collapsed until you do, even
 while the Tool is still running. A long name is cut short on a narrow screen —
 hover over it for the whole name.
 
+A very large result is cut short before the model sees it, and ends with a
+`[truncated: …]` note saying how long it was. The Chat keeps the shortened
+result, so the note is what you read too.
+
 Tool calls that follow one another are grouped into a single collapsed row,
 even when there is only one. While the reply is still working on them, the row
 shows a playful verb; once the reply moves on or finishes, it lists the names

@@ -1,0 +1,1 @@
+ALTER TABLE "chat" ADD COLUMN "title_failures" integer DEFAULT 0 NOT NULL;

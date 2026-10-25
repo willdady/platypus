@@ -46,10 +46,15 @@ describe("generateEmbedding", () => {
 
     expect(result).toEqual([0.1, 0.2, 0.3]);
     expect(embeddingModelFn).toHaveBeenCalledWith("text-embedding-3-small");
-    expect(mockEmbed).toHaveBeenCalledWith({
-      model: { modelId: "text-embedding-3-small" },
-      value: "hello world",
-    });
+    expect(mockEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: { modelId: "text-embedding-3-small" },
+        value: "hello world",
+        maxRetries: 1,
+      }),
+    );
+    const [options] = mockEmbed.mock.calls[0] as [{ abortSignal: unknown }];
+    expect(options.abortSignal).toBeInstanceOf(AbortSignal);
   });
 
   it("throws when the provider does not support embeddings", async () => {

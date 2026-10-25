@@ -31,6 +31,7 @@ import { generateEmbedding } from "./embedding.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { loadActivePath } from "./chat-messages.ts";
 import { errorMessage } from "../utils/error-message.ts";
+import { withDeadline } from "../utils/abort-race.ts";
 
 /**
  * How much one pass may send, in tokens estimated as characters ÷ 4: half the
@@ -41,6 +42,21 @@ const BUDGET_SHARE = 0.5;
 const DEFAULT_BUDGET_TOKENS = 32_000;
 const CONTEXT_SHARE = 0.25;
 const CHARS_PER_TOKEN = 4;
+
+/**
+ * Bounds on the summary call (issue #1618). The batch holds the cluster-wide
+ * extraction lock, so a hung provider must cost one Chat a bounded wait rather
+ * than stall extraction everywhere. The deadline covers the call's retries.
+ */
+export const SUMMARY_TIMEOUT_MS = 120_000;
+const SUMMARY_MAX_OUTPUT_TOKENS = 8_192;
+const SUMMARY_MAX_RETRIES = 1;
+
+/**
+ * How long one batch may keep starting Chats. Checked before each, like the
+ * shutdown signal: the Chat in flight still finishes, under its own deadline.
+ */
+export const BATCH_DEADLINE_MS = 10 * 60_000;
 
 const SEPARATOR = "\n\n";
 const TRUNCATED = " [truncated]";
@@ -273,11 +289,18 @@ const processChat = async (
   // Call the LLM for summary generation
   let result;
   try {
-    result = await generateText({
-      model,
-      prompt: summaryPrompt,
-      temperature: 0.3,
-    });
+    result = await withDeadline(
+      (abortSignal) =>
+        generateText({
+          model,
+          prompt: summaryPrompt,
+          temperature: 0.3,
+          maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+          maxRetries: SUMMARY_MAX_RETRIES,
+          abortSignal,
+        }),
+      SUMMARY_TIMEOUT_MS,
+    );
   } catch (error) {
     const message = errorMessage(error);
     logger.error(
@@ -501,11 +524,14 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
  * shutdown), the batch stops before its next Chat. The Chat being processed
  * when the signal fires still finishes — aborting mid-write would leave its
  * `memoryExtractionStatus` half-way between `processing` and a terminal state.
+ * {@link BATCH_DEADLINE_MS} stops it the same way, so one batch cannot hold the
+ * extraction lock for longer than that plus one Chat.
  */
 export const processMemoryExtractionBatch = async (
   signal?: AbortSignal,
 ): Promise<void> => {
   logger.info("Starting memory extraction batch");
+  const deadline = Date.now() + BATCH_DEADLINE_MS;
 
   try {
     const chatsToProcess = await findChatsToProcess();
@@ -530,6 +556,12 @@ export const processMemoryExtractionBatch = async (
       if (signal?.aborted) {
         logger.info(
           "Memory extraction batch stopped for shutdown, before the next chat",
+        );
+        return;
+      }
+      if (Date.now() >= deadline) {
+        logger.warn(
+          "Memory extraction batch hit its deadline, before the next chat",
         );
         return;
       }
