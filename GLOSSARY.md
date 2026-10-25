@@ -106,7 +106,7 @@ Replacing the content of an older tool result in what a model call receives, lea
 _Avoid_: pruning, compaction (reserve for summarising, which Platypus does not do), context editing, truncation (that names a per-call bound on a single result or reply).
 
 **Tool-result truncation**:
-Cutting a single tool result that exceeds a fixed size down to that size as it comes back from the tool, with a marker saying it was cut. Applies to every tool that feeds the model, core-built, plugin and **MCP** alike, whether or not a **Context window** was declared. Unlike **Tool-result clearing**, it happens once at ingestion rather than per call, so the cut form is what the next model call receives and what the **Transcript** stores: the User reads the marker too. The marker does not invite re-running the tool, which would return the same oversized result.
+Cutting a single tool result over a fixed size down to that size, with a marker saying so, as it comes back from any tool — core, plugin or **MCP**. Unlike **Tool-result clearing** it happens once, at ingestion, so the cut form is both what the model receives and what the **Transcript** stores; the marker does not invite re-running the tool.
 _Avoid_: clearing (send-time, never stored), compaction.
 
 **Token usage**:

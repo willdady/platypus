@@ -104,13 +104,14 @@ export const createMemoryTools = async (
         .default(5)
         .describe("Maximum number of results to return (1-20, default 5)"),
     }),
-    execute: async ({ query, limit }) => {
+    execute: async ({ query, limit }, { abortSignal }) => {
       try {
         // Generate query embedding
         const queryEmbedding = await generateEmbedding(
           embedding.provider,
           pointerSettingModelId(embedding.modelId),
           query,
+          abortSignal,
         );
 
         // Cosine similarity search using pgvector <=> operator

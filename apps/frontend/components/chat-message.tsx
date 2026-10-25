@@ -225,7 +225,12 @@ function toolCallName(part: MessageToolPart | DynamicToolUIPart): string {
 /** Whether a call's own row shows it as failed. */
 function toolCallErrored(part: MessagePart): boolean {
   if (isLoadSkillPart(part) || isReadSkillFilePart(part)) {
-    return !!(part.errorText || (part.output && "error" in part.output));
+    // A result the backend truncated arrives as a string, whatever its type says.
+    const output: unknown = part.output;
+    return !!(
+      part.errorText ||
+      (output && typeof output === "object" && "error" in output)
+    );
   }
   if (isWebToolPart(part)) {
     return !!(part.errorText ?? normalizedWebTool(part)?.error);

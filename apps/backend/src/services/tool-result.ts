@@ -56,7 +56,11 @@ export const capToolResult = (value: unknown, toolName: string): unknown => {
     { toolName, length: text.length, limit: MAX_TOOL_RESULT_CHARS },
     "Tool result truncated",
   );
-  return `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n${truncatedToolResultMarker(text.length)}`;
+  // Never split a surrogate pair: Postgres rejects the lone half in `jsonb`,
+  // and the cut result is persisted.
+  let end = MAX_TOOL_RESULT_CHARS;
+  if (/[\uD800-\uDBFF]/.test(text.charAt(end - 1))) end--;
+  return `${text.slice(0, end)}\n${truncatedToolResultMarker(text.length)}`;
 };
 
 /**
@@ -119,8 +123,7 @@ const mapToolResults = (
  */
 export const normalizeToolResults = (
   tools: Record<string, Tool>,
-): Record<string, Tool> =>
-  mapToolResults(tools, (result) => normalizeToolResult(result));
+): Record<string, Tool> => mapToolResults(tools, normalizeToolResult);
 
 /**
  * Wrap every tool in a map so its result is capped at

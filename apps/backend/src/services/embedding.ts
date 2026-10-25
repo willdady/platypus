@@ -10,12 +10,14 @@ const EMBEDDING_MAX_RETRIES = 1;
 
 /**
  * Generates an embedding vector for the given text. Throws if the Provider
- * type does not support text embeddings (e.g. Anthropic).
+ * type does not support text embeddings (e.g. Anthropic). `signal` is the
+ * caller's own, such as a Chat turn's, honoured alongside the deadline.
  */
 export const generateEmbedding = async (
   provider: ProviderRow,
   embeddingModelId: ConcreteModelId,
   text: string,
+  signal?: AbortSignal,
 ): Promise<number[]> => {
   const opened = openProvider(provider);
   if (!opened.embeddingModel) {
@@ -33,6 +35,7 @@ export const generateEmbedding = async (
         abortSignal,
       }),
     EMBEDDING_TIMEOUT_MS,
+    signal,
   );
   return embedding;
 };

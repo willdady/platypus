@@ -253,8 +253,8 @@ while the Tool is still running. A long name is cut short on a narrow screen —
 hover over it for the whole name.
 
 A very large result is cut short before the model sees it, and ends with a
-`[truncated: …]` note saying how long it was. The Chat keeps the shortened
-result, so the note is what you read too.
+note marking it truncated and saying how long it was. The Chat keeps the
+shortened result, so you read the same note the model did.
 
 Tool calls that follow one another are grouped into a single collapsed row,
 even when there is only one. While the reply is still working on them, the row
@@ -563,8 +563,10 @@ Each Chat's menu offers:
 <Callout type="info">
   A new Chat is called **Untitled** until a reply comes back, then the backend
   names it from the conversation. If it can't produce a usable title, the Chat
-  stays **Untitled** and the next turn tries again. You don't have to wait —
-  rename it whenever you like and the automatic titling leaves your name alone.
+  stays **Untitled** and the next turn tries again. After a few failed tries it
+  stops, and the Chat stays **Untitled** until you rename it. You don't have to
+  wait — rename it whenever you like and the automatic titling leaves your name
+  alone.
 </Callout>
 
 ## Getting around without the mouse

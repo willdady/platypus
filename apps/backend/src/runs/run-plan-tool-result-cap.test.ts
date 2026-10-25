@@ -4,6 +4,7 @@ import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
 import { buildModelInvocation } from "./run-plan.ts";
 import {
+  capToolResult,
   MAX_TOOL_RESULT_CHARS,
   normalizeToolResults,
   truncatedToolResultMarker,
@@ -147,5 +148,13 @@ describe("tool result size cap", () => {
       { type: "json", value: { ok: true } },
       { type: "text", value: "small" },
     ]);
+  });
+
+  it("never splits a surrogate pair at the cut", () => {
+    const text = `${"x".repeat(MAX_TOOL_RESULT_CHARS - 1)}🦆tail`;
+    const cut = capToolResult(text, "t") as string;
+    expect(cut.startsWith(`${"x".repeat(MAX_TOOL_RESULT_CHARS - 1)}\n[`)).toBe(
+      true,
+    );
   });
 });
