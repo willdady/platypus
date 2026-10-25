@@ -429,6 +429,47 @@ describe("Token usage over a real multi-step stream", () => {
     });
   });
 
+  // Issue #1634: a delegate's tokens were billed to this turn too.
+  it("adds the usage the turn's delegates reported", async () => {
+    const result = streamText({
+      model: mockModel([
+        toolCallStep(usage(1_000, 30)),
+        answerStep(usage(4_200, 70)),
+      ]),
+      prompt: "Ping the service and tell me what it said.",
+      tools: { ping },
+      stopWhen: [stepCountIs(5)],
+    });
+
+    const message = await lastSnapshot(
+      toUIMessageStream({
+        stream: result.stream,
+        messageMetadata: createMessageMetadata({
+          delegatedUsage: () => [
+            {
+              providerId: "p",
+              model: "m",
+              inputTokens: 300,
+              outputTokens: 20,
+              cacheReadTokens: 100,
+            },
+          ],
+        }),
+      }),
+    );
+
+    expect(message?.metadata?.tokenUsage).toEqual({
+      inputTokens: 5_500,
+      outputTokens: 120,
+      cacheReadTokens: 100,
+    });
+    // Occupancy stays the turn's own last call (ADR-0018).
+    expect(message?.metadata?.contextOccupancy).toEqual({
+      inputTokens: 4_200,
+      outputTokens: 70,
+    });
+  });
+
   it("keeps the folded sum from a turn cancelled mid-stream", async () => {
     const controller = new AbortController();
     const result = streamText({

@@ -10,7 +10,7 @@ import {
   applyToolResultClearing,
   DEFAULT_CLEARING_POLICY,
 } from "./tool-result-clearing.ts";
-import { stepOccupancy } from "./run-stats.ts";
+import { stepOccupancy, type UsageModel } from "./run-stats.ts";
 import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
 import { capToolResults } from "../services/tool-result.ts";
 
@@ -62,6 +62,12 @@ export const BEDROCK_CACHE_POINT = {
  */
 export type RunPlan = {
   model: LanguageModel;
+  /**
+   * The (Provider, model) pair `model` was opened from, which the run's Token
+   * usage is broken down by (issue #1634). Set wherever a plan is resolved;
+   * absent only in a test's hand-built plan.
+   */
+  usageModel?: UsageModel;
   tools: Record<string, Tool>;
   system?: string;
   maxSteps: number;

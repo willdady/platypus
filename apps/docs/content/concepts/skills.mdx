@@ -18,11 +18,13 @@ the names and descriptions reach the [system prompt](/concepts/system-prompt), s
 the prompt stays short until a Skill is needed.
 
 A Skill can also be a **bundle**: its instructions plus reference files,
-scripts and assets that travel with them, imported from a zip in the [Agent
-Skills](https://agentskills.io) format. The Agent is told which files the Skill
+scripts and assets that travel with them, in the [Agent
+Skills](https://agentskills.io) format. A bundle arrives one of two ways:
+[imported from a zip](/building-with-platypus/skills#import-a-skill-from-a-zip),
+or [installed from a GitHub
+repository](/building-with-platypus/skills#install-skills-from-github). The Agent is told which files the Skill
 bundles when it loads the Skill, and reads the text ones on demand, so a Skill
-that says "see `forms.md`" works. See [Import a Skill from a
-zip](/building-with-platypus/skills#import-a-skill-from-a-zip).
+that says "see `forms.md`" works.
 
 Where the Agent has a [Sandbox](/concepts/sandboxes), loading a bundled Skill
 also copies it there, so its scripts and assets can be used. See [Skills in a

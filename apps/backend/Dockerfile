@@ -73,7 +73,10 @@ COPY --from=builder --chown=platypus:platypus /app/out/full/ .
 COPY --chown=platypus:platypus apps/backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Expose port
+# The port this image serves on, so EXPOSE, the healthcheck and the server
+# agree without the deployment setting it. The app's own default stays for runs
+# outside a container.
+ENV PORT=4000
 EXPOSE 4000
 
 # Probe the port the server actually listens on: PORT if set, else the app's

@@ -5,6 +5,7 @@ import { mockLogger } from "../test-setup.ts";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { buffer } from "node:stream/consumers";
 
 describe("DiskStorage", () => {
   let tempDir: string;
@@ -74,6 +75,23 @@ describe("DiskStorage", () => {
       await expect(storage.get("dir")).rejects.toMatchObject({
         code: "EISDIR",
       });
+    });
+  });
+
+  describe("getStream", () => {
+    it("streams the object with its content type and length", async () => {
+      const data = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
+      await storage.put("binary.bin", data, "application/octet-stream");
+
+      const result = await storage.getStream("binary.bin");
+
+      expect(result!.contentType).toBe("application/octet-stream");
+      expect(result!.contentLength).toBe(256);
+      expect(await buffer(result!.stream)).toEqual(data);
+    });
+
+    it("returns null for a missing object", async () => {
+      expect(await storage.getStream("non-existent-file")).toBeNull();
     });
   });
 

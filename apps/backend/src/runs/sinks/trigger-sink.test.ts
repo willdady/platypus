@@ -335,6 +335,34 @@ describe("TriggerSink", () => {
       });
     });
 
+    it("persists the per-model breakdown of the token sums", async () => {
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
+      const usageByModel = [
+        { providerId: "p1", model: "big", inputTokens: 70, outputTokens: 40 },
+        { providerId: "p2", model: "small", inputTokens: 30, outputTokens: 10 },
+      ];
+
+      await sink.onFinish({
+        runId: "run-1",
+        status: "succeeded",
+        messages: [],
+        stats: {
+          steps: 2,
+          toolCalls: [],
+          inputTokens: 100,
+          outputTokens: 50,
+          usageByModel,
+        },
+      });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.stats).toMatchObject({
+        inputTokens: 100,
+        outputTokens: 50,
+        usageByModel,
+      });
+    });
+
     it("omits the cache fields for a run whose Provider reported none", async () => {
       const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 

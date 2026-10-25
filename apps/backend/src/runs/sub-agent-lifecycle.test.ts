@@ -3,7 +3,7 @@ import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { MockLanguageModelV3, convertArrayToReadableStream } from "ai/test";
 import { z } from "zod";
 
-import { startRun } from "./run-lifecycle.ts";
+import { ABORT_GRACE_MS, startRun } from "./run-lifecycle.ts";
 import { driveOnce } from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import { runRegistry, type RunHandle } from "./run-registry.ts";
@@ -11,10 +11,11 @@ import { wrapToolsWithActivity } from "../services/tool-activity.ts";
 import {
   createDelegateTool,
   createSubAgentDelegate,
+  type SubAgentDelegate,
 } from "../tools/sub-agent.ts";
 import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import { workspaceScope, orgScope, type WorkspaceScope } from "../scope.ts";
-import type { RunStatus } from "./types.ts";
+import type { ParentRunContext, RunStats, RunStatus } from "./types.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
 /** A delegate's Tool gate scope (ADR-0033): its own session's, unattended. */
@@ -151,7 +152,11 @@ describe("a delegated run inside a parent run", () => {
           readOnlyToolNames: new Set(),
           gateScope: GATE_SCOPE,
         }),
-      parentRun: { runId: "parent", scope: parentScope },
+      parentRun: {
+        runId: "parent",
+        scope: parentScope,
+        setDelegateUsage: parent.setDelegateUsage,
+      },
     });
 
     // Exactly what `prepareChatTurn` hands the model: the one `delegate` tool,
@@ -190,7 +195,8 @@ describe("a delegated run inside a parent run", () => {
   it("still stalls a parent that is idle for the same span", async () => {
     startParent();
 
-    await vi.advanceTimersByTimeAsync(PER_STEP_MS * 2);
+    // No drive unwinds the parent here, so it is finished by the abort grace.
+    await vi.advanceTimersByTimeAsync(PER_STEP_MS * 2 + ABORT_GRACE_MS);
 
     expect(parentHandle.signal.aborted).toBe(true);
     expect(outcomes.map((o) => o.status)).toEqual(["failed"]);
@@ -220,7 +226,11 @@ describe("a delegated run inside a parent run", () => {
           readOnlyToolNames: new Set(),
           gateScope: GATE_SCOPE,
         }),
-      parentRun: { runId: "parent", scope: parentScope },
+      parentRun: {
+        runId: "parent",
+        scope: parentScope,
+        setDelegateUsage: parent.setDelegateUsage,
+      },
     });
 
     const gen = (
@@ -272,7 +282,11 @@ describe("a delegated run's Run events", () => {
   ];
 
   /** A delegate that runs one `work` tool call, then answers. */
-  const workingDelegate = (id: string, name: string) =>
+  const workingDelegate = (
+    id: string,
+    name: string,
+    setDelegateUsage: ParentRunContext["setDelegateUsage"] = () => undefined,
+  ) =>
     createSubAgentDelegate({
       id,
       name,
@@ -313,7 +327,7 @@ describe("a delegated run's Run events", () => {
           readOnlyToolNames: new Set(),
           gateScope: GATE_SCOPE,
         }),
-      parentRun: { runId: "parent", scope: parentScope },
+      parentRun: { runId: "parent", scope: parentScope, setDelegateUsage },
     });
 
   it("nests the delegate's events beneath the parent's delegate event, and loses none across parallel delegates", async () => {
@@ -393,5 +407,190 @@ describe("a delegated run's Run events", () => {
     expect(serialized).not.toContain("Task for");
     expect(serialized).not.toContain("worked");
     expect(serialized).not.toContain("done.");
+  });
+});
+
+/**
+ * Issue #1634: a run reports the tokens its delegates were billed for, however
+ * each delegate ended. Every model call in these fixtures reports `USAGE`
+ * (5 in, 2 out), so each figure below is a count of calls.
+ */
+describe("a delegated run's Token usage", () => {
+  const PARENT = { providerId: "p-parent", model: "big" };
+  const CHILD = { providerId: "p-child", model: "small" };
+
+  const delegateCall = (id: string, subAgent: string) => [
+    { type: "tool-input-start" as const, id, toolName: DELEGATE_TOOL_NAME },
+    { type: "tool-input-end" as const, id },
+    {
+      type: "tool-call" as const,
+      toolCallId: id,
+      toolName: DELEGATE_TOOL_NAME,
+      input: JSON.stringify({ subAgent, task: "Go" }),
+    },
+  ];
+
+  /** A delegate that makes one `work` call per entry of `workMs` (each that
+   *  long), then answers. */
+  const delegateOf = (
+    name: string,
+    parentRun: ParentRunContext,
+    workMs: number[],
+  ) => {
+    let call = 0;
+    return createSubAgentDelegate({
+      id: `sa-${name}`,
+      name,
+      plan: {
+        model: modelOf(
+          ...workMs.map(() =>
+            stream(
+              [
+                { type: "tool-input-start", id: "w1", toolName: "work" },
+                { type: "tool-input-end", id: "w1" },
+                {
+                  type: "tool-call",
+                  toolCallId: "w1",
+                  toolName: "work",
+                  input: "{}",
+                },
+              ],
+              "tool-calls",
+            ),
+          ),
+          stream([
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "Done." },
+            { type: "text-end", id: "t1" },
+          ]),
+        ),
+        usageModel: CHILD,
+        maxSteps: DEFAULT_AGENT_MAX_STEPS,
+      },
+      loadTools: () =>
+        Promise.resolve({
+          tools: {
+            work: {
+              inputSchema: z.object({}),
+              execute: async () => {
+                await sleep(workMs[call++]);
+                return "worked";
+              },
+            },
+          },
+          readOnlyToolNames: new Set(),
+          gateScope: GATE_SCOPE,
+        }),
+      parentRun,
+    });
+  };
+
+  /** Drives a headless parent that delegates to `names` in parallel. */
+  const runParent = async (
+    names: string[],
+    delegateFor: (
+      name: string,
+      parentRun: ParentRunContext,
+    ) => SubAgentDelegate,
+    cancelAfterMs?: number,
+  ) => {
+    let reported: RunStats | undefined;
+    const parent = startRun({
+      runId: `parent-${Math.random().toString(36).slice(2)}`,
+      onTerminate: ({ stats }) => {
+        reported = stats;
+      },
+    });
+    const parentRun: ParentRunContext = {
+      runId: parent.handle.runId,
+      scope: parentScope,
+      setDelegateUsage: parent.setDelegateUsage,
+    };
+    if (cancelAfterMs !== undefined) {
+      // A Chat or Trigger run always holds its Tool session's disposer.
+      await parent.adoptOrDispose(() => Promise.resolve());
+      setTimeout(() => runRegistry.cancel(parent.handle.runId), cancelAfterMs);
+    }
+    const tool = createDelegateTool(
+      names.map((name) => delegateFor(name, parentRun)),
+    );
+    await driveOnce({
+      plan: {
+        model: modelOf(
+          stream(
+            names.flatMap((name, i) => delegateCall(`d${i}`, name)),
+            "tool-calls",
+          ),
+          stream([
+            { type: "text-start", id: "p1" },
+            { type: "text-delta", id: "p1", delta: "All done." },
+            { type: "text-end", id: "p1" },
+          ]),
+        ),
+        usageModel: PARENT,
+        tools: wrapToolsWithActivity(
+          { [DELEGATE_TOOL_NAME]: tool },
+          parent.onActivity,
+        ),
+        maxSteps: 3,
+      },
+      run: parent,
+      prompt: "Fan out",
+    }).catch(() => undefined);
+    return reported;
+  };
+
+  it("folds parallel delegates into the parent's sums, broken down by model", async () => {
+    const reported = await runParent(["Alpha", "Beta"], (name, parentRun) =>
+      delegateOf(name, parentRun, [15]),
+    );
+
+    // Parent: 2 calls. Each delegate: 2 calls, merged into one row.
+    expect(reported).toMatchObject({
+      inputTokens: 30,
+      outputTokens: 12,
+      usageByModel: [
+        { ...PARENT, inputTokens: 10, outputTokens: 4 },
+        { ...CHILD, inputTokens: 20, outputTokens: 8 },
+      ],
+    });
+    // The parent's own last call, never a delegate's (ADR-0018).
+    expect(reported?.contextOccupancy).toBe(5);
+  });
+
+  it("counts what a timed-out delegate was billed before it stopped", async () => {
+    const reported = await runParent(["Alpha", "Slow"], (name, parentRun) =>
+      name === "Slow"
+        ? delegateOf(
+            name,
+            {
+              ...parentRun,
+              timeouts: { perStepTimeoutMs: 60_000, perRunTimeoutMs: 60 },
+            },
+            [15, 500],
+          )
+        : delegateOf(name, parentRun, [15]),
+    );
+
+    // Parent: 2 calls. Alpha: 2 calls. Slow: 1 completed step, then timed out
+    // in its second step's tool call — a step counts once it has finished.
+    expect(reported?.usageByModel).toEqual([
+      { ...PARENT, inputTokens: 10, outputTokens: 4 },
+      { ...CHILD, inputTokens: 15, outputTokens: 6 },
+    ]);
+  });
+
+  it("counts a delegate cancelled along with its parent", async () => {
+    const reported = await runParent(
+      ["Slow"],
+      (name, parentRun) => delegateOf(name, parentRun, [15, 500]),
+      100,
+    );
+
+    // The parent's one call never finished its step — the delegate was still
+    // running — so the only usage recorded is the delegate's completed step.
+    expect(reported?.usageByModel).toEqual([
+      { ...CHILD, inputTokens: 5, outputTokens: 2 },
+    ]);
   });
 });

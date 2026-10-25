@@ -25,6 +25,9 @@ export const CRASH_DRAIN_MS = 2_000;
 export const drainRuns = async (
   timeoutMs: number = SHUTDOWN_DRAIN_MS,
 ): Promise<boolean> => {
+  // Stopping, so each cancelled run finishes at once rather than after the
+  // abort grace (`run-lifecycle.ts`).
+  runRegistry.beginStop();
   for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
   return runRegistry.whenIdle(timeoutMs);
 };

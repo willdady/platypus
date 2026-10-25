@@ -668,7 +668,8 @@ that recorded an unusually large number of events keeps the first ten
 thousand and marks the point past which later events are missing.
 
 Among the per-run stats, **in / out** are the run's total token counts across
-every step — what the run cost — while **context** is a different quantity: how
+every step, including those of any Sub-Agents it delegated to — what the run
+cost — while **context** is a different quantity: how
 much of the model's Context window the conversation filled on the run's final
 step. Watch that one to see a Trigger heading for its model's limit before it
 starts failing there. It is absent for a Provider that reports no token usage.

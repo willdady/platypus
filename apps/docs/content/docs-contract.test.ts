@@ -831,6 +831,36 @@ describe("the uploaded-files location the self-hosting pages promise", () => {
   });
 });
 
+// --- the port the backend image serves on ------------------------------------
+
+/**
+ * The backend configuration page says the image sets `PORT` to the port it
+ * exposes. Compose no longer sets it, so a mismatch here serves the backend on
+ * a port nothing publishes.
+ */
+describe("the port the backend image serves on", () => {
+  const page = "reference/backend-configuration.mdx";
+  const imagePort = dockerfileEnv("PORT");
+
+  it("serves on the port the image exposes", () => {
+    const exposed = DOCKERFILE.match(/^EXPOSE (\d+)\s*$/m)?.[1];
+    expect(
+      imagePort?.value,
+      `${BACKEND_DOCKERFILE} declares no \`ENV PORT\` matching its ` +
+        `\`EXPOSE ${exposed}\`, so a container started without PORT serves on ` +
+        `the app's default instead of the exposed port.`,
+    ).toBe(exposed);
+  });
+
+  it("names that port on the backend configuration page", () => {
+    expect(
+      readDoc(page).includes(`image sets it to \`${imagePort?.value}\``),
+      `apps/docs/content/${page} must say the backend image sets PORT to ` +
+        `\`${imagePort?.value}\` (${BACKEND_DOCKERFILE}:${imagePort?.line}).`,
+    ).toBe(true);
+  });
+});
+
 // --- webhook events ----------------------------------------------------------
 
 describe("webhook events", () => {
@@ -1978,6 +2008,13 @@ const BACKEND_CONSTANTS = [
     cost: "A reader attaching a large PDF is refused at a size the page never warned of.",
   },
   {
+    source: "apps/backend/src/storage/utils.ts",
+    name: "MAX_INLINE_FILE_BYTES",
+    phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A reader expecting the model to reread a large attachment later in the Chat finds it reported unavailable.",
+  },
+  {
     source: "apps/backend/src/services/skill-github.ts",
     name: "GITHUB_ARCHIVE_MAX_BYTES",
     phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
@@ -2033,6 +2070,13 @@ const BACKEND_CONSTANTS = [
     phrase: (ms: number) => `${NUMBER_WORDS[ms / 1_000] ?? ms / 1_000} seconds`,
     files: ["self-hosting/docker-compose.mdx"],
     cost: "A load balancer is configured to wait for a readiness answer that never comes if the page's patience differs from the backend's.",
+  },
+  {
+    source: "apps/backend/src/runs/run-lifecycle.ts",
+    name: "ABORT_GRACE_MS",
+    phrase: (ms: number) => `${NUMBER_WORDS[ms / 1_000] ?? ms / 1_000} seconds`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A User who presses stop and sends at once is refused for longer than the page said.",
   },
   {
     source: "apps/backend/src/jobs/scheduler.ts",

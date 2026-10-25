@@ -1,10 +1,10 @@
 import type { TextStreamPart, ToolSet } from "ai";
-import type { CachedInputTokens } from "@platypus/schemas";
+import type { ModelUsage } from "@platypus/schemas";
 import {
   isTruncatedByTokenLimit,
   stoppedAtStepCeiling,
 } from "./stream-error.ts";
-import { pickCachedInput } from "./run-stats.ts";
+import { pickCachedInput, sumUsage } from "./run-stats.ts";
 import type { ChatMessageMetadata } from "../types.ts";
 import type { TurnFacts } from "./types.ts";
 
@@ -75,6 +75,12 @@ export type MessageMetadataFacts = TurnFacts & {
    * no resolved Tool session (a headless Trigger) already gets today.
    */
   isClearableTool?: (toolName: string) => boolean;
+  /**
+   * The usage the turn's delegated Sub-Agent runs have reported so far (issue
+   * #1634), added into `tokenUsage`. Read live: a step's delegates have all
+   * ended by the time that step's `finish-step` part arrives.
+   */
+  delegatedUsage?: () => readonly ModelUsage[];
 };
 
 export const createMessageMetadata = ({
@@ -86,6 +92,7 @@ export const createMessageMetadata = ({
   driveStartMs,
   now = Date.now,
   isClearableTool,
+  delegatedUsage,
 }: MessageMetadataFacts = {}) => {
   // Whether any step of this turn has reported an input-token count. Only
   // read to erase a reading, never to synthesise one — see the `finish-step`
@@ -97,16 +104,10 @@ export const createMessageMetadata = ({
   let steps = 0;
   // The running Token usage sum (issue #354) — folded across every step that
   // reported one, as opposed to `contextOccupancy`'s last-value replacement
-  // right beside it.
-  let inputTokensSum = 0;
-  let outputTokensSum = 0;
-  // Cached-input read and write counts, summed the same way as a breakdown of
-  // the input figure (issue #734). A step that reports none leaves the sum
-  // standing — the deep merge keeps a key an override omits — so a key exists
-  // only once some step has reported a value for it, never as a `0` sum for a
-  // Provider that reports no cache detail.
-  let cacheReadTokensSum = 0;
-  let cacheWriteTokensSum = 0;
+  // right beside it. Its cached-input read and write counts are a breakdown of
+  // the input figure (issue #734), each present only once some step has
+  // reported it, never as a `0` sum for a Provider that reports no cache detail.
+  let ownUsage = sumUsage([]);
   // The turn's clearable Tool names among the ones it has actually called so
   // far — reported in full each time, like `tokenUsage`'s sum, since the
   // merge replaces an array rather than concatenating it.
@@ -167,31 +168,16 @@ export const createMessageMetadata = ({
       // step reports a number, the key stays absent rather than writing a
       // `{ 0, 0 }` sum for a turn whose Provider never reported anything.
       if (typeof inputTokens === "number" || typeof outputTokens === "number") {
-        inputTokensSum += inputTokens ?? 0;
-        outputTokensSum += outputTokens ?? 0;
-        const tokenUsage: {
-          inputTokens: number;
-          outputTokens: number;
-        } & CachedInputTokens = {
-          inputTokens: inputTokensSum,
-          outputTokens: outputTokensSum,
-        };
-        // Cached input, summed across the turn's steps just like the flat input
-        // figure beside it — a breakdown of that number, never subtracted. A
-        // step that reports no read (or write) count adds nothing and, unlike
-        // occupancy, needs no erasing: the sum only grows, and the merge keeps
-        // the key an override omits, so a Provider that reports no cache detail
-        // at all persists no cache key rather than a `0` sum.
-        const cached = pickCachedInput(part.usage.inputTokenDetails);
-        if (cached.cacheReadTokens !== undefined) {
-          cacheReadTokensSum += cached.cacheReadTokens;
-          tokenUsage.cacheReadTokens = cacheReadTokensSum;
-        }
-        if (cached.cacheWriteTokens !== undefined) {
-          cacheWriteTokensSum += cached.cacheWriteTokens;
-          tokenUsage.cacheWriteTokens = cacheWriteTokensSum;
-        }
-        meta.tokenUsage = tokenUsage;
+        ownUsage = sumUsage([
+          ownUsage,
+          {
+            inputTokens: inputTokens ?? 0,
+            outputTokens: outputTokens ?? 0,
+            ...pickCachedInput(part.usage.inputTokenDetails),
+          },
+        ]);
+        // The turn's delegates were billed too, so they count (issue #1634).
+        meta.tokenUsage = sumUsage([ownUsage, ...(delegatedUsage?.() ?? [])]);
       }
 
       if (typeof driveStartMs === "number") {

@@ -329,6 +329,7 @@ const runStreamedDrive = (
   // earliest point the model request can be said to have been sent.
   const driveStartMs = Date.now();
 
+  run.setUsageModel(opts.plan.usageModel);
   const result = streamText({
     ...modelArgs({ ...opts, plan }, noProgress),
     onStepEnd: (step: RunStep) => {
@@ -358,6 +359,7 @@ const runStreamedDrive = (
       // know whether the loop was stopped or the model was done.
       stepCeiling: opts.plan.maxSteps,
       driveStartMs,
+      delegatedUsage: run.delegatedUsage,
       isClearableTool: (toolName) =>
         isClearableToolName(
           toolName,
@@ -629,6 +631,7 @@ export const driveOnce = async (
   // The plan's tool wrapping is inside the `try` too: nothing above this drive
   // finishes the run if it throws (issue #1122).
   try {
+    run.setUsageModel(opts.plan.usageModel);
     const plan = planRecording(opts.plan, scope);
     const result = await withAgentCausation(opts.agentId, async () => {
       const streamed = streamText({
@@ -732,18 +735,19 @@ export const driveOnce = async (
       { error, runId: run.handle.runId, duration: Date.now() - startTime },
       "Run generate failed",
     );
-    // A cancelled run is recorded as cancelled; a timed-out one stays a
-    // failure, and so does anything the model call threw on its own. The status
-    // choice is the shared one; only the error is the thrown one, not the
-    // signal's (there is no `TimeoutError` for a run that merely threw).
+    // A stopped run is recorded as the stop says — cancelled with no error, or
+    // failed with the `TimeoutError` — whatever the aborted call threw.
+    // Anything the model call threw on its own is a failure with the thrown
+    // error (there is no `TimeoutError` for a run that merely threw).
     const decision = decideTerminalStatus(run, {
       noProgress,
       failOnStreamError: false,
     });
-    await run.finish(
-      decision.status === "cancelled" ? "cancelled" : "failed",
-      err,
-    );
+    if (run.handle.signal.aborted) {
+      await run.finish(decision.status, decision.error);
+    } else {
+      await run.finish("failed", err);
+    }
     throw err;
   }
 };

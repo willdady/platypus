@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 interface S3ClientConfig {
@@ -5,6 +6,7 @@ interface S3ClientConfig {
   endpoint?: string;
   credentials?: { accessKeyId: string; secretAccessKey: string };
   forcePathStyle?: boolean;
+  requestHandler?: Record<string, unknown>;
 }
 
 interface MockCommand {
@@ -94,12 +96,28 @@ describe("S3Storage", () => {
       );
     });
 
-    it("should throw if credentials are not set", () => {
+    it("should leave credentials to the SDK default chain when no keys are set", () => {
       delete process.env.STORAGE_S3_ACCESS_KEY_ID;
       delete process.env.STORAGE_S3_SECRET_ACCESS_KEY;
-      expect(() => new S3Storage()).toThrow(
-        "STORAGE_S3_ACCESS_KEY_ID and STORAGE_S3_SECRET_ACCESS_KEY are required",
-      );
+      new S3Storage();
+      expect(capturedConfigs[0]).not.toHaveProperty("credentials");
+    });
+
+    it("should pass static credentials when both keys are set", () => {
+      new S3Storage();
+      expect(capturedConfigs[0].credentials).toEqual({
+        accessKeyId: "test-key",
+        secretAccessKey: "test-secret",
+      });
+    });
+
+    it("should set connection and request timeouts", () => {
+      new S3Storage();
+      expect(capturedConfigs[0].requestHandler).toEqual({
+        connectionTimeout: 5_000,
+        requestTimeout: 30_000,
+        throwOnRequestTimeout: true,
+      });
     });
 
     it("should create S3Client with configured region", () => {
@@ -174,6 +192,41 @@ describe("S3Storage", () => {
 
       const cmd = sendMock.mock.calls[0][0] as MockCommand;
       expect(cmd.input.ContentDisposition).toBeUndefined();
+    });
+  });
+
+  describe("getStream", () => {
+    it("should pass the response body through with its type and length", async () => {
+      const body = Readable.from([Buffer.from("file content")]);
+      sendMock.mockResolvedValueOnce({
+        Body: body,
+        ContentType: "image/png",
+        ContentLength: 12,
+      });
+
+      const storage = new S3Storage();
+      const result = await storage.getStream("org/ws/chat/msg/0-abc.png");
+
+      const cmd = sendMock.mock.calls[0][0] as MockCommand;
+      expect(cmd._type).toBe("GetObjectCommand");
+      expect(cmd.input).toEqual({
+        Bucket: "test-bucket",
+        Key: "org/ws/chat/msg/0-abc.png",
+      });
+      expect(result).toEqual({
+        stream: body,
+        contentType: "image/png",
+        contentLength: 12,
+      });
+    });
+
+    it("should return null for a missing key", async () => {
+      sendMock.mockRejectedValueOnce(
+        Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" }),
+      );
+
+      const storage = new S3Storage();
+      expect(await storage.getStream("non-existent")).toBeNull();
     });
   });
 

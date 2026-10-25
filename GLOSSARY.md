@@ -110,7 +110,7 @@ Cutting a single tool result over a fixed size down to that size, with a marker 
 _Avoid_: clearing (send-time, never stored), compaction.
 
 **Token usage**:
-The tokens a **Chat turn** or run was billed for — the vendor's reported input and output counts folded across every model call the turn made. A sum, and legitimately one: each call is billed separately. Distinct from **Context occupancy**, which is a single call's input count and never accumulates — on a long tool-using turn the two differ by roughly an order of magnitude. Counts only: no Provider declares what a model costs per token, so Platypus states no monetary figure anywhere.
+The tokens a **Chat turn** or run was billed for — the vendor's reported input and output counts folded across every model call the turn made. A sum, and legitimately one: each call is billed separately. It spans the run's delegated **Sub-Agent** runs too, which may be on other models. Distinct from **Context occupancy**, which is a single call's input count and never accumulates — on a long tool-using turn the two differ by roughly an order of magnitude. Counts only: no Provider declares what a model costs per token, so Platypus states no monetary figure anywhere.
 _Avoid_: tokens used (ambiguous between this and **Context occupancy** — name which one), cost, spend, context usage.
 
 **Output ceiling**:
@@ -309,7 +309,7 @@ Removing a Shared resource's Attachment from one Workspace. The Shared resource 
 _Avoid_: delete, unshare, remove (for a Shared resource).
 
 **Clone**:
-Making an independent, Workspace-owned copy of an Agent or a Trigger, with no link back to the original. A cloned Trigger starts disabled, and a cloned Inbound Trigger has no token until the Owner issues one.
+Making an independent, Workspace-owned copy of an Agent or a Trigger, with no link back to the original. A Shared Agent can be cloned into a Workspace; the copy leaves out any Sub-Agents, Skills and Tool sets not attached there. A cloned Trigger starts disabled, and a cloned Inbound Trigger has no token until the Owner issues one.
 _Avoid_: duplicate, copy, fork.
 
 **Blueprint**:

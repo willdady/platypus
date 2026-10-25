@@ -22,6 +22,7 @@ import { RunEventRecorder } from "./run-events.ts";
 import { withStreamKeepalive } from "./stream-keepalive.ts";
 import { hasOutput, holdFirstOutput } from "./first-output.ts";
 import type {
+  ParentRunContext,
   ResolvedRunPlan,
   RunInput,
   RunSink,
@@ -126,7 +127,14 @@ const finishFailedOnThrow = async <T>(
     if (!(err instanceof ConflictError)) {
       logger.error({ error, runId: run.handle.runId }, message);
     }
-    await run.finish("failed", err);
+    // Work that threw because the run was stopped ends as the stop says —
+    // a cancel is `cancelled`, not a failure of the work it interrupted.
+    if (run.handle.signal.aborted) {
+      const { status, error: stopped } = run.statusFromSignal();
+      await run.finish(status, stopped);
+    } else {
+      await run.finish("failed", err);
+    }
     throw err;
   }
 };
@@ -156,6 +164,7 @@ export class AgentRunner {
     timeouts: RunTimeouts | undefined,
     onActivity: (event: ToolActivityEvent) => void,
     signal: AbortSignal,
+    setDelegateUsage: ParentRunContext["setDelegateUsage"],
   ): Promise<ChatTurn> {
     // The turn rides down whole; the runner adds only what it is the one to
     // know. `runId` is the run's own identity, not the turn's, so it is the
@@ -174,8 +183,9 @@ export class AgentRunner {
       onActivity,
       // Sub-agent delegate tools built for this turn register their own runs
       // as children of this one, so they need to know whose child they are and
-      // what bounds this run was started under.
-      run: { runId, scope, timeouts },
+      // what bounds this run was started under, and report their Token usage
+      // back into this run's.
+      run: { runId, scope, timeouts, setDelegateUsage },
       // A cancelled run, or one its step timer has already killed, stops
       // waiting on a Tool set or MCP server that has not answered (#1135).
       signal,
@@ -295,6 +305,7 @@ export class AgentRunner {
           params.timeouts,
           run.onActivity,
           run.handle.signal,
+          run.setDelegateUsage,
         ),
     );
 

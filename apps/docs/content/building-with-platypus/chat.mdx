@@ -25,6 +25,10 @@ alias](/concepts/providers#model-aliases) — a stable name like `fast` — rath
 than its vendor model id. Pick it and your Chat follows whatever model the alias
 points at, including after an Org Admin repoints it.
 
+When more than one Provider offers a model with the same name, the model
+selector button shows the Provider's name after the model's, so you can tell
+which one your next message goes to.
+
 A Chat reopens on the Agent or model it last used. A new Chat opens on the one
 you last picked in this Workspace in this browser, however long ago, and opening
 an existing Chat does not change it. Before your first pick, or in another
@@ -102,6 +106,10 @@ filename. A PDF or DOCX the model can't take natively has its text extracted and
 sent in the file's place. Anything else gets an amber notice naming the file as
 soon as you attach it — remove it or switch to a model that accepts it, or the
 turn is refused.
+
+A file over **20 MiB** reaches the model only on the turn you first send it.
+On later turns, including a regenerated reply, the model is told the file is
+unavailable. The file itself stays in the conversation for you to open.
 
 <Callout type="warning">
   A warning appears above the input when the model you have selected can't read
@@ -295,7 +303,8 @@ into whichever of these it has a reading for:
 - **Input**, **Output**, **Total** tokens — how many tokens this reply was
   billed for. If it took several passes through the model (it called a Tool
   and then answered, say), this is the total across every one of them, not
-  just the last. The **Input** figure already includes any tokens the Provider
+  just the last. It includes the tokens of any Sub-Agents the reply delegated
+  to, even where they run on a different model. The **Input** figure already includes any tokens the Provider
   served from its cache, which are billed at a fraction of the uncached rate,
   so under it a smaller line names how much of the Input was **read from
   cache** (and, where the Provider reports one, how much was **written to
@@ -626,7 +635,9 @@ untouched.
   Pressing stop, or **Escape**, **cancels the run on the server**, not only your
   connection to it. The Agent stops working, the tokens stop being spent, and
   the partial reply is kept. Closing the tab does none of that — the run carries
-  on and finishes.
+  on and finishes. A tool call that was mid-way can take up to five seconds to
+  wind down. Wait until the Chat shows as stopped before you send your next
+  message; one sent sooner is refused.
 </Callout>
 
 ## Per-Chat settings, and when they exist

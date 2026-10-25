@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   accumulateStepStats,
   computeStats,
+  mergeUsageByModel,
   pickCachedInput,
+  withDelegatedUsage,
   type RunStep,
 } from "./run-stats.ts";
 import type { RunStats } from "./types.ts";
@@ -171,5 +173,116 @@ describe("pickCachedInput", () => {
     expect(pickCachedInput({ cacheReadTokens: 900 })).toEqual({
       cacheReadTokens: 900,
     });
+  });
+});
+
+/**
+ * A run's reported Token usage spans its delegated Sub-Agent runs (issue
+ * #1634): the headline sums fold them in and `usageByModel` breaks them down.
+ */
+describe("withDelegatedUsage", () => {
+  const PARENT = { providerId: "p1", model: "big" };
+  const own: RunStats = {
+    steps: 2,
+    inputTokens: 100,
+    outputTokens: 10,
+    cacheReadTokens: 40,
+    contextOccupancy: 60,
+  };
+
+  it("reports the run's own calls as one row when nothing was delegated", () => {
+    expect(withDelegatedUsage(own, PARENT, [])).toEqual({
+      ...own,
+      usageByModel: [
+        {
+          ...PARENT,
+          inputTokens: 100,
+          outputTokens: 10,
+          cacheReadTokens: 40,
+        },
+      ],
+    });
+  });
+
+  it("folds delegates into the sums, rows merged by (Provider, model)", () => {
+    const reported = withDelegatedUsage(own, PARENT, [
+      { providerId: "p2", model: "small", inputTokens: 20, outputTokens: 5 },
+      {
+        providerId: "p1",
+        model: "big",
+        inputTokens: 7,
+        outputTokens: 3,
+        cacheWriteTokens: 2,
+      },
+    ]);
+
+    expect(reported).toEqual({
+      steps: 2,
+      inputTokens: 127,
+      outputTokens: 18,
+      cacheReadTokens: 40,
+      cacheWriteTokens: 2,
+      contextOccupancy: 60,
+      usageByModel: [
+        {
+          ...PARENT,
+          inputTokens: 107,
+          outputTokens: 13,
+          cacheReadTokens: 40,
+          cacheWriteTokens: 2,
+        },
+        { providerId: "p2", model: "small", inputTokens: 20, outputTokens: 5 },
+      ],
+    });
+  });
+
+  // ADR-0018: occupancy is the parent's last call, never a delegate's.
+  it("leaves contextOccupancy as the run's own", () => {
+    expect(
+      withDelegatedUsage(own, PARENT, [
+        { ...PARENT, inputTokens: 9_000, outputTokens: 1 },
+      ]).contextOccupancy,
+    ).toBe(60);
+  });
+
+  it("counts delegates of a run that made no call of its own", () => {
+    expect(
+      withDelegatedUsage({}, PARENT, [
+        { ...PARENT, inputTokens: 5, outputTokens: 2 },
+      ]),
+    ).toEqual({
+      inputTokens: 5,
+      outputTokens: 2,
+      usageByModel: [{ ...PARENT, inputTokens: 5, outputTokens: 2 }],
+    });
+  });
+
+  it("returns the stats unchanged when no row is known", () => {
+    expect(withDelegatedUsage(own, undefined, [])).toBe(own);
+  });
+});
+
+describe("mergeUsageByModel", () => {
+  it("keeps a cache key one row reported and adds none another lacked", () => {
+    expect(
+      mergeUsageByModel([
+        { providerId: "p", model: "m", inputTokens: 1, outputTokens: 1 },
+        {
+          providerId: "p",
+          model: "m",
+          inputTokens: 2,
+          outputTokens: 2,
+          cacheReadTokens: 0,
+        },
+      ]),
+    ).toEqual([
+      {
+        providerId: "p",
+        model: "m",
+        inputTokens: 3,
+        outputTokens: 3,
+        cacheReadTokens: 0,
+      },
+    ]);
   });
 });

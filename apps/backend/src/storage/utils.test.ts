@@ -1,9 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { extractFiles, rewriteStorageUrls, inlineFileUrls } from "./utils.ts";
+import {
+  extractFiles,
+  rewriteStorageUrls,
+  inlineFileUrls,
+  MAX_INLINE_FILE_BYTES,
+} from "./utils.ts";
+import { mockLogger } from "../test-setup.ts";
 import { canonicalStorageKeyFromUrl } from "./file-reference.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { FileUIPart } from "ai";
-import { resetStorage } from "./index.ts";
+import { getStorage, resetStorage } from "./index.ts";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -308,6 +314,49 @@ describe("Storage Utils", () => {
 
       const filePart = inlined[0].parts[0];
       expect((filePart as FileUIPart).url).toBe(storageUrl);
+    });
+
+    describe("size cap", () => {
+      const key = "org-1/ws-1/chat-1/msg-1/0-abc12345.png";
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            { type: "file", url: `storage://${key}`, mediaType: "image/png" },
+          ],
+        },
+      ];
+
+      // Grown sparse, so the test never builds a 20 MiB buffer to store it.
+      const storeOfSize = async (size: number) => {
+        await getStorage().put(key, Buffer.from("x"), "image/png");
+        await fs.truncate(path.join(tempDir, key), size);
+      };
+
+      it("should leave a file over the cap un-inlined and warn", async () => {
+        await storeOfSize(MAX_INLINE_FILE_BYTES + 1);
+
+        const inlined = await inlineFileUrls(messages, backendOrigin, chat);
+
+        expect((inlined[0].parts[0] as FileUIPart).url).toBe(
+          `storage://${key}`,
+        );
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          { key, size: MAX_INLINE_FILE_BYTES + 1 },
+          "File too large to inline, leaving as-is",
+        );
+      });
+
+      it("should inline a file exactly at the cap", async () => {
+        await storeOfSize(MAX_INLINE_FILE_BYTES);
+
+        const inlined = await inlineFileUrls(messages, backendOrigin, chat);
+
+        expect((inlined[0].parts[0] as FileUIPart).url).toMatch(
+          /^data:image\/png;base64,/,
+        );
+      });
     });
 
     // A File part's key round-trips through the client, so a Chat turn can
