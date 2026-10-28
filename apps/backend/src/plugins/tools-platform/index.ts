@@ -1,6 +1,7 @@
 import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
 import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 import { createKanbanTools } from "../../tools/kanban.ts";
+import { createKanbanBoardTools } from "../../tools/kanban-boards.ts";
 import { createDashboardTools } from "../../tools/dashboard.ts";
 import { createTriggerTools } from "../../tools/trigger.ts";
 import { createAgentDiscoveryTools } from "../../tools/agent-discovery.ts";
@@ -26,12 +27,24 @@ export const plugin: PlatypusPlugin = {
   contributes: {
     toolSets: [
       {
+        // Named "Kanban Cards" since "Kanban Boards" joined it; the id stays
+        // "kanban" because Agents persist it.
         id: "kanban",
-        name: "Kanban",
-        category: "Productivity",
-        description: "Manage kanban boards in this workspace",
+        name: "Kanban Cards",
+        category: "Kanban",
+        description:
+          "Read kanban boards and manage their cards and comments in this workspace",
         tools: ({ workspaceId, agentId, orgId, frontendUrl }) =>
           createKanbanTools(workspaceId, agentId, orgId, frontendUrl),
+      },
+      {
+        id: "kanban-boards",
+        name: "Kanban Boards",
+        category: "Kanban",
+        description:
+          "Create, edit and delete kanban boards and their columns in this workspace",
+        tools: ({ workspaceId, orgId, frontendUrl }) =>
+          createKanbanBoardTools(workspaceId, orgId, frontendUrl),
       },
       {
         id: "dashboards",

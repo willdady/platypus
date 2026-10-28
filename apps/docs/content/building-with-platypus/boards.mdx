@@ -1,6 +1,6 @@
 ---
 title: Boards
-description: Kanban boards in a Workspace — create a board with columns, labels, and cards, and let Agents read and update it through the Kanban tool set.
+description: Kanban boards in a Workspace — create a board with columns, labels, and cards, and let Agents read and update it through the Kanban Tool sets.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -94,8 +94,8 @@ starts collapsed; click it to open. On a phone, **Details**, **Comments** and
 
 ## Agents and boards
 
-Grant an Agent the **Kanban** tool set (in the [Agent form](/building-with-platypus/agents)'s
-**Tools** card, under _Productivity_) and it can operate boards directly. The tool
+Grant an Agent the **Kanban Cards** tool set (in the [Agent form](/building-with-platypus/agents)'s
+**Tools** card, under _Kanban_) and it can operate boards directly. The tool
 set lets an Agent:
 
 - **list boards** and **read a board's state** (columns and card summaries),
@@ -117,6 +117,13 @@ set lets an Agent:
   delete only your own comments, but an Agent can edit or delete any comment on
   a card, yours included.
 </Callout>
+
+The board's own structure is a separate grant. **Kanban Boards**, in the same
+_Kanban_ category, lets an Agent **create, rename, relabel and delete boards**,
+and **add, rename, reorder and delete columns**. Grant it only to an Agent whose
+job is to set boards up: deleting a board or a column deletes every card in it.
+The Agent has to name the board exactly to delete it, which stops a misread id,
+not a model that decided the board should go.
 
 This is what makes boards a two-way surface: you arrange the work, and an Agent
 — in a Chat or on a schedule via a [Trigger](/building-with-platypus/triggers) —
@@ -174,7 +181,7 @@ Two things it deliberately does not record:
   a card deletes its history with it.
 </Callout>
 
-An Agent with the **Kanban** tool set can read the same history when it fetches
+An Agent with the **Kanban Cards** tool set can read the same history when it fetches
 a card, but only when asked to, so tell it to check how a card has moved before
 acting on it.
 

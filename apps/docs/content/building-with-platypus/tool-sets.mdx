@@ -22,7 +22,8 @@ has loaded. If something below isn't there, your Operator hasn't enabled it — 
 | **Math Conversions** | Math          | Convert temperature, distance, weight and volume between units.                                                                                                                                        | Always                             |
 | **Time**             | Utilities     | Read the current time and convert between timezones.                                                                                                                                                   | Always                             |
 | **Identifiers**      | Utilities     | Generate unique ids — UUIDs, or short nanoids — for naming records and resources in external systems.                                                                                                  | Always                             |
-| **Kanban**           | Productivity  | Read a Board's columns and card summaries, a card's details and history, and create, move, copy, bulk-edit and delete cards and their comments.                                                        | Always                             |
+| **Kanban Cards**     | Kanban        | Read a Board's columns and card summaries, a card's details and history, and create, move, copy, bulk-edit and delete cards and their comments.                                                        | Always                             |
+| **Kanban Boards**    | Kanban        | List and read Boards, and **create, rename, relabel and delete** them, and add, rename, reorder and delete their columns.                                                                              | Always                             |
 | **Dashboards**       | Productivity  | **Deprecated; removed in v4.0.0.** List Dashboards and their widgets, and write new data into a widget.                                                                                                | Always                             |
 | **Triggers**         | Automation    | List and read Triggers, and **create, edit and delete** them — including scheduling new unattended runs.                                                                                               | Always                             |
 | **Agent Discovery**  | Productivity  | Read-only: list the Agents, Tool sets and Providers in the Workspace, and read one Agent's configuration.                                                                                              | Always                             |
@@ -33,13 +34,14 @@ has loaded. If something below isn't there, your Operator hasn't enabled it — 
 | **Web Fetch**        | Web           | Fetch the contents of a URL the model chose.                                                                                                                                                           | When the Operator loads its Plugin |
 | **Sandbox**          | Sandbox       | Run shell commands, read, write, edit and list files inside the Workspace's Sandbox, and — where the Sandbox supports it — look at an image or document it made, or offer a file to you as a download. | Needs a Sandbox on the Workspace   |
 
-## Three of these change your Workspace
+## Four of these change your Workspace
 
 <Callout type="warning">
-  **Agent Management**, **Skill Management** and **Triggers** are write access to
-  your own configuration. An Agent granted them can create Agents you didn't ask
-  for, rewrite the Instructions of ones you did, delete a Skill, and schedule
-  unattended runs — all from a model's decision inside a Chat turn, with no
+  **Agent Management**, **Skill Management**, **Triggers** and **Kanban Boards**
+  are write access to your own configuration. An Agent granted them can create
+  Agents you didn't ask for, rewrite the Instructions of ones you did, delete a
+  Skill, schedule unattended runs, and delete a Board or a column along with
+  every card in it — all from a model's decision inside a Chat turn, with no
   confirmation step.
 
 Grant them to an Agent whose job is genuinely to build things. Don't grant them
@@ -78,5 +80,5 @@ Admin registers it — see [MCP servers](/building-with-platypus/mcp)).
 - **[Agents & Sub-Agents](/building-with-platypus/agents)** — the **Tools** card
   these appear on.
 - **[Build a daily board digest](/building-with-platypus/board-digest)** — a
-  worked example that grants **Kanban** and puts it to work on a schedule.
+  worked example that grants **Kanban Cards** and puts it to work on a schedule.
 - **[Extending → Tool sets](/extending/tool-sets)** — contribute one of your own.

@@ -129,10 +129,11 @@ plugin API v2, and every core that accepts the current `apiVersion` supplies it.
 Extract it into a standalone exported factory returning a single `Tool`. The
 owning set calls that factory internally; other sets import and call it too.
 
-Use the **same key name** in every set. Tools **claim** names into one map as
-each set resolves, so identical keys collapse to one entry — a deliberate
-dedup, not a collision. Differing keys give the Agent the same tool twice
-under two names.
+Use the **same key name** in every set, and wrap the tool in `shareTool(key,
+tool)`. Tools **claim** names into one map as each set resolves; a name already
+held by the same shared tool is skipped — a deliberate dedup, not a collision.
+Without `shareTool` the later set's copy wins and a collision is logged.
+Differing keys give the Agent the same tool twice under two names.
 
 When two _different_ tools claim one name the later claim wins and the shadowed
 one is logged with both owners, so check the logs before assuming a tool is

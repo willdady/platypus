@@ -39,6 +39,7 @@ import { CLOSER_TIMEOUT_MS } from "./closers.ts";
 import {
   composeToolSet,
   registerToolSet,
+  shareTool,
   TOOL_SET_RESOLVE_TIMEOUT_MS,
 } from "./index.ts";
 import { CORE_BUILTIN_OWNER } from "../plugins/registry.ts";
@@ -277,6 +278,32 @@ describe("openToolSession", () => {
         shadowedToolSet: "set.first",
         shadowedPlugin: "core-a",
       }),
+      expect.stringContaining("same tool name"),
+    );
+  });
+
+  // One implementation two Tool sets both contribute (e.g. `listBoards` in
+  // Kanban Cards and Kanban Boards) is not a contest: each set builds its own
+  // instance, but the turn keeps the first and reports nothing.
+  it("keeps the first claim of a shared tool and reports no collision", async () => {
+    const shared = () =>
+      shareTool("test.read", {
+        description: "read",
+        execute: () => "ok",
+      } as unknown as Tool);
+    register("shared.first", () => ({ read: shared() }));
+    register("shared.second", () => ({ read: shared() }));
+
+    const session = await openToolSession(
+      scope,
+      grantedAgent("shared.first", "shared.second"),
+      noMcps(),
+    );
+
+    expect(Object.keys(session.tools)).toEqual(["read"]);
+    expect(session.gateScope.toolSetIds.get("read")).toBe("shared.first");
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.anything(),
       expect.stringContaining("same tool name"),
     );
   });

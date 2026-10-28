@@ -241,7 +241,7 @@ export default function HomePage() {
           body="A board is scoped to your workspace — columns, cards, labels, and priorities. Both you and your agents read and update the same board, so it's a natural place to track and hand off work."
           points={[
             "Drag cards across columns, with labels and priorities to organize your work",
-            "Grant the Kanban tool set and an agent can create, move, and comment on cards",
+            "Grant the Kanban tool sets and an agent can create, move, and comment on cards, or set up a board of its own",
             "Board changes fire event triggers that can kick off the next agent run",
           ]}
           imageLabel="A Kanban board in a Platypus workspace with columns of cards"

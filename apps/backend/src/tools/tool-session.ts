@@ -25,6 +25,7 @@ import { runCloser, type Closer, type CoreCloserRegistrar } from "./closers.ts";
 import type { ToolGateScope } from "../tool-gates/index.ts";
 import {
   getToolSet,
+  isSameSharedTool,
   reportToolNameCollisions,
   TOOL_SET_RESOLVE_TIMEOUT_MS,
   type CoreToolSetContext,
@@ -437,8 +438,14 @@ export const openToolSession = async (
    * them was at merge time.
    */
   const claim = (incoming: Record<string, Tool>, owner: ToolOwner): void => {
-    reportToolNameCollisions(incoming, owners, owner);
-    for (const [name, tool] of Object.entries(incoming)) {
+    // A shared tool another set already brought is the same tool, not a rival.
+    const fresh = Object.fromEntries(
+      Object.entries(incoming).filter(
+        ([name, tool]) => !isSameSharedTool(tools[name], tool),
+      ),
+    );
+    reportToolNameCollisions(fresh, owners, owner);
+    for (const [name, tool] of Object.entries(fresh)) {
       tools[name] = tool;
       owners.set(name, owner);
     }
