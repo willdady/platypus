@@ -110,6 +110,7 @@ describe("createKanbanTools", () => {
           dueDate: null,
           priority: "none",
           createdByUserId: "user-1",
+          updatedAt: new Date("2026-05-02"),
         },
         {
           id: "card-1",
@@ -122,6 +123,7 @@ describe("createKanbanTools", () => {
           dueDate: new Date("2026-04-01"),
           priority: "high",
           createdByUserId: "user-1",
+          updatedAt: new Date("2026-05-01"),
         },
         {
           id: "card-other",
@@ -206,6 +208,7 @@ describe("createKanbanTools", () => {
                 assignees: [{ type: "agent", id: "agent-1" }],
                 dueDate: new Date("2026-04-01"),
                 priority: "high",
+                updatedAt: new Date("2026-05-01"),
               },
               {
                 id: "card-2",
@@ -216,6 +219,7 @@ describe("createKanbanTools", () => {
                 assignees: [],
                 dueDate: null,
                 priority: "none",
+                updatedAt: new Date("2026-05-02"),
               },
             ],
           },
