@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.29.0](https://github.com/willdady/platypus/compare/v3.28.0...v3.29.0) (2026-10-28)
+
+
+### Features
+
+* **backend:** add Daytona Sandbox backend plugin ([#1706](https://github.com/willdady/platypus/issues/1706)) ([5639ab9](https://github.com/willdady/platypus/commit/5639ab92e94a80494a3e08f60230bdaf07e4aeea))
+* **backend:** include updatedAt in getBoardState card summaries ([#1707](https://github.com/willdady/platypus/issues/1707)) ([95a71c9](https://github.com/willdady/platypus/commit/95a71c90164e4fae883c009fd64a9c8cf420c38b))
+* **tools:** add a Kanban Boards Tool set for board and column management ([#1713](https://github.com/willdady/platypus/issues/1713)) ([589c0d4](https://github.com/willdady/platypus/commit/589c0d41a4149335138f3015eccbeb11b71f2f84))
+
+
+### Bug Fixes
+
+* **backend:** fail a Trigger run cut at the output limit with no answer ([#1712](https://github.com/willdady/platypus/issues/1712)) ([0f62f2a](https://github.com/willdady/platypus/commit/0f62f2a9a73acf8ca99e82948f5416546aeb6325))
+* **frontend:** drop the multi-user claim from the Notifications Tool set description ([#1711](https://github.com/willdady/platypus/issues/1711)) ([a533e0b](https://github.com/willdady/platypus/commit/a533e0bf735b17524325800b072f760a8a74095a))
+
 ## [3.28.0](https://github.com/willdady/platypus/compare/v3.27.0...v3.28.0) (2026-10-25)
 
 
