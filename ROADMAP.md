@@ -47,10 +47,10 @@ Where an item is a good contribution opportunity, it says so.
 
 ### Additional Sandbox backends
 
-The Sandbox interface is pluggable. Two reference backends ship today: **Docker**
+The Sandbox interface is pluggable. Three backends ship today: **Docker**
 (single-node / self-hosted) and **SSH** (attach to a host you already run — the one
-option viable in horizontally-scaled deployments). We want more: hosted
-sandbox-as-a-service (Daytona, Modal), remote VMs, and so on.
+option viable in horizontally-scaled deployments), and **Daytona** (hosted). We want
+more: other sandbox-as-a-service providers (Modal), remote VMs, and so on.
 
 > **Contributions welcome.** A new backend implements the existing `SandboxBackend`
 > interface and is contributed through a Plugin manifest's `contributes.sandboxBackends`
@@ -117,6 +117,10 @@ streaming or by push notification, not by holding a request open. See the
 
 > **Proactive messages are out of scope.** Neither A2A nor MCP lets a server start a
 > message in a conversation. Delivering one is left to a gateway's own delivery endpoint.
+
+### Daytona Sandbox backend — 3.29.0
+
+The first hosted sandbox-as-a-service backend.
 
 ## Later / Exploring
 
