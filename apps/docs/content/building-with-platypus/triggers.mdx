@@ -741,10 +741,16 @@ Triggers they want and issues new tokens; until then, nothing runs as them.
 ## When a run stops early
 
 Every model has a ceiling on how much it can write in one reply. A run that
-reaches it stops wherever it got to — mid-sentence, mid-list — and still ends
-_Success_, because nothing failed; the Agent ran out of room to finish writing.
-That run carries a muted line on **Trigger runs** reading **Run cut short at the
-model's output limit.**
+reaches it stops wherever it got to — mid-sentence, mid-list. What happens next
+depends on whether the Agent wrote anything:
+
+- **A partial answer** ends _Success_, because the Agent got part of the way
+  there. The run carries a muted line on **Trigger runs** reading **Run cut
+  short at the model's output limit.**
+- **No answer at all** ends _Failed_. This usually means the model spent its
+  whole allowance reasoning before it started writing. The error says the model
+  hit its output limit, and points you at the model's **Max output tokens** on
+  its Provider.
 
 <Callout type="warning">
   **Nothing retries or resumes a cut-short run.** The next scheduled or event

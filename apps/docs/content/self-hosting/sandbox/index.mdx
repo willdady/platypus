@@ -1,7 +1,7 @@
 ---
 title: Sandbox infrastructure
 asIndexPage: true
-description: What a Sandbox is, choosing between the Docker and SSH backends, and the environment variables and permissions every Sandbox shares.
+description: What a Sandbox is, choosing between the Docker, SSH and Daytona backends, and the environment variables and permissions every Sandbox shares.
 ---
 
 import { Callout } from "nextra/components";
@@ -11,9 +11,10 @@ import { Callout } from "nextra/components";
 A **Sandbox** is a configured, isolated execution environment registered on a
 [Workspace](/concepts), giving agents shell and filesystem tools that run inside
 it. The Sandbox interface is pluggable so different backends — local container,
-remote VM, hosted sandbox-as-a-service — can be contributed. Platypus ships two
-reference backends: **Docker** (one container per Workspace on the local daemon)
-and **SSH** (attach to a pre-existing, operator-owned host). Neither is enabled by
+remote VM, hosted sandbox-as-a-service — can be contributed. Platypus ships
+three backends: **Docker** (one container per Workspace on the local daemon),
+**SSH** (attach to a pre-existing, operator-owned host) and **Daytona** (one
+hosted sandbox per Workspace). None is enabled by
 default — each is turned on by listing its Plugin in `PLATYPUS_PLUGINS`.
 
 This page is for the **Operator** and **Org Admin** who stand up and curate that
@@ -29,7 +30,7 @@ Files and environment variables **persist between Chat turns**. That is what mak
 the Sandbox worth having — an Agent can install something in one turn and use it
 in the next, so build-and-test work survives longer than a single reply.
 
-Adding a new backend (Modal, E2B, Daytona, a custom VM) means implementing the
+Adding a new backend (Modal, E2B, a custom VM) means implementing the
 fixed Sandbox contract; see
 [Extending → Sandbox backends](/extending/sandbox-backends) for
 custom backends.
@@ -40,7 +41,10 @@ custom backends.
   Workspace on the local Docker daemon, with default-deny network allowlists.
   Single-node, single-operator deployments only.
 - **[SSH adapter](/self-hosting/sandbox/ssh)** — attaches to a host you already
-  run. The one option for horizontally-scaled deployments.
+  run. Works in horizontally-scaled deployments.
+- **[Daytona adapter](/self-hosting/sandbox/daytona)** — one hosted Daytona
+  sandbox per Workspace, on a Daytona account you supply. Works in
+  horizontally-scaled deployments, with no host to run.
 
 ## Workspace-default environment variables
 

@@ -178,6 +178,13 @@ const decideTerminalStatus = (
     failure?: string;
     noProgress: NoProgressDetector | null;
     failOnStreamError: boolean;
+    /**
+     * The output ceiling cut the run before it wrote any answer. Only the
+     * headless drive passes it: unattended, an empty answer is the only sign
+     * the run produced nothing (#1690). A partial answer still succeeds with
+     * its notice, and a step-ceiling stop is deliberate, so neither counts.
+     */
+    emptyAtOutputCeiling?: boolean;
   },
 ): TerminalDecision => {
   const trip = opts.noProgress?.tripped() ?? null;
@@ -187,6 +194,11 @@ const decideTerminalStatus = (
   }
 
   const { status, error } = run.statusFromSignal();
+  if (status === "succeeded" && opts.emptyAtOutputCeiling) {
+    const failure =
+      "The model hit its output limit before writing an answer. Raise the Provider model's Max output tokens.";
+    return { status: "failed", error: new Error(failure), failure };
+  }
   if (!opts.failOnStreamError) return { status, error };
 
   // What the stream reported outranks why we stopped: a run that both timed out
@@ -727,6 +739,8 @@ export const driveOnce = async (
     const decision = decideTerminalStatus(run, {
       noProgress,
       failOnStreamError: false,
+      emptyAtOutputCeiling:
+        !!stats.truncatedByTokenLimit && !result.text.trim(),
     });
     const trip =
       decision.error instanceof NoProgressError

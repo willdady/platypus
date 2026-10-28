@@ -493,7 +493,7 @@ export function createBoardReadTools(
     "kanban.getBoardState",
     tool({
       description:
-        "Get the state of a kanban board including columns with nested card summaries (id, title, position, labelIds) and labels. Use getCard, when available, to fetch full card details.",
+        "Get the state of a kanban board including columns with nested card summaries (id, title, position, labelIds, assignees, dueDate, priority, updatedAt) and labels. Use getCard, when available, to fetch full card details.",
       inputSchema: z.object({
         boardId: z.string().describe("The ID of the board to get state for"),
         label: z.string().describe("The board name (for display purposes)"),
@@ -523,6 +523,7 @@ export function createBoardReadTools(
                 assignees: card.assignees,
                 dueDate: card.dueDate,
                 priority: card.priority,
+                updatedAt: card.updatedAt,
               })),
             })),
             labels: board.labels,

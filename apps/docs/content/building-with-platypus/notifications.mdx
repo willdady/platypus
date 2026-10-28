@@ -26,8 +26,7 @@ owner gets when a Workspace is transferred to them, shows **Platypus** instead.
 - **Open**, under the entry, takes you to the Chat or Trigger run the Agent
   posted it from. A Notification posted outside either, or whose Chat has been
   deleted or whose run has been pruned, has no **Open** link.
-- The close button in an entry's top-right corner dismisses it for good, for
-  everyone in the Workspace — not just for you.
+- The close button in an entry's top-right corner dismisses it for good.
 - From the keyboard, the arrow keys move through the list. Enter expands an
   entry and marks it read; Delete dismisses it.
 - **Mark all as read** clears unread Notifications from the count without
@@ -68,7 +67,9 @@ It cannot touch another Agent's.
   phone or a chat channel. An Agent that posts one and expects you to be paged
   is wrong — you find out next time you look at the bell. For an outbound
   integration, use a [Webhook](/building-with-platypus/webhooks) and subscribe
-  to the `notification.created` event.
+  to the `notification.created` event — or an [Event
+  Trigger](/building-with-platypus/triggers) with `notification.created` among
+  its Events.
 </Callout>
 
 ## Where to next
