@@ -81,7 +81,8 @@ export const plugin: PlatypusPlugin = {
         id: "notifications",
         name: "Notifications",
         category: "Communication",
-        description: "Post notifications visible to users in this workspace",
+        description:
+          "Post notifications the Workspace Owner reads in the in-app bell, then list, edit or delete its own",
         tools: ({ workspaceId, agentId, orgId }) =>
           createNotificationTools(workspaceId, agentId, orgId),
       },

@@ -22,7 +22,7 @@ export function createNotificationTools(
   const ctx = { workspaceId, agentId, orgId };
   const create = tool({
     description:
-      "Create a notification visible to users in this workspace. Supports minimal markdown in the body.",
+      "Create a notification the workspace owner reads in the in-app bell. Supports minimal markdown in the body.",
     inputSchema: z.object({
       title: z
         .string()
