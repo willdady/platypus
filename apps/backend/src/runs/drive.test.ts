@@ -417,12 +417,15 @@ describe("driveOnce", () => {
   it("records the step-ceiling stop on the run's stats", async () => {
     const { run, outcome } = startRecordedRun();
 
-    const { stats } = await driveOnce({
+    const { text: answer, stats } = await driveOnce({
       plan: oneStepPlanOf(stuckStreamingModel()),
       run,
       prompt: "hi",
     });
 
+    // An empty answer at the step ceiling is not an output-ceiling failure:
+    // the Agent may have done its work through tool calls (#1690).
+    expect(answer).toBe("");
     expect(stats.stoppedAtStepLimit).toBe(true);
     expect(outcome[0].status).toBe("succeeded");
     expect(outcome[0].stats).toMatchObject({ stoppedAtStepLimit: true });
