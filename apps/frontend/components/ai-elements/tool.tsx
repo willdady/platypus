@@ -90,6 +90,12 @@ const toolToToolSet: Record<string, string> = {
   listComments: "kanban",
   upsertComment: "kanban",
   deleteComment: "kanban",
+  // kanban-boards (listBoards and getBoardState are shared with kanban)
+  upsertBoard: "kanban-boards",
+  deleteBoard: "kanban-boards",
+  upsertColumn: "kanban-boards",
+  deleteColumn: "kanban-boards",
+  reorderColumns: "kanban-boards",
   // triggers
   listTriggers: "triggers",
   getTrigger: "triggers",
@@ -170,6 +176,7 @@ const toolIcons: Record<string, LucideIcon> = {
 /** One icon per toolset, matching the workspace home page. */
 const toolSetIcons: Record<string, LucideIcon> = {
   kanban: KanbanSquareIcon,
+  "kanban-boards": KanbanSquareIcon,
   triggers: ZapIcon,
   "agent-discovery": BotIcon,
   "skill-management": SparklesIcon,

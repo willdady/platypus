@@ -1,7 +1,7 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { db } from "../index.ts";
-import { getToolSets } from "../tools/index.ts";
+import { getToolSets, shareTool } from "../tools/index.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 import { providerModelReferences } from "../services/model-capability.ts";
 import { listScoped, resolveScoped } from "../services/scoped-resource.ts";
@@ -21,22 +21,25 @@ import type { ScopeContext } from "../scope.ts";
  * multiple tool sets (e.g. agent-discovery AND kanban).
  */
 export function createListAgentsTool(ctx: ScopeContext): Tool {
-  return tool({
-    description:
-      "List the agents available in the current workspace, including shared agents attached to it.",
-    inputSchema: z.object({}),
-    execute: async () => {
-      const scoped = await listScoped(db, "agent", ctx);
-      return scoped.map(({ row, scope }) => ({
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        modelId: row.modelId,
-        providerId: row.providerId,
-        scope,
-      }));
-    },
-  });
+  return shareTool(
+    "listAgents",
+    tool({
+      description:
+        "List the agents available in the current workspace, including shared agents attached to it.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const scoped = await listScoped(db, "agent", ctx);
+        return scoped.map(({ row, scope }) => ({
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          modelId: row.modelId,
+          providerId: row.providerId,
+          scope,
+        }));
+      },
+    }),
+  );
 }
 
 export function createAgentDiscoveryTools(

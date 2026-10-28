@@ -23,10 +23,15 @@ vi.mock("../../storage/index.ts", () => ({ getStorage: vi.fn() }));
 
 import { plugin } from "./index.ts";
 import { loadPlugins, type LoadedPlugin } from "../loader.ts";
-import { getToolSet, getToolSets } from "../../tools/index.ts";
+import {
+  getToolSet,
+  getToolSets,
+  isSameSharedTool,
+} from "../../tools/index.ts";
 
 const EXPECTED_IDS = [
   "kanban",
+  "kanban-boards",
   "dashboards",
   "triggers",
   "agent-discovery",
@@ -73,7 +78,7 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
     }));
   });
 
-  it("registers all eight domain tool sets with bare ids", () => {
+  it("registers all nine domain tool sets with bare ids", () => {
     expect(before.filter((id) => EXPECTED_IDS.includes(id))).toEqual([]);
     expect(loaded).toEqual([
       expect.objectContaining({
@@ -89,6 +94,28 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
     for (const id of EXPECTED_IDS) {
       const tools = await getToolSet(id)!.buildTurnTools(ctx);
       expect(Object.keys(tools).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("groups both Kanban sets under a Kanban category", () => {
+    expect(
+      getToolSets()
+        .filter((s) => s.category === "Kanban")
+        .map(({ id, name }) => ({ id, name })),
+    ).toEqual([
+      { id: "kanban", name: "Kanban Cards" },
+      { id: "kanban-boards", name: "Kanban Boards" },
+    ]);
+  });
+
+  it("shares listBoards and getBoardState between the two Kanban sets", async () => {
+    const cards = await getToolSet("kanban")!.buildTurnTools(ctx);
+    const boards = await getToolSet("kanban-boards")!.buildTurnTools(ctx);
+    const shared = Object.keys(cards).filter((name) => name in boards);
+    expect(shared.sort()).toEqual(["getBoardState", "listBoards"]);
+    // Marked shared, so a turn granting both claims each once, unreported.
+    for (const name of shared) {
+      expect(isSameSharedTool(cards[name], boards[name])).toBe(true);
     }
   });
 

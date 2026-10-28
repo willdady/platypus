@@ -12,7 +12,10 @@ import {
   updateCard,
 } from "../services/kanban-card.ts";
 import { listCardHistory } from "../services/kanban-card-history.ts";
-import { getBoardState, listBoards } from "../services/kanban-board.ts";
+import {
+  getBoardState as readBoardState,
+  listBoards as listBoardRows,
+} from "../services/kanban-board.ts";
 import {
   createComment,
   listComments,
@@ -21,9 +24,10 @@ import {
   resolveCommentNames,
   updateCommentBody,
 } from "../services/kanban-comment.ts";
-import type { KanbanContext } from "../services/kanban-shared.ts";
+import type { KanbanContext, KanbanScope } from "../services/kanban-shared.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 import { createListAgentsTool } from "./agent-discovery.ts";
+import { shareTool } from "./index.ts";
 
 /**
  * The Agent-facing surface over the Kanban modules (`services/kanban-*`): each
@@ -45,28 +49,6 @@ export function createKanbanTools(
     actor: { agentId },
   };
 
-  /**
-   * Turns the module's typed failures into the `{ error }` payload a Tool
-   * result carries — a Tool reports a problem back to the model rather than
-   * throwing it into the run.
-   */
-  async function asToolResult<T>(
-    run: () => Promise<T>,
-  ): Promise<T | ErrorResult> {
-    try {
-      return await run();
-    } catch (error) {
-      if (
-        error instanceof NotFoundError ||
-        error instanceof ValidationError ||
-        error instanceof ConflictError
-      ) {
-        return { error: error.message };
-      }
-      throw error;
-    }
-  }
-
   /** The board's page in the frontend, when one is configured. */
   const boardUrl = (boardId: string): string | undefined =>
     buildResourceUrl(frontendUrl, orgId, workspaceId, `boards/${boardId}`);
@@ -87,59 +69,7 @@ export function createKanbanTools(
   };
 
   const listAgents = createListAgentsTool({ orgId, workspaceId });
-
-  const listBoardsTool = tool({
-    description: "List all kanban boards in the current workspace.",
-    inputSchema: z.object({}),
-    execute: async () =>
-      // Trimmed to what the model needs to pick a board; the Workspace and
-      // timestamps it already knows or does not use.
-      (await listBoards(db, ctx)).map(
-        ({ id, name, description, labels, createdAt }) => ({
-          id,
-          name,
-          description,
-          labels,
-          createdAt,
-        }),
-      ),
-  });
-
-  const getBoardStateTool = tool({
-    description:
-      "Get the state of a kanban board including columns with nested card summaries (id, title, position, labelIds, assignees, dueDate, priority, updatedAt) and labels. Use getCard to fetch full card details.",
-    inputSchema: z.object({
-      boardId: z.string().describe("The ID of the board to get state for"),
-      label: z.string().describe("The board name (for display purposes)"),
-    }),
-    execute: async ({ boardId }) =>
-      asToolResult(async () => {
-        const { board, columns } = await getBoardState(db, ctx, boardId);
-        const url = boardUrl(boardId);
-
-        // Summaries rather than whole cards: a board read goes into the
-        // model's context, and `getCard` is there for the rest.
-        return {
-          board,
-          columns: columns.map(({ cards, ...column }) => ({
-            ...column,
-            cards: cards.map((card) => ({
-              id: card.id,
-              columnId: card.columnId,
-              title: card.title,
-              position: card.position,
-              labelIds: card.labelIds,
-              assignees: card.assignees,
-              dueDate: card.dueDate,
-              priority: card.priority,
-              updatedAt: card.updatedAt,
-            })),
-          })),
-          labels: board.labels,
-          ...(url && { url }),
-        };
-      }),
-  });
+  const { listBoards, getBoardState } = createBoardReadTools(ctx, frontendUrl);
 
   const getCardTool = tool({
     description:
@@ -491,8 +421,8 @@ export function createKanbanTools(
 
   return {
     listAgents,
-    listBoards: listBoardsTool,
-    getBoardState: getBoardStateTool,
+    listBoards,
+    getBoardState,
     getCard: getCardTool,
     upsertCard,
     moveCard: moveCardTool,
@@ -507,3 +437,101 @@ export function createKanbanTools(
 
 /** What a Tool returns when the module refuses the write. */
 type ErrorResult = { error: string };
+
+/**
+ * Turns the module's typed failures into the `{ error }` payload a Tool
+ * result carries — a Tool reports a problem back to the model rather than
+ * throwing it into the run.
+ */
+export async function asToolResult<T>(
+  run: () => Promise<T>,
+): Promise<T | ErrorResult> {
+  try {
+    return await run();
+  } catch (error) {
+    if (
+      error instanceof NotFoundError ||
+      error instanceof ValidationError ||
+      error instanceof ConflictError
+    ) {
+      return { error: error.message };
+    }
+    throw error;
+  }
+}
+
+/**
+ * The board reads, shared by the Kanban Cards and Kanban Boards Tool sets
+ * under the same names — and marked shared, so an Agent granted both gets
+ * each once with no collision reported.
+ */
+export function createBoardReadTools(
+  scope: KanbanScope,
+  frontendUrl: string | undefined,
+) {
+  const listBoards = shareTool(
+    "kanban.listBoards",
+    tool({
+      description: "List all kanban boards in the current workspace.",
+      inputSchema: z.object({}),
+      execute: async () =>
+        // Trimmed to what the model needs to pick a board; the Workspace and
+        // timestamps it already knows or does not use.
+        (await listBoardRows(db, scope)).map(
+          ({ id, name, description, labels, createdAt }) => ({
+            id,
+            name,
+            description,
+            labels,
+            createdAt,
+          }),
+        ),
+    }),
+  );
+
+  const getBoardState = shareTool(
+    "kanban.getBoardState",
+    tool({
+      description:
+        "Get the state of a kanban board including columns with nested card summaries (id, title, position, labelIds, assignees, dueDate, priority, updatedAt) and labels. Use getCard, when available, to fetch full card details.",
+      inputSchema: z.object({
+        boardId: z.string().describe("The ID of the board to get state for"),
+        label: z.string().describe("The board name (for display purposes)"),
+      }),
+      execute: async ({ boardId }) =>
+        asToolResult(async () => {
+          const { board, columns } = await readBoardState(db, scope, boardId);
+          const url = buildResourceUrl(
+            frontendUrl,
+            scope.orgId,
+            scope.workspaceId,
+            `boards/${boardId}`,
+          );
+
+          // Summaries rather than whole cards: a board read goes into the
+          // model's context, and `getCard` is there for the rest.
+          return {
+            board,
+            columns: columns.map(({ cards, ...column }) => ({
+              ...column,
+              cards: cards.map((card) => ({
+                id: card.id,
+                columnId: card.columnId,
+                title: card.title,
+                position: card.position,
+                labelIds: card.labelIds,
+                assignees: card.assignees,
+                dueDate: card.dueDate,
+                priority: card.priority,
+                updatedAt: card.updatedAt,
+              })),
+            })),
+            labels: board.labels,
+            ...(url && { url }),
+          };
+        }),
+    }),
+  );
+
+  return { listBoards, getBoardState };
+}

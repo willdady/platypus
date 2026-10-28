@@ -155,6 +155,30 @@ export const hasToolSet = (toolSetId: string): boolean =>
 export const getToolSets = (): readonly ToolSetRegistration[] =>
   TOOL_SETS.list();
 
+/** Keys a tool {@link shareTool} marked, by what it was shared as. */
+const SHARED_TOOL = Symbol("platypus.sharedTool");
+
+/**
+ * Marks `tool` as one implementation several Tool sets contribute under the
+ * same name, so a turn granting more than one of them keeps the first claim
+ * and reports no collision. A symbol-keyed property rather than a lookup on
+ * the object, because result normalization spreads every tool into a new one.
+ */
+export const shareTool = <T extends Tool>(key: string, tool: T): T =>
+  Object.assign(tool, { [SHARED_TOOL]: key });
+
+/** Whether `held` and `incoming` are the same {@link shareTool} tool. */
+export const isSameSharedTool = (
+  held: Tool | undefined,
+  incoming: Tool,
+): boolean => {
+  const key = (held as { [SHARED_TOOL]?: string } | undefined)?.[SHARED_TOOL];
+  return (
+    key !== undefined &&
+    key === (incoming as { [SHARED_TOOL]?: string })[SHARED_TOOL]
+  );
+};
+
 /**
  * Warn for every name `incoming` takes from a Tool set that already claimed it
  * this turn.

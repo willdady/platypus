@@ -62,9 +62,10 @@ this turn, plus the frontend URL if one is configured:
 ```ts
 {
   id: "kanban",
-  name: "Kanban",
-  category: "Productivity",
-  description: "Manage kanban boards in this workspace",
+  name: "Kanban Cards",
+  category: "Kanban",
+  description:
+    "Read kanban boards and manage their cards and comments in this workspace",
   tools: ({ workspaceId, agentId, orgId, frontendUrl }) =>
     createKanbanTools(workspaceId, agentId, orgId, frontendUrl),
 }
@@ -135,8 +136,8 @@ connection, a pool, a watcher — register a way to close it:
 ```ts
 {
   id: "kanban",
-  name: "Kanban",
-  category: "Productivity",
+  name: "Kanban Cards",
+  category: "Kanban",
   tools: (ctx) => {
     const client = connect(ctx.workspaceId);
     ctx.registerCloser(() => client.close());
