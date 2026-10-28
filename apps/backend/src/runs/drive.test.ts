@@ -79,12 +79,13 @@ const finishingModel = (
   overrides: {
     finishReason?: LanguageModelV3FinishReason;
     usage?: LanguageModelV3Usage;
+    text?: string;
   } = {},
 ): MockLanguageModelV3 =>
   modelOf([
     { type: "stream-start", warnings: [] },
     { type: "text-start", id: "t1" },
-    { type: "text-delta", id: "t1", delta: "ok" },
+    { type: "text-delta", id: "t1", delta: overrides.text ?? "ok" },
     { type: "text-end", id: "t1" },
     {
       type: "finish",
@@ -273,8 +274,38 @@ describe("driveOnce", () => {
     });
 
     expect(stats.truncatedByTokenLimit).toBe(true);
+    expect(outcome[0].status).toBe("succeeded");
     expect(outcome[0].stats).toMatchObject({ truncatedByTokenLimit: true });
   });
+
+  // Issue #1690: a run cut at the output ceiling before it wrote any answer
+  // has nothing to show for itself, and nobody is watching to notice.
+  it.each([
+    ["empty", ""],
+    ["whitespace-only", "  \n "],
+  ])(
+    "finishes as failed when the output ceiling leaves the answer %s",
+    async (_, answer) => {
+      const { run, outcome } = startRecordedRun();
+
+      const { stats } = await driveOnce({
+        plan: planOf(
+          finishingModel({
+            finishReason: { unified: "length", raw: "max_tokens" },
+            text: answer,
+          }),
+        ),
+        prompt: "hi",
+        run,
+      });
+
+      expect(stats.truncatedByTokenLimit).toBe(true);
+      expect(outcome[0].status).toBe("failed");
+      expect(outcome[0].error?.message).toMatch(/output limit/);
+      expect(outcome[0].error?.message).toMatch(/Max output tokens/);
+      expect(outcome[0].stats).toMatchObject({ truncatedByTokenLimit: true });
+    },
+  );
 
   // Issue #734. The headless path folds usage through `computeStats`, which
   // must carry the cached-input breakdown the same way the streamed

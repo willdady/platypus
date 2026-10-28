@@ -724,10 +724,25 @@ export const driveOnce = async (
 
     // The no-progress stop condition halts the loop cleanly (the SDK resolves
     // normally), so a tripped detector surfaces here rather than in the catch.
-    const decision = decideTerminalStatus(run, {
+    let decision = decideTerminalStatus(run, {
       noProgress,
       failOnStreamError: false,
     });
+    // Unattended, an empty answer cut at the output ceiling is the only sign
+    // the run produced nothing (#1690). A partial answer still succeeds with
+    // the flag, and a step-ceiling stop is deliberate, so neither fails here.
+    if (
+      decision.status === "succeeded" &&
+      stats.truncatedByTokenLimit &&
+      !result.text.trim()
+    ) {
+      decision = {
+        status: "failed",
+        error: new Error(
+          "The model hit its output limit before writing an answer. Raise the Provider model's Max output tokens.",
+        ),
+      };
+    }
     const trip =
       decision.error instanceof NoProgressError
         ? { toolName: decision.error.toolName, count: decision.error.count }
