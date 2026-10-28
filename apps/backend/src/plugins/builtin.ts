@@ -17,6 +17,7 @@ export const BUILTIN_PLUGINS: Record<
   "@platypus/tools-platform": () => import("./tools-platform/index.ts"),
   "@platypus/docker": () => import("./docker/index.ts"),
   "@platypus/ssh": () => import("./ssh/index.ts"),
+  "@platypus/daytona": () => import("./daytona/index.ts"),
   "@platypus/exa": () => import("./exa/index.ts"),
   "@platypus/decision-gate": () => import("./decision-gate/index.ts"),
 };

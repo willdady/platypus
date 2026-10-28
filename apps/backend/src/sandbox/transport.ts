@@ -103,6 +103,41 @@ export const createCappedSink = (cap: number) => {
 };
 
 /**
+ * Single-quote a value for safe interpolation into a `/bin/sh` command line,
+ * escaping embedded single quotes with the classic `'\''` idiom.
+ */
+export const shQuote = (value: string): string =>
+  `'${value.replace(/'/g, `'\\''`)}'`;
+
+// A valid POSIX environment-variable name. `adminEnv`/`userEnv` are already held
+// to this by the schema, but the model-supplied `input.env` keys are not — so we
+// guard here before interpolating a key into the shell string. A key that isn't
+// a valid identifier can't be a usable env var anyway (`export 1FOO=…` errors),
+// so dropping it is both safe and correct.
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Flatten an argv and its {@link SandboxExecOptions} into one `/bin/sh` line,
+ * for a transport with a shell in the way (SSH, Daytona). The merged env
+ * (ADR-0004) goes in as `export KEY=val;` statements — an SSH server's
+ * `AcceptEnv` rejects arbitrary variables (ADR-0012) — and every value and argv
+ * element is single-quoted. Exports go first and the `cd` is chained straight
+ * onto the command, so a failed `cd` skips the command (non-zero exit) instead
+ * of the `;` after an export letting it run elsewhere.
+ */
+export const toShellCommand = (
+  argv: string[],
+  opts: Pick<SandboxExecOptions, "cwd" | "env">,
+): string => {
+  const envPrefix = Object.entries(opts.env ?? {})
+    .filter(([k]) => ENV_KEY_PATTERN.test(k))
+    .map(([k, v]) => `export ${k}=${shQuote(v)}; `)
+    .join("");
+  const cdPrefix = opts.cwd ? `cd ${shQuote(opts.cwd)} && ` : "";
+  return `${envPrefix}${cdPrefix}${argv.map(shQuote).join(" ")}`;
+};
+
+/**
  * Thrown by {@link SandboxTransport.writeFile} when `mode: "create"` finds the
  * path already taken. A distinct type rather than a message because the message
  * an Operator sees names the *workspace-relative* path the model asked for, and
