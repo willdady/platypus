@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { PlatypusUIMessage } from "./chat-ui-message.ts";
+import { transcriptSummarySchema } from "./chat-summary.ts";
 
 const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -275,6 +276,11 @@ export const chatSchema = z.object({
   tree: z
     .array(z.object({ id: z.string(), parentId: z.string().nullable() }))
     .optional(),
+  // The Chat's Transcript summaries (ADR-0041), newest first, beside `messages`
+  // so the Chat can render a divider at each summary's anchor and read whether
+  // the composer meter's last reading predates a summary. Read-only in the
+  // product: nothing here is ever edited or deleted except with the Chat.
+  summaries: z.array(transcriptSummarySchema).optional(),
   status: chatStatusSchema,
   isPinned: z.boolean(),
   tags: z
@@ -1494,6 +1500,55 @@ export const TOOL_RESULT_CLEARING_THRESHOLD = 0.7;
 
 /** How many of the most recent clearable tool results survive a clearing pass. */
 export const TOOL_RESULT_CLEARING_KEEP_RECENT = 4;
+
+/**
+ * Transcript summarising (ADR-0041, issue #1716): a durable **Transcript
+ * summary** of a Chat's older Transcript, sent to the model in place of the
+ * messages it covers.
+ *
+ * Constants, deliberately not env knobs — the same shape as Tool-result
+ * clearing, so an Operator can predict one rule from the one number they set
+ * (the declared Context window). No kill switch: a failed summary is never
+ * fatal and simply doesn't engage (the signed notes on the ADR).
+ */
+
+/**
+ * The fraction of the declared Context window at which a turn's finish takes
+ * a Transcript summary off the response path. Above Tool-result clearing's own
+ * 0.7, so the clearing that needs no model call always gets the first try.
+ */
+export const TRANSCRIPT_SUMMARY_TRIGGER = 0.8;
+
+/**
+ * The fraction at which the pre-turn **backstop** engages: a Chat whose
+ * Projected occupancy is already this full, with no usable summary, waits for
+ * a summary before calling the model rather than risking a Provider overflow.
+ */
+export const TRANSCRIPT_SUMMARY_BACKSTOP = 0.95;
+
+/**
+ * How many of the most recent turns a summary leaves verbatim — the anchor is
+ * the assistant message before them. The tail that is not re-sent as summary
+ * keeps the last exchange in full so the model answers what the User just
+ * asked. With an earlier summary already in place the kept tail shrinks (see
+ * `TRANSCRIPT_SUMMARY_KEEP_TURNS_WITH_SUMMARY`), so a heavy tail cannot cause
+ * a summary on every turn.
+ */
+export const TRANSCRIPT_SUMMARY_KEEP_TURNS = 4;
+
+/**
+ * The kept tail when the reading that triggers a summary was itself taken
+ * with a summary in place: one turn, so a turn whose tail alone crossed the
+ * trigger does not grow a new summary on top of the one it already reads.
+ */
+export const TRANSCRIPT_SUMMARY_KEEP_TURNS_WITH_SUMMARY = 1;
+
+/**
+ * The summary-handoff prompt's output ceiling, about a window's worth of what
+ * a summary call must fit into a bounded reply. A number with a unit in docs
+ * prose is pinned to this by the docs contract test.
+ */
+export const TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS = 4_096;
 
 /**
  * A Context occupancy reading as it is stored on an assistant message
@@ -3797,3 +3852,4 @@ export const webhookEventScope = (
   }
 };
 export * from "./chat-ui-message.ts";
+export * from "./chat-summary.ts";

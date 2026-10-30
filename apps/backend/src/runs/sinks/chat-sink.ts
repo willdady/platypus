@@ -9,6 +9,19 @@ import { ConflictError, isUniqueViolation } from "../../errors.ts";
 import { logger } from "../../logger.ts";
 import { generateChatMetadata } from "../../services/chat-metadata.ts";
 import { stillAwaits } from "../../services/chat-messages.ts";
+import {
+  deepestPriorSummary,
+  loadChatSummaries,
+  projectedOccupancyOf,
+  registerTranscriptSummary,
+  resolveSummariserModel,
+  summaryAnchorIndex,
+  takeTranscriptSummary,
+  transcriptSummaryDueAfterTurn,
+  transcriptSummaryKeptTurns,
+  type TranscriptSummaryQueries,
+} from "../../services/chat-summary.ts";
+import { resolveScoped } from "../../services/scoped-resource.ts";
 import { extractFiles } from "../../storage/utils.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 import { FlushScheduler } from "../flush-scheduler.ts";
@@ -372,6 +385,20 @@ export class ChatSink implements RunSink {
       // never block or delay run completion, and any failure is caught and
       // logged.
       this.generateMetadata();
+
+      // Fire-and-forget Transcript summarising (ADR-0041, issue #1716): the
+      // turn's final Projected occupancy has crossed the trigger, so a summary
+      // is taken OFF the response path — the next turn finds it already
+      // waiting and pays no latency. If the User sends the next message before
+      // it lands, that turn simply runs without it; the row is immutable, so
+      // the race is harmless. Never fatal: a failure logs here and the next
+      // turn's finish-pass retries.
+      //
+      // Gated on `written`, not on `status`: a turn stopped by a cancellation
+      // or a timeout still stored its reply, and that reply's reading is the
+      // one the next turn starts from. A turn whose reply could not be stored
+      // has no reading to trigger on.
+      if (written) this.scheduleTranscriptSummary();
     }
     // Resolution failed before there was a plan to persist, or the reply
     // could not be stored: only the status, on the row `onStart` claimed.
@@ -453,6 +480,94 @@ export class ChatSink implements RunSink {
       logger.error(
         { error, chatId: this.runId, workspaceId },
         "Error generating chat metadata",
+      );
+    });
+  }
+
+  /**
+   * The data-access surface the after-turn summary pass re-resolves the
+   * Chat's model with — Scoped-resource reads, exactly as a Chat turn serves
+   * them (ADR-0007), so a Shared (org-scoped) Provider/Agent resolves here the
+   * way it resolved the turn.
+   */
+  private readonly summariserQueries: TranscriptSummaryQueries = {
+    async getAgent(id, orgId, workspaceId) {
+      return (
+        (await resolveScoped(db, "agent", id, { orgId, workspaceId }))?.row ??
+        null
+      );
+    },
+    async getProvider(id, orgId, workspaceId) {
+      return (
+        (await resolveScoped(db, "provider", id, { orgId, workspaceId }))
+          ?.row ?? null
+      );
+    },
+  };
+
+  /**
+   * Starts (never awaits) the after-turn Transcript summary pass: the turn's
+   * final Projected occupancy crossed the trigger, the declared window exists,
+   * and the Chat's own model is available to write the summary. The kept tail
+   * shrinks to one turn when the triggering reading itself ran with a summary
+   * in place. Registered in the in-flight map so a backstop on the next turn
+   * waits for this pass rather than starting a second.
+   */
+  private scheduleTranscriptSummary(): void {
+    const plan = this.plan;
+    if (!plan) return;
+    const { resolved } = plan;
+    const path = this.latestMessages;
+    const reading = projectedOccupancyOf(path);
+    if (
+      !reading ||
+      !transcriptSummaryDueAfterTurn(reading.projected, plan.contextWindow)
+    ) {
+      return;
+    }
+
+    // The Chat's own resolved model: an Agent turn re-resolves through its
+    // Agent row, a Direct turn through its Provider+model reference — the same
+    // authority the turn queue's own `resolveGenerationPlan` used (ADR-0017).
+    const source =
+      resolved.agentId !== undefined
+        ? { agentId: resolved.agentId }
+        : { providerId: resolved.providerId, modelId: resolved.modelId };
+
+    void registerTranscriptSummary(this.runId, async () => {
+      const { model, modelId } = await resolveSummariserModel(
+        source,
+        this.params.orgId,
+        this.params.workspaceId,
+        this.summariserQueries,
+      );
+      const anchorIndex = summaryAnchorIndex(
+        path,
+        transcriptSummaryKeptTurns(reading.summaryId),
+      );
+      if (anchorIndex === undefined) return undefined;
+      const summary = await takeTranscriptSummary({
+        chatId: this.runId,
+        model,
+        modelId,
+        path,
+        triggeredFromOccupancy: reading.projected,
+        previousSummary: deepestPriorSummary(
+          path,
+          await loadChatSummaries(this.runId),
+          anchorIndex,
+        ),
+        readingSummaryId: reading.summaryId,
+        readOnlyToolNames: plan.readOnlyToolNames,
+      });
+      return summary;
+    }).catch((error) => {
+      // `takeTranscriptSummary` never throws by itself; this is the model
+      // re-resolution's failure (an Agent or Provider deleted mid-flight) and
+      // the occasional join of a backstop's pass. Never fatal either way.
+      logger.error(
+        { error, chatId: this.runId },
+        "After-turn transcript summary failed; the next turn's finish retries",
       );
     });
   }

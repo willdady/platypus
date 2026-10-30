@@ -50,6 +50,12 @@ export type MessageMetadataFacts = TurnFacts & {
   /** The live map the runner fills from `onToolExecutionEnd`. */
   toolDurations?: ReadonlyMap<string, number>;
   /**
+   * The Transcript summary this turn's occupancy reading was taken through
+   * (ADR-0041, issue #1716), stamped beside every reading written on the
+   * turn's reply — see {@link TurnFacts.summaryId}.
+   */
+  summaryId?: string;
+  /**
    * The turn's resolved **Step ceiling** — the same figure the loop's step-count
    * stop condition is built from. Needed here because the terminal finish reason
    * alone cannot say whether the loop was stopped or the model was done.
@@ -100,6 +106,7 @@ export const createMessageMetadata = ({
   isClearableTool,
   delegatedUsage,
   continued,
+  summaryId,
 }: MessageMetadataFacts = {}) => {
   const priorUsage = continued?.tokenUsage ? [continued.tokenUsage] : [];
   const priorModelMs = continued?.modelDurationMs ?? 0;
@@ -152,6 +159,10 @@ export const createMessageMetadata = ({
       steps += 1;
       const meta: ChatMessageMetadata = {};
       const { inputTokens, outputTokens } = part.usage;
+
+      // The summary the reading was taken with rides alongside it — the
+      // tuple is what the next turn's stale check reads back (ADR-0041).
+      if (summaryId !== undefined) meta.summaryId = summaryId;
 
       if (typeof inputTokens !== "number") {
         // This step's context size is unknown, so any figure already on the

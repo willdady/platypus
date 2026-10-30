@@ -1127,6 +1127,92 @@ describe("chat-execution", () => {
       });
     });
 
+    // ADR-0041 / issue #1716: the deepest usable Transcript summary replaces
+    // the older Transcript at send time, and rides the first kept user message
+    // as a leading text part.
+    describe("Transcript summary read", () => {
+      const fourTurns = (): PlatypusUIMessage[] => [
+        { id: "u1", role: "user", parts: [{ type: "text", text: "u1" }] },
+        { id: "a1", role: "assistant", parts: [{ type: "text", text: "a1" }] },
+        { id: "u2", role: "user", parts: [{ type: "text", text: "u2" }] },
+        { id: "a2", role: "assistant", parts: [{ type: "text", text: "a2" }] },
+        { id: "u3", role: "user", parts: [{ type: "text", text: "u3" }] },
+        { id: "a3", role: "assistant", parts: [{ type: "text", text: "a3" }] },
+      ];
+
+      const summary = {
+        id: "sum-1",
+        chatId: "chat-1",
+        anchorId: "a1",
+        coveredIds: ["u1", "a1"],
+        text: "Condensed earlier transcript.",
+        stats: null,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      };
+
+      it("sends the summary as a leading text part of the first kept user message", async () => {
+        const queries = createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          providers: [baseProvider],
+        });
+
+        const turn = await prepareChatTurn(
+          {
+            ...baseInput,
+            messages: fourTurns(),
+            request: { providerId: baseProvider.id, modelId: "gpt-4" },
+            chatSummaries: [summary],
+          },
+          queries,
+        );
+
+        // The covered prefix collapses; the kept tail begins at u2.
+        expect(turn.stream.messages.map((m) => m.id)).toEqual([
+          "u2",
+          "a2",
+          "u3",
+          "a3",
+        ]);
+        const first = turn.stream.messages[0];
+        expect(first.role).toBe("user");
+        const firstPart = first.parts[0];
+        expect(firstPart.type).toBe("text");
+        if (firstPart.type === "text") {
+          expect(firstPart.text).toContain("Condensed earlier transcript.");
+        }
+        // Never a message of its own, and the System prompt is untouched.
+        expect(turn.stream.messages).toHaveLength(4);
+        expect(turn.stream.summaryId).toBe("sum-1");
+      });
+
+      it("sends the path untouched, and no summary id, when none is usable", async () => {
+        const queries = createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          providers: [baseProvider],
+        });
+
+        const turn = await prepareChatTurn(
+          {
+            ...baseInput,
+            messages: fourTurns(),
+            request: { providerId: baseProvider.id, modelId: "gpt-4" },
+            chatSummaries: [{ ...summary, coveredIds: ["not-live"] }],
+          },
+          queries,
+        );
+
+        expect(turn.stream.messages.map((m) => m.id)).toEqual([
+          "u1",
+          "a1",
+          "u2",
+          "a2",
+          "u3",
+          "a3",
+        ]);
+        expect(turn.stream).not.toHaveProperty("summaryId");
+      });
+    });
+
     it("Agent without an explicit maxSteps falls back to the default (15), not 1", async () => {
       const agentNoMaxSteps = { ...baseAgent, maxSteps: null };
       const queries = createInMemoryChatTurnQueries({

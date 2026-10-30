@@ -432,17 +432,18 @@ in an unsent message is something only the vendor can do, and it has not seen it
 yet. Read it as "this is where the next message starts from", and expect a long
 message to add to it.
 
-When the meter is filling up, you have three options: prune the Chat by hand
-(see [editing and deleting
+When the meter is filling up, you still have the three hands-on options: prune
+the Chat by hand (see [editing and deleting
 messages](#fixing-a-conversation-instead-of-restarting-it)), start a new Chat, or
-switch to a model with a bigger window. Nothing happens automatically.
+switch to a model with a bigger window. A Chat that keeps going also gets help
+on its own — see [When a long conversation is
+condensed](#when-a-long-conversation-is-condensed).
 
-<Callout type="warning">
-  **The meter appears; nothing enforces it.** Platypus does not trim, summarise,
-  warn, or block a turn for approaching the window — reaching it fails at the
-  vendor exactly as it did before, and the meter is the only thing that changed.
-  Treat a full meter as your cue to act, not as a guard rail that will catch
-  you.
+<Callout type="info">
+  **The meter is a reading, not a switch.** It never blocks a turn. Where a
+  **Context window** is declared, Platypus condenses a long Chat's older
+  messages on its own so the next turn still fits — and the meter shows where
+  that condensed conversation starts from.
 </Callout>
 
 **No meter at all** is normal, and means one of three things: the Chat has no
@@ -472,15 +473,57 @@ is sent starting from that point in the conversation. A tool result the model
 no longer has carries a **Not sent to model** badge; expand it to read what it
 returned.
 
-<Callout type="warning">
-  **This is retention, not summarising.** Platypus does not write a shorter
-  version of an older result — it either sends it in full or not at all. If the
+<Callout type="info">
+  **This is retention, not rewriting.** For a tool result, Platypus either sends
+  it in full or not at all — it does not write a shorter version of it. If the
   model needs to act on something in a result that has stopped being sent, ask
-  again in a follow-up message.
+  again in a follow-up message. Older *messages* are condensed differently; see
+  below.
 </Callout>
 
 This has no effect where no **Context window** is declared for the model — see
 above.
+
+## When a long conversation is condensed
+
+Where a **Context window** is declared, a Chat that has been going long enough
+condenses the older part of itself. A dashed line appears in the transcript
+saying that earlier messages were condensed into a summary the assistant reads
+instead, and that they are still here. This happens on its own, usually just
+after a reply finishes, so your next message is not delayed.
+
+**Click the line** to read the summary the assistant was given. Everything above
+it is still on screen, still copyable, still editable, and still there after a
+reload: nothing was deleted, and the Chat itself has not changed. What changed is
+only what the model is sent — the summary stands in for those messages.
+
+Two things follow from that, and both are worth knowing:
+
+- **Details above the line can come back fuzzier.** A summary keeps the intent,
+  the decisions, the facts that later steps depend on, what files and tools were
+  touched, what is still open, and where the work stands — not every word. If
+  something above the line matters to your next question, state it again, or
+  point the model at the message.
+- **The line marks roughly where the Chat started growing.** The newest few
+  turns are always sent in full, so the summary sits a few turns back rather
+  than at the very top of the last exchange.
+
+The meter beside the input shows **—** for a moment when a summary has just been
+taken: the number it was showing described the conversation _before_ the
+summary, so it would be misleading. The next reply reports a fresh reading and
+the meter comes back.
+
+Nothing here happens for a model with no **Context window** declared: Platypus
+has no size to work against, so such a Chat is sent in full until the vendor
+refuses it.
+
+<Callout type="warning">
+  **Deleting a message above the line can make the Chat larger for one turn.**
+  The summary only applies while the messages it covered are exactly what the
+  Chat still holds. Delete one inside that stretch and the summary stops being
+  used, so the next turn sends more of the Chat and takes a fresh summary first.
+  That turn can take noticeably longer than usual.
+</Callout>
 
 ## Fixing a conversation instead of restarting it
 

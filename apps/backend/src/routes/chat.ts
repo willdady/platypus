@@ -36,6 +36,7 @@ import {
   loadActivePath,
   switchActivePath,
 } from "../services/chat-messages.ts";
+import { loadChatSummaries } from "../services/chat-summary.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { oneRow } from "../db/one-row.ts";
 
@@ -161,11 +162,15 @@ chat.get(
 
     const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
     const { messages, tree } = await loadActivePath(chatId, chat.activeLeafId);
+    // The Chat's Transcript summaries (ADR-0041), newest first, for the
+    // divider at each usable summary's anchor and the composer meter's "—".
+    const summaries = await loadChatSummaries(chatId);
     return c.json({
       ...chatResponse(chat),
       ...(chat.a2aClientName ? { a2aClientName: chat.a2aClientName } : {}),
       messages: servedMessages(messages, getOrigin(c)),
       tree,
+      summaries,
     });
   },
 );

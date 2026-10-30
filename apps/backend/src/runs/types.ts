@@ -2,6 +2,7 @@ import type { PlatypusUIMessage } from "../types.ts";
 import type {
   CachedInputTokens,
   ModelUsage,
+  TranscriptSummaryRow,
   UnloadedToolSet,
 } from "@platypus/schemas";
 import type { WorkspaceScope } from "../scope.ts";
@@ -135,6 +136,14 @@ export type TurnRequest = {
   request: ChatTurnRequest;
   messages: PlatypusUIMessage[];
   /**
+   * The Chat's Transcript summaries (ADR-0041, issue #1716), newest first —
+   * loaded by the caller that owns the Chat's id and carried down like the
+   * pinned Memories block, so turn preparation stays a pure function of its
+   * inputs. Absent for headless runs (triggers, sub-Agents), which have no
+   * Transcript to summarise.
+   */
+  chatSummaries?: TranscriptSummaryRow[];
+  /**
    * The pinned Memories block (ADR-0020) an interactive Chat turn resolved —
    * the rendered summaries fragment, reused or re-taken by the Chat route
    * against the re-pin horizon. Absent for headless runs (triggers, sub-Agents),
@@ -209,6 +218,14 @@ export type TurnFacts = {
    * (e.g. a delegated sub-Agent) that never measured one.
    */
   prepDurationMs?: number;
+  /**
+   * The id of the Transcript summary this turn read its occupancy reading
+   * through (ADR-0041, issue #1716) — stamped onto the reply's metadata so
+   * the next turn can tell a reading whose summary a Delete has since made
+   * unusable, and the composer meter can show "—" when the newest summary
+   * post-dates the last reading.
+   */
+  summaryId?: string;
 };
 
 /**
@@ -250,6 +267,20 @@ export type ResolvedRunPlan = {
    * A2A Task ignore them.
    */
   unloadedToolSets?: readonly UnloadedToolSet[];
+  /**
+   * The declared Context window the run's plan resolved with (ADR-0018) — the
+   * denominator the Transcript-summary trigger divides the turn's reading by
+   * (ADR-0041). Absent where the model declares none, in which case the Chat
+   * never summarises.
+   */
+  contextWindow?: number;
+  /**
+   * The turn's clearable MCP tool names (ADR-0021, issue #626) — the half of
+   * clearability beyond the core allowlist, handed to the after-turn summary
+   * pass so it clears what the turn's session cleared. Only the session's OWN
+   * resolutions, exactly as the plan the drive ran carried them.
+   */
+  readOnlyToolNames?: ReadonlySet<string>;
 };
 
 /**

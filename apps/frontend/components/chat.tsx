@@ -55,6 +55,12 @@ import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
 import { clearedToolCallIds } from "@/lib/tool-result-clearing";
+import {
+  appliedTranscriptSummary,
+  occupancyIsStaleAfterSummary,
+  summarisingStatusOf,
+} from "@/lib/chat-summary";
+import { TranscriptSummaryDivider } from "./transcript-summary-divider";
 import { useStableSet } from "@/hooks/use-stable-set";
 import { useTimeout } from "@/hooks/use-timeout";
 import { useStreamingFavicon } from "@/hooks/use-streaming-favicon";
@@ -685,6 +691,27 @@ export function Chat({
   // the clearing it explains cannot read one turn differently.
   const projectedOccupancy = nextTurnOccupancy(contextOccupancy);
 
+  // The Transcript summary this Chat actually reads (ADR-0041, issue #1716):
+  // the deepest one usable on the current Active path — a Delete inside its
+  // range, or of the user message after its anchor, makes a summary unusable
+  // and the next one up takes its place.
+  const appliedSummary = appliedTranscriptSummary(
+    messages,
+    chatData?.summaries,
+  );
+
+  // After a summary is taken and before the next turn reports a reading, the
+  // number on the meter describes the view the summary replaced — so it shows
+  // "—" with no note instead of a figure the next call will not start at.
+  const occupancyAfterSummary = occupancyIsStaleAfterSummary(
+    messages,
+    chatData?.summaries,
+  );
+
+  // The status this turn streamed while it waited for a summary (ADR-0041),
+  // read off the Run event the backend put at the head of the turn.
+  const summarisingStatus = summarisingStatusOf(messages, turnInFlight);
+
   // Tool-result clearing (ADR-0018 Notes, issue #524): which tool results the
   // NEXT model call would no longer receive, derived from the same reading the
   // meter above shows rather than a stored flag — a message this session
@@ -868,6 +895,14 @@ export function Chat({
                         : undefined
                     }
                   />
+                  {/* The divider sits after the summary's anchor — the last
+                      message it covers — and expands to the summary text.
+                      Every message above it stays readable. */}
+                  {appliedSummary?.anchorIndex === messageIndex && (
+                    <TranscriptSummaryDivider
+                      summary={appliedSummary.summary}
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -880,6 +915,14 @@ export function Chat({
         <div className="flex justify-center min-w-0">
           <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
             {isRecoveringRun && <ChatReconnectingNotice />}
+            {summarisingStatus && (
+              <p
+                role="status"
+                className="mb-2 text-xs text-muted-foreground sm:mb-1"
+              >
+                {summarisingStatus}
+              </p>
+            )}
             {canSendMessages ? (
               <ChatComposer
                 onSubmit={handleSubmit}
@@ -975,17 +1018,23 @@ export function Chat({
                   // than drifting into the middle the way `justify-between`
                   // alone would leave it.
                   <AnimatePresence initial={false}>
-                    {projectedOccupancy != null &&
-                      resolvedModel?.contextWindow != null && (
+                    {resolvedModel?.contextWindow != null &&
+                      (occupancyAfterSummary || projectedOccupancy != null) && (
                         <ContextMeterEntrance
                           key="context-meter"
                           className="order-last -mx-3 w-[calc(100%+1.5rem)] sm:order-none sm:mx-0 sm:mr-auto sm:w-auto"
                         >
-                          <ContextMeter
-                            className="mt-1.5 justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:mt-0 sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0"
-                            occupancy={projectedOccupancy}
-                            contextWindow={resolvedModel.contextWindow}
-                          />
+                          {occupancyAfterSummary ? (
+                            <span className="mt-1.5 inline-block text-xs text-muted-foreground tabular-nums sm:mt-0">
+                              —
+                            </span>
+                          ) : (
+                            <ContextMeter
+                              className="mt-1.5 justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:mt-0 sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0"
+                              occupancy={projectedOccupancy}
+                              contextWindow={resolvedModel.contextWindow}
+                            />
+                          )}
                         </ContextMeterEntrance>
                       )}
                   </AnimatePresence>
