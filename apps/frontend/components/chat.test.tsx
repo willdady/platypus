@@ -498,6 +498,128 @@ function renderWithAgent(agentId: string) {
   );
 }
 
+describe("a Transcript summary", () => {
+  // ADR-0041, issue #1716: the divider renders at the anchor of the summary the
+  // Chat actually reads, and opens to its text; the composer meter reads "—"
+  // until the next turn reports a reading taken through it.
+  const turns = (): PlatypusUIMessage[] => [
+    { id: "u1", role: "user", parts: [{ type: "text", text: "u1" }] },
+    { id: "a1", role: "assistant", parts: [{ type: "text", text: "a1" }] },
+    { id: "u2", role: "user", parts: [{ type: "text", text: "u2" }] },
+    { id: "a2", role: "assistant", parts: [{ type: "text", text: "a2" }] },
+    { id: "u3", role: "user", parts: [{ type: "text", text: "u3" }] },
+    { id: "a3", role: "assistant", parts: [{ type: "text", text: "a3" }] },
+  ];
+
+  const summaryRow = (over: Record<string, unknown> = {}) => ({
+    id: "sum-1",
+    chatId: CHAT_ID,
+    anchorId: "a1",
+    coveredIds: ["u1", "a1"],
+    text: "The condensed earlier conversation.",
+    stats: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ...over,
+  });
+
+  const renderWith = (summaries: unknown[], messages = turns()) => {
+    harness.data.set("/agents", { results: [] });
+    harness.data.set(`/chat/${CHAT_ID}`, {
+      status: "succeeded",
+      messages,
+      tree: messages.map((message, i) => ({
+        id: message.id,
+        parentId: messages[i - 1]?.id ?? null,
+      })),
+      summaries,
+    });
+    harness.turn.messages = messages;
+    return renderChat();
+  };
+
+  it("renders the divider at the anchor and expands to the summary text", async () => {
+    renderWith([summaryRow()]);
+
+    const divider = await screen.findByRole("button", {
+      name: /Earlier messages were condensed/,
+    });
+    expect(divider).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText("The condensed earlier conversation."),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(divider);
+
+    expect(divider).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByText("The condensed earlier conversation."),
+    ).toBeInTheDocument();
+    // Every message above the divider is still on screen.
+    expect(screen.getByRole("button", { name: "Edit u1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit a1" })).toBeInTheDocument();
+  });
+
+  it("does not render the divider for a summary a Delete made unusable", async () => {
+    renderWith([summaryRow({ coveredIds: ["gone", "a1"] })]);
+
+    // Wait for the transcript, then assert the absence.
+    await screen.findByRole("button", { name: "Edit u1" });
+    expect(
+      screen.queryByRole("button", { name: /Earlier messages were condensed/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the meter as — once a summary the last reading predates is in place", async () => {
+    const messages = turns();
+    messages[5] = {
+      ...messages[5],
+      metadata: { contextOccupancy: { inputTokens: 900, outputTokens: 50 } },
+    };
+    renderWith([summaryRow()], messages);
+
+    expect(await screen.findByText("—")).toBeInTheDocument();
+  });
+
+  it("shows the status the turn streamed while it waited for a summary", async () => {
+    harness.turn.status = "streaming";
+    renderWith(
+      [],
+      [
+        ...turns(),
+        {
+          id: "a4",
+          role: "assistant",
+          parts: [
+            {
+              type: "data-transcript-summary-status",
+              data: { text: "Summarising earlier messages…" },
+            },
+          ],
+        },
+      ],
+    );
+
+    expect(
+      await screen.findByText("Summarising earlier messages…"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the meter once the last reading was taken through the summary", async () => {
+    const messages = turns();
+    messages[5] = {
+      ...messages[5],
+      metadata: {
+        contextOccupancy: { inputTokens: 200, outputTokens: 50 },
+        summaryId: "sum-1",
+      },
+    };
+    renderWith([summaryRow()], messages);
+
+    await screen.findByRole("button", { name: "Edit u1" });
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+});
+
 describe("composer tool row", () => {
   it("names the chat settings button in a Chat with no Agent", () => {
     harness.data.set("/providers", { results: [searchProvider] });

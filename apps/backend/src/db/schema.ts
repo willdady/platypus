@@ -28,6 +28,7 @@ import type {
   providerApiModeSchema,
   RglLayoutItem,
   RunEventError,
+  TranscriptSummaryStats,
   TriggerRunStats,
   triggerSchema,
   UnloadedToolSet,
@@ -389,6 +390,65 @@ export const chatMessage = pgTable(
       columns: [t.chatId, t.parentId],
       foreignColumns: [t.chatId, t.id],
     }),
+  ],
+);
+
+/**
+ * One durable **Transcript summary** of a Chat's older Transcript (ADR-0041,
+ * issue #1716): a row recording that "everything on the path from the root to
+ * anchor message X, condensed", so the model receives the `text` in place of
+ * the older messages while the stored Transcript never changes.
+ *
+ * Landed as a table rather than a column on `chat` or on a message, because a
+ * Chat's tree has branches: every Alternative can carry its own summary, and
+ * switching to an Alternative with a summary on it reuses that one.
+ *
+ * Rows are NEVER updated — a new summary supersedes rather than revises an
+ * older one, and a later change to the tree is caught when the row is read,
+ * against `coveredIds`, never by rewriting it. That is what makes the row safe
+ * against the tree's two sibling-making edits (ADR-0026): an edit or a
+ * regenerate adds a message whose path differs at the split, so the anchor's
+ * own path is untouched; only a Delete inside the range changes the live path
+ * under an anchor, and that is exactly what the `coveredIds` check catches.
+ */
+export const chatSummary = pgTable(
+  "chat_summary",
+  (t) => ({
+    // The row's own surrogate id. The (chat, anchor) pair is not unique —
+    // several summaries may sit at the same anchor and the newest usable one
+    // wins at read time — so no key can lead with the pair, and no anchor
+    // rewrite (a ``backward-moving watermark``) exists to version against.
+    id: t.text("id").primaryKey(),
+    chatId: t
+      .text("chat_id")
+      .notNull()
+      .references((): AnyPgColumn => chat.id, { onDelete: "cascade" }),
+    /** The last message the summary covers, always an assistant message. */
+    anchorId: t.text("anchor_id").notNull(),
+    /** The live path ids root→anchor when the summary was taken. */
+    coveredIds: t.jsonb("covered_ids").$type<string[]>().notNull(),
+    /** The summary text. */
+    text: t.text("text").notNull(),
+    /** The model that wrote it and the reading it was taken from (ADR-0041). */
+    stats: t.jsonb("stats").$type<TranscriptSummaryStats>(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    // A Chat's summaries, newest first, for the divider and the read path.
+    index("idx_chat_summary_chat_id_created_at").on(
+      t.chatId,
+      t.createdAt.desc().nullsFirst(),
+    ),
+    // Covers the anchor foreign key below, and the read that picks a row by
+    // its anchor when several summaries sit there.
+    index("idx_chat_summary_chat_id_anchor_id").on(t.chatId, t.anchorId),
+    // The anchor is a message the summary covered; the Chat's delete cascades
+    // through the `chatId` reference above, so no row is ever hard-deleted
+    // under a surviving Chat (ADR-0026).
+    foreignKey({
+      columns: [t.chatId, t.anchorId],
+      foreignColumns: [chatMessage.chatId, chatMessage.id],
+    }).onDelete("cascade"),
   ],
 );
 

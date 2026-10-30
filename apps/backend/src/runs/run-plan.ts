@@ -92,6 +92,14 @@ export type RunPlan = {
    */
   initialOccupancy?: number;
   /**
+   * The id of the Transcript summary this turn's occupancy reading was taken
+   * with (ADR-0041, issue #1716) — the read at the start of the turn. Absent
+   * for a turn that read no summary, and for any delegated or headless run,
+   * which have no Transcript to summarise. Carried to the metadata extractor
+   * so the reply records which summary its reading describes.
+   */
+  summaryId?: string;
+  /**
    * Names this turn's Tool session resolved to an MCP-declared `readOnlyHint`
    * (ADR-0021, issue #626) — keyed by the name a Tool enters the turn's tool
    * map under, so it agrees with `ModelMessage` tool-result parts whether or

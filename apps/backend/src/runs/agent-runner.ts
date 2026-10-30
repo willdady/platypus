@@ -3,7 +3,7 @@ import {
   createIdGenerator,
   createUIMessageStreamResponse,
 } from "ai";
-import type { ModelMessage } from "ai";
+import type { InferUIMessageChunk, ModelMessage } from "ai";
 import {
   prepareChatTurn,
   validateTurnAttachments,
@@ -337,6 +337,13 @@ export class AgentRunner {
         const plan: ResolvedRunPlan = {
           resolved: turn.resolved,
           unloadedToolSets: turn.unloadedToolSets,
+          // The declared window this turn ran under — the denominator the
+          // sink's Transcript-summary trigger divides the turn's reading by
+          // (ADR-0041).
+          contextWindow: turn.stream.contextWindow,
+          // What the turn's session resolved as clearable beyond the core
+          // allowlist, for the after-turn summary pass to clear the same way.
+          readOnlyToolNames: turn.stream.readOnlyToolNames,
         };
         await sink.onResolved({ runId: input.runId, plan });
 
@@ -370,6 +377,9 @@ export class AgentRunner {
         agentId: turn.resolved.agentId,
         searchUnavailable: turn.searchUnavailable,
         prepDurationMs: Date.now() - prepStartMs,
+        // The summary this turn read its occupancy reading through, stamped
+        // beside the reading on the reply (ADR-0041).
+        summaryId: turn.stream.summaryId,
       },
     };
   }
@@ -477,6 +487,12 @@ export class AgentRunner {
       logger.error({ err, runId: input.runId }, "Chat drive background error"),
     );
 
+    // A turn whose start engaged the backstop opens its stream with the status
+    // its wait owed the User. Client branch only — see `withSummarisingStatus`.
+    const clientStream = turn.summaryBackstop
+      ? drive.response.pipeThrough(withSummarisingStatus())
+      : drive.response;
+
     // Wrapped past the tee, so the heartbeat reaches the client and not the
     // server-side drain above (issue #648). The no-buffering header a reverse
     // proxy needs is already on the response the SDK builds; `stream-keepalive`
@@ -485,7 +501,7 @@ export class AgentRunner {
     // Task's producer — finds the Chat already holding the reply.
     return withStreamKeepalive(
       createUIMessageStreamResponse({
-        stream: drive.response.pipeThrough(holdFirstOutput(saved)),
+        stream: clientStream.pipeThrough(holdFirstOutput(saved)),
       }),
     );
   }
@@ -536,6 +552,35 @@ export class AgentRunner {
     return { text, stats };
   }
 }
+
+/** The status row a backstop-waiting turn opens its stream with. */
+export const TRANSCRIPT_SUMMARY_STATUS_TEXT = "Summarising earlier messages…";
+
+/**
+ * Opens a turn's stream with the status its backstop wait owed the User — a
+ * streamed, per-turn run-timeline event (ADR-0023, the Chat turn's record), not
+ * a one-off UI flag, and the same event family the later `/compact` live trace
+ * shows in more places (ADR-0041).
+ *
+ * Emitted at the head of the client branch only: the server-side drain and the
+ * reply the sink persists never carry it, so a reload reads the turn without
+ * the row — it is about the wait, not the reply.
+ */
+const withSummarisingStatus = (): TransformStream<
+  InferUIMessageChunk<PlatypusUIMessage>,
+  InferUIMessageChunk<PlatypusUIMessage>
+> =>
+  new TransformStream({
+    start(controller) {
+      controller.enqueue({
+        type: "data-transcript-summary-status",
+        data: { text: TRANSCRIPT_SUMMARY_STATUS_TEXT },
+      });
+    },
+    transform(chunk, controller) {
+      controller.enqueue(chunk);
+    },
+  });
 
 /** Singleton runner — services and routes share one instance. */
 export const agentRunner = new AgentRunner();

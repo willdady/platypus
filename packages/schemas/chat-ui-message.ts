@@ -99,6 +99,21 @@ export type ChatMessageMetadata = {
    * show nothing — and differ only in why. Normalise with `?? null` at the read
    * site rather than branching on both.
    */
+  /**
+   * The id of the **Transcript summary** whose summarised view this message's
+   * occupancy reading was taken with (ADR-0041, issue #1716). Present on an
+   * assistant message when the turn that produced it ran with a summary in
+   * place of its older Transcript.
+   *
+   * Read back at the start of the next turn to detect a **stale reading**: a
+   * Delete inside the summary's range makes it unusable, so the stored reading
+   * no longer describes the view that turn will send — the turn is then due
+   * for the backstop even though its raw figure is beneath it.
+   *
+   * Absent on a turn that ran with no summary, on the seeded `loadSkill`
+   * message, and on messages with no reading at all.
+   */
+  summaryId?: string;
   contextOccupancy?: {
     /** The occupancy figure itself. */
     inputTokens: number;
@@ -244,8 +259,21 @@ export type CustomUITools = {
   };
 };
 
-/** The data parts a message may carry: a User's Sandbox uploads. */
-export type PlatypusDataTypes = { "sandbox-upload": SandboxUpload };
+/**
+ * A server-emitted, per-turn status row in a Chat's message stream — the
+ * **run-timeline event** a Chat turn carries (ADR-0023), as opposed to a
+ * one-off client flag. The pre-turn backstop's "Summarising earlier
+ * messages…" status rides this (ADR-0041); the later `/compact` live trace is
+ * the same event shown in more places, not a second mechanism.
+ */
+export type TranscriptSummaryStatusData = { text: string };
+
+/** The data parts a message may carry: a User's Sandbox uploads, and the
+ *  turn's server-emitted status rows. */
+export type PlatypusDataTypes = {
+  "sandbox-upload": SandboxUpload;
+  "transcript-summary-status": TranscriptSummaryStatusData;
+};
 
 export type PlatypusUIMessage = UIMessage<
   ChatMessageMetadata,

@@ -17,6 +17,7 @@ import {
   retrieveRecentSummaries,
 } from "./memory-retrieval.ts";
 import { seedUserInvokedSkill } from "./slash-command.ts";
+import { loadChatSummaries } from "./chat-summary.ts";
 import { resolveTurn } from "./chat-messages.ts";
 import { currentTurnId, isA2aChat } from "./a2a-task-state.ts";
 import { endTurnIn, turnEnded } from "./a2a-task-lifecycle.ts";
@@ -147,10 +148,19 @@ export const startChatTurn = async (params: {
     agentId: request.agentId,
   });
 
+  // The Chat's Transcript summaries (ADR-0041), newest first — loaded here,
+  // at the one caller that owns the chat id, and carried down through
+  // `RunInput` exactly like the pinned Memories block, so turn preparation
+  // never re-resolves an id it was not asked about. Only a Chat turn has any:
+  // a headless run's `RunInput` carries none, and the summariser then never
+  // engages.
+  const chatSummaries = await loadChatSummaries(request.id);
+
   const input: RunInput = {
     runId: request.id,
     request,
     messages,
+    chatSummaries,
     memorySnapshot,
     // The same moment the pin was resolved against, so a re-take and its
     // retrieval window agree on "now" rather than reading the clock twice.

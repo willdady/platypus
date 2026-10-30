@@ -9,7 +9,12 @@ vi.mock("../index.ts", () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
-        where: vi.fn(() => ({ limit: mockExistingChat })),
+        // The chat-row lookup chains `.limit(1)`; `loadChatSummaries` chains
+        // `.orderBy(...).limit(50)`. One `where` shape serves both.
+        where: vi.fn(() => ({
+          limit: mockExistingChat,
+          orderBy: vi.fn(() => ({ limit: mockExistingChat })),
+        })),
       })),
     })),
   },
