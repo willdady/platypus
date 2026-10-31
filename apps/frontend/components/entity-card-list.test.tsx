@@ -284,27 +284,30 @@ describe("list paging", () => {
   });
 });
 
-describe("EntityCardList slots", () => {
-  const item = { id: "i1", name: "Alpha", description: "First" };
+const item = { id: "i1", name: "Alpha", description: "First" };
 
-  /** Renders the loaded list with `item` and the given slots. */
-  const renderCards = (
-    slots: Partial<Parameters<typeof EntityCardList<typeof item>>[0]> = {},
-  ) =>
-    render(
-      <EntityCardList
-        items={[item]}
-        isLoading={false}
-        error={undefined}
-        subject="widgets"
-        skeleton={<p>Skeleton</p>}
-        empty={<p>Nothing here</p>}
-        {...slots}
-      />,
-    );
+/** Renders the loaded list with `item` and the given slots. */
+function renderCards(
+  slots: Partial<Parameters<typeof EntityCardList<typeof item>>[0]> = {},
+) {
+  return render(
+    <EntityCardList
+      items={[item]}
+      isLoading={false}
+      error={undefined}
+      subject="widgets"
+      skeleton={<p>Skeleton</p>}
+      empty={<p>Nothing here</p>}
+      {...slots}
+    />,
+  );
+}
 
-  const card = () => screen.getByText("Alpha").closest('[data-slot="item"]');
+function renderedCard() {
+  return screen.getByText("Alpha").closest('[data-slot="item"]');
+}
 
+describe("EntityCardList list states", () => {
   it("renders `skeleton` in a region named for the subject while loading", () => {
     renderCards({ isLoading: true });
 
@@ -327,28 +330,15 @@ describe("EntityCardList slots", () => {
     expect(screen.getByText("Nothing here")).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
+});
 
-  it("renders each item's name and description", () => {
-    renderCards();
-
-    expect(screen.getByText("Alpha")).toBeInTheDocument();
-    expect(screen.getByText("First")).toBeInTheDocument();
-  });
-
+describe("EntityCardList card height", () => {
   it("reserves a two-line description box, with the full text on hover", () => {
     renderCards();
 
     const description = screen.getByText("First");
     expect(description).toHaveClass("line-clamp-2", "min-h-[2lh]");
     expect(description).toHaveAttribute("title", "First");
-  });
-
-  it("truncates the name, with the full name on hover", () => {
-    renderCards();
-
-    const name = screen.getByText("Alpha");
-    expect(name).toHaveClass("truncate");
-    expect(name).toHaveAttribute("title", "Alpha");
   });
 
   it("clamps and reserves the description to `descriptionLines`", () => {
@@ -369,17 +359,34 @@ describe("EntityCardList slots", () => {
     expect(description).not.toHaveAttribute("title");
   });
 
+  it("truncates the name, with the full name on hover", () => {
+    renderCards();
+
+    const name = screen.getByText("Alpha");
+    expect(name).toHaveClass("truncate");
+    expect(name).toHaveAttribute("title", "Alpha");
+  });
+});
+
+describe("EntityCardList slots", () => {
+  it("renders each item's name and description", () => {
+    renderCards();
+
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.getByText("First")).toBeInTheDocument();
+  });
+
   it("links the card to `href`", () => {
     renderCards({ href: (i) => `/things/${i.id}` });
 
-    expect(card()).toHaveAttribute("href", "/things/i1");
+    expect(renderedCard()).toHaveAttribute("href", "/things/i1");
   });
 
   it("renders a plain card without `href`", () => {
     renderCards();
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    expect(card()?.tagName).toBe("DIV");
+    expect(renderedCard()?.tagName).toBe("DIV");
   });
 
   it("renders `media` before the content", () => {
@@ -390,6 +397,14 @@ describe("EntityCardList slots", () => {
     ).toHaveAttribute("data-slot", "item-content");
   });
 
+  it("renders `badges` in the title row after the name", () => {
+    renderCards({ badges: (i) => <span>Badge for {i.name}</span> });
+
+    expect(screen.getByText("Alpha").parentElement).toHaveTextContent(
+      "AlphaBadge for Alpha",
+    );
+  });
+
   it("renders `meta` under the description", () => {
     renderCards({ meta: (i) => <span>Meta of {i.name}</span> });
 
@@ -398,17 +413,43 @@ describe("EntityCardList slots", () => {
     );
   });
 
+  it("renders `actions` before `menu` in the card's actions", () => {
+    renderCards({
+      actions: (i) => <button>Primary {i.name}</button>,
+      menu: (i) => <button>Menu {i.name}</button>,
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Primary Alpha" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Menu Alpha" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders `menu` in the card's actions, and no actions without it", () => {
     const { unmount } = renderCards();
     expect(
-      card()?.querySelector('[data-slot="item-actions"]'),
+      renderedCard()?.querySelector('[data-slot="item-actions"]'),
     ).not.toBeInTheDocument();
     unmount();
 
     renderCards({ menu: (i) => <button>Menu for {i.name}</button> });
     expect(
-      card()?.querySelector('[data-slot="item-actions"]'),
+      renderedCard()?.querySelector('[data-slot="item-actions"]'),
     ).toHaveTextContent("Menu for Alpha");
+  });
+
+  it("draws a shared card as a plain card with the Organization badge", () => {
+    renderCards({
+      href: (i) => `/things/${i.id}`,
+      isShared: () => true,
+      menu: () => <button>Menu</button>,
+    });
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getByText("Organization")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Menu" })).toBeInTheDocument();
   });
 
   it("lets `wrap` surround the card and add classes and meta", () => {
@@ -422,8 +463,45 @@ describe("EntityCardList slots", () => {
 
     expect(
       screen.getByRole("region", { name: "Wrapper of Alpha" }),
-    ).toContainElement(card() as HTMLElement);
-    expect(card()).toHaveClass("border-warning");
+    ).toContainElement(renderedCard() as HTMLElement);
+    expect(renderedCard()).toHaveClass("border-warning");
     expect(screen.getByText("Extra")).toBeInTheDocument();
+  });
+
+  it("draws a group with its heading and rule above the main grid", () => {
+    renderCards({
+      groups: [
+        {
+          heading: "Pinned",
+          items: [{ id: "i2", name: "Beta", description: "" }],
+          "aria-label": "Pinned widgets",
+          separated: true,
+        },
+      ],
+    });
+
+    expect(screen.getByRole("heading", { name: "Pinned" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("list", { name: "Pinned widgets" }),
+    ).toHaveTextContent("Beta");
+    expect(screen.getByRole("separator")).toBeInTheDocument();
+  });
+
+  it("draws a group without the empty state when the main grid is empty", () => {
+    renderCards({
+      items: [],
+      groups: [
+        {
+          heading: "Pinned",
+          items: [{ id: "i2", name: "Beta", description: "" }],
+          "aria-label": "Pinned widgets",
+        },
+      ],
+    });
+
+    expect(screen.queryByText("Nothing here")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("list", { name: "Pinned widgets" }),
+    ).toHaveTextContent("Beta");
   });
 });

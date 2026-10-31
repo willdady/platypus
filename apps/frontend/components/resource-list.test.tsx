@@ -239,11 +239,11 @@ describe.each(RESOURCES)(
 
     // A long URL is cut off with an ellipsis inside the card, so the full
     // value stays readable on hover.
-    it("truncates the row's second line, keeping the full value on hover", async () => {
+    it("ellipsizes the row's second line, keeping the full value on hover", async () => {
       await renderRows([workspaceItem]);
 
       const line = screen.getByText(secondLine);
-      expect(line).toHaveClass("truncate");
+      expect(line).toHaveClass("line-clamp-1", "min-h-[1lh]");
       expect(line).toHaveAttribute("title", secondLine);
     });
 

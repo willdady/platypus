@@ -1,25 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Item,
-  ItemTitle,
-  ItemActions,
-  ItemDescription,
-  ItemContent,
-  ItemMedia,
-} from "@/components/ui/item";
+import { ItemActions } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { OrganizationBadge } from "@/components/resource-list";
+import { AgentAvatar } from "@/components/agent-avatar";
 import { CloneDialog } from "@/components/clone-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
+import { EntityCardList } from "@/components/entity-card-list";
 import {
   ButtonRowSkeleton,
   CardGridSkeleton,
   IconButtonSkeleton,
-  LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -67,7 +59,6 @@ import { splitPinned } from "@/lib/pinned-agents";
 import {
   ListFooter,
   ListPagination,
-  GhostCards,
   pageOf,
 } from "@/components/list-pagination";
 import {
@@ -286,29 +277,11 @@ export function AgentsList({
     return writeEntity<Agent>(url, "agents", scope, { data: sanitizedData });
   };
 
-  if (isLoadingAgents || isLoadingProviders) {
-    return (
-      <LoadingRegion label="Loading agents">
-        <AgentCardsSkeleton />
-        <ButtonRowSkeleton
-          className="mt-4"
-          widths={["w-36", ...(canManageShared ? ["w-44"] : [])]}
-        />
-      </LoadingRegion>
-    );
-  }
+  const isLoading = isLoadingAgents || isLoadingProviders;
 
-  if (agentsError) {
-    return (
-      <ListError
-        error={agentsError}
-        subject="agents"
-        onRetry={() => void mutate()}
-      />
-    );
-  }
-
-  if (!providers.length) {
+  // A Workspace with no Provider can't run an Agent: say so before the list's
+  // own ladder, and don't offer to create one.
+  if (!isLoading && !agentsError && !providers.length) {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="w-full xl:w-4/5 max-w-4xl">
@@ -379,92 +352,36 @@ export function AgentsList({
     );
   };
 
-  const renderCard = (agent: AgentWithScope) => {
-    const isOrgScoped = agent.scope === "organization";
-    // Count and list only references that actually resolve in this
-    // workspace, so the badge count matches the tooltip — a detached
-    // shared resource drops out of both (it is no longer active here).
+  // Count and list only references that actually resolve in this workspace,
+  // so the badge count matches the tooltip — a detached shared resource drops
+  // out of both (it is no longer active here).
+  const renderMeta = (agent: AgentWithScope) => {
     const toolSetNames = getToolSetNames(agent.toolSetIds);
     const skillNames = getSkillNames(agent.skillIds);
     const subAgentNames = getSubAgentNames(agent.subAgentIds);
+    // One line: the counts clip rather than wrap.
     return (
-      <li key={agent.id}>
-        <Item variant="outline" className="h-full items-stretch">
-          {agent.avatarUrl ? (
-            <ItemMedia variant="image" className="size-12 rounded-full">
-              {/* Agent avatar URL is user-supplied (arbitrary host); not
-            routable through the Next image optimizer. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={agent.avatarUrl}
-                alt={agent.name}
-                className="size-full object-cover"
-                width={48}
-                height={48}
-                loading="lazy"
-                decoding="async"
-              />
-            </ItemMedia>
-          ) : (
-            <ItemMedia
-              variant="icon"
-              className="size-12 rounded-full [&_svg]:!size-7"
-            >
-              <Bot className="size-7 text-muted-foreground" />
-            </ItemMedia>
-          )}
-          <ItemContent>
-            <div className="flex min-h-badge items-center gap-2">
-              <ItemTitle className="min-w-0">
-                <span className="truncate" title={agent.name}>
-                  {agent.name}
-                </span>
-              </ItemTitle>
-              {isOrgScoped && <OrganizationBadge />}
-            </div>
-            {/* Always two lines tall, so every card is one height. */}
-            <ItemDescription
-              className="text-xs line-clamp-2 min-h-[2lh]"
-              title={agent.description || undefined}
-            >
-              {agent.description}
-            </ItemDescription>
-            {/* One line: the counts clip rather than wrap. */}
-            <div className="flex gap-3 mt-auto overflow-hidden text-xs text-muted-foreground">
-              <CountTooltip
-                icon={<Wrench className="size-3" />}
-                noun="tool set"
-                names={toolSetNames}
-              />
-              <CountTooltip
-                icon={<Sparkles className="size-3" />}
-                noun="skill"
-                names={skillNames}
-              />
-              <CountTooltip
-                icon={<Bot className="size-3" />}
-                noun="sub-agent"
-                names={subAgentNames}
-              />
-            </div>
-          </ItemContent>
-          <ItemActions className={agentCardActionsClassName}>
-            <Button size="sm" asChild>
-              <Link href={routes.chat.forAgent(agent.id)}>
-                <BotMessageSquare /> New chat
-              </Link>
-            </Button>
-            {renderMenu(agent)}
-          </ItemActions>
-        </Item>
-      </li>
+      <div className="flex gap-3 mt-auto overflow-hidden text-xs text-muted-foreground">
+        <CountTooltip
+          icon={<Wrench className="size-3" />}
+          noun="tool set"
+          names={toolSetNames}
+        />
+        <CountTooltip
+          icon={<Sparkles className="size-3" />}
+          noun="skill"
+          names={skillNames}
+        />
+        <CountTooltip
+          icon={<Bot className="size-3" />}
+          noun="sub-agent"
+          names={subAgentNames}
+        />
+      </div>
     );
   };
 
   const cloneRefs = agentToClone && cloneReferences(agentToClone);
-
-  const gridClassName =
-    "grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4";
 
   const actions = (
     <>
@@ -488,36 +405,67 @@ export function AgentsList({
 
   return (
     <>
-      {agents.length === 0 ? (
-        <EmptyCard
-          icon={<Bot />}
-          title="No agents yet"
-          description="Create an agent to start chatting with it in this workspace."
-          action={actions}
-        />
-      ) : (
-        <>
-          {pinnedAgents.length > 0 && (
-            <div className="mb-2 flex flex-col gap-2">
-              <h3 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                <Pin className="size-4" /> Pinned
-              </h3>
-              <ul aria-label="Pinned agents" className={gridClassName}>
-                {pinnedAgents.map(renderCard)}
-              </ul>
-              <hr className="mt-4" />
-            </div>
-          )}
-          {unpinnedAgents.length > 0 && (
-            <ul aria-label="Agents" className={gridClassName}>
-              {page.items.map(renderCard)}
-              <GhostCards page={page} />
-            </ul>
-          )}
-        </>
-      )}
+      <EntityCardList
+        items={page.items}
+        groups={
+          pinnedAgents.length
+            ? [
+                {
+                  heading: (
+                    <>
+                      <Pin className="size-4" /> Pinned
+                    </>
+                  ),
+                  items: pinnedAgents,
+                  "aria-label": "Pinned agents",
+                  separated: true,
+                },
+              ]
+            : undefined
+        }
+        ghosts={page}
+        isLoading={isLoading}
+        error={agentsError}
+        subject="agents"
+        onRetry={() => void mutate()}
+        skeleton={
+          <>
+            <AgentCardsSkeleton />
+            <ButtonRowSkeleton
+              className="mt-4"
+              widths={["w-36", ...(canManageShared ? ["w-44"] : [])]}
+            />
+          </>
+        }
+        empty={
+          <EmptyCard
+            icon={<Bot />}
+            title="No agents yet"
+            description="Create an agent to start chatting with it in this workspace."
+            action={actions}
+          />
+        }
+        aria-label="Agents"
+        // The counts sit on the card's bottom edge, as the stacked layout
+        // intends; the card must stretch to place them there.
+        wrap={(agent, card) => card({ className: "items-stretch" })}
+        media={(agent) => (
+          <AgentAvatar agent={agent} className="size-12 self-start" />
+        )}
+        isShared={(agent) => agent.scope === "organization"}
+        meta={renderMeta}
+        actions={(agent) => (
+          <Button size="sm" asChild>
+            <Link href={routes.chat.forAgent(agent.id)}>
+              <BotMessageSquare /> New chat
+            </Link>
+          </Button>
+        )}
+        actionsClassName={agentCardActionsClassName}
+        menu={renderMenu}
+      />
 
-      {agents.length > 0 && (
+      {!isLoading && !agentsError && agents.length > 0 && (
         <ListFooter
           pagination={
             <ListPagination

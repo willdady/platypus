@@ -14,6 +14,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import { CardGridSkeleton, LoadingRegion } from "@/components/list-skeletons";
 import { RowActionsMenu } from "@/components/row-actions-menu";
+import { OrganizationBadge } from "@/components/organization-badge";
 import { SearchInput } from "@/components/search-input";
 import {
   GhostCards,
@@ -57,76 +58,80 @@ type CardExtras = {
   meta?: ReactNode;
 };
 
-/**
- * The `grid-cols-1 lg:grid-cols-2` card list of outline `Item` cards, with
- * its loading, failed and empty states. The caller fetches, sorts, and owns
- * the dialogs and controls around it; the slots fill in what differs.
- */
-export function EntityCardList<T extends EntityCard>({
-  items,
-  isLoading,
-  error,
-  subject,
-  skeleton,
-  empty,
-  descriptionLines = 2,
-  ghosts = NO_GHOSTS,
-  href,
-  media,
-  meta,
-  menu,
-  wrap,
-  onRetry,
-}: {
-  items: readonly T[];
-  /** Empty slots after the cards, filling a short last page or row. */
-  ghosts?: Pick<Page<unknown>, "ghosts" | "rowGhosts">;
-  isLoading: boolean;
-  error: unknown;
-  /** The plural noun loading or failing to load: "boards", "shared agents". */
-  subject: string;
-  /** Drawn in the loading region. */
-  skeleton: ReactNode;
-  /** Drawn when there are no items: a `ListState` or an `EmptyCard`. */
-  empty: ReactNode;
-  /** The lines the description clamps to and reserves. */
-  descriptionLines?: keyof typeof DESCRIPTION_LINES;
+/** The slots that fill in what differs between one list's cards and another's. */
+type EntityCardSlots<T extends EntityCard> = {
   /** The card links here; without it the card is not a link. */
-  href?: (item: T) => string;
+  href?: (item: T) => string | undefined;
   /** Leads the card: an avatar. */
   media?: (item: T) => ReactNode;
+  /** Rendered in the title row after the name: pills. */
+  badges?: (item: T) => ReactNode;
+  /** Rendered inside `ItemActions` before the menu: a primary button. */
+  actions?: (item: T) => ReactNode;
+  /** Classes on `ItemActions`, for a card whose primary action wraps. */
+  actionsClassName?: string;
   /** Rendered under the description: a count, a badge. */
   meta?: (item: T) => ReactNode;
   /** The card's `RowActionsMenu`; without it the card has no actions. */
   menu?: (item: T) => ReactNode;
   /** Surrounds each card, drawing it with `card`: a per-card read. */
   wrap?: (item: T, card: (extras?: CardExtras) => ReactNode) => ReactNode;
-  /** Reads the list again after a failed read; without it there is no Retry. */
-  onRetry?: () => void;
+  /**
+   * When true for an item: `OrganizationBadge` is appended to its badges,
+   * `href` is not applied (the card is not a link), and `wrap`/`menu` still
+   * run. The caller keeps owning the menu contents (`RowActionsMenu shared …`).
+   */
+  isShared?: (item: T) => boolean;
+};
+
+/**
+ * The `grid-cols-1 lg:grid-cols-2` grid of outline `Item` cards, with its
+ * ghost slots, but without the list's loading, failed and empty states — so a
+ * group of cards (a Pinned section) can be drawn inside a list that already
+ * ran the ladder.
+ */
+function EntityCardGrid<T extends EntityCard>({
+  items,
+  ghosts = NO_GHOSTS,
+  descriptionLines = 2,
+  "aria-label": label,
+  href,
+  media,
+  badges,
+  actions,
+  actionsClassName,
+  meta,
+  menu,
+  wrap,
+  isShared,
+}: EntityCardSlots<T> & {
+  items: readonly T[];
+  /** Empty slots after the cards, filling a short last page or row. */
+  ghosts?: Pick<Page<unknown>, "ghosts" | "rowGhosts">;
+  /** The lines the description clamps to and reserves. */
+  descriptionLines?: keyof typeof DESCRIPTION_LINES;
+  /** Names the grid for assistive tech: "Pinned agents". */
+  "aria-label"?: string;
 }) {
-  if (isLoading) {
-    return (
-      <LoadingRegion label={`Loading ${subject}`}>{skeleton}</LoadingRegion>
-    );
-  }
-
-  if (error) {
-    return <ListError error={error} subject={subject} onRetry={onRetry} />;
-  }
-
-  if (!items.length) {
-    return empty;
-  }
-
   const renderCard = (item: T, extras: CardExtras = {}) => {
+    const shared = isShared?.(item) ?? false;
+    const actionsNode = actions?.(item);
+    const menuNode = menu?.(item);
     const content = (
       <>
         {media?.(item)}
         <ItemContent>
-          <ItemTitle className="min-h-badge max-w-full">
+          <ItemTitle
+            className={cn(
+              "min-h-badge max-w-full",
+              (badges || isShared) && "min-w-0",
+            )}
+          >
             <span className="truncate" title={item.name}>
               {item.name}
             </span>
+            {badges?.(item)}
+            {shared && <OrganizationBadge />}
           </ItemTitle>
           <ItemDescription
             className={cn("text-xs", DESCRIPTION_LINES[descriptionLines])}
@@ -137,10 +142,15 @@ export function EntityCardList<T extends EntityCard>({
           {meta?.(item)}
           {extras.meta}
         </ItemContent>
-        {menu && <ItemActions>{menu(item)}</ItemActions>}
+        {(actionsNode || menuNode) && (
+          <ItemActions className={actionsClassName}>
+            {actionsNode}
+            {menuNode}
+          </ItemActions>
+        )}
       </>
     );
-    const link = href?.(item);
+    const link = shared ? undefined : href?.(item);
     return link ? (
       <Item
         variant="outline"
@@ -157,7 +167,10 @@ export function EntityCardList<T extends EntityCard>({
   };
 
   return (
-    <ul className="grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4">
+    <ul
+      aria-label={label}
+      className="grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4"
+    >
       {items.map((item) => (
         <li key={item.id}>
           {wrap
@@ -167,6 +180,106 @@ export function EntityCardList<T extends EntityCard>({
       ))}
       <GhostCards page={ghosts} />
     </ul>
+  );
+}
+
+/** A section of cards drawn above the list's main grid, such as Pinned agents. */
+export type EntityCardGroup<T extends EntityCard> = {
+  /** Drawn above the group's cards as its heading. */
+  heading?: ReactNode;
+  items: readonly T[];
+  /** Empty slots after the group's cards. */
+  ghosts?: Pick<Page<unknown>, "ghosts" | "rowGhosts">;
+  /** Names the group's grid for assistive tech. */
+  "aria-label"?: string;
+  /** Draws a rule under the group, separating it from the main grid. */
+  separated?: boolean;
+};
+
+/**
+ * The `grid-cols-1 lg:grid-cols-2` card list of outline `Item` cards, with
+ * its loading, failed and empty states. The caller fetches, sorts, and owns
+ * the dialogs and controls around it; the slots fill in what differs.
+ */
+export function EntityCardList<T extends EntityCard>({
+  items,
+  isLoading,
+  error,
+  subject,
+  skeleton,
+  empty,
+  descriptionLines = 2,
+  ghosts = NO_GHOSTS,
+  groups,
+  "aria-label": label,
+  onRetry,
+  ...slots
+}: EntityCardSlots<T> & {
+  items: readonly T[];
+  /** Empty slots after the cards, filling a short last page or row. */
+  ghosts?: Pick<Page<unknown>, "ghosts" | "rowGhosts">;
+  isLoading: boolean;
+  error: unknown;
+  /** The plural noun loading or failing to load: "boards", "shared agents". */
+  subject: string;
+  /** Drawn in the loading region. */
+  skeleton: ReactNode;
+  /** Drawn when there are no items: a `ListState`, an `EmptyCard`, or null. */
+  empty: ReactNode;
+  /** The lines the description clamps to and reserves. */
+  descriptionLines?: keyof typeof DESCRIPTION_LINES;
+  /** Sections drawn above the main grid: Pinned agents. */
+  groups?: readonly EntityCardGroup<T>[];
+  /** Names the main grid for assistive tech: "Agents". */
+  "aria-label"?: string;
+  /** Reads the list again after a failed read; without it there is no Retry. */
+  onRetry?: () => void;
+}) {
+  if (isLoading) {
+    return (
+      <LoadingRegion label={`Loading ${subject}`}>{skeleton}</LoadingRegion>
+    );
+  }
+
+  if (error) {
+    return <ListError error={error} subject={subject} onRetry={onRetry} />;
+  }
+
+  const shownGroups = groups?.filter((group) => group.items.length) ?? [];
+
+  if (!items.length && !shownGroups.length) {
+    return empty;
+  }
+
+  return (
+    <>
+      {shownGroups.map((group, i) => (
+        <div key={i} className="mb-2 flex flex-col gap-2">
+          {group.heading && (
+            <h3 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+              {group.heading}
+            </h3>
+          )}
+          <EntityCardGrid
+            {...slots}
+            items={group.items}
+            ghosts={group.ghosts}
+            descriptionLines={descriptionLines}
+            aria-label={group["aria-label"]}
+          />
+          {group.separated && <hr className="mt-4" />}
+        </div>
+      ))}
+      {items.length > 0 && (
+        <EntityCardGrid
+          {...slots}
+          items={items}
+          ghosts={ghosts}
+          descriptionLines={descriptionLines}
+          aria-label={label}
+        />
+      )}
+    </>
   );
 }
 

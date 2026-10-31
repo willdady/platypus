@@ -8,6 +8,14 @@ description: Card conventions for Platypus frontend lists. Use when adding or ch
 The Workspace home's Agents, Boards, Dashboards, Triggers and Skills cards are
 the reference implementation; a new card list reads the same way.
 
+Build every card list on `EntityCardList` (`components/entity-card-list.tsx`).
+It owns the grid, the loading/error/empty ladder, and the one-height card, so a
+list fills in the slots instead of re-building them: `media` leads the card,
+`badges` fills the title row, `meta` adds the lines under the description,
+`actions` puts a primary button before the menu, `menu` is the `RowActionsMenu`,
+`href` is the card's click, and `isShared` adds the Organization badge and
+locks the click. Use its `groups` for a Pinned section.
+
 ## What clicking a card opens
 
 **A card opens the item's main view, unless it carries an explicit primary

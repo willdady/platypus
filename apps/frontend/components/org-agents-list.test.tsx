@@ -138,29 +138,10 @@ describe("OrgAgentsList unattached warning", () => {
   });
 });
 
-describe("OrgAgentsList list states", () => {
+describe("OrgAgentsList empty state", () => {
   it("shows the empty state when the organization shares no agents", async () => {
     await renderAgents([]);
 
     expect(screen.getByText(/No shared agents yet/i)).toBeInTheDocument();
-  });
-
-  it("surfaces a failed read rather than rendering an empty list", async () => {
-    mockScopedSWR({ "/agents": { error: new Error("500") } });
-    await renderList(<OrgAgentsList orgId="org1" />);
-
-    expect(
-      screen.getByText(/Failed to load shared agents/),
-    ).toBeInTheDocument();
-  });
-
-  it("holds the grid with a skeleton, not the empty state, while loading", async () => {
-    mockScopedSWR({ "/agents": { isLoading: true } });
-    await renderList(<OrgAgentsList orgId="org1" />);
-
-    expect(
-      screen.getByRole("status", { name: "Loading shared agents" }),
-    ).toHaveAttribute("aria-busy", "true");
-    expect(screen.queryByText(/No shared agents yet/i)).not.toBeInTheDocument();
   });
 });

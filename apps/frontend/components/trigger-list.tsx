@@ -5,25 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CloneDialog } from "@/components/clone-dialog";
 import { replaceSearchParam } from "@/lib/search-params";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
-import {
-  Item,
-  ItemTitle,
-  ItemActions,
-  ItemDescription,
-  ItemContent,
-} from "@/components/ui/item";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
-import {
-  CardGridSkeleton,
-  LoadingRegion,
-  SkeletonLine,
-} from "@/components/list-skeletons";
+import { ListState } from "@/components/list-state";
+import { CardGridSkeleton, SkeletonLine } from "@/components/list-skeletons";
+import { EntityCardList } from "@/components/entity-card-list";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import {
   ListFooter,
   ListPagination,
-  GhostCards,
   pageOf,
 } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
@@ -330,29 +319,6 @@ export function TriggerList({
     </>
   );
 
-  if (isLoading && !triggersData) {
-    return withFooter(
-      <LoadingRegion label="Loading triggers">
-        <TriggerCardsSkeleton />
-      </LoadingRegion>,
-    );
-  }
-
-  if (error) {
-    return withFooter(
-      <ListError
-        error={error}
-        subject="triggers"
-        onRetry={() => void mutate()}
-      />,
-    );
-  }
-
-  // No controls with nothing to filter, as with the Skills section above it.
-  if (!allTriggers.length) {
-    return withFooter(<ListState variant="empty">No triggers yet.</ListState>);
-  }
-
   // A new filter starts on page 1.
   const setFilter = (key: string, value: string | null) => {
     replaceSearchParam(key, value);
@@ -360,62 +326,48 @@ export function TriggerList({
   };
 
   // Shown even with nothing listed: fired One-offs may be all there is.
-  const controls = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <Select
-        value={typeFilter}
-        onValueChange={(value) =>
-          setFilter("triggerType", value === ALL ? null : value)
-        }
-      >
-        <SelectTrigger className="w-36" aria-label="Filter by type">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>All types</SelectItem>
-          {triggerTypeSchema.options.map((type) => (
-            <SelectItem key={type} value={type}>
-              {TRIGGER_TYPE_LABELS[type]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <div className="flex items-center gap-2">
-        <Switch
-          id="show-fired-triggers"
-          checked={showFired}
-          onCheckedChange={(checked) =>
-            setFilter("triggerShowFired", checked ? "true" : null)
+  const controls =
+    !error && allTriggers.length ? (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Select
+          value={typeFilter}
+          onValueChange={(value) =>
+            setFilter("triggerType", value === ALL ? null : value)
           }
-          // Only a One-off fires, and a One-off is always Cron.
-          disabled={typeFilter === "event" || typeFilter === "inbound"}
-        />
-        <Label htmlFor="show-fired-triggers" className="text-sm font-normal">
-          Show fired
-        </Label>
+        >
+          <SelectTrigger className="w-36" aria-label="Filter by type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All types</SelectItem>
+            {triggerTypeSchema.options.map((type) => (
+              <SelectItem key={type} value={type}>
+                {TRIGGER_TYPE_LABELS[type]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="show-fired-triggers"
+            checked={showFired}
+            onCheckedChange={(checked) =>
+              setFilter("triggerShowFired", checked ? "true" : null)
+            }
+            // Only a One-off fires, and a One-off is always Cron.
+            disabled={typeFilter === "event" || typeFilter === "inbound"}
+          />
+          <Label htmlFor="show-fired-triggers" className="text-sm font-normal">
+            Show fired
+          </Label>
+        </div>
       </div>
-    </div>
-  );
-
-  if (!triggers.length) {
-    return withFooter(controls);
-  }
+    ) : null;
 
   const shown =
     typeFilter === ALL
       ? triggers
       : triggers.filter((trigger) => trigger.type === typeFilter);
-
-  if (!shown.length) {
-    return withFooter(
-      <>
-        {controls}
-        <ListState variant="empty">
-          No {TRIGGER_TYPE_LABELS[typeFilter as TriggerType]} triggers to show.
-        </ListState>
-      </>,
-    );
-  }
 
   const page = pageOf(
     searchParams.get("triggersPage"),
@@ -423,126 +375,131 @@ export function TriggerList({
     TRIGGERS_PAGE_SIZE,
   );
 
+  // Nothing to list yet; fired One-offs hidden but reachable; or a type with
+  // no Trigger of its own.
+  const empty = !allTriggers.length ? (
+    <ListState variant="empty">No triggers yet.</ListState>
+  ) : !triggers.length ? null : (
+    <ListState variant="empty">
+      No {TRIGGER_TYPE_LABELS[typeFilter as TriggerType]} triggers to show.
+    </ListState>
+  );
+
+  const renderBadges = (trigger: Serialized<Trigger>) => (
+    <>
+      <Badge variant="outline" className="text-xs">
+        <TriggerTypeIcon type={trigger.type} />
+        {TRIGGER_TYPE_LABELS[trigger.type] ?? trigger.type}
+      </Badge>
+      {trigger.type === "cron" && trigger.config.isOneOff && (
+        <Badge variant="outline" className="text-xs">
+          <CalendarClock />
+          One-off
+        </Badge>
+      )}
+      {trigger.firedAt ? (
+        <Badge variant="secondary" className="text-xs">
+          <CircleCheck />
+          Fired
+        </Badge>
+      ) : (
+        !trigger.enabled && <DisabledBadge />
+      )}
+    </>
+  );
+
+  const renderMeta = (trigger: Serialized<Trigger>) => (
+    <>
+      <div className="flex h-4 min-w-0 items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+        {agentsById[trigger.agentId] && (
+          <>
+            <AgentAvatar
+              agent={agentsById[trigger.agentId]}
+              className="size-4 shrink-0"
+            />
+            <TruncatedText text={agentsById[trigger.agentId].name} />
+          </>
+        )}
+      </div>
+      {/* Two lines tall, the most any Trigger draws, so every card is one
+          height and any spare space falls last. */}
+      <div className="flex min-h-9 flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
+        {trigger.type === "cron" ? (
+          <ScheduleLine
+            cronExpression={trigger.config.cronExpression}
+            timezone={trigger.config.timezone}
+            nextRunAt={
+              trigger.enabled && trigger.nextRunAt
+                ? formatDateTime(trigger.nextRunAt)
+                : undefined
+            }
+          />
+        ) : trigger.type === "inbound" ? (
+          <InboundLine trigger={trigger} />
+        ) : (
+          <CardLine>
+            <CountTooltip
+              icon={<Zap className="size-3" />}
+              noun="event"
+              names={trigger.config.events}
+            />
+          </CardLine>
+        )}
+        <CardLine>
+          <span>Last run:</span>
+          {trigger.lastRunStatus && trigger.lastRunStartedAt ? (
+            <>
+              <span title={formatDateTime(trigger.lastRunStartedAt)}>
+                {formatRelativeTime(trigger.lastRunStartedAt)}
+              </span>
+              <StatusIcon status={trigger.lastRunStatus} />
+            </>
+          ) : (
+            <span>Never</span>
+          )}
+        </CardLine>
+      </div>
+    </>
+  );
+
+  const renderMenu = (trigger: Serialized<Trigger>) => (
+    <RowActionsMenu
+      name={trigger.name}
+      edit={{ href: routes.triggers.detail(trigger.id) }}
+      clone={{ onSelect: () => setTriggerToClone(trigger) }}
+      toggle={
+        // A fired One-off is spent: it cannot be re-armed.
+        trigger.firedAt
+          ? undefined
+          : {
+              enabled: trigger.enabled,
+              onSelect: () => void toggle.toggle(trigger),
+              disabled: toggle.isToggling(trigger.id),
+            }
+      }
+      remove={{ onSelect: () => deleteFlow.request(trigger) }}
+    />
+  );
+
   return withFooter(
     <>
       {controls}
-
-      <ul className="grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4">
-        {page.items.map((trigger) => (
-          <li key={trigger.id}>
-            <Item variant="outline" className="h-full cursor-pointer" asChild>
-              {/* The card opens the Trigger's runs; Edit is in the menu. */}
-              <Link href={routes.triggerRuns.forTrigger(trigger.id)}>
-                <ItemContent>
-                  <div className="flex min-h-badge items-center gap-2">
-                    <ItemTitle className="min-w-0">
-                      <span className="truncate" title={trigger.name}>
-                        {trigger.name}
-                      </span>
-                    </ItemTitle>
-                    <Badge variant="outline" className="text-xs">
-                      <TriggerTypeIcon type={trigger.type} />
-                      {TRIGGER_TYPE_LABELS[trigger.type] ?? trigger.type}
-                    </Badge>
-                    {trigger.type === "cron" && trigger.config.isOneOff && (
-                      <Badge variant="outline" className="text-xs">
-                        <CalendarClock />
-                        One-off
-                      </Badge>
-                    )}
-                    {trigger.firedAt ? (
-                      <Badge variant="secondary" className="text-xs">
-                        <CircleCheck />
-                        Fired
-                      </Badge>
-                    ) : (
-                      !trigger.enabled && <DisabledBadge />
-                    )}
-                  </div>
-                  <ItemDescription
-                    className="text-xs min-h-[2lh]"
-                    title={trigger.description || undefined}
-                  >
-                    {trigger.description}
-                  </ItemDescription>
-                  <div className="flex h-4 min-w-0 items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-                    {agentsById[trigger.agentId] && (
-                      <>
-                        <AgentAvatar
-                          agent={agentsById[trigger.agentId]}
-                          className="size-4 shrink-0"
-                        />
-                        <TruncatedText
-                          text={agentsById[trigger.agentId].name}
-                        />
-                      </>
-                    )}
-                  </div>
-                  {/* Two lines tall, the most any Trigger draws, so every
-                      card is one height and any spare space falls last. */}
-                  <div className="flex min-h-9 flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
-                    {trigger.type === "cron" ? (
-                      <ScheduleLine
-                        cronExpression={trigger.config.cronExpression}
-                        timezone={trigger.config.timezone}
-                        nextRunAt={
-                          trigger.enabled && trigger.nextRunAt
-                            ? formatDateTime(trigger.nextRunAt)
-                            : undefined
-                        }
-                      />
-                    ) : trigger.type === "inbound" ? (
-                      <InboundLine trigger={trigger} />
-                    ) : (
-                      <CardLine>
-                        <CountTooltip
-                          icon={<Zap className="size-3" />}
-                          noun="event"
-                          names={trigger.config.events}
-                        />
-                      </CardLine>
-                    )}
-                    <CardLine>
-                      <span>Last run:</span>
-                      {trigger.lastRunStatus && trigger.lastRunStartedAt ? (
-                        <>
-                          <span
-                            title={formatDateTime(trigger.lastRunStartedAt)}
-                          >
-                            {formatRelativeTime(trigger.lastRunStartedAt)}
-                          </span>
-                          <StatusIcon status={trigger.lastRunStatus} />
-                        </>
-                      ) : (
-                        <span>Never</span>
-                      )}
-                    </CardLine>
-                  </div>
-                </ItemContent>
-                <ItemActions className="gap-1">
-                  <RowActionsMenu
-                    name={trigger.name}
-                    edit={{ href: routes.triggers.detail(trigger.id) }}
-                    clone={{ onSelect: () => setTriggerToClone(trigger) }}
-                    toggle={
-                      // A fired One-off is spent: it cannot be re-armed.
-                      trigger.firedAt
-                        ? undefined
-                        : {
-                            enabled: trigger.enabled,
-                            onSelect: () => void toggle.toggle(trigger),
-                            disabled: toggle.isToggling(trigger.id),
-                          }
-                    }
-                    remove={{ onSelect: () => deleteFlow.request(trigger) }}
-                  />
-                </ItemActions>
-              </Link>
-            </Item>
-          </li>
-        ))}
-        <GhostCards page={page} />
-      </ul>
+      <EntityCardList
+        items={page.items}
+        ghosts={page}
+        isLoading={isLoading && !triggersData}
+        error={error}
+        subject="triggers"
+        onRetry={() => void mutate()}
+        skeleton={<TriggerCardsSkeleton />}
+        empty={empty}
+        // The card opens the Trigger's runs; Edit is in the menu.
+        href={(trigger) => routes.triggerRuns.forTrigger(trigger.id)}
+        badges={renderBadges}
+        meta={renderMeta}
+        actionsClassName="gap-1"
+        menu={renderMenu}
+      />
 
       {triggerToClone && (
         <CloneDialog

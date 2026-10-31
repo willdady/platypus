@@ -90,7 +90,7 @@ describe("UsersList delete", () => {
   });
 });
 
-describe("UsersList list states", () => {
+describe("UsersList table states", () => {
   it("shows the empty state when no users came back", async () => {
     await renderUsers([]);
 

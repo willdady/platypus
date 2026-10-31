@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ItemMedia } from "@/components/ui/item";
+import { AgentAvatar } from "@/components/agent-avatar";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyCard } from "@/components/empty-card";
 import { EntityCardList } from "@/components/entity-card-list";
@@ -96,31 +96,9 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
             description="Promote a workspace agent to the organization to share it across workspaces."
           />
         }
-        media={(agent) =>
-          agent.avatarUrl ? (
-            <ItemMedia variant="image" className="size-12 rounded-full">
-              {/* Agent avatar URL is user-supplied (arbitrary host); not
-              routable through the Next image optimizer. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={agent.avatarUrl}
-                alt={agent.name}
-                className="size-full object-cover"
-                width={48}
-                height={48}
-                loading="lazy"
-                decoding="async"
-              />
-            </ItemMedia>
-          ) : (
-            <ItemMedia
-              variant="icon"
-              className="size-12 rounded-full [&_svg]:!size-7"
-            >
-              <Bot className="size-7 text-muted-foreground" />
-            </ItemMedia>
-          )
-        }
+        media={(agent) => (
+          <AgentAvatar agent={agent} className="size-12 self-start" />
+        )}
         meta={(agent) =>
           canManage && (
             <div className="mt-1">

@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentType, type ReactNode, useState } from "react";
-import { Building, Plus, Share2 } from "lucide-react";
+import { Plus, Share2 } from "lucide-react";
 import Link from "next/link";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useAuth } from "@/components/auth-provider";
@@ -14,21 +14,19 @@ import {
 } from "@/lib/authorization";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
-import { cn } from "@/lib/utils";
 import {
   useSharedDeleteGuard,
   useSharedDetach,
 } from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
-import { ListError } from "./list-state";
 import {
   ButtonRowSkeleton,
-  ItemRowsSkeleton,
-  LoadingRegion,
+  CardGridSkeleton,
   SkeletonLine,
 } from "./list-skeletons";
-import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { DeleteConfirmDialog } from "./delete-confirm-dialog";
+import { EntityCardList } from "./entity-card-list";
+import { OrganizationBadge } from "./organization-badge";
 import {
   AttachmentCount,
   ManageAttachmentsDialog,
@@ -36,7 +34,6 @@ import {
   UnattachedWarning,
 } from "./manage-sharing";
 import { RowActionsMenu } from "./row-actions-menu";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
   AttachSharedAction,
@@ -119,6 +116,7 @@ export function ResourceList({
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
   const {
+    data,
     error,
     isLoading,
     mutate,
@@ -168,40 +166,6 @@ export function ResourceList({
       )
     : true;
 
-  if (isLoading) {
-    // The same rows, then the same Add / Attach buttons the loaded list
-    // offers this caller, so neither pops in when the read lands.
-    return (
-      <LoadingRegion label={`Loading ${config.labels.plural}`}>
-        <ItemRowsSkeleton
-          badge={Boolean(workspaceId)}
-          secondLine
-          extra={
-            canManageAttachments && (
-              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
-            )
-          }
-        />
-        <ButtonRowSkeleton
-          widths={[
-            ...(canManage ? ["w-32"] : []),
-            ...(canAttach && workspaceId ? ["w-48"] : []),
-          ]}
-        />
-      </LoadingRegion>
-    );
-  }
-
-  if (error) {
-    return (
-      <ListError
-        error={error}
-        subject={config.labels.plural}
-        onRetry={() => void mutate()}
-      />
-    );
-  }
-
   // The resource's own settings surface, with any trailing segment: a row's
   // detail page, or its create page.
   const orgSettingsRoot = orgRoutes(orgId).settings[config.settingsKey];
@@ -232,122 +196,134 @@ export function ResourceList({
     </div>
   );
 
-  if (!resources.length) {
-    const EmptyState = config.emptyState;
-    return (
-      <EmptyState
-        orgId={orgId}
-        workspaceId={workspaceId}
-        canManage={canManage}
-        action={canManage || canAttach ? actions : undefined}
-      />
-    );
-  }
+  const EmptyState = config.emptyState;
+
+  // The card's description carries the row's second line: a Provider's type,
+  // an MCP server's URL.
+  const cards = resources.map((resource) => ({
+    ...resource,
+    description: resource[config.secondLine],
+  }));
+
+  // A Shared resource is locked inside a Workspace: a plain card, with Detach
+  // named in its menu rather than behind the card's own click (ADR-0007).
+  const isShared = (resource: ScopedResource) =>
+    Boolean(workspaceId) && resource.scope === "organization";
 
   return (
     <>
-      <ul className="mb-4">
-        {resources.map((resource) => {
-          const isOrgScopedInWorkspace =
-            workspaceId && resource.scope === "organization";
-
-          const content = (count: number | undefined) => (
-            <ItemContent>
-              <div className="flex items-center gap-2">
-                <ItemTitle>{resource.name}</ItemTitle>
-                {resource.scope === "organization" && <OrganizationBadge />}
-              </div>
-              <p
-                className="text-sm text-muted-foreground truncate"
-                title={resource[config.secondLine]}
-              >
-                {resource[config.secondLine]}
-              </p>
-              {canManageAttachments && (
-                <div className="mt-1">
-                  <SharedWithBadge
-                    orgId={orgId}
-                    resourceType={config.resourceType}
-                    resourceId={resource.id}
-                  />
-                </div>
-              )}
-              {count === 0 && <UnattachedWarning />}
-            </ItemContent>
-          );
-
-          return (
-            <li key={resource.id} className="mb-2">
-              <AttachmentCount
-                orgId={canManageAttachments ? orgId : null}
+      <EntityCardList
+        items={cards}
+        isLoading={isLoading}
+        error={error}
+        subject={config.labels.plural}
+        onRetry={() => void mutate()}
+        skeleton={
+          // The same cards, then the same Add / Attach buttons the loaded
+          // list offers this caller, so neither pops in when the read lands.
+          <>
+            <CardGridSkeleton
+              titleBadges={workspaceId ? ["w-24"] : []}
+              descriptionLines={1}
+              extra={
+                canManageAttachments && (
+                  <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
+                )
+              }
+            />
+            <ButtonRowSkeleton
+              className="mt-4"
+              widths={[
+                ...(canManage ? ["w-32"] : []),
+                ...(canAttach && workspaceId ? ["w-48"] : []),
+              ]}
+            />
+          </>
+        }
+        empty={
+          <EmptyState
+            orgId={orgId}
+            workspaceId={workspaceId}
+            canManage={canManage}
+            action={canManage || canAttach ? actions : undefined}
+          />
+        }
+        descriptionLines={1}
+        href={(resource) => settingsHref(resource.id)}
+        isShared={isShared}
+        // On the Organization surface the row is not locked, but a Shared
+        // resource still carries its badge.
+        badges={(resource) =>
+          !workspaceId &&
+          resource.scope === "organization" && <OrganizationBadge />
+        }
+        meta={(resource) =>
+          canManageAttachments && (
+            <div className="mt-1">
+              <SharedWithBadge
+                orgId={orgId}
                 resourceType={config.resourceType}
                 resourceId={resource.id}
-              >
-                {(count) =>
-                  isOrgScopedInWorkspace ? (
-                    // Locked here (ADR-0007): a plain card, with Detach named in
-                    // its menu rather than behind the card's own click.
-                    <Item variant="outline">
-                      {content(count)}
-                      {canAttach && (
-                        <ItemActions>
-                          <RowActionsMenu
-                            name={resource.name}
-                            shared
-                            edit={{ href: `${orgSettingsRoot}/${resource.id}` }}
-                            remove={{
-                              onSelect: () => detach.open(resource),
-                            }}
-                          />
-                        </ItemActions>
-                      )}
-                    </Item>
-                  ) : (
-                    <Item
-                      variant="outline"
-                      className={cn(count === 0 && "border-warning")}
-                      asChild
-                    >
-                      <Link href={settingsHref(resource.id)}>
-                        {content(count)}
-                        <ItemActions>
-                          <RowActionsMenu
-                            name={resource.name}
-                            edit={{ href: settingsHref(resource.id) }}
-                            actions={
-                              canManageAttachments
-                                ? [
-                                    {
-                                      label: "Manage attachments",
-                                      icon: <Share2 />,
-                                      onSelect: () =>
-                                        setResourceToManage(resource),
-                                    },
-                                  ]
-                                : undefined
-                            }
-                            remove={
-                              canManage
-                                ? {
-                                    onSelect: () =>
-                                      workspaceId
-                                        ? deleteFlow.request(resource)
-                                        : void deleteGuard.request(resource),
-                                  }
-                                : undefined
-                            }
-                          />
-                        </ItemActions>
-                      </Link>
-                    </Item>
-                  )
-                }
-              </AttachmentCount>
-            </li>
-          );
-        })}
-      </ul>
-      {actions}
+              />
+            </div>
+          )
+        }
+        menu={(resource) =>
+          isShared(resource) ? (
+            canAttach ? (
+              <RowActionsMenu
+                name={resource.name}
+                shared
+                edit={{ href: `${orgSettingsRoot}/${resource.id}` }}
+                remove={{ onSelect: () => detach.open(resource) }}
+              />
+            ) : null
+          ) : (
+            <RowActionsMenu
+              name={resource.name}
+              edit={{ href: settingsHref(resource.id) }}
+              actions={
+                canManageAttachments
+                  ? [
+                      {
+                        label: "Manage attachments",
+                        icon: <Share2 />,
+                        onSelect: () => setResourceToManage(resource),
+                      },
+                    ]
+                  : undefined
+              }
+              remove={
+                canManage
+                  ? {
+                      onSelect: () =>
+                        workspaceId
+                          ? deleteFlow.request(resource)
+                          : void deleteGuard.request(resource),
+                    }
+                  : undefined
+              }
+            />
+          )
+        }
+        wrap={(resource, card) => (
+          <AttachmentCount
+            orgId={canManageAttachments ? orgId : null}
+            resourceType={config.resourceType}
+            resourceId={resource.id}
+          >
+            {(count) =>
+              card({
+                className: count === 0 ? "border-warning" : undefined,
+                meta: count === 0 && <UnattachedWarning />,
+              })
+            }
+          </AttachmentCount>
+        )}
+      />
+      {!isLoading && !error && resources.length > 0 && (
+        <div className="mt-4">{actions}</div>
+      )}
       {resourceToManage && (
         <ManageAttachmentsDialog
           orgId={orgId}
@@ -386,14 +362,5 @@ export function ResourceList({
         onManage={setResourceToManage}
       />
     </>
-  );
-}
-
-export function OrganizationBadge() {
-  return (
-    <Badge variant="pill">
-      <Building />
-      Organization
-    </Badge>
   );
 }

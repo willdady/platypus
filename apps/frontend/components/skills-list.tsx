@@ -4,16 +4,9 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { replaceSearchParam } from "@/lib/search-params";
 import { defaultFilter } from "cmdk";
-import {
-  Item,
-  ItemTitle,
-  ItemActions,
-  ItemDescription,
-  ItemContent,
-} from "@/components/ui/item";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { OrganizationBadge } from "@/components/resource-list";
+import { EntityCardList } from "@/components/entity-card-list";
 import { SearchInput } from "@/components/search-input";
 import {
   Select,
@@ -23,18 +16,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListState } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
 import {
   ButtonRowSkeleton,
   CardGridSkeleton,
-  LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
 import {
   ListFooter,
   ListPagination,
-  GhostCards,
   NO_GHOSTS,
   pageOf,
 } from "@/components/list-pagination";
@@ -83,7 +74,6 @@ import {
 } from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
-import { cn } from "@/lib/utils";
 import {
   NeedsSandboxBadge,
   SkillImportButton,
@@ -285,26 +275,53 @@ export function SkillsList({
   const handleDeleteClick = (skill: SkillWithScope) =>
     workspaceId ? deleteFlow.request(skill) : deleteGuard.request(skill);
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading skills">
-        <SkillCardsSkeleton
-          agentLine={Boolean(workspaceId)}
-          sharingLines={!workspaceId && canManageOrg}
-        />
-        <ButtonRowSkeleton
-          className="mt-4"
-          widths={["w-32", ...(canAttach && workspaceId ? ["w-44"] : [])]}
-        />
-      </LoadingRegion>
-    );
-  }
+  // Org-scoped (Shared) Skills are locked inside a Workspace: they can only
+  // be edited from the organization settings surface (ADR-0007).
+  const isSharedInWorkspace = (skill: SkillWithScope) =>
+    Boolean(workspaceId) && skill.scope === "organization";
 
-  if (error) {
+  const renderMenu = (skill: SkillWithScope) => {
+    if (isSharedInWorkspace(skill)) {
+      // Like a Shared Agent: Detach is named in the menu rather than behind
+      // the card's own click, and only an Org Admin gets one.
+      return canAttach ? (
+        <RowActionsMenu
+          name={skill.name}
+          shared
+          edit={{ href: orgRoutes(orgId).settings.skillDetail(skill.id) }}
+          remove={{ onSelect: () => orgSkillDetach.open(skill) }}
+        />
+      ) : null;
+    }
+
     return (
-      <ListError error={error} subject="skills" onRetry={() => void mutate()} />
+      <RowActionsMenu
+        name={skill.name}
+        edit={{ href: `${editBasePath}/${skill.id}` }}
+        actions={[
+          ...(canPromote
+            ? [
+                {
+                  label: "Promote to organization",
+                  icon: <ArrowUpFromLine />,
+                  onSelect: () => promote.open(skill),
+                },
+              ]
+            : []),
+          ...(!workspaceId && canManageOrg
+            ? [
+                {
+                  label: "Manage attachments",
+                  icon: <Share2 />,
+                  onSelect: () => setSkillToManage(skill),
+                },
+              ]
+            : []),
+        ]}
+        remove={{ onSelect: () => void handleDeleteClick(skill) }}
+      />
     );
-  }
+  };
 
   // The Command palette's own scorer, applied to the name: a card grid, not a
   // `Command` list, so it is called directly rather than through `Command`.
@@ -340,7 +357,7 @@ export function SkillsList({
   // Workspace home only: the Organization surface fetches no agent data, so
   // the agent filter would have nothing to offer there. Nothing to filter, no
   // controls.
-  const controls = workspaceId && skills.length > 0 && (
+  const controls = !isLoading && !error && workspaceId && skills.length > 0 && (
     <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
       <SearchInput
         placeholder="Search skills…"
@@ -408,165 +425,92 @@ export function SkillsList({
   return (
     <>
       {controls}
-      {showCard ? (
-        <EmptyCard
-          icon={<Sparkles />}
-          title="No skills yet"
-          description="Create or import a skill to give your agents packaged know-how they load when a task needs it."
-          action={actions}
-        />
-      ) : skills.length === 0 ? (
-        <ListState variant="empty">No skills yet.</ListState>
-      ) : shown.length === 0 ? (
-        <ListState variant="empty">No skills match your filters.</ListState>
-      ) : (
-        <ul className="grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4">
-          {page.items.map((skill) => {
-            // Org-scoped (Shared) Skills are locked inside a workspace: they can
-            // only be edited from the organization settings surface.
-            const isOrgScopedInWorkspace =
-              Boolean(workspaceId) && skill.scope === "organization";
-
-            const skillAgents = getAgentsForSkill(skill.id);
-            const agentCount = skillAgents.length;
-
-            if (isOrgScopedInWorkspace) {
-              // Like a Shared Agent: a plain card, with Detach named in its
-              // menu rather than behind the card's own click.
-              return (
-                <li key={skill.id}>
-                  <Item variant="outline" className="h-full">
-                    <ItemContent>
-                      <div className="flex min-h-badge items-center gap-2">
-                        <ItemTitle className="min-w-0">
-                          <span className="truncate" title={skill.name}>
-                            {skill.name}
-                          </span>
-                        </ItemTitle>
-                        <UserInvocableBadge skill={skill} />
-                        <NeedsSandboxBadge skill={skill} />
-                        <OrganizationBadge />
-                      </div>
-                      <ItemDescription
-                        className="text-xs line-clamp-2 min-h-[2lh]"
-                        title={skill.description || undefined}
-                      >
-                        {skill.description}
-                      </ItemDescription>
-                      <SkillAgentsIndicator agents={skillAgents} />
-                    </ItemContent>
-                    {canAttach && (
-                      <ItemActions>
-                        <RowActionsMenu
-                          name={skill.name}
-                          shared
-                          edit={{
-                            href: orgRoutes(orgId).settings.skillDetail(
-                              skill.id,
-                            ),
-                          }}
-                          remove={{
-                            onSelect: () => orgSkillDetach.open(skill),
-                          }}
-                        />
-                      </ItemActions>
-                    )}
-                  </Item>
-                </li>
-              );
-            }
-
-            return (
-              <li key={skill.id}>
-                <AttachmentCount
-                  orgId={!workspaceId && canManageOrg ? orgId : null}
+      <EntityCardList
+        items={page.items}
+        ghosts={page}
+        isLoading={isLoading}
+        error={error}
+        subject="skills"
+        onRetry={() => void mutate()}
+        skeleton={
+          <>
+            <SkillCardsSkeleton
+              agentLine={Boolean(workspaceId)}
+              sharingLines={!workspaceId && canManageOrg}
+            />
+            <ButtonRowSkeleton
+              className="mt-4"
+              widths={["w-32", ...(canAttach && workspaceId ? ["w-44"] : [])]}
+            />
+          </>
+        }
+        empty={
+          showCard ? (
+            <EmptyCard
+              icon={<Sparkles />}
+              title="No skills yet"
+              description="Create or import a skill to give your agents packaged know-how they load when a task needs it."
+              action={actions}
+            />
+          ) : skills.length === 0 ? (
+            <ListState variant="empty">No skills yet.</ListState>
+          ) : (
+            <ListState variant="empty">No skills match your filters.</ListState>
+          )
+        }
+        href={(skill) => `${editBasePath}/${skill.id}`}
+        isShared={isSharedInWorkspace}
+        badges={(skill) => (
+          <>
+            <UserInvocableBadge skill={skill} />
+            <NeedsSandboxBadge skill={skill} />
+          </>
+        )}
+        meta={(skill) =>
+          workspaceId ? (
+            <SkillAgentsIndicator agents={getAgentsForSkill(skill.id)} />
+          ) : (
+            canManageOrg && (
+              <div className="mt-1">
+                <SharedWithBadge
+                  orgId={orgId}
                   resourceType="skill"
                   resourceId={skill.id}
-                >
-                  {(count) => (
-                    <Item
-                      variant="outline"
-                      className={cn(
-                        "h-full cursor-pointer",
-                        (workspaceId ? agentCount === 0 : count === 0) &&
-                          "border-warning",
-                      )}
-                      asChild
-                    >
-                      <Link href={`${editBasePath}/${skill.id}`}>
-                        <ItemContent>
-                          <div className="flex min-h-badge items-center gap-2">
-                            <ItemTitle className="min-w-0">
-                              <span className="truncate" title={skill.name}>
-                                {skill.name}
-                              </span>
-                            </ItemTitle>
-                            <UserInvocableBadge skill={skill} />
-                            <NeedsSandboxBadge skill={skill} />
-                          </div>
-                          <ItemDescription
-                            className="text-xs line-clamp-2 min-h-[2lh]"
-                            title={skill.description || undefined}
-                          >
-                            {skill.description}
-                          </ItemDescription>
-                          {workspaceId && (
-                            <SkillAgentsIndicator agents={skillAgents} />
-                          )}
-                          {!workspaceId && canManageOrg && (
-                            <div className="mt-1">
-                              <SharedWithBadge
-                                orgId={orgId}
-                                resourceType="skill"
-                                resourceId={skill.id}
-                              />
-                            </div>
-                          )}
-                          {!workspaceId && canManageOrg && (
-                            <UnattachedWarningLine count={count} />
-                          )}
-                        </ItemContent>
-                        <ItemActions>
-                          <RowActionsMenu
-                            name={skill.name}
-                            edit={{ href: `${editBasePath}/${skill.id}` }}
-                            actions={[
-                              ...(canPromote
-                                ? [
-                                    {
-                                      label: "Promote to organization",
-                                      icon: <ArrowUpFromLine />,
-                                      onSelect: () => promote.open(skill),
-                                    },
-                                  ]
-                                : []),
-                              ...(!workspaceId && canManageOrg
-                                ? [
-                                    {
-                                      label: "Manage attachments",
-                                      icon: <Share2 />,
-                                      onSelect: () => setSkillToManage(skill),
-                                    },
-                                  ]
-                                : []),
-                            ]}
-                            remove={{
-                              onSelect: () => void handleDeleteClick(skill),
-                            }}
-                          />
-                        </ItemActions>
-                      </Link>
-                    </Item>
-                  )}
-                </AttachmentCount>
-              </li>
-            );
-          })}
-          <GhostCards page={page} />
-        </ul>
-      )}
+                />
+              </div>
+            )
+          )
+        }
+        menu={renderMenu}
+        wrap={(skill, card) =>
+          isSharedInWorkspace(skill) ? (
+            card()
+          ) : (
+            <AttachmentCount
+              orgId={!workspaceId && canManageOrg ? orgId : null}
+              resourceType="skill"
+              resourceId={skill.id}
+            >
+              {(count) =>
+                card({
+                  className: (
+                    workspaceId
+                      ? getAgentsForSkill(skill.id).length === 0
+                      : count === 0
+                  )
+                    ? "border-warning"
+                    : undefined,
+                  meta: !workspaceId && canManageOrg && (
+                    <UnattachedWarningLine count={count} />
+                  ),
+                })
+              }
+            </AttachmentCount>
+          )
+        }
+      />
 
-      {!showCard && (
+      {!isLoading && !error && !showCard && (
         <ListFooter
           className="mt-4"
           pagination={
