@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.30.0](https://github.com/willdady/platypus/compare/v3.29.0...v3.30.0) (2026-10-31)
+
+
+### Features
+
+* add Reasoning controls driven by a per-model Reasoning map ([#1724](https://github.com/willdady/platypus/issues/1724)) ([d099c88](https://github.com/willdady/platypus/commit/d099c88cba474d97df777007996d8e86dbef9162))
+* **backend:** recover from a context overflow, and tell the User when it can't ([#1719](https://github.com/willdady/platypus/issues/1719)) ([c6f7e55](https://github.com/willdady/platypus/commit/c6f7e553d2809bd17027e478c173cfd9d3d3444d)), closes [#1717](https://github.com/willdady/platypus/issues/1717)
+* **backend:** summarise a Chat's older Transcript into a durable summary ([#1718](https://github.com/willdady/platypus/issues/1718)) ([18a0ec5](https://github.com/willdady/platypus/commit/18a0ec5e567592d2663e9d7668335bc698006d50))
+* clear older write tools' input to free up context space ([#1723](https://github.com/willdady/platypus/issues/1723)) ([fc09d66](https://github.com/willdady/platypus/commit/fc09d66f4236ee8a5f438c443626835670672819))
+* condense a Chat on demand with a /compact command ([#1721](https://github.com/willdady/platypus/issues/1721)) ([7022acd](https://github.com/willdady/platypus/commit/7022acd1e676cf5e77d8d39a5eba9e55ca263e9e))
+* **frontend:** hint when no Context window is declared ([#1738](https://github.com/willdady/platypus/issues/1738)) ([dd0e311](https://github.com/willdady/platypus/commit/dd0e3110aa54804c6a35239a6f30198d51f92366))
+* **frontend:** show the summarising status in the Chat transcript ([#1737](https://github.com/willdady/platypus/issues/1737)) ([a81705b](https://github.com/willdady/platypus/commit/a81705be991cc004108fcc3a53523678d9dab869))
+* send Reasoning controls to native Providers through the SDK reasoning option ([#1725](https://github.com/willdady/platypus/issues/1725)) ([13d1043](https://github.com/willdady/platypus/commit/13d1043bcf3c86f779a4487fb3361314186e32a0))
+
+
+### Bug Fixes
+
+* **backend:** make the Transcript summary pass end on a user request ([b24342e](https://github.com/willdady/platypus/commit/b24342ebc4a14e8ccbe91249ff1812bb5a75232b))
+* **docs:** correct the Administering pages against the current product ([#1751](https://github.com/willdady/platypus/issues/1751)) ([5805b78](https://github.com/willdady/platypus/commit/5805b787d363b3503e5467c27b47e6bc3e51de4e))
+* **frontend:** offer retry on failed list reads and show delete refusals inline ([#1745](https://github.com/willdady/platypus/issues/1745)) ([4155654](https://github.com/willdady/platypus/commit/41556543d48facca8683ca1ae649f94b1a0f23ba))
+* **frontend:** reword the Transcript summary divider ([83c6e87](https://github.com/willdady/platypus/commit/83c6e87cbffcc6d96058299e90618eacb978ca75))
+
 ## [3.29.0](https://github.com/willdady/platypus/compare/v3.28.0...v3.29.0) (2026-10-28)
 
 
