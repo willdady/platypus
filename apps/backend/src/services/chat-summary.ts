@@ -538,6 +538,17 @@ Length: concise, dense headings and bullet points where useful. Aim for no more 
 ${steering !== undefined ? `The requester's instruction for this summary: ${steering}` : ""}`;
 
 /**
+ * The user message that closes the pass's input. The range always ends with
+ * the anchor, an assistant message, and a chat model handed a trailing
+ * assistant message continues it (DeepSeek's prefix completion, and most
+ * OpenAI-compatible templates) rather than reading the instructions — one
+ * /compact stored a single space, the next stored the reply's continuation.
+ * Ending on a user turn is what makes the model answer the instructions.
+ */
+export const TRANSCRIPT_SUMMARY_REQUEST =
+  "Write the summary now, following the instructions you were given.";
+
+/**
  * A summary pass's inputs, resolved by the caller — the model is a parameter,
  * never read inside (ADR-0041, so a cheaper summariser is a resolver change).
  */
@@ -641,10 +652,22 @@ export const takeTranscriptSummary = async (
               ]
             : []),
           ...modelMessages,
+          { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
         maxOutputTokens: TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
         abortSignal: signal,
       });
+
+      // A blank reply is a failed summary, not a summary: stored, it would
+      // stand in for every covered message and the next turn would read
+      // nothing.
+      if (result.text.trim() === "") {
+        logger.warn(
+          { chatId, finishReason: result.finishReason },
+          "Transcript summary came back blank; proceeding without one",
+        );
+        return undefined;
+      }
 
       const anchor = path[anchorIndex];
       if (anchor === undefined) break;
