@@ -5,6 +5,7 @@ import {
   stoppedAtStepCeiling,
 } from "./stream-error.ts";
 import { pickCachedInput, sumUsage } from "./run-stats.ts";
+import { isContextOverflowError } from "../services/context-overflow.ts";
 import type { ChatMessageMetadata } from "../types.ts";
 import type { TurnFacts } from "./types.ts";
 
@@ -239,6 +240,15 @@ export const createMessageMetadata = ({
         meta.readOnlyToolNames = [...calledClearableToolNames];
       }
       return Object.keys(meta).length > 0 ? meta : undefined;
+    }
+    // A call the Provider rejected as too long, with nothing left to recover
+    // it (issue #1717): the next turn reads this and summarises first. The
+    // summary it overflowed with rides along, so a newer one reads as fresh.
+    if (part.type === "error" && isContextOverflowError(part.error)) {
+      return {
+        contextOverflow: true,
+        ...(summaryId !== undefined ? { summaryId } : {}),
+      };
     }
     // The terminal finish only. A step inside a tool loop can end at the
     // ceiling and the run still recover and complete normally; flagging those

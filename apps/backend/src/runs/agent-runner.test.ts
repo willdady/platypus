@@ -94,7 +94,17 @@ vi.mock("ai", async () => {
   const actual = await vi.importActual("ai");
   return {
     ...actual,
-    streamText: mockStreamText,
+    // The drive pipes the result's stream through overflow recovery before
+    // the (mocked) UI conversion reads it; a scripted result with no stream
+    // of its own gets an empty one.
+    streamText: (...args: unknown[]) => {
+      const result = mockStreamText(...args) as
+        { stream?: unknown } | undefined;
+      if (result && result.stream === undefined) {
+        result.stream = new ReadableStream();
+      }
+      return result;
+    },
     toUIMessageStream: mockToUIMessageStream,
     convertToModelMessages: vi.fn().mockReturnValue([]),
     createIdGenerator: vi.fn().mockReturnValue(() => "msg-1"),

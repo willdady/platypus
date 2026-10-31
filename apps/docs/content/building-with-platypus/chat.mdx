@@ -515,7 +515,7 @@ the meter comes back.
 
 Nothing here happens for a model with no **Context window** declared: Platypus
 has no size to work against, so such a Chat is sent in full until the vendor
-refuses it.
+refuses it. Once it does, the Chat condenses anyway — see below.
 
 <Callout type="warning">
   **Deleting a message above the line can make the Chat larger for one turn.**
@@ -524,6 +524,43 @@ refuses it.
   used, so the next turn sends more of the Chat and takes a fresh summary first.
   That turn can take noticeably longer than usual.
 </Callout>
+
+## When a Chat says it is too long for the model
+
+The reply stops with an error explaining that the Chat has outgrown the model.
+The model's vendor refused the turn because everything it would have been sent
+— the conversation, plus any tool results from this turn — no longer fits.
+
+**Send your next message as usual.** A Chat that is refused this way condenses
+its older messages straight away, whether or not a **Context window** is
+declared, and your next message waits for that summary before it is sent. The
+dashed line from [When a long conversation is
+condensed](#when-a-long-conversation-is-condensed) appears where it starts.
+
+<Callout type="warning">
+  **Regenerating straight away can be refused again.** A regenerated reply only
+  uses the summary once it is ready; it does not wait for it. Send a new message
+  instead, or give the summary a moment first.
+</Callout>
+
+If the Chat refuses again, what is left after condensing still does not fit.
+The newest few turns are always sent in full, so a Chat with only a few turns
+cannot condense at all — usually one very long message or attachment is
+filling the window. Start a new Chat with less in it, or switch to a model with
+a bigger window.
+
+<Callout type="info">
+  **A single oversized tool result does not end the turn.** When the result a
+  tool just returned is what pushes the conversation past the window, Platypus
+  replaces that result with an error telling the model to ask the tool for less,
+  and lets the model carry on. The tool call shows that error as its result, now
+  and after a reload, because it is exactly what the model saw. If the model's
+  narrower request still does not fit, the turn stops with the error above.
+</Callout>
+
+Triggers and Sub-Agents stop with the same error when their run outgrows the
+model, and they have no earlier conversation to condense: give the Agent a
+model with a bigger window, or ask it to do less in one run.
 
 ## Fixing a conversation instead of restarting it
 

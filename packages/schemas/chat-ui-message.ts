@@ -114,6 +114,14 @@ export type ChatMessageMetadata = {
    * message, and on messages with no reading at all.
    */
   summaryId?: string;
+  /**
+   * The Provider rejected one of this turn's model calls as too long for the
+   * model's context, and nothing recovered it (issue #1717). The next turn
+   * takes a Transcript summary before it calls the model, whatever its reading
+   * says; `summaryId`, when present, names the summary this turn overflowed
+   * with, so a newer one is known to be a fresh attempt.
+   */
+  contextOverflow?: true;
   contextOccupancy?: {
     /** The occupancy figure itself. */
     inputTokens: number;

@@ -1,5 +1,6 @@
 import {
   stepCountIs,
+  wrapLanguageModel,
   type LanguageModel,
   type ModelMessage,
   type SystemModelMessage,
@@ -13,6 +14,9 @@ import {
 import { stepOccupancy, type UsageModel } from "./run-stats.ts";
 import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
 import { capToolResults } from "../services/tool-result.ts";
+import type { OverflowRecovery } from "./context-overflow-recovery.ts";
+import { TRANSCRIPT_SUMMARY_TRIGGER } from "@platypus/schemas";
+import { logger } from "../logger.ts";
 
 /**
  * Prompt caching — one mechanism is not enough (ADR-0020 Notes, issue #682).
@@ -159,9 +163,21 @@ export const buildModelInvocation = (
      * for the same result.
      */
     extraStopCondition?: NoProgressDetector["stopCondition"];
+    /**
+     * The loop's context-overflow recovery (issue #1717): wraps the model so
+     * an overflow straight after a tool step is retried once. Every Drive
+     * passes one; absent only where a test assembles an invocation alone.
+     */
+    overflowRecovery?: OverflowRecovery;
   },
 ) => ({
-  model: plan.model,
+  model:
+    options.overflowRecovery && typeof plan.model !== "string"
+      ? wrapLanguageModel({
+          model: plan.model,
+          middleware: options.overflowRecovery.middleware,
+        })
+      : plan.model,
   // `instructions`, not the deprecated `system`: a bare string has no place to
   // hang Bedrock's cache point, and the `SystemModelMessage` form exists for
   // exactly this. When the plan carries no System prompt, no instructions
@@ -217,6 +233,26 @@ export const buildModelInvocation = (
       DEFAULT_CLEARING_POLICY,
       (toolName) => plan.readOnlyToolNames?.has(toolName) ?? false,
     );
+    // The evidence a later decision on summarising older steps rests on
+    // (issue #1717): the context is near full and clearing, the cheaper
+    // mechanism, has nothing left to give. A measurement, so a window is
+    // required — without one there is no reading to compare.
+    if (
+      cleared === messages &&
+      occupancy !== undefined &&
+      plan.contextWindow !== undefined &&
+      occupancy / plan.contextWindow >= TRANSCRIPT_SUMMARY_TRIGGER
+    ) {
+      logger.info(
+        {
+          occupancy,
+          contextWindow: plan.contextWindow,
+          fraction: occupancy / plan.contextWindow,
+          step: steps.length,
+        },
+        "Context near full with nothing left to clear",
+      );
+    }
     // Always a `messages` override, never an empty object: Tool-result
     // clearing (above) and the trailing cache point (below) both act on this
     // array and both must survive a single pass. The cache point is attached

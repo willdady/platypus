@@ -5,6 +5,8 @@ import {
   NoSuchToolError,
 } from "ai";
 import { logger } from "../logger.ts";
+import { isContextOverflowError } from "../services/context-overflow.ts";
+import { TOOL_RESULT_TOO_LARGE } from "./context-overflow-recovery.ts";
 import {
   formatIssues,
   findIssues,
@@ -128,6 +130,10 @@ const describeStringifiedToolInputError = (
   )}`;
 };
 
+/** What an unrecovered context overflow tells the User, on every Drive. */
+export const CONTEXT_OVERFLOW_MESSAGE =
+  "This conversation is too long for the model's context window. Start a new Chat, or switch to a model with a larger context window.";
+
 /**
  * Converts AI SDK errors into user-facing strings for the UI message stream.
  *
@@ -141,6 +147,9 @@ const describeStringifiedToolInputError = (
  * recognises — a missing API key, a 401, a rate limit — are exactly its causes.
  */
 export const describeSdkError = (error: unknown): string => {
+  // Never the Provider's own text: what the User can act on is that the
+  // conversation outgrew the model, not the vendor's token arithmetic.
+  if (isContextOverflowError(error)) return CONTEXT_OVERFLOW_MESSAGE;
   if (LoadAPIKeyError.isInstance(error)) {
     return "AI provider API key is missing or not configured.";
   }
@@ -194,6 +203,9 @@ export const describeSdkError = (error: unknown): string => {
  * This is what `toUIMessageStream`'s `onError` is wired to on every run.
  */
 export const formatStreamError = (error: unknown): string => {
+  // A result overflow recovery replaced is a recovered step, not a failure:
+  // it already logged its own warning (issue #1717).
+  if (error === TOOL_RESULT_TOO_LARGE) return error;
   logger.error({ error }, "Chat stream error");
   return describeSdkError(error);
 };
