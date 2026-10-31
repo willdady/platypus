@@ -73,17 +73,7 @@ import {
 } from "./file-gate.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { listScopedByIds, resolveScoped } from "./scoped-resource.ts";
-import {
-  applyTranscriptSummary,
-  deepestPriorSummary,
-  loadChatSummaries,
-  projectedOccupancyOf,
-  summaryAnchorIndex,
-  takeTranscriptSummary,
-  transcriptSummaryBackstopDue,
-  transcriptSummaryKeptTurns,
-  waitForTranscriptSummary,
-} from "./chat-summary.ts";
+import { beforeTurn } from "./chat-summary.ts";
 import {
   wrapToolsWithActivity,
   type ToolActivityEvent,
@@ -819,59 +809,18 @@ export const prepareChatTurn = async (
     // inlined or file parts normalised — so files attached inside the
     // summarised prefix are no longer fetched, and the summary text rides the
     // first kept message into the conversion below exactly as the brief's
-    // shape requires.
-    let summaryRead = applyTranscriptSummary(messages, chatSummaries ?? []);
-
-    // The pre-turn **backstop**: Projected occupancy is already at
-    // `TRANSCRIPT_SUMMARY_BACKSTOP` of the declared window with no usable
-    // summary — or the last reading is stale, a summary a Delete has since
-    // broken — and the turn would otherwise send a view that fills (or has
-    // overflowed) the window. The turn WAITS for a summary before calling the
-    // model. A finish-pass already running off the response path is joined,
-    // never duplicated, through the in-flight registry.
-    const readingSummary = projectedOccupancyOf(messages);
-    let summaries = chatSummaries ?? [];
-    let backstopEngaged = false;
-    if (
-      transcriptSummaryBackstopDue({
-        projectedOccupancy: readingSummary?.projected,
-        contextWindow: context.plan.contextWindow,
-        usableSummary: summaryRead.summary,
-        readingSummaryId: readingSummary?.summaryId,
-        summaries,
-        path: messages,
-      })
-    ) {
-      const chatId = run?.runId;
-      if (chatId !== undefined) {
-        const anchorIndex = summaryAnchorIndex(
-          messages,
-          transcriptSummaryKeptTurns(readingSummary?.summaryId),
-        );
-        const summary = await waitForTranscriptSummary(chatId, () =>
-          takeTranscriptSummary({
-            chatId,
-            model: context.plan.model,
-            modelId: context.resolvedModelId,
-            path: messages,
-            triggeredFromOccupancy: readingSummary?.projected ?? 0,
-            previousSummary: deepestPriorSummary(
-              messages,
-              summaries,
-              anchorIndex ?? 0,
-            ),
-            readingSummaryId: readingSummary?.summaryId,
-            readOnlyToolNames: session.readOnlyToolNames,
-            signal,
-          }),
-        );
-        if (summary !== undefined) {
-          summaries = await loadChatSummaries(chatId);
-          summaryRead = applyTranscriptSummary(messages, summaries);
-          backstopEngaged = summaryRead.summary !== undefined;
-        }
-      }
-    }
+    // shape requires. When the pre-turn backstop is due and this is a Chat
+    // turn, `beforeTurn` also waits for (or joins) a take and re-applies.
+    const summaryRead = await beforeTurn({
+      chatId: run?.runId,
+      path: messages,
+      summaries: chatSummaries ?? [],
+      contextWindow: context.plan.contextWindow,
+      model: context.plan.model,
+      modelId: context.resolvedModelId,
+      readOnlyToolNames: session.readOnlyToolNames,
+      signal,
+    });
 
     const messagesToSend = summaryRead.messages;
     const passthroughFileTypes = passthroughFileTypesForModel(
@@ -912,7 +861,7 @@ export const prepareChatTurn = async (
         messages: inlinedMessages,
         // The summary this turn's reading will be taken with, carried to the
         // reply's metadata (ADR-0041).
-        ...(summaryRead.summary ? { summaryId: summaryRead.summary.id } : {}),
+        ...(summaryRead.summaryId ? { summaryId: summaryRead.summaryId } : {}),
         // Tool-result clearing's other input beyond the core allowlist
         // (ADR-0021, issue #626): only the session's OWN MCP resolutions, never
         // a delegate's — a Sub-Agent's plan carries its own nested session's
@@ -963,7 +912,9 @@ export const prepareChatTurn = async (
       unloadedToolSets: session.unloadedToolSets,
       // The stream opens with the visible "Summarising earlier messages…"
       // status the backstop's wait owes the User (ADR-0041).
-      ...(backstopEngaged ? { summaryBackstop: true as const } : {}),
+      ...(summaryRead.backstopEngaged
+        ? { summaryBackstop: true as const }
+        : {}),
       // The session closes what it opened, delegates' nested sessions included —
       // the caller no longer reconciles two lists of clients to get there.
       dispose: session.dispose,

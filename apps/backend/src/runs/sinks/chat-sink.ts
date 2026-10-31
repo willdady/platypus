@@ -9,19 +9,7 @@ import { ConflictError, isUniqueViolation } from "../../errors.ts";
 import { logger } from "../../logger.ts";
 import { generateChatMetadata } from "../../services/chat-metadata.ts";
 import { stillAwaits } from "../../services/chat-messages.ts";
-import {
-  deepestPriorSummary,
-  drizzleTranscriptSummaryQueries,
-  loadChatSummaries,
-  projectedOccupancyOf,
-  registerTranscriptSummary,
-  resolveSummariserModel,
-  overflowedReply,
-  summaryAnchorIndex,
-  takeTranscriptSummary,
-  transcriptSummaryDueAfterTurn,
-  transcriptSummaryKeptTurns,
-} from "../../services/chat-summary.ts";
+import { afterTurn } from "../../services/chat-summary.ts";
 import { extractFiles } from "../../storage/utils.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 import { FlushScheduler } from "../flush-scheduler.ts";
@@ -492,74 +480,30 @@ export class ChatSink implements RunSink {
    * shrinks to one turn when the triggering reading itself ran with a summary
    * in place. Registered in the in-flight map so a backstop on the next turn
    * waits for this pass rather than starting a second.
+   *
+   * The due-ness decision and the take live in `chat-summary.ts`'s `afterTurn`;
+   * this method only hands it the finished path and the Chat's own model
+   * reference.
    */
   private scheduleTranscriptSummary(): void {
     const plan = this.plan;
     if (!plan) return;
     const { resolved } = plan;
-    const path = this.latestMessages;
-    const reading = projectedOccupancyOf(path);
-    // A reply the Provider rejected as too long (issue #1717) is due whatever
-    // the reading or the window: the rejection is the measurement. Taken now
-    // rather than only at the next turn's backstop, so a regenerate — whose
-    // path no longer holds this reply — still finds the summary waiting.
-    const overflowed = overflowedReply(path);
-    if (
-      !overflowed &&
-      (!reading ||
-        !transcriptSummaryDueAfterTurn(reading.projected, plan.contextWindow))
-    ) {
-      return;
-    }
-    // The summary the shrinking tail is measured against: the one the
-    // overflowed reply ran with, or the one the triggering reading did.
-    const readingSummaryId = overflowed
-      ? overflowed.summaryId
-      : reading?.summaryId;
-
-    // The Chat's own resolved model: an Agent turn re-resolves through its
-    // Agent row, a Direct turn through its Provider+model reference — the same
-    // authority the turn queue's own `resolveGenerationPlan` used (ADR-0017).
-    const source =
-      resolved.agentId !== undefined
-        ? { agentId: resolved.agentId }
-        : { providerId: resolved.providerId, modelId: resolved.modelId };
-
-    void registerTranscriptSummary(this.runId, async () => {
-      const { model, modelId } = await resolveSummariserModel(
-        source,
-        this.params.orgId,
-        this.params.workspaceId,
-        drizzleTranscriptSummaryQueries,
-      );
-      const anchorIndex = summaryAnchorIndex(
-        path,
-        transcriptSummaryKeptTurns(readingSummaryId),
-      );
-      if (anchorIndex === undefined) return undefined;
-      const summary = await takeTranscriptSummary({
-        chatId: this.runId,
-        model,
-        modelId,
-        path,
-        triggeredFromOccupancy: reading?.projected ?? 0,
-        previousSummary: deepestPriorSummary(
-          path,
-          await loadChatSummaries(this.runId),
-          anchorIndex,
-        ),
-        readingSummaryId,
-        readOnlyToolNames: plan.readOnlyToolNames,
-      });
-      return summary;
-    }).catch((error) => {
-      // `takeTranscriptSummary` never throws by itself; this is the model
-      // re-resolution's failure (an Agent or Provider deleted mid-flight) and
-      // the occasional join of a backstop's pass. Never fatal either way.
-      logger.error(
-        { error, chatId: this.runId },
-        "After-turn transcript summary failed; the next turn's finish retries",
-      );
+    afterTurn({
+      chatId: this.runId,
+      orgId: this.params.orgId,
+      workspaceId: this.params.workspaceId,
+      path: this.latestMessages,
+      contextWindow: plan.contextWindow,
+      // The Chat's own resolved model: an Agent turn re-resolves through its
+      // Agent row, a Direct turn through its Provider+model reference — the
+      // same authority the turn queue's own `resolveGenerationPlan` used
+      // (ADR-0017).
+      source:
+        resolved.agentId !== undefined
+          ? { agentId: resolved.agentId }
+          : { providerId: resolved.providerId, modelId: resolved.modelId },
+      readOnlyToolNames: plan.readOnlyToolNames,
     });
   }
 

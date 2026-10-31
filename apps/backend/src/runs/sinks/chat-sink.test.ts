@@ -27,23 +27,16 @@ vi.mock("../../services/chat-metadata.ts", () => ({
   generateChatMetadata: mockGenerateChatMetadata,
 }));
 
-// The after-turn Transcript-summary pass (ADR-0041). Its model resolution is
-// stubbed, and its model call is stubbed, so this suite can assert WHEN the
-// sink schedules a pass and with what — the pass itself is exercised in
-// `chat-summary-pass.test.ts`. Everything else in the module stays real.
-const { mockTakeTranscriptSummary, mockResolveSummariserModel } = vi.hoisted(
-  () => ({
-    mockTakeTranscriptSummary: vi.fn(),
-    mockResolveSummariserModel: vi.fn(),
-  }),
-);
+// The after-turn Transcript-summary pass (ADR-0041). The sink's part is to
+// hand the finished turn to `afterTurn`; the pass's due-ness decision and take
+// are exercised at their own seam in `chat-summary.test.ts`.
+const { mockAfterTurn } = vi.hoisted(() => ({ mockAfterTurn: vi.fn() }));
 vi.mock("../../services/chat-summary.ts", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../../services/chat-summary.ts")>();
   return {
     ...actual,
-    takeTranscriptSummary: mockTakeTranscriptSummary,
-    resolveSummariserModel: mockResolveSummariserModel,
+    afterTurn: mockAfterTurn,
   };
 });
 
@@ -1111,9 +1104,11 @@ describe("ChatSink", () => {
     });
   });
 
-  // The after-turn Transcript-summary trigger (ADR-0041, issue #1716): a turn
-  // whose final Projected occupancy crosses the trigger schedules ONE pass,
-  // off the response path, and only where a Context window is declared.
+  // ADR-0041, issue #1716: the sink's part in the after-turn pass is to hand
+  // the finished turn to the summariser's `afterTurn`, which owns the
+  // due-ness decision and the take. The behaviour behind it (the 0.8 trigger,
+  // the overflow rule, failure handling) is exercised in `chat-summary.test.ts`
+  // and the take itself in `chat-summary-pass.test.ts`.
   describe("onFinish — after-turn Transcript summary", () => {
     /** A reply carrying a reading of `input` tokens. */
     const withReading = (
@@ -1126,21 +1121,6 @@ describe("ChatSink", () => {
         ...(summaryId ? { summaryId } : {}),
       },
     });
-
-    /** Five turns, the last assistant carrying `reading` — enough for the
-     *  4-turn kept tail a bare reading leaves. */
-    const longTurn = (reading: PlatypusUIMessage): PlatypusUIMessage[] => [
-      u0,
-      a0,
-      u1,
-      { id: "a1", role: "assistant", parts: [{ type: "text", text: "a1" }] },
-      { id: "u2", role: "user", parts: [{ type: "text", text: "u2" }] },
-      { id: "a2", role: "assistant", parts: [{ type: "text", text: "a2" }] },
-      { id: "u3", role: "user", parts: [{ type: "text", text: "u3" }] },
-      { id: "a3", role: "assistant", parts: [{ type: "text", text: "a3" }] },
-      { id: "u4", role: "user", parts: [{ type: "text", text: "u4" }] },
-      reading,
-    ];
 
     const runWith = async (
       plan: ResolvedRunPlan,
@@ -1158,13 +1138,7 @@ describe("ChatSink", () => {
     };
 
     beforeEach(() => {
-      mockTakeTranscriptSummary.mockReset();
-      mockTakeTranscriptSummary.mockResolvedValue(undefined);
-      mockResolveSummariserModel.mockReset();
-      mockResolveSummariserModel.mockResolvedValue({
-        model: {} as never,
-        modelId: "m1",
-      });
+      mockAfterTurn.mockReset();
     });
 
     const windowed: ResolvedRunPlan = {
@@ -1172,83 +1146,58 @@ describe("ChatSink", () => {
       contextWindow: 10_000,
     };
 
-    it("takes exactly one summary after a turn whose final occupancy crosses 0.8", async () => {
+    it("hands the finished path, window and the Chat's own Agent source to afterTurn", async () => {
       seedChat();
-      await runWith(windowed, longTurn(withReading(8_100)));
+      const final = [u0, a0, u1, withReading(8_100)];
+      await runWith(windowed, final);
 
-      // Scheduled off the response path, so it lands after `onFinish`.
-      await vi.waitFor(() =>
-        expect(mockTakeTranscriptSummary).toHaveBeenCalledTimes(1),
-      );
-      const args = mockTakeTranscriptSummary.mock.calls[0][0] as {
-        readingSummaryId?: string;
-        chatId?: string;
-        modelId?: string;
-        triggeredFromOccupancy?: number;
+      expect(mockAfterTurn).toHaveBeenCalledTimes(1);
+      const args = mockAfterTurn.mock.calls[0][0] as {
+        chatId: string;
+        orgId: string;
+        workspaceId: string;
+        path: PlatypusUIMessage[];
+        contextWindow?: number;
+        source: unknown;
       };
       expect(args).toMatchObject({
         chatId: "chat-1",
-        modelId: "m1",
-        // 8100 input + 100 output: the Projected occupancy of the next call.
-        triggeredFromOccupancy: 8_200,
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        contextWindow: 10_000,
+        source: { agentId: "a1" },
       });
-      // The kept tail is the full 4 turns when the reading was taken bare.
-      expect(args.readingSummaryId).toBeUndefined();
-    });
-
-    it("takes no summary when the turn's occupancy is below the trigger", async () => {
-      seedChat();
-      await runWith(windowed, [u0, a0, u1, withReading(7_000)]);
-      expect(mockTakeTranscriptSummary).not.toHaveBeenCalled();
-    });
-
-    it("takes no summary for a model with no declared Context window", async () => {
-      seedChat();
-      await runWith(planWithAgent, [u0, a0, u1, withReading(99_000)]);
-      expect(mockTakeTranscriptSummary).not.toHaveBeenCalled();
-    });
-
-    it("records the summary its reading was taken with, keeping one turn", async () => {
-      seedChat();
-      await runWith(windowed, [u0, a0, u1, withReading(8_100, "sum-old")]);
-      await vi.waitFor(() =>
-        expect(mockTakeTranscriptSummary).toHaveBeenCalledTimes(1),
+      expect(args.path.map((message) => message.id)).toEqual(
+        final.map((message) => message.id),
       );
-      expect(mockTakeTranscriptSummary.mock.calls[0][0]).toMatchObject({
-        readingSummaryId: "sum-old",
+    });
+
+    it("hands a Direct turn's Provider + model reference", async () => {
+      seedChat();
+      await runWith({ ...planAdhoc, contextWindow: 10_000 }, [
+        u0,
+        a0,
+        u1,
+        withReading(8_100),
+      ]);
+
+      expect(mockAfterTurn.mock.calls[0][0]).toMatchObject({
+        source: { providerId: "p1", modelId: "m1" },
       });
     });
 
-    // Issue #1717 (R1): a turn the Provider rejected as too long takes its
-    // summary straight away, whatever the reading — so a regenerate, whose
-    // path no longer holds the overflowed reply, still finds one waiting.
-    it("takes a summary after a turn that overflowed, with no window or reading", async () => {
+    it("does not schedule when no plan resolved", async () => {
       seedChat();
-      const overflowed: PlatypusUIMessage = {
-        ...reply("r1"),
-        metadata: { contextOverflow: true, summaryId: "sum-old" },
-      };
-      await runWith(planWithAgent, longTurn(overflowed));
-      await vi.waitFor(() =>
-        expect(mockTakeTranscriptSummary).toHaveBeenCalledTimes(1),
-      );
-      expect(mockTakeTranscriptSummary.mock.calls[0][0]).toMatchObject({
-        chatId: "chat-1",
-        // The summary it overflowed with is the base to shrink from.
-        readingSummaryId: "sum-old",
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "succeeded",
+        messages: [u0, a0, u1, withReading(8_100)],
+        stats: {},
       });
-    });
 
-    it("never lets a failed summary fail the turn", async () => {
-      seedChat();
-      mockTakeTranscriptSummary.mockRejectedValueOnce(new Error("boom"));
-      await expect(
-        runWith(windowed, longTurn(withReading(8_100))),
-      ).resolves.toBeUndefined();
-      await vi.waitFor(() =>
-        expect(mockTakeTranscriptSummary).toHaveBeenCalledTimes(1),
-      );
-      expect(rowOf(seedChat(), "chat", "chat-1")).toBeDefined();
+      expect(mockAfterTurn).not.toHaveBeenCalled();
     });
   });
 });
