@@ -22,7 +22,7 @@ Platypus is an open-source, full-stack application for building AI Agents that r
 
 📚 **Full documentation lives at [docs.platypus.chat](https://docs.platypus.chat).**
 
-![A Platypus Chat where an Agent edits a scheduled Trigger through tool calls](assets/00_screenshot.png)
+![A Platypus Chat where an Agent edits a scheduled Trigger through tool calls](assets/platypus-workspace-home.png)
 
 ## 💡 Why Platypus
 
@@ -47,8 +47,6 @@ Platypus is an open-source, full-stack application for building AI Agents that r
 - **🌐 Provider Agnostic:** Powered by the Vercel AI SDK — OpenAI, Anthropic, Google, Bedrock, and OpenRouter, plus Ollama, vLLM, and any OpenAI-compatible endpoint.
 - **🧩 Plugins:** Add Tool sets, Sandbox backends, and web-search backends without forking, using the typed [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk).
 - **⚖️ MIT Licensed:** Open source and free to use, on hardware you control.
-
-![The Agents page of a Workspace, listing Agents with their tool sets, skills, and sub-agents](assets/01_screenshot.png)
 
 See it all come together in the [daily board digest worked example](https://docs.platypus.chat/building-with-platypus/board-digest).
 
