@@ -11,13 +11,8 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { FormAdvancedSection } from "@/components/form-advanced-section";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
@@ -37,7 +32,7 @@ import { useCallback, useState } from "react";
 import { deepEqual } from "@/lib/deep-equal";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import { ChevronsUpDown, ShieldOff } from "lucide-react";
+import { ShieldOff } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -240,8 +235,6 @@ function TriggerForm({
     workspaceEntity(workspaceId),
     { orgId },
   );
-
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   const router = useRouter();
 
@@ -512,46 +505,32 @@ function TriggerForm({
                 </FieldLabel>
               </Field>
 
-              <Collapsible
-                open={isAdvancedOpen}
-                onOpenChange={setIsAdvancedOpen}
-              >
-                <CollapsibleTrigger asChild>
-                  <div className="flex text-sm justify-between items-center">
-                    <span className="cursor-default">Advanced settings</span>
-                    <Button variant="ghost" size="icon-sm">
-                      <ChevronsUpDown />
-                      <span className="sr-only">Toggle</span>
-                    </Button>
-                  </div>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <Field orientation="horizontal" className="pt-2">
-                    <Switch
-                      id="includeMemories"
-                      checked={formData.includeMemories}
-                      onCheckedChange={(checked) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          includeMemories: checked,
-                        }))
-                      }
-                      disabled={isSubmitting}
-                    />
-                    <FieldLabel
-                      htmlFor="includeMemories"
-                      className="flex-col items-stretch gap-0"
-                    >
-                      <p>Include Memories</p>
-                      <p className="text-xs text-muted-foreground">
-                        Add your recent memory summaries to this trigger&apos;s
-                        system prompt. Off by default, so a run isn&apos;t
-                        influenced by chat activity unrelated to it.
-                      </p>
-                    </FieldLabel>
-                  </Field>
-                </CollapsibleContent>
-              </Collapsible>
+              <FormAdvancedSection>
+                <Field orientation="horizontal" className="pt-2">
+                  <Switch
+                    id="includeMemories"
+                    checked={formData.includeMemories}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        includeMemories: checked,
+                      }))
+                    }
+                    disabled={isSubmitting}
+                  />
+                  <FieldLabel
+                    htmlFor="includeMemories"
+                    className="flex-col items-stretch gap-0"
+                  >
+                    <p>Include Memories</p>
+                    <p className="text-xs text-muted-foreground">
+                      Add your recent memory summaries to this trigger&apos;s
+                      system prompt. Off by default, so a run isn&apos;t
+                      influenced by chat activity unrelated to it.
+                    </p>
+                  </FieldLabel>
+                </Field>
+              </FormAdvancedSection>
             </>
           )}
         </FieldGroup>
