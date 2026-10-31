@@ -22,6 +22,9 @@ its three-dot menu and choose **Promote to organization**. It re-scopes to the
 Organization, attaches itself back to the Workspace it came from, and from then on
 is editable only from **Organization settings**.
 
+A Skill can also start at Organization scope: **Organization settings → Skills**
+offers **Create skill**, import, and **Install from GitHub**.
+
 **MCP servers and Providers** have no Promote action. Create them at Organization
 scope in the first place: **Organization settings → MCP Servers → Add MCP server**, or
 **Organization settings → Providers → Add provider**.
@@ -51,8 +54,8 @@ Workspace, and there are two places to create one.
 **From the Organization surface**, for handing an Agent, Skill, MCP server or
 Provider to several Workspaces: open its three-dot menu and choose **Manage
 attachments**. The dialog is titled **Share** followed by the resource's name,
-and lists the Workspaces you can tick. Each one in the list shows how many
-Workspaces it's in — **3 workspaces** — which is the quickest read on whether
+and lists the Workspaces you can tick. Each card on the Organization list shows
+how many Workspaces it's in — **3 workspaces** — which is the quickest read on whether
 you've actually handed something out. A card on the Organization list that's in
 none gets a warning outline and the line **WARNING: Not attached to any
 workspaces.**, since no Workspace can use it yet.
@@ -75,7 +78,7 @@ memories with a Shared Provider only while that Provider is attached.
   at is the trap. Nothing reports an error — chats simply stay **Untitled**,
   because the Workspace can no longer see the Provider doing the titling. Attach
   the Provider again, or pick another **Task Model Provider**, and titling
-  resumes on the next chat.
+  resumes.
 </Callout>
 
 ## What a Workspace Owner sees
@@ -83,8 +86,10 @@ memories with a Shared Provider only while that Provider is attached.
 An attached Shared resource appears in the Workspace list badged
 **Organization**. Owners can use it — grant a Shared Skill to their Agent, select
 a Shared Provider's model — but not change it. A Shared card offers them no
-edit at all: its three-dot menu, with **Edit in org settings** and **Detach**,
-is yours alone.
+edit: **Edit in org settings** and **Detach** are yours alone. On a Shared
+Agent their three-dot menu offers **Pin** and **Clone**. **Clone** makes a
+Workspace Agent of their own, leaving out any Skill, Sub-Agent or Tool set not
+attached to their Workspace.
 
 That is the point: one definition, changed once by you, live everywhere at once.
 

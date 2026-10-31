@@ -2199,7 +2199,10 @@ const BACKEND_CONSTANTS = [
       ms === 60_000
         ? "at most once a minute"
         : `at most once every ${ms / 60_000} minutes`,
-    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    files: [
+      "building-with-platypus/a2a-endpoints.mdx",
+      "administering/index.mdx",
+    ],
     cost: "A Workspace Owner checking whether a token is still in use reads its last-used time as fresher than it is.",
   },
 ] as const;
