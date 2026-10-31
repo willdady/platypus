@@ -14,6 +14,7 @@ import {
   CHAT_MAX_STEPS_ERROR,
   CHAT_SAMPLING_ERRORS,
   CHAT_SELECTION_ERROR,
+  CHAT_THINKING_BUDGET_ERROR,
   turnRequest,
 } from "./chat-turn";
 
@@ -25,6 +26,9 @@ const settings: ChatSettings = {
   seed: 7,
   presencePenalty: 0.1,
   frequencyPenalty: 0.2,
+  reasoningThinking: false,
+  reasoningEffort: "high",
+  thinkingBudget: 1024,
   maxSteps: 10,
 };
 
@@ -65,11 +69,24 @@ describe("turnRequest", () => {
           seed: 7,
           presencePenalty: 0.1,
           frequencyPenalty: 0.2,
+          reasoningThinking: false,
+          reasoningEffort: "high",
+          thinkingBudget: 1024,
           maxSteps: 10,
           search: false,
         },
       },
     );
+  });
+
+  it.each([0, 1.5])("refuses a Thinking budget of %s", (thinkingBudget) => {
+    expect(
+      turnRequest({
+        selection: direct,
+        settings: { ...settings, thinkingBudget },
+        search: false,
+      }),
+    ).toEqual({ ok: false, reason: CHAT_THINKING_BUDGET_ERROR });
   });
 
   it("leaves empty instructions off a Direct turn", () => {

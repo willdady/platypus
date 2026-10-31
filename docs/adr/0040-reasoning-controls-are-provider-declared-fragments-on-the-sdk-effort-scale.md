@@ -1,14 +1,8 @@
 ---
-status: accepted-pending-implementation
-implemented-by: "#1521"
+status: accepted
 ---
 
 # Reasoning controls are provider-declared request fragments on the SDK's effort scale
-
-> **Today:** Platypus sends no reasoning control to any Provider. A reasoning
-> model runs at whatever its server or vendor defaults to, and the only way to
-> change that is a server-wide flag or a second gateway alias per mode. This ADR
-> describes the target; #1521 builds it.
 
 Reasoning models served by self-hosted backends are steered by request fields
 that differ per model family — `chat_template_kwargs.enable_thinking`,
@@ -22,7 +16,8 @@ with no Agent, stores a choice on that scale beside its sampling parameters;
 the run merges the declared fragments into the Provider's `providerOptions`
 namespace, which `@ai-sdk/openai-compatible` copies into the body unchanged.
 Native Providers need no map: the same choice is handed to the SDK's own
-`reasoning` option and translated by the vendor adapter.
+`reasoning` option and translated by the vendor adapter. That half lands
+separately (#1689); until then a native Provider is sent no reasoning control.
 
 ## Considered options
 
@@ -56,7 +51,8 @@ Native Providers need no map: the same choice is handed to the SDK's own
 - **An undeclared step is never sent.** A stored choice the current map lacks —
   a Direct Chat switched to another model, a map edited after the fact — resolves
   to the map's default. Thinking off suppresses effort and budget.
-- **Mode-dependent sampling is not a fragment's job.** A `thinking.off` fragment
-  may carry any field, but Platypus does not let it override an Agent's own
-  temperature; hidden precedence between two settings pages is the kind of rule
-  nobody can state.
+- **A fragment fills in sampling the Agent left blank; the Agent always wins.**
+  A fragment may carry `temperature`, `top_p` and the other sampling fields as
+  defaults (a model card's per-mode recommendations), but any the Agent — or a
+  Direct Chat — set itself are dropped from the fragment before it is sent. One
+  rule, stated from the form: a value you typed is never beaten by the map.

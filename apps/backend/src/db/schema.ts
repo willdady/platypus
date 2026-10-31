@@ -26,6 +26,7 @@ import type {
   PlatypusUIMessage,
   Provider,
   providerApiModeSchema,
+  ReasoningEffort,
   RglLayoutItem,
   RunEventError,
   TranscriptSummaryStats,
@@ -268,6 +269,10 @@ export const chat = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
+    // Reasoning controls (ADR-0040); null means the model's default.
+    reasoningThinking: t.boolean("reasoning_thinking"),
+    reasoningEffort: t.text("reasoning_effort").$type<ReasoningEffort>(),
+    thinkingBudget: t.integer("thinking_budget"),
     // The per-chat Max steps setting for Direct (no-Agent) turns (#539),
     // mirroring the Agent table's column. Nullable: null means "unset" and
     // the turn falls back to DEFAULT_DIRECT_MAX_STEPS.
@@ -487,6 +492,10 @@ export const agent = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
+    // Reasoning controls (ADR-0040); null means the model's default.
+    reasoningThinking: t.boolean("reasoning_thinking"),
+    reasoningEffort: t.text("reasoning_effort").$type<ReasoningEffort>(),
+    thinkingBudget: t.integer("thinking_budget"),
     toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
     skillIds: t.jsonb("skill_ids").$type<string[]>().default([]), // Array of skill ids
     subAgentIds: t.jsonb("sub_agent_ids").$type<string[]>().default([]), // Array of sub-agent ids

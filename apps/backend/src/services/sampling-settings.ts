@@ -1,5 +1,9 @@
+import type { ReasoningChoice } from "@platypus/schemas";
+
 /**
- * The sampling parameters an Agent (or a Direct Chat turn) carries, as stored.
+ * The sampling parameters an Agent (or a Direct Chat turn) carries, as stored,
+ * with its Reasoning controls beside them (ADR-0040) — resolved separately, by
+ * `resolveReasoning`, because they reach the wire as a body fragment.
  *
  * Nullable because the UI clears a field back to "unset" by writing `null`
  * rather than dropping the key — without that, `JSON.stringify` omits the
@@ -12,7 +16,7 @@ export type SamplingSource = {
   seed?: number | null;
   presencePenalty?: number | null;
   frequencyPenalty?: number | null;
-};
+} & ReasoningChoice;
 
 /** The same parameters in the shape the AI SDK takes, with unset keys absent. */
 export type SamplingSettings = {

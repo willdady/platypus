@@ -12,6 +12,7 @@ import {
   setLoading,
   stubRejectedSave,
   stubSaveSequence,
+  savedBody,
 } from "@/test/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -516,5 +517,90 @@ describe("AgentForm Skills search", () => {
       screen.getByRole("searchbox", { name: "Search skills" }),
     ).toBeEnabled();
     expect(document.getElementById("skill-s1")).toBeDisabled();
+  });
+});
+
+// Issue #1521: the Reasoning section follows the selected model's map.
+describe("AgentForm Reasoning section", () => {
+  const thinkingProvider = {
+    ...provider,
+    providerType: "OpenAI",
+    apiMode: "chat",
+    modelIds: [
+      {
+        id: "gpt-4o",
+        passthroughFileTypes: [],
+        reasoning: {
+          thinking: { on: {}, off: {} },
+          effort: { high: {} },
+          budget: { field: "thinking_token_budget" },
+        },
+      },
+    ],
+  } as unknown as Provider;
+
+  const stored = {
+    id: "a1",
+    name: "Bot",
+    description: "A helpful bot",
+    instructions: "",
+    providerId: "p1",
+    modelId: "gpt-4o",
+    maxSteps: 5,
+    reasoningThinking: true,
+    reasoningEffort: "high",
+    thinkingBudget: 2048,
+  };
+
+  const renderEdit = () =>
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        agentId="a1"
+      />,
+    );
+
+  beforeEach(() => {
+    resetFormHarness();
+    registerSwrData();
+  });
+
+  it("is absent for a model with no map", async () => {
+    setDataFor("/agents/a1", stored);
+    renderEdit();
+
+    expect(await screen.findByDisplayValue("Bot")).toBeInTheDocument();
+    expect(screen.queryByText("Reasoning")).not.toBeInTheDocument();
+  });
+
+  it("round-trips all three fields, and a cleared one saves as null", async () => {
+    setDataFor("/providers", { results: [thinkingProvider] });
+    setDataFor("/agents/a1", stored);
+    const fetchMock = stubSaveSequence(
+      { status: 200, body: { id: "a1" } },
+      { status: 200, body: { id: "a1" } },
+    );
+    renderEdit();
+
+    expect(await screen.findByDisplayValue("2048")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({
+      reasoningThinking: true,
+      reasoningEffort: "high",
+      thinkingBudget: 2048,
+    });
+
+    fireEvent.change(screen.getByLabelText("Thinking budget"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(savedBody(fetchMock)).toMatchObject({
+      thinkingBudget: null,
+    });
   });
 });

@@ -5,8 +5,13 @@ import { Dialog } from "./ui/dialog";
 import { ChatSettingsDialog } from "./chat-settings-dialog";
 import { CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
+import type { ReasoningMap } from "@platypus/schemas";
+import { selectOption } from "@/test/test-utils";
 
-function renderDialog(initial: Partial<ChatSettings> = {}) {
+function renderDialog(
+  initial: Partial<ChatSettings> = {},
+  reasoning?: ReasoningMap,
+) {
   const onChange = vi.fn();
   // A stateful parent: the dialog is a controlled component, so its derived
   // validation state only moves when the value round-trips through state.
@@ -19,6 +24,9 @@ function renderDialog(initial: Partial<ChatSettings> = {}) {
       topK: undefined,
       presencePenalty: undefined,
       frequencyPenalty: undefined,
+      reasoningThinking: undefined,
+      reasoningEffort: undefined,
+      thinkingBudget: undefined,
       maxSteps: undefined,
       ...initial,
     });
@@ -26,6 +34,7 @@ function renderDialog(initial: Partial<ChatSettings> = {}) {
       <Dialog open>
         <ChatSettingsDialog
           settings={settings}
+          reasoning={reasoning}
           onChange={(patch) => {
             onChange(patch);
             setSettings((prev) => ({ ...prev, ...patch }));
@@ -214,5 +223,55 @@ describe("ChatSettingsDialog inputs", () => {
     });
 
     expect(onChange).toHaveBeenCalledWith({ instructions: "Be terse." });
+  });
+
+  // Issue #1521: the controls follow the selected model's Reasoning map.
+  describe("Reasoning controls", () => {
+    const MAP: ReasoningMap = {
+      thinking: { on: {}, off: {} },
+      effort: { low: {}, high: {} },
+      budget: { field: "thinking_token_budget" },
+    };
+
+    it("shows none for a model with no map", () => {
+      renderDialog();
+      expect(screen.queryByLabelText("Thinking")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Effort")).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText("Thinking budget"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("stores the chosen effort step", async () => {
+      const onChange = renderDialog({}, MAP);
+      await selectOption(screen.getByLabelText("Effort"), "High");
+      expect(onChange).toHaveBeenLastCalledWith({ reasoningEffort: "high" });
+    });
+
+    it("offers only the declared effort steps", () => {
+      renderDialog({}, MAP);
+      fireEvent.click(screen.getByLabelText("Effort"));
+      expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
+        "Model default",
+        "Low",
+        "High",
+      ]);
+    });
+
+    it("turning thinking off disables effort and budget", async () => {
+      const onChange = renderDialog({}, MAP);
+      await selectOption(screen.getByLabelText("Thinking"), "Off");
+      expect(onChange).toHaveBeenLastCalledWith({ reasoningThinking: false });
+      expect(screen.getByLabelText("Effort")).toBeDisabled();
+      expect(screen.getByLabelText("Thinking budget")).toBeDisabled();
+    });
+
+    it("clears the budget back to unset", () => {
+      const onChange = renderDialog({ thinkingBudget: 512 }, MAP);
+      fireEvent.change(screen.getByLabelText("Thinking budget"), {
+        target: { value: "" },
+      });
+      expect(onChange).toHaveBeenLastCalledWith({ thinkingBudget: undefined });
+    });
   });
 });

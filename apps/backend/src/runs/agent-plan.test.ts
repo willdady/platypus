@@ -303,3 +303,34 @@ describe("resolveGenerationPlan", () => {
     expect(guardrails).toBeNull();
   });
 });
+
+// Issue #1521: a Sub-Agent resolves through `{ agent }`, the same as the
+// Agent-backed Chat turn and Trigger run, so its stored Reasoning controls
+// reach the run's provider options.
+describe("resolveGenerationPlan Reasoning controls", () => {
+  const provider = makeProviderRow({
+    ...baseProvider,
+    modelIds: [
+      {
+        id: "gpt-4",
+        passthroughFileTypes: [],
+        reasoning: { thinking: { on: { think: true }, off: { think: false } } },
+      },
+    ],
+  });
+
+  it("sends an Agent row's own choice under the Provider's namespace", async () => {
+    const { plan } = await resolveGenerationPlan(
+      {
+        agent: {
+          providerId: "p1",
+          modelId: "gpt-4",
+          reasoningThinking: false,
+        },
+      },
+      scope,
+      queriesWith([provider]),
+    );
+    expect(plan.providerOptions).toEqual({ Test: { think: false } });
+  });
+});

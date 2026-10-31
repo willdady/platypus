@@ -1,6 +1,7 @@
 import type { PlatypusUIMessage } from "../types.ts";
 import type {
   CachedInputTokens,
+  ReasoningEffort,
   ModelUsage,
   TranscriptSummaryRow,
   UnloadedToolSet,
@@ -35,6 +36,11 @@ export type ChatTurnRequest = {
   seed?: number;
   presencePenalty?: number;
   frequencyPenalty?: number;
+  /** The Direct turn's Reasoning controls (ADR-0040); ignored on an Agent
+   *  turn like the sampling fields. Null and absent both mean unset. */
+  reasoningThinking?: boolean | null;
+  reasoningEffort?: ReasoningEffort | null;
+  thinkingBudget?: number | null;
   /**
    * The per-chat Max steps setting (#539). Read only on the Direct
    * (no-Agent) branch, where it overrides `DEFAULT_DIRECT_MAX_STEPS`; an
@@ -247,6 +253,11 @@ export type ResolvedGeneration = {
   frequencyPenalty?: number;
   presencePenalty?: number;
   seed?: number;
+  /** The Reasoning controls as requested (ADR-0040) — persisted rather than
+   *  resolved, since what the map made of them is no setting of the Chat's. */
+  reasoningThinking?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  thinkingBudget?: number;
   /**
    * The per-chat Max steps setting as REQUESTED, not as resolved (#539) —
    * the plan always carries a concrete ceiling, so persisting it would turn

@@ -9,6 +9,7 @@ import {
   SEARCH_SOURCE_NONE,
   type ConcreteModelId,
   type Provider,
+  type ReasoningMap,
 } from "@platypus/schemas";
 
 /**
@@ -36,6 +37,8 @@ export type ModelConfigView = {
    * (ADR-0018). Undefined means undeclared, which is the normal state.
    */
   contextWindow?: number;
+  /** The Org Admin's Reasoning map (ADR-0040); undefined when none. */
+  reasoning?: ReasoningMap;
 };
 
 /** Normalize a provider's models to objects, tolerating the legacy `string[]`. */
@@ -56,6 +59,7 @@ export function getModelConfigs(
           maxExtractedTextChars: m.maxExtractedTextChars,
           maxOutputTokens: m.maxOutputTokens,
           contextWindow: m.contextWindow,
+          reasoning: m.reasoning,
         },
   );
 }

@@ -80,6 +80,15 @@ export function createAgentManagementTools(
       presencePenalty: agentFields.presencePenalty.describe("Presence penalty"),
       frequencyPenalty:
         agentFields.frequencyPenalty.describe("Frequency penalty"),
+      reasoningThinking: agentFields.reasoningThinking.describe(
+        "Thinking on or off, where the model's Reasoning map has a switch; null for the model default",
+      ),
+      reasoningEffort: agentFields.reasoningEffort.describe(
+        "Reasoning effort step, where the model's Reasoning map declares it; null for the model default",
+      ),
+      thinkingBudget: agentFields.thinkingBudget.describe(
+        "Most reasoning tokens per reply, where the model's Reasoning map names a budget field; null to clear",
+      ),
       toolSetIds: agentFields.toolSetIds.describe("Tool set IDs to assign"),
       skillIds: agentFields.skillIds.describe("Skill IDs to assign"),
       subAgentIds: agentFields.subAgentIds.describe("Sub-agent IDs to assign"),
@@ -124,6 +133,15 @@ export function createAgentManagementTools(
       presencePenalty: agentFields.presencePenalty.describe("Presence penalty"),
       frequencyPenalty:
         agentFields.frequencyPenalty.describe("Frequency penalty"),
+      reasoningThinking: agentFields.reasoningThinking.describe(
+        "Thinking on or off, where the model's Reasoning map has a switch; null for the model default",
+      ),
+      reasoningEffort: agentFields.reasoningEffort.describe(
+        "Reasoning effort step, where the model's Reasoning map declares it; null for the model default",
+      ),
+      thinkingBudget: agentFields.thinkingBudget.describe(
+        "Most reasoning tokens per reply, where the model's Reasoning map names a budget field; null to clear",
+      ),
       toolSetIds: agentFields.toolSetIds.describe("Tool set IDs to assign"),
       skillIds: agentFields.skillIds.describe("Skill IDs to assign"),
       subAgentIds: agentFields.subAgentIds.describe("Sub-agent IDs to assign"),

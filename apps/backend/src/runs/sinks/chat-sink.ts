@@ -622,6 +622,9 @@ export class ChatSink implements RunSink {
       seed: resolved.seed ?? null,
       presencePenalty: resolved.presencePenalty ?? null,
       frequencyPenalty: resolved.frequencyPenalty ?? null,
+      reasoningThinking: resolved.reasoningThinking ?? null,
+      reasoningEffort: resolved.reasoningEffort ?? null,
+      thinkingBudget: resolved.thinkingBudget ?? null,
       maxSteps: resolved.maxSteps ?? null,
       // Every write points the leaf at the reply, so the first one moves it
       // there. Nothing else moves it mid-run: a delete is refused while the

@@ -1018,3 +1018,64 @@ describe("ProviderForm Web search selector", () => {
     },
   );
 });
+
+// Issue #1521: the Reasoning map is JSON on the Model entry.
+describe("ProviderForm model dialog Reasoning map", () => {
+  const MAP = { thinking: { on: { think: true }, off: { think: false } } };
+
+  const openReasoning = (dialog: HTMLElement) =>
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /Reasoning map/ }),
+    );
+
+  it("keeps a stored map through an unrelated edit", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], reasoning: MAP },
+    ]);
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Alias", "fast");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].reasoning).toEqual(MAP);
+  });
+
+  it("saves a good map", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    const dialog = openEditDialog("gpt-4o");
+    openReasoning(dialog);
+    type(dialog, "Reasoning map", JSON.stringify(MAP));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].reasoning).toEqual(MAP);
+  });
+
+  it.each([
+    ["not JSON", "{ thinking:", /not valid JSON/],
+    [
+      "a reserved key",
+      JSON.stringify({ always: { messages: [] } }),
+      /always cannot set "messages"/,
+    ],
+  ])("shows an inline error for a map that is %s", (_, text, message) => {
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    const dialog = openEditDialog("gpt-4o");
+    openReasoning(dialog);
+    type(dialog, "Reasoning map", text);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    expect(within(dialog).getByText(message)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Reasoning map")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+});

@@ -687,6 +687,13 @@
       "when": 1793357215940,
       "tag": "0097_chat_summary",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793408850656,
+      "tag": "0098_reasoning_controls",
+      "breakpoints": true
     }
   ]
 }

@@ -155,6 +155,9 @@ const baseAgent = {
   topP: null,
   topK: null,
   frequencyPenalty: null,
+  reasoningThinking: null,
+  reasoningEffort: null,
+  thinkingBudget: null,
   presencePenalty: null,
   seed: null,
   toolSetIds: [],
@@ -860,6 +863,59 @@ describe("chat-execution", () => {
 
       expect(turn.stream.seed).toBe(99);
       expect(turn.resolved.seed).toBe(99);
+    });
+
+    // Issue #1521: Reasoning controls resolve like sampling — the Agent's
+    // wherever it runs, the Chat's own only on a Direct turn.
+    describe("Reasoning controls", () => {
+      const thinkingProvider = makeProviderRow({
+        ...baseProvider,
+        modelIds: [
+          {
+            id: "gpt-4",
+            passthroughFileTypes: [],
+            reasoning: {
+              thinking: { on: { think: true }, off: { think: false } },
+            },
+          },
+        ],
+      });
+      const thinkingOff = { reasoningThinking: false };
+
+      it("sends the Agent's choice on an Agent turn, never the request's", async () => {
+        const agent = { ...baseAgent, reasoningThinking: true };
+        const queries = createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          agents: [agent],
+          providers: [thinkingProvider],
+        });
+
+        const turn = await prepareChatTurn(
+          { ...baseInput, request: { agentId: agent.id, ...thinkingOff } },
+          queries,
+        );
+
+        expect(turn.stream.providerOptions).toEqual({ Test: { think: true } });
+        expect(turn.resolved.reasoningThinking).toBeUndefined();
+      });
+
+      it("sends and persists the request's own choice on a Direct turn", async () => {
+        const queries = createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          providers: [thinkingProvider],
+        });
+
+        const turn = await prepareChatTurn(
+          {
+            ...baseInput,
+            request: { providerId: "p1", modelId: "gpt-4", ...thinkingOff },
+          },
+          queries,
+        );
+
+        expect(turn.stream.providerOptions).toEqual({ Test: { think: false } });
+        expect(turn.resolved.reasoningThinking).toBe(false);
+      });
     });
 
     // Issue #539: the per-chat Max steps setting rides the turn request and,

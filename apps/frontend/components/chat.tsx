@@ -1046,6 +1046,7 @@ export function Chat({
                         </Tooltip>
                         <ChatSettingsDialog
                           settings={settings}
+                          reasoning={resolvedModel?.reasoning}
                           onChange={updateSettings}
                           onClose={() => setIsSettingsDialogOpen(false)}
                         />

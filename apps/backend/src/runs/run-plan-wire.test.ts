@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { LanguageModel } from "ai";
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -6,7 +6,15 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
+import type { ModelConfig } from "@platypus/schemas";
+import {
+  buildModelInvocation,
+  REQUEST_LEVEL_CACHE_DIRECTIVE,
+  type RunPlan,
+} from "./run-plan.ts";
+import { resolveGenerationPlan } from "./agent-plan.ts";
+import { makeProviderRow } from "../services/provider-row.test-fixtures.ts";
+import type { SamplingSource } from "../services/sampling-settings.ts";
 
 /**
  * Wire-shape tests for prompt caching (ADR-0020 Notes, issue #682).
@@ -222,5 +230,204 @@ describe("prompt cache wire shape", () => {
       }
       expect(result.warnings ?? []).toEqual([]);
     }
+  });
+});
+
+/**
+ * Reasoning map wire shape (ADR-0040, issue #1521): the body an OpenAI
+ * chat-mode Provider sends once a Model entry's map is resolved. Driven through
+ * `resolveGenerationPlan` with a stubbed global `fetch`, so the namespace the
+ * fragment rides under is the one `@ai-sdk/openai-compatible` really reads.
+ */
+describe("Reasoning map wire shape", () => {
+  const COMPAT_RESPONSE = OPENROUTER_RESPONSE;
+
+  const send = async (
+    reasoning: ModelConfig["reasoning"],
+    choice: SamplingSource = {},
+  ) => {
+    const captured: CapturedBody[] = [];
+    vi.stubGlobal("fetch", recordingFetch(captured, COMPAT_RESPONSE));
+    try {
+      const provider = makeProviderRow({
+        id: "p1",
+        name: "local-vllm",
+        organizationId: "org-1",
+        workspaceId: "ws-1",
+        providerType: "OpenAI",
+        apiMode: "chat",
+        baseUrl: "http://vllm.test/v1",
+        apiKey: "sk-x",
+        modelIds: [{ id: "m", passthroughFileTypes: [], reasoning }],
+      });
+      const { plan } = await resolveGenerationPlan(
+        { providerId: "p1", modelId: "m", ...choice },
+        { orgId: "org-1", workspaceId: "ws-1" },
+        { getProvider: () => Promise.resolve(provider) },
+      );
+      const result = await generateText({
+        ...buildModelInvocation(
+          { ...plan, tools: {}, system: "You are helpful." },
+          { abortSignal: new AbortController().signal },
+        ),
+        prompt: "hello",
+      });
+      return { body: captured[0].body, warnings: result.warnings ?? [] };
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+
+  // The request every OpenAI chat-mode turn sent before Reasoning maps
+  // existed. Pinned literally: a map-less model must still send exactly this.
+  const BASELINE = {
+    model: "m",
+    messages: [
+      { role: "system", content: "You are helpful." },
+      { role: "user", content: "hello" },
+    ],
+  };
+
+  it("sends today's body for a model with no map and a choice of all nulls", async () => {
+    const { body } = await send(undefined, {
+      reasoningThinking: null,
+      reasoningEffort: null,
+      thinkingBudget: null,
+    });
+    expect(body).toEqual(BASELINE);
+  });
+
+  it("sends today's body for a map that resolves to nothing", async () => {
+    const { body } = await send({ effort: { low: { think: "low" } } });
+    expect(body).toEqual(BASELINE);
+  });
+
+  it("Qwen 3.6: thinking switch, budget and an always fragment", async () => {
+    const { body } = await send(
+      {
+        always: { chat_template_kwargs: { preserve_thinking: true } },
+        thinking: {
+          on: { chat_template_kwargs: { enable_thinking: true } },
+          off: { chat_template_kwargs: { enable_thinking: false } },
+        },
+        budget: { field: "thinking_token_budget" },
+        default: { thinking: true },
+      },
+      { thinkingBudget: 2048 },
+    );
+    expect(body).toEqual({
+      ...BASELINE,
+      chat_template_kwargs: { preserve_thinking: true, enable_thinking: true },
+      thinking_token_budget: 2048,
+    });
+  });
+
+  const DEEPSEEK: ModelConfig["reasoning"] = {
+    thinking: { on: {}, off: { reasoningEffort: "none" } },
+    effort: {
+      low: { chat_template_kwargs: { reasoning_effort: "low" } },
+      high: { chat_template_kwargs: { reasoning_effort: "high" } },
+      xhigh: { chat_template_kwargs: { reasoning_effort: "xhigh" } },
+      max: { chat_template_kwargs: { reasoning_effort: "max" } },
+    },
+    budget: { field: "thinking_token_budget" },
+    default: { effort: "high" },
+  };
+
+  it("DeepSeek V4.1 Flash: the default effort step", async () => {
+    const { body } = await send(DEEPSEEK);
+    expect(body).toEqual({
+      ...BASELINE,
+      chat_template_kwargs: { reasoning_effort: "high" },
+    });
+  });
+
+  it("DeepSeek V4.1 Flash: thinking off sends top-level reasoning_effort via the SDK's reasoningEffort", async () => {
+    const { body } = await send(DEEPSEEK, {
+      reasoningThinking: false,
+      reasoningEffort: "max",
+      thinkingBudget: 100,
+    });
+    expect(body).toEqual({ ...BASELINE, reasoning_effort: "none" });
+  });
+
+  it("a raw top-level reasoning_effort in a fragment never reaches the wire", async () => {
+    const { body } = await send({ always: { reasoning_effort: "low" } });
+    expect(body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("Ollama: its own think field", async () => {
+    const { body } = await send(
+      {
+        thinking: { on: { think: true }, off: { think: false } },
+        effort: {
+          low: { think: "low" },
+          medium: { think: "medium" },
+          high: { think: "high" },
+        },
+      },
+      { reasoningThinking: true, reasoningEffort: "medium" },
+    );
+    expect(body).toEqual({ ...BASELINE, think: "medium" });
+  });
+
+  it("the Agent's temperature beats a fragment's; a cleared one lets it through", async () => {
+    const map = { always: { temperature: 0.6, top_p: 0.95 } };
+    expect((await send(map, { temperature: 0.2 })).body).toMatchObject({
+      temperature: 0.2,
+      top_p: 0.95,
+    });
+    expect((await send(map, { temperature: null })).body).toMatchObject({
+      temperature: 0.6,
+    });
+  });
+
+  it("keeps the cache directives beside the fragment", () => {
+    const invocation = buildModelInvocation(
+      {
+        ...planWith(createOpenAI({ apiKey: "sk-x" })("gpt-4o")),
+        providerOptions: { "local-vllm": { think: true } },
+      },
+      { abortSignal: new AbortController().signal },
+    );
+    expect(invocation.providerOptions).toEqual({
+      ...REQUEST_LEVEL_CACHE_DIRECTIVE,
+      "local-vllm": { think: true },
+    });
+  });
+
+  it("merges into a cache namespace rather than replacing it", () => {
+    const invocation = buildModelInvocation(
+      {
+        ...planWith(createOpenAI({ apiKey: "sk-x" })("gpt-4o")),
+        providerOptions: { anthropic: { think: true } },
+      },
+      { abortSignal: new AbortController().signal },
+    );
+    expect(invocation.providerOptions.anthropic).toEqual({
+      ...REQUEST_LEVEL_CACHE_DIRECTIVE.anthropic,
+      think: true,
+    });
+  });
+
+  it("ignores a map on a Provider other than OpenAI chat mode", async () => {
+    const provider = makeProviderRow({
+      id: "p1",
+      name: "openai",
+      organizationId: "org-1",
+      workspaceId: "ws-1",
+      providerType: "OpenAI",
+      apiMode: "responses",
+      apiKey: "sk-x",
+      modelIds: [
+        { id: "m", passthroughFileTypes: [], reasoning: { always: { a: 1 } } },
+      ],
+    });
+    const { plan } = await resolveGenerationPlan(
+      { providerId: "p1", modelId: "m" },
+      { orgId: "org-1", workspaceId: "ws-1" },
+      { getProvider: () => Promise.resolve(provider) },
+    );
+    expect(plan.providerOptions).toBeUndefined();
   });
 });

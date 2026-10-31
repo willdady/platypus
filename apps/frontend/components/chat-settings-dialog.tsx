@@ -28,19 +28,29 @@ import {
   TOP_P_MIN,
   isValidChatMaxSteps,
   isValidChatSampling,
+  isValidThinkingBudget,
   type ChatSamplingField,
+  type ReasoningMap,
 } from "@platypus/schemas";
-import { CHAT_MAX_STEPS_ERROR, CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
+import {
+  CHAT_MAX_STEPS_ERROR,
+  CHAT_SAMPLING_ERRORS,
+  CHAT_THINKING_BUDGET_ERROR,
+} from "@/lib/chat-turn";
+import { ReasoningControls } from "./reasoning-controls";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
 
 type ChatSettingsDialogProps = {
   settings: ChatSettings;
+  /** The selected model's Reasoning map, where its Provider honours one. */
+  reasoning?: ReasoningMap;
   onChange: (patch: Partial<ChatSettings>) => void;
   onClose?: () => void;
 };
 
 export function ChatSettingsDialog({
   settings,
+  reasoning,
   onChange,
   onClose,
 }: ChatSettingsDialogProps) {
@@ -122,7 +132,17 @@ export function ChatSettingsDialog({
               </Button>
             </div>
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-4">
+          <CollapsibleContent className="mt-4 grid gap-4">
+            <ReasoningControls
+              map={reasoning}
+              value={settings}
+              onChange={onChange}
+              budgetError={
+                isValidThinkingBudget(settings.thinkingBudget)
+                  ? null
+                  : CHAT_THINKING_BUDGET_ERROR
+              }
+            />
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="temperature">Temperature</Label>

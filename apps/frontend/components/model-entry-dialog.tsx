@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Collapsible,
   CollapsibleContent,
@@ -192,6 +193,13 @@ export function ModelEntryDialog({
     storedFileTypes.other.length > 0,
   );
   const [fieldErrors, setFieldErrors] = useState<FormErrors>(errors ?? {});
+  // The Reasoning map as typed: JSON is only parsed on submit, so a half-typed
+  // object is never rejected mid-keystroke.
+  const [storedReasoningText] = useState(() =>
+    draft.reasoning ? JSON.stringify(draft.reasoning, null, 2) : "",
+  );
+  const [reasoningText, setReasoningText] = useState(storedReasoningText);
+  const [reasoningOpen, setReasoningOpen] = useState(!!draft.reasoning);
 
   // Whether the Context window is being typed rather than picked. State as well
   // as derivation, because neither alone is enough: Custom chosen with no window
@@ -225,7 +233,7 @@ export function ModelEntryDialog({
     // form clean.
     const fileTypes = joinNativeFileTypes(toggledFileTypes, otherFileTypesText);
     const stored = draft.passthroughFileTypes;
-    const entry = {
+    const entry: ModelConfigView = {
       ...draft,
       passthroughFileTypes:
         fileTypes.length === stored.length &&
@@ -233,6 +241,22 @@ export function ModelEntryDialog({
           ? stored
           : fileTypes,
     };
+    // Unchanged text keeps the stored object, so Save with nothing changed
+    // leaves the provider form clean; empty clears the map.
+    if (reasoningText !== storedReasoningText) {
+      try {
+        entry.reasoning =
+          reasoningText.trim() === ""
+            ? undefined
+            : (JSON.parse(reasoningText) as ModelConfigView["reasoning"]);
+      } catch {
+        setFieldErrors((prev) => ({
+          ...prev,
+          reasoning: "The Reasoning map is not valid JSON",
+        }));
+        return;
+      }
+    }
     const result = modelConfigSchema.safeParse(entry);
     if (!result.success) {
       setFieldErrors(parseValidationErrors({ error: result.error.issues }));
@@ -468,6 +492,49 @@ export function ModelEntryDialog({
                   <FieldError>{fieldErrors.passthroughFileTypes}</FieldError>
                 )}
               </div>
+
+              <Collapsible open={reasoningOpen} onOpenChange={setReasoningOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground -ml-2 h-7 px-2 text-xs"
+                  >
+                    Reasoning map
+                    <ChevronsUpDown className="size-3.5" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <ModelField
+                    htmlFor="model-reasoning"
+                    label="Reasoning map"
+                    hint={
+                      <>
+                        JSON saying which reasoning controls this model has and
+                        the request fields each one sends. Only an OpenAI
+                        provider in chat mode sends them. Leave empty for none.
+                      </>
+                    }
+                    error={fieldErrors.reasoning}
+                  >
+                    <Textarea
+                      id="model-reasoning"
+                      rows={6}
+                      className="font-mono text-xs"
+                      placeholder={'{ "thinking": { "on": {}, "off": {} } }'}
+                      value={reasoningText}
+                      aria-invalid={!!fieldErrors.reasoning}
+                      onChange={(e) => {
+                        setReasoningText(e.target.value);
+                        setFieldErrors((prev) =>
+                          retractFieldError(prev, "reasoning"),
+                        );
+                      }}
+                    />
+                  </ModelField>
+                </CollapsibleContent>
+              </Collapsible>
 
               <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
                 <ModelField

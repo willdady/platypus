@@ -105,6 +105,15 @@ const withToolResultFilesMoved = (
 ): LanguageModel =>
   wrapLanguageModel({ model, middleware: toolResultFilesMiddleware });
 
+/**
+ * The `providerOptions` key an OpenAI chat-mode Provider's model reads raw body
+ * fields from — `@ai-sdk/openai-compatible` takes the `name` given below up to
+ * its first dot. Where a Reasoning map's fragment is sent (ADR-0040).
+ */
+export const compatProviderOptionsName = (
+  provider: Pick<ProviderRow, "name">,
+): string => provider.name.replace(/\..*/s, "").trim();
+
 export const openProvider = (provider: ProviderRow): OpenedProvider => {
   switch (provider.providerType) {
     case "OpenAI": {

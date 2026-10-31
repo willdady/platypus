@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { Chat } from "@platypus/schemas";
+import type { Chat, ReasoningEffort } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import type { Serialized } from "@/lib/api-write";
 
@@ -11,6 +11,9 @@ export type ChatSettings = {
   seed: number | undefined;
   presencePenalty: number | undefined;
   frequencyPenalty: number | undefined;
+  reasoningThinking: boolean | undefined;
+  reasoningEffort: ReasoningEffort | undefined;
+  thinkingBudget: number | undefined;
   maxSteps: number | undefined;
 };
 
@@ -26,6 +29,9 @@ export function useChatSettings(
     seed: undefined,
     presencePenalty: undefined,
     frequencyPenalty: undefined,
+    reasoningThinking: undefined,
+    reasoningEffort: undefined,
+    thinkingBudget: undefined,
     maxSteps: undefined,
   });
 
@@ -46,6 +52,9 @@ export function useChatSettings(
         seed: chatData.seed ?? undefined,
         presencePenalty: chatData.presencePenalty ?? undefined,
         frequencyPenalty: chatData.frequencyPenalty ?? undefined,
+        reasoningThinking: chatData.reasoningThinking ?? undefined,
+        reasoningEffort: chatData.reasoningEffort ?? undefined,
+        thinkingBudget: chatData.thinkingBudget ?? undefined,
         maxSteps: chatData.maxSteps ?? undefined,
       });
     }
