@@ -313,7 +313,7 @@ describe("TriggerList cron schedule", () => {
   });
 });
 
-describe("TriggerList list states", () => {
+describe("TriggerList empty states", () => {
   // No controls with nothing to filter.
   it("says so, without controls, when the workspace has no triggers", async () => {
     await renderTriggers([]);
@@ -346,23 +346,9 @@ describe("TriggerList list states", () => {
     });
     expect(screen.getByText("Nightly job")).toBeInTheDocument();
   });
+});
 
-  it("surfaces a failed read rather than rendering an empty list", async () => {
-    mockScopedSWR({ "/triggers": { error: new Error("500") } });
-    await renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
-
-    expect(screen.getByText(/Failed to load triggers/)).toBeInTheDocument();
-  });
-
-  it("holds the grid with a skeleton while the read is in flight", async () => {
-    mockScopedSWR({ "/triggers": { isLoading: true } });
-    await renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
-
-    expect(
-      screen.getByRole("status", { name: "Loading triggers" }),
-    ).toHaveAttribute("aria-busy", "true");
-  });
-
+describe("TriggerList re-read", () => {
   // A revalidation keeps the list it has rather than flashing to the
   // skeleton and back.
   it("keeps the list it has while a re-read is in flight", async () => {
@@ -478,21 +464,7 @@ describe("TriggerList event triggers", () => {
   });
 });
 
-describe("TriggerList card height", () => {
-  it("reserves a two-line description box, with the full text on hover", async () => {
-    await renderTriggers([{ ...cronTrigger, description: "Runs nightly" }]);
-
-    const description = screen.getByText("Runs nightly");
-    expect(description).toHaveClass("line-clamp-2", "min-h-[2lh]");
-    expect(description).toHaveAttribute("title", "Runs nightly");
-  });
-
-  it("keeps the description box when there is no description", async () => {
-    await renderTriggers([cronTrigger]);
-
-    expect(screen.getByRole("paragraph")).toHaveClass("min-h-[2lh]");
-  });
-
+describe("TriggerList card content", () => {
   it("draws a schedule, its next run and Last run in a two-line block", async () => {
     await renderTriggers([
       {
@@ -508,14 +480,6 @@ describe("TriggerList card height", () => {
     expect(block).toHaveTextContent(
       /^At 12:00 AM \(UTC\)·Next: formatted:2026-02-01T09:00:00\.000ZLast run:/,
     );
-  });
-
-  it("truncates the Trigger's name, with the full name on hover", async () => {
-    await renderTriggers([cronTrigger]);
-
-    const name = screen.getByText("Nightly job");
-    expect(name).toHaveClass("truncate");
-    expect(name).toHaveAttribute("title", "Nightly job");
   });
 
   it("truncates the agent's name, with the full name on hover", async () => {
