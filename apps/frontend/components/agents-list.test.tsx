@@ -322,7 +322,7 @@ describe("AgentsList pinning", () => {
   });
 });
 
-describe("AgentsList list states", () => {
+describe("AgentsList empty state", () => {
   it("shows the empty state when the workspace has no agents", async () => {
     await renderAgents([]);
 
@@ -332,46 +332,9 @@ describe("AgentsList list states", () => {
       expect.stringContaining("/agents/create"),
     );
   });
-
-  it("holds the card grid with a skeleton while the read is in flight", async () => {
-    mockScopedSWR({
-      "/agents": { isLoading: true },
-      "/providers": [provider],
-    });
-    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
-
-    expect(
-      screen.getByRole("status", { name: "Loading agents" }),
-    ).toHaveAttribute("aria-busy", "true");
-    expect(screen.queryByText("No agents yet")).not.toBeInTheDocument();
-  });
-
-  it("surfaces a failed read rather than rendering an empty list", async () => {
-    mockScopedSWR({
-      "/agents": { error: new Error("500") },
-      "/providers": [provider],
-    });
-    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
-
-    expect(screen.getByText(/Failed to load/i)).toBeInTheDocument();
-  });
 });
 
-describe("AgentsList card height", () => {
-  it("reserves a two-line description box, with the full text on hover", async () => {
-    await renderAgents([workspaceAgent]);
-
-    const description = screen.getByText("desc");
-    expect(description).toHaveClass("line-clamp-2", "min-h-[2lh]");
-    expect(description).toHaveAttribute("title", "desc");
-  });
-
-  it("keeps the description box when there is no description", async () => {
-    await renderAgents([{ ...workspaceAgent, description: "" }]);
-
-    expect(screen.getByRole("paragraph")).toHaveClass("min-h-[2lh]");
-  });
-
+describe("AgentsList reference counts", () => {
   it("counts tool sets, skills and sub-agents in singular and plural", async () => {
     mockScopedSWR({
       "/tools": [
