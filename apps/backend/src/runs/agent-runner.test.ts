@@ -56,10 +56,23 @@ const {
     mockStreamText: vi.fn(),
     // The drive hands the `streamText` result's stream to this. Nothing reads
     // what it returns: `readUIMessageStream` is mocked to the harness queue.
-    mockToUIMessageStream: vi.fn(
-      (_uiOpts: never) =>
-        new ReadableStream({ start: (controller) => controller.close() }),
-    ),
+    // The real SDK calls the metadata extractor for every part, the terminal
+    // finish included; the mocked stream is empty, so the finish part is
+    // replayed here from whatever `streamResultOf` reported.
+    mockToUIMessageStream: vi.fn((_uiOpts: never) => {
+      const uiOpts = _uiOpts as {
+        messageMetadata?: (opts: {
+          part: { type: "finish"; finishReason: string };
+        }) => unknown;
+      };
+      const finishReason = streamHarness.terminalFinishReason;
+      if (finishReason !== undefined) {
+        uiOpts.messageMetadata?.({ part: { type: "finish", finishReason } });
+      }
+      return new ReadableStream({
+        start: (controller) => controller.close(),
+      });
+    }),
     streamHarness: {
       AsyncQueue,
       queue: null as InstanceType<typeof AsyncQueue> | null,
@@ -80,6 +93,10 @@ const {
       // part; the tests call it by hand with the part they care about.
       messageMetadata: undefined as
         ((opts: { part: MetadataPart }) => unknown) | undefined,
+      // The terminal finish reason `streamResultOf` scripted, so the default
+      // `toUIMessageStream` mock can put it through the metadata extractor the
+      // way the SDK would.
+      terminalFinishReason: undefined as string | undefined,
       responseSentinel: { __isResponse: true },
     },
   };
@@ -258,6 +275,9 @@ const streamResultOf = (
 ) => {
   const gate = opts.settleAfter ?? Promise.resolve();
   const after = <T>(value: T) => gate.then(() => value);
+  // Read by the default `toUIMessageStream` mock so the terminal finish
+  // reaches the metadata extractor, as it does through the real SDK.
+  streamHarness.terminalFinishReason = data.finishReason ?? "stop";
   return {
     text: after(data.text ?? "ok"),
     steps: after(data.steps ?? []),
@@ -1342,6 +1362,7 @@ const resetStreamHarness = (): void => {
   streamHarness.onFinish = undefined;
   streamHarness.onToolExecutionEnd = undefined;
   streamHarness.messageMetadata = undefined;
+  streamHarness.terminalFinishReason = undefined;
 };
 
 /**
