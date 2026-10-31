@@ -49,7 +49,9 @@ An Agent decides for itself when to reach for one of its
 [Skills](/building-with-platypus/skills). You can also ask for one by name.
 
 Type `/` as the first character of an empty input and a list of the selected
-Agent's Skills opens above it. Keep typing to narrow it, **↑** and **↓** to move
+Agent's Skills opens above it, after the built-in
+[`/compact`](#condensing-a-conversation-yourself) command once the Chat has a
+reply. Keep typing to narrow it, **↑** and **↓** to move
 through it, **Tab** or **Enter** to take the one highlighted — or click it. The
 name lands in the box with the cursor after it, so you carry straight on with
 the rest of the message:
@@ -83,13 +85,13 @@ of the text, and the resubmitted turn loads the Skill again.
   **A name that matches no Skill is sent as ordinary text, not refused.**
   Mistype it — `/write-relase-note` — and the turn runs normally with the typo
   sitting in your prompt: the Agent answers without the Skill and nothing says
-  why. The list is the check. It reads **No matching skill — this will send as
+  why. The list is the check. It reads **No matching command — this will send as
   ordinary text** while you are still typing, and **Escape** closes it without
   clearing what you have written.
 </Callout>
 
-With a Provider and model picked directly rather than an Agent, there is no list
-and `/` is an ordinary character — Skills belong to an Agent.
+With a Provider and model picked directly rather than an Agent, the list offers
+only `/compact` — Skills belong to an Agent.
 
 ## Attaching files
 
@@ -513,9 +515,9 @@ taken: the number it was showing described the conversation _before_ the
 summary, so it would be misleading. The next reply reports a fresh reading and
 the meter comes back.
 
-Nothing here happens for a model with no **Context window** declared: Platypus
-has no size to work against, so such a Chat is sent in full until the vendor
-refuses it.
+Nothing here happens on its own for a model with no **Context window**
+declared: Platypus has no size to work against, so such a Chat is sent in full
+until the vendor refuses it, unless you condense it yourself.
 
 <Callout type="warning">
   **Deleting a message above the line can make the Chat larger for one turn.**
@@ -524,6 +526,28 @@ refuses it.
   used, so the next turn sends more of the Chat and takes a fresh summary first.
   That turn can take noticeably longer than usual.
 </Callout>
+
+## Condensing a conversation yourself
+
+Send `/compact` to condense the whole conversation now rather than waiting for
+it to fill up. Add an instruction after it to say what the summary must keep:
+
+```
+/compact keep the API decisions and the open questions
+```
+
+Nothing is added to the conversation. While the summary is written the input
+shows **Summarising the conversation…**; then the dashed line appears under the
+last reply, and your next message is the first one the assistant reads in full
+after the summary. Unlike the automatic summary, no recent turns are kept
+verbatim.
+
+`/compact` works whether or not a **Context window** is declared, and is
+refused while a reply is still running. Not happy with a summary? Send
+`/compact` again, with a sharper instruction: the newest summary is the one
+used.
+
+`compact` is reserved, so no Skill can be named it.
 
 ## Fixing a conversation instead of restarting it
 

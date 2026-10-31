@@ -127,6 +127,15 @@ survives.
 | An ingestion cap for MCP results and `fetchUrl`       | One wording and one shape for "too large; request less" is used by the summary pass's overflow retry, so the cap and the recovery path teach the model one pattern.          |
 | Batch clearing for cache hits (`clear_at_least`)      | Trigger/target hysteresis is stated here as the rule for any context reduction, so clearing can adopt it later under this ADR.                                               |
 
+## Notes
+
+- **`/compact` (#1111) takes a summary on demand.** It is the same pass, steered
+  by the User's instruction, with no turn kept verbatim: the anchor is the
+  Active path's last assistant message, and the summary rides the next user
+  message sent. It needs no declared **Context window**, so "a Chat with no
+  declared Context window never summarises" now reads "never summarises on its
+  own". Built-in command names are reserved: a Skill may not take one.
+
 ## References
 
 - #1263 (the umbrella), #1716 (this tier), #1111 (`/compact`), #1253 (one run

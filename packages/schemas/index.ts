@@ -466,6 +466,21 @@ export const chatActiveLeafSchema = z.object({
   messageId: z.string().min(1),
 });
 
+export const CHAT_COMPACT_INSTRUCTION_MAX_LENGTH = 2000;
+
+/**
+ * A `/compact` request (issue #1111): the User's optional instruction steering
+ * what the Transcript summary keeps.
+ */
+export const chatCompactSchema = z.object({
+  instruction: z
+    .string()
+    .trim()
+    .min(1)
+    .max(CHAT_COMPACT_INSTRUCTION_MAX_LENGTH)
+    .optional(),
+});
+
 export const chatUpdateSchema = partialWithoutDefaults(
   chatSchema.pick({
     workspaceId: true,
@@ -670,6 +685,25 @@ export const SKILL_ARGUMENT_HINT_MAX_LENGTH = 120;
 const skillNameRegex = new RegExp(`^${SKILL_NAME_SOURCE}$`);
 
 /**
+ * The commands the Chat input runs itself rather than resolving to a Skill
+ * (issue #1111). Their names are reserved: a Skill may not take one, so a
+ * typed `/compact` can never mean two things and neither hides the other.
+ */
+export const BUILT_IN_CHAT_COMMANDS = [
+  {
+    name: "compact",
+    argumentHint: "[what the summary should keep]",
+  },
+] as const;
+
+export type BuiltInChatCommandName =
+  (typeof BUILT_IN_CHAT_COMMANDS)[number]["name"];
+
+const RESERVED_SKILL_NAMES = new Set<string>(
+  BUILT_IN_CHAT_COMMANDS.map((command) => command.name),
+);
+
+/**
  * One file bundled with a Skill other than `SKILL.md`, as the API lists it.
  * `isText` was decided from the content at import, never the extension.
  */
@@ -695,7 +729,11 @@ export const skillBaseSchema = z.object({
     .string()
     .min(SKILL_NAME_MIN_LENGTH)
     .max(SKILL_NAME_MAX_LENGTH)
-    .regex(skillNameRegex, "Skill name must be kebab-case"),
+    .regex(skillNameRegex, "Skill name must be kebab-case")
+    .refine(
+      (name) => !RESERVED_SKILL_NAMES.has(name),
+      "This name is reserved for a built-in chat command",
+    ),
   description: z
     .string()
     .min(SKILL_DESCRIPTION_MIN_LENGTH)

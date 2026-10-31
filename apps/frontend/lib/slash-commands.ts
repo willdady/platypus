@@ -8,7 +8,12 @@
  * anywhere but the textarea (issue #649).
  */
 
-/** What the picker needs of a Skill to offer it. */
+import {
+  BUILT_IN_CHAT_COMMANDS,
+  type BuiltInChatCommandName,
+} from "@platypus/schemas";
+
+/** What the picker needs of a Skill or a built-in command to offer it. */
 export type SlashCommand = {
   name: string;
   argumentHint?: string | null;
@@ -111,4 +116,24 @@ export function rankSlashCommands(
  */
 export function completeSlashCommand(name: string): string {
   return `/${name} `;
+}
+
+const BUILT_IN_NAMES = new Set<string>(
+  BUILT_IN_CHAT_COMMANDS.map((command) => command.name),
+);
+
+/**
+ * The built-in command a submitted value runs, and its trailing argument, or
+ * `null` for anything else — a Skill command included, which is sent as text
+ * for the backend to resolve (issue #1111). Built-in names are reserved, so a
+ * Skill can never be shadowed by one.
+ */
+export function builtInCommandOf(
+  value: string,
+): { name: BuiltInChatCommandName; argument?: string } | null {
+  const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(value.trim());
+  if (!match || !BUILT_IN_NAMES.has(match[1])) return null;
+  const name = match[1] as BuiltInChatCommandName;
+  const argument = match[2]?.trim();
+  return argument ? { name, argument } : { name };
 }

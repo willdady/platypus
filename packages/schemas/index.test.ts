@@ -384,6 +384,24 @@ describe("Skill Schema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("rejects a name a built-in chat command reserves, on create and rename", () => {
+    expect(
+      skillCreateSchema.safeParse({
+        name: "compact",
+        description: base.description,
+        body: base.body,
+        workspaceId: "ws-1",
+      }).success,
+    ).toBe(false);
+    const update = { description: base.description, body: base.body };
+    expect(
+      skillUpdateSchema.safeParse({ ...update, name: "compact" }).success,
+    ).toBe(false);
+    expect(
+      skillUpdateSchema.safeParse({ ...update, name: "compact-notes" }).success,
+    ).toBe(true);
+  });
+
   it("defaults model invocation on and accepts an argument hint", () => {
     const result = skillSchema.safeParse({
       ...base,

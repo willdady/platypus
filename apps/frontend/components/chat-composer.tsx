@@ -16,9 +16,9 @@ type ChatComposerProps = {
   onSubmit: (message: PromptInputMessage) => void | Promise<void>;
   /** Whether the action menu offers Upload to Sandbox. */
   canUploadToSandbox: boolean;
-  /** The Agent's assigned Skills, unfiltered. Empty disables slash handling. */
+  /** The built-in commands on offer, then the Agent's assigned Skills. */
   commands: SlashCommand[];
-  /** Whether an Agent is selected — the gate on slash handling. */
+  /** Whether there is any command to offer — the gate on slash handling. */
   slashEnabled: boolean;
   placeholder: string;
   status: ChatStatus;

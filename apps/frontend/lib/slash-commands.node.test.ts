@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  builtInCommandOf,
   completeSlashCommand,
   rankSlashCommands,
   skillsForAgent,
@@ -104,5 +105,25 @@ describe("skillsForAgent", () => {
   it("offers nothing for an Agent with no assignment", () => {
     expect(skillsForAgent(skills, undefined)).toEqual([]);
     expect(skillsForAgent(skills, [])).toEqual([]);
+  });
+});
+
+describe("builtInCommandOf", () => {
+  it("reads a built-in command and its trailing instruction", () => {
+    expect(builtInCommandOf("/compact keep the API decisions")).toEqual({
+      name: "compact",
+      argument: "keep the API decisions",
+    });
+  });
+
+  it("reads a bare command with no instruction", () => {
+    expect(builtInCommandOf("/compact")).toEqual({ name: "compact" });
+    expect(builtInCommandOf("/compact   ")).toEqual({ name: "compact" });
+  });
+
+  it("is null for a Skill, a longer name, or a command not at position 0", () => {
+    expect(builtInCommandOf("/blog-post about otters")).toBe(null);
+    expect(builtInCommandOf("/compact-notes")).toBe(null);
+    expect(builtInCommandOf("please /compact")).toBe(null);
   });
 });

@@ -17,7 +17,7 @@ export type ChatTranscriptSummary = Serialized<TranscriptSummary>;
  * frontend must not compile backend source: a summary is usable when its
  * anchor is on the current Active path, its `coveredIds` are exactly the live
  * path ids from the root through that anchor, and the anchor still ends a turn
- * (the message after it is the user message that carries the summary). A
+ * (the message after it, if any, is the user message that carries it). A
  * Delete inside the range — or of that first kept user message — makes it
  * unusable, and the divider must not render for it.
  */
@@ -45,8 +45,10 @@ export function isSummaryUsable(
     return false;
   }
   // The anchor must still end a turn: the summary rides the first kept user
-  // message, which exists exactly when the anchor is followed by one.
-  return messages[anchorIndex + 1]?.role === "user";
+  // message. An anchor at the leaf (a `/compact`, issue #1111) has none yet,
+  // but the next message sent is one, so it is what the next turn reads.
+  const next = messages[anchorIndex + 1];
+  return next === undefined || next.role === "user";
 }
 
 /**
