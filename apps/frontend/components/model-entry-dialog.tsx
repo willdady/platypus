@@ -187,10 +187,10 @@ export function ModelEntryDialog({
   const [otherFileTypesText, setOtherFileTypesText] = useState(
     storedFileTypes.other.join(", "),
   );
-  // Open from the start when the stored list holds anything the toggles don't
-  // cover, so no stored value is hidden.
+  // Open from the start when it holds a stored value (media types the toggles
+  // don't cover, or a Reasoning map), so no stored value is hidden.
   const [advancedOpen, setAdvancedOpen] = useState(
-    storedFileTypes.other.length > 0,
+    storedFileTypes.other.length > 0 || !!draft.reasoning,
   );
   const [fieldErrors, setFieldErrors] = useState<FormErrors>(errors ?? {});
   // The Reasoning map as typed: JSON is only parsed on submit, so a half-typed
@@ -199,7 +199,6 @@ export function ModelEntryDialog({
     draft.reasoning ? JSON.stringify(draft.reasoning, null, 2) : "",
   );
   const [reasoningText, setReasoningText] = useState(storedReasoningText);
-  const [reasoningOpen, setReasoningOpen] = useState(!!draft.reasoning);
 
   // Whether the Context window is being typed rather than picked. State as well
   // as derivation, because neither alone is enough: Custom chosen with no window
@@ -456,45 +455,12 @@ export function ModelEntryDialog({
                     );
                   })}
                 </div>
-                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground -ml-2 h-7 px-2 text-xs"
-                    >
-                      Advanced
-                      <ChevronsUpDown className="size-3.5" />
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <ModelField
-                      htmlFor="model-passthrough-other"
-                      label="Other media types"
-                      hint="Further media types this model reads natively, comma-separated."
-                    >
-                      <Input
-                        id="model-passthrough-other"
-                        placeholder="e.g. application/msword"
-                        value={otherFileTypesText}
-                        aria-invalid={!!fieldErrors.passthroughFileTypes}
-                        onChange={(e) => {
-                          setOtherFileTypesText(e.target.value);
-                          setFieldErrors((prev) =>
-                            retractFieldError(prev, "passthroughFileTypes"),
-                          );
-                        }}
-                      />
-                    </ModelField>
-                  </CollapsibleContent>
-                </Collapsible>
                 {fieldErrors.passthroughFileTypes && (
                   <FieldError>{fieldErrors.passthroughFileTypes}</FieldError>
                 )}
               </div>
 
-              <Collapsible open={reasoningOpen} onOpenChange={setReasoningOpen}>
+              <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
                 <CollapsibleTrigger asChild>
                   <Button
                     type="button"
@@ -502,11 +468,29 @@ export function ModelEntryDialog({
                     size="sm"
                     className="text-muted-foreground -ml-2 h-7 px-2 text-xs"
                   >
-                    Reasoning map
+                    Advanced
                     <ChevronsUpDown className="size-3.5" />
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent>
+                <CollapsibleContent className="flex flex-col gap-3">
+                  <ModelField
+                    htmlFor="model-passthrough-other"
+                    label="Other media types"
+                    hint="Further media types this model reads natively, comma-separated."
+                  >
+                    <Input
+                      id="model-passthrough-other"
+                      placeholder="e.g. application/msword"
+                      value={otherFileTypesText}
+                      aria-invalid={!!fieldErrors.passthroughFileTypes}
+                      onChange={(e) => {
+                        setOtherFileTypesText(e.target.value);
+                        setFieldErrors((prev) =>
+                          retractFieldError(prev, "passthroughFileTypes"),
+                        );
+                      }}
+                    />
+                  </ModelField>
                   <ModelField
                     htmlFor="model-reasoning"
                     label="Reasoning map"
