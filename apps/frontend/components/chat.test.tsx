@@ -524,7 +524,7 @@ describe("a Transcript summary", () => {
     renderWith([summaryRow()]);
 
     const divider = await screen.findByRole("button", {
-      name: /Earlier messages were condensed/,
+      name: /Older messages were summarised/,
     });
     expect(divider).toHaveAttribute("aria-expanded", "false");
     expect(
@@ -548,7 +548,7 @@ describe("a Transcript summary", () => {
     // Wait for the transcript, then assert the absence.
     await screen.findByRole("button", { name: "Edit u1" });
     expect(
-      screen.queryByRole("button", { name: /Earlier messages were condensed/ }),
+      screen.queryByRole("button", { name: /Older messages were summarised/ }),
     ).not.toBeInTheDocument();
   });
 
