@@ -54,6 +54,7 @@ import {
   skillSchema,
   TOOL_NAME_NAMESPACE_SEPARATOR,
   TOOL_NAME_PATTERN,
+  TOOL_INPUT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
   triggerBaseSchema,
@@ -2242,6 +2243,14 @@ const SCHEMA_CONSTANTS = [
       `The ${NUMBER_WORDS[count] ?? count} most recent results stay`,
     files: ["building-with-platypus/chat.mdx"],
     cost: "A User expects the model to still see a tool result it no longer gets.",
+  },
+  {
+    name: "TOOL_INPUT_CLEARING_KEEP_RECENT",
+    value: TOOL_INPUT_CLEARING_KEEP_RECENT,
+    phrase: (count: number) =>
+      `The ${NUMBER_WORDS[count] ?? count} most recent writes keep what`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A User expects the model to still see what an older write sent.",
   },
   {
     name: "RUN_EVENT_ERROR_MAX_BYTES",

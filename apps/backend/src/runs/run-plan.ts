@@ -11,6 +11,7 @@ import {
   applyToolResultClearing,
   DEFAULT_CLEARING_POLICY,
 } from "./tool-result-clearing.ts";
+import { applyToolInputClearing } from "./tool-input-clearing.ts";
 import { stepOccupancy, type UsageModel } from "./run-stats.ts";
 import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
 import { capToolResults } from "../services/tool-result.ts";
@@ -205,12 +206,12 @@ export const buildModelInvocation = (
   // accepts it nowhere and quietly caches nothing. The same hazard applies to
   // the `openrouter` namespace: never put a foreign key in either.
   providerOptions: REQUEST_LEVEL_CACHE_DIRECTIVE,
-  // Tool-result clearing (ADR-0018 Notes, issue #524) and the trailing Bedrock
-  // cache point both live here, mutating the same `messages` value in the same
-  // callback. `prepareStep` fires before every step INCLUDING the first, and
-  // its `messages` override carries forward to later steps — the one seam that
-  // reaches both a within-turn blowup and, via `initialOccupancy`, a turn's
-  // very first call. It never touches `onFinish`'s response messages, so what
+  // Tool-result and Tool-input clearing (ADR-0018 Notes, issues #524, #1722)
+  // and the trailing Bedrock cache point all live here, mutating the same
+  // `messages` value in the same callback. `prepareStep` fires before every
+  // step INCLUDING the first, and its `messages` override carries forward to
+  // later steps — the one seam that reaches both a within-turn blowup and, via
+  // `initialOccupancy`, a turn's very first call. It never touches `onFinish`'s response messages, so what
   // a Chat persists is unaffected regardless of what this returns.
   prepareStep: ({
     steps,
@@ -227,16 +228,23 @@ export const buildModelInvocation = (
       steps.length > 0
         ? stepOccupancy(steps[steps.length - 1]?.usage)
         : plan.initialOccupancy;
-    const cleared = applyToolResultClearing(
-      messages,
-      { occupancy, contextWindow: plan.contextWindow },
-      DEFAULT_CLEARING_POLICY,
-      (toolName) => plan.readOnlyToolNames?.has(toolName) ?? false,
+    const reading = { occupancy, contextWindow: plan.contextWindow };
+    // Tool-input clearing (issue #1722) runs after result clearing and before
+    // the cache point; both return `messages` itself when they change nothing.
+    const cleared = applyToolInputClearing(
+      applyToolResultClearing(
+        messages,
+        reading,
+        DEFAULT_CLEARING_POLICY,
+        (toolName) => plan.readOnlyToolNames?.has(toolName) ?? false,
+      ),
+      reading,
     );
     // The evidence a later decision on summarising older steps rests on
     // (issue #1717): the context is near full and clearing, the cheaper
-    // mechanism, has nothing left to give. A measurement, so a window is
-    // required — without one there is no reading to compare.
+    // mechanism, has nothing left to give — in results or inputs. A
+    // measurement, so a window is required — without one there is no reading
+    // to compare.
     if (
       cleared === messages &&
       occupancy !== undefined &&

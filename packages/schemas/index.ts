@@ -1545,6 +1545,28 @@ export const TOOL_RESULT_CLEARING_THRESHOLD = 0.7;
 export const TOOL_RESULT_CLEARING_KEEP_RECENT = 4;
 
 /**
+ * Tool-input clearing (ADR-0018 Notes, issue #1722): the core write tools
+ * whose bulky input fields are cleared from what a model call receives, at
+ * Tool-result clearing's threshold, once the call has succeeded. Each maps to
+ * the fields cleared; identifying fields (`path`, `dashboardId`, …) stay.
+ *
+ * Safe because what was written is reproducible — the model can read the file
+ * or widget back. Deny by default, and core only: no MCP or plugin tool joins,
+ * since nothing tells core that another tool's input is reproducible.
+ */
+export const CLEARABLE_TOOL_INPUT_FIELDS: ReadonlyMap<
+  string,
+  readonly string[]
+> = new Map([
+  ["fsWrite", ["content"]],
+  ["fsEdit", ["oldString", "newString"]],
+  ["updateWidgetData", ["data"]],
+]);
+
+/** How many of the most recent clearable write calls keep their input. */
+export const TOOL_INPUT_CLEARING_KEEP_RECENT = 4;
+
+/**
  * Transcript summarising (ADR-0041, issue #1716): a durable **Transcript
  * summary** of a Chat's older Transcript, sent to the model in place of the
  * messages it covers.

@@ -7,6 +7,7 @@ import {
   type RunPlan,
 } from "./run-plan.ts";
 import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
+import { CLEARED_TOOL_INPUT_MARKER } from "./tool-input-clearing.ts";
 import { logger } from "../logger.ts";
 
 /**
@@ -39,6 +40,33 @@ const toolResultMessages = (n: number, toolName = "read_url"): ModelMessage[] =>
       },
     ],
   }));
+
+/** `n` successful `fsWrite` calls, each an assistant call and its tool result. */
+const fsWriteMessages = (n: number): ModelMessage[] =>
+  Array.from({ length: n }, (_, i): ModelMessage[] => [
+    {
+      role: "assistant",
+      content: [
+        {
+          type: "tool-call",
+          toolCallId: `w${i}`,
+          toolName: "fsWrite",
+          input: { path: `f${i}`, content: `body ${i}`, mode: "create" },
+        },
+      ],
+    },
+    {
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          toolCallId: `w${i}`,
+          toolName: "fsWrite",
+          output: { type: "json", value: { ok: true } },
+        },
+      ],
+    },
+  ]).flat();
 
 const invoke = (plan: RunPlan) =>
   buildModelInvocation(plan, { abortSignal: new AbortController().signal });
@@ -245,5 +273,19 @@ describe("buildModelInvocation context-pressure evidence", () => {
       ],
     });
     expect(evidenceLines(spy)).toEqual([]);
+  });
+
+  // Tool-input clearing (issue #1722) counts as something left to clear.
+  it("logs nothing when only write inputs were cleared", async () => {
+    const spy = vi.spyOn(logger, "info");
+    const prepareStep = prepareStepOf(planOf({ contextWindow: 100 }));
+    const result = await prepareStep({
+      steps: [{ usage: { inputTokens: 85 } }],
+      messages: [{ role: "user", content: "hi" }, ...fsWriteMessages(5)],
+    });
+    expect(evidenceLines(spy)).toEqual([]);
+    expect(JSON.stringify(result.messages)).toContain(
+      CLEARED_TOOL_INPUT_MARKER,
+    );
   });
 });

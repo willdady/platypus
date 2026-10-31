@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import type { PlatypusUIMessage } from "@platypus/schemas";
-import { clearedToolCallIds } from "./tool-result-clearing";
+import {
+  clearedInputToolCallIds,
+  clearedToolCallIds,
+} from "./tool-result-clearing";
 
 /**
  * A tool-result message, with `readOnlyToolNames` metadata reporting the tool
@@ -156,5 +159,61 @@ describe("clearedToolCallIds", () => {
       contextWindow: 100,
     });
     expect(result.has("x1")).toBe(false);
+  });
+});
+
+describe("clearedInputToolCallIds", () => {
+  const write = (
+    toolCallId: string,
+    {
+      state = "output-available",
+      output = { ok: true },
+      toolName = "fsWrite",
+    }: { state?: string; output?: unknown; toolName?: string } = {},
+  ): PlatypusUIMessage =>
+    ({
+      id: `m-${toolCallId}`,
+      role: "assistant",
+      parts: [
+        {
+          type: `tool-${toolName}`,
+          toolCallId,
+          state,
+          input: { path: "f", content: "c", mode: "create" },
+          output,
+        },
+      ],
+    }) as unknown as PlatypusUIMessage;
+
+  const ABOVE = { occupancy: 95, contextWindow: 100 };
+
+  it("marks successful allowlisted writes past the 4 most recent", () => {
+    const messages = Array.from({ length: 6 }, (_, i) => write(`w${i}`));
+    expect(clearedInputToolCallIds(messages, ABOVE)).toEqual(
+      new Set(["w0", "w1"]),
+    );
+  });
+
+  it("skips a failed call and an `{ error }` result", () => {
+    const messages = [
+      write("e0", { state: "output-error", output: undefined }),
+      write("e1", { toolName: "updateWidgetData", output: { error: "nope" } }),
+      ...Array.from({ length: 4 }, (_, i) => write(`w${i}`)),
+    ];
+    expect(clearedInputToolCallIds(messages, ABOVE).size).toBe(0);
+  });
+
+  it("never marks a tool outside the allowlist", () => {
+    const messages = Array.from({ length: 6 }, (_, i) =>
+      write(`m${i}`, { toolName: "shellExec" }),
+    );
+    expect(clearedInputToolCallIds(messages, ABOVE).size).toBe(0);
+  });
+
+  it("returns the same empty set when nothing is cleared (issue #869)", () => {
+    const messages = [write("w0")];
+    expect(clearedInputToolCallIds(messages, {})).toBe(
+      clearedInputToolCallIds(messages, ABOVE),
+    );
   });
 });

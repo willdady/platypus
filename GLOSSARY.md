@@ -109,6 +109,10 @@ _Avoid_: version (reads as a release), branch, sibling, variant, revision, draft
 Replacing the content of an older tool result in what a model call receives, leaving the tool call itself and the stored **Transcript** untouched. Bounds what one model call receives by retention rather than by condensation, so a cleared result is plainly absent to the model instead of silently condensed — and it is the cheap first try, taken at a lower **Projected occupancy** than a **Transcript summary**. Engages only where a **Context window** was declared, and only for tools whose results are safe to lose — a core tool core knows to be read-only, or an MCP tool carrying a **Read-only hint**. A tool that has said nothing about itself is treated as one that writes.
 _Avoid_: pruning, compaction (that names taking a **Transcript summary**), context editing, truncation (that names a per-call bound on a single result or reply).
 
+**Tool-input clearing**:
+**Tool-result clearing**'s sibling for writes: replacing the bulky input of an older tool call — what a file write, file edit or dashboard widget update wrote — in what a model call receives, keeping the fields that say what was written where. Same threshold and the same send-time-only rule as **Tool-result clearing**, with its own count of recent calls kept. Only for a call that succeeded, since what it wrote can be read back, and only for core write tools named for it; a failed call keeps its input so the model can retry it, and no **MCP** or plugin tool's input is ever cleared.
+_Avoid_: Tier 2 (that names Blueprint pointer-settings, ADR-0008), pruning, compaction.
+
 **Tool-result truncation**:
 Cutting a single tool result over a fixed size down to that size, with a marker saying so, as it comes back from any tool — core, plugin or **MCP**. Unlike **Tool-result clearing** it happens once, at ingestion, so the cut form is both what the model receives and what the **Transcript** stores; the marker does not invite re-running the tool.
 _Avoid_: clearing (send-time, never stored), compaction.

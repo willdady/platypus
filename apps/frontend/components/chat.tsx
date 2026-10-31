@@ -56,7 +56,10 @@ import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
-import { clearedToolCallIds } from "@/lib/tool-result-clearing";
+import {
+  clearedInputToolCallIds,
+  clearedToolCallIds,
+} from "@/lib/tool-result-clearing";
 import {
   appliedTranscriptSummary,
   occupancyIsStaleAfterSummary,
@@ -732,11 +735,19 @@ export function Chat({
   //
   // Computed above the early returns below: `useStableSet` is a hook, so it
   // cannot sit after a conditional return.
+  //
+  // Tool-input clearing (issue #1722) shares the indication: a write call's
+  // input left out reads the same as a read call's result left out.
+  const clearingReading = {
+    occupancy: projectedOccupancy,
+    contextWindow: resolvedModel?.contextWindow,
+  };
+  const resultClearedIds = clearedToolCallIds(messages, clearingReading);
+  const inputClearedIds = clearedInputToolCallIds(messages, clearingReading);
   const staleToolCallIds = useStableSet(
-    clearedToolCallIds(messages, {
-      occupancy: projectedOccupancy,
-      contextWindow: resolvedModel?.contextWindow,
-    }),
+    inputClearedIds.size === 0
+      ? resultClearedIds
+      : new Set([...resultClearedIds, ...inputClearedIds]),
   );
 
   // Whether this Chat's transcript is still on its way: the row read is in
