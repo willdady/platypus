@@ -6,6 +6,7 @@ import { Plus, Radio } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { EmptyCard } from "@/components/empty-card";
+import { ListError } from "@/components/list-state";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DisabledBadge } from "@/components/disabled-badge";
 import { RowActionsMenu } from "@/components/row-actions-menu";
@@ -62,7 +63,15 @@ function WebhooksList({
       </LoadingRegion>
     );
   }
-  if (error) return <div>Failed to load webhooks.</div>;
+  if (error) {
+    return (
+      <ListError
+        error={error}
+        subject="webhooks"
+        onRetry={() => void mutate()}
+      />
+    );
+  }
 
   const webhooks: Webhook[] = toggle.apply(results);
 

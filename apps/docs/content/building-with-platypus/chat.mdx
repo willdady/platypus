@@ -448,13 +448,19 @@ condensed](#when-a-long-conversation-is-condensed).
   that condensed conversation starts from.
 </Callout>
 
-**No meter at all** is normal, and means one of three things: the Chat has no
-reply yet, nobody has declared a **Context window** for this model, or the
-Provider does not report token usage. In each case the capacity or the reading is unknown, and Platypus
-would rather show nothing than a number you cannot interpret. An Org Admin
-declares the window on the Provider's model entry — see [Declaring a Context
-window](/self-hosting/providers-and-auth#declaring-a-context-window). Switching
-model switches the meter with it, since the window belongs to the model.
+**No meter at all** is normal once a model is selected, and means one of two
+things: the Chat has no reply yet, or the Provider does not report token usage.
+Without a reading, Platypus would rather show nothing than a number you cannot
+interpret.
+
+Where nobody has declared a **Context window** for the model, a line appears in
+the meter's place instead: **No Context window set: long Chats aren't
+condensed ahead of time.** Select **Add a Context window in Provider settings**
+to open Provider settings, where an Org Admin declares the window on the model
+entry — see [Declaring a Context
+window](/self-hosting/providers-and-auth#declaring-a-context-window).
+Switching model switches the meter with it, since the window belongs to the
+model.
 
 ## Freeing up space during a long tool-using turn
 
@@ -532,7 +538,9 @@ does refuse it, the Chat condenses anyway — see below.
   The summary only applies while the messages it covered are exactly what the
   Chat still holds. Delete one inside that stretch and the summary stops being
   used, so the next turn sends more of the Chat and takes a fresh summary first.
-  That turn can take noticeably longer than usual.
+  That turn can take noticeably longer than usual; while it waits, the
+  transcript shows **Summarising earlier messages…** where the reply will
+  appear.
 </Callout>
 
 ## Condensing a conversation yourself
@@ -564,8 +572,9 @@ The model's vendor refused the turn because everything it would have been sent
 
 **Send your next message as usual.** A Chat that is refused this way condenses
 its older messages straight away, whether or not a **Context window** is
-declared, and your next message waits for that summary before it is sent. The
-dashed line from [When a long conversation is
+declared, and your next message waits for that summary before it is sent. While
+it waits, the transcript shows **Summarising earlier messages…** where the reply
+will appear. The dashed line from [When a long conversation is
 condensed](#when-a-long-conversation-is-condensed) appears where it starts.
 
 <Callout type="warning">

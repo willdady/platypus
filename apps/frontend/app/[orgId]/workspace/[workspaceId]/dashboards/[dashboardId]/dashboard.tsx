@@ -733,7 +733,11 @@ function DashboardPage({
       >
         {!widgetsData ? (
           widgetsError ? (
-            <ListError error={widgetsError} subject="widgets" />
+            <ListError
+              error={widgetsError}
+              subject="widgets"
+              onRetry={() => void mutateWidgets()}
+            />
           ) : (
             <GridSkeleton />
           )

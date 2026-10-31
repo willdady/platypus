@@ -21,6 +21,7 @@ function ContextsPage() {
     results: contexts,
     error,
     isLoading,
+    mutate,
   } = useScopedList<ContextWithWorkspaceName>("users/me/contexts", {});
   // Until the read lands there is no telling whether a global context exists,
   // so the editor stays hidden and Save stays off: a save then would POST a
@@ -96,7 +97,11 @@ function ContextsPage() {
                     </div>
                   </div>
                 ) : (
-                  <ListError error={error} subject="global context" />
+                  <ListError
+                    error={error}
+                    subject="global context"
+                    onRetry={() => void mutate()}
+                  />
                 )}
                 <div className="flex items-center justify-between">
                   <Button

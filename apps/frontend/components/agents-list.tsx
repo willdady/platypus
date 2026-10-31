@@ -427,6 +427,7 @@ export function AgentsList({
         isLoading={isLoading}
         error={agentsError}
         subject="agents"
+        onRetry={() => void mutate()}
         skeleton={
           <>
             <AgentCardsSkeleton />

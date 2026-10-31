@@ -137,7 +137,13 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
   }
 
   if (error && !data) {
-    return <ListError error={error} subject="inbound triggers" />;
+    return (
+      <ListError
+        error={error}
+        subject="inbound triggers"
+        onRetry={() => void mutate()}
+      />
+    );
   }
 
   if (!triggers.length) {

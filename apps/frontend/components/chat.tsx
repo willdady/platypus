@@ -36,6 +36,7 @@ import {
   type PlatypusUIMessage,
 } from "@platypus/schemas";
 import { cn, joinUrl, optionalFetcher } from "@/lib/utils";
+import { workspaceRoutes } from "@/lib/routes";
 import {
   chatPollIntervalMs,
   classifyChatError,
@@ -66,10 +67,15 @@ import {
   summarisingStatusOf,
 } from "@/lib/chat-summary";
 import { TranscriptSummaryDivider } from "./transcript-summary-divider";
+import { TurnStatus } from "./turn-status";
 import { useStableSet } from "@/hooks/use-stable-set";
 import { useTimeout } from "@/hooks/use-timeout";
 import { useStreamingFavicon } from "@/hooks/use-streaming-favicon";
-import { ContextMeter, ContextMeterEntrance } from "./context-meter";
+import {
+  ContextMeter,
+  ContextMeterEntrance,
+  ContextWindowHint,
+} from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { useChatTurn } from "@/hooks/use-chat-turn";
 import { Dialog, DialogTrigger } from "./ui/dialog";
@@ -106,6 +112,19 @@ const ESCAPE_OWNERS =
 /** The status line a `/compact` shows while its summary is being taken. */
 const COMPACTING_STATUS = "Summarising the conversation…";
 
+/**
+ * Where the composer's context meter — or the hint that stands in for it when
+ * no Context window is declared — sits in the footer. Narrow screens give it a
+ * row of its own by bleeding back over the footer's padding; wide ones keep it
+ * in source order with `mr-auto` eating the free space.
+ */
+const CONTEXT_FOOTER_PLACEMENT =
+  "order-last -mx-3 w-[calc(100%+1.5rem)] sm:order-none sm:mx-0 sm:mr-auto sm:w-auto";
+
+/** The tinted band either context element wears on a narrow screen. */
+const CONTEXT_FOOTER_BAND =
+  "mt-1.5 rounded-b-md bg-foreground/5 px-3 py-1.5 sm:mt-0 sm:rounded-none sm:bg-transparent sm:p-0";
+
 export function Chat({
   orgId,
   workspaceId,
@@ -132,6 +151,7 @@ export function Chat({
     results: providers,
     error: providersError,
     isLoading,
+    mutate: mutateProviders,
   } = useScopedList<Provider>("providers", scope);
 
   // Fetch agents
@@ -384,6 +404,16 @@ export function Chat({
     agents,
     selection: { agentId, modelId, providerId },
   });
+
+  // The window the resolved model declares, if any. Without one the composer
+  // cannot draw a meter, so it shows the hint instead (issue #1728).
+  const contextWindow = resolvedModel?.contextWindow;
+
+  // Where the window is declared: the Workspace's Provider list, reachable by
+  // any reader who can send here. A Shared Provider is edited from its menu on
+  // that list and opens on the Organization surface (ADR-0007).
+  const contextWindowHref = workspaceRoutes(orgId, workspaceId).settings
+    .providers;
   // What the model picker on both surfaces is configured with (issue #724).
   const modelSelection: ModelSelection = {
     agents,
@@ -690,7 +720,9 @@ export function Chat({
   // carried and hides the meter — that erasure is deliberate, so the key's
   // presence is the test rather than its value.
   //
-  // Either number missing hides the meter; `ContextMeter` owns that decision.
+  // Either number missing hides the meter. The composer decides a missing
+  // window shows the hint instead; `ContextMeter` keeps its own guard for
+  // standalone reuse.
   const contextOccupancy = messages
     .filter(
       (m) => m.role === "assistant" && "contextOccupancy" in (m.metadata ?? {}),
@@ -764,7 +796,11 @@ export function Chat({
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="w-full xl:w-4/5 max-w-4xl">
-          <ListError error={providersError} subject="providers" />
+          <ListError
+            error={providersError}
+            subject="providers"
+            onRetry={() => void mutateProviders()}
+          />
         </div>
       </div>
     );
@@ -964,12 +1000,12 @@ export function Chat({
           <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
             {isRecoveringRun && <ChatReconnectingNotice />}
             {(summarisingStatus || compacting) && (
-              <p
-                role="status"
-                className="mb-2 text-xs text-muted-foreground sm:mb-1"
-              >
+              // This copy is the live region for a streamed status too: the
+              // transcript's copy sits inside the busy transcript, and is
+              // drawn for the eye rather than announced again.
+              <TurnStatus className="mb-2 sm:mb-1">
                 {summarisingStatus ?? COMPACTING_STATUS}
-              </p>
+              </TurnStatus>
             )}
             {canSendMessages ? (
               <ChatComposer
@@ -1067,25 +1103,43 @@ export function Chat({
                   // than drifting into the middle the way `justify-between`
                   // alone would leave it.
                   <AnimatePresence initial={false}>
-                    {resolvedModel?.contextWindow != null &&
-                      (occupancyAfterSummary || projectedOccupancy != null) && (
-                        <ContextMeterEntrance
-                          key="context-meter"
-                          className="order-last -mx-3 w-[calc(100%+1.5rem)] sm:order-none sm:mx-0 sm:mr-auto sm:w-auto"
-                        >
-                          {occupancyAfterSummary ? (
-                            <span className="mt-1.5 inline-block text-xs text-muted-foreground tabular-nums sm:mt-0">
-                              —
-                            </span>
-                          ) : (
-                            <ContextMeter
-                              className="mt-1.5 justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:mt-0 sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0"
-                              occupancy={projectedOccupancy}
-                              contextWindow={resolvedModel.contextWindow}
+                    {contextWindow != null
+                      ? (occupancyAfterSummary ||
+                          projectedOccupancy != null) && (
+                          <ContextMeterEntrance
+                            key="context-meter"
+                            className={CONTEXT_FOOTER_PLACEMENT}
+                          >
+                            {occupancyAfterSummary ? (
+                              <span className="mt-1.5 inline-block text-xs text-muted-foreground tabular-nums sm:mt-0">
+                                —
+                              </span>
+                            ) : (
+                              <ContextMeter
+                                className={cn(
+                                  CONTEXT_FOOTER_BAND,
+                                  "justify-center sm:justify-start",
+                                )}
+                                occupancy={projectedOccupancy}
+                                contextWindow={contextWindow}
+                              />
+                            )}
+                          </ContextMeterEntrance>
+                        )
+                      : resolvedModel && (
+                          <ContextMeterEntrance
+                            key="context-window-hint"
+                            className={CONTEXT_FOOTER_PLACEMENT}
+                          >
+                            <ContextWindowHint
+                              href={contextWindowHref}
+                              className={cn(
+                                CONTEXT_FOOTER_BAND,
+                                "text-center sm:text-left",
+                              )}
                             />
-                          )}
-                        </ContextMeterEntrance>
-                      )}
+                          </ContextMeterEntrance>
+                        )}
                   </AnimatePresence>
                 }
                 // Named, not tooltipped: a Radix tooltip closes on Escape and

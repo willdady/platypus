@@ -217,6 +217,7 @@ export function ResourceList({
         isLoading={isLoading}
         error={error}
         subject={config.labels.plural}
+        onRetry={() => void mutate()}
         skeleton={
           // The same cards, then the same Add / Attach buttons the loaded
           // list offers this caller, so neither pops in when the read lands.

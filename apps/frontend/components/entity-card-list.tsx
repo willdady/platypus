@@ -212,6 +212,7 @@ export function EntityCardList<T extends EntityCard>({
   ghosts = NO_GHOSTS,
   groups,
   "aria-label": label,
+  onRetry,
   ...slots
 }: EntityCardSlots<T> & {
   items: readonly T[];
@@ -231,6 +232,8 @@ export function EntityCardList<T extends EntityCard>({
   groups?: readonly EntityCardGroup<T>[];
   /** Names the main grid for assistive tech: "Agents". */
   "aria-label"?: string;
+  /** Reads the list again after a failed read; without it there is no Retry. */
+  onRetry?: () => void;
 }) {
   if (isLoading) {
     return (
@@ -239,7 +242,7 @@ export function EntityCardList<T extends EntityCard>({
   }
 
   if (error) {
-    return <ListError error={error} subject={subject} />;
+    return <ListError error={error} subject={subject} onRetry={onRetry} />;
   }
 
   const shownGroups = groups?.filter((group) => group.items.length) ?? [];
@@ -390,6 +393,7 @@ export function WorkspaceEntityCardList({
         isLoading={isLoading}
         error={error}
         subject={config.entity}
+        onRetry={() => void mutate()}
         skeleton={<CardGridSkeleton descriptionLines={1} />}
         empty={
           <ListState variant="empty">

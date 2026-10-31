@@ -490,6 +490,7 @@ export function TriggerList({
         isLoading={isLoading && !triggersData}
         error={error}
         subject="triggers"
+        onRetry={() => void mutate()}
         skeleton={<TriggerCardsSkeleton />}
         empty={empty}
         // The card opens the Trigger's runs; Edit is in the menu.

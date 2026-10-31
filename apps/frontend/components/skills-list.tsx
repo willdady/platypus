@@ -431,6 +431,7 @@ export function SkillsList({
         isLoading={isLoading}
         error={error}
         subject="skills"
+        onRetry={() => void mutate()}
         skeleton={
           <>
             <SkillCardsSkeleton

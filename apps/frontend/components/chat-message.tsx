@@ -64,6 +64,7 @@ import type { AlternativePosition } from "@/lib/chat-alternatives";
 import { isTurnInFlight as isInFlight } from "@/lib/chat-recovery";
 import { ResponseMetricsPopover } from "./response-metrics-popover";
 import { TurnNotice } from "./turn-notice";
+import { TurnStatus } from "./turn-status";
 import { MessagePartBoundary } from "./message-part-boundary";
 import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
@@ -121,6 +122,12 @@ function isTextPart(part: MessagePart): part is TextUIPart {
 
 function isReasoningPart(part: MessagePart): part is ReasoningUIPart {
   return part.type === "reasoning";
+}
+
+function isTranscriptSummaryStatusPart(
+  part: MessagePart,
+): part is PartOfType<"data-transcript-summary-status"> {
+  return part.type === "data-transcript-summary-status";
 }
 
 function isDynamicToolPart(part: MessagePart): part is DynamicToolUIPart {
@@ -437,7 +444,27 @@ export const ChatMessage = memo(function ChatMessage({
   // construction (see `isGenericToolPart`), so this list can be extended or
   // reordered freely — the first (and only) match wins regardless of
   // position.
+  const isTurnInFlight = isInFlight(status);
+  const isAwaitedReply =
+    message.role === "assistant" && isLastMessage && isTurnInFlight;
+
   const partRenderers: PartRenderer[] = [
+    // The turn's own status row (ADR-0023, ADR-0041): the wait it streamed
+    // before the reply, drawn where the reply will be. Only the in-flight
+    // turn shows it — once the turn is over it is about a wait that has
+    // ended, and the sink never persists it anyway. The composer above the
+    // input is this row's live region, so the transcript copy stays visual.
+    partRenderer(isTranscriptSummaryStatusPart, (statusPart, i) =>
+      isAwaitedReply ? (
+        <TurnStatus
+          key={`${message.id}-${i}`}
+          announce={false}
+          className="pl-8"
+        >
+          {statusPart.data.text}
+        </TurnStatus>
+      ) : null,
+    ),
     partRenderer(isTextPart, (textPart, i) => (
       <Message
         key={`${message.id}-${i}`}
@@ -558,10 +585,6 @@ export const ChatMessage = memo(function ChatMessage({
       </Message>
     )),
   ];
-
-  const isTurnInFlight = isInFlight(status);
-  const isAwaitedReply =
-    message.role === "assistant" && isLastMessage && isTurnInFlight;
 
   // A call waiting on the User is drawn the same way whatever the tool: its
   // own renderer has nothing to show until it has run.
