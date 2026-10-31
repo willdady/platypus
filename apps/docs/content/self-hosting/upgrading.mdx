@@ -50,6 +50,13 @@ Dashboard and its widgets, and Agents lose the **Dashboards** Tool set. Move
 anything you want to keep before you upgrade; see
 [Dashboards](/building-with-platypus/dashboards).
 
+## Coming from 3.29
+
+`/compact` is now a built-in Chat command, so `compact` is no longer a valid
+Skill name. A Skill already called that keeps working when an Agent loads it,
+but typing `/compact` runs the built-in instead, and the Skill can't be saved
+again under that name. Rename it to keep invoking it by hand.
+
 ## Coming from 3.27
 
 The backend image now sets `PORT` to `4000`, the port it has always exposed.

@@ -699,9 +699,14 @@ export const BUILT_IN_CHAT_COMMANDS = [
 export type BuiltInChatCommandName =
   (typeof BUILT_IN_CHAT_COMMANDS)[number]["name"];
 
-const RESERVED_SKILL_NAMES = new Set<string>(
+const BUILT_IN_CHAT_COMMAND_NAMES = new Set<string>(
   BUILT_IN_CHAT_COMMANDS.map((command) => command.name),
 );
+
+/** Whether `name` is a built-in chat command's, and so no Skill's. */
+export const isBuiltInChatCommandName = (
+  name: string,
+): name is BuiltInChatCommandName => BUILT_IN_CHAT_COMMAND_NAMES.has(name);
 
 /**
  * One file bundled with a Skill other than `SKILL.md`, as the API lists it.
@@ -731,7 +736,7 @@ export const skillBaseSchema = z.object({
     .max(SKILL_NAME_MAX_LENGTH)
     .regex(skillNameRegex, "Skill name must be kebab-case")
     .refine(
-      (name) => !RESERVED_SKILL_NAMES.has(name),
+      (name) => !isBuiltInChatCommandName(name),
       "This name is reserved for a built-in chat command",
     ),
   description: z

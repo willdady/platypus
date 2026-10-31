@@ -2023,6 +2023,14 @@ const BACKEND_CONSTANTS = [
   },
   {
     source: "packages/schemas/index.ts",
+    name: "CHAT_COMPACT_INSTRUCTION_MAX_LENGTH",
+    phrase: (chars: number) =>
+      `**${chars.toLocaleString("en-US")} characters**`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A User writing a long `/compact` instruction is refused at a length the page never warned of.",
+  },
+  {
+    source: "packages/schemas/index.ts",
     name: "SKILL_GITHUB_INSTALL_MAX",
     phrase: (count: number) => `up to **${count}** at a time`,
     files: ["building-with-platypus/skills.mdx"],

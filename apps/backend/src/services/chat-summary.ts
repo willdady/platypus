@@ -704,6 +704,10 @@ export const clearedModelMessages = async (
 
 // --- The pass's model resolution && the in-flight registry ---
 
+/** The Chat's own model reference a summary pass re-resolves (ADR-0017). */
+export type SummariserSource =
+  { agentId: string } | { providerId: string; modelId: string };
+
 /**
  * Re-resolves the model a summary pass writes with, from the same authority a
  * Chat turn resolves its model from (`resolveGenerationPlan`) and with the
@@ -713,7 +717,7 @@ export const clearedModelMessages = async (
  * rewrite the rule in two places.
  */
 export const resolveSummariserModel = async (
-  source: { agentId: string } | { providerId: string; modelId: string },
+  source: SummariserSource,
   orgId: string,
   workspaceId: string,
   queries: TranscriptSummaryQueries,
@@ -843,20 +847,11 @@ export const compactTranscript = async (args: {
   orgId: string;
   workspaceId: string;
   /** The Chat's own model reference, as its last turn resolved it. */
-  source: { agentId: string } | { providerId: string; modelId: string };
+  source: SummariserSource;
   path: PlatypusUIMessage[];
   instruction?: string;
-  queries?: TranscriptSummaryQueries;
 }): Promise<ChatSummaryRow | undefined> => {
-  const {
-    chatId,
-    orgId,
-    workspaceId,
-    source,
-    path,
-    instruction,
-    queries = drizzleTranscriptSummaryQueries,
-  } = args;
+  const { chatId, orgId, workspaceId, source, path, instruction } = args;
   const anchorIndex = summaryAnchorIndex(path, 0);
   if (anchorIndex === undefined) return undefined;
 
@@ -867,7 +862,7 @@ export const compactTranscript = async (args: {
       source,
       orgId,
       workspaceId,
-      queries,
+      drizzleTranscriptSummaryQueries,
     );
     return takeTranscriptSummary({
       chatId,

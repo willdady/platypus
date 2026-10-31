@@ -29,6 +29,7 @@ import type {
 } from "@platypus/schemas";
 import {
   BUILT_IN_CHAT_COMMANDS,
+  isBuiltInChatCommandName,
   nextTurnOccupancy,
   type Sandbox,
   UNTITLED_CHAT_TITLE,
@@ -798,9 +799,11 @@ export function Chat({
   );
 
   // Built-in commands come first, and only once there is a turn to act on.
+  // A Skill saved under a built-in's name before it was reserved is left out:
+  // typing it runs the built-in.
   const slashCommands: SlashCommand[] = [
     ...(messages.length > 0 ? BUILT_IN_CHAT_COMMANDS : []),
-    ...agentSkills,
+    ...agentSkills.filter((skill) => !isBuiltInChatCommandName(skill.name)),
   ];
 
   // Sandbox uploads land first; the message goes only once every one has. A
@@ -819,8 +822,7 @@ export function Chat({
       const outcome = await writeAt(`${chatUrl}/compact`, {
         method: "POST",
         data: builtIn.argument ? { instruction: builtIn.argument } : {},
-      });
-      setCompacting(false);
+      }).finally(() => setCompacting(false));
       if (outcome.outcome !== "success") {
         toast.error(outcome.message);
         throw new Error(outcome.message);
